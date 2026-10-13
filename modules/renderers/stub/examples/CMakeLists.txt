@@ -22,7 +22,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "STUB")
         # umbrella already carries that include directory; in a multi-renderer build it carries the
         # DEFAULT renderer's, and STUB may not be the default -- so name it here, where it is true
         # in both. (Found by a `-DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB;SDL_RENDERER"`
-        # build, the combination CLAUDE.md documents.)
+        # build, a combination CLAUDE.md documented before SDL_RENDERER was retired.)
         target_include_directories(${target} PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/../include")
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)

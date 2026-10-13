@@ -13,7 +13,7 @@
 //   4. CNAEXT SetPresentationParameters remains store-only but reports the currently applied count
 //      instead of echoing an unapplied request.
 
-// Renderer-neutral runtime back-buffer MSAA contract (plans/plan_dx.md DX-219).
+// Renderer-neutral runtime back-buffer MSAA contract (DX-219).
 //
 // The fixture alternates single-sample and four-sample rendering through GraphicsDevice::Reset,
 // then compares the resolved diagonal edge. It also proves that an unreasonable request is

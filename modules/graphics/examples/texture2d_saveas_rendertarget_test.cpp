@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-178 (the measurement) and VULKAN-169 (the fix) -- what
+// VULKAN-178 (the measurement) and VULKAN-169 (the fix) -- what
 // `SaveAsPng`/`SaveAsJpeg` actually read.
 //
-// Renderer-agnostic and registered on Vulkan and EasyGL, because everything it asserts is
-// `Texture2D`'s own behaviour in the shared layer: a one-renderer result could not tell a shared
-// fix from a Vulkan-shaped one.
+// Renderer-agnostic, because everything it asserts is `Texture2D`'s own behaviour in the shared
+// layer: a one-renderer result could not tell a shared fix from a renderer-shaped one.
 //
 // The row was written expecting these to "go through readback and upload paths that differ per
 // renderer". They do not: `Texture2D::SaveAsPng` encodes `cpuPixels_`, a CPU-side shadow the
 // texture keeps of whatever was last uploaded to it, and never asks the renderer for anything. So
-// the interesting question is not whether Vulkan's readback is right here -- it is what happens
+// the interesting question is not whether a renderer's readback is right here -- it is what happens
 // when there IS no shadow, which is exactly the case a game hits when it saves a screenshot: a
 // `RenderTarget2D` it drew into and never called `SetData` on.
 //

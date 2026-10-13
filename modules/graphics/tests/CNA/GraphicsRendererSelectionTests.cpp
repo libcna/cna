@@ -164,7 +164,8 @@ TEST_F(GraphicsRendererSelectionTest, SetPreferredRejectsARetiredIdentityInstead
     // spelling, so asking for one is refused like an unknown name -- never quietly replaced.
     for (const char* retired : {"GDI", "HTML_DOM", "SVG_DOM", "OPENGL4", "gdi", "OpenGL4",
                                 "DIRECTX12", "CANVAS", "OPENGLES2", "WEBGL1", "DirectX12", "canvas",
-                                "OpenGLES2", "WebGL1", "VULKAN", "Vulkan"})
+                                "OpenGLES2", "WebGL1", "VULKAN", "Vulkan", "DIRECTX11",
+                                "DirectX11", "METAL", "Metal", "SDL_RENDERER", "sdl_renderer"})
     {
         SCOPED_TRACE(retired);
         EXPECT_THROW(GraphicsRendererSelection::SetPreferred(retired), System::ArgumentException);
@@ -177,7 +178,8 @@ TEST_F(GraphicsRendererSelectionTest, ARetiredNameIsReportedAsRetiredRatherThanU
     // An old configuration that still names a retired renderer is told it was retired and what
     // this build offers instead -- not that it misspelled something, and never routed to the
     // renderer that took over its role (docs/removed-renderers.md).
-    for (const char* retired : {"VULKAN", "vulkan", "OPENGL4"})
+    for (const char* retired :
+         {"VULKAN", "vulkan", "DIRECTX11", "METAL", "SDL_RENDERER", "OPENGL4"})
     {
         SCOPED_TRACE(retired);
         try

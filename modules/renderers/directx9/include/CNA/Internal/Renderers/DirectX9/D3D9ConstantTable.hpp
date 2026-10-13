@@ -5,10 +5,11 @@
 // every named constant. Design decision 9: this project does not link D3DX (ID3DXConstantTable's
 // own home -- a deprecated d3dx9_43.dll redistributable this project will not ship), so this reads
 // the documented D3DXSHADER_CONSTANTTABLE binary layout directly instead of calling that helper
-// API. Needed because, unlike D3D11's own D3D11EffectRenderer (a fixed-slot cbuffer convention
-// works there since HLSL cbuffer field offsets are caller-predictable), D3D9 constant REGISTERS
-// are assigned by the compiler itself and can vary between shaders -- a real post-compile
-// name -> register lookup is the only reliable way to know where a named uniform actually landed.
+// API. Needed because, unlike the retired D3D11 renderer's D3D11EffectRenderer (a fixed-slot
+// cbuffer convention worked there since HLSL cbuffer field offsets are caller-predictable), D3D9
+// constant REGISTERS are assigned by the compiler itself and can vary between shaders -- a real
+// post-compile name -> register lookup is the only reliable way to know where a named uniform
+// actually landed.
 //
 // Token-stream layout reference (D3D9 shader bytecode): a comment token has its low 16 bits equal
 // to 0xFFFE, with bits 16-30 giving the comment's payload size in DWORDs. This project's own

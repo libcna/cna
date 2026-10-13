@@ -81,7 +81,7 @@ struct VSOutput
 
 // REMED-GFX-006: transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
 // no built-in inverse(); vs_3_0 has ample instruction budget for this. Matches Pbr3D.hlsl's own
-// CPU-supplied NormalMatrix and the corrected Vulkan pbr3d_skinned.vert.glsl.
+// CPU-supplied NormalMatrix and the retired VULKAN renderer's corrected pbr3d_skinned.vert.glsl.
 float3x3 InverseTranspose3x3(float3x3 m)
 {
     float3 c0 = cross(m[1], m[2]);

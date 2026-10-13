@@ -66,8 +66,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
     D3DCULL CullModeToD3D9(int cullMode)
     {
-        // See this function's own header doc: D3D9 defines clockwise as front-facing by default,
-        // same convention D3DCommon::CullModeToD3D11 assumes for D3D11.
+        // See this function's own header doc: D3D9, like D3D11, defines clockwise as
+        // front-facing by default.
         switch (static_cast<CullMode>(cullMode))
         {
             case CullMode::None:                     return D3DCULL_NONE;

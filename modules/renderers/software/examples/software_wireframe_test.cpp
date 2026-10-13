@@ -3,7 +3,7 @@
 // task SoftwareRenderer::ApplyRasterizerState dropped its fillMode argument and the rasterizer
 // only ever filled solid triangles, so FillMode.WireFrame rendered as a solid fill (no line-raster
 // path existed). This is the Software counterpart of the GPU renderers' wireframe support (e.g. EasyGL
-// expands each triangle into GL_LINES; D3D11/Vulkan use the hardware WIREFRAME fill mode).
+// expands each triangle into GL_LINES).
 //
 // XNA/FNA contract (verified against FNA RasterizerState.FillMode + PipelineCache):
 //   FillMode.Solid     -> normal filled triangle rasterization.

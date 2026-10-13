@@ -229,7 +229,7 @@ namespace CNA::Examples
                 return std::abs(a - b) <= tolerance;
             };
 
-            // plans/plan_vulkan.md VULKAN-185: how much of the tolerance this comparison actually
+            // VULKAN-185: how much of the tolerance this comparison actually
             // used. A golden CTest that prints only pass or fail cannot tell "identical" from "one
             // step inside the limit", so a scene that drifts from a max difference of 2 to 59 under
             // a tolerance of 60 goes on saying [PASS] until the day it does not. The number is on
@@ -341,19 +341,14 @@ namespace CNA::Examples
         if (!ProbeGpuDisplayAvailable())
             return kSkipExitCode;
 
-        // LLGL-55: a real display is present (the probe above succeeded), but the LLGL Vulkan
-        // module still cannot actually PRESENT on it when the X server has no DRI3 support --
-        // confirmed, not guessed: LLGL::VKSwapChain's own surface creation throws
-        // "failed to create Vulkan swap-chain (error code = VK_ERROR_SURFACE_LOST_KHR)" out of
-        // the GraphicsDevice/Game constructor itself, well after this function's own display
-        // probe already passed. Uncaught, this used to abort the whole test process (every
-        // Vulkan-selecting LLGL test on a DRI3-less Xvfb) instead of reporting a clean result --
-        // this is a genuine infrastructure gap (this renderer's OWN choice of renderer module vs.
-        // what the X server actually supports), not a rendering defect, so it is reported the
-        // same way "no display at all" already is: SKIPPED, not FAILED, and NOT silently treated
-        // as a pass. The substring match is deliberately narrow (this exact LLGL/Vulkan surface
-        // error, not `std::exception` in general) so a genuine Vulkan pipeline/rendering bug
-        // still surfaces as an uncaught exception -- a real crash, correctly reported as FAILED.
+        // LLGL-55: a real display is present (the probe above succeeded), but a Vulkan swapchain
+        // still cannot PRESENT on it when the X server has no DRI3 support. SDL_GPU's Vulkan
+        // backend reports that as VK_ERROR_SURFACE_LOST_KHR in the SDL error the GraphicsDevice/
+        // Game constructor throws, well after this function's own display probe passed. It is an
+        // infrastructure gap, not a rendering defect, so it is reported the way "no display at
+        // all" is: SKIPPED, not FAILED, and not silently treated as a pass. The substring match is
+        // deliberately narrow (this exact surface error, not `std::exception` in general) so a
+        // genuine pipeline or rendering bug still surfaces as an uncaught exception.
         try
         {
             TGame game;

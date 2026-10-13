@@ -32,10 +32,7 @@
 // uVertexColorEnabled` to the fragment shader, computing `vc=(uVertexColorEnabled>0.5)?vColor:
 // vec4(1)` then `FragColor=texture(...)*vc*uDiffuseColor`. The generic `BindDrawParams()` uniform
 // setter already handles `loc_diffuse`/`loc_vertexcolor` whenever the program exposes them, so no
-// other C++ changes were needed. The identical bug (DiffuseColor silently dropped in the
-// stride-24 vertex+fragment shader pair) was independently found and fixed the same way on Bgfx;
-// Vulkan's `colored_textured3d.vert.glsl` already multiplied by `pc.diffuseColor` correctly and
-// needed no fix.
+// other C++ changes were needed.
 //
 // Uses 3 distinctly-valued, non-white colors chosen so all three inputs and every 2-of-3 partial
 // product are numerically distinguishable from the true 3-way product: texture color

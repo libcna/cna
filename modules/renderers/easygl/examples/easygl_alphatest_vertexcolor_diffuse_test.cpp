@@ -20,21 +20,6 @@
 // instead, produces the same correct RGB **and** that the alpha test correctly reads the
 // post-vertex-color-multiply alpha — genuine new coverage, not a duplicate of Task 367.
 //
-// CONFIRMED, NOT FIXED HERE: Vulkan and Bgfx take a fundamentally different, incompatible
-// architecture for `AlphaTestEffect` — a single generic alpha-test pipeline/shader shared across
-// all vertex strides (`alpha_test3d.vert/frag.glsl` on Vulkan, `vs/fs_alpha_test3d.sc` on Bgfx)
-// that **only ever declares `position`+`texcoord` vertex inputs, never a color attribute** — so
-// `AlphaTestEffect.VertexColorEnabled` has **zero effect on Vulkan or Bgfx**, and this is true by
-// default: even `AlphaTestEffect`'s own default settings (`AlphaFunction=Greater`,
-// `ReferenceAlpha=0`) already produce `alphaTest.z=-1`, which routes every draw through this
-// vertex-color-blind pipeline unless `AlphaFunction=Always` is explicitly set (which defeats the
-// point of using `AlphaTestEffect` at all). Fixing this properly means unifying Vulkan/Bgfx's
-// alpha-test dispatch with their already-correct per-stride textured/colored-textured pipelines
-// (mirroring EasyGL's architecture) — a genuinely large, multi-shader-file, multi-renderer change,
-// not a Task-377-sized fix. Tracked as new **Task 887**; no Vulkan/Bgfx test is added here to
-// avoid encoding today's confirmed-wrong behavior as a "passing" assertion that would need
-// updating (and could be forgotten) once Task 887 lands.
-//
 // Uses TextureColor=white (255,255,255,255, so texture is an identity factor, isolating the
 // vertex-color × diffuse-color interaction specifically), VertexColor RGB=(200,100,50) Alpha=200,
 // DiffuseColor=(0.6,0.4,0.8), effect Alpha=0.8. Two `CompareFunction::Greater` cases with

@@ -20,7 +20,7 @@ layout(set = 1, binding = 0) uniform PC {
     vec4 emissiveAmount;  // xyz = emissive+ambient*diffuse (pre-summed by the XNA layer), w = envMapAmount
 } pc;
 
-// Mirrors VulkanRenderer's env_map3d.vert.glsl EnvMapParams field-for-field. Fog
+// Mirrors the retired VulkanRenderer's env_map3d.vert.glsl EnvMapParams field-for-field. Fog
 // (REMED-GFX-009) is supplied separately via the FogParams block further below.
 layout(set = 1, binding = 1) uniform EnvMapParams {
     mat4 world;
@@ -36,7 +36,7 @@ layout(set = 1, binding = 1) uniform EnvMapParams {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanRenderer's FogParams shape byte-for-byte.
+// the retired VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
@@ -67,7 +67,7 @@ void main() {
         0.0, 1.0);
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
-    // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
+    // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (as Vulkan did).
     float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

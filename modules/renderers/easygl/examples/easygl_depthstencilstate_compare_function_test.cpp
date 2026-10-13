@@ -16,17 +16,10 @@
 //                (opposite depth direction from Less -- catches a Less/Greater direction swap).
 //
 // All checks share one Clear() (the 5 columns don't spatially overlap) and one frame. Z values
-// are deliberately kept within [0, 1]: with an identity World/View/Projection, this project's
-// Vulkan renderer expects clip-space Z in DirectX's [0,+w] range (matching real XNA semantics), and
-// a negative Z would silently clip away on Vulkan only -- see Task 313's test file for the full
-// explanation. Do not reintroduce negative Z values here.
-//
-// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState) is already
-// confirmed (Task 313, tracked as Task 870) to ignore DepthBufferFunction entirely, hardcoding
-// depthCompareOp per pipeline-creation-function to VK_COMPARE_OP_LESS or LESS_OR_EQUAL regardless
-// of what's requested. Expect only the checks that happen to match whichever hardcoded op the
-// exercised pipeline uses to pass on Vulkan, and the rest to fail -- this is a reconfirmation of
-// Task 870, not a new bug. Kept the Vulkan variant registered as a documented known failure.
+// are deliberately kept within [0, 1]: with an identity World/View/Projection, real XNA semantics
+// put clip-space Z in DirectX's [0,+w] range, and a negative Z would silently clip away on a
+// renderer that follows them -- see Task 313's test file for the full explanation. Do not
+// reintroduce negative Z values here.
 //
 // Exit code 0 = all 5 checks PASS, 1 = any FAIL.
 

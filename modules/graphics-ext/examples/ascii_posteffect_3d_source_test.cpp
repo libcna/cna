@@ -18,7 +18,7 @@
 // convention as ascii_posteffect_pixel_test.cpp) so cell/pixel positions are exactly predictable.
 //
 // Check A -- SupportsCapability(GraphicsCapability::ThreeD): renderers without a real 3D pipeline
-//   (SDL_RENDERER, HEADLESS, ...) SKIP (exit 77) rather than spuriously failing -- a documented
+//   (HEADLESS, ...) SKIP (exit 77) rather than spuriously failing -- a documented
 //   capability boundary, matching backbuffer_headless_reject_test.cpp's own convention.
 // Check B -- Draw() against the 3D-rendered source does not throw.
 // Check C -- a background-only corner cell (no geometry reaches it) quantizes to exactly the

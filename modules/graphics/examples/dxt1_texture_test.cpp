@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 125: EasyGL/Vulkan integration test — DXT1 texture loaded via FromStream,
+// Task 125: EasyGL integration test — DXT1 texture loaded via FromStream,
 // rendered, and pixel readback asserts correct colour.
 //
 // Constructs a minimal in-memory DDS file containing one 4×4 DXT1 block with all

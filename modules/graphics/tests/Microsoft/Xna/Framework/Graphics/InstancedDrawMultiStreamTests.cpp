@@ -160,9 +160,9 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
-// InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
-// WebGPU (REMED-GFX-211/213), and Software (SOFTWARE-129). InstancedDrawRangeTests.cpp uses this set for the same
-// reason.
+// InstanceFrequency -- EasyGL (REMED-GFX-122), WebGPU (REMED-GFX-211/213) and Software
+// (SOFTWARE-129), and the since-retired D3D11/D3D12 (REMED-GFX-123), Vulkan and bgfx.
+// InstancedDrawRangeTests.cpp uses this set for the same reason.
 //
 // This is now every renderer that rasterizes an instanced draw at all EXCEPT D3D9, so the triage
 // group at the bottom of this file no longer carries a measured-defect arm. It carried one for as
@@ -1371,11 +1371,12 @@ TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFr
 // Measured boundaries this leg deliberately stays inside, so that it is a preservation gate on
 // EVERY instancing renderer rather than a restatement of open findings:
 //
-//   * the per-instance VertexOffset is 0 here. Vulkan, bgfx and WebGPU ignore a nonzero one --
-//     REMED-GFX-122/123 corrected only EasyGL and D3D11/D3D12 -- which is recorded as
-//     REMED-GFX-211 and asserted separately below on the renderers that do honour it.
-//   * the colour axis is not asserted here -- only D3D11/D3D12 are still identified as colouring
-//     the instanced route from DiffuseColor and neither could be measured (REMED-GFX-212; see
+//   * the per-instance VertexOffset is 0 here. Vulkan, bgfx and WebGPU ignored a nonzero one --
+//     REMED-GFX-122/123 corrected only EasyGL and D3D11/D3D12 -- which was recorded as
+//     REMED-GFX-211 and is asserted separately below on the renderers that do honour it.
+//   * the colour axis is not asserted here -- the since-retired D3D11/D3D12 were the last
+//     renderers identified as colouring the instanced route from DiffuseColor, and neither could
+//     be measured (REMED-GFX-212; see
 //     ExpectExactlyTheseCellsIgnoringColour, and InstancedVertexColorTests.cpp for the direct
 //     per-renderer measurement).
 //   * the instance frequency is 1. bgfx implements no per-instance divisor at all
@@ -2166,10 +2167,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
     if (BindingOffsetOracle())
     {
         EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
-            << "this renderer implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
-               "input layout on the step rate, EasyGL through glVertexAttribDivisor, REMED-GFX-213 by "
-               "expanding the grouping into a renderer's own instance staging copies: six "
-               "instances at InstanceFrequency 2 must consume records 0,0,1,1,2,2";
+            << "this renderer implements the per-instance divisor -- EasyGL through "
+               "glVertexAttribDivisor, REMED-GFX-213 by expanding the grouping into a renderer's "
+               "own instance staging copies: six instances at InstanceFrequency 2 must consume "
+               "records 0,0,1,1,2,2";
     }
     else
     {

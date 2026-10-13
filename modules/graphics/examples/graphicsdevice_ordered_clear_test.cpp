@@ -10,7 +10,7 @@
 // must leave B everywhere C did not touch, and nothing of A anywhere -- on a PreserveContents
 // target just as much as on a DiscardContents one.
 //
-// `VulkanRenderer` delivered a clear ONLY through the render pass load op:
+// The retired `VulkanRenderer` delivered a clear ONLY through the render pass load op:
 // `GetOrCreateRTRenderPass(depthFormat, discardContents)` chose
 // `discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD` and there was no
 // `vkCmdClearAttachments` path anywhere in the renderer. A pass has exactly one load action, so

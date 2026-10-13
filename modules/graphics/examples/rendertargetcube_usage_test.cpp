@@ -373,15 +373,15 @@ class RenderTargetCubeUsageTest : public Game
      *        one, and returns nothing.
      *
      * This exists because a preservation check that skips it is false-positive-capable on a
-     * deferred renderer. Vulkan used to record exactly ONE render pass per unique render-target
-     * source per flush -- `RecordCommandBuffer`'s Phase 1 collected `usedRTs` and replayed every
-     * queued batch for each -- so a producer pass and a later partial pass issued into the same
-     * flush window collapsed into a single pass whose one load action ran before BOTH, and the
-     * producer's content survived even on a renderer that discards on every bind. **REMED-GFX-140
-     * fixed that**: Phase 1 is now keyed on the bind cycle, so a rebind is a separate native pass
-     * with its own load action. **SdlGpu had the identical defect by a different route** --
-     * `EnsureFrameRendered` gave each unique `DrawTarget` (resource plus cube face) one
-     * `SDL_BeginGPURenderPass` -- **and REMED-GFX-145 fixed it the same way.**
+     * deferred renderer. The retired VULKAN renderer used to record exactly ONE render pass per
+     * unique render-target source per flush -- `RecordCommandBuffer`'s Phase 1 collected `usedRTs`
+     * and replayed every queued batch for each -- so a producer pass and a later partial pass
+     * issued into the same flush window collapsed into a single pass whose one load action ran
+     * before BOTH, and the producer's content survived even on a renderer that discards on every
+     * bind. **REMED-GFX-140 fixed that**: Phase 1 was then keyed on the bind cycle, so a rebind was
+     * a separate native pass with its own load action. **SdlGpu had the identical defect by a
+     * different route** -- `EnsureFrameRendered` gave each unique `DrawTarget` (resource plus cube
+     * face) one `SDL_BeginGPURenderPass` -- **and REMED-GFX-145 fixed it the same way.**
      *
      * The barrier stays, and is still required, because it is what makes this file's subject
      * observable at all rather than a workaround for the collapsing: a preservation check has to
@@ -821,9 +821,9 @@ class RenderTargetCubeUsageTest : public Game
      * holding both cycles' draws produces exactly the pixels two LOAD passes would -- so what this
      * asserts is only that the composition is right either way: the producer's pattern with the
      * marker over it. It passes on a discarding renderer too, which is exactly why it is not the
-     * oracle for P3, and it is NOT a licence to collapse: REMED-GFX-140 (Vulkan) and
-     * REMED-GFX-145 (SdlGpu) established that every
-     * bind cycle is its own logical pass and
+     * oracle for P3, and it is NOT a licence to collapse: REMED-GFX-140 (the retired VULKAN
+     * renderer) and REMED-GFX-145 (SdlGpu) established that every bind cycle is its own logical
+     * pass and
      * `examples/rendertarget_pass_boundary_test.cpp` enforces that on a DiscardContents target,
      * where the two shapes differ.
      */

@@ -28,8 +28,8 @@ layout(set = 1, binding = 0) uniform PC {
 // plans/plan_sdlgpu.md: DirectionalLight1/DirectionalLight2 + EmissiveColor + specular + the World
 // matrix (needed here to compute a world-space normal/position), forwarded via a second
 // vertex-stage UBO (set 1, binding 1) since the primary 128-byte UBO above is already fully
-// packed -- mirrors VulkanRenderer/WebGPURenderer's own lit_textured3d second-UBO
-// precedent (field names kept identical to those renderers' for easier cross-reference).
+// packed -- mirrors the lit_textured3d second-UBO precedent of WebGPURenderer and the retired
+// VulkanRenderer (field names kept identical to those renderers' for easier cross-reference).
 layout(set = 1, binding = 1) uniform LitLightParams {
     vec4 light1Dir_pad;
     vec4 light1Diffuse_pad;
@@ -46,7 +46,7 @@ layout(set = 1, binding = 1) uniform LitLightParams {
 
 // REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
-// VulkanRenderer's FogParams shape byte-for-byte.
+// the retired VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
@@ -62,7 +62,7 @@ void main() {
     gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
     // GLSL has a built-in inverse(), unlike WGSL -- no need for WebGPU's CPU-precomputed normal
-    // matrix workaround; this mirrors VulkanRenderer's own lit_textured3d.vert.glsl exactly.
+    // matrix workaround; this mirrors the retired VulkanRenderer's lit_textured3d.vert.glsl.
     mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(normalMatrix * inNormal);
     fragWorldPos = (lp.world * CNA_INSTANCE_POSITION(vec4(inPos, 1.0))).xyz;
@@ -93,7 +93,7 @@ void main() {
         0.0, 1.0);
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
-    // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
+    // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (as Vulkan did).
     float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

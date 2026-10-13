@@ -21,8 +21,8 @@
 // Geometry: one identity-bone quad whose normal faces +Z; DirectionalLight0 points down −Z, so
 // N·(−L0) = 1 exactly. Lights 1/2 are disabled (they contribute nothing) unless a case needs them.
 // Identity World/View/Proj, white 1×1 texture, opaque blend, CullNone. Backbuffer readback is linear
-// on every renderer this test is registered for (matches the established Vulkan/EasyGL/SdlGpu/Bgfx/
-// D3D11 skinned tests, which assert linear 0.3→77 etc.).
+// on every renderer this test is registered for (matches the established EasyGL/SdlGpu skinned
+// tests, which assert linear 0.3→77 etc.).
 //
 // Exit code 0 = PASS (all cases), 1 = FAIL.
 

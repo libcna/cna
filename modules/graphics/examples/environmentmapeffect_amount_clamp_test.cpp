@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-196 (finding F-36) -- Direct3D 9 saturates a vertex shader's colour output
+// VULKAN-196 (finding F-36) -- Direct3D 9 saturates a vertex shader's colour output
 // registers, and `EnvironmentMapEffect` carries its blend factor in one of them.
 //
 // `FX-123` established the semantic against real XNA frames: D3D9 clamps `oD0` **and `oD1`** to
@@ -11,9 +11,9 @@
 // and XNA will saturate it; a renderer that interpolates the raw value extrapolates the blend
 // instead of replacing with the environment map.
 //
-// Renderer-agnostic on purpose. EasyGL already clamps (`EasyGLRenderer.cpp:8423`) and Vulkan did
-// not, so this is a parity gap as well as an XNA divergence, and the same source registered on both
-// is what makes that statement checkable rather than asserted.
+// Renderer-agnostic on purpose. EasyGL already clamped (`EasyGLRenderer.cpp:8423`) and the retired
+// VULKAN renderer did not, so this was a parity gap as well as an XNA divergence, and one shared
+// source is what makes such a statement checkable rather than asserted.
 //
 // The legs are RELATIONAL, never absolute, because the base colour a lit `EnvironmentMapEffect`
 // produces depends on the lighting model and is not this test's subject:

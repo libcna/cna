@@ -53,7 +53,7 @@ namespace CNA::Platform::Sdl3 {
         /**
          * @brief Stops an Xlib protocol error from ending the process.
          *
-         * plans/plan_vulkan.md `VULKAN-154`/`VULKAN-157`, findings F-22 and F-23 -- which turned
+         * `VULKAN-154`/`VULKAN-157`, findings F-22 and F-23 -- which turned
          * out to be **one** defect, and this is it.
          *
          * Xlib's default error handler calls `exit()`. When the failing request comes from inside
@@ -119,8 +119,7 @@ namespace CNA::Platform::Sdl3 {
                     std::fprintf(stderr,
                                  "[CNA][platform] X protocol error ignored: error_code=%u "
                                  "request=%u.%u serial=%lu resource=0x%lx. Xlib's default handler "
-                                 "would have called exit() here; see plans/plan_vulkan.md "
-                                 "VULKAN-154.\n",
+                                 "would have called exit() here; see VULKAN-154.\n",
                                  static_cast<unsigned>(e->error_code),
                                  static_cast<unsigned>(e->request_code),
                                  static_cast<unsigned>(e->minor_code), e->serial, e->resourceid);
@@ -227,7 +226,7 @@ namespace CNA::Platform::Sdl3 {
         // application, and calling it here would tear down subsystems the host still holds.
         // Cached native handles must close before the subsystems that own them.
         //
-        // plans/plan_vulkan.md VULKAN-159 (finding F-28): do NOT re-lock when this very thread is
+        // VULKAN-159 (finding F-28): do NOT re-lock when this very thread is
         // already inside the critical section. `exit()` can be reached from within a platform call
         // that holds the mutex -- measured with gdb on 2026-09-05, Xlib's default error handler
         // calling exit() from inside SDL_CreateWindow, itself called from CreateWindow which took

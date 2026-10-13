@@ -41,7 +41,7 @@ typedef uint32_t CNA_GraphicsDeviceStatus;
 #define CNA_GRAPHICS_DEVICE_STATUS_NOT_RESET UINT32_C(2)
 
 /**
- * @brief Fixed-width identity of the policy a 2D-only renderer applies to unsupported 3D calls.
+ * @brief Fixed-width identity of the policy a renderer without 3D support applies to 3D calls.
  */
 typedef uint32_t CNA_Unsupported3DGraphicsCallBehavior;
 
@@ -1224,7 +1224,7 @@ CNA_C_API CNA_Result cna_graphics_device_set_string_marker_ext(
     CNA_StringView marker);
 
 /**
- * @brief Gets the active policy for unsupported 3D calls on a 2D-only renderer.
+ * @brief Gets the active policy for unsupported 3D calls on a renderer without 3D support.
  *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param out_behavior Receives one of the `CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_*` identities.
@@ -1235,7 +1235,7 @@ CNA_C_API CNA_Result cna_graphics_device_get_unsupported_3d_call_behavior(
     CNA_Unsupported3DGraphicsCallBehavior* out_behavior);
 
 /**
- * @brief Sets the policy for unsupported 3D calls on a 2D-only renderer.
+ * @brief Sets the policy for unsupported 3D calls on a renderer without 3D support.
  *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param behavior One of the `CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_*` identities.
@@ -1414,8 +1414,7 @@ CNA_C_API CNA_Result cna_graphics_device_supports_surface_format_as_render_targe
  *
  * **Not the same question as the `CustomEffects` capability**, and this is the one that matters
  * before writing a shader: SOFTWARE and HEADLESS *accept* any source and keep rendering with their
- * own fixed path, and Vulkan takes SPIR-V rather than GLSL. Asking only the capability is how a
- * pass reports success while drawing nothing.
+ * own fixed path. Asking only the capability is how a pass reports success while drawing nothing.
  *
  * @param graphics_device The device.
  * @param out_executes Receives the answer.

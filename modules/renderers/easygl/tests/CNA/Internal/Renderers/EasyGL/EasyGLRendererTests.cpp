@@ -285,7 +285,7 @@ TEST(EasyGLSurfaceState, StretchAndNativeBackBufferAlsoCoverTheWholeDrawable)
     }
 }
 
-// plans/plan_dx.md DX-217 settled what NativeBackBuffer means, and it is the mode's own
+// DX-217 settled what NativeBackBuffer means, and it is the mode's own
 // documentation: "no scaling; game draws at its requested size" (IGraphicsRenderer.hpp's
 // CnaPresentationMode). The logical surface IS the client area, so a requested virtual resolution
 // is deliberately NOT applied in this mode.

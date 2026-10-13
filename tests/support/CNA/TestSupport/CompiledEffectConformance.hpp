@@ -3784,8 +3784,9 @@ namespace CNA::TestSupport
      * validation refuses first. That makes this a contract about the public boundary's robustness,
      * not a proof of the harness assertion policy. The proof of that policy is the sweep that goes
      * at a renderer's compiled-effect runtime DIRECTLY, below the public validation, where the
-     * assertion is genuinely reachable (`VulkanCompiledEffectTest.
-     * MalformedBytecodeIsRejectedWithoutCrashing`, plans/plan_fx.md FX-111).
+     * assertion is genuinely reachable (`CompiledEffectTruncationSweepTest.
+     * EveryTruncationOfARealEffectIsRefusedOrParsedWhole`, moved from the retired VULKAN suite;
+     * plans/plan_fx.md FX-111).
      *
      * Sweeping every 4-byte length rather than pinning one keeps it honest across fixture changes,
      * and under a sanitizer the sweep is the real question: a parser walking off the end of a

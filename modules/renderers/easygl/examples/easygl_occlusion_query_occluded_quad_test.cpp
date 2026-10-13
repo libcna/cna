@@ -9,8 +9,8 @@
 // DepthStencilState.cpp), then draw a full-NDC Red target quad at depth 0.7 -- 0.7 <= 0.3 is FALSE,
 // so every one of the target quad's fragments is rejected by the depth test. The target quad's draw
 // call is wrapped in Begin()/End(); if depth testing genuinely occludes it, the query should report
-// PixelCount() == 0. Z values kept within [0,1] per this project's own established Vulkan
-// clip-space-Z convention (not exercised by this EasyGL-only test, but kept consistent anyway).
+// PixelCount() == 0. Z values kept within [0,1] per XNA's Direct3D clip-space-Z convention (not
+// exercised by this EasyGL-only test, but kept consistent anyway).
 //
 // GetBackBufferData (via glReadPixels, a synchronizing GL call) both forces the driver to flush
 // pending work so the query's result becomes available (same technique as Task 445) and

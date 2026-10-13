@@ -1,28 +1,26 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-214 -- does a RenderTargetUsage::PreserveContents target still preserve
+// VULKAN-214 -- does a RenderTargetUsage::PreserveContents target still preserve
 // after the window has been resized under it?
 //
-// On Vulkan a resize is a swapchain recreation, which is the most disruptive thing that happens to
-// this renderer while resources are alive: the swapchain, its image views, its framebuffers and the
-// backbuffer depth image are all destroyed and rebuilt, the frame generation advances, and the
-// readback cache is invalidated. A render target created before all that keeps its own images and
-// its own framebuffer, and `PreserveContents` promises its texels survive an unbind/rebind cycle.
-// Nothing tested that the promise still holds across the recreation.
+// On the retired VULKAN renderer, where this was first written, a resize was a swapchain
+// recreation: the swapchain, its image views, its framebuffers and the backbuffer depth image were
+// all destroyed and rebuilt, the frame generation advanced, and the readback cache was invalidated.
+// A render target created before a resize keeps its own storage, and `PreserveContents` promises
+// its texels survive an unbind/rebind cycle. Nothing tested that the promise still holds across a
+// resize.
 //
-// Renderer-agnostic and registered on Vulkan and EasyGL, because "preserve survives a resize" is a
-// claim about the XNA contract rather than about Vulkan, and a one-renderer result cannot separate
-// a renderer defect from a shared-layer one.
+// Renderer-agnostic, because "preserve survives a resize" is a claim about the XNA contract rather
+// than about one renderer, and a one-renderer result cannot separate a renderer defect from a
+// shared-layer one.
 //
 //   A  Before any resize: a preserved target holds what was drawn into it. The control -- if this
 //      fails, B is measuring PreserveContents itself and not the resize.
 //   B  After the resize: rebinding the SAME target and drawing into the OTHER half leaves the
 //      first half's texels intact. A target whose framebuffer or render pass did not survive shows
-//      up here as the clear colour, or as a validation message the VULKAN-408 gate catches.
+//      up here as the clear colour.
 //   C  A Texture2D created before the resize is still readable after it, with its original pixels.
 //      Cheap, and it separates "render targets specifically" from "every resource".
-//   D  Vulkan only: the swapchain really was recreated. Without it A-C could all pass on a build
-//      where the resize quietly did nothing, which is exactly the failure this row is about.
 //
 // The resize is driven through GraphicsDeviceManager (setPreferredBackBufferWidth/Height +
 // ApplyChanges()) rather than by resizing the native window directly. Two reasons, and the second
@@ -30,8 +28,7 @@
 // deadline to wait on and no environment-dependent failure mode; and this file lives under
 // modules/graphics/, where the platform ratchet (cmake/PlatformRatchet.cmake) refuses a new
 // example that reaches for the windowing library by name -- correctly, because a test of the XNA
-// contract has no business doing so. A Vulkan-only leg asserts the swapchain really was recreated,
-// so the test cannot pass by never resizing at all.
+// contract has no business doing so.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 

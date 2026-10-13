@@ -120,7 +120,7 @@ static CNA_Result on_load(
             device, CNA_GRAPHICS_CAPABILITY_THREE_D, &three_d) != CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;
     }
-    /* A 2D-only renderer has no models to load; that is its answer, not this route's. */
+    /* A device without 3D has no models to load; that is its answer, not this route's. */
     state->validated = three_d == CNA_TRUE ? validate_loaded_model(device) : 2;
     return CNA_RESULT_SUCCESS;
 }

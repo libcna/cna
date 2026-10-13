@@ -122,11 +122,11 @@ namespace
     /**
      * @brief The exact policy used when an application requests a 2D mip chain.
      *
-     * Declared, not probed, for the same reason as RtContract: SDL_Renderer documents that its 2D
-     * texture API has no mip chain. Most still create a mipmapped resource and reject
-     * `SetData(level=1, ...)`. SKIA-127 now implements that upload/readback path after SKIA-126
-     * opened construction. These honest policies must not be conflated by a test that terminates
-     * before reporting them.
+     * Declared, not probed, for the same reason as RtContract: a renderer's texture API may have no
+     * mip chain (SDL's 2D render API, behind the retired SDL_RENDERER, had none). Most still create
+     * a mipmapped resource and reject `SetData(level=1, ...)`. SKIA-127 now implements that
+     * upload/readback path after SKIA-126 opened construction. These honest policies must not be
+     * conflated by a test that terminates before reporting them.
      */
     enum class MipPolicy
     {

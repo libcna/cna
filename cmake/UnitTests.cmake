@@ -355,12 +355,12 @@ if(CNA_BUILD_TESTS)
         set(CNA_TEST_GROUP_DEPENDENCY_inspector cna_inspector)
     endif()
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
-    # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
-    # System::Xml::Serialization, so the group that tests it links that component too --
-    # everywhere the component exists. plans/plan_dx.md DX-250/DX-269: on a Windows target it does
-    # not (see cmake/SharpRuntimeConsumption.cmake for the exact upstream reason), so both the
-    # source and dependency are absent rather than naming a target CMake would reject at generate
-    # time or compiling a source whose include root is unavailable.
+    # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into System::Xml::Serialization,
+    # so the group that tests it links that component too -- everywhere the component exists.
+    # DX-250/DX-269 (the retired plans/plan_dx.md): on a Windows target it does not (see
+    # cmake/SharpRuntimeConsumption.cmake for the exact upstream reason), so both the source and
+    # dependency are absent rather than naming a target CMake would reject at generate time or
+    # compiling a source whose include root is unavailable.
     if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
         set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
     else()
@@ -1159,13 +1159,13 @@ if(CNA_BUILD_TESTS)
     # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
     # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
     # driver has null cursors).
-    # plans/plan_vulkan.md VULKAN-153 (finding F-22): this test carried NO timeout, and it can
-    # deadlock -- observed twice on 2026-09-05, single-threaded in futex_wait with 2 seconds of CPU
-    # after 45 minutes of wall clock, both times while a second copy of this same suite was running
-    # from another checkout. Without a TIMEOUT, ctest never reaps it and the whole run stops there;
-    # the only way to finish was to kill the process by hand. Bounding it turns an unbounded stall
-    # into one reported failure. 1200s is generous against the measured range: 221s alone, 628s as
-    # the slowest healthy run seen under -j6. The deadlock itself is a separate row.
+    # VULKAN-153 (finding F-22 of the retired plans/plan_vulkan.md): this test carried NO timeout,
+    # and it can deadlock -- observed twice on 2026-09-05, single-threaded in futex_wait with 2
+    # seconds of CPU after 45 minutes of wall clock, both times while a second copy of this same
+    # suite was running from another checkout. Without a TIMEOUT, ctest never reaps it and the whole
+    # run stops there; the only way to finish was to kill the process by hand. Bounding it turns an
+    # unbounded stall into one reported failure. 1200s is generous against the measured range: 221s
+    # alone, 628s as the slowest healthy run seen under -j6. The deadlock itself was a separate row.
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
@@ -1403,11 +1403,11 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 
-    # plans/plan_vulkan.md VULKAN-154/VULKAN-157: the Xlib error-handler regression is the one
-    # platform test that needs a REAL X11 connection rather than SDL's dummy driver -- its whole
-    # subject is what Xlib does with a failing X request. Its own ctest, with the video driver and
-    # the display forced, because the gtest-discovered copy inside the shared binary inherits the
-    # shell's DISPLAY (finding F-22) and usually finds SDL already committed to another driver.
+    # VULKAN-154/VULKAN-157 (the retired plans/plan_vulkan.md): the Xlib error-handler regression is
+    # the one platform test that needs a REAL X11 connection rather than SDL's dummy driver -- its
+    # whole subject is what Xlib does with a failing X request. Its own ctest, with the video driver
+    # and the display forced, because the gtest-discovered copy inside the shared binary inherits
+    # the shell's DISPLAY (finding F-22) and usually finds SDL already committed to another driver.
     cna_register_renderer_test(NAME CnaPlatformXErrorHandlerTests
         COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3XErrorHandlerTest.*
         LABELS "platform" TIMEOUT 60

@@ -1472,9 +1472,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Inserts a named debug marker at the current point in the GPU command stream.
          *
-         * On Vulkan with VK_EXT_debug_utils, calls vkCmdInsertDebugUtilsLabelEXT so the
-         * label appears in GPU profilers (RenderDoc, NVIDIA Nsight, etc.).
-         * On all other renderers this is a no-op.
+         * Renderers with a native debug-label API forward it so the label appears in GPU
+         * profilers (RenderDoc, NVIDIA Nsight, etc.); on the others this is a no-op.
          *
          * @param marker The label string to insert.
          */
@@ -1540,10 +1539,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Returns whether the active renderer (and, for device-dependent entries, the
          * current runtime device/driver) supports the given CNA::GraphicsCapability.
          *
-         * Query this before relying on a feature that isn't universally supported (e.g. 3D on
-         * the 2D-only SDL_RENDERER renderer), instead of calling it and handling the
-         * resulting exception. MultipleRenderTargets and Texture3D also answer for this device's
-         * GraphicsProfile: Reach binds one render target and has no volume textures.
+         * Query this before relying on a feature that isn't universally supported, instead of
+         * calling it and handling the resulting exception. MultipleRenderTargets and Texture3D also
+         * answer for this device's GraphicsProfile: Reach binds one render target and has no
+         * volume textures.
          *
          * @param capability The capability to check.
          * @return True if supported by the active renderer/device.
@@ -1623,9 +1622,9 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * plans/plan_modern.md `MOD-1699`. `GraphicsCapability::CustomEffects` says a renderer accepts a
          * custom effect; this says the shader you wrote is what runs. They differ on real
-         * renderers: SOFTWARE and HEADLESS accept any source and render with their own fixed path,
-         * and Vulkan takes SPIR-V bytecode rather than GLSL text. A pass that assumes the first
-         * answer covers the second copies its input through and reports success.
+         * renderers: SOFTWARE and HEADLESS accept any source and render with their own fixed
+         * path. A pass that assumes the first answer covers the second copies its input through
+         * and reports success.
          *
          * @return True when the supplied shader source is executed.
          */
@@ -1698,8 +1697,8 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] int GetMaxTextureDimension() const;
 
         /**
-         * @brief Configures how permanently unsupported 3D calls are handled by a 2D-only
-         * graphics renderer.
+         * @brief Configures how permanently unsupported 3D calls are handled by a graphics
+         * renderer without 3D support.
          *
          * Throw is the default and preserves the renderer's established exceptions/null results.
          * WarnAndStub logs each unsupported operation once and substitutes a safe no-op or
@@ -1749,8 +1748,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Test-only: tears down and rebuilds the active graphics renderer (same window)
          * with a new PresentationParameters.MultiSampleCount, so a renderer-level property
-         * (e.g. Vulkan's own backbuffer sampleCount_, picked once at renderer-construction time)
-         * can be changed after the device already exists.
+         * picked once at renderer-construction time can be changed after the device already
+         * exists.
          *
          * This exists because GraphicsDeviceManager.PreferMultiSampling/ApplyChanges() does NOT
          * reach here: Game's own GraphicsDevice member is unconditionally default-constructed
@@ -2167,7 +2166,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Pushes SamplerStates[firstSlot..MaxSamplers-1] down to the renderer.
          *
          * Called from every draw entry point with the default, and from SpriteBatch's flush
-         * with firstSlot == 1 (plan_vulkan.md VULKAN-166): a sprite batch owns slot 0 through
+         * with firstSlot == 1 (VULKAN-166): a sprite batch owns slot 0 through
          * ISpriteBatchRenderer::SetSamplerFilter/SetSamplerAddressMode/SetSamplerAddressModeWEXT,
          * so re-publishing it here would give one slot two writers with no ordering between them
          * across the renderer families. Slots 1 and up have no other writer at all, which is why

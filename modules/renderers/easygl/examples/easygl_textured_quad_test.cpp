@@ -50,8 +50,7 @@ protected:
 
         // Clear to solid red so we can check clear+readback before adding SpriteBatch.
         device.Clear(Color(255, 0, 0, 255));
-        // Express the absence of depth work through the public state object. This is equivalent
-        // on 3D renderers and remains valid on deliberately 2D-only renderers.
+        // Express the absence of depth work through the public state object.
         device.setDepthStencilStateProperty(DepthStencilState::None);
 
         // Read back the centre pixel — should be the clear colour.

@@ -29,15 +29,12 @@ protected:
         if (done_) return;
         done_ = true;
 
-        // plan_vulkan.md VULKAN-139. GLTF-157's contract is that an unknown raw stride fails
-        // LOUDLY -- it does not say when. The two renderers that register this source refuse at
-        // different moments, and both are consistent with their own design:
-        //
-        //   EasyGL selects its native layout from the stride at UPLOAD, so it can refuse there.
-        //   CNA's Vulkan renderer binds what the caller DECLARED (VULKAN-144); with no declaration
-        //   it falls back to the stride table, and that decision is made at DRAW time -- so an
-        //   unknown stride is stored without complaint and the draw is what refuses (VULKAN-152
-        //   declared exactly that boundary).
+        // VULKAN-139. GLTF-157's contract is that an unknown raw stride fails
+        // LOUDLY -- it does not say when. EasyGL selects its native layout from the stride at
+        // UPLOAD, so it can refuse there. A renderer that binds what the caller DECLARED and falls
+        // back to the stride table only at DRAW time (the retired VULKAN renderer did, VULKAN-144;
+        // VULKAN-152 declared exactly that boundary) stores an unknown stride without complaint,
+        // and the draw is what refuses.
         //
         // Asserting the upload-time throw alone would therefore assert EasyGL's ARCHITECTURE, not
         // GLTF-157's contract. This asks for the refusal and lets it arrive at either point, while

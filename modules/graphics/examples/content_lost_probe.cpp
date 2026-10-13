@@ -39,7 +39,7 @@ int main()
     }
 
     // plans/plan_apple_m4.md AM4-195: vertex and index buffers exist only where the renderer draws
-    // 3D; a 2D-only one (SDL_RENDERER) refuses to create them, and the render-target half of the
+    // 3D; a renderer without 3D refuses to create them, and the render-target half of the
     // contract is then the whole of it.
     const bool buffers = device->SupportsCapability(CNA::GraphicsCapability::ThreeD);
     const VertexDeclaration& declaration = VertexPositionColor::getVertexDeclarationStatic();

@@ -144,7 +144,7 @@ namespace Microsoft::Xna::Framework::Graphics
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 return;
             case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
-                // plan_vulkan.md VULKAN-170: name the format. A bare "has not passed the
+                // VULKAN-170: name the format. A bare "has not passed the
                 // renderer's promotion gate" tells a caller nothing it did not already know, and
                 // the sibling refusal one branch down (Texture::ValidateFormat) has always named
                 // the ordinal. This is the renderer's own no -- distinct from the profile's

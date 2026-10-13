@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::DirectX9
             return buf;
         }
 
-        /// Mirrors D3D11Textures.cpp's own CalculateMipLevels: full mip chain down to 1x1.
+        /// Full mip chain down to 1x1.
         int CalculateMipLevels(int w, int h)
         {
             int levels = 1;

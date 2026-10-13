@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
-// XNA culling-compatibility investigation (docs/xna_culling_compatibility_audit.md):
-// minimal, deterministic CullMode reproducer under a REAL camera (perspective/orthographic
-// projection + Matrix::CreateLookAt), extending the existing identity-transform-only coverage
-// in examples/easygl_rasterizerstate_cullmode_test.cpp (Tasks 323-325/765, reused verbatim on
-// Vulkan as Vulkan_RasterizerState_CullMode). That existing test already establishes, empirically,
-// pixel-verified, on all 3 renderers: under XNA's default CullCounterClockwiseFace RasterizerState,
-// a triangle whose raw NDC-space vertex order has signed area < 0 (by the standard shoelace
-// formula, Y-up) SURVIVES; one with signed area > 0 is CULLED. This file checks whether that same
-// rule still holds once a real World/View/Projection chain is involved -- the identity-only test
-// cannot distinguish "the cull-state-to-native mapping is correct" from "it only happens to look
-// correct when World=View=Projection=Identity". No model loading, FBX, textures, lighting, bones,
-// or animation are used here -- two flat-colored triangles only.
+// XNA culling-compatibility investigation (docs/xna_culling_compatibility_audit.md): minimal,
+// deterministic CullMode reproducer under a REAL camera (perspective/orthographic projection +
+// Matrix::CreateLookAt), extending the existing identity-transform-only coverage in
+// examples/easygl_rasterizerstate_cullmode_test.cpp (Tasks 323-325/765). That existing test already
+// establishes, empirically, pixel-verified, on every renderer that runs it: under XNA's default
+// CullCounterClockwiseFace RasterizerState, a triangle whose raw NDC-space vertex order has signed
+// area < 0 (by the standard shoelace formula, Y-up) SURVIVES; one with signed area > 0 is CULLED.
+// This file checks whether that same rule still holds once a real World/View/Projection chain is
+// involved -- the identity-only test cannot distinguish "the cull-state-to-native mapping is
+// correct" from "it only happens to look correct when World=View=Projection=Identity". No model
+// loading, FBX, textures, lighting, bones, or animation are used here -- two flat-colored triangles
+// only.
 //
 // Method (avoids hand-deriving expected screen positions, which is exactly the kind of arithmetic
 // this investigation must not rely on): for every scenario below,

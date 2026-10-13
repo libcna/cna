@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 426: Pixel test -- newline advances by line spacing on EasyGL.
 //
-// Direct EasyGL port of Task 692's SDL_Renderer test, building on Task 424's fixture pattern to
+// Direct EasyGL port of Task 692's test, building on Task 424's fixture pattern to
 // exercise the newline branch of the shared, renderer-agnostic SpriteBatch::DrawString:
 // `curOffset.X = 0; curOffset.Y += spriteFont.lineSpacing_; firstInLine = true;`.
 //

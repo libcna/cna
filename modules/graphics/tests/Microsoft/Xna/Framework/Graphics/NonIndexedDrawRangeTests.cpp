@@ -23,12 +23,12 @@
 // keeps its exact range therefore leaves both outer regions at the clear colour, while a draw that
 // binds a wider vertex range necessarily lights them.
 //
-// Renderer scope. Bgfx, EasyGL, WebGPU, Vulkan, D3D9, D3D11 and Software raster render 3D triangles
-// and support backbuffer readback, so they carry the permanent TriangleList coverage. The full
-// five-topology sweep additionally needs PointListEXT, which Vulkan/D3D9/D3D11/D3D12 still route
-// through their triangle-list default (the independent REMED-GFX-114), so that sweep runs on Bgfx,
-// EasyGL, WebGPU and Software. PointListEXT remains extension-only regression coverage; the four
-// classic XNA topologies are required parity behavior.
+// Renderer scope. EasyGL, WebGPU, D3D9 and Software raster render 3D triangles and support
+// backbuffer readback, so they carry the permanent TriangleList coverage. The full five-topology
+// sweep additionally needs PointListEXT, which D3D9 still routes through its triangle-list default
+// (the independent REMED-GFX-114), so that sweep runs on EasyGL, WebGPU and Software. PointListEXT
+// remains extension-only regression coverage; the four classic XNA topologies are required parity
+// behavior.
 
 #include <algorithm>
 #include <array>
@@ -377,9 +377,10 @@ namespace
 
     /// "Did any geometry render here?" compares RGB only. Every primitive in this fixture has a
     /// non-black colour, so RGB alone answers the question — while the alpha a renderer leaves in a
-    /// *cleared* render target it later samples back is its own convention (Vulkan resolves the
-    /// black clear to alpha 0, the OpenGL-family renderers to alpha 255) and has nothing to do with
-    /// which vertices a draw consumed. The intended primitives are still matched on exact RGBA.
+    /// *cleared* render target it later samples back is its own convention (the retired VULKAN
+    /// renderer resolved the black clear to alpha 0, the OpenGL-family renderers resolve it to
+    /// alpha 255) and has nothing to do with which vertices a draw consumed. The intended
+    /// primitives are still matched on exact RGBA.
     bool HasSameRgb(const Color& left, const Color& right)
     {
         return left.getRProperty() == right.getRProperty() &&

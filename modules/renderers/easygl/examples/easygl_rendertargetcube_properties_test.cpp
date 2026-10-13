@@ -6,14 +6,14 @@
 // documents/computes.
 //
 // Task 336 fix: LevelCount now correctly reflects `mipMap`, and EasyGL actually allocates +
-// auto-generates the full mip chain (per-face) on unbind. Holds on Vulkan/Bgfx too (shared,
-// renderer-agnostic computation) but only EasyGL's GPU resource is truly mip-complete right now
-// (Task 878).
+// auto-generates the full mip chain (per-face) on unbind. Holds on every renderer (shared,
+// renderer-agnostic computation), even one whose GPU resource is not mip-complete (Task 878).
 //
 // Task 337 fix: MultiSampleCount now reflects the renderer's real, device-clamped value (mirroring
 // FNA's MathHelper.ClosestMSAAPower + FNA3D_GetMaxMultiSampleCount), and EasyGL actually creates a
 // shared multisampled color renderbuffer (reused across faces) resolved into the correct face's
-// texture image on unbind. Same Vulkan/Bgfx caveat as LevelCount above (Task 879).
+// texture image on unbind. A renderer without multisampled render targets reports 0 instead
+// (Task 879).
 //
 // One remaining note:
 //   - GetTypeName() was missing entirely before this task (inherited TextureCube's "TextureCube"
@@ -101,13 +101,13 @@ protected:
 
         // --- Task 337 fix: MultiSampleCount reflects the real, per-renderer value, never a
         // blind pass-through (see easygl_rendertarget2d_properties_test.cpp for the full
-        // rationale — this test is shared between EasyGL and Vulkan builds). ---
+        // rationale — this test is shared between renderers). ---
         {
             RenderTargetCube rt(device, 8, false, SurfaceFormat::Color, DepthFormat::None,
                                  4, RenderTargetUsage::DiscardContents);
             const int v = rt.getMultiSampleCountProperty();
             check(v == 4 || v == 0,
-                  "multiSample=4: MultiSampleCount == 4 (EasyGL, real) or 0 (Vulkan/Bgfx, not yet implemented)");
+                  "multiSample=4: MultiSampleCount == 4 (EasyGL, real) or 0 (a renderer without MSAA targets)");
         }
         {
             RenderTargetCube rt(device, 8, false, SurfaceFormat::Color, DepthFormat::None,

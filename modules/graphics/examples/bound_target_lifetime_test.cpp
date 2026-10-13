@@ -176,8 +176,8 @@ namespace
     /**
      * @brief Whether a `RenderTargetCube` face can be rendered into at all.
      *
-     * SDL_RENDERER has no cube path and HEADLESS does not rasterize. Declared rather than asserted,
-     * exactly as the neighbouring render-target fixtures already do.
+     * HEADLESS does not rasterize. Declared rather than asserted, exactly as the neighbouring
+     * render-target fixtures already do.
      */
     constexpr bool kRenderTargetCubeSupported =
 #if defined(CNA_RENDERER_HEADLESS)
@@ -206,13 +206,14 @@ namespace
     /**
      * @brief Whether the mip level > 0 of a MULTI-target set's member is publicly readable.
      *
-     * Strictly narrower than kRenderTargetMipReadable: VULKAN regenerates a single render target's
-     * mip chain (leg E1a passes there) but returns all-zero for level 1 of a target bound as part of
-     * an MRT set (`L1 the surviving MRT slot's mip chain was still regenerated (0/8) ... got
-     * (0,0,0,0)`). Recorded as an independent finding rather than folded into this task's subject;
-     * L1's level-0 check and its backbuffer check stay asserted on every renderer. LLGL measures the
-     * identical (0,0,0,0) result running on its own Vulkan module, unsurprising since that module
-     * wraps real Vulkan and shares the same MRT/mip-regeneration path.
+     * Strictly narrower than kRenderTargetMipReadable: the retired VULKAN renderer regenerated a
+     * single render target's mip chain (leg E1a passed there) but returned all-zero for level 1 of
+     * a target bound as part of an MRT set (`L1 the surviving MRT slot's mip chain was still
+     * regenerated (0/8) ... got (0,0,0,0)`). Recorded as an independent finding rather than folded
+     * into this task's subject; L1's level-0 check and its backbuffer check stay asserted on every
+     * renderer. LLGL measured the identical (0,0,0,0) result running on its own Vulkan module,
+     * unsurprising since that module wrapped real Vulkan and shared the same MRT/mip-regeneration
+     * path.
      */
     constexpr bool kMrtSlotMipReadable =
         true;
@@ -1448,9 +1449,8 @@ namespace
 
     // Matches CNA::Examples::kSkipExitCode (common/PixelTestGame.hpp) -- a leg that exits with this
     // code decided for itself, before this supervisor is involved, that its environment can't
-    // support the check (LLGL-55: e.g. the shared Vulkan-WSI-unavailable guard,
-    // examples/common/LlglVulkanWsiSkipGuard.cpp). That is not the same as the leg failing, so it
-    // must not be counted or reported as one.
+    // support the check (LLGL-55: e.g. RunPixelTest's VK_ERROR_SURFACE_LOST_KHR skip there). That
+    // is not the same as the leg failing, so it must not be counted or reported as one.
     constexpr int kLegSkipExitCode = 77;
 
     /**

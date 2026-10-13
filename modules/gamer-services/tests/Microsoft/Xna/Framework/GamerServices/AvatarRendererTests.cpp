@@ -216,7 +216,7 @@ TEST(AvatarRendererTest, DrawsEveryPresetAndExpressionOnTheDispatcherDevice) {
 // plans/plan_apple_m4.md AM4-008: the GPU upload used to set its "uploaded" marker before the
 // buffers existed, so a renderer that refuses vertex buffers left a half-built upload behind a
 // complete-looking marker and the second Draw indexed past the end of the part list. Every Draw
-// must now fail the same clean way, which only a 2D-only renderer can provoke.
+// must now fail the same clean way, which only a renderer without 3D can provoke.
 TEST(AvatarRendererTest, AFailedGpuUploadFailsEveryDrawCleanlyRatherThanHalfBuilding) {
     GraphicsDevice device;
     if (device.SupportsCapability(CNA::GraphicsCapability::ThreeD))

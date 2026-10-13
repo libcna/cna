@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx.md DX-217: renderer-neutral forwarding proof for presentation interval changes.
+// DX-217: renderer-neutral forwarding proof for presentation interval changes.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

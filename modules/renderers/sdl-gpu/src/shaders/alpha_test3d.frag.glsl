@@ -23,7 +23,7 @@ layout(set = 3, binding = 1) uniform SamplerLodBias {
     vec4 slots4To7;
 } samplerLodBias;
 
-// Same encoding as EasyGL/Vulkan/WebGPU:
+// Same encoding as EasyGL/WebGPU:
 //   if (alphaTol > 0) -> pass = |alpha - alphaRef| < alphaTol
 //   else              -> pass = alpha < alphaRef
 //   weight = pass ? alphaPassW : alphaFailW; weight < 0 -> discard.

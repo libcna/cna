@@ -24,11 +24,11 @@
 // Check B -- a real BasicEffect/VertexPositionColor quad drawn into one face, read back via
 //   GetData(): proves a genuine 3D draw dispatch reaches a cube face render target, not just
 //   Clear().
-// Check C -- EnvironmentMapEffect sampling round trip (mirrors vulkan_rendertargetcube_sample_test.
-//   cpp, adapted to a real 3D draw instead of SpriteBatch -- see this check's own in-body comment
-//   for why): solid blue drawn into all 6 faces, unbound, then sampled back as
-//   EnvironmentMapEffect.EnvironmentMap on a full-screen quad -- centre pixel must be blue. This
-//   specifically exercises IWebGPUCubeSamplable/ResolveCubeSamplable(): before this task,
+// Check C -- EnvironmentMapEffect sampling round trip (mirrors the retired VULKAN renderer's
+//   rendertargetcube sample test, adapted to a real 3D draw instead of SpriteBatch -- see this
+//   check's own in-body comment for why): solid blue drawn into all 6 faces, unbound, then sampled
+//   back as EnvironmentMapEffect.EnvironmentMap on a full-screen quad -- centre pixel must be blue.
+//   This specifically exercises IWebGPUCubeSamplable/ResolveCubeSamplable(): before this task,
 //   GpuDrawParams::envMap was resolved via a dynamic_cast to the concrete WebGPUTextureCubeRenderer
 //   type only, so a WebGPURenderTargetCubeRenderer (a different concrete class) would have silently
 //   failed that cast and rendered the 1x1 white-cube fallback instead -- this check would fail
@@ -271,9 +271,8 @@ protected:
                 { Vector3( 1.0f,  1.0f, 0.0f), n, Vector2(1.0f, 1.0f) },
             };
             // Defensive re-apply (CullNone is already set at the top of Draw() and nothing in
-            // this file resets it) -- kept explicit since vulkan_rendertargetcube_sample_test.cpp's
-            // own Task 896 finding is that this exact quad's winding is back-facing under the
-            // real default RasterizerState.
+            // this file resets it) -- kept explicit since Task 896 found that this exact quad's
+            // winding is back-facing under the real default RasterizerState.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
 

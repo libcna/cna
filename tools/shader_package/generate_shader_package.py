@@ -268,7 +268,7 @@ class ShadercCompiler:
 # ---- WGSL payloads (plans/plan_webgpu_modern_graphics.md WMG-0005) --------------------------------
 #
 # A "wgsl" payload is derived from the SAME Vulkan GLSL source as the package's SPIR-V payload, so
-# the Vulkan and WebGPU programs cannot drift apart: the source is rewritten into the WebGPU binding
+# the SPIR-V and WebGPU programs cannot drift apart: the source is rewritten into the WebGPU binding
 # contract (below), compiled by shaderc exactly like a SPIR-V payload, and translated to WGSL by
 # naga. Every rule here is a mechanical rewrite of a declaration, never of shader logic.
 #
@@ -283,7 +283,7 @@ class ShadercCompiler:
 #   * `writeonly buffer` becomes `buffer` -- WGSL storage buffers are read or read_write.
 # Clip space needs no rule: naga's SPIR-V frontend negates the vertex position's y (Vulkan's clip
 # space is y-down, WebGPU's y-up), which makes every generated program produce the framebuffer image
-# its Vulkan twin produces.
+# its SPIR-V twin produces.
 WEBGPU_TRANSFORM = "cna-webgpu-glsl/1"
 WEBGPU_SCALAR_BLOCK = (3, 0)
 WEBGPU_SAMPLER_BINDING_OFFSET = 32
@@ -385,7 +385,7 @@ def naga_toolchain(path: Path) -> NagaToolchain:
 # SPIR-V block layouts, compared between the shaderc module and naga's re-emission of the WGSL. The
 # WGSL is correct exactly when every uniform/storage block has the same member offsets, array
 # strides and matrix strides in both -- which is what makes the WebGPU renderer's byte uploads mean
-# what the Vulkan renderer's mean.
+# what a SPIR-V renderer's mean.
 _OP_CONSTANT, _OP_TYPE_INT, _OP_TYPE_FLOAT, _OP_TYPE_VECTOR, _OP_TYPE_MATRIX = 43, 21, 22, 23, 24
 _OP_TYPE_ARRAY, _OP_TYPE_RUNTIME_ARRAY, _OP_TYPE_STRUCT, _OP_TYPE_POINTER = 28, 29, 30, 32
 _OP_VARIABLE, _OP_DECORATE, _OP_MEMBER_DECORATE, _OP_TYPE_BOOL = 59, 71, 72, 20

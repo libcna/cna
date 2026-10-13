@@ -2,12 +2,10 @@
 
 // plans/plan_dx9.md Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.
 //
-// RGBA8 storage only (D3DFMT_A8B8G8R8) -- matches D3D11Textures.hpp's own established
-// simplification (see that file's header comment): every ITextureRenderer/ITextureCubeRenderer/
-// ITexture3DRenderer implementation in this project treats textures as RGBA8 regardless of the
-// XNA SurfaceFormat/`surfaceFormat` ordinal a caller passes; CreateTexture3D/CreateTextureCube's
-// own `surfaceFormat` parameter is accepted for interface-signature compatibility only, same as
-// D3D11's precedent.
+// RGBA8 storage only (D3DFMT_A8B8G8R8), the simplification the retired D3D11 renderer also made:
+// textures are treated as RGBA8 regardless of the XNA SurfaceFormat/`surfaceFormat` ordinal a
+// caller passes; CreateTexture3D/CreateTextureCube's own `surfaceFormat` parameter is accepted for
+// interface-signature compatibility only.
 //
 // D3DPOOL_MANAGED (not DEFAULT) for all three -- design decision 2's own payoff, confirmed for
 // real by D9-4's spike: MANAGED textures survive Reset() with no re-upload needed and are
@@ -26,8 +24,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     /// Real D3D9 2D texture renderer (D9-50). Level 0 is uploaded at construction time from
     /// ImageData::pixels; further mip levels (when ImageData::mipLevels > 1) are left undefined
-    /// until the caller uploads them via UpdatePixelsLevel() -- mirrors D3D11TextureRenderer's own
-    /// level-0-then-later-levels convention.
+    /// until the caller uploads them via UpdatePixelsLevel().
     class D3D9TextureRenderer final : public ITextureRenderer
     {
     public:
@@ -56,8 +53,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
     /// Real D3D9 cube-map texture renderer (D9-51). Face order (0..5) is D3D9's own native
     /// D3DCUBEMAP_FACES enum order (+X,-X,+Y,-Y,+Z,-Z), the same convention
-    /// IRenderTargetCubeRenderer::BindAsRenderTargetFace() and D3D11TextureCubeRenderer already
-    /// document, so a raw `static_cast<D3DCUBEMAP_FACES>(face)` is always correct here.
+    /// IRenderTargetCubeRenderer::BindAsRenderTargetFace() already documents, so a raw
+    /// `static_cast<D3DCUBEMAP_FACES>(face)` is always correct here.
     class D3D9TextureCubeRenderer final : public ITextureCubeRenderer
     {
     public:

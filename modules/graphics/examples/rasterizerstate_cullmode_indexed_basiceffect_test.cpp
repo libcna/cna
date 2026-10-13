@@ -222,8 +222,8 @@ protected:
             // Retry loop: Bgfx's GetBackBufferData only reliably reflects the FIRST read per
             // rendered frame (Task 406) -- a lone Clear+Draw+Read can see stale data from a
             // previous call within the same Draw() invocation. Retrying across real frames
-            // gives it a chance to catch up; harmless on EasyGL/Vulkan, which succeed on the
-            // first attempt.
+            // gives it a chance to catch up; harmless on renderers that succeed on the first
+            // attempt.
             for (int attempt = 0; attempt < 10; ++attempt)
             {
                 dev.Clear(kBackground);

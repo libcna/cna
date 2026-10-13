@@ -544,12 +544,10 @@ class BackbufferReadbackDimensionTest : public Game
     }
 
     /**
-     * @brief VULKAN-404 -- the Khronos layer's verdict on everything this leg just did.
+     * @brief VULKAN-404 -- the Khronos validation layer's verdict on everything this leg just did.
      *
-     * Asserted per leg rather than per suite, because the defect this guards is reachable from one
-     * leg only (G1, the growing resize) and a suite-wide count would not say which. The layer's own
-     * liveness is asserted first: an empty message list from a layer that never loaded is not
-     * evidence.
+     * Only the retired VULKAN renderer asserted it (per leg, because the defect it guarded was
+     * reachable from leg G1 alone), so the body is empty on every surviving renderer.
      */
     void CheckValidationClean()
     {
@@ -589,9 +587,8 @@ namespace
 
     // Matches CNA::Examples::kSkipExitCode (common/PixelTestGame.hpp) -- a leg that exits with this
     // code decided for itself, before this supervisor is involved, that its environment can't
-    // support the check (LLGL-55: e.g. the shared Vulkan-WSI-unavailable guard,
-    // examples/common/LlglVulkanWsiSkipGuard.cpp). That is not the same as the leg failing, so it
-    // must not be counted or reported as one.
+    // support the check (LLGL-55: e.g. RunPixelTest's VK_ERROR_SURFACE_LOST_KHR skip there). That
+    // is not the same as the leg failing, so it must not be counted or reported as one.
     constexpr int kLegSkipExitCode = 77;
 
     bool RunLegIsolated(const char* exePath, const char* legId, bool& crashed, bool& skipped)

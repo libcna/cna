@@ -495,7 +495,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         auto& dev = getGraphicsDeviceProperty();
         auto rt = MakeTarget(dev, depth, samples, mipMap, RenderTargetUsage::DiscardContents, label);
 
-        // plan_vulkan.md VULKAN-184: what a target reports is the format it APPLIED, not the one
+        // VULKAN-184: what a target reports is the format it APPLIED, not the one
         // it was asked for, and those differ on a device that cannot give you what you asked for.
         //
         // This leg used to require them equal. That held everywhere it had ever run -- llvmpipe
@@ -520,8 +520,8 @@ class RenderTargetMsaaDepthContractTest : public Game
                                        "reported rather than hidden"));
 
         // The APPLIED count is device- and renderer-dependent and the XNA contract permits rounding
-        // DOWN to the nearest supported count: Vulkan and WebGPU gate render-target MSAA on the
-        // device's own sample count and legitimately apply 0 here, EasyGL caps at GL_MAX_SAMPLES,
+        // DOWN to the nearest supported count: WebGPU gates render-target MSAA on the device's own
+        // sample count and legitimately applies 0 here, EasyGL caps at GL_MAX_SAMPLES,
         // and SDL_GPU clamps to what the adapter reports. Asserting one exact number per cell would
         // therefore encode this machine rather than the contract. What IS universal -- and what a
         // silent MSAA drop to make a depth attachment legal would violate -- is that the count is a

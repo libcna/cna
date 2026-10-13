@@ -18,8 +18,9 @@
 //
 // SdlGpu renders into a RenderTarget2D (SurfaceFormat::Color = RGBA8 UNORM, linear -- confirmed by
 // examples/sdlgpu_envmap_test.cpp's own gray-cube 128->128 readback), so the expected pixel values
-// below are asserted directly in linear space, exactly like the already-verified Vulkan/Bgfx
-// slices (vulkan_environmentmapeffect_amount_zero_test.cpp, bgfx_environmentmapeffect_amount_zero_test.cpp).
+// below are asserted directly in linear space, exactly like the retired Vulkan/Bgfx renderers'
+// verified slices (vulkan_environmentmapeffect_amount_zero_test.cpp,
+// bgfx_environmentmapeffect_amount_zero_test.cpp).
 //
 // All four checks set EnvironmentMapAmount=0 to suppress the cube-map blend entirely, isolating the
 // lit/emissive term, and use zero directional lights (lightSum=0) so the pixel reduces to

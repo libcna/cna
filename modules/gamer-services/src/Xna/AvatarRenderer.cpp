@@ -143,8 +143,8 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
             // Built into locals and committed only once every resource exists. `effect` is the
             // "uploaded" marker, and it used to be assigned first: when a later allocation threw
-            // (a 2D-only renderer refuses vertex buffers), the marker claimed a complete upload
-            // over an empty `parts`, and the next Draw indexed past its end.
+            // (the retired 2D-only renderer refused vertex buffers), the marker claimed a
+            // complete upload over an empty `parts`, and the next Draw indexed past its end.
             auto newEffect = std::make_unique<Graphics::SkinnedEffect>(*device);
             auto newWhite = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(*device, 1, 1, {255, 255, 255, 255}));
             std::vector<std::unique_ptr<Graphics::Texture2D>> newImages;

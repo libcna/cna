@@ -1,8 +1,8 @@
 #pragma once
 
 // plans/plan_dx9.md Phase D9-2 (D9-22): stride-keyed D3DVERTEXELEMENT9 arrays, mirroring the same 5
-// stride-keyed layouts (16/20/24/32/52 bytes) D3DCommon::InputElementsForStride() already
-// establishes for D3D11 -- same byte offsets, same semantic meaning, D3D9's own element/type
+// stride-keyed layouts (16/20/24/32/52 bytes) the retired D3DCommon::InputElementsForStride()
+// established for D3D11 -- same byte offsets, same semantic meaning, D3D9's own element/type
 // enums (design decision 12: this is D3D9's own table, not a D3DCommon consumer).
 //
 // XNA's own VertexDeclaration maps 1:1 onto D3DVERTEXELEMENT9 -- this project's D3D9 renderer is
@@ -54,9 +54,9 @@ namespace CNA::Internal::Renderers::DirectX9
     /// (confirmed empirically: opaque red read back as opaque blue before this fix).
     ///
     /// Note (D9-90's own future concern, not this function's): stride 32 is ambiguous between
-    /// VertexPositionNormalTexture and a hypothetical differently-shaped 32-byte SpriteBatch
-    /// vertex -- D3D11's own DX-70 already found and solved this exact collision; reuse that
-    /// resolution when D3D9's SpriteBatch renderer lands rather than rediscovering it here.
+    /// VertexPositionNormalTexture and a hypothetical differently-shaped 32-byte SpriteBatch vertex
+    /// -- the retired D3D11 renderer's DX-70 already found and solved this exact collision; reuse
+    /// that resolution when D3D9's SpriteBatch renderer lands rather than rediscovering it here.
     const D3DVERTEXELEMENT9* VertexElementsForStrideD3D9(std::size_t strideInBytes, UINT& count);
 
     /**

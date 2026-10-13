@@ -51,8 +51,8 @@ namespace CNA::Graphics {
      * texture -> fragment shader -> cell luminance/color selection -> glyph atlas sampling, no
      * per-frame readback) is architecturally possible on shader-capable renderers via
      * `Microsoft::Xna::Framework::Graphics::ShaderEffect`, but is deliberately deferred -- it would
-     * not run on 2D-only/non-shader renderers (`SDL_RENDERER`, `HEADLESS`, `SOFTWARE`, ...), which
-     * this effect must keep supporting uniformly.
+     * not run on non-shader renderers (`HEADLESS`, `SOFTWARE`, ...), which this effect must keep
+     * supporting uniformly.
      *
      * CNAEXT extension -- no XNA/FNA precedent. Deliberately not named `AsciiEffect` alone: unlike
      * `Microsoft::Xna::Framework::Graphics::Effect` (a GPU shader program `SpriteBatch`/

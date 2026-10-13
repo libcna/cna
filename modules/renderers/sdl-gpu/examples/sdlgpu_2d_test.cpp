@@ -7,7 +7,7 @@
 //
 // No pixel-level readback exists yet on this renderer (ReadBackbuffer is not implemented --
 // plans/plan_sdlgpu.md's Phase SDLGPU-8/39), so this test cannot assert exact pixel colors the way the
-// WebGPU/D3D11/Vulkan smoke tests do. It proves: real texture upload, a real multi-sprite scene
+// WebGPU smoke tests do. It proves: real texture upload, a real multi-sprite scene
 // (tint/alpha/rotation/flip/sampler variants) drawn over many frames with no crash -- the same
 // bar WEBGPU-126 met before automated GPU readback existed for that renderer.
 //

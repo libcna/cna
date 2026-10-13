@@ -495,8 +495,6 @@ namespace
 
 TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAcceptance)
 {
-    // plans/plan_apple_m4.md AM4-151: Metal joined this file's depth/stencil contracts once its
-    // backbuffer and targets had exactly the planes their DepthFormat names.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 
     EXPECT_EQ(RenderDepthWinner(DepthFormat::None), Color::Green);
@@ -691,7 +689,6 @@ TEST(BackBufferDepthStencilContractTest, StockEffectUsesXnaClipDepthConvention)
 
 TEST(BackBufferDepthStencilContractTest, SpriteBatchLayerDepthParticipatesInDepthTesting)
 {
-    // plans/plan_apple_m4.md AM4-153: Metal's sprites became XNA's homogeneous vertices.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 
     EXPECT_EQ(RenderSpriteDepthWinner(), Color::Red);

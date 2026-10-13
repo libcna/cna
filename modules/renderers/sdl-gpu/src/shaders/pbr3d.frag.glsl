@@ -23,7 +23,7 @@ layout(set = 2, binding = 4) uniform sampler2D uOcclusionMap;
 layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
 layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;
 // plans/plan_street_sdlgpu.md STREETS-0002: an ImageBasedLightEXT's three resources, after the
-// shadow maps at 7..9, read through GraphicsDevice.SamplerStates[10..12] as on Vulkan, EasyGL and
+// shadow maps at 7..9, read through GraphicsDevice.SamplerStates[10..12] as on EasyGL and
 // WebGPU. A draw with no environment binds neutral white here and iblParams.x switches the term off.
 layout(set = 2, binding = 10) uniform samplerCube uIblIrradiance;
 layout(set = 2, binding = 11) uniform samplerCube uIblSpecular;
@@ -71,7 +71,8 @@ layout(set = 3, binding = 2) uniform PbrParams {
     // reception needs one, so the two vectors ride at the end of this block instead.
     vec4 lodBias0To3;
     vec4 lodBias4To7;
-    // STREETS-0002: x = enabled, y = prefiltered mip count, z = intensity -- Vulkan's iblParams.
+    // STREETS-0002: x = enabled, y = prefiltered mip count, z = intensity -- the retired
+    // VulkanRenderer's iblParams.
     vec4 iblParams;
     // STREETS-0002: MipMapLevelOfDetailBias of sampler slots 10, 11 and 12, applied in the shader
     // like every other slot's here, because this renderer's samplers are created without one.
@@ -132,8 +133,9 @@ vec3 safeNormalize(vec3 v) {
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
 }
 
-// STREETS-0002: the split-sum image-based term, Vulkan's CnaIblAmbient term for term. The mip for a
-// roughness is roughness * (mipCount - 1), which is EnvironmentProcessor::mipForRoughness.
+// STREETS-0002: the split-sum image-based term, the retired VulkanRenderer's CnaIblAmbient term
+// for term. The mip for a roughness is roughness * (mipCount - 1), which is
+// EnvironmentProcessor::mipForRoughness.
 vec3 cnaIblAmbient(vec3 N, vec3 V, vec3 albedo, vec3 F0, float roughness,
                    float metallic, float occlusion) {
     if (pbrp.iblParams.x < 0.5) return vec3(0.0);

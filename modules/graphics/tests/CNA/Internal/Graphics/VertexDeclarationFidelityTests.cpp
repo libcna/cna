@@ -9,11 +9,11 @@
 // about can be asserted directly rather than inferred from pixels.
 //
 // WHY THE RULE IS ASYMMETRIC. The exit triage rejected "the declaration must equal the stride
-// table's entry": Vulkan renders a position-only stride-12 declaration correctly today because a
-// declaration that names no colour supplies no colour for a stock program to consume, and an
-// equality rule would reject that. Only what the declaration ACTUALLY DECLARES has to survive, and
-// every leg below is written to fail if that asymmetry is ever quietly tightened into equality --
-// the accepted cases are as load-bearing as the rejected ones.
+// table's entry": the retired VULKAN renderer rendered a position-only stride-12 declaration
+// correctly because a declaration that names no colour supplies no colour for a stock program to
+// consume, and an equality rule would reject that. Only what the declaration ACTUALLY DECLARES has
+// to survive, and every leg below is written to fail if that asymmetry is ever quietly tightened
+// into equality -- the accepted cases are as load-bearing as the rejected ones.
 
 #include <string>
 #include <vector>
@@ -156,10 +156,11 @@ TEST(VertexDeclarationFidelityTest, SkinnedVertexColorStride56IsRepresentable)
 
 TEST(VertexDeclarationFidelityTest, PositionOnlyStride12SurvivesThePositionColorFallback)
 {
-    // Vulkan's measured behaviour: its colored pipeline binds Position@0 and Color@12 and strides
-    // by the buffer's own 12 bytes, and a position-only declaration renders correctly through it.
+    // The retired VULKAN renderer's measured behaviour: its colored pipeline bound Position@0 and
+    // Color@12 and strode by the buffer's own 12 bytes, and a position-only declaration rendered
+    // correctly through it.
     EXPECT_EQ("", Verdict(Elements({Pos()}), 12, UnlistedStrideLayout::PositionColorFallback));
-    // WebGPU's and Vulkan's instanced modules are position-only for the same stride.
+    // WebGPU's instanced modules are position-only for the same stride.
     EXPECT_EQ("", Verdict(Elements({Pos()}), 12, UnlistedStrideLayout::PositionOnlyFallback));
 }
 

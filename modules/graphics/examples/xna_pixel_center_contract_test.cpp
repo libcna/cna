@@ -11,8 +11,7 @@
 // REMED-GFX-239 moved this out of the EasyGL example directory. The convention belongs to XNA, so
 // every renderer owes it, and one that does not implement it should say so by failing here rather
 // than by never being asked -- CNA otherwise gives different pixel coverage depending on the
-// renderer, silently. EasyGL implements it (EasyGLRenderer::xnaPixelCenterScale_); Vulkan does not,
-// and its registration is expected to fail until it does.
+// renderer, silently. EasyGL implements it (EasyGLRenderer::xnaPixelCenterScale_).
 //
 // The larger control triangle stays so a failure cannot be mistaken for a broken BasicEffect or
 // readback path: on a renderer that merely lacks the convention, the control triangle is intact.

@@ -2,7 +2,7 @@
 // Phase 58/59/63 (WEBGPU-22): verify WebGPURenderer's lit_textured3d.wgsl /
 // GetOrCreatePipelineLitTextured3D() / DrawPrimitivesEx() dispatch for stride-32
 // (VertexPositionNormalTexture) draws -- the first WebGPU 3D shader with real Blinn-Phong
-// lighting (FNA's Lighting.fxh ComputeLights(), ported from VulkanRenderer's
+// lighting (FNA's Lighting.fxh ComputeLights(), ported from the retired VULKAN renderer's
 // lit_textured3d.{vert,frag}.glsl), driven by a second UBO (litBindGroupLayout_) alongside the
 // existing 128-byte primary uniforms.
 //

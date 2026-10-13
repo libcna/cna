@@ -80,9 +80,8 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         /// D9-82/GLTF-394: XNA's four topologies plus CNAEXT PointListEXT map explicitly --
-        /// unlike D3D11/Vulkan's own per-renderer VertexCountForPrimitives() precedent, D3D9's
-        /// DrawPrimitive/DrawIndexedPrimitive already take a PrimitiveCount directly (not a raw
-        /// vertex/index count), so no equivalent conversion helper is needed here.
+        /// D3D9's DrawPrimitive/DrawIndexedPrimitive already take a PrimitiveCount directly (not a
+        /// raw vertex/index count), so no vertex-count conversion helper is needed here.
         D3DPRIMITIVETYPE ToD3D9Topology(PrimitiveType pt)
         {
             switch (pt)
@@ -936,22 +935,20 @@ namespace CNA::Internal::Renderers::DirectX9
     // D9-64 fix: these were silent-throw stubs left over from D9-11's skeleton, never wired up by
     // D9-61/D9-82 (which only ever push depth/stencil state through the multi-field
     // ApplyDepthStencilState() path). GraphicsDevice::SetDepthTestEnabled()/SetDepthWriteEnabled()
-    // are real public (CNAEXT) API that EasyGL honours and D3D11 wires up -- a game (or,
-    // as found here, the reused easygl_blendstate_opaque_test.cpp CTest) calling
-    // dev.SetDepthTestEnabled(false) on D3D9 threw instead of taking effect. Unlike D3D11 (which
-    // must rebuild a whole cached ID3D11DepthStencilState object from tracked fields), D3D9's
-    // render states are independently settable, so this is a direct, single SetRenderState call --
-    // no field-tracking struct needed.
+    // are real public (CNAEXT) API that EasyGL honours -- a game (or, as found here, the reused
+    // easygl_blendstate_opaque_test.cpp CTest) calling dev.SetDepthTestEnabled(false) on D3D9 threw
+    // instead of taking effect. Unlike D3D11 (whose immutable ID3D11DepthStencilState must be
+    // rebuilt whole from tracked fields), D3D9's render states are independently settable, so this
+    // is a direct, single SetRenderState call -- no field-tracking struct needed.
     void DirectX9Renderer::SetDepthTestEnabled(bool enabled)
     {
         SetRenderStateCheckedEXT(D3DRS_ZENABLE, enabled ? D3DZB_TRUE : D3DZB_FALSE,
                                  kUnsafeDepthState, "SetDepthTestEnabled(D3DRS_ZENABLE)");
     }
 
-    // Deliberate no-op, matching D3D11's own identical choice: a bare "enable blending" has
-    // no defined blend factors in XNA -- real blend configuration always arrives via
-    // ApplyBlendState(), which already unconditionally enables blending (D3DRS_ALPHABLENDENABLE)
-    // whenever it's called.
+    // Deliberate no-op: a bare "enable blending" has no defined blend factors in XNA -- real blend
+    // configuration always arrives via ApplyBlendState(), which already unconditionally enables
+    // blending (D3DRS_ALPHABLENDENABLE) whenever it's called.
     void DirectX9Renderer::SetBlendEnabled(bool) {}
 
     void DirectX9Renderer::SetDepthWriteEnabled(bool enabled)
@@ -1433,10 +1430,9 @@ namespace CNA::Internal::Renderers::DirectX9
         currentCustomCubeRT_ = nullptr;
 
         // MRT binds are NOT tracked in currentCustomRT_/currentCustomCubeRT_ (a single pointer
-        // can't represent N targets, matches D3D11's own identical MRT-tracking gap) -- unbinding
-        // an MRT set must go through SetRenderTargets(nullptr, 0) or SetRenderTarget2D(nullptr)
-        // (both unconditionally restore the back buffer), not a single-target bind expecting an
-        // implicit MRT-aware unbind first.
+        // can't represent N targets) -- unbinding an MRT set must go through
+        // SetRenderTargets(nullptr, 0) or SetRenderTarget2D(nullptr) (both unconditionally restore
+        // the back buffer), not a single-target bind expecting an implicit MRT-aware unbind first.
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> DirectX9Renderer::CreateOcclusionQuery()

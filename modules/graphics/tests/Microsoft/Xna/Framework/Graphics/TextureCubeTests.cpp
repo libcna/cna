@@ -86,10 +86,8 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // a renderer that had read nothing at all. The tests below therefore assert the real outcome for
 // this renderer rather than merely that the call returned.
 //
-// Native 2D keeps IGraphicsRenderer::CreateTextureCube's
-// nullptr default (no cube resource exists at all); Headless stores no pixel data by design.
-// Every other renderer reads level 0 back exactly -- Software only at level 0, since it stores no
-// cube mip levels.
+// Headless stores no pixel data by design. Every other renderer reads level 0 back exactly --
+// Software only at level 0, since it stores no cube mip levels.
 // -----------------------------------------------------------------------
 //
 // REMED-GFX-135 adds the write-side half of the same question. `TextureCube::SetData` now has

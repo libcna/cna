@@ -111,10 +111,10 @@ AREAS: dict[str, tuple[str, str, str]] = {
         "PLAT-13/PLAT-14/PLAT-32",
         "The handle handed to renderers; the 7 window properties define its minimum surface.",
     ),
-    "gl-vulkan-interop": (
+    "gl-context": (
         "IPlatformGlContext",
         "PLAT-22/PLAT-23/PLAT-41/PLAT-42",
-        "GL context creation; the Vulkan surface service went with the retired VULKAN renderer.",
+        "GL context creation.",
     ),
     "sdl-renderer-specific": (
         "allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",
@@ -187,13 +187,10 @@ RULES: list[tuple[str, str, str]] = [
     (r"^SDL_(Get|Set|Has|Clear|Lock|Unlock|Create|Destroy|Copy|Enumerate)\w*Propert", "native-handle", "property access"),
     (r"^SDL_PropertiesID$", "native-handle", "property set handle"),
     (r"^SDL_PropertyType$", "native-handle", "property type"),
-    # GL / Vulkan / Metal interop, before window flags (SDL_WINDOW_OPENGL is creation intent).
-    (r"^SDL_GL_", "gl-vulkan-interop", "GL context"),
-    (r"^SDL_(GLContext|GL[Aa]ttr|GLprofile)", "gl-vulkan-interop", "GL context type"),
-    (r"^SDL_Vulkan_", "gl-vulkan-interop", "Vulkan surface/extensions"),
-    (r"^SDL_Metal_", "gl-vulkan-interop", "Metal view"),
-    (r"^SDL_MetalView$", "gl-vulkan-interop", "Metal view handle"),
-    (r"^SDL_(EGL|GLAD)", "gl-vulkan-interop", "EGL/GL loader interop"),
+    # GL interop, before window flags (SDL_WINDOW_OPENGL is creation intent).
+    (r"^SDL_GL_", "gl-context", "GL context"),
+    (r"^SDL_(GLContext|GL[Aa]ttr|GLprofile)", "gl-context", "GL context type"),
+    (r"^SDL_(EGL|GLAD)", "gl-context", "EGL/GL loader interop"),
 
     # Events. SDL_EVENT_* covers the whole event taxonomy including input events; the event
     # *payload* is a platform-event concern, while input *state* below is a separate service.
@@ -274,7 +271,7 @@ RULES: list[tuple[str, str, str]] = [
     # The rules are kept so a future SDL_LoadObject call site is classified rather than falling
     # through, but the area is empty today and IPlatformDynamicLibrary was cut on that evidence.
     (r"^SDL_(LoadObject|LoadFunction|UnloadObject|SharedObject)", "dynamic-library", "dynamic library"),
-    (r"^SDL_FunctionPointer$", "gl-vulkan-interop", "SDL_GL_GetProcAddress return type"),
+    (r"^SDL_FunctionPointer$", "gl-context", "SDL_GL_GetProcAddress return type"),
 
     # Pixel formats, surfaces and blending: CNA graphics vocabulary, not a platform service.
     (r"^SDL_(PIXELFORMAT_|PixelFormat|PIXELTYPE|PACKEDORDER|ARRAYORDER|BITMAPORDER|PACKEDLAYOUT|Colorspace|COLORSPACE|COLOR_TYPE|COLOR_RANGE|COLOR_PRIMARIES|TRANSFER_CHARACTERISTICS|MATRIX_COEFFICIENTS|CHROMA_LOCATION|DEFINE_PIXELFORMAT|ISPIXELFORMAT|BYTESPERPIXEL|BITSPERPIXEL)", "pixel-format", "pixel format"),
@@ -295,7 +292,7 @@ RULES: list[tuple[str, str, str]] = [
     # classified to that subsystem rather than dismissed as "not an API call".
     (r"^SDL_(gpu|render)$", "sdl-renderer-specific", "SDL header include"),
     (r"^SDL_(audio|audiocvt|sysaudio|wave|mixer)$", "audio", "SDL header include"),
-    (r"^SDL_(opengl|opengl_glext|opengles|opengles2|vulkan|metal)$", "gl-vulkan-interop", "SDL header include"),
+    (r"^SDL_(opengl|opengl_glext|opengles|opengles2)$", "gl-context", "SDL header include"),
     (r"^SDL_(video|cocoavideo)$", "window", "SDL header include"),
     (r"^SDL_(haptic|syshaptic|joystick|mouse|keyboard|sensor|androidsensor|windowssensor|touch|gamepad)$", "input", "SDL header include"),
     (r"^SDL_events$", "event", "SDL header include"),

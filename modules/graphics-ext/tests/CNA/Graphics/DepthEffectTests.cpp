@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // DepthEffect is a CNAEXT CNA extension (no XNA/FNA precedent). The structural contract lives
 // beside exact pixel oracles for every quantizer, both palettes, and both Bayer matrices so the
-// EasyGL and Vulkan package variants must agree on the complete effect rather than merely compile.
+// GLSL and SPIR-V package variants must agree on the complete effect rather than merely compile.
 
 #ifdef CNA_CNAEXT
 

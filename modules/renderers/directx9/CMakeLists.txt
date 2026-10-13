@@ -1,15 +1,15 @@
 # plans/plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectRenderer.cpp calls
 # D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
-# stock D3D9 pipeline must stay d3dcompiler-free (unlike D3D11, which links it into its
-# whole renderer target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its
-# own isolated static library instead, with d3dcompiler linked ONLY there (D9-111's own "on this
-# target only"). D3D9ConstantTable.cpp (D9-110's CTAB parser) moves here too -- it has no consumer
-# outside D3D9EffectRenderer.cpp, and leaving it in the main glob while D3D9EffectRenderer.cpp moved
-# out created a genuine link-order circular dependency between the two targets (this effect target
-# calling ParseConstantTableEXT() while ALSO needing to be linked INTO the main renderer target for
-# DirectX9Renderer::CreateEffectRenderer() to construct one) -- found empirically via a real
-# "undefined reference to ParseConstantTableEXT" link failure across every D3D9 test binary, not
-# assumed in advance. ${RENDERER_TARGET} links this target (D9-112) so
+# stock D3D9 pipeline must stay d3dcompiler-free (unlike the retired D3D11 renderer, which linked it
+# into its whole renderer target unconditionally, DX-58/DX-121). Excluded from the main glob and
+# built as its own isolated static library instead, with d3dcompiler linked ONLY there (D9-111's own
+# "on this target only"). D3D9ConstantTable.cpp (D9-110's CTAB parser) moves here too -- it has no
+# consumer outside D3D9EffectRenderer.cpp, and leaving it in the main glob while
+# D3D9EffectRenderer.cpp moved out created a genuine link-order circular dependency between the two
+# targets (this effect target calling ParseConstantTableEXT() while ALSO needing to be linked INTO
+# the main renderer target for DirectX9Renderer::CreateEffectRenderer() to construct one) -- found
+# empirically via a real "undefined reference to ParseConstantTableEXT" link failure across every
+# D3D9 test binary, not assumed in advance. ${RENDERER_TARGET} links this target (D9-112) so
 # DirectX9Renderer::CreateEffectRenderer() can construct one.
 set(D3D9_EFFECT_BACKEND_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/D3D9EffectRenderer.cpp"

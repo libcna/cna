@@ -305,11 +305,10 @@ TEST_F(DualTextureEffectDefaultsTest, GetTypeNameReturnsFullyQualifiedName)
 // i.e. the forwarded RGB is alpha-premultiplied (DiffuseColor*Alpha) and the
 // forwarded alpha channel is the plain Alpha value. Checked directly on
 // FillGpuDrawParams()'s output rather than via a GPU pixel readback, because
-// Vulkan's BlendState support is known-fake/hardcoded (Task 868/870) and
-// would make a real blended pixel-readback test spuriously fail there for a
-// reason unrelated to DualTextureEffect itself — see the pixel-test files
-// for the real end-to-end GPU verification on EasyGL/Bgfx (and the
-// alpha-channel-only verification on Vulkan that works around that gap).
+// the retired VULKAN renderer's BlendState support was known-fake/hardcoded
+// (Task 868/870) and would have made a real blended pixel-readback test
+// spuriously fail there for a reason unrelated to DualTextureEffect itself —
+// see the pixel-test files for the real end-to-end GPU verification on EasyGL.
 
 TEST_F(DualTextureEffectDefaultsTest, AlphaPremultipliesForwardedDiffuseRgb)
 {
@@ -403,10 +402,6 @@ namespace
         void SetUp() override
         {
             device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-            // WINCLOSE-0018: DirectX11 binds an opaque-black texel for an unbound slot.
-            // VKPAR-0004: Vulkan joins the list -- dual_texture3d.frag samples both units
-            // unconditionally and both now fall back to XNA's opaque black.
-            // plans/plan_apple_m4.md AM4-140 enrols Metal, which now binds the same opaque black.
             if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software))
                 GTEST_SKIP() << "requires a stock-effect raster path that samples a missing slot";
         }

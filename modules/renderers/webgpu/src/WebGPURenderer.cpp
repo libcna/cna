@@ -466,7 +466,7 @@ namespace CNA::Internal::Renderers::WebGPU
             return std::max(1, base >> level);
         }
 
-        // XNA CompareFunction ordinals -> WGPUCompareFunction (mirrors Vulkan's own ToVkCompareOp):
+        // XNA CompareFunction ordinals -> WGPUCompareFunction:
         // Always=0, Never=1, Less=2, LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7.
         [[nodiscard]] WGPUCompareFunction ToWGPUCompareFunction(int xnaCompare)
         {
@@ -484,7 +484,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         // WEBGPU-83: XNA StencilOperation ordinal -> WGPU. Increment/Decrement (unsaturated) wrap;
-        // the *Saturation variants clamp -- matching the Vulkan renderer's own mapping.
+        // the *Saturation variants clamp.
         [[nodiscard]] WGPUStencilOperation ToWGPUStencilOperation(int xnaOp)
         {
             switch (xnaOp)
@@ -501,7 +501,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         // WEBGPU-39: maps XNA DepthFormat -> the exact WGPU depth attachment format the other CNA
-        // backends (Vulkan PickDepthFormat / EasyGL / Bgfx MapDepthFormat) also use, per render target.
+        // backends (e.g. EasyGL) also use, per render target.
         // None has no depth attachment at all. All of Depth16Unorm/Depth24Plus/Depth24PlusStencil8 are
         // core WebGPU formats (always available). hasStencil is true only for the combined format.
         struct DepthAttachmentEXT { WGPUTextureFormat format; bool hasStencil; bool hasDepth; };
@@ -724,9 +724,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         // ---- WEBGPU-41/77/78/79/80/81/82/83: graphics-state -> WGPU translation helpers ----
         // Shared by every 3D GetOrCreatePipeline*() family so the exact same XNA->WGPU mapping is
-        // used everywhere (mirrors ToWGPUCompareFunction()'s own established role/pattern, and
-        // VulkanRenderer::ToVkBlendFactor()/ToVkBlendOp()/FillBlendAttachmentState()'s
-        // identical purpose on that renderer).
+        // used everywhere (mirrors ToWGPUCompareFunction()'s own established role/pattern).
 
         // XNA Blend enum -> WGPUBlendFactor: One=0, Zero=1, SourceColor=2, InverseSourceColor=3,
         // SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
@@ -808,13 +806,12 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
-        // WEBGPU-116: the WebGPU spelling of every XNA VertexElementFormat, mirroring
-        // VulkanRenderer's own ToVkVertexFormat. Every pipeline builder selects its per-attribute
-        // WGPUVertexFormat through this one map, so each attribute names the XNA format it means and
-        // the ordinal->format table lives in exactly one place instead of ~55 scattered literals.
-        // Color is Unorm8x4, not a BGRA vertex format: WebGPU has no B8G8R8A8 vertex format, and this
-        // renderer's packed layouts already store colour as RGBA the shader reads straight -- unlike
-        // Vulkan, which picks VK_FORMAT_B8G8R8A8_UNORM to swizzle during the fetch.
+        // WEBGPU-116: the WebGPU spelling of every XNA VertexElementFormat. Every pipeline builder
+        // selects its per-attribute WGPUVertexFormat through this one map, so each attribute names
+        // the XNA format it means and the ordinal->format table lives in exactly one place instead
+        // of ~55 scattered literals. Color is Unorm8x4, not a BGRA vertex format: WebGPU has no
+        // B8G8R8A8 vertex format, and this renderer's packed layouts already store colour as RGBA
+        // the shader reads straight.
         [[nodiscard]] WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat format)
         {
             switch (format)
@@ -993,9 +990,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // cull mode, wireframe, depth bias, slope-scale depth bias, and a caller-supplied salt for
         // any extra dimension -- e.g. stride for AlphaTest3D/DualTexture3D) into a single uint64_t
         // pipeline cache key.
-        // Mirrors VulkanRenderer::Make3DKey()/PackBlendBits()'s own role: when blend is
-        // disabled, the (irrelevant) blend factors always collapse to the same bits so different
-        // disabled BlendStates don't create duplicate pipelines.
+        // When blend is disabled, the (irrelevant) blend factors always collapse to the same bits
+        // so different disabled BlendStates don't create duplicate pipelines.
         /// WEBGPU-202: the default extra-MRT-slot formats for a single-target draw -- never read,
         /// because the loop that consumes them runs only when `colorAttachmentCount > 1`.
         inline constexpr std::array<WGPUTextureFormat, 4> kNoMrtColorFormatsEXT{};
@@ -1082,8 +1078,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         // WEBGPU-82: fills a full WGPUSamplerDescriptor (address modes, mag/min/mipmap filter,
         // anisotropy) from a real XNA SamplerState -- shared translation used by
-        // GetOrCreateSlotSampler(), mirrors VulkanRenderer::ApplySamplerState()'s own
-        // filter switch verbatim (magFilter/minFilter split per XNA TextureFilter value).
+        // GetOrCreateSlotSampler() (magFilter/minFilter split per XNA TextureFilter value).
         void FillWGPUSamplerDescriptor(WGPUSamplerDescriptor& descriptor, int filter, int addressU,
                                        int addressV, int addressW, int maxMipLevel,
                                        int maxAnisotropy)
@@ -1137,14 +1132,13 @@ namespace CNA::Internal::Renderers::WebGPU
                     ? descriptor.lodMaxClamp
                     : std::min(static_cast<float>(maxMipLevel), descriptor.lodMaxClamp);
             // WebGPU requires maxAnisotropy==1 unless mag/min/mipmap are all Linear (true only for
-            // filter==2 above) -- matches VulkanRenderer::ApplySamplerState()'s identical
-            // enableAniso gate.
+            // filter==2 above).
             descriptor.maxAnisotropy = enableAniso
                 ? static_cast<std::uint16_t>(std::clamp(maxAnisotropy, 1, 16))
                 : 1;
         }
 
-        // WEBGPU-145/149: the shared primary uniform block is 160 bytes = the Vulkan-compatible
+        // WEBGPU-145/149: the shared primary uniform block is 160 bytes = the
         // 128-byte MVP/material/light0 layout plus the 32-byte FNA fog tail (fogColor + fogVector).
         // EVERY consumer of the shared coloredBindGroupLayout_/litBindGroupLayout_/skinnedBindGroupLayout_
         // binding-0 now binds exactly this many bytes (all *DrawCommand::uniforms are std::array<float,40>),
@@ -1157,11 +1151,10 @@ namespace CNA::Internal::Renderers::WebGPU
         static_assert(kPrimaryUniformByteSize == 176u,
                       "primary WebGPU UBO must be 176 bytes (128 base + 32 fog tail + 16 bias tail)");
 
-        // Mirrors VulkanRenderer::DrawColoredPrimitives()'s own use of
-        // FillExtPushConst()'s byte layout: this path carries no BasicEffect diffuse/
-        // VertexColorEnabled (no GpuDrawParams at all), so it preserves the historical XNA
-        // behaviour of outputting the raw vertex colours unmodified (diffuseColor=white,
-        // vertexColorEnabled=true), everything else left zeroed.
+        // The FillExtUniforms() byte layout for DrawColoredPrimitives(): this path carries no
+        // BasicEffect diffuse/VertexColorEnabled (no GpuDrawParams at all), so it preserves the
+        // historical XNA behaviour of outputting the raw vertex colours unmodified
+        // (diffuseColor=white, vertexColorEnabled=true), everything else left zeroed.
         void FillColoredUniforms(std::array<float, 44>& out, const Matrix& world, const Matrix& view,
                                  const Matrix& projection)
         {
@@ -1177,10 +1170,9 @@ namespace CNA::Internal::Renderers::WebGPU
             for (int i = 32; i < 40; ++i) out[i] = 0.0f;
         }
 
-        // Mirrors VulkanRenderer::FillExtPushConst() field-for-field (real GpuDrawParams
-        // this time, not DrawColoredPrimitives()'s hardcoded white/vertex-color-always-true
-        // values) -- used by DrawPrimitivesEx()'s stride-16 dispatch so a BasicEffect draw's real
-        // DiffuseColor/VertexColorEnabled actually reach the shader.
+        // Real GpuDrawParams this time, not DrawColoredPrimitives()'s hardcoded
+        // white/vertex-color-always-true values -- used by DrawPrimitivesEx()'s stride-16 dispatch
+        // so a BasicEffect draw's real DiffuseColor/VertexColorEnabled actually reach the shader.
         void FillExtUniforms(std::array<float, 44>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
@@ -1224,8 +1216,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // World (for world-space position), EyePosition, per-light SpecularColor, material
         // SpecularColor/Power, and the 3x3 normal matrix -- forwarded here since the primary
         // 160-byte uniform block (FillExtUniforms) carries MVP/material/light0 plus the fog tail
-        // (WEBGPU-145). Mirrors VulkanRenderer's LitLightParams UBO field-for-field; fog itself rides
-        // in the primary Uniforms block (fogColor/fogVector), consumed by the lit_textured3d shaders.
+        // (WEBGPU-145). Fog itself rides in the primary Uniforms block (fogColor/fogVector),
+        // consumed by the lit_textured3d shaders.
         void FillLitLightUniforms(std::array<float, 68>& out, const GpuDrawParams& p)
         {
             out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.0f;
@@ -1247,18 +1239,18 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         // env_map3d.wgsl's Transform UBO (group 0 binding 0): mvp + world, since WebGPU has no
-        // push constants -- mirrors VulkanRenderer::FillEnvMapPushConst() field-for-field.
+        // push constants.
         void FillEnvMapTransform(std::array<float, 32>& out, const Matrix& mvp, const Matrix& world)
         {
             mvp.ToColumnMajor(out.data());
             world.ToColumnMajor(out.data() + 16);
         }
 
-        // env_map3d.wgsl's EnvMapParams UBO (group 0 binding 1): mirrors
-        // VulkanRenderer::DrawPrimitivesEx()'s own envMapUboData[] packing field-for-field
-        // (cross-checked against EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical
-        // GLSL formula before porting), plus a CPU-precomputed normal matrix at the tail (WGSL has
-        // no inverse() -- same reason FillLitLightUniforms() precomputes its own).
+        // env_map3d.wgsl's EnvMapParams UBO (group 0 binding 1): the retired VULKAN renderer's
+        // envMapUboData[] packing, field for field (cross-checked against
+        // EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical GLSL formula before porting), plus
+        // a CPU-precomputed normal matrix at the tail (WGSL has no inverse() -- same reason
+        // FillLitLightUniforms() precomputes its own).
         void FillEnvMapParams(std::array<float, 64>& out, const GpuDrawParams& p)
         {
             out[0] = p.eyePositionWorld[0]; out[1] = p.eyePositionWorld[1];
@@ -1288,11 +1280,10 @@ namespace CNA::Internal::Renderers::WebGPU
             out[56] = normalMatrix[6]; out[57] = normalMatrix[7]; out[58] = normalMatrix[8]; out[59] = 0.0f;
         }
 
-        // Mirrors VulkanRenderer::FillAlphaTestPushConst() field-for-field. AlphaTestEffect
-        // has no lighting, so this repurposes the [20..23]/[24] slots (ambient/light0/
-        // vertexColorEnabled in FillExtUniforms) for {alphaRef, alphaTolerance, passWeight,
-        // failWeight, vertexColorEnabled} instead, plus the 32-byte fog tail (160 total), so it still fits
-        // the existing coloredBindGroupLayout_ unchanged.
+        // AlphaTestEffect has no lighting, so this repurposes the [20..23]/[24] slots
+        // (ambient/light0/vertexColorEnabled in FillExtUniforms) for {alphaRef, alphaTolerance,
+        // passWeight, failWeight, vertexColorEnabled} instead, plus the 32-byte fog tail (160
+        // total), so it still fits the existing coloredBindGroupLayout_ unchanged.
         void FillAlphaTestUniforms(std::array<float, 44>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
@@ -2062,8 +2053,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                          int w, int h, void* data,
                                                          int dataLength) const
     {
-        // plans/plan_webgpu_failing_eight.md WGF-0003. The rules are VulkanTextureCubeRenderer's
-        // own, because this is one shared contract rather than two: a block-aligned origin, a
+        // plans/plan_webgpu_failing_eight.md WGF-0003. The rules are one shared contract, first
+        // written for the retired VULKAN renderer: a block-aligned origin, a
         // block-aligned extent unless it reaches the mip edge, and tightly packed block rows out.
         if (data == nullptr || !compressed_ || blockBytes_ <= 0) return false;
         if (face < 0 || face >= 6 || level < 0 || level >= mipLevels_) return false;
@@ -2422,9 +2413,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // owner's global sampleCount_" choice (the per-instance multiSampleCount argument is
         // intentionally not read -- every GetOrCreatePipeline*3D() bakes ONE renderer-global sample
         // count into every pipeline, so a face pass must match it). SIX separate single-layer
-        // multisampled textures (WebGPU forbids a multisampled ARRAY texture, unlike Vulkan's
-        // 6-layer image) so a PreserveContents face loads its OWN samples rather than whichever
-        // face rendered last -- the per-face choice Vulkan/EasyGL settled on (REMED-GFX-141).
+        // multisampled textures (WebGPU forbids a multisampled ARRAY texture) so a
+        // PreserveContents face loads its OWN samples rather than whichever face rendered last --
+        // the per-face choice EasyGL settled on (REMED-GFX-141).
         // texture_/faceViews_ stay single-sample and become the resolve destinations.
         // WEBGPU-165: THIS cube's own applied count, decided above, not the renderer's global.
         if (appliedMultiSampleCount_ > 1)
@@ -2955,7 +2946,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         // WEBGPU-39: map the requested XNA DepthFormat to the exact WGPU depth attachment format,
-        // matching Vulkan/EasyGL/Bgfx (which each pick a distinct depth format per render target).
+        // matching EasyGL (which picks a distinct depth format per render target).
         // DepthFormat::None gets NO depth attachment at all: no depth texture is created, the pass
         // omits the depth-stencil attachment, and pipelines drawn into this target carry no
         // depth-stencil state -- so depth is neither tested nor written, exactly as on every other
@@ -3107,10 +3098,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderTargetRenderer::BindAsRenderTarget()
     {
-        // Pure bookkeeping -- mirrors VulkanRenderTargetRenderer::BindAsRenderTarget()'s identical
-        // role. The real work (flushing whatever was queued for the PREVIOUS target into its own
-        // render pass) already happened in WebGPURenderer::SetRenderTarget2D() before this
-        // is called; see that function's own comment.
+        // Pure bookkeeping. The real work (flushing whatever was queued for the PREVIOUS target
+        // into its own render pass) already happened in WebGPURenderer::SetRenderTarget2D() before
+        // this is called; see that function's own comment.
         if (owner_ != nullptr) owner_->currentRenderTarget_ = this;
     }
 
@@ -3388,8 +3378,7 @@ namespace CNA::Internal::Renderers::WebGPU
     // draws issued between two SetData calls already hold independent copies -- a stronger
     // guarantee than orphaning. And wgpuQueueWriteBuffer is a queue-ordered, non-stalling copy, so
     // there is no CPU stall for Discard to avoid. All three options therefore produce identical,
-    // correct results (verified by WebGPU_SetDataOptions); mirrors VulkanRenderer, which likewise
-    // does not branch buffer uploads on the option.
+    // correct results (verified by WebGPU_SetDataOptions).
     void WebGPUVertexBufferRenderer::SetDataWithOptions(const void* data,
                                                         int vertexCount,
                                                         std::size_t strideInBytes,
@@ -4696,8 +4685,7 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to query surface capabilities");
         }
 
-        // REMED-GFX-131: prefer a NON-sRGB surface format, exactly as VulkanRenderer::
-        // CreateSwapchain() already does for the identical decision, and for the identical reason:
+        // REMED-GFX-131: prefer a NON-sRGB surface format, because
         // XNA's SurfaceFormat.Color -- the default backbuffer format, and the only format the
         // IGraphicsRenderer render-target entry points can even express -- is a plain 8-bit UNORM
         // byte format, while SurfaceFormat.ColorSrgbEXT is the separate gamma-encoded one. An sRGB
@@ -5169,9 +5157,9 @@ namespace CNA::Internal::Renderers::WebGPU
         if (surfaceFormat_ == WGPUTextureFormat_Undefined)
             return;
 
-        // Uniform layout matches VulkanRenderer::FillExtPushConst()'s 128-byte/32-float
-        // push-constant layout byte-for-byte (see plans/plan_webgpu.md's Phase 57 entry-point note):
-        // [0..15] MVP, [16..19] diffuseColor, [20..23] ambient+lightingEnabled,
+        // Uniform layout is the retired VULKAN renderer's 128-byte/32-float FillExtPushConst()
+        // push-constant layout, byte for byte (see plans/plan_webgpu.md's Phase 57 entry-point
+        // note): [0..15] MVP, [16..19] diffuseColor, [20..23] ambient+lightingEnabled,
         // [24..27] light0Dir+textureEnabled, [28..31] light0Diffuse+vertexColorEnabled. Only the
         // fields this minimal DrawColoredPrimitives slice actually reads are named; the rest keep
         // the same byte offsets so a future DrawPrimitivesEx (BasicEffect) shader can reuse this
@@ -6186,7 +6174,7 @@ namespace
         /// The record's own position: `vec4f(input.position, 1.0)`.
         Rigid,
         /// The bone-skinned position: `skinMat * vec4f(input.position, 1.0)`. The instance applies
-        /// AFTER the skin, which is the composition EasyGL and Vulkan both use.
+        /// AFTER the skin, which is the composition EasyGL uses.
         Skinned
     };
 
@@ -6590,8 +6578,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (surfaceFormat_ == WGPUTextureFormat_Undefined || texturedBindGroupLayout_ == nullptr)
             return;
 
-        // Ported from VulkanRenderer's lit_textured3d.{vert,frag}.glsl (itself ported from
-        // FNA's Lighting.fxh ComputeLights()). Group 0 binding 0 is the same primary Uniforms
+        // Ported from the retired VULKAN renderer's lit_textured3d.{vert,frag}.glsl (itself ported
+        // from FNA's Lighting.fxh ComputeLights()). Group 0 binding 0 is the same primary Uniforms
         // block as colored3d/textured3d (MVP, diffuseColor, ambientColor+lightingEnabled,
         // light0Dir+textureEnabled, light0Diffuse); binding 1 is the secondary LitLightParams
         // block (light1/light2, emissive, world, eye position, per-light specular, material
@@ -6599,7 +6587,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // is texturedBindGroupLayout_, reused unchanged.
         // WMG-0014: shadow reception is appended rather than spliced -- WGSL module-scope
         // declarations may appear in any order, so one block serves every family that receives
-        // shadows, exactly as Vulkan's shadow_sampling.glsl is included into each of its own.
+        // shadows.
         const std::string shaderSource =
             std::string(webgpu_shaders::kLitTextured) + webgpu_shaders::kShadowSampling;
 
@@ -6625,8 +6613,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // Same UBO/binding layout as the per-pixel-lit shader (reuses litBindGroupLayout_/
         // litPipelineLayout_ unchanged below), so only a new shader module is needed here.
         // WMG-0014: the vertex-lit sibling shares this family's pipeline layout, so it declares
-        // the same group 2 even though its Gouraud path does not sample a shadow map -- exactly as
-        // Vulkan's lit_textured3d_vertexlit shares set 1 without including shadow_sampling.glsl.
+        // the same group 2 even though its Gouraud path does not sample a shadow map.
         const std::string vertexLitShaderSource =
             std::string(webgpu_shaders::kLitTexturedVertexLit) + webgpu_shaders::kShadowSampling;
 
@@ -6821,8 +6808,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (surfaceFormat_ == WGPUTextureFormat_Undefined || texturedBindGroupLayout_ == nullptr)
             return;
 
-        // Ported from VulkanRenderer's alpha_test3d.{vert,frag}.glsl. AlphaTestEffect has
-        // no lighting, so the primary Uniforms block repurposes [20..23]/[24] for
+        // Ported from the retired VULKAN renderer's alpha_test3d.{vert,frag}.glsl. AlphaTestEffect
+        // has no lighting, so the primary Uniforms block repurposes [20..23]/[24] for
         // {alphaRef, alphaTolerance, passWeight, failWeight, vertexColorEnabled} instead (see
         // FillAlphaTestUniforms()) -- same 160-byte primary-UBO shape, so this reuses coloredBindGroupLayout_
         // (group 0) and texturedBindGroupLayout_ (group 1) unchanged; no new bind group layout or
@@ -6968,14 +6955,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (surfaceFormat_ == WGPUTextureFormat_Undefined || coloredBindGroupLayout_ == nullptr)
             return;
 
-        // Ported from VulkanRenderer's dual_texture3d.{vert,frag}.glsl. DualTextureEffect
-        // has no lighting and no alpha test, so group 0 reuses coloredBindGroupLayout_/the primary
-        // Uniforms layout unchanged. Group 1 carries FOUR bindings: one sampler and one texture per
-        // public sampler slot. REMED-GFX-172: the two layers do NOT share a TextureFilter/
-        // AddressMode -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
-        // DECLARE_TEXTURE(Texture2, 1), so Texture reads GraphicsDevice.SamplerStates[0] and
-        // Texture2 reads SamplerStates[1]. One WGSL sampler for both textures made slot 1
-        // inexpressible, and slot 1 silently inherited slot 0's.
+        // Ported from the retired VULKAN renderer's dual_texture3d.{vert,frag}.glsl.
+        // DualTextureEffect has no lighting and no alpha test, so group 0 reuses
+        // coloredBindGroupLayout_/the primary Uniforms layout unchanged. Group 1 carries FOUR
+        // bindings: one sampler and one texture per public sampler slot. REMED-GFX-172: the two
+        // layers do NOT share a TextureFilter/AddressMode -- FNA's DualTextureEffect.fx declares
+        // DECLARE_TEXTURE(Texture, 0) and DECLARE_TEXTURE(Texture2, 1), so Texture reads
+        // GraphicsDevice.SamplerStates[0] and Texture2 reads SamplerStates[1]. One WGSL sampler for
+        // both textures made slot 1 inexpressible, and slot 1 silently inherited slot 0's.
         static constexpr const char* shaderSource = webgpu_shaders::kDualTexture;
 
         WGPUShaderSourceWGSL wgsl{};
@@ -7144,11 +7131,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (surfaceFormat_ == WGPUTextureFormat_Undefined)
             return;
 
-        // WEBGPU-25/36/74: ported from VulkanRenderer's env_map3d.{vert,frag}.glsl, itself
-        // cross-checked against EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical GLSL
+        // WEBGPU-25/36/74: ported from the retired VULKAN renderer's env_map3d.{vert,frag}.glsl,
+        // itself cross-checked against EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical GLSL
         // formula before porting -- both references already agree field-for-field, so this is a
         // direct WGSL translation, not a re-derivation. Group 0 binding 0 (Transform: mvp+world)
-        // stands in for Vulkan's 128-byte push-constant range (WebGPU has none); binding 1
+        // stands in for a 128-byte push-constant range (WebGPU has none); binding 1
         // (EnvMapParams) carries everything else, including a CPU-precomputed normal matrix (WGSL
         // has no inverse()). Group 1 is a new 3-binding shape: sampler + texture_2d + texture_cube.
         static constexpr const char* shaderSource = webgpu_shaders::kEnvMap;
@@ -7326,7 +7313,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.stencilRef = referenceStencil_;
         // EnvironmentMapEffect::Texture/EnvironmentMap are both genuinely optional (unlike every
         // other stride-32+ effect family's dispatch gate) -- null falls back to the 1x1 white
-        // texture/cube at render time, matching VulkanRenderer's own default-white fallback.
+        // texture/cube at render time.
         // ResolveSamplable()/the dynamic_cast below are both already null-safe.
         command.texture = ResolveSamplable(params.texture0);
         command.envMap = ResolveCubeSamplable(params.envMap);
@@ -7526,7 +7513,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (surfaceFormat_ == WGPUTextureFormat_Undefined || coloredPipelineLayout_ == nullptr)
             return;
 
-        // WEBGPU-27: ported from VulkanRenderer's instanced3d.{vert,frag}.glsl. Only
+        // WEBGPU-27: ported from the retired VULKAN renderer's instanced3d.{vert,frag}.glsl. Only
         // position (binding 0, per-vertex) is consumed by THIS module -- it is the variant selected
         // for a geometry stride whose packed layout carries no COLOR0 element at all (20
         // VertexPositionTexture, 32 VertexPositionNormalTexture, and any stride the table does not
@@ -8117,8 +8104,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 #endif
 
         // WMG-0011: an `Effect` writes its own parameters into its renderer in `Apply()`, and
-        // nothing else does: `CRTEffect::OnApply` is where `uCrtParams` is set at all. EasyGL and
-        // Vulkan call it as the batch flushes; this renderer copies a sprite's uniforms when the
+        // nothing else does: `CRTEffect::OnApply` is where `uCrtParams` is set at all. EasyGL
+        // calls it as the batch flushes; this renderer copies a sprite's uniforms when the
         // sprite is queued, so calling it there is what makes the copy carry the effect's own
         // parameters instead of the zeroes it was constructed with. Without it a packaged
         // post-process effect ran with every parameter at zero, which for CRT and DepthEffect is
@@ -8191,7 +8178,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             // WMG-0006: a descriptor-contract sprite shader is the engine layer's fullscreen
             // program, which takes PIXEL positions and divides by the viewport size the scalar
-            // block carries -- the same two inputs the Vulkan sprite route pushes. The NDC above
+            // block carries. The NDC above
             // was baked from `spriteExtentW/H` (or the target), so the pixels come straight back.
             auto snapshot = activeSpriteCustomEffect_->CaptureDescriptorStateEXT(*this);
             const float extentW = viewportUsable ? spriteExtentW : static_cast<float>(targetWidth);
@@ -8774,7 +8761,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPURenderer::SetStringMarkerEXT(const char* marker)
     {
         // plans/plan_webgpu_modern_graphics.md WMG-0020. An empty label is nothing to name, and
-        // WebGPU would reject it; VulkanRenderer::SetStringMarkerEXT drops it the same way.
+        // WebGPU would reject it.
         if (marker == nullptr || marker[0] == '\0') return;
         if (TraceDrawOrder())
         {
@@ -8959,8 +8946,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                      static_cast<std::uint32_t>(referenceStencil_));
 
             // WMG-0020: a debug group naming this pass, so a capture shows the segment's draws
-            // and its labels grouped under the destination that produced them -- the role
-            // VulkanRenderer's own beginDebugRegion/endDebugRegion lambdas play. Opened after the
+            // and its labels grouped under the destination that produced them. Opened after the
             // pass state above so the group contains the draws rather than the setup, and closed
             // before End(), which WebGPU requires: a pass encoder's group stack must be empty.
             const std::string passLabel =
@@ -9389,7 +9375,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // plans/plan_webgpu_modern_graphics.md WMG-0006: which binding contract this pair follows is
         // decided from the WGSL itself, before anything is compiled. The WEBGPU-76 contract puts its
         // one declared block at @group(0) @binding(0) and nothing anywhere else; the descriptor
-        // contract -- the one CNA's generated WGSL and its Vulkan SPIR-V share -- uses @group(1)
+        // contract -- the one CNA's generated WGSL follows -- uses @group(1)
         // for the effect's own resources, @group(3) @binding(0) for the scalar block, and samplers
         // at texture binding + 32. A module that is neither is Legacy, which is what it always was.
         {
@@ -9506,9 +9492,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPUEffectRenderer::SetUniformFloat(const char* name, float value)
     {
-        // WMG-0006: the descriptor contract has no shader reflection, exactly as Vulkan's SPIR-V
-        // route has none: a scalar's TYPE selects its slot in the fixed block, and the shader reads
-        // that slot under whatever name its own source gave it.
+        // WMG-0006: the descriptor contract has no shader reflection: a scalar's TYPE selects its
+        // slot in the fixed block, and the shader reads that slot under whatever name its own
+        // source gave it.
         if (contract_ == ContractEXT::Descriptor) { scalarBlock_[24] = value; return; }
         WriteUniformBytes(name, &value, 4);
     }
@@ -9572,7 +9558,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             matrixSetByGame_ = true;
             // MOD-2237: the engine's own geometry packages need several matrices at once, so these
             // exact names additionally reach the engine-matrix block. The two light spellings share
-            // slot zero, as they do on Vulkan: a draw is cube-face or 2D, never both.
+            // slot zero: a draw is cube-face or 2D, never both.
             int engineMatrix = -1;
             if (name != nullptr &&
                 (std::strcmp(name, "uLightViewProjection") == 0 ||
@@ -9665,9 +9651,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     //
     // Where the contract carries reflection (@p consumed non-null), only the attributes the vertex
     // stage declares reach the pipeline, and a location the shader consumes that no declaration
-    // supplies is a refusal rather than an undefined read -- Vulkan's MOD-2237 rule, kept
-    // identical. An instance attribute counts as supplied; before WMG-0021 it could not, because
-    // there was no instance half to supply it from.
+    // supplies is a refusal rather than an undefined read -- the MOD-2237 rule. An instance
+    // attribute counts as supplied; before WMG-0021 it could not, because there was no instance
+    // half to supply it from.
     void WebGPURenderer::BuildCustomEffectVertexLayoutsEXT(
         const CustomEffectDrawCommand& command, const std::vector<std::uint32_t>* consumed,
         std::vector<std::vector<WGPUVertexAttribute>>& attributeStorage,
@@ -9848,8 +9834,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         // WMG-0021: every bound per-instance stream, in slot order. Their attribute locations
         // continue after the per-vertex declaration's element count and then across the streams --
-        // EasyGL's convention (PerVertexLocationCount) and the one Vulkan copied (VULKAN-168) --
-        // so a single shader source describes its inputs on all three renderers.
+        // EasyGL's convention (PerVertexLocationCount; the retired VULKAN renderer copied it in
+        // VULKAN-168) -- so a single shader source describes its inputs on both renderers.
         command.instanceCount = static_cast<std::uint32_t>(std::max(1, instanceCount));
         auto nextLocation = static_cast<std::uint32_t>(elements.size());
         for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
@@ -11476,7 +11462,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // WEBGPU-84: wrap this query's contiguous run of draws in one BeginOcclusionQuery/
             // EndOcclusionQuery pair. A run ends when the tagged query changes (including to none);
             // only a query's FIRST run this flush is recorded, since a query slot may be written just
-            // once per resolve -- the same policy VulkanRenderer applies.
+            // once per resolve.
             // AM4-108: a draw queued in a run the query has since abandoned (begun again) is drawn
             // but no longer counted, so the new run reports only its own samples.
             WebGPUOcclusionQueryRenderer* drawQuery =
@@ -12057,10 +12043,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // friends -- that is precisely the "resolve at flush time" defect this replaces.
     Matrix WebGPURenderer::XnaPixelCenterCorrectionEXT(const PrimitiveType primitive) const
     {
-        // Filled primitives only, for VulkanRenderer::XnaPixelCenterCorrectionEXT's own reason:
-        // the correction compensates for Direct3D's top-left FILL rule by moving the pixel centre
-        // just inside the primitive, and a line or a point has no fill rule -- the same shift only
-        // moves it off the pixels XNA lights.
+        // Filled primitives only: the correction compensates for Direct3D's top-left FILL rule by
+        // moving the pixel centre just inside the primitive, and a line or a point has no fill rule
+        // -- the same shift only moves it off the pixels XNA lights.
         switch (primitive)
         {
             case PrimitiveType::TriangleList:
@@ -12245,7 +12230,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // negative public X/Y or a rectangle hanging off the target would otherwise wrap
             // through uint32_t into an enormous rectangle. XNA/FNA clip a ScissorRectangle to the
             // active target rather than rejecting it, which is also what this renderer has always
-            // done and what Vulkan's computeScissor does; ranges are clipped, never rejected.
+            // done; ranges are clipped, never rejected.
             // The edge sums are formed in 64 bits: X and Width both come straight from the public
             // Rectangle, so `x + width` can overflow a 32-bit int on absurd input, and signed
             // overflow is undefined behaviour rather than a large number.
@@ -12571,16 +12556,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // same texture/view (no resolve) when this target is not multisampled, identical to
         // before MSAA existed.
         // RenderTargetUsage.DiscardContents (XNA's own default) means content is not guaranteed
-        // to survive between separate SetRenderTarget bind cycles -- mirrors
-        // VulkanRenderTargetRenderer::GetRenderPass()'s own discardContents=!preserveContents_
-        // choice, applied on every bind cycle (not just this target's first-ever use). An
-        // explicit Clear()/ClearColorAndDepth()/etc. call always wins regardless of
-        // preserveContents (matches "Clear() clears whichever target is currently active" XNA
-        // semantics). Like Vulkan, the clear VALUE used when no explicit Clear() happened is
+        // to survive between separate SetRenderTarget bind cycles -- a
+        // discardContents=!preserveContents_ choice, applied on every bind cycle (not just this
+        // target's first-ever use). An explicit Clear()/ClearColorAndDepth()/etc. call always wins
+        // regardless of preserveContents (matches "Clear() clears whichever target is currently
+        // active" XNA semantics). The clear VALUE used when no explicit Clear() happened is
         // whatever this renderer's global clearColor_/clearDepth_/clearStencil_ currently holds
         // (potentially stale from the last explicit Clear() anywhere, not a fresh per-target
-        // default) -- a real, documented imprecision this shares with the Vulkan reference
-        // renderer rather than a new one introduced here.
+        // default) -- a real, documented imprecision.
         // WEBGPU-53/54/8/9: this target's own real Depth24PlusStencil8 attachment is always
         // present -- see WebGPURenderTargetRenderer's constructor comment.
         // REMED-GFX-159/156: ONE ordered replay across all eleven deferred families AND the
@@ -12866,7 +12849,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         // Render whatever Clear()/sprite work has been queued so far this logical frame before
         // reading it back, so a Clear()+GetBackBufferData() pair observes its own frame's result
-        // without needing a real Present() in between (matches Vulkan/Bgfx's on-demand submit).
+        // without needing a real Present() in between.
         EnsureFrameRendered();
         SubmitFrameEncoderEXT();   // WEBGPUPERF-0006: the copy into readbackBuffer_ is in it.
 
@@ -13196,9 +13179,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         // Every previously-created 3D/sprite pipeline baked the OLD sampleCount_ into its own
         // WGPUMultisampleState.count -- release them all so the next Queue*Draw()/RenderSprites()
-        // lazily rebuilds with the new value (mirrors
-        // VulkanRenderer::ApplyMultiSampleCount()'s identical "invalidate every pipeline
-        // cache" approach; a rare, not-a-hot-path event).
+        // lazily rebuilds with the new value (an "invalidate every pipeline cache" approach; a
+        // rare, not-a-hot-path event).
         ClearAllPipelineCaches();
 
         // The backbuffer's own depth buffer and (while MSAA is now active) multisampled colour
@@ -13341,12 +13323,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // SetRenderTarget2D switches to a DIFFERENT target, closing out that render pass
         // immediately and starting fresh accumulation for the new target; or (b) tag every queued
         // draw command (all ~10 of this renderer's Queue*Draw families) with which target it
-        // belongs to and replay them grouped-by-target at final-flush time, closer to
-        // VulkanRenderer's own deferred/replay model (see its RecordCommandBuffer()).
+        // belongs to and replay them grouped-by-target at final-flush time.
         // (a) was chosen: it needs one new function (RenderPendingDrawsToRenderTarget) and zero
         // changes to any existing Queue*Draw()/*DrawCommand struct, whereas (b) would add a
         // target-tag field and per-target grouping logic to every one of those ~10 families -- a
-        // much larger change for a renderer that, unlike Vulkan, has no pre-existing per-draw
+        // much larger change for a renderer that has no pre-existing per-draw
         // deferred/replay infrastructure to extend. WEBGPU-114 extends the same choice to a
         // RenderTargetCube face, generalised into FlushCurrentRenderTarget() so it applies
         // regardless of which of the 3 kinds of target ({backbuffer, RenderTarget2D, cube face})
@@ -13863,16 +13844,15 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const auto* instanceStream = FirstInstanceStream(params);
         if (instanceStream == nullptr)
         {
-            // No per-instance VB -- fall back to a single-instance indexed draw, matching
-            // VulkanRenderer::DrawInstancedPrimitivesEx's own identical fallback.
+            // No per-instance VB -- fall back to a single-instance indexed draw.
             DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
 
         // plans/plan_street_webgpu.md STREETW-0001/0004: a stock effect keeps its OWN family when
         // the draw is instanced -- it takes the ordinary family's programs and adds a per-instance
-        // binding, which is how VULKAN-222..232 put the same thing on the Vulkan renderer. Without
-        // this every instanced draw fell through to the instanced3d family below, which is
+        // binding, which is how VULKAN-222..232 put the same thing on the retired VULKAN renderer.
+        // Without this every instanced draw fell through to the instanced3d family below, which is
         // position-only, unlit and untextured, and the renderer reported success while rendering a
         // flat silhouette in the effect's diffuse colour.
         //
@@ -13896,7 +13876,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             {
                 // STREETW-0005: skinned draws included. The per-instance matrix applies AFTER the
                 // bone skin -- one palette serves every instance, which is what an instanced
-                // skinned draw means, and the composition EasyGL and Vulkan both use.
+                // skinned draw means, and the composition EasyGL uses.
                 DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount,
                                      params, "instanced", instanceCount, instanceStream);
                 return;
@@ -14400,9 +14380,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // matching every other renderer's own dispatch condition for this flag.
         // WMG-0014: and not while a shadow map is attached. The Gouraud sibling computes its
         // lighting in the vertex stage, where a per-pixel shadow lookup has nowhere to go, so a
-        // shadowed draw takes the per-pixel path whatever PreferPerPixelLighting says -- the same
-        // rule Vulkan applies, so "the default per-vertex lighting still receives a shadow" means
-        // the same thing on both.
+        // shadowed draw takes the per-pixel path whatever PreferPerPixelLighting says.
         command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting &&
                                   !(params.shadowsEnabled && params.shadowMap != nullptr);
         // WMG-0014: this draw's shadow reception, captured here for the same reason its pipeline
@@ -15423,8 +15401,8 @@ namespace
         // the application binds nothing.
         //
         // Bound unconditionally by the families below rather than behind a `textureEnabled` test,
-        // which is VulkanRenderer's reading and not EasyGL's: the WGSL stock programs already
-        // carry the white identity where it belongs, as
+        // which is the retired VULKAN renderer's reading and not EasyGL's: the WGSL stock programs
+        // already carry the white identity where it belongs, as
         // `select(vec4f(1.0), textureSampleBias(...), textureEnabled > 0.5)`, so a BasicEffect
         // with TextureEnabled=false never samples this view at all.
         if (classicNullTexture_ == nullptr)
@@ -15763,7 +15741,7 @@ namespace
         // (SkinnedEffect never sets GpuDrawParams::alphaTest away from its always-pass default).
         // Fog (WEBGPU-148): the primary Uniforms block carries the fog tail (fogColor/fogVector,
         // WEBGPU-145); each skinned shader computes fogFactor from the SKINNED view-space position
-        // (matching FNA SkinnedEffect and Vulkan's skinned3d.vert.glsl) and applies ApplyFog last.
+        // (matching FNA SkinnedEffect) and applies ApplyFog last.
         // WMG-0014: shadow reception, appended to every module of this family so they
         // share one pipeline layout.
         const std::string shaderSource =
@@ -16241,9 +16219,7 @@ namespace
         // every other renderer's own dispatch condition for this flag (Task 1102b).
         // WMG-0014: and not while a shadow map is attached. The Gouraud sibling computes its
         // lighting in the vertex stage, where a per-pixel shadow lookup has nowhere to go, so a
-        // shadowed draw takes the per-pixel path whatever PreferPerPixelLighting says -- the same
-        // rule Vulkan applies, so "the default per-vertex lighting still receives a shadow" means
-        // the same thing on both.
+        // shadowed draw takes the per-pixel path whatever PreferPerPixelLighting says.
         command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting &&
                                   !(params.shadowsEnabled && params.shadowMap != nullptr);
         const Matrix wvp = world * view * projection * XnaPixelCenterCorrectionEXT(primitive);

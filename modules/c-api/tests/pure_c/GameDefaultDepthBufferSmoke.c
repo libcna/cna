@@ -79,7 +79,7 @@ int main(void)
         !CNA_TEST_STAGE(state.frames >= 1) ||
         /* the manager's XNA default, not PresentationParameters' None */
         !CNA_TEST_STAGE(state.saw_depth24) ||
-        /* a 2D-only renderer has no real depth plane and may refuse; a 3D one must not */
+        /* a device without 3D has no real depth plane and may refuse; a 3D one must not */
         !CNA_TEST_STAGE(!state.three_d || state.clear_result == CNA_RESULT_SUCCESS) ||
         !CNA_TEST_STAGE(cna_game_destroy(game) == CNA_RESULT_SUCCESS)) {
         return CNA_TEST_FAIL(1);

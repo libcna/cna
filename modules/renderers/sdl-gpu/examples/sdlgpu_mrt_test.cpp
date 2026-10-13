@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT) proof for the SDL_GPU graphics renderer.
 //
-// Stock (single fragment output) effects keep the same scope boundary this project's D3D11/D3D12
+// Stock (single fragment output) effects keep the same scope boundary the retired D3D11/D3D12
 // MRT support established: rts[0] is the real draw target; rts[1..count-1] are bound and
 // independently cleared but never receive a stock draw, since no STOCK shader family in this
 // codebase declares more than one fragment output. Checks A-C below prove exactly that boundary.
@@ -439,7 +439,7 @@ class SdlGpuMrtTest : public Game
         Check(colorNear(a0Pixel, Color(51, 102, 204, 255)),
               "ordinary compiled Effect writes Tint to MRT slot 0");
         // AM4-146: the shared fixture writes oC1 = Tint.yxzw (CompiledEffectFixtures.hpp
-        // `writesMrt`), as the Metal copy of this test measures.
+        // `writesMrt`), as the retired METAL renderer's copy of this test measured.
         Check(colorNear(a1Pixel, Color(102, 51, 204, 255)),
               "ordinary compiled Effect writes Tint.yxzw independently to MRT slot 1");
 

@@ -301,8 +301,6 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderPreservesEveryClassicUncompressedFormatAndExactBytes)
 {
-    // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
-    // plans/plan_apple_m4.md AM4-147: Metal's every uncompressed one.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     constexpr std::array<SurfaceFormat, 15> formats{{
@@ -355,8 +353,6 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        TextureCubeReaderPreservesEveryClassicCompressedFormatAndExactBlocks)
 {
-    // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
-    // plans/plan_apple_m4.md AM4-148: and Metal's, DXT included.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     constexpr std::array<SurfaceFormat, 3> formats{{
@@ -528,8 +524,6 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConst
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        Texture3DReaderPreservesEveryClassicVolumeFormatAndExactBytes)
 {
-    // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
-    // plans/plan_apple_m4.md AM4-147: so does Metal's.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     struct FormatCase
@@ -583,8 +577,6 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 TEST_F(Texture3DTextureCubeContentTypeReaderTest,
        Texture3DReaderAcceptsDepthDominantMipChainAndPreservesEveryLevel)
 {
-    // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
-    // plans/plan_apple_m4.md AM4-147: so does Metal's.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     const std::vector<std::vector<std::uint8_t>> expected{

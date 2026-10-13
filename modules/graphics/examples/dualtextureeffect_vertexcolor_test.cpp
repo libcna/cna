@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Task 889: DualTextureEffect.VertexColorEnabled, verified on all 3 renderers (EasyGL/Vulkan/Bgfx
-// share this exact source, mirroring Task 950's graphicsdevice_clear_depth_test.cpp pattern).
+// Task 889: DualTextureEffect.VertexColorEnabled, a shared renderer-neutral source (mirroring
+// Task 950's graphicsdevice_clear_depth_test.cpp pattern).
 //
 // FNA reference (Graphics/Effect/StockEffects/HLSL/DualTextureEffect.fx): `VSDualTextureVc`
 // executes `vout.Diffuse *= vin.Color` on top of `ComputeCommonVSOutput()`'s

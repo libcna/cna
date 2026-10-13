@@ -22,10 +22,6 @@
 // genuine interpolation, not just an on/off switch. `World`/`View`/`Projection` are all Identity,
 // so this renderer-neutral fixture keeps raw vertex Z inside Direct3D's [0,1] clip interval.
 //
-// CONFIRMED, NOT FIXED HERE: Vulkan and Bgfx have zero fog GPU implementation for any 3D effect
-// (Task 888, discovered by Task 378) — no test is added for either renderer, matching Task 377/378's
-// precedent of not committing a test that would encode a known no-op as a passing assertion.
-//
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

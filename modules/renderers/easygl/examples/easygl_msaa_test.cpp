@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Renderer-neutral back-buffer MSAA contract (plans/plan_dx.md DX-219).
+// Renderer-neutral back-buffer MSAA contract (DX-219).
 //
 // A solid full-screen quad cannot distinguish multisampling from single-sample rendering. This
 // fixture instead draws a flat white triangle over black and requires partially covered pixels on

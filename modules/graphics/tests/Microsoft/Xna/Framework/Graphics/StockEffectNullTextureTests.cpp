@@ -68,13 +68,10 @@ namespace
     protected:
         void SetUp() override
         {
-            // plans/plan_vulkan_parity.md VKPAR-0004 adds Vulkan: GSC-F2 recorded it as one of the
-            // renderers still binding white here, and it now binds the measured opaque black.
             // plans/plan_webgpu_modern_graphics.md WMG-0025 adds WebGPU, which had no null-texture
             // handling at all until it gained the same 1x1 opaque-black 2D and cube.
             // plans/plan_apple_m4.md AM4-066 gave SDL_GPU the same opaque black for every classic
             // slot (AM4-107 enrols it here, so that rule is measured rather than only reviewed).
-            // AM4-140 gives Metal the same opaque black and enrols it.
             if (!CNA_RENDERER_IS(Software, OpenGL33, OpenGLES3, WebGPU, SdlGpu))
                 GTEST_SKIP() << "needs a stock-effect raster path whose missing slots are pinned";
 

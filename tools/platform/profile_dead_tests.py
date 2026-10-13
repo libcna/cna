@@ -158,7 +158,7 @@ Test Passed.
 7/7 Test: SdlGpu_BoundTargetLifetime
 Output:
 ----------------------------------------------------------
-[INFO] A1: oracle unavailable on VULKAN (NotSupportedException) -- boundary recorded
+[INFO] A1: oracle unavailable on SDL_GPU (NotSupportedException) -- boundary recorded
 <end of output>
 Test time =   0.30 sec
 ----------------------------------------------------------

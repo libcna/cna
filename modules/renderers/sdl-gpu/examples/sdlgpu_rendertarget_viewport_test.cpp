@@ -50,8 +50,8 @@
 // backbuffer — the RT pass replayed with the scissor no longer clipping. That per-pass-scissor
 // deferred-reset limitation is now FIXED (REMED-GFX-068 made the scissor per-draw, like the viewport),
 // and the Viewport∩Scissor intersection is asserted end-to-end in sdlgpu_rendertarget_scissor_test
-// Frame 3. (The independence was already proven on Vulkan, where both states are per-draw —
-// vulkan_rendertarget_viewport_test, GFX-062 Frame 3.)
+// Frame 3. (The independence was already proven on the retired Vulkan renderer, where both states
+// were per-draw — vulkan_rendertarget_viewport_test, GFX-062 Frame 3.)
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 

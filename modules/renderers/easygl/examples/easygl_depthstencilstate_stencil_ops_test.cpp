@@ -43,18 +43,6 @@
 // Column 3 is the one case in this test where a WORKING implementation must show BACKGROUND, not
 // GREEN, making it the only check capable of catching a fully-bypassed stencil test.
 //
-// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState, tracked as
-// Task 870) discards stencilPass/stencilFail/stencilDepthFail entirely and never enables the
-// stencil test at all (stencilTestEnable is never set), so every fragment always passes the
-// (nonexistent) stencil test regardless of the requested compare or reference value. This was
-// discovered mid-development: an earlier version of this test WITHOUT column 3 coincidentally
-// passed all its checks on Vulkan too, since every one of columns 0-2 happens to expect GREEN
-// (PASS) already -- exactly what a fully-bypassed stencil test also produces, giving the test zero
-// power to detect the bug. Column 3 is designed to fail specifically on a bypassed stencil test
-// (expects BACKGROUND, but a bypass always shows GREEN) -- expect columns 0-2 to pass on Vulkan
-// purely by coincidence and column 3 to fail, revealing the bug. This is a fourth reconfirmation
-// of Task 870, not a new bug; do not read columns 0-2 passing as evidence stencil ops work.
-//
 // Exit code 0 = all 4 checks PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

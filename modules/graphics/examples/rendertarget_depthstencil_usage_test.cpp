@@ -183,8 +183,8 @@ namespace
         /**
          * REMED-GFX-142's subject. `PreserveContents`/`PlatformContents` keep DEPTH across a full
          * unbind/rebind cycle, per the FNA3D contract quoted in this file's header. False is a
-         * declared defect: pre-fix it is false for VULKAN (LOAD_OP_DONT_CARE for depth in the
-         * preserving RT render pass) and for WEBGPU's cube leg (an unconditional
+         * declared defect: pre-fix it was false for the retired VULKAN renderer (LOAD_OP_DONT_CARE
+         * for depth in the preserving RT render pass) and for WEBGPU's cube leg (an unconditional
          * WGPULoadOp_Clear).
          */
         bool    depthPreserves;
@@ -192,7 +192,7 @@ namespace
         bool    stencilPreserves;
         /**
          * A `Clear()` issued AFTER a draw inside the SAME bind cycle wipes that draw, per XNA's
-         * command order (REMED-GFX-129's subject on Vulkan). False on a renderer whose only clear
+         * command order (REMED-GFX-129's subject). False on a renderer whose only clear
          * mechanism is still the pass load action, so a mid-cycle clear is hoisted to the front of
          * the cycle -- check K7 then asserts the COLLAPSED result, which stays falsifiable in both
          * directions and turns red the day that renderer gains ordered clears.
@@ -225,26 +225,26 @@ namespace
          */
         bool    msaaCubeReadback;
         /**
-         * A multisampled RenderTarget2D honours `PreserveContents` at all. False on Vulkan, where
-         * `VulkanRenderTargetRenderer::GetRenderPass()` hands its MSAA leg a hardcoded
-         * `discardContents=true` -- COLOUR and DEPTH alike. That is the multisampled-RT2D
-         * preservation finding REMED-GFX-141 recorded and deliberately did not fix (its cube
-         * sibling passes `!preserveContents_` and is correct), so check D8 asserts the discarding
-         * outcome there instead of claiming a depth result the renderer cannot give.
+         * A multisampled RenderTarget2D honours `PreserveContents` at all. It was false on the
+         * retired VULKAN renderer, whose `VulkanRenderTargetRenderer::GetRenderPass()` handed its
+         * MSAA leg a hardcoded `discardContents=true` -- COLOUR and DEPTH alike. That was the
+         * multisampled-RT2D preservation finding REMED-GFX-141 recorded and deliberately did not
+         * fix (its cube sibling passed `!preserveContents_` and was correct), so check D8 asserted
+         * the discarding outcome there instead of claiming a depth result the renderer could not
+         * give.
          */
         bool    msaaRt2dPreserves;
         /**
-         * `DrawUserPrimitives` works at all. False on the 2D-only renderers, which throw
-         * `std::runtime_error("... does not support 3D: CreateVertexBuffer")` from the first draw.
-         * Every depth/stencil observation in this file is a depth-tested or stencil-gated DRAW, so
-         * where this is false no content can be measured -- but the whole public sequence
-         * (construct, bind, Clear, unbind, read, dispose) still runs and still has to be legal,
-         * which is what those renderers are registered here to prove.
+         * `DrawUserPrimitives` works at all. Every depth/stencil observation in this file is a
+         * depth-tested or stencil-gated DRAW, so where this is false no content can be measured --
+         * but the whole public sequence (construct, bind, Clear, unbind, read, dispose) still runs
+         * and still has to be legal.
          */
         bool    drawsUserPrimitives;
         /**
          * Ask for a multisampled BACKBUFFER. Only true where that is the sole way a render target
-         * can engage MSAA: Vulkan gates its RT MSAA resources on the renderer's own sampleCount_.
+         * can engage MSAA, as on a renderer that gates its RT MSAA resources on its own device-wide
+         * sample count.
          */
         bool    preferMultiSampling;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
@@ -433,10 +433,9 @@ class RenderTargetDepthStencilUsageTest : public Game
      */
     void DrawBand(GraphicsDevice& dev, int band, float z, const Color& colour)
     {
-        // A 2D-only renderer throws from the first DrawUserPrimitives (see drawsUserPrimitives), so
-        // every sequence here degenerates to its bind/Clear/unbind/read skeleton there rather than
-        // being skipped -- that skeleton still has to be legal and is exactly what those renderers
-        // are registered to prove.
+        // Where drawsUserPrimitives is false, every sequence here degenerates to its
+        // bind/Clear/unbind/read skeleton rather than being skipped -- that skeleton still has to
+        // be legal.
         if (!kContract.drawsUserPrimitives) return;
         const float x0 = (band < 0) ? -1.0f : (-1.0f + static_cast<float>(band) * (2.0f / 3.0f));
         const float x1 = (band < 0) ?  1.0f : (-1.0f + static_cast<float>(band + 1) * (2.0f / 3.0f));

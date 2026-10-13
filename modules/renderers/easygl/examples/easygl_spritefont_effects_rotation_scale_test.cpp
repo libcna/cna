@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 429: Verify rotation/origin/scale with DrawString on EasyGL.
 //
-// EasyGL port of Task 694's SDL_Renderer "Test 2": a code path already correct BEFORE Task 694's
+// EasyGL port of Task 694's "Test 2": a code path already correct BEFORE Task 694's
 // own flip fix (untouched by that fix) -- this test independently confirms it also renders
 // correctly through EasyGL's own draw renderer.
 //

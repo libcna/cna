@@ -6,7 +6,7 @@
 // Same scene as Task 306 exactly: clear to Color(200,50,0,255), draw a full-screen opaque quad
 // Color(255,100,0,255) under BlendState::Additive. Expected (Additive: colorDst=One, no
 // InverseSourceAlpha): R = 255+200 = 455 saturates/clamps to 255 (unambiguous, no rounding);
-// G = 100+50 = 150 exactly (the distinguishing check that catches Task 868's Vulkan bug, where a
+// G = 100+50 = 150 exactly (the distinguishing check that catches Task 868's defect class, where a
 // hardcoded InverseSourceAlpha destination factor would instead drop the destination entirely,
 // giving G~100). Reuses Task 306's own tolerance=10 (its own [140,160] range around 150) against
 // the literal (255,150,0).

@@ -16,8 +16,8 @@
 // face B's samples, or a cycled/cleared scratch, in the storage the load action reads. The
 // single-sample cube layer still holds the correct A, which is why a full redraw and an immediate
 // readback both pass -- the defect only appears when a face is revisited for a PARTIAL update after
-// another face has been rendered. D3D11, whose multisampled cube resource is a real six-slice array
-// with one per-slice view, preserves exactly.
+// another face has been rendered. The retired DIRECTX11 renderer, whose multisampled cube resource
+// was a real six-slice array with one per-slice view, preserved exactly.
 //
 // This file is the oracle for that. It reuses REMED-GFX-134/136's asymmetric five-region face
 // producer verbatim -- drawn geometry, never Clear(), a 0/255-only palette that is an exact fixed
@@ -34,10 +34,10 @@
 // landed" and fails everything else.
 //
 // Nothing forces a flush between the producer and the rebind: no Settle(), no Present, no
-// intermediate GetData, no wait. REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) made every public
-// bind cycle its own native pass, so the whole public sequence is queued first and read once at the
-// end. A readback barrier in the middle would hide exactly the resolve-ordering half of this
-// finding.
+// intermediate GetData, no wait. REMED-GFX-140 (the retired VULKAN renderer) and REMED-GFX-145
+// (SdlGpu) made every public bind cycle its own native pass, so the whole public sequence is
+// queued first and read once at the end. A readback barrier in the middle would hide exactly the
+// resolve-ordering half of this finding.
 //
 // Boundaries this file does NOT cross:
 //   * Depth/stencil preservation is REMED-GFX-142's. Here depth only has to not corrupt colour.
@@ -114,7 +114,7 @@ namespace
          * A `multiSampleCount = 4` RenderTargetCube really reports an applied count > 0 here.
          * False is a declared capability boundary, not a defect: WebGPU ignores the parameter
          * (WEBGPU-114's own scope), D3D9's cube target allocates no multisampling at all, and
-         * Software/SDL_Renderer have no cube target to multisample.
+         * Software has no cube target to multisample.
          */
         bool    msaaEngages;
         /**
@@ -127,9 +127,9 @@ namespace
         Support msaaReadback;
         /**
          * Ask for a multisampled BACKBUFFER. Only true where that is the sole way a cube target can
-         * engage MSAA at all: `VulkanRenderTargetCubeRenderer` gates its MSAA resources on the
-         * renderer's own `sampleCount_`, so `multiSampleCount = 4` reports 0 unless the device
-         * itself was created multisampled.
+         * engage MSAA at all: a renderer that gates its cube MSAA resources on its own device-wide
+         * sample count reports 0 for `multiSampleCount = 4` unless the device itself was created
+         * multisampled.
          */
         bool    preferMultiSampling;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.

@@ -11,19 +11,20 @@
 // first one's sampler. An unset slot may use the documented default; an explicit sampler must never
 // be replaced by it.
 //
-// THE DEFECT this reproduces is Vulkan-local and is the stock-3D half of a fix SpriteBatch already
-// received. Vulkan's `ApplySamplerState` is correct -- it builds and caches a per-slot `VkSampler`
-// into `slotSamplers_[slot]` from a complete, correct XNA ordinal mapping -- and SpriteBatch reads
-// it (`VulkanSpriteBatchRenderer::FlushTexture`, whose own comment records the identical fix being
-// applied there under Task 665: "previously always used the texture's own pre-baked descriptor set,
-// built once at texture-load time with a fixed default sampler, completely bypassing
-// SetSamplerFilter/SetSamplerAddressMode"). The stock 3D descriptor builders never received that
-// fix: six of them take NO sampler parameter at all, so the sampler is neither written into the
-// descriptor nor present in the cache key, and every one of their 15 combined-image-sampler
-// bindings is hardcoded to `defaultSampler_` (VK_FILTER_LINEAR + VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_
-// EDGE). `PointClamp` therefore still filters linearly and `LinearWrap` still clamps.
+// THE DEFECT this reproduces was local to the retired VULKAN renderer and was the stock-3D half of
+// a fix SpriteBatch had already received. Vulkan's `ApplySamplerState` was correct -- it built and
+// cached a per-slot `VkSampler` into `slotSamplers_[slot]` from a complete, correct XNA ordinal
+// mapping -- and SpriteBatch read it (`VulkanSpriteBatchRenderer::FlushTexture`, whose own comment
+// recorded the identical fix being applied there under Task 665: "previously always used the
+// texture's own pre-baked descriptor set, built once at texture-load time with a fixed default
+// sampler, completely bypassing SetSamplerFilter/SetSamplerAddressMode"). The stock 3D descriptor
+// builders never received that fix: six of them took NO sampler parameter at all, so the sampler
+// was neither written into the descriptor nor present in the cache key, and every one of their 15
+// combined-image-sampler bindings was hardcoded to `defaultSampler_` (VK_FILTER_LINEAR +
+// VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE). `PointClamp` therefore still filtered linearly and
+// `LinearWrap` still clamped.
 //
-// WHICH FAMILIES. Vulkan's replay dispatch selects exactly one descriptor set per draw:
+// WHICH FAMILIES. Vulkan's replay dispatch selected exactly one descriptor set per draw:
 //
 //   useAlphaTest   -> descSet            GetOrCreateTexSamplerDescSet(view, slotSamplers_[0])  OK
 //   useDualTexture -> dualTexDescSet     GetOrCreateDualTexDescSet(..., sampler0, sampler1)    OK
@@ -33,9 +34,9 @@
 //   useLitTextured -> litTexturedDescSet GetOrCreateLitTexturedDescSet                     BROKEN
 //   useFogTex3D    -> fogTex3DDescSet    GetOrCreateFogTex3DDescSet                        BROKEN
 //
-// `useFogTex3D` is set for ANY plain textured BasicEffect draw -- it is the fog-CAPABLE bundle, not
-// "fog is on" -- so the most ordinary textured 3D draw in the API binds a broken descriptor even
-// though the correct `descSet` was computed one line earlier and then went unused.
+// `useFogTex3D` was set for ANY plain textured BasicEffect draw -- it was the fog-CAPABLE bundle,
+// not "fog is on" -- so the most ordinary textured 3D draw in the API bound a broken descriptor
+// even though the correct `descSet` was computed one line earlier and then went unused.
 //
 // THE ORACLE is modulation-independent, because a lit or fogged effect scales the sampled texel and
 // an exact-RGBA expectation would then be asserting the lighting model rather than the sampler.
@@ -594,7 +595,8 @@ class StockEffectSamplerContractTest : public Game
     {
         const char* name;
         void (StockEffectSamplerContractTest::*draw)(GraphicsDevice&, float);
-        /// The Vulkan descriptor builder this family routes to, named so a failure points at it.
+        /// The descriptor builder this family routed to on the retired VULKAN renderer, where the
+        /// defect lived; kept in every failure tag.
         const char* descriptorPath;
         /// True when the effect's modulation is the identity, so the exact stored texel is asserted.
         bool identityModulation;

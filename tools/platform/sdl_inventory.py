@@ -37,16 +37,18 @@ prose mentions of SDL in an explanatory comment also count; that is the conserva
 What deliberately does *not* count -- two classes of CNA-owned spelling that merely look like SDL:
 
   1. Identifiers containing "SDL_" as an infix, notably the renderer-selection macros
-     `CNA_RENDERER_SDL_RENDERER` and `CNA_RENDERER_SDL_GPU`. The leading `\b` in the patterns
+     `CNA_RENDERER_SDL_GPU` and the retired `CNA_RENDERER_SDL_RENDERER` named in configure-time
+     refusals. The leading `\b` in the patterns
      below excludes them.
   2. The bare tokens `SDL_GPU` and `SDL_RENDERER` (see EXCLUDED_EXACT below). These are CNA's own
-     `CNA_GRAPHICS_RENDERER` identity names, written in prose and in enum-to-string tables.
+     `CNA_GRAPHICS_RENDERER` identity names (SDL_RENDERER retired, refused by name), written in
+     prose and in enum-to-string tables.
      Neither is an SDL3 API symbol -- the real API spells them `SDL_GPUDevice`, `SDL_GPUTexture`,
      `SDL_CreateRenderer` and so on, all of which still count.
 
 Both exclusions are load-bearing rather than incidental: those spellings name CNA build options
-and renderer identities, they survive the plan by design (the SDL_RENDERER, SDL_GPU and FNA3D
-renderers are allowlisted), and counting them would make the plan's definition of done unreachable
+and renderer identities, they survive the plan by design (the SDL_GPU and FNA3D renderers are
+allowlisted), and counting them would make the plan's definition of done unreachable
 by construction. Together they are worth 78 files -- a naive `grep SDL_` over the tree reports
 four extra files for the first class and 74 for the second.
 
@@ -283,7 +285,7 @@ def render_markdown(inv: Inventory) -> str:
     renderer_families = sum(1 for (is_r, _), _ in counts.items() if is_r)
     out.write(
         f"| `modules/renderers/*` | {renderer_total} | native window handle, GL context, "
-        f"Vulkan surface, SDL renderer/GPU ({renderer_families} families) |\n"
+        f"SDL GPU device ({renderer_families} families) |\n"
     )
 
     out.write(

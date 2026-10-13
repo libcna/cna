@@ -8,11 +8,10 @@ Run from the shaders/ directory or pass --output <path>.
 Output: spirv_shaders.hpp  (next to this script unless --output given)
 
 Note: these shaders follow SDL_gpu's SPIR-V resource-binding convention for graphics
-pipelines (SDL_gpu.h, SDL_CreateGPUShader doc comment), NOT the plain Vulkan convention
-this project's VulkanRenderer shaders use -- vertex-stage textures/storage are set 0,
-vertex-stage uniform buffers are set 1, fragment-stage textures/storage are set 2, and
-fragment-stage uniform buffers are set 3. Do not copy a VulkanRenderer shader's
-compiled SPIR-V here without re-checking its set numbers against this convention.
+pipelines (SDL_gpu.h, SDL_CreateGPUShader doc comment), not a plain Vulkan descriptor-set
+layout -- vertex-stage textures/storage are set 0, vertex-stage uniform buffers are set 1,
+fragment-stage textures/storage are set 2, and fragment-stage uniform buffers are set 3. Do not
+bring in SPIR-V written for another layout without re-checking its set numbers.
 """
 
 import ctypes
@@ -141,12 +140,12 @@ def spv_to_cpp_array(name: str, spv: bytes) -> str:
     )
 
 
-# plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception is ONE piece of GLSL, the Vulkan
-# renderer's checked-in snippet, not a second copy maintained here. The including shader defines
-# CNA_SHADOW_* first to put the four resources where SDL_gpu's fixed set convention wants them;
-# every sampling, cascade, PCF and punctual formula is the shared file's.
-SHADOW_SAMPLING_GLSL = (Path(__file__).resolve().parent / ".." / ".." / ".." / "vulkan" / "src"
-                        / "shaders" / "shadow_sampling.glsl")
+# plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception is ONE piece of GLSL, spliced
+# into every including shader rather than copied into each. It was the retired Vulkan renderer's
+# snippet and moved here with it on 2026-10-13. The including shader defines CNA_SHADOW_* first to
+# put the four resources where SDL_gpu's fixed set convention wants them; every sampling, cascade,
+# PCF and punctual formula is this file's.
+SHADOW_SAMPLING_GLSL = Path(__file__).resolve().parent / "shadow_sampling.glsl"
 
 
 def expand_local_includes(source: str) -> str:
@@ -157,12 +156,12 @@ def expand_local_includes(source: str) -> str:
 
 
 # plans/plan_street_sdlgpu.md STREETS-0001: the per-instance world matrix, as an OPTIONAL input to
-# every stock 3D vertex shader -- the Vulkan renderer's VULKAN-227 prologue, same four columns at the
-# same locations 12..15. An instanced stock draw keeps its effect's family (its uniforms, samplers
-# and fragment stage) and differs only in the vertex module, which is the ordinary source compiled a
-# second time with CNA_INSTANCED. Without it, every instanced draw here took the position-only
-# instanced3d module whatever effect was applied, so every instanced PbrEffect prop was a flat
-# white silhouette.
+# every stock 3D vertex shader -- the retired Vulkan renderer's VULKAN-227 prologue, same four
+# columns at the same locations 12..15. An instanced stock draw keeps its effect's family (its
+# uniforms, samplers and fragment stage) and differs only in the vertex module, which is the
+# ordinary source compiled a second time with CNA_INSTANCED. Without it, every instanced draw here
+# took the position-only instanced3d module whatever effect was applied, so every instanced
+# PbrEffect prop was a flat white silhouette.
 #
 # The NON-instanced expansion is textually the identity, so every ordinary module's SPIR-V is
 # byte-identical to what it was before -- checked by regenerating this header and diffing.
@@ -272,7 +271,7 @@ def main():
         source = expand_local_includes(glsl_path.read_text())
         if defines:
             # plans/plan_gltf.md GLTF-465: variant defines are inserted after GLSL's mandatory #version
-            # line, the same way the Vulkan renderer's own compile_shaders.py does it.
+            # line, the same way the retired Vulkan renderer's own compile_shaders.py did it.
             version_end = source.index("\n", source.index("#version")) + 1
             source = (source[:version_end]
                       + "".join(f"#define {name} 1\n" for name in defines)

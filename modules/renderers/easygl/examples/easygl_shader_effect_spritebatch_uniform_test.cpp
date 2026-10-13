@@ -16,8 +16,7 @@
 //
 // Fixed by having FlushBatch() bind the SAME compiled program the effect itself owns
 // (Effect::GetEffectRendererPtr(), overridden by ShaderEffect) instead of maintaining a redundant
-// second copy -- matching how Vulkan's custom-effect path already works (it never recompiles at
-// flush time either, since the effect's own pipeline is used directly).
+// second copy.
 //
 // This test sets a uMyTint uniform via ShaderEffect::SetUniformVec4() (blue) and confirms the
 // SpriteBatch-drawn quad actually reads back blue, not the GLSL-default-initialized black that

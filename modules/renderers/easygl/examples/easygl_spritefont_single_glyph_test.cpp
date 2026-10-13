@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 424: Pixel test -- draw a single glyph at a known position on EasyGL.
 //
-// Direct EasyGL port of Task 690's SDL_Renderer test (which itself was the first-of-its-kind
+// Direct EasyGL port of Task 690's test (which itself was the first-of-its-kind
 // SpriteFont pixel test in this project, designed directly from FNA's real SpriteBatch::DrawString
 // contract -- traced in the shared, renderer-agnostic SpriteBatch.cpp: per-glyph destination rect
 // = position + accumulated kerning/cropping offset, sized by the glyph's own bounds, sampling the

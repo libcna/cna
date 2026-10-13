@@ -19,14 +19,14 @@
  * name instead of being created with a descriptor nothing will ever fill.)
  *
  * CNA's portable shader packages do not obey it, and are not wrong to: their SPIR-V is compiled
- * from the `*.vulkan.*.glsl` sources, which are written against CNA's **own** Vulkan renderer's
- * descriptor convention (fragment samplers at `set = 1` and small per-draw parameters in a
- * `push_constant` block). Two renderers that both consume SPIR-V still disagree about where a
- * resource lives, so something has to translate, and the honest place for that is here rather
- * than in the shader sources -- the package is shared with Vulkan, which is already validated
- * against it, and a second set of numbers baked into the sources would make one of the two
- * renderers wrong (`plans/plan_sdlgpu_modern_graphics.md` Phase 10, "do not assume Vulkan
- * descriptor-set numbering").
+ * from the `*.vulkan.*.glsl` sources, which are written against the descriptor convention of
+ * CNA's **own** (since retired) Vulkan renderer (fragment samplers at `set = 1` and small per-draw
+ * parameters in a `push_constant` block). Two renderers that both consumed SPIR-V still disagreed
+ * about where a resource lives, so something has to translate, and the honest place for that is
+ * here rather than in the shader sources -- the package was shared with Vulkan, which was
+ * validated against it, and a second set of numbers baked into the sources would have made one
+ * of the two renderers wrong (`plans/plan_sdlgpu_modern_graphics.md` Phase 10, "do not assume
+ * Vulkan descriptor-set numbering").
  *
  * Two transformations happen, and nothing else:
  *

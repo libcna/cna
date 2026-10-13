@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-217: does a TEXTURED instanced draw sample its texture?
+// VULKAN-217: does a TEXTURED instanced draw sample its texture?
 //
 // Why this question was not already asked
 // ---------------------------------------
-// §10's parity matrix records instancing as `VULKAN_STRONGER`, on a true count: EasyGL's only
-// instancing test drives a GLSL `ShaderEffect`, and Vulkan has two stock-effect ones
-// (`Vulkan_DrawInstanced_3Instances`, `_InstancedVertexColor_Cardinality`). Both of those are
+// §10's parity matrix recorded instancing as `VULKAN_STRONGER`, on a true count: EasyGL's only
+// instancing test drove a GLSL `ShaderEffect`, and the retired VULKAN renderer had two stock-effect
+// ones (`Vulkan_DrawInstanced_3Instances`, `_InstancedVertexColor_Cardinality`). Both of those were
 // COLOUR draws. Neither renderer had ever been asked whether instancing composes with a texture,
 // which is the ordinary XNA case -- Microsoft's own InstancedModel sample textures its instances,
 // and `DrawInstancedPrimitives` is a vertex-supply mechanism, not a different pixel pipeline.
 //
-// The two renderers implement instancing very differently, and that is what makes the question
+// The two renderers implemented instancing very differently, and that is what made the question
 // sharp rather than academic. EasyGL adds an OPTIONAL per-instance world matrix (locations 12-15,
 // `uCnaInstanced`) to *every* stock program, so instancing composes with textures, lighting and
-// everything else by construction. Vulkan selects a SEPARATE program pair for instanced draws, and
-// `instanced3d.frag.glsl` says in its own header comment: "no fog, no texture, just the flat
-// instance diffuse color".
+// everything else by construction. VULKAN selected a SEPARATE program pair for instanced draws,
+// and its `instanced3d.frag.glsl` said in its own header comment: "no fog, no texture, just the
+// flat instance diffuse color".
 //
 // The legs
 // --------
@@ -479,7 +479,7 @@ protected:
         }
 
         // ---- T/U: the COLOURED alpha-test shape ---------------------------------------------
-        // plans/plan_vulkan.md VULKAN-229. H/I drive a Position+TextureCoordinate record; the
+        // VULKAN-229. H/I drive a Position+TextureCoordinate record; the
         // alpha-test family has a second vertex shape, Position+Colour+TextureCoordinate with
         // VertexColorEnabled, and only that one reads a colour. Same 2x1 texture trick, but WHITE
         // rather than blue, with a grey(128) vertex colour -- so the left half must read
@@ -648,7 +648,7 @@ protected:
         }
 
         // ---- P/Q: the UNTEXTURED lit shape --------------------------------------------------
-        // plans/plan_vulkan.md VULKAN-228. J/K drive Position+Normal+TextureCoordinate, which is
+        // VULKAN-228. J/K drive Position+Normal+TextureCoordinate, which is
         // one of the lit family's THREE vertex shapes. This is the second: an exactly
         // Position+Normal declaration with BasicEffect.TextureEnabled false -- XNA's Primitives3D
         // vertex, and the shape a game gets from a mesh with no UVs at all. Same light and same
@@ -726,7 +726,7 @@ protected:
         }
 
         // ---- R/S: the COLOURED lit shape ----------------------------------------------------
-        // plans/plan_vulkan.md VULKAN-228, the lit family's third vertex shape:
+        // VULKAN-228, the lit family's third vertex shape:
         // Position+Normal+Colour+TextureCoordinate with VertexColorEnabled -- the stock
         // ModelProcessor's colour-carrying mesh. RED vertex colour under the same N.L = 0.5 light
         // over a white texture, so the three outcomes are all distinct: (128,0,0) is correct,
@@ -882,7 +882,7 @@ protected:
         }
 
         // ---- V/W: the COLOURED dual-texture shape -------------------------------------------
-        // plans/plan_vulkan.md VULKAN-230. L/M drive the two-coordinate shape; DualTextureEffect
+        // VULKAN-230. L/M drive the two-coordinate shape; DualTextureEffect
         // has a second one, Position+Colour+TextureCoordinate at stride 24 (Task 889), where the
         // record carries ONE coordinate set and the shader's second UV input reads the same
         // element (VULKAN-150). tex0 WHITE, tex2 quarter-grey, vertex colour RED: the correct
@@ -961,7 +961,7 @@ protected:
         }
 
         // ---- X/Y: SkinnedEffect on an instanced draw -----------------------------------------
-        // plans/plan_vulkan.md VULKAN-231. Instancing a skinned mesh is the ordinary way to draw a
+        // VULKAN-231. Instancing a skinned mesh is the ordinary way to draw a
         // crowd, and the test has to fail if EITHER half is dropped -- so the bone and the
         // per-instance matrix move the geometry in the SAME axis by DIFFERENT amounts, and two
         // pixels separate every outcome.
@@ -978,8 +978,8 @@ protected:
         // +0.75 is empty. Neither half can be missing and still pass.
         {
             // The stride-52 GPU-compact skinned record, and the empty-declaration VertexBuffer
-            // constructor its siblings use (see vulkan_skinnedeffect_translation_bone_test.cpp):
-            // pos(12) + normal(12) + uv(8) + weights(16) + indices(4).
+            // constructor its siblings use: pos(12) + normal(12) + uv(8) + weights(16) +
+            // indices(4).
             struct SkinnedGpuVertex {
                 float px, py, pz;
                 float nx, ny, nz;
@@ -1052,7 +1052,7 @@ protected:
         }
 
         // ---- Z/AA: PbrEffect on an instanced draw --------------------------------------------
-        // plans/plan_vulkan.md VULKAN-232. Two claims, and the leg fails if either is false.
+        // VULKAN-232. Two claims, and the leg fails if either is false.
         //
         //   TRANSFORM. World = +0.25 in x composes with the three instances at -0.5/0/+0.5, so the
         //     quads land at -0.25, +0.25 and +0.75 -- exactly the arrangement X/Y uses, for the
@@ -1152,7 +1152,7 @@ protected:
         }
 
         // ---- AB/AC: SkinnedPbrEffect on an instanced draw ------------------------------------
-        // plans/plan_vulkan.md VULKAN-232's second family. Z/AA proved the rigid PBR pair; this is
+        // VULKAN-232's second family. Z/AA proved the rigid PBR pair; this is
         // the skinned one, and it carries BOTH discriminators at once -- the bone (X/Y's) and the
         // BRDF value (Z/AA's). One bone translating +0.25 replaces World this time, so the three
         // quads again land at -0.25, +0.25 and +0.75.
@@ -1244,15 +1244,15 @@ protected:
         }
 
         // ---- AD..AG: FOG on the instanced BasicEffect shapes ---------------------------------
-        // plans/plan_vulkan.md VULKAN-233, the last item VULKAN-218 listed. The instanced route
-        // used a program family of its own whose fragment shaders say, in their own headers, "no
-        // fog" -- so BasicEffect.FogEnabled was silently ignored on any instanced draw.
+        // VULKAN-233, the last item VULKAN-218 listed. The retired VULKAN
+        // renderer's instanced route used a program family of its own whose fragment shaders said,
+        // in their own headers, "no fog" -- so BasicEffect.FogEnabled was silently ignored on any
+        // instanced draw there.
         //
-        // The recipe is the one this renderer's own colored3d/textured3d fog tests derive:
-        // fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1) over the raw object-space Z,
-        // so Z = 0.45 with FogStart = 0 and FogEnd = -0.9 is exactly half. Red fog over blue
-        // geometry gives (128,0,128); (0,0,255) is the unmistakable signature of a program with no
-        // fog term at all, and (255,0,0) of one that fogged completely.
+        // The recipe: fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1) over the raw
+        // object-space Z, so Z = 0.45 with FogStart = 0 and FogEnd = -0.9 is exactly half. Red fog
+        // over blue geometry gives (128,0,128); (0,0,255) is the unmistakable signature of a
+        // program with no fog term at all, and (255,0,0) of one that fogged completely.
         {
             const PT tq[4] = {
                 { -0.12f,  0.12f, 0.45f, 0.0f, 0.0f },
@@ -1347,10 +1347,11 @@ protected:
         }
 
         // ---- AH/AI: fog on the POSITION-ONLY instanced shape ---------------------------------
-        // plans/plan_vulkan.md VULKAN-234's measurement. A declaration naming ONLY a Position is
-        // the one BasicEffect record the fog-capable bundle has no program for on Vulkan, so it
-        // keeps the position-only `instanced3d` module -- which has no fog term. Whether that is a
-        // parity gap or a shared limit is a question for both renderers, not an inference.
+        // VULKAN-234's measurement. A declaration naming ONLY a Position was
+        // the one BasicEffect record the retired VULKAN renderer's fog-capable bundle had no
+        // program for, so it kept the position-only `instanced3d` module -- which had no fog term.
+        // Whether that is a parity gap or a shared limit is a question for each renderer, not an
+        // inference.
         {
             struct P3 { float x, y, z; std::uint32_t pad; };
             static_assert(sizeof(P3) == 16);

@@ -21,8 +21,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// XNA SetDataOptions -> D3DLOCK flags: Discard = D3DLOCK_DISCARD (driver may return a
         /// fresh, unsynchronized region); NoOverwrite = D3DLOCK_NOOVERWRITE (caller promises not to
         /// touch any in-flight range); None = also DISCARD, since it is always GPU-sync-safe and
-        /// XNA's own docs only say None *may* stall, never that it must -- same choice
-        /// D3D11VertexBufferRenderer already made for its own MapTypeFor().
+        /// XNA's own docs only say None *may* stall, never that it must.
         DWORD LockFlagsFor(SetDataOptions options)
         {
             return options == SetDataOptions::NoOverwrite ? D3DLOCK_NOOVERWRITE : D3DLOCK_DISCARD;
@@ -78,7 +77,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // Never shrinks -- grow to the larger of what's actually requested and the
         // originally-declared vertex capacity at this call's stride, so a buffer created with a
         // generous capacity_ doesn't get needlessly reallocated on every SetData() at the same
-        // stride (same discipline D3D11VertexBufferRenderer::EnsureCapacity() already established).
+        // stride.
         const std::size_t capacityBytes = static_cast<std::size_t>(capacity_) * stride_;
         UINT newByteWidth = static_cast<UINT>(requiredBytes > capacityBytes ? requiredBytes : capacityBytes);
         if (newByteWidth == 0) newByteWidth = static_cast<UINT>(requiredBytes);

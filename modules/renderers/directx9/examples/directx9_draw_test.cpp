@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_dx9.md Phase D9-8 (D9-82): this renderer's first real 3D triangle. Proves
 // DrawColoredPrimitives()/DrawIndexedColoredPrimitives() -- the real BasicEffect
-// VertexColorEnabled-only path (ShaderIndex 3, "BasicEffect_VSBasicVcNoFog"/
-// "BasicEffect_PSBasicNoFog") -- through the real public Game/GraphicsDeviceManager/
-// GraphicsDevice API, mirroring DirectX11_Smoke's own Check P exactly (same "oversized triangle"
-// full-NDC trick, same before/after-Clear() discipline, same CullMode::None reset so this basic
-// check does not depend on D9-21's still-open D3DCULL winding proof).
+// VertexColorEnabled-only path (ShaderIndex 3,
+// "BasicEffect_VSBasicVcNoFog"/"BasicEffect_PSBasicNoFog") -- through the real public
+// Game/GraphicsDeviceManager/GraphicsDevice API, mirroring the retired DirectX11_Smoke's Check P
+// exactly (same "oversized triangle" full-NDC trick, same before/after-Clear() discipline, same
+// CullMode::None reset so this basic check does not depend on D9-21's still-open D3DCULL winding
+// proof).
 //
 // Check A -- DrawColoredPrimitives: a known vertex color paints over a known-blue Clear()
 //   background at the same readback location (before=blue, after=red).
@@ -86,9 +87,10 @@ namespace
 
     struct VPC { float x, y, z; uint32_t color; };
 
-    // Same full-NDC "oversized triangle" trick DirectX11_Smoke's own Check P established: with
-    // world=view=projection=Identity, these Position values ARE clip-space coordinates directly.
-    // 0xFF0000FFu packed as XNA's own R,G,B,A ascending-byte Color convention = opaque red.
+    // Same full-NDC "oversized triangle" trick the retired DirectX11_Smoke's Check P established:
+    // with world=view=projection=Identity, these Position values ARE clip-space coordinates
+    // directly. 0xFF0000FFu packed as XNA's own R,G,B,A ascending-byte Color convention = opaque
+    // red.
     const VPC kTri[3] = {
         {-1.0f, -1.0f, 0.0f, 0xFF0000FFu},
         { 3.0f, -1.0f, 0.0f, 0xFF0000FFu},
@@ -140,9 +142,9 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<DirectX9Renderer&>(dev.GetRenderer());
 
-        // Known-safe baseline, matching DirectX11_Smoke's own Check P discipline: opaque blend, no
-        // depth/stencil, no culling (so this basic check does not depend on D9-21's still-open
-        // D3DCULL winding proof).
+        // Known-safe baseline, matching the retired DirectX11_Smoke's Check P discipline: opaque
+        // blend, no depth/stencil, no culling (so this basic check does not depend on D9-21's
+        // still-open D3DCULL winding proof).
         renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
         renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);

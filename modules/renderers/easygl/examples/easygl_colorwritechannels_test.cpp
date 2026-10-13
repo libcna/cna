@@ -7,7 +7,7 @@
 // This test covers slot 0 on the backbuffer. REMED-GFX-016's EasyGL MRT regression separately
 // proves ColorWriteChannels0..3 through glColorMaski on profiles that expose indexed masks, while
 // lower profiles reject distinct per-slot masks rather than applying slot 0 globally. MultiSampleMask
-// remains a documented GL/GLES capability gap; the sample mask is proven on Software and Vulkan.
+// remains a documented GL/GLES capability gap; the sample mask is proven on Software.
 // Clear() must ignore the mask (glClear respects color masks, but XNA Clear does not) -- exercised
 // implicitly since every case clears to D under an active mask.
 //

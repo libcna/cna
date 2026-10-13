@@ -588,9 +588,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_street_sdlgpu.md STREETS-0008: Direct3D 9 saturates a vertex shader's colour
-    # outputs (oD0/oD1) before interpolation, which XNA games observe. Vulkan's two renderer-agnostic
-    # witnesses, compiled again: BasicEffect's unlit COLOR0 (VULKAN-197) and EnvironmentMapEffect's
-    # COLOR1 amount (VULKAN-196, already clamped here since SDLGPU-81).
+    # outputs (oD0/oD1) before interpolation, which XNA games observe. The retired VULKAN renderer's
+    # two renderer-agnostic witnesses, compiled again: BasicEffect's unlit COLOR0 (VULKAN-197) and
+    # EnvironmentMapEffect's COLOR1 amount (VULKAN-196, already clamped here since SDLGPU-81).
     cna_sdlgpu_test(cna_test_sdlgpu_basiceffect_diffuse_color_clamp
         ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BasicEffect_DiffuseColorClamp
@@ -692,7 +692,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # SDLGPU-129: XNA publishes a Deferred SpriteBatch's sampler to device slot zero at End's
-    # flush, not at Begin, and the next 3D draw inherits it. Compile the exact EasyGL/Vulkan
+    # flush, not at Begin, and the next 3D draw inherits it. Compile the exact EasyGL
     # timing-and-pixel discriminator so the merged shared behavior has SDL GPU evidence too.
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_sampler0_publication
         ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sampler0_publication_test.cpp)
@@ -949,12 +949,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
 
 
     # REMED-GFX-169: every stock 3D effect must sample its textures through the public
-    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. Vulkan's
-    # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
-    # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
-    # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
-    # absent from their cache keys too. Vulkan is where the defect lives; the other renderers run the
-    # same public fixture as controls.
+    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. On the retired
+    # Vulkan renderer, ApplySamplerState was correct and SpriteBatch read slotSamplers_[0], but six
+    # stock 3D descriptor builders took NO sampler parameter at all, so all 15 of their
+    # combined-image-sampler bindings were hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE)
+    # and the sampler was absent from their cache keys too. Vulkan is where the defect lived; the
+    # other renderers run the same public fixture as controls.
     cna_sdlgpu_test(cna_test_sdlgpu_stock_effect_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_StockEffectSamplerContract COMMAND cna_test_sdlgpu_stock_effect_sampler

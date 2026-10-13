@@ -198,17 +198,18 @@ struct VertexOutput {
      * @brief plans/plan_webgpu_modern_graphics.md WMG-0014: directional, cascaded, point and spot
      *        shadow reception, appended to every lit fragment program that receives shadows.
      *
-     * The WGSL twin of the Vulkan renderer's `shadow_sampling.glsl`, function for function and
-     * constant for constant, so the two renderers answer a shadow query the same way. Group 2 is
+     * The WGSL twin of SDL_GPU's `shadow_sampling.glsl` (first written for the retired VULKAN
+     * renderer), function for
+     * function and constant for constant. Group 2 is
      * deliberately identical for every family that includes it; groups 0 and 1 stay the family's
      * own uniform and material bundles. A module's declarations may appear in any order in WGSL,
      * so this is concatenated onto a shader's source rather than spliced into it.
      *
-     * The atlas is read with its `v` flipped, exactly as on Vulkan and unlike EasyGL. The caster
+     * The atlas is read with its `v` flipped, unlike EasyGL. The caster
      * writes `gl_Position.y = -lightSpace.y` for Vulkan's clip space, and naga's SPIR-V frontend
      * negates `y` again in the entry point it generates -- which is how a Vulkan-authored shader
      * lands correctly in WebGPU's opposite clip space. The two negations leave the rasterised
-     * atlas in the same orientation as Vulkan's, so it is read the same way.
+     * atlas in the orientation Vulkan's clip space produces, hence the flipped read.
      *
      * `textureSampleLevel` rather than `textureSample`: every tap here sits inside a loop with a
      * `continue` and behind early returns, which is non-uniform control flow, and WGSL forbids an
@@ -238,9 +239,9 @@ struct CnaShadowParams {
     punctualTexelYPad: vec4f,
 };
 @group(2) @binding(0) var<uniform> cnaShadow: CnaShadowParams;
-// Three samplers rather than one shared: the Vulkan renderer reads these three maps through
-// sampler slots 7, 8 and 9, and a shadow map filtered differently from the one Vulkan used would
-// answer a PCF tap differently -- which is the whole measurement these shaders exist to make.
+// Three samplers rather than one shared: the shared GLSL snippet reads these three maps through
+// three sampler slots, and a shadow map filtered differently from the other families' would answer
+// a PCF tap differently -- which is the whole measurement these shaders exist to make.
 @group(2) @binding(1) var cnaShadowSampler: sampler;
 @group(2) @binding(2) var cnaShadowMap: texture_2d<f32>;
 @group(2) @binding(3) var cnaPunctualCubeSampler: sampler;
@@ -471,7 +472,7 @@ struct VertexOutput {
     let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     // WMG-0014: the directional shadow scales the three directional lights' diffuse and the
-    // specular that follows from them, exactly as on EasyGL and Vulkan; the ambient term and the
+    // specular that follows from them, exactly as on EasyGL and SDL_GPU; the ambient term and the
     // punctual light are outside it -- the punctual light carries its own shadow.
     let shadow = cnaShadowFactor(input.worldPos);
     let lightSum = u.ambientLighting.xyz
@@ -1063,10 +1064,9 @@ struct VSOut {
      * at once: the roughness LOD is the whole point, and the tap sits behind this function's early
      * return, where WGSL forbids an implicit-derivative sample.
      *
-     * Three samplers rather than one, matching Vulkan's `PbrSlotSamplersRawEXT()` and EasyGL's
-     * texture units: these three resources are read through XNA sampler slots 10, 11 and 12, and a
-     * prefiltered cube filtered differently from the one Vulkan used would answer a roughness ramp
-     * differently.
+     * Three samplers rather than one, matching EasyGL's texture units: these three resources are
+     * read through XNA sampler slots 10, 11 and 12, and a prefiltered cube filtered differently
+     * from the one EasyGL uses would answer a roughness ramp differently.
      */
     inline constexpr char kIblSampling[] = R"WGSL(
 struct CnaIblParams {
@@ -1407,7 +1407,7 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
@@ -1538,7 +1538,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
@@ -1668,7 +1668,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
@@ -1792,7 +1792,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
-    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and SDL_GPU's
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     output.color = input.color;

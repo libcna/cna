@@ -59,7 +59,7 @@ namespace
 #if defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
 #else
-#error "ShaderEffect reflection contract requires EasyGL or DirectX 11"
+#error "ShaderEffect reflection contract requires EasyGL"
 #endif
 
     constexpr int kSize = 32;

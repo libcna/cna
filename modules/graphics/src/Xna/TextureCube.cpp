@@ -545,10 +545,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-135 (REMED-GFX-127/130's contract, applied to the WRITE direction). Every check
         // above runs BEFORE anything is converted or handed to a renderer, so a rejected call cannot
-        // have changed one texel. A renderer that was never created at all (the 2D-only
-        // renderers keep IGraphicsRenderer::CreateTextureCube's nullptr default) used to be skipped
-        // by a bare `if (renderer_)`, which turned "no storage exists" into a successful-looking
-        // upload -- it is the same answer as an unimplemented write, reached one step earlier.
+        // have changed one texel. A renderer that was never created at all (as on a graphics
+        // renderer that keeps IGraphicsRenderer::CreateTextureCube's nullptr default) used to be
+        // skipped by a bare `if (renderer_)`, which turned "no storage exists" into a
+        // successful-looking upload -- it is the same answer as an unimplemented write, reached one
+        // step earlier.
         if (!renderer_)
         {
             throw System::NotSupportedException(
@@ -719,8 +720,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // fabricates a complete transparent-black cube face. Conversion happens only when the
         // renderer reports it wrote the whole region; otherwise the caller's `data` is left
         // byte-for-byte as it was and the missing capability is raised instead of being answered
-        // with invented content. A renderer that was never created at all (the 2D-only
-        // renderers keep IGraphicsRenderer::CreateTextureCube's nullptr default) is the same
+        // with invented content. A renderer that was never created at all (as on a graphics
+        // renderer that keeps IGraphicsRenderer::CreateTextureCube's nullptr default) is the same
         // answer reached one step earlier: no storage exists, so there is nothing to return.
         if (!renderer_)
         {

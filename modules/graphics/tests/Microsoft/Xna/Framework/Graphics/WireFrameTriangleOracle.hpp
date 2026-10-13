@@ -57,7 +57,6 @@ namespace CnaTest::WireFrameOracle
     /** @brief Whether the active renderer rasterizes and reads back, so pixels can be asserted. */
     [[nodiscard]] inline bool HasPixelOracle()
     {
-        // plans/plan_apple_m4.md AM4-158: Metal rasterizes and reads back as every other here does.
         return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, WebGPU, SdlGpu,
                                DirectX9);
     }

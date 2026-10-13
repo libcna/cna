@@ -51,9 +51,8 @@
 // GetBackBufferData and therefore carries the renderer set REMED-GFX-113 established. The
 // ordinary -> instanced -> ordinary transition additionally needs a working instanced route, so it
 // carries REMED-GFX-118's instanced suite set, and asserts the instanced leg's OWN binding offset
-// only on the renderers whose instanced path consumes it (EasyGL via REMED-GFX-122, D3D11/D3D12 via
-// REMED-GFX-123) -- whether the others honour it there is REMED-GFX-122/123's question, not this
-// file's.
+// only on the renderers whose instanced path consumes it (EasyGL via REMED-GFX-122) -- whether the
+// others honour it there is REMED-GFX-122/123's question, not this file's.
 
 #include <algorithm>
 #include <array>

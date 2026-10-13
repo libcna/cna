@@ -47,9 +47,7 @@
 //   * every level             -- owned by the SINGLE-SAMPLE resolved texture;
 //   * `level >= LevelCount`   -- a caller error, rejected deterministically before any native call.
 //
-// CNA's own conforming renderers already implement exactly this: `VulkanTargetPassEXT::Mip`-
-// `GenerateMips` regenerates "from level 0's just-rendered (and, where MSAA was engaged,
-// just-resolved) content" right after the render pass ends, and EasyGL regenerates on unbind.
+// CNA's own conforming renderers already implement exactly this: EasyGL regenerates on unbind.
 //
 // THE ORACLE
 // ----------
@@ -195,21 +193,19 @@ namespace
 #if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
-        // plans/plan_apple_m4.md AM4-097: Metal included (it refused more than one descriptor before).
         true;
 #endif
 
     /**
      * @brief Whether the CONTENT of an MRT extra attachment's generated level is claimable here.
      *
-     * SDL_GPU and Vulkan leave attachment 1 at the pass' explicit clear colour when a stock
+     * SDL_GPU leaves attachment 1 at the pass' explicit clear colour when a stock
      * single-output draw writes attachment 0 only, so its regenerated chain is independently
      * claimable there. XNA leaves a genuinely unwritten MRT output undefined, so everywhere else
      * this file measures and prints what the extra attachment holds rather than inventing a value.
      */
     constexpr bool kMrtExtraAttachmentContentClaimable =
 #if defined(CNA_RENDERER_SDL_GPU)
-        // plans/plan_apple_m4.md AM4-097: Metal masks attachments past 0 out of its stock pipelines.
         true;
 #else
         false;

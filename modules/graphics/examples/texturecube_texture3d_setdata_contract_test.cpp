@@ -20,8 +20,9 @@
 // "this renderer creates no cube/volume resource at all" into a successful-looking call. Three
 // distinct silent-discard routes are reachable through the public API today:
 //
-//   * NO RESOURCE -- SDL_Renderer keeps IGraphicsRenderer::CreateTextureCube's
-//     nullptr default, so `renderer_` is null and the upload is dropped by the `if` itself;
+//   * NO RESOURCE -- a renderer that keeps IGraphicsRenderer::CreateTextureCube's nullptr default
+//     (the retired SDL_RENDERER did) leaves `renderer_` null, and the upload is dropped by the `if`
+//     itself;
 //   * NO STORAGE -- Headless's cube renderer validates its arguments, records a trace entry and
 //     stores nothing, and RenderTargetCube renderers without an explicit upload override inherit
 //     IRenderTargetCubeRenderer::SetData's deterministic refusal;
@@ -967,7 +968,7 @@ class CubeVolumeSetDataContractTest : public Game
         // rather than merely "did not throw". A uniform colour cannot tell a stored face from a
         // dropped one, so the source carries the same per-texel pattern the plain-cube checks use.
         //
-        // plan_vulkan.md VULKAN-406: ALL SIX faces, not just face 2. One face cannot tell a cube
+        // VULKAN-406: ALL SIX faces, not just face 2. One face cannot tell a cube
         // whose layers are each independently initialised from one that got the single layer this
         // check happened to touch -- which is the shape of the defect that row names, and face 2 is
         // simply the one it named because it was the only one asked for.
@@ -984,12 +985,11 @@ class CubeVolumeSetDataContractTest : public Game
     }
 
     /**
-     * @brief VULKAN-406 -- the Khronos layer's verdict on every cube, volume and cube-target
-     *        subresource this fixture just touched.
+     * @brief VULKAN-406 -- the Khronos validation layer's verdict on every cube, volume and
+     *        cube-target subresource this fixture just touched.
      *
-     * The layer's own liveness is asserted first: an empty message list from a layer that never
-     * loaded is not evidence. Compiled only for the Vulkan build; the thirteen other renderers
-     * registering this source are unaffected.
+     * Only the retired VULKAN renderer asserted it, so the body is empty on every surviving
+     * renderer.
      */
     void CheckValidationClean()
     {

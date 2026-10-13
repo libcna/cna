@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-400: does a FULL-BACKBUFFER SpriteBatch draw, issued before any 3D
+// VULKAN-400: does a FULL-BACKBUFFER SpriteBatch draw, issued before any 3D
 // draw in the same frame, break that frame's 3D rendering?
 //
 // Where the question comes from
@@ -11,9 +11,9 @@
 // is documented, avoided, and -- until this file -- never checked on any other renderer.
 //
 // Renderer-neutral on purpose: it lives here rather than under one renderer's examples so the same
-// source answers the question for every family that registers it. A failure on Vulkan alone is a
-// Vulkan defect; a failure everywhere is the upstream finding reproduced, which CLAUDE.md says to
-// reproduce rather than fix.
+// source answers the question for every family that registers it. A failure on one family alone
+// is that family's defect; a failure everywhere is the upstream finding reproduced, which CLAUDE.md
+// says to reproduce rather than fix.
 //
 // Why two legs and not one
 // -----------------------

@@ -9,9 +9,7 @@
 //   EasyGL: this VertexDeclaration cannot be bound to the stock 'skinned3d_vertexlit' program --
 //   element 1 declares BlendIndices0@12 Vector4 but shader input 'aBoneIndices' expects Byte4.
 //
-// EasyGL uses one floating-point attribute and casts to int() when indexing uBones[]. D3D11/12
-// select uint4 or float4 stock vertex-shader signatures because attaching R8G8B8A8_UINT to a
-// float4 signature bit-reinterprets the values instead of numerically converting them.
+// EasyGL uses one floating-point attribute and casts to int() when indexing uBones[].
 //
 // Six checks, because "it draws something" is not the same as "it read the index":
 //   (a) a Vector4-declared BLENDINDICES draws at all -- before the fix this threw;

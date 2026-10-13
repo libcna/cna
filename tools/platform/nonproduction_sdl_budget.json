@@ -89,10 +89,6 @@
       "category": "audio-native-fixture",
       "max_references": 1
     },
-    "modules/graphics/examples/backbuffer_pass_order_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
     "modules/graphics/examples/backbuffer_readback_dimension_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 1
@@ -108,10 +104,6 @@
     "modules/graphics/examples/graphicsdevice_ordered_clear_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 3
-    },
-    "modules/graphics/examples/house3d_demo.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
     },
     "modules/graphics/examples/present_lifecycle_contract_test.cpp": {
       "category": "renderer-integration-executable",
@@ -131,19 +123,11 @@
     },
     "modules/graphics/examples/rendertargetcube_msaa_face_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 2
+      "max_references": 1
     },
     "modules/graphics/examples/rendertargetcube_usage_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 2
-    },
-    "modules/graphics/examples/texture2d_getdata_transfer_range_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
     },
     "modules/graphics/examples/viewport_reset_after_resize_test.cpp": {
       "category": "renderer-integration-executable",
@@ -240,42 +224,6 @@
     "modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 8
-    },
-    "modules/renderers/easygl/examples/easygl_sample_keyboard_cube3d_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/easygl/examples/easygl_sample_layered_blend_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/easygl/examples/easygl_sample_moving_quad3d_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/easygl/examples/easygl_spritefont_default_char_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/easygl/examples/easygl_spritefont_effects_flip_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 3
-    },
-    "modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/easygl/examples/easygl_spritefont_multiglyph_spacing_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/easygl/examples/easygl_spritefont_newline_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
-    "modules/renderers/easygl/examples/easygl_spritefont_single_glyph_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
     },
     "modules/renderers/fna3d/examples/fna3d_device_lifetime_test.cpp": {
       "category": "renderer-integration-executable",

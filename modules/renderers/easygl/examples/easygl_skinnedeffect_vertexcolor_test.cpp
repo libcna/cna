@@ -102,7 +102,7 @@ protected:
         fx.Apply();
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
-        // plan_vulkan.md VULKAN-205 (finding F-40): quad B's claim is that a black per-vertex
+        // VULKAN-205 (finding F-40): quad B's claim is that a black per-vertex
         // colour zeroes the lit/textured result. That is true of the DIFFUSE and, measured on the
         // real XNA 4.0 runtime, NOT true of the specular highlight: XNA's own `Vc` effects fold the
         // colour into `vout.Diffuse` and then `AddSpecular` adds `Specular * color.a` on top, so a

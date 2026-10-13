@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-167 (EasyGL half): does a SpriteBatch's `SamplerState.AddressW`
+// VULKAN-167 (EasyGL half): does a SpriteBatch's `SamplerState.AddressW`
 // reach a `sampler3D` a custom effect bound, on this renderer?
 //
 // The hook and the half that was missing
@@ -21,9 +21,7 @@
 // while the sprite's own texture occupies `GL_TEXTURE_2D` on the same unit -- GL allows one texture
 // per target per unit -- and a single GL **sampler object** bound at that unit governs both. So the
 // batch's slot-0 sampler is exactly what addresses the volume, which is what makes one override
-// enough. (Vulkan numbers this differently: there a bound effect texture lives in descriptor set 1.
-// `ShaderEffect` takes renderer-specific source by contract, `VULKAN-250`, so the two tests are
-// siblings rather than one shared file.)
+// enough.
 //
 // How it is measured
 // -----------------
@@ -39,7 +37,8 @@
 // the point filter, so a wrong answer at 1.25 cannot be blamed on those; and a leg asserts that the
 // two `SamplerState`s differ in W and in nothing else, so the difference is attributable rather
 // than assumed. A final leg repeats the wrap draw through the **same** effect, because a sampler
-// cached per effect rather than per batch is the failure mode the Vulkan sibling had to fix.
+// cached per effect rather than per batch is the failure mode the retired Vulkan sibling had to
+// fix.
 //
 // Exit code 0 = every leg PASS, 1 = any FAIL.
 

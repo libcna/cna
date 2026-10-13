@@ -6,7 +6,7 @@
 // Texture3D / TextureCube / RenderTarget2D / RenderTargetCube all require a
 // GraphicsDevice to construct and have no throw-before-access guards, so
 // constructor / property / GetData / SetData tests are covered by the
-// EasyGL and Vulkan integration tests (easygl_render_target_test, house3d_demo,
+// EasyGL integration tests (easygl_render_target_test, house3d_demo,
 // etc.).  What CAN be verified without a GPU are the enum values that all four
 // types depend on.
 
@@ -166,8 +166,8 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 // EasyGL is the one renderer that overrides it with a real upload into the shared GL cube texture.
 //
 // Constructing a RenderTargetCube can legitimately fail on a renderer that has no cube-map render
-// target at all (Software and native 2D keep CreateRenderTargetCube's nullptr
-// default); that is not what is under test, so it is skipped rather than asserted either way.
+// target at all (one that keeps CreateRenderTargetCube's nullptr default); that is not what is
+// under test, so it is skipped rather than asserted either way.
 // -----------------------------------------------------------------------
 
 #include <memory>
@@ -218,15 +218,8 @@ namespace
         // renderer deliberately does not make.
         // SOFTWARE-119 writes into the same CPU face/mip storage its rasterizer and GetData use;
         // the shared set-data contract asserts the exact round trip rather than mere acceptance.
-        // WINCLOSE-0017: DirectX11's single-sample cube colour resource is an ordinary sampleable
-        // TEXTURECUBE, and its RenderTargetCube renderer now uploads into it with the plain
-        // TextureCube's own UpdateSubresource path; the exact round trip is asserted below.
-        // plans/plan_vulkan_parity.md VKPAR-0027: Vulkan uploads into the face through the same
-        // per-face flush its readback uses; the exact round trip is asserted below.
         // plans/plan_apple_m4.md AM4-092: SDL_GPU's RenderTargetCube uploads the face too
         // (SdlGpuRenderTargetCubeRenderer::SetData -> UploadTargetRegion).
-        // plans/plan_apple_m4.md AM4-147: and Metal's single-sampled cube target, through the
-        // plain cube's replace-and-preserve upload (MetalRenderTargetCubeUploadSupported).
         return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, SdlGpu);
     }
 }

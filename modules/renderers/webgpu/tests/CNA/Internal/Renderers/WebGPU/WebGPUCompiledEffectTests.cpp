@@ -2,16 +2,16 @@
 //
 // plans/plan_webgpu.md WEBGPU-167..171: the WebGPU compiled-effect runtime.
 //
-// Like Vulkan (`plans/plan_fx.md` `FX-065`), this backend has no MojoShader-provided adapter: the
+// This backend has no MojoShader-provided adapter (`plans/plan_fx.md` `FX-065`): the
 // nine-function effect context, the constant register files and the uniform packing are all code in
-// this repository, so they need their own evidence rather than borrowed trust. Unlike Vulkan it also
+// this repository, so they need their own evidence rather than borrowed trust. It also
 // REWRITES the emitted SPIR-V -- WGSL has no combined image sampler -- so the tests that matter most
 // here are the ones that put real pixels through that rewrite.
 //
 // The runtime-level tests go through `WebGPURenderer::CreateCompiledEffect` DIRECTLY, so they keep
 // testing the backend rather than the layer above it. The shared cross-renderer contracts go through
 // the public `Effect`/`GraphicsDevice` API instead, which is what makes them the same evidence
-// FNA3D, SDL_GPU, EasyGL and Vulkan produce.
+// FNA3D, SDL_GPU and EasyGL produce.
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
 
@@ -268,7 +268,7 @@ TEST(WebGPUCompiledEffectTest, TheSpirvSplitRefusesSomethingThatIsNotSpirv)
 
 TEST(WebGPUCompiledEffectTest, SharedBackendConformanceContract)
 {
-    // HiDef, as Vulkan's and SDL_GPU's copies of this test ask for: the contract's first line
+    // HiDef, as SDL_GPU's copy of this test asks for: the contract's first line
     // asserts it (its render-state section uses separate alpha blending), and under the default
     // Reach device that assertion was the only thing this test ever ran.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

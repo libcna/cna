@@ -151,7 +151,7 @@ static int clear_and_confirm(
      * InvalidOperationException where FNA silently dropped the flags -- and XNA's own
      * Clear(Color) derives the same set rather than asserting all three. A C-API game owns no
      * GraphicsDeviceManager unless it creates one; its device now carries the manager's default
-     * Depth24 (GameDefaultDepthBufferSmoke.c), but a 2D-only renderer still has no real depth
+     * Depth24 (GameDefaultDepthBufferSmoke.c), but a device without 3D still has no real depth
      * plane, so the flags are derived from the active parameters rather than assumed.
      */
     CNA_PresentationParameters active;

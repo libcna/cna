@@ -109,12 +109,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
 
 
     # REMED-GFX-169: every stock 3D effect must sample its textures through the public
-    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. Vulkan's
-    # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
-    # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
-    # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
-    # absent from their cache keys too. Vulkan is where the defect lives; the other renderers run the
-    # same public fixture as controls.
+    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. The defect lived
+    # in the retired VULKAN renderer, whose stock 3D descriptor builders hardcoded one default
+    # sampler; this renderer ran the same public fixture as a control.
     cna_headless_test(cna_test_headless_stock_effect_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME Headless_StockEffectSamplerContract COMMAND cna_test_headless_stock_effect_sampler
@@ -450,7 +447,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
         COMMAND cna_test_headless_rendertarget_pass_boundary
         TIMEOUT 60 LABELS "Headless")
 
-    # REMED-GFX-129: cross-renderer control for Vulkan's ordered-Clear correction.
+    # REMED-GFX-129: Clear() is an ordered command at its exact public call position.
     cna_headless_test(cna_test_headless_ordered_clear
                       ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_register_renderer_test(NAME Headless_GraphicsDevice_OrderedClear

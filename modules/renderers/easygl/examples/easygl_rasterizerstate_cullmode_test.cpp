@@ -4,9 +4,7 @@
 // entirely so BOTH winding orders render in the same frame.
 //
 // Method: two columns, each drawn with a different, verified winding order:
-//   Column 0 (left half):  DrawQuadCW  -- signed area < 0 in NDC (matches the same winding as
-//                           vulkan_fill_mode_test.cpp's reference triangle, empirically confirmed
-//                           visible under the default RasterizerState there) -- survives XNA's
+//   Column 0 (left half):  DrawQuadCW  -- signed area < 0 in NDC -- survives XNA's
 //                           default CullCounterClockwiseFace state.
 //   Column 1 (right half): DrawQuadCCW -- the reversed winding (signed area > 0) -- culled by
 //                           XNA's default CullCounterClockwiseFace state, requires CullMode::None

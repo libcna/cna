@@ -26,8 +26,8 @@ Every renderer family is placed in exactly one bucket, from measured usage:
   interface-leak    Names only a bare SDL_Window type inherited from the common creation or
                     registry boundary, without using a window service. This bucket is expected to
                     stay empty after PLAT-59; PLAT-58/PLAT-61 remove the remaining common types.
-  migratable        Uses only platform services (native handle, GL context, Vulkan surface,
-                    window, events). Freed by its Phase 4 task.
+  migratable        Uses only platform services (native handle, GL context, window, events).
+                    Freed by its Phase 4 task.
 
 The interface-leak bucket is the reason this audit exists: counted naively, *every* renderer looks
 SDL-coupled, including STUB and HEADLESS, which do no rendering at all.
@@ -201,7 +201,7 @@ def audit(repo_root: Path) -> tuple[list[dict[str, object]], dict[str, str]]:
         # A real service need is any call into a platform area. SDL_Window named as a bare type does
         # not count while the common creation and registry plumbing still carries it; service calls
         # distinguish a real window dependency from a temporary common-boundary leak.
-        service_areas = {"native-handle", "gl-vulkan-interop", "event", "display", "filesystem", "timing", "window"}
+        service_areas = {"native-handle", "gl-context", "event", "display", "filesystem", "timing", "window"}
         real_service_symbols = {
             s for s in code_symbols
             if classify_symbol(s)[0] in service_areas and s not in INTERFACE_LEAK_TYPES
@@ -223,7 +223,7 @@ def audit(repo_root: Path) -> tuple[list[dict[str, object]], dict[str, str]]:
         service_area_counts: Counter = Counter()
         for symbol in real_service_symbols:
             service_area_counts[classify_symbol(symbol)[0]] += code_symbols[symbol]
-        needs = [a for a in ("native-handle", "gl-vulkan-interop", "event", "window", "display", "filesystem") if service_area_counts.get(a)]
+        needs = [a for a in ("native-handle", "gl-context", "event", "window", "display", "filesystem") if service_area_counts.get(a)]
 
         rows.append(
             {

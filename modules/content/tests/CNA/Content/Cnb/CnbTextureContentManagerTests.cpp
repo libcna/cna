@@ -72,10 +72,10 @@ namespace
                   static_cast<std::streamsize>(bytes.size()));
     }
 
-    /// Whether the active renderer stores cube faces: SDL_RENDERER creates no cube resource and
-    /// Headless stores no pixels, so both refuse TextureCube::SetData (REMED-GFX-135, the same
-    /// reviewed set as TextureCubeTests.cpp). A .cnb load passes that NotSupportedException
-    /// through, as an .xnb load passes a texture constructor's (CNA plans/plan_apple_m4.md AM4-268).
+    /// Whether the active renderer stores cube faces: Headless stores no pixels, so it refuses
+    /// TextureCube::SetData (REMED-GFX-135, the same reviewed set as TextureCubeTests.cpp). A .cnb
+    /// load passes that NotSupportedException through, as an .xnb load passes a texture
+    /// constructor's (CNA plans/plan_apple_m4.md AM4-268).
     [[nodiscard]] bool CubeStorageSupported()
     {
         return !CNA_RENDERER_IS(CNA::Testing::Renderers::Headless);

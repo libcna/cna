@@ -79,8 +79,8 @@ static CNA_Result validate_states(CNA_Handle graphics_device)
         blend.alpha_blend_function = extrema[index];
         blend.color_blend_function = extrema[index];
         /* plans/plan_apple_m4.md AM4-198: a backend that cannot draw Min/Max blending refuses it
-           by name -- SDL_RENDERER's software backend, which the dummy video driver selects -- and
-           that is the documented NOT_SUPPORTED answer rather than a failure of the binding. */
+           by name, and that is the documented NOT_SUPPORTED answer rather than a failure of the
+           binding. */
         const CNA_Result extremum = cna_graphics_device_set_blend_state(graphics_device, &blend);
         if (extremum != CNA_RESULT_SUCCESS && extremum != CNA_RESULT_NOT_SUPPORTED) {
             return CNA_RESULT_INVALID_STATE;

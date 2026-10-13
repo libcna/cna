@@ -98,10 +98,8 @@ class Packed16FormatTest final : public Game
     template <typename Packed, typename Make>
     void RunLeg(GraphicsDevice& dev, const char* name, SurfaceFormat format, Make make)
     {
-        // plan_vulkan.md VULKAN-173. This source is registered by more than one renderer now, and
-        // not every renderer stores all three formats: CNA's Vulkan renderer has no core-1.0
-        // spelling for Bgra4444 (VK_FORMAT_A4R4G4B4_UNORM_PACK16 is VK_EXT_4444_formats / core
-        // 1.3, and the instance asks for 1.1), so it deliberately does not claim it.
+        // VULKAN-173. This source is registered by more than one renderer now, and
+        // not every renderer stores all three formats.
         //
         // The gate is the RENDERER'S OWN CLAIM, not a renderer name and not a silent skip. A
         // renderer that answers Supported must pass the full pixel leg below; one that does not

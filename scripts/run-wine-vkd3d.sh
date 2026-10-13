@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# plans/plan_dx.md DX-100/DX-102: run a Windows cross-compiled .exe that uses Direct3D 12 (today
-# only SDL_GPU's D3D12 driver, through run-wine-vkd3d-headless.sh; the DIRECTX12 renderer was
-# retired on 2026-10-06) under Wine with
-# vkd3d-proton, using a dedicated Wine prefix distinct from D3D11's own DXVK prefix
-# (run-wine-dxvk.sh / ~/.wine-cna-d3d11) -- D3D11 and D3D12 need different translation layers
-# (DXVK vs. vkd3d-proton) with different native-DLL overrides, so sharing one prefix would require
-# constantly re-registering overrides between test runs.
+# DX-100/DX-102 (the retired plans/plan_dx.md): run a Windows cross-compiled .exe that uses
+# Direct3D 12 (today only SDL_GPU's D3D12 driver, through run-wine-vkd3d-headless.sh; the
+# DIRECTX12 renderer was retired on 2026-10-06) under Wine with vkd3d-proton, using a dedicated Wine
+# prefix distinct from the DXVK prefix (~/.wine-cna-d3d11, which run-wine-dxvk9.sh uses) -- D3D11
+# and D3D12 need different translation layers (DXVK vs. vkd3d-proton) with different native-DLL
+# overrides, so sharing one prefix would require constantly re-registering overrides between test
+# runs.
 #
 # Usage: scripts/run-wine-vkd3d.sh <path-to.exe> [args...]
 #
@@ -17,14 +17,15 @@
 #
 # Mirrors DX-85's DXVK-engagement gate: vkd3d-proton's own logger (VKD3D_DEBUG=info, set below)
 # prints a real, distinguishing "vkd3d-proton - applicationVersion: <version>" line the moment it
-# actually initializes -- confirmed empirically by this project's own real run (plans/plan_dx.md DX-102's
-# row) against this exact prefix. A vanilla Wine WineD3D fallback for D3D12 does not exist at all
-# (WineD3D never implemented D3D12) -- if device creation had silently gone through some other
-# path, feature-level negotiation itself would have failed outright (D3D12CreateDevice has no
-# non-vkd3d-proton implementation to fall back to under Wine), so this gate mainly guards against a
-# stale/misconfigured prefix rather than a silent wrong-renderer substitution the way DXVK's own gate
-# does. Set CNA_D3D12_SKIP_VKD3D_GATE=1 for a binary that legitimately never creates a device (none
-# exist yet, but mirrors DX-85's own escape hatch for consistency).
+# actually initializes -- confirmed empirically by this project's own real run (DX-102's row in the
+# retired plans/plan_dx.md) against this exact prefix. A vanilla Wine WineD3D fallback for D3D12
+# does not exist at all (WineD3D never implemented D3D12) -- if device creation had silently gone
+# through some other path, feature-level negotiation itself would have failed outright
+# (D3D12CreateDevice has no non-vkd3d-proton implementation to fall back to under Wine), so this
+# gate mainly guards against a stale/misconfigured prefix rather than a silent wrong-renderer
+# substitution the way DXVK's own gate does. Set CNA_D3D12_SKIP_VKD3D_GATE=1 for a binary that
+# legitimately never creates a device (none exist yet, but mirrors DX-85's own escape hatch for
+# consistency).
 set -uo pipefail
 
 if [ "$#" -lt 1 ]; then
@@ -38,7 +39,7 @@ export VKD3D_DEBUG="${VKD3D_DEBUG:-info}"
 
 if [ ! -f "${WINEPREFIX}/system.reg" ]; then
     echo "error: WINEPREFIX '${WINEPREFIX}' is not an initialized Wine prefix." >&2
-    echo "Set it up first (see plans/plan_dx.md DX-100's own row for the exact steps this machine used)." >&2
+    echo "Set it up first (see DX-100's row in the retired plans/plan_dx.md, in Git history, for the exact steps)." >&2
     exit 1
 fi
 

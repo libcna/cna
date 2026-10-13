@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_dx.md DX-257: differential public-path proof for the three SamplerState fields that
+// DX-257: differential public-path proof for the three SamplerState fields that
 // construction-only tests cannot validate. Every mip and volume slice has a distinct flat colour,
 // so an incorrect native field mapping identifies itself in the readback.
 

@@ -387,8 +387,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // REMED-GFX-170: fills a complete SDL_GPUSamplerCreateInfo from a public XNA SamplerState.
         // Every TextureFilter ordinal is handled explicitly and separately for its three
         // components; there is no default branch that quietly turns an unrecognised value into
-        // Point or Linear. Mirrors WebGPURenderer's FillWGPUSamplerDescriptor and
-        // VulkanRenderer::ApplySamplerState, which carry the identical table.
+        // Point or Linear. Mirrors WebGPURenderer's FillWGPUSamplerDescriptor, which carries the
+        // identical table.
         void FillSdlGpuSamplerCreateInfo(SDL_GPUSamplerCreateInfo& createInfo, int filter,
                                          int addressU, int addressV, int maxAnisotropy)
         {
@@ -776,7 +776,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // non-default anisotropy on ANY renderer.
         constexpr int kSpriteBatchMaxAnisotropy = 4;
 
-        // Mirrors VulkanRenderer::ToVkCompareOp's exact XNA CompareFunction ordinal table:
+        // The exact XNA CompareFunction ordinal table:
         // Always=0, Never=1, Less=2, LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7.
         [[nodiscard]] SDL_GPUCompareOp ToCompareOp(int xnaCompare)
         {
@@ -794,7 +794,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         // SDLGPU-18/19/20: XNA StencilOperation ordinals -> SDL_GPUStencilOp (mirrors
-        // VulkanRenderer::ToVkStencilOp/EasyGL's ToEasyGLStencilOp exactly): Keep=0, Zero=1,
+        // EasyGL's ToEasyGLStencilOp exactly): Keep=0, Zero=1,
         // Replace=2, Increment=3, Decrement=4, IncrementSaturation=5, DecrementSaturation=6, Invert=7.
         [[nodiscard]] SDL_GPUStencilOp ToStencilOp(int xnaOp)
         {
@@ -811,8 +811,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
         }
 
-        // SDLGPU-18: XNA Blend ordinals -> SDL_GPUBlendFactor (mirrors VulkanRenderer::
-        // ToVkBlendFactor/EasyGL's ToEasyGLBlendFactor exactly): One=0, Zero=1, SourceColor=2,
+        // SDLGPU-18: XNA Blend ordinals -> SDL_GPUBlendFactor (mirrors EasyGL's
+        // ToEasyGLBlendFactor exactly): One=0, Zero=1, SourceColor=2,
         // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
         // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
         // InverseBlendFactor=11, SourceAlphaSaturation=12.
@@ -869,8 +869,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // boost::hash_combine's well-known mixing formula -- used to fold every render-state
         // dimension (SDLGPU-18/19/20) into one pipeline cache key without hand-packing bit ranges
-        // per field (which VulkanRenderer's own PackBlendBits/PackDepthStencilBits comments
-        // note it outgrew once every dimension was added -- this sidesteps that entirely).
+        // per field (which the retired Vulkan renderer's PackBlendBits/PackDepthStencilBits
+        // outgrew once every dimension was added -- this sidesteps that entirely).
         [[nodiscard]] std::size_t HashCombine(std::size_t seed, std::size_t value)
         {
             return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
@@ -962,7 +962,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         /// STREETS-0001: the shader locations of an instanced draw's four world-matrix columns --
-        /// the Vulkan renderer's VULKAN-227 locations, past every stock per-vertex input here.
+        /// the retired Vulkan renderer's VULKAN-227 locations, past every stock per-vertex input
+        /// here.
         constexpr int kInstanceColumnLocationEXT = 12;
 
         /// STREETS-0001: a fixed-layout family's vertex input state -- its own slot-0 record, plus,
@@ -1127,8 +1128,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // depthStencilFormat, full RenderStateSnapshot) into one cache key. INVALID means the
         // active pass has no depth/stencil attachment. Disabled dimensions (blend off, stencil off,
         // two-sided off) always collapse their own sub-fields out of the hash regardless of what
-        // they're set to, so different "irrelevant" values don't create duplicate pipelines --
-        // mirrors VulkanRenderer::PackBlendBits's identical "collapse to 0 when disabled" rule.
+        // they're set to, so different "irrelevant" values don't create duplicate pipelines.
         // sampleCount (SDLGPU-38's MSAA fix) is a REQUIRED dimension, not an optional one to
         // collapse -- a pipeline created with the wrong sample_count for its render pass's actual
         // attachments is exactly finding #1 of the adversarial review this fixes.
@@ -1200,7 +1200,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // Fills a color target's real blend factors/op from a RenderStateSnapshot -- shared by
         // every pipeline-creation function so the exact same XNA->SDL_gpu mapping is used
-        // everywhere (mirrors VulkanRenderer::FillBlendAttachmentState's identical role).
+        // everywhere.
         void FillBlendState(SDL_GPUColorTargetBlendState& out, const SdlGpuRenderer::RenderStateSnapshot& rs,
                             int colorTargetIndex = 0)
         {
@@ -1241,7 +1241,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Fills a pipeline's real front/back stencil-op state (SDLGPU-19) from a
         // RenderStateSnapshot, on top of the depthTest/depthWrite/depthFunc every pipeline already
         // threads through separately. XNA's TwoSidedStencilMode=false uses the SAME (ordinary,
-        // clockwise) ops/func for both faces (matches this project's own EasyGL/Vulkan renderers'
+        // clockwise) ops/func for both faces (matches this project's own EasyGL renderer's
         // identical fallback-to-front convention -- FNA's own real behavior: the CCW fields are
         // simply ignored when this is false, not reset to any default).
         void FillDepthStencilState(SDL_GPUDepthStencilState& out, bool depthTest, bool depthWrite, int depthFunc,
@@ -1295,8 +1295,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 rs.depthBias, rs.slopeScaleDepthBias);
         }
 
-        // Mirrors VulkanRenderer's CalculateVulkanRTMipLevels / Texture2D.cpp's
-        // CalculateMipLevels -- each renderer keeps its own copy of this small helper.
+        // Mirrors Texture2D.cpp's CalculateMipLevels -- each renderer keeps its own copy of this
+        // small helper.
         [[nodiscard]] int CalculateMipLevels(int w, int h)
         {
             int levels = 1;
@@ -1731,8 +1731,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
         }
 
-        // Mirrors VulkanRenderer::FillExtPushConst()'s 128-byte layout byte-for-byte
-        // (DrawColoredPrimitives()'s hardcoded white/vertex-color-always-true behaviour).
+        // The 128-byte per-draw layout, filled with DrawColoredPrimitives()'s hardcoded
+        // white/vertex-color-always-true behaviour.
         void FillColoredUniforms(std::array<float, 32>& out, const Matrix& wvp)
         {
             wvp.ToColumnMajor(out.data());
@@ -1741,8 +1741,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[31] = 1.0f;
         }
 
-        // Mirrors VulkanRenderer::FillExtPushConst()/WebGPURenderer::FillExtUniforms()
-        // field-for-field -- real GpuDrawParams, used by DrawPrimitivesEx()'s dispatch.
+        // Mirrors WebGPURenderer::FillExtUniforms() field-for-field -- real GpuDrawParams, used
+        // by DrawPrimitivesEx()'s dispatch.
         void FillExtUniforms(std::array<float, 32>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
@@ -1756,14 +1756,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[31] = p.vertexColorEnabled ? 1.0f : 0.0f;
         }
 
-        // REMED-GFX-009/-010: shared 32-byte FogParams block, byte-identical to
-        // VulkanRenderer's own FogParams shape -- vec4 fogColorEnabled (xyz = FogColor, w =
-        // fogEnabled 0/1) + vec4 fogVector (REMED-GFX-010 FNA view-space fog vector). Bound to the
-        // vertex stage only; the vertex shader computes keep = 1 - saturate(dot(vec4(pos,1),
-        // fogVector)) -- object-space position for non-skinned, POST-skin for skinned -- and forwards
-        // FogColor + keep to the fragment stage as a varying. A default-constructed all-zero block
-        // means no fog (dot -> 0 -> keep 1) -- correct for the no-GpuDrawParams FillColoredUniforms
-        // path (DrawColoredPrimitives), which never sets fog.
+        // REMED-GFX-009/-010: shared 32-byte FogParams block -- vec4 fogColorEnabled (xyz =
+        // FogColor, w = fogEnabled 0/1) + vec4 fogVector (REMED-GFX-010 FNA view-space fog vector).
+        // Bound to the vertex stage only; the vertex shader computes keep = 1 -
+        // saturate(dot(vec4(pos,1), fogVector)) -- object-space position for non-skinned, POST-skin
+        // for skinned -- and forwards FogColor + keep to the fragment stage as a varying. A
+        // default-constructed all-zero block means no fog (dot -> 0 -> keep 1) -- correct for the
+        // no-GpuDrawParams FillColoredUniforms path (DrawColoredPrimitives), which never sets fog.
         void FillFogUniforms(std::array<float, 8>& out, const GpuDrawParams& p)
         {
             out[0] = p.fogColor[0]; out[1] = p.fogColor[1]; out[2] = p.fogColor[2];
@@ -1777,8 +1776,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // World (the vertex shader computes its own normal matrix via GLSL's built-in inverse(),
         // unlike WebGPURenderer's WGSL-forced CPU-side precomputation -- no normal-matrix
         // slots needed here), EyePosition, per-light SpecularColor, material SpecularColor/Power.
-        // Mirrors VulkanRenderer's LitLightParams UBO field-for-field. Fog is not carried
-        // here -- REMED-GFX-009 supplies it in a separate FogParams block (FillFogUniforms).
+        // Fog is not carried here -- REMED-GFX-009 supplies it in a separate FogParams block
+        // (FillFogUniforms).
         void FillLitLightUniforms(std::array<float, 56>& out, const GpuDrawParams& p)
         {
             out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.0f;
@@ -1792,9 +1791,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             // plans/plan_sdlgpu_modern_graphics.md SMG-0032: a draw that receives a shadow takes the
             // per-pixel path whatever PreferPerPixelLighting says. Gouraud lighting would evaluate
             // the lookup at the corners and interpolate it, so a ground plane of two triangles
-            // would carry a gradient rather than a shadow. Vulkan, WebGPU and EasyGL apply the
-            // same rule, so "the default per-vertex lighting still receives a shadow" means the
-            // same thing on all four.
+            // would carry a gradient rather than a shadow. WebGPU and EasyGL apply the same
+            // rule, so "the default per-vertex lighting still receives a shadow" means the same
+            // thing on all three.
             const bool receivesShadow = p.shadowsEnabled && p.shadowMap != nullptr;
             out[19] = (p.preferPerPixelLighting || receivesShadow) ? 1.0f : 0.0f;
             for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi];
@@ -1835,11 +1834,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                         p.pbrSpecularTextureTransformRows[row][component];
         }
 
-        // Mirrors VulkanRenderer::FillAlphaTestPushConst()/WebGPURenderer::
-        // FillAlphaTestUniforms() field-for-field (minus fog): [20..23]=alphaTest params
-        // (refVal, tolerance, passWeight, failWeight), [24]=vertexColorEnabled -- the
-        // ambient/light0/textureEnabled slots FillExtUniforms uses are repurposed since
-        // AlphaTestEffect has no lighting.
+        // Mirrors WebGPURenderer::FillAlphaTestUniforms() field-for-field (minus fog):
+        // [20..23]=alphaTest params (refVal, tolerance, passWeight, failWeight),
+        // [24]=vertexColorEnabled -- the ambient/light0/textureEnabled slots FillExtUniforms uses
+        // are repurposed since AlphaTestEffect has no lighting.
         void FillAlphaTestUniforms(std::array<float, 32>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
@@ -1864,8 +1862,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         // env_map3d.glsl's secondary EnvMapParams block: world(16) + 8 vec4 (32) = 48 floats.
-        // Mirrors VulkanRenderer::env_map3d's EnvMapParams field-for-field. Fog is not
-        // carried here -- REMED-GFX-009 supplies it via a separate FogParams block.
+        // Fog is not carried here -- REMED-GFX-009 supplies it via a separate FogParams block.
         void FillEnvMapParams(std::array<float, 48>& out, const GpuDrawParams& p)
         {
             for (int wi = 0; wi < 16; ++wi) out[wi] = p.worldColMajor[wi];
@@ -1883,8 +1880,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // skinned3d.vert.glsl's SkinnedLightParams block -- byte-identical layout to
         // FillLitLightUniforms()'s LitLightParams, with WeightsPerVertex packed into the
-        // eyePos_weightsPerVertex.w slot FillLitLightUniforms leaves as pad (mirrors
-        // VulkanRenderer's own skinned3d.vert.glsl packing convention). This identical
+        // eyePos_weightsPerVertex.w slot FillLitLightUniforms leaves as pad. This identical
         // layout is exactly why skinned3d's fragment stage can reuse lit_textured3d's fragment
         // shader unchanged.
         void FillSkinnedLightUniforms(std::array<float, 56>& out, const GpuDrawParams& p)
@@ -2524,10 +2520,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes the committed SPIR-V directly. When
         // configured, SDL_shadercross adds the formats it can translate that SPIR-V into, allowing
         // SDL to choose its native D3D12 or Metal driver without maintaining divergent shaders.
-        // debug_mode mirrors DirectX11Renderer::CreateDeviceResources()'s own #ifndef NDEBUG
-        // CNA-side toggle (design decision 12: the validation/debug layer is a debug-build
-        // convenience, never a hard requirement) -- a debug build asks the Vulkan driver for
-        // SDL_gpu's own validation layer, a release build does not.
+        // debug_mode is an #ifndef NDEBUG CNA-side toggle (design decision 12: the validation/debug
+        // layer is a debug-build convenience, never a hard requirement) -- a debug build asks the
+        // Vulkan driver for SDL_gpu's own validation layer, a release build does not.
 #ifndef NDEBUG
         resources.debugModeEnabled = true;
 #else
@@ -4601,8 +4596,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                 int colorBlendFunc, int alphaBlendFunc,
                                                 const BlendWriteState& writeState)
     {
-        // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending. Matches
-        // VulkanRenderer::ApplyBlendState's own derivation exactly.
+        // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending.
         // One/Zero is a copy only under Add. Subtract/ReverseSubtract/Min/Max remain observable
         // with those same factors, so collapsing them to SDL's disabled-blend path would both
         // change the equation and make function-only A -> B -> A transitions reuse Opaque.
@@ -4742,9 +4736,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             // clamp the captured rectangle to the target's physical extent in 64-bit space -- this
             // keeps the SDL_Rect within [0,target] with a non-negative size even for a rect that
             // begins outside or overhangs the target edge (SDL's Vulkan/Metal/D3D12 scissor VUIDs
-            // require offset >= 0 and offset+extent within the framebuffer). Mirrors
-            // VulkanRenderer::computeScissor (REMED-GFX-013). SDL_Rect is top-left origin,
-            // matching XNA ScissorRectangle directly -- no Y-flip.
+            // require offset >= 0 and offset+extent within the framebuffer; REMED-GFX-013).
+            // SDL_Rect is top-left origin, matching XNA ScissorRectangle directly -- no Y-flip.
             const int64_t x0 = std::clamp<int64_t>(ref.scissorX, 0, targetWidth);
             const int64_t y0 = std::clamp<int64_t>(ref.scissorY, 0, targetHeight);
             const int64_t x1 = std::clamp<int64_t>(static_cast<int64_t>(ref.scissorX) + ref.scissorW, 0, targetWidth);
@@ -4757,8 +4750,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         else
         {
             // Disabled (or a not-yet-set, zero-size) scissor rect means "no clipping" -- use the
-            // full render target/swapchain extents, matching VulkanRenderer's own
-            // scissorEnabled_-gated fallback-to-full-target convention.
+            // full render target/swapchain extents.
             rect.x = 0;
             rect.y = 0;
             rect.w = targetWidth;
@@ -5597,11 +5589,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                         texture = textures->textures2D[unit].texture;
                     }
                 }
-                // STREETS-0004: unit N samples through SamplerStates[N], as in XNA and on Vulkan
-                // (VULKAN-166). A ShaderEffect applies no LOD bias of its own, so the state's
-                // bias rides on the native sampler. Unit 0 of a SpriteBatch draw is the batch's
-                // own sampler: SpriteBatch assigns SamplerStates[0] through its private channel,
-                // which never reaches samplerSlots_[0].
+                // STREETS-0004: unit N samples through SamplerStates[N], as in XNA and on the
+                // retired Vulkan renderer (VULKAN-166). A ShaderEffect applies no LOD bias of its
+                // own, so the state's bias rides on the native sampler. Unit 0 of a SpriteBatch
+                // draw is the batch's own sampler: SpriteBatch assigns SamplerStates[0] through its
+                // private channel, which never reaches samplerSlots_[0].
                 if (unit == 0 && spriteSampler != nullptr)
                     sampler = spriteSampler;
                 else if (unitSamplers != nullptr && unit < unitSamplers->size())
@@ -7419,8 +7411,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
         const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
 
-        // The same float-for-float block the Vulkan and WebGPU renderers fill, read by the same
-        // shadow_sampling.glsl, so all three answer a shadow query from identical numbers.
+        // The same float-for-float block the WebGPU renderer fills, read by the same
+        // shadow_sampling.glsl, so both answer a shadow query from identical numbers.
         float* out = shadow.uniforms.data();
         std::copy_n(params.lightViewProjColMajor, 16, out);
         std::copy_n(params.cascadeMatricesColMajor, 64, out + 16);
@@ -10589,11 +10581,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "buffer, and none was propagated");
 
         // The location of an element is its INDEX in the declaration -- the convention EasyGL's
-        // custom-program path established and the Vulkan renderer follows
-        // (`VulkanRenderer.cpp`: "the location is the element's index in it"). Reflection then says
-        // which of those the shader actually consumes: an element it does not read is omitted
-        // rather than bound to nothing, and a location it reads that the declaration does not
-        // supply is refused rather than left reading undefined input.
+        // custom-program path established (the retired Vulkan renderer followed it too). Reflection
+        // then says which of those the shader actually consumes: an element it does not read is
+        // omitted rather than bound to nothing, and a location it reads that the declaration does
+        // not supply is refused rather than left reading undefined input.
         const std::vector<SpirvResourceBindingEXT>& vertexResources = effect.GetVertexResourcesEXT();
         (void) vertexResources;
         const std::vector<std::uint32_t>& consumed = effect.GetVertexInputLocationsEXT();
@@ -11212,10 +11203,10 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* pixels,
                                                   int levelW, int levelH)
     {
-        // Same convention as VulkanTextureRenderer::UpdatePixelsLevel: this interface method
-        // returns void, so an out-of-range level cannot be reported and must not be guessed at
-        // either -- reaching SDL_UploadToGPUTexture with a nonexistent subresource is exactly the
-        // class of failure REMED-GFX-135 removed from the Texture3D path.
+        // This interface method returns void, so an out-of-range level cannot be reported and must
+        // not be guessed at either -- reaching SDL_UploadToGPUTexture with a nonexistent
+        // subresource is exactly the class of failure REMED-GFX-135 removed from the Texture3D
+        // path.
         if (pixels == nullptr || level < 0 || level >= levelCount_)
         {
             if (TextureTraceEnabled() && traceId_ != 0)
@@ -13056,10 +13047,10 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // SMG-0007. A portable shader package hands over SPIR-V, which is the form this device
         // already consumes -- so this route needs no runtime shader compiler at all and is
-        // available in every build, including the ones that deliberately have no libshaderc.
-        // What it does need is the descriptor translation in SdlGpuSpirvBindings: the payload is
-        // compiled from sources written against CNA's Vulkan renderer's descriptor convention,
-        // and SDL_gpu mandates its own.
+        // available in every build, including the ones that deliberately have no libshaderc. What
+        // it does need is the descriptor translation in SdlGpuSpirvBindings: the payload is
+        // compiled from sources written against the retired Vulkan renderer's descriptor
+        // convention, and SDL_gpu mandates its own.
         if (LooksLikeSpirvEXT(vertSrc.data(), vertSrc.size())
             || LooksLikeSpirvEXT(fragSrc.data(), fragSrc.size()))
         {
@@ -13249,7 +13240,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         return pipeline;
     }
 
-    // Fixed 128-byte layout mirroring D3D11EffectRenderer's own convention byte-for-byte: [0..15]=
+    // Fixed 128-byte layout (byte-for-byte the retired D3D11EffectRenderer's convention): [0..15]=
     // vpSize (vec4, xy used), [16..79]=mat4 matrix, [80..95]=vec4 color, [96..99]=float/int slot 0.
     // `name` is deliberately ignored, matching every sibling EffectRenderer's own convention.
     void SdlGpuEffectRenderer::SetUniformMat4(const char* name, const float* matrix)

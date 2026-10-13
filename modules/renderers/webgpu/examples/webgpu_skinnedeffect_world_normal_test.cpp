@@ -13,10 +13,10 @@
 // inverse-transpose (normalMatrixCol0/1/2, filled by FillLitLightUniforms but never read). Every
 // pre-existing skinned test uses World = Identity, where the missing factor is the identity and the
 // bug is invisible. This is the non-identity-World harness those tests cannot cover -- a port of
-// vulkan_skinnedeffect_world_normal_test.cpp using GetBackBufferData readback, as the other WebGPU
-// pixel tests do.
+// the retired VULKAN renderer's skinned world-normal test using GetBackBufferData readback, as the
+// other WebGPU pixel tests do.
 //
-// Design notes that make the bug *numerically* visible (identical to the Vulkan harness):
+// Design notes that make the bug *numerically* visible:
 //   * The quad lies in the XY plane facing the camera, and every World keeps it facing the camera
 //     and covering the centre pixel -- so a failure is a lighting difference, never a coverage
 //     artifact.
@@ -37,7 +37,7 @@
 //   4. World = RotationZ(90) * Scale(2,1,1): CPU-derived by the same formula.
 //
 // REMED-GFX-131: the readback byte is now simply round(N.L * 255), exactly as on a renderer like
-// EasyGL or Vulkan. SurfaceFormat::Color is a plain UNORM byte format, so this renderer's render
+// EasyGL. SurfaceFormat::Color is a plain UNORM byte format, so this renderer's render
 // targets and backbuffer no longer use an *UnormSrgb format that gamma-encoded every stored value
 // (correct scale N.L=0.894 read ~243 instead of 228, un-worlded 0.707 read ~219, raw-World 0.447
 // read ~178). The three cases remain three-way distinguishable.

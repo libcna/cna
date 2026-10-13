@@ -27,7 +27,7 @@ target_include_directories(cna_graphics_core PRIVATE ${CNA_SOURCE_DIR}/third_par
 # TouchPanel display metrics and Mouse/TextInputEXT window binding, while Input::MouseCursor
 # builds on Graphics::Texture2D. Declared on both targets so CMake repeats the archives.
 target_link_libraries(cna_graphics_core PRIVATE cna_input)
-# plans/plan_dx.md DX-252: CMake repeats a declared static-archive cycle twice by default, which is
+# DX-252: CMake repeats a declared static-archive cycle twice by default, which is
 # exactly enough while the cycle is two archives deep. A renderer helper archive makes it deeper --
 # cna_renderer_mojoshader_effect is linked by a renderer family and itself reaches back into
 # cna_graphics_core -- so an executable could pull GraphicsDevice.cpp.obj out of the LAST

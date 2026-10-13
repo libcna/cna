@@ -13,12 +13,13 @@
 // unbound.** The game must not need GetData, Present, a second frame, a manual flush, a fence wait,
 // a device/queue idle or a CPU readback to make the producer's result visible to the consumer.
 //
-// THE DEFECT this file reproduces is Vulkan-local. The Vulkan renderer is a whole-frame-deferred
-// recorder: every Clear/sprite/3D call is queued and replayed once, at Present, into one command
-// buffer whose passes are ordered by the public bind-cycle ("segment") id. A GetData readback of a
-// target cannot wait for Present, so REMED-GFX-074 added an early flush that records and submits
-// that target's passes immediately -- and, to avoid double-rendering at Present, it consumes what
-// it recorded. That flush filters the frame's segment list down to the target being READ:
+// THE DEFECT this file reproduces was local to the retired VULKAN renderer, a whole-frame-deferred
+// recorder: every Clear/sprite/3D call was queued and replayed once, at Present, into one command
+// buffer whose passes were ordered by the public bind-cycle ("segment") id. A GetData readback of a
+// target could not wait for Present, so REMED-GFX-074 added an early flush that recorded and
+// submitted that target's passes immediately -- and, to avoid double-rendering at Present, it
+// consumed what it recorded. That flush filtered the frame's segment list down to the target being
+// READ:
 //
 //     if (rtOnly) erase every segment whose rt is not in this target's flush group;
 //
@@ -30,9 +31,9 @@
 // the pattern. GetData was acting as an accidental execution barrier; the missing native operation
 // was the producer's render pass itself, not a wait.
 //
-// So the fix is NOT a flush/wait/readback: the early flush replays every pending render-target
+// So the fix was NOT a flush/wait/readback: the early flush replayed every pending render-target
 // segment up to the flush point, in public segment order, exactly as Present would. The image
-// layout and memory dependency were already correct (each render target's render pass ends with
+// layout and memory dependency were already correct (each render target's render pass ended with
 // finalLayout = SHADER_READ_ONLY_OPTIMAL and a subpass dependency
 // COLOR_ATTACHMENT_OUTPUT/COLOR_ATTACHMENT_WRITE -> FRAGMENT_SHADER|TRANSFER /
 // SHADER_READ|TRANSFER_READ), which is why nothing here needed a new barrier.
@@ -178,10 +179,11 @@ namespace
      * `Clear(A); draw pattern; Clear(B)` used to be sampled by its consumer as the PATTERN, not as
      * B -- the trailing clear was lost, so `Clear()` was not an ordered command there. Both
      * reported the identical value (20,25,40,255), i.e. the pattern's own texel (0,0), on all three
-     * RenderTargetUsage values, which is the SDL_GPU/WebGPU counterpart of REMED-GFX-129 (fixed on
-     * Vulkan and scoped to Vulkan). Both renderers now cut their bind cycle into one native render
-     * pass per observable Clear, so the ordered contract holds everywhere and this declaration is
-     * unconditional -- the producer/consumer path being the second, independent witness of it.
+     * RenderTargetUsage values, which is the SDL_GPU/WebGPU counterpart of REMED-GFX-129 (fixed on,
+     * and scoped to, the retired VULKAN renderer). Both renderers now cut their bind cycle into one
+     * native render pass per observable Clear, so the ordered contract holds everywhere and this
+     * declaration is unconditional -- the producer/consumer path being the second, independent
+     * witness of it.
      */
     constexpr bool kOrderedClearAfterDrawWins = true;
 
@@ -871,8 +873,8 @@ class RenderTargetProducerConsumerTest : public Game
      * measures the producer's resolve-before-sample ordering and never the separate question of
      * whether a multisampled target's own first readback works (REMED-GFX-154 on bgfx).
      *
-     * Whether the requested sample count is genuinely APPLIED is measured, not assumed. Several
-     * renderers (Vulkan among them) derive a render target's sample count from the device's own, so
+     * Whether the requested sample count is genuinely APPLIED is measured, not assumed. A renderer
+     * may derive a render target's sample count from the device's own, so
      * a run without GraphicsDeviceManager.PreferMultiSampling reports 0 here and this leg is an
      * honest sample-count-one case. The `--msaa` run of this same fixture sets that property, which
      * is what makes "one genuinely applied MSAA count" a measured claim rather than a request.

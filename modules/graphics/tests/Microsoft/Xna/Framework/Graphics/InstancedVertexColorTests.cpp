@@ -119,8 +119,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 }
 
 // The renderers whose instanced route this file has measured, and which therefore carry a contract
-// assertion. D3D11 and D3D12 joined this set with DX-222's private headless-compositor run; D3D9
-// remains unmeasured. Software is measured through deterministic CPU readback.
+// assertion. D3D11 and D3D12, since retired, joined it with DX-222's private headless-compositor
+// run; D3D9 remains unmeasured. Software is measured through deterministic CPU readback.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {

@@ -18,8 +18,8 @@
 //
 // Implementation (see EasyGLRenderer.cpp): `VertexBuffer::SetDataRaw()` now pushes its
 // own `VertexDeclaration`'s element list down to the renderer via the new
-// `IVertexBufferRenderer::SetVertexDeclaration()` (default no-op, so Vulkan/Bgfx/SDL_RENDERER
-// need zero changes). `EasyGLVertexBufferRenderer::ApplyLayout()` binds generically from that
+// `IVertexBufferRenderer::SetVertexDeclaration()` (default no-op, so renderers that do not need
+// it change nothing). `EasyGLVertexBufferRenderer::ApplyLayout()` binds generically from that
 // list when non-empty: GLSL attribute location = the element's own index within the declaration
 // (matching this session's established "layout(location=N) == Nth field of the ported HLSL
 // input struct" convention), and a `VertexElementFormat`->GL-attribdescription table covers

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_dx9.md Phase D9-8 (D9-83): CNA's own minimal hardware-instancing shader (CNAEXT) -- vs_2_0/
-// ps_2_0, mirrors D3DCommon/shaders/instanced3d.vert.hlsl's/instanced3d.frag.hlsl's exact scope
+// ps_2_0, with the exact scope of the retired D3DCommon's instanced3d.vert.hlsl/.frag.hlsl
 // (Position + a per-instance world matrix, flat DiffuseColor output, no lighting/texture/fog).
 //
 // This is NOT a Microsoft Stock Effect port -- real XNA 4.0's own BasicEffect/AlphaTestEffect/
@@ -9,9 +9,9 @@
 // declare no per-instance semantic). Real XNA hardware instancing requires the game author's own
 // custom Effect with a custom vertex shader that reads the per-instance stream -- there is no
 // "instanced BasicEffect" in real XNA. This shader is CNA's own opinionated minimal stand-in for
-// that custom-Effect role, matching every other renderer's own identical choice (D3D11/Vulkan/Bgfx
-// all authored their own equivalent "instanced3d" shader rather than attempting to instance a
-// stock effect).
+// that custom-Effect role, matching the identical choice of the retired D3D11/Vulkan/Bgfx
+// renderers (each authored its own equivalent "instanced3d" shader rather than attempting to
+// instance a stock effect).
 //
 // Register layout is fully self-chosen (unlike D9-72's Stock Effect register table, which had to
 // be extracted from the real compiler's own disassembly because Microsoft's original source

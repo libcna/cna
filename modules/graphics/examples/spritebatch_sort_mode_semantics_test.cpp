@@ -1,25 +1,26 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-050 -- SpriteSortMode::Immediate and SpriteSortMode::Texture, asserted
+// VULKAN-050 -- SpriteSortMode::Immediate and SpriteSortMode::Texture, asserted
 // through behaviour the modes actually control rather than through the mode being accepted.
 //
-// Renderer-agnostic on purpose, and registered for more than one renderer, because the row's
-// premise was that Vulkan is the only renderer that overrides SetImmediateMode and therefore the
-// only one whose Immediate handling could be wrong. Running the same measurement on EasyGL is what
-// separates a Vulkan defect from a CNA-wide one, and here it separated three things:
+// Renderer-agnostic on purpose, and first registered for both the retired VULKAN renderer and
+// EasyGL, because the row's premise was that Vulkan was the only renderer that overrode
+// SetImmediateMode and therefore the only one whose Immediate handling could be wrong. Running the
+// same measurement on EasyGL is what separated a Vulkan defect from a CNA-wide one, and here it
+// separated three things:
 //
-//   1. `SetImmediateMode` is dead code in this configuration. `VulkanSpriteBatchRenderer` stores
-//      `immediateMode_` and reads it ONLY inside `#if defined(CNA_VULKAN_COMPILED_EFFECTS)`, which
-//      is OFF in cmake-build-vulkan. The row's "must fail if SetImmediateMode is stubbed out" can
-//      not be honoured as written, because stubbing it out changes nothing here. What CAN be
-//      asserted is the seam above it: that Begin() propagates the mode at all (leg B2).
+//   1. `SetImmediateMode` was dead code in that configuration. `VulkanSpriteBatchRenderer` stored
+//      `immediateMode_` and read it ONLY inside `#if defined(CNA_VULKAN_COMPILED_EFFECTS)`, which
+//      was OFF in cmake-build-vulkan. The row's "must fail if SetImmediateMode is stubbed out"
+//      could not be honoured as written, because stubbing it out changed nothing there. What CAN
+//      be asserted is the seam above it: that Begin() propagates the mode at all (leg B2).
 //
-//   2. A texture mutated between two Draw calls does NOT distinguish the modes on either renderer,
+//   2. A texture mutated between two Draw calls did NOT distinguish the modes on either renderer,
 //      and the reason is below the SpriteBatch seam. `SpriteBatch::flushSingle` does forward each
 //      Immediate sprite straight to the renderer, but `EasyGLSpriteBatchRenderer::Draw` appends to
 //      a vertex batch that is only flushed when the bound texture changes or at End(), and
-//      `VulkanSpriteBatchRenderer::Draw` records into `activeBatches_` for replay at Present. Both
-//      therefore rasterize every sprite of the batch against the texture's FINAL contents. That is
+//      `VulkanSpriteBatchRenderer::Draw` recorded into `activeBatches_` for replay at Present. Both
+//      therefore rasterized every sprite of the batch against the texture's FINAL contents. That is
 //      a divergence from XNA, it is CNA-wide rather than Vulkan-specific, and it is recorded as
 //      VULKAN-057 rather than papered over here: leg B reports the measurement and asserts only
 //      what Immediate must do regardless (draw every sprite, in place, in issue order).
@@ -215,7 +216,7 @@ protected:
                   Text(deferred[0]) + " right=" + Text(deferred[2]));
 
         // B. Immediate. XNA submits each Draw as it is issued, so the first sprite would keep the
-        //    old colour; neither CNA renderer can produce that, because both accumulate below the
+        //    old colour; CNA's renderers cannot produce that, because they accumulate below the
         //    SpriteBatch seam (see the header, and VULKAN-057). What Immediate must still do is
         //    draw EVERY sprite, into its own destination rectangle, leaving the rest cleared --
         //    this leg fails if the mode drops a sprite, duplicates one, or misplaces it.
@@ -233,9 +234,9 @@ protected:
             // The measurement itself, printed rather than asserted: asserting XNA's answer here
             // would fail on every CNA renderer, and asserting CNA's would cement the divergence.
             // VULKAN-057 closed on the second arm of its acceptance -- the divergence is REFUSED
-            // and recorded, in docs/vulkan-renderer.md and docs/xna-4-api-coverage.md, with the
-            // cost leg D below as its evidence. If this line ever prints red/blue, the refusal was
-            // reversed: move those two documents, do not adjust this print.
+            // and recorded in docs/xna-4-api-coverage.md, with the cost leg D below as its
+            // evidence. If this line ever prints red/blue, the refusal was reversed: move that
+            // document, do not adjust this print.
             std::printf("[INFO] mid-batch texture mutation under Immediate: left=%s right=%s "
                         "(XNA would give red/blue; refused and documented, VULKAN-057) -- "
                         "Deferred gave %s/%s\n",
@@ -320,10 +321,10 @@ protected:
         }
 
         // D. VULKAN-057's cost, measured rather than asserted. Honouring Immediate means
-        //    submitting the recorded work before Draw returns. Neither renderer has a per-sprite
-        //    submission, but both have a "force the queued work to the GPU now" path that a
-        //    readback takes -- Vulkan's FlushDeferredRenderTarget (record, submit, device wait),
-        //    EasyGL's glReadPixels. Timing M one-sprite batches with ONE readback at the end
+        //    submitting the recorded work before Draw returns. EasyGL has no per-sprite
+        //    submission, but it has a "force the queued work to the GPU now" path that a readback
+        //    takes -- glReadPixels (the retired VULKAN renderer's was FlushDeferredRenderTarget:
+        //    record, submit, device wait). Timing M one-sprite batches with ONE readback at the end
         //    against the same M with a readback after each therefore prices the per-sprite
         //    submission on the machinery that would have to carry it.
         //

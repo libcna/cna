@@ -8,7 +8,7 @@
 // so this is the technique other WebGPU-based engines use.
 //
 // IMPORTANT, DELIBERATE DIVERGENCE this test also documents: unlike every other CNA graphics
-// renderer (VulkanRenderer/EasyGLRenderer), which only regenerate mip content for a
+// renderer (e.g. EasyGLRenderer), which only regenerate mip content for a
 // RENDER TARGET being unbound (matching real FNA3D semantics -- a plain Texture2D/TextureCube never
 // auto-generates mip content from level 0 in FNA/XNA itself), this WebGPU-only behaviour DOES
 // generate real mip content for a plain Texture2D/TextureCube automatically whenever mipMap=true

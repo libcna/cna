@@ -85,10 +85,10 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * plans/plan_modern.md `MOD-219`. `IsEffectValid()` says *that* a shader did not compile; this
          * says why. The two are separate on purpose: a failed compile is not an exception here,
-         * because on several renderers `GraphicsCapability::CustomEffects` is true while GLSL source
-         * is never compiled at all (Vulkan takes SPIR-V; SOFTWARE and HEADLESS accept and ignore),
-         * and throwing would turn a documented capability boundary into a crash. Callers that need
-         * to *report* the failure — the engine-layer passes do, naming themselves — read it here.
+         * because on some renderers `GraphicsCapability::CustomEffects` is true while GLSL source
+         * is never compiled at all (SOFTWARE and HEADLESS accept and ignore it), and throwing would
+         * turn a documented capability boundary into a crash. Callers that need to *report* the
+         * failure — the engine-layer passes do, naming themselves — read it here.
          *
          * @return The renderer's log, or an empty string when the program linked or the renderer
          *         keeps no log.
@@ -113,8 +113,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
          *
          * Required on a source-compiling renderer whose shading dialect has no loose (non-block)
-         * uniforms -- today IGL's Vulkan backend. Harmlessly ignored everywhere else, so the same
-         * call can sit unconditionally beside the effect's construction.
+         * uniforms (the retired IGL renderer's Vulkan backend was one). Harmlessly ignored
+         * everywhere else, so the same call can sit unconditionally beside the effect's
+         * construction.
          *
          * Ask @ref GraphicsDevice::GetShaderDialectEXT which payload dialect the active renderer
          * wants; an application that needs both generally supplies two shader payload pairs and

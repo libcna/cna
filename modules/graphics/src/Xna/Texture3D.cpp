@@ -171,9 +171,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // renderer is asked directly: the device's answer also folds in the profile, which the
         // next check refuses with its own message.
         // plans/plan_apple_m4.md AM4-196: except where the device's caller opted into
-        // Unsupported3DGraphicsCallBehavior::WarnAndStub. A 2D-only renderer then answers
-        // CreateTexture3D with its own warn-once, zero-reading null object -- the documented
-        // meaning of that policy -- which this refusal used to pre-empt before it was asked.
+        // Unsupported3DGraphicsCallBehavior::WarnAndStub. A renderer without 3D support then
+        // answers CreateTexture3D with its own warn-once, zero-reading null object -- the
+        // documented meaning of that policy -- which this refusal used to pre-empt before it was
+        // asked.
         if (!device.GetRenderer().SupportsCapability(CNA::GraphicsCapability::Texture3D) &&
             device.GetRenderer().GetUnsupported3DGraphicsCallBehavior() !=
                 CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub)

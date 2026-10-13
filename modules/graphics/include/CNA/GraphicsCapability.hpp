@@ -15,9 +15,8 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Some renderers, such as the native 2D renderer, are intentionally
-         * 2D-only and lack this entirely. Query the selected renderer rather than
-         * inferring support from its name.
+         * clears and state). The retired 2D-only SDL_RENDERER lacked this entirely. Query the
+         * selected renderer rather than inferring support from its name.
          */
         ThreeD,
 
@@ -80,7 +79,7 @@ namespace CNA
         MultiStreamVertexInput,
 
         /** @brief Hardware instancing (GraphicsDevice.DrawInstancedPrimitives). Device/driver-
-         *  dependent on renderers that implement it via an optional GL/Vulkan extension rather
+         *  dependent on renderers that implement it via an optional GL extension rather
          *  than an unconditional core feature. */
         Instancing,
 

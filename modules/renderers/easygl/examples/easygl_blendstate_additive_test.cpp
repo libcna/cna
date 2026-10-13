@@ -10,9 +10,9 @@
 //   G = src*1 + dst*1 = 100 + 50  = 150 (NOT saturated - an exact-value check)
 //   B = 0
 //
-// This test also happens to re-expose Task 868 (Vulkan's blend state is almost entirely fake —
-// see plans/plan_graphics.md) for real this time, unlike Task 305's NonPremultiplied test, which
-// coincidentally passed on Vulkan. Task 868's hardcoded equation uses InverseSourceAlpha for the
+// This test also catches Task 868's defect class (a blend state that ignores the requested
+// factors — see plans/plan_graphics.md), unlike Task 305's NonPremultiplied test, which a hardcoded
+// equation passes by coincidence. Task 868's hardcoded equation uses InverseSourceAlpha for the
 // destination factor; at alpha=255 that evaluates to (1 - 1) = 0, meaning the destination would be
 // completely dropped instead of fully added. That gives a WRONG G of ~100 (source only) instead of
 // the correct 150 (source + destination) — a clean, unambiguous, non-coincidental failure signal.

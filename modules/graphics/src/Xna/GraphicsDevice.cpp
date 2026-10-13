@@ -326,15 +326,15 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        /// plans/plan_dx.md DX-235: CNA_FORCE_HEADLESS_DEVICE_EXT names the renderers whose device is to
-        /// be created as if PresentationParameters::HeadlessEXT had been set on it -- no window, no
+        /// DX-235: CNA_FORCE_HEADLESS_DEVICE_EXT names the renderers whose device is to be created
+        /// as if PresentationParameters::HeadlessEXT had been set on it -- no window, no
         /// video subsystem, render into the renderer's own off-screen back buffer and read the
         /// result back. It exists because the renderer-neutral example corpus builds its own
         /// GraphicsDeviceManager inside each fixture's constructor, so there is no per-fixture place
         /// to opt in, and a CI/dev-loop environment that cannot present is a property of the
         /// environment rather than of any one fixture. Same comma-separated renderer-name list shape
         /// as the two debug seams below, and deliberately NOT a plain boolean: a renderer that
-        /// cannot run without a swap chain (D3D11, EasyGL) must keep refusing by name rather than
+        /// cannot run without a swap chain (EasyGL) must keep refusing by name rather than
         /// being silently switched into a mode it does not have.
         [[nodiscard]] bool isForcedHeadlessDevice(std::string_view rendererName)
         {
@@ -502,10 +502,10 @@ namespace Microsoft::Xna::Framework::Graphics
             // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
             // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
             setBlendStateProperty(BlendState::Opaque);
-            // A 2D-only renderer has no native depth/stencil state to initialize. Test the
-            // renderer family's 3D contract rather than the current backbuffer attachment: a 3D
-            // renderer must retain DepthStencilState::Default even when the eager Game-owned
-            // device is first constructed with DepthFormat::None and a later
+            // A renderer without 3D support has no native depth/stencil state to initialize.
+            // Test the renderer family's 3D contract rather than the current backbuffer
+            // attachment: a 3D renderer must retain DepthStencilState::Default even when the
+            // eager Game-owned device is first constructed with DepthFormat::None and a later
             // GraphicsDeviceManager reset supplies Depth24.
             if (renderer_->SupportsCapability(CNA::GraphicsCapability::ThreeD))
                 setDepthStencilStateProperty(DepthStencilState::Default);
@@ -1467,8 +1467,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // bound target, but their destructors cannot, so this is only reached by an object destroyed
         // while bound, and before its backend is released. The renderer is moved to the back buffer
         // now, while the backend still exists: not every renderer detaches a dying backend itself
-        // (DX-233 taught DirectX11/12 and EasyGL to; Software keeps a raw pointer it would unbind on
-        // the next transition).
+        // (DX-233 taught EasyGL to, as it did the since-retired DirectX11/12; Software keeps a raw
+        // pointer it would unbind on the next transition).
         if (!isDisposed_ && renderer_ != nullptr)
         {
             try
@@ -3743,9 +3743,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // Runtime opt-in, same effect as the descriptor check above. Only renderers that can
         // genuinely run without a swap chain support this (SDL GPU today) -- see
         // PresentationParameters::getHeadlessEXTProperty()'s own doc comment. A renderer that cannot
-        // (D3D11's constructor always creates a swap chain; EasyGL's GL context is bound to a
-        // window) will throw from its own constructor, which is the honest outcome: it is a real
-        // "this renderer cannot do that" error, not something GraphicsDevice should paper over.
+        // (EasyGL's GL context is bound to a window) will throw from its own constructor, which is
+        // the honest outcome: it is a real "this renderer cannot do that" error, not something
+        // GraphicsDevice should paper over.
         if (presentationParameters_.getHeadlessEXTProperty())
         {
             platformWindow_.reset();
@@ -4081,7 +4081,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 // with no display server at all, not merely without a visible window.
                 //
                 // RTR-P5-15: decided per candidate, not once up front. A fallback chain can
-                // legitimately cross this boundary (VULKAN -> HEADLESS, or the reverse), and the
+                // legitimately cross this boundary (OPENGL33 -> HEADLESS, or the reverse), and the
                 // answer belongs to whichever renderer is actually being attempted -- which is why
                 // the reference MOVES with the candidate instead of only ever being taken.
                 //

@@ -25,7 +25,7 @@
 // Check I -- ClearColorDepthAndStencil: exact color readback.
 // Check L -- a real GraphicsDeviceManager resize (64x64 -> 96x80) genuinely exercises
 //   EnsureDeviceSize()'s Reset() path, and Clear()+GetBackBufferData() after the resize reads
-//   back the NEW size's data correctly (D9-33), mirroring D3D11's own DX-83 check.
+//   back the NEW size's data correctly (D9-33), mirroring the retired D3D11 renderer's DX-83 check.
 // Check J -- a device created with DepthFormat::None (no depth-stencil requested) genuinely has
 //   no depth-stencil surface (GetDepthStencilSurface() fails), and ClearDepth()/ClearStencil()
 //   silently no-op (do not throw) on it -- proving D9-31's HasDepthBuffer()/HasStencilBuffer()
@@ -313,8 +313,9 @@ protected:
         // Check L (D9-33) -- a real backbuffer resize genuinely exercises EnsureDeviceSize()'s
         // Reset() path (previously proven only indirectly, by D9-31's own smoke test converging to
         // its initial 64x64 size) -- resized via the same public GraphicsDeviceManager path a real
-        // game uses, mirroring D3D11's own DX-83 check. EnsureDeviceSize() only picks the new size
-        // up lazily on the next Present()/Clear() cycle, so this polls across a few frames.
+        // game uses, mirroring the retired D3D11 renderer's DX-83 check. EnsureDeviceSize() only
+        // picks the new size up lazily on the next Present()/Clear() cycle, so this polls across a
+        // few frames.
         {
             gdm_->setPreferredBackBufferWidthProperty(96);
             gdm_->setPreferredBackBufferHeightProperty(80);
@@ -509,8 +510,9 @@ protected:
         // Check Q (D9-50) -- D3D9TextureRenderer round-trips exact RGBA8 bytes, both at
         // construction (level 0 from ImageData) and via a later UpdatePixelsLevel() replacement.
         // Since this is D3DPOOL_MANAGED (not DEFAULT), the constructed texture is directly
-        // LockRect(READONLY)-able for verification -- no staging-texture dance needed, unlike
-        // D3D11's own equivalent check (D9-4's own confirmed payoff of design decision 2).
+        // LockRect(READONLY)-able for verification -- no staging-texture dance needed, unlike the
+        // retired D3D11 renderer's equivalent check (D9-4's own confirmed payoff of design
+        // decision 2).
         {
             ImageData img;
             img.width = 4;
@@ -1019,8 +1021,8 @@ protected:
         // from the device via GetSamplerState() (no draw call needed to observe this -- D3D9 lets
         // sampler state be read back independent of any draw) and confirm they exactly match
         // TextureFilter::Point/TextureAddressMode::Clamp's own D3D9StateMapping translation. An
-        // out-of-range slot is confirmed to silently no-op (matches D3D11's own bound-check
-        // precedent), not throw.
+        // out-of-range slot is confirmed to silently no-op (the retired D3D11 renderer's
+        // bound-check precedent), not throw.
         {
             using Microsoft::Xna::Framework::Graphics::TextureFilter;
             using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
@@ -1053,7 +1055,7 @@ protected:
                 threwOnOutOfRange = true;
             }
             check(!threwOnOutOfRange,
-                  "D9-63: an out-of-range sampler slot is silently ignored (does not throw), matching D3D11's own bound-check precedent");
+                  "D9-63: an out-of-range sampler slot is silently ignored (does not throw), as XNA's sampler-slot setters do");
         }
 
         // Check Z (D9-64 / REMED-GFX-089) -- the helper setters change exactly one field of the

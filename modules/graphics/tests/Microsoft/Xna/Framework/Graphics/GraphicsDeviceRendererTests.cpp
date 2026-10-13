@@ -37,8 +37,9 @@ TEST(GraphicsDeviceRendererTest, StartupDiagnosticNeverWritesToStdout)
     // exception that escapes this block leaves both installed, and the next test in the process to
     // capture anything dies on "Only one stdout capturer can exist at a time" -- a CHECK, so it
     // calls abort() and takes the whole run with it. That is not hypothetical: on native Windows,
-    // where a GraphicsDevice can fail to construct once the D3D11 device budget is spent, this
-    // test ended CnaTests with exit 3 and no results file at all, losing every test after it.
+    // where the retired DIRECTX11 renderer's GraphicsDevice could fail to construct once the D3D11
+    // device budget was spent, this test ended CnaTests with exit 3 and no results file at all,
+    // losing every test after it.
     std::string constructionFailure;
     ::testing::internal::CaptureStdout();
     ::testing::internal::CaptureStderr();

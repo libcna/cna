@@ -1772,7 +1772,7 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataFor
     const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
     if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
     // plans/plan_apple_m4.md AM4-194: the runtime path builds a Model, which needs vertex buffers;
-    // a 2D-only renderer refuses every fixture there for that reason alone, which is not the
+    // a renderer without 3D refuses every fixture there for that reason alone, which is not the
     // loader disagreement this test is about. Same precondition as the runtime cases above.
     {
         GraphicsDevice probe;

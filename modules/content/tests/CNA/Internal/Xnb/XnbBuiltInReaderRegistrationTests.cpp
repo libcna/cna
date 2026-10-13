@@ -191,11 +191,10 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 }
 
 
-// REMED-GFX-135: does THIS build's renderer actually store a cube face? Native 2D
-// creates no cube resource at all and Headless stores no pixel data by design, so
-// TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
-// deterministically instead of accepting the data and discarding it. Same constant and same
-// reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
+// REMED-GFX-135: does THIS build's renderer actually store a cube face? Headless stores no pixel
+// data by design, so TextureCube::SetData -- and therefore every content path that uploads a cube
+// -- now refuses deterministically instead of accepting the data and discarding it. Same constant
+// and same reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
 // plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE

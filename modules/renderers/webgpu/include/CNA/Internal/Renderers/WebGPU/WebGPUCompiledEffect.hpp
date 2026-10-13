@@ -2,14 +2,14 @@
 //
 // plans/plan_webgpu.md WEBGPU-167..171: compiled XNA Effect Framework bytecode on the WebGPU renderer.
 //
-// This backend is shaped like the Vulkan one (`plans/plan_fx.md` `FX-065`) rather than like the OpenGL or
-// SDL_GPU ones, because it faces the same two facts: MojoShader ships no WebGPU adapter, so the
-// nine-function `MOJOSHADER_effectShaderContext` is CNA's own, written directly against
-// `MOJOSHADER_parse()` with the portable SPIR-V profile; and the renderer defers its draws to
-// `Present()`, so a pass has to SNAPSHOT its uniforms and sampler bindings at apply time rather
-// than read them back when the draw is finally recorded.
+// This backend is shaped like the retired VULKAN renderer's (`plans/plan_fx.md` `FX-065`) rather
+// than like the OpenGL or SDL_GPU ones, because it faces the same two facts: MojoShader ships no
+// WebGPU adapter, so the nine-function `MOJOSHADER_effectShaderContext` is CNA's own, written
+// directly against `MOJOSHADER_parse()` with the portable SPIR-V profile; and the renderer defers
+// its draws to `Present()`, so a pass has to SNAPSHOT its uniforms and sampler bindings at apply
+// time rather than read them back when the draw is finally recorded.
 //
-// One thing is genuinely different from Vulkan, and it is the whole reason `WEBGPU-166` existed:
+// One thing was genuinely different from that backend, the whole reason `WEBGPU-166` existed:
 // **WGSL has no combined image sampler.** MojoShader's SPIR-V emits one `OpTypeSampledImage` global
 // per D3D9 sampler register -- Vulkan's `VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER` shape -- and
 // naga's SPIR-V frontend refuses to load one, reporting `invalid id %N`. Every linked pass therefore
@@ -161,9 +161,9 @@ namespace CNA::Internal::Renderers::WebGPU
     /**
      * @brief One compiled XNA effect owned by the WebGPU renderer.
      *
-     * plans/plan_webgpu.md WEBGPU-167..171. Mirrors `VulkanCompiledEffect`'s shape deliberately:
-     * both renderers defer GPU submission, so both must snapshot a pass's uniforms and sampler
-     * bindings at apply time rather than reading them back when the draw is finally recorded.
+     * plans/plan_webgpu.md WEBGPU-167..171. The renderer defers GPU submission, so this must
+     * snapshot a pass's uniforms and sampler bindings at apply time rather than reading them back
+     * when the draw is finally recorded.
      */
     class WebGPUCompiledEffect final : public ICompiledEffectRuntime
     {

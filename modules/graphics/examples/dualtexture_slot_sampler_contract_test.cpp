@@ -1647,7 +1647,7 @@ protected:
         }
         catch (const std::exception& e)
         {
-            // plans/plan_vulkan.md VULKAN-346, and the same recovery
+            // VULKAN-346, and the same recovery
             // rendertarget_effect_source_test.cpp already documents for its own legs. Render()
             // binds a render target before the draw it is probing with, so a renderer that refuses
             // that draw leaves the target BOUND -- the unbind after it never runs. The shutdown

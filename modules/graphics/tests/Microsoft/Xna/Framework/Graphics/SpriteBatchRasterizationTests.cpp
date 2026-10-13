@@ -85,9 +85,7 @@ namespace
 // other SpriteBatch test in this repository still passes while it does.
 TEST(SpriteBatchRasterizationTest, AnOpaqueSpriteActuallyChangesThePixelsItCovers)
 {
-    // Gated to the renderers that actually rasterize and can hand a pixel back. The list
-    // deliberately includes DirectX11, which every existing readback suite omits -- which is
-    // why a D3D11 SpriteBatch that draws nothing has never failed a test here.
+    // Gated to the renderers that actually rasterize and can hand a pixel back.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Fna3d);
 
     GraphicsDevice device = MakeDevice();
@@ -111,9 +109,7 @@ TEST(SpriteBatchRasterizationTest, AnOpaqueSpriteActuallyChangesThePixelsItCover
 // whole target would pass the test above and still be wrong.
 TEST(SpriteBatchRasterizationTest, TheDestinationRectangleBoundsWhatIsDrawn)
 {
-    // Gated to the renderers that actually rasterize and can hand a pixel back. The list
-    // deliberately includes DirectX11, which every existing readback suite omits -- which is
-    // why a D3D11 SpriteBatch that draws nothing has never failed a test here.
+    // Gated to the renderers that actually rasterize and can hand a pixel back.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Fna3d);
 
     GraphicsDevice device = MakeDevice();
@@ -275,7 +271,7 @@ TEST(SpriteBatchRasterizationTest, ARotatedSpriteWithACentreOriginLandsWhereXnaP
 // not notice, because it names its render target view explicitly; a draw does, because it renders
 // into whatever OMSetRenderTargets last bound -- which after a Present is nothing. So a renderer
 // that does not rebind shows a correct clear colour every frame and none of its geometry, from the
-// second frame onward. That is precisely what cna_demo_2d shows on DirectX11.
+// second frame onward. That is precisely what cna_demo_2d showed on the retired DIRECTX11 renderer.
 TEST(SpriteBatchRasterizationTest, ASpriteStillRasterizesInTheFrameAfterAPresent)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Fna3d);

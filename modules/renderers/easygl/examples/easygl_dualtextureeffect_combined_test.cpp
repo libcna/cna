@@ -24,12 +24,9 @@
 // (avoiding bilinear-filtering ambiguity by sampling exactly at each texel's center), each
 // compared against its own independently-derived expected value.
 //
-// Fog is deliberately excluded from this combined test: Task 388 fixed it on EasyGL only, but
-// Vulkan/Bgfx have zero fog GPU implementation (Task 888) — including it here would make this
-// capstone's shared assertions diverge per renderer, defeating its own purpose.
+// Fog is deliberately excluded from this combined test; Task 388 covers it separately.
 //
-// This is the capstone test for Phase 44's pixel-verification work (Tasks 383-388): identical
-// assertions run unmodified (up to standard per-renderer workarounds) on Vulkan and Bgfx.
+// This is the capstone test for Phase 44's pixel-verification work (Tasks 383-388).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

@@ -20,27 +20,13 @@
 // over z=[0,0.9]. A 3-point sweep (z=0 no fog, z=0.45 half fog, z=0.9 full fog) proves the blend is
 // a genuine interpolation, not just an on/off switch.
 //
-// CONFIRMED, NOT FIXED HERE (a much larger, pre-existing, project-wide gap discovered while
-// investigating this task, unrelated to `AlphaTestEffect` specifically): **fog is completely
-// unimplemented in every Vulkan and Bgfx 3D shader** — confirmed by grepping every `.glsl`/`.sc`
-// shader file in both renderers for "fog" and finding zero matches anywhere, not just in the
-// alpha-test-specific shaders Task 377 already flagged. This means `BasicEffect.FogEnabled` (and
-// every other stock effect's fog support) is *also* a silent no-op on Vulkan/Bgfx today, despite
-// `BasicEffect::FillGpuDrawParams()` already (and correctly) forwarding the fog fields — the C++
-// side was never the problem there, only the GPU side. Implementing real fog on Vulkan/Bgfx means
-// adding fog uniforms/varyings and the blend formula to essentially every 3D shader in both
-// renderers (8+ shader pairs × 2 renderers) — a genuinely large, project-wide feature addition, not
-// a Task-378-sized fix. Tracked as new **Task 888**; no Vulkan/Bgfx test is added here for the
-// same reason Task 377 didn't commit one — it would encode today's confirmed no-op as a "passing"
-// assertion that would need updating (and could be forgotten) once Task 888 lands.
-//
 // The material is sampled through an explicit 1x1 opaque-white Texture. AlphaTestEffect has no
 // TextureEnabled switch and always samples its texture, and Microsoft XNA samples a null one as
 // opaque black (SOFTWARE-303, measured). This fixture predates that measurement and relied on the
 // retired white-null convention, so on a renderer with XNA's rule it read black and half-fogged
-// black instead of the material (DX12-0021). Its subject is fog, so
-// the texture is now stated rather than implied, with the TEXCOORD0 every AlphaTestEffect vertex shader
-// reads (XNA refuses a declaration without it, and so do both D3D renderers once a texture is bound).
+// black instead of the material (DX12-0021). Its subject is fog, so the texture is now stated
+// rather than implied, with the TEXCOORD0 every AlphaTestEffect vertex shader reads (XNA refuses a
+// declaration without it, and so does the DIRECTX9 renderer once a texture is bound).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

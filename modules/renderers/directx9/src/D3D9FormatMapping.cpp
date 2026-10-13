@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::DirectX9
             // AABBGGRR as a uint32, i.e. R at the lowest byte). D3D9's channel-order names read
             // MSB-to-LSB (opposite DXGI's LSB-to-MSB convention) -- verified against Microsoft's
             // own D3D9-to-D3D10 legacy-format table: D3DFMT_A8B8G8R8 <-> DXGI_FORMAT_R8G8B8A8_UNORM
-            // (the same R,G,B,A memory layout D3D11's own SurfaceFormatToDxgi() maps Color to).
+            // (the same R,G,B,A memory layout).
             case SurfaceFormat::Color:            return D3DFMT_A8B8G8R8;
             case SurfaceFormat::Bgr565:            return D3DFMT_R5G6B5;
             case SurfaceFormat::Bgra5551:          return D3DFMT_A1R5G5B5;
@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             case DepthFormat::None:             return D3DFMT_UNKNOWN;
             case DepthFormat::Depth16:          return D3DFMT_D16;
-            // Unlike D3D11 (no pure-depth 24-bit format, DX-11-fmt folds this into D24S8), D3D9
+            // Unlike D3D11 (no pure-depth 24-bit format, DX-11-fmt folded this into D24S8), D3D9
             // has a real depth-only 24-bit format.
             case DepthFormat::Depth24:          return D3DFMT_D24X8;
             case DepthFormat::Depth24Stencil8:  return D3DFMT_D24S8;

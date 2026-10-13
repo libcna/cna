@@ -24,7 +24,7 @@ namespace CNA::Platform::Sdl3 {
     /**
      * @brief The thread currently inside @ref SdlGlobalStateMutex, or a default id when none is.
      *
-     * plans/plan_vulkan.md `VULKAN-159` (finding F-28). Kept beside the mutex rather than inside a
+     * `VULKAN-159` (finding F-28). Kept beside the mutex rather than inside a
      * lock type so a destructor can ask the question without owning anything: is this very thread
      * already in the critical section?
      */
@@ -37,7 +37,7 @@ namespace CNA::Platform::Sdl3 {
     /**
      * @brief `std::lock_guard` for @ref SdlGlobalStateMutex that also records the owning thread.
      *
-     * plans/plan_vulkan.md `VULKAN-159`. Every acquisition of the SDL global-state mutex goes
+     * `VULKAN-159`. Every acquisition of the SDL global-state mutex goes
      * through this type, which is what makes @ref SdlGlobalStateHeldByThisThread trustworthy: a
      * raw `std::lock_guard` on the same mutex would leave the owner unset and turn the
      * destructor's check into a silent lie.
@@ -64,7 +64,7 @@ namespace CNA::Platform::Sdl3 {
     /**
      * @brief Whether the calling thread is already inside the SDL global-state critical section.
      *
-     * plans/plan_vulkan.md `VULKAN-159` (F-28). `exit()` can be reached from inside a platform
+     * `VULKAN-159` (F-28). `exit()` can be reached from inside a platform
      * call that holds the mutex -- Xlib's default error handler does exactly that -- and the
      * static destructors it then runs include `~Sdl3Platform`, which would re-lock a
      * non-recursive mutex on its own owning thread and never return. Asking this first is the

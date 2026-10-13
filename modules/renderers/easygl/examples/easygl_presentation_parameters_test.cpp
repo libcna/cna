@@ -54,9 +54,10 @@ protected:
         check(pp.getBackBufferHeightProperty() == kH,
               "BackBufferHeight matches requested value");
         // Both branches asserted this differently and BOTH were green on their own tree, which is
-        // the whole reason it needed care. plans/plan_vulkan.md VULKAN-335 asks the renderer what it
-        // applied -- the more honest question in general, and right for Vulkan, which really does
-        // substitute (FindDepthFormat prefers D24_UNORM_S8_UINT so StencilEnable can work).
+        // the whole reason it needed care. VULKAN-335 asked the renderer what it
+        // applied -- the more honest question in general, and right for the retired VULKAN
+        // renderer, which really did substitute (it preferred D24_UNORM_S8_UINT so StencilEnable
+        // could work).
         //
         // It is NOT adopted here, because on EasyGL it contradicts EasyGL_DepthFormat, which
         // requires a requested Depth24 to be STORED as Depth24 and was green before this merge.

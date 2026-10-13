@@ -4,7 +4,7 @@
 // ReadBackbuffer. Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows
 // CNA_GRAPHICS_RENDERER=D3D9).
 //
-// Unlike D3D11, this renderer does not use D3DCommon (plans/plan_dx9.md design decision 12 --
+// This renderer never used the retired D3DCommon (plans/plan_dx9.md design decision 12 --
 // D3DFORMAT is a different enum space from DXGI_FORMAT, and D3D9 has no state objects at all).
 // Unlike D3D11, D3D9 has no separate device/swap-chain split -- CreateDevice() creates the
 // implicit swap chain (back buffer + optional depth-stencil) in the same call.
@@ -66,14 +66,15 @@ namespace CNA::Internal::Renderers::DirectX9
      * Phase D9-3 (device/present/device-lost) and D9-6 (render states) are fully closed: real
      * device creation using the game's actual requested back-buffer/depth-stencil format,
      * fullscreen flag, and swap interval (via the project owner-approved additive
-     * GraphicsRendererCreateArgs extension -- see plans/plan_dx9.md's "IGraphicsRenderer boundary problem"
-     * section) -- not D3D11's own hardcoded-format precedent, which is fine for D3D11 (parity, not
-     * authenticity) but would be a direct fidelity violation here. Clear()/all 6 Clear*
-     * combos/Present()/ReadBackbuffer()/resize/the real XNA device-lost lifecycle/render-state
-     * pushes are all real. Phase D9-4 (D3D9Buffers.hpp) adds real vertex/index buffers. D9-82 adds
-     * the real BasicEffect-VertexColor-only DrawColoredPrimitives/DrawIndexedColoredPrimitives
-     * path; full effect-aware DrawPrimitivesEx dispatch and SpriteBatch still throw
-     * NotYetImplemented() naming their own follow-up task (D9-82b/c, D9-90).
+     * GraphicsRendererCreateArgs extension -- see plans/plan_dx9.md's "IGraphicsRenderer boundary
+     * problem" section) -- not the retired D3D11 renderer's hardcoded-format precedent, which was
+     * fine there (parity, not authenticity) but would be a direct fidelity violation here.
+     * Clear()/all 6 Clear* combos/Present()/ReadBackbuffer()/resize/the real XNA device-lost
+     * lifecycle/render-state pushes are all real. Phase D9-4 (D3D9Buffers.hpp) adds real
+     * vertex/index buffers. D9-82 adds the real BasicEffect-VertexColor-only
+     * DrawColoredPrimitives/DrawIndexedColoredPrimitives path; full effect-aware DrawPrimitivesEx
+     * dispatch and SpriteBatch still throw NotYetImplemented() naming their own follow-up task
+     * (D9-82b/c, D9-90).
      */
     class DirectX9Renderer final : public IGraphicsRenderer
     {
@@ -159,7 +160,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// common case) still reaches a real, honored format -- see this method's own base-class
         /// doc comment (IGraphicsRenderer::UpdatePresentationFormatEXT) for the full rationale.
         /// Only updates the tracked fields; the actual device Reset() happens lazily from the next
-        /// Present() via EnsureDeviceSize(), same timing EasyGL/D3D11 already use for resize.
+        /// Present() via EnsureDeviceSize(), same timing EasyGL already uses for resize.
         void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat, bool isFullScreen) override;
 
         // ---- IGraphicsRenderer: real (Phase D9-3, D9-31) ----
@@ -199,8 +200,8 @@ namespace CNA::Internal::Renderers::DirectX9
                                                                     bool preserveContents = false, bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         /// D9-53: real D3D9RenderTargetCubeRenderer. MSAA deliberately unsupported for cube render
-        /// targets (matches D3D11RenderTargetCubeRenderer's own precedent) -- `multiSampleCount` is
-        /// accepted for signature compatibility and silently ignored.
+        /// targets -- `multiSampleCount` is accepted for signature compatibility and silently
+        /// ignored.
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat,
                                                                           bool preserveContents = false,
                                                                           bool mipMap = false,
@@ -218,7 +219,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-54: real MRT via SetRenderTarget(i, surface), i=0..count-1, capped and validated
         /// against the real D3DCAPS9::NumSimultaneousRTs (design decision 13: an over-request
         /// THROWS a named error rather than silently degrading to fewer targets -- the exact
-        /// invisible-capability trap this project's own D3D11 precedent accepts but this
+        /// invisible-capability trap the retired D3D11 renderer accepted but this
         /// authenticity-focused renderer deliberately does not). All CNA render targets are
         /// D3DFMT_A8B8G8R8 (RGBA8-storage-only, D9-50's own simplification), so design decision
         /// 13's "same bit depth" requirement is always trivially satisfied -- nothing to actively
@@ -233,12 +234,12 @@ namespace CNA::Internal::Renderers::DirectX9
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         /// D9-53: real MSAA-support probe backing D3D9RenderTargetRenderer's own clamp -- queries
         /// IDirect3D9::CheckDeviceMultiSampleType() for `format`/`requested`, returning 0 if
-        /// `requested` <= 1 or the device does not support that exact sample count (matches
-        /// D3D11RenderTargetRenderer's own all-or-nothing clamp, no step-down ladder). CNAEXT.
+        /// `requested` <= 1 or the device does not support that exact sample count (all-or-nothing,
+        /// no step-down ladder). CNAEXT.
         [[nodiscard]] int ClampMultiSampleCountEXT(D3DFORMAT format, int requested) const;
         /// D9-53: restores the device's own default back-buffer/depth-stencil surfaces -- called by
         /// SetRenderTarget2D(nullptr) and by a D3D9RenderTargetRenderer/D3D9RenderTargetCubeRenderer's
-        /// own UnbindAsRenderTarget(). CNAEXT (mirrors DirectX11Renderer::RestoreBackBufferRenderTargetEXT()).
+        /// own UnbindAsRenderTarget(). CNAEXT.
         void RestoreBackBufferRenderTargetEXT();
         /// REMED-GFX-092: atomically switches all active D3D9 render-target slots, the depth
         /// surface, and viewport.  A failed transition restores the captured native binding when
@@ -292,8 +293,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// per-instance-aware Stock Effect vertex shader at all, so this is not effect-aware and
         /// does not dispatch through `DrawPrimitivesExImpl()`. Falls back to
         /// `DrawIndexedPrimitivesEx()` when the bound set has no per-instance stream
-        /// (REMED-GFX-202: `FirstInstanceStream(params) == nullptr`; matches
-        /// `DirectX11Renderer`'s own identical fallback). Defined in `D3D9InstancedDraw.cpp`.
+        /// (REMED-GFX-202: `FirstInstanceStream(params) == nullptr`). Defined in
+        /// `D3D9InstancedDraw.cpp`.
         void DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
                                        const Matrix& world, const Matrix& view, const Matrix& projection,
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
@@ -302,8 +303,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
         /// D9-111/D9-112 (Phase D9-11): real runtime D3DCompile() custom ShaderEffect. Compile
         /// target follows the current GraphicsProfile (D9-100): vs_3_0/ps_3_0 under HiDef,
-        /// vs_2_0/ps_2_0 under Reach. Mirrors DirectX11Renderer::CreateEffectRenderer()'s own
-        /// "construct, compile immediately if both sources are non-empty" contract.
+        /// vs_2_0/ps_2_0 under Reach. Contract: construct, then compile immediately if both
+        /// sources are non-empty.
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
 
@@ -412,7 +413,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         /// Exposes the real IDirect3DDevice9 for tests/diagnostics and later D3D9 renderer files
         /// (buffers/textures/draws) that need it without duplicating this renderer's own device-
-        /// creation path (CNAEXT, mirrors DirectX11Renderer::GetDeviceEXT()).
+        /// creation path (CNAEXT).
         [[nodiscard]] IDirect3DDevice9* GetDeviceEXT() const { return device_.Get(); }
         /// Exposes the real D3DCAPS9 queried at device-creation time (CNAEXT, D9-32 profile
         /// enforcement and diagnostics/tests both need this without re-querying).
@@ -494,10 +495,10 @@ namespace CNA::Internal::Renderers::DirectX9
         D3DPRESENT_PARAMETERS BuildPresentParameters() const;
         /// D9-33: D3D9 has no ResizeBuffers -- a window resize (or a presentation-format change
         /// reported via UpdatePresentationFormatEXT()) is a device Reset() with updated
-        /// width_/height_/format fields. Called lazily from Present() (mirrors D3D11's own
-        /// EnsureSwapChainSize(), checked every Present() rather than reacting to an OS resize
-        /// event) when the platform surface's actual pixel size no longer matches what the device was
-        /// created/last reset at, OR presentationDirty_ was set.
+        /// width_/height_/format fields. Called lazily from Present() (checked every Present()
+        /// rather than reacting to an OS resize event) when the platform surface's actual pixel
+        /// size no longer matches what the device was created/last reset at, OR presentationDirty_
+        /// was set.
         void EnsureDeviceSize();
         /// D9-34: real XNA device-lost lifecycle. Called every Present() while deviceLost_ is true.
         /// Polls TestCooperativeLevel(): D3DERR_DEVICELOST -> still lost, do nothing more this
@@ -560,12 +561,12 @@ namespace CNA::Internal::Renderers::DirectX9
         /// (per-vertex, step rate 1): POSITION0 (FLOAT3, offset 0); stream 1 (per-instance, step
         /// rate 1): TEXCOORD1..4 (FLOAT4 each, offsets 0/16/32/48). Not one of
         /// D3D9VertexDeclarations.hpp's single-stream stride-keyed layouts, so this is a separate,
-        /// dedicated declaration (mirrors DirectX11Renderer::GetOrCreateInstancedInputLayoutEXT()).
+        /// dedicated declaration.
         IDirect3DVertexDeclaration9* GetOrCreateInstancedVertexDeclarationEXT();
 
         /// D9-82b: shared entry point for `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` -- `ib` is
-        /// null for the non-indexed call. Selects which Stock Effect `params` indicates (mirrors
-        /// `DirectX11Renderer::DrawPrimitivesExImpl`'s own flag priority-cascade) and dispatches
+        /// null for the non-indexed call. Selects which Stock Effect `params` indicates (a flag
+        /// priority-cascade) and dispatches
         /// to that effect's own draw helper; throws a named not-yet-implemented for effects whose
         /// row hasn't landed yet. D3D9 PBR porting task: `params.pbr` is checked FIRST, ahead of
         /// every Stock Effect flag (mirrors `EasyGLRenderer::SelectProgram()`'s own identical
@@ -723,9 +724,8 @@ namespace CNA::Internal::Renderers::DirectX9
         ComPtr<IDirect3DSurface9> defaultDepthStencilSurface_;
 
         /// D9-53: the currently-bound custom 2D render target, or null when the back buffer is
-        /// active. Raw, non-owning -- lifetime is owned by whoever holds the IRenderTargetRenderer
-        /// (mirrors DirectX11Renderer::currentCustomRT_'s identical lifetime reasoning). MRT
-        /// (D9-54) is not tracked here yet -- unimplemented, inherits IGraphicsRenderer's own
+        /// active. Raw, non-owning -- lifetime is owned by whoever holds the IRenderTargetRenderer.
+        /// MRT (D9-54) is not tracked here yet -- unimplemented, inherits IGraphicsRenderer's own
         /// SetRenderTargets() default (binds only the first target via this same field).
         D3D9RenderTargetRenderer* currentCustomRT_ = nullptr;
         /// D9-53: the currently-bound custom cube-map render target face, or null when none is
@@ -738,8 +738,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D3DPOOL_DEFAULT resources (unlike vertex/index buffers) so they survive Reset()
         /// unaffected -- no RegisterDefaultPoolResourceEXT() wiring needed.
         std::unique_ptr<D3D9ShaderCache> shaderCache_;
-        /// D9-82: real IDirect3DVertexDeclaration9 objects, cached by vertex stride in bytes
-        /// (mirrors DirectX11Renderer::inputLayoutCache_'s shape). See
+        /// D9-82: real IDirect3DVertexDeclaration9 objects, cached by vertex stride in bytes. See
         /// GetOrCreateVertexDeclarationEXT().
         std::unordered_map<std::size_t, ComPtr<IDirect3DVertexDeclaration9>> vertexDeclCache_;
         /// D9-83: CNA's own CNAEXT Instanced3D shader pair + 2-stream vertex declaration, lazily

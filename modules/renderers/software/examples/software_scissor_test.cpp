@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-080: the Software (CPU-raster) renderer must honor GraphicsDevice.ScissorRectangle when
 // RasterizerState.ScissorTestEnable is true -- for both the 2D SpriteBatch path and the 3D raster
-// path -- exactly like the GPU renderers corrected by REMED-GFX-013 (Vulkan) / GFX-068 (SdlGpu) etc.
+// path -- exactly like the GPU renderers corrected by REMED-GFX-013 (the retired VULKAN renderer) /
+// GFX-068 (SdlGpu) etc.
 //
 // XNA/FNA contract: ScissorRectangle is a framebuffer/target-space rectangle (NOT viewport-local).
 // It clips rasterization ONLY when RasterizerState.ScissorTestEnable == true; when false the stored
 // rectangle has no effect. With a custom Viewport the effective raster region is
 //     framebuffer ∩ Viewport ∩ ScissorRectangle
 // and the scissor origin is independent of Viewport.X/Y (no double offset, no viewport-local
-// conversion) -- proven against D3D11/Vulkan/SdlGpu, whose scissor is likewise framebuffer-space.
+// conversion) -- proven against SdlGpu and the retired D3D11/Vulkan renderers, whose scissor is
+// likewise framebuffer-space.
 //
 // Pre-fix Software signature (this test FAILS pre-fix): SoftwareRenderer::SetScissorRect was
 // a no-op (no rectangle stored) and ApplyRasterizerState discarded its ScissorTestEnable argument,

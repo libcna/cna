@@ -461,8 +461,8 @@ TEST_F(MultiRendererFallbackTest, ACallerSuppliedWindowRefusesACrossKindCandidat
     }
 
     // A plain window, owned by this test and never handed over. Whatever the first candidate's
-    // window kind is, a plain window cannot serve an OpenGL/Vulkan/Metal candidate -- which is
-    // exactly what leaving renderIntent at None expresses.
+    // window kind is, a plain window cannot serve an OpenGL candidate -- which is exactly what
+    // leaving renderIntent at None expresses.
     CNA::Platform::WindowDescription callerDescription;
     callerDescription.title = "RTR-P5-13 caller-owned";
     callerDescription.width = 64;

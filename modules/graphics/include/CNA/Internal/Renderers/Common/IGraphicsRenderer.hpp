@@ -77,7 +77,7 @@ namespace CNA::Internal::Renderers
      * renderer's existing factor/function→native mapping is untouched; only this genuinely-new
      * output state is added. `colorWriteChannels[i]` holds the raw XNA `ColorWriteChannels` int
      * (bit0=R, bit1=G, bit2=B, bit3=A; 15 = All) — a bit layout identical to the native colour
-     * masks of Vulkan/D3D9/D3D11/WebGPU/SDL_GPU, so the value is usable directly on
+     * masks of D3D9/WebGPU/SDL_GPU, so the value is usable directly on
      * mask-capable renderers and via the ColorWriteHas* helpers on boolean renderers.
      */
     struct BlendWriteState
@@ -648,9 +648,9 @@ namespace CNA::Internal::Renderers
         /// buffer backing it, as opposed to merely being requested via DepthFormat at
         /// construction time. Most renderers honor whatever DepthFormat was requested, so the
         /// default mirrors that (via @p depthFormatWasRequested, computed by the caller from
-        /// RenderTarget2D::getDepthStencilFormatProperty() != DepthFormat::None). The native 2D renderer's
-        /// 2D-only render targets never allocate real depth-buffer storage regardless of what
-        /// format was requested, and overrides this to always return false (Task 708).
+        /// RenderTarget2D::getDepthStencilFormatProperty() != DepthFormat::None). The retired
+        /// native 2D renderer's render targets never allocated real depth-buffer storage, and it
+        /// overrode this to always return false (Task 708).
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const { return depthFormatWasRequested; }
 
         /// @brief CNAEXT. How many bits this target's depth buffer stores, for scaling DepthBias.
@@ -694,7 +694,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Cube equivalent of IRenderTargetRenderer::GetAppliedDepthStencilFormatEXT.
          *
-         * plans/plan_vulkan.md `VULKAN-215`. Its 2D twin has had this since renderers began
+         * `VULKAN-215`. Its 2D twin has had this since renderers began
          * substituting depth formats; the cube did not, so `RenderTargetCube.DepthStencilFormat`
          * could only ever echo the request. The identity default keeps every renderer that does
          * not substitute exactly as it was.
@@ -749,7 +749,8 @@ namespace CNA::Internal::Renderers
         // System::NotSupportedException (REMED-GFX-130).
         //
         // REMED-GFX-134 implemented it on every renderer that owned a rendered cube resource at
-        // the time (Bgfx and D3D12, named below, were retired on 2026-09-17 and 2026-10-06):
+        // the time (Bgfx and D3D12, named below, were retired on 2026-09-17 and 2026-10-06,
+        // Vulkan and D3D11 on 2026-10-13):
         // EasyGL, Vulkan, Bgfx, D3D9, D3D11 and D3D12 joined SdlGpu and WebGPU, each reusing the
         // mechanism its plain-TextureCube sibling already uses in the same file plus that
         // renderer's own rendered-face specifics -- REMED-GFX-067's `originBottomLeft` row
@@ -757,12 +758,11 @@ namespace CNA::Internal::Renderers
         // still-bound or not-yet-presented target needs (REMED-GFX-074/075). The public row order
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
-        // Headless keeps the inherited refusal because it rasterizes nothing, and the renderers
-        // that create no cube render target at all (native 2D)
-        // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
-        // `TextureCube::GetData` refuses a null renderer one step earlier. Every remaining boundary
-        // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
-        // mipMap=true refusal) is likewise a `false`, never invented content.
+        // Headless keeps the inherited refusal because it rasterizes nothing, and a renderer
+        // that creates no cube render target at all never reaches this class --
+        // `GraphicsDevice::SetRenderTargets` refuses to bind one and `TextureCube::GetData` refuses
+        // a null renderer one step earlier. Every remaining boundary (a mip level D3D9 never
+        // allocated, WebGPU's mipMap=true refusal) is likewise a `false`, never invented content.
     };
 
     /**
@@ -887,9 +887,9 @@ namespace CNA::Internal::Renderers
          * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
          *
          * Needed only where loose (non-block) uniforms do not exist -- which is every SPIR-V
-         * target, including IGL's Vulkan backend. There a `SetUniformFloat("tint", ...)` has
-         * nowhere to go: the shader's parameters are members of a block, and reaching them means
-         * knowing each one's byte offset.
+         * target, including the retired IGL renderer's Vulkan backend. There a
+         * `SetUniformFloat("tint", ...)` has nowhere to go: the shader's parameters are members of
+         * a block, and reaching them means knowing each one's byte offset.
          *
          * That mapping is DECLARED rather than discovered, and that is a finding rather than a
          * preference: IGL `v1.1.1` returns an empty reflection on Vulkan
@@ -1015,14 +1015,13 @@ namespace CNA::Internal::Renderers
          * the one that survived, because it is the only one that is complete:
          *
          *   - `sdlgpu` added this complete-state hook. It alone carries `maxAnisotropy`.
-         *   - the `dx` branch added `SetSamplerAddressW` plus `SetSamplerMipState`
-         *     (plans/plan_dx.md DX-257).
-         *   - the `vulkan` branch added `SetSamplerAddressModeWEXT` (plans/plan_vulkan.md
-         *     VULKAN-164) for the same W axis under a different name.
+         *   - the `dx` branch added `SetSamplerAddressW` plus `SetSamplerMipState` (DX-257).
+         *   - the `vulkan` branch added `SetSamplerAddressModeWEXT` (VULKAN-164) for the same W
+         *     axis under a different name.
          *
-         * All three have real implementors in this tree -- SdlGpu, WebGPU, DirectX 9 and EasyGL
-         * override this one; DirectX 9/11/12 override `SetSamplerAddressW`/`SetSamplerMipState`;
-         * Vulkan and EasyGL override `SetSamplerAddressModeWEXT`. So the default below FANS OUT to
+         * SdlGpu, WebGPU and EasyGL override this one; DirectX 9 overrides
+         * `SetSamplerAddressW`/`SetSamplerMipState`; `SetSamplerAddressModeWEXT` lost its last
+         * implementor with the retired Vulkan renderer. So the default below FANS OUT to
          * every legacy hook rather than only to the two it originally forwarded. A renderer that
          * overrides this method receives everything directly; one that overrides only the older
          * hooks keeps receiving exactly what it did before, W and mip state included. Neither can
@@ -1051,7 +1050,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Sets the volume-texture W address mode applied to each Draw call.
          *
-         * The `dx` branch's spelling; DirectX 9/11/12 implement this one. Reached through
+         * The `dx` branch's spelling; DirectX 9 implements this one. Reached through
          * `SetSamplerState`'s default fan-out.
          *
          * @param addressW Raw TextureAddressMode int value for W (0=Wrap, 1=Clamp, 2=Mirror).
@@ -1060,10 +1059,10 @@ namespace CNA::Internal::Renderers
         /**
          * @brief CNAEXT. Sets the W texture address mode of the batch's SamplerState.
          *
-         * The `vulkan` branch's spelling of the same axis (plans/plan_vulkan.md VULKAN-164); Vulkan
-         * and EasyGL implement this one. Kept alongside `SetSamplerAddressW` because both have
-         * implementors, and both are reached through `SetSamplerState`'s default fan-out -- so a
-         * renderer is told exactly once per name it actually overrides.
+         * The `vulkan` branch's spelling of the same axis (VULKAN-164); no current renderer
+         * implements it (the retired Vulkan renderer did). Like `SetSamplerAddressW` it is reached
+         * through `SetSamplerState`'s default fan-out -- so a renderer is told exactly once per
+         * name it actually overrides.
          *
          * Separate from `SetSamplerAddressMode` because that method's two-argument signature is
          * implemented by every renderer and widening it would break them all. XNA's SpriteBatch
@@ -1180,8 +1179,8 @@ namespace CNA::Internal::Renderers
     struct GpuVertexStreamBinding
     {
         /// Public binding slot -- the stream's index in the `SetVertexBuffers` array. Also the
-        /// native input slot on every API that has one (D3D11 `InputSlot`, Vulkan
-        /// `binding`, WebGPU vertex-buffer index, SDL_GPU `slot`).
+        /// native input slot on every API that has one (WebGPU vertex-buffer index, SDL_GPU
+        /// `slot`).
         int slot = 0;
 
         /// Renderer resource for this stream. Never null for `slot < vertexStreamCount`. Only
@@ -1368,7 +1367,7 @@ namespace CNA::Internal::Renderers
         /// Divergence 1 / D9-81 item 1). When true, XNA selects a per-pixel-lit shader
         /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
         /// it selects a per-vertex-lit shader instead. Renderers that generate both lighting
-        /// families honour this (D3D9, D3D11, WebGPU, Vulkan, EasyGL);
+        /// families honour this (D3D9, WebGPU, EasyGL);
         /// fixed-function renderers evaluate lighting per vertex by construction; a
         /// renderer with neither renders per-pixel regardless of its value -- a known, tracked
         /// divergence from XNA's default, not fixed by adding this field alone. Only meaningful
@@ -1928,7 +1927,7 @@ namespace CNA::Internal::Renderers
      * correct draw of the wrong data.
      *
      * @param params      The draw being dispatched.
-     * @param rendererName Name used in the message, e.g. "Vulkan".
+     * @param rendererName Name used in the message, e.g. "WebGPU".
      */
     inline void RejectUnsupportedStreamCombination(
         const GpuDrawParams& params, const char* rendererName)
@@ -2095,10 +2094,8 @@ namespace CNA::Internal::Renderers
         virtual void SetPresentationMode(int mode) = 0;
         /// Updates the swap interval at runtime (0=immediate, 1=VSync, 2=half-rate).
         /// A renderer that cannot change VSync after construction ignores this; one that can is
-        /// expected to apply it, not merely record it. The Vulkan renderer used to be named here
-        /// as an example of the former and is no longer one -- it rebuilds its swapchain with the
-        /// matching VkPresentModeKHR (plans/plan_vulkan.md VULKAN-332), which is the same
-        /// mechanism it already ran on every resize.
+        /// expected to apply it, not merely record it (as the retired Vulkan renderer did by
+        /// rebuilding its swapchain, VULKAN-332).
         virtual void SetSwapInterval(int /*interval*/) {}
         /**
          * @brief The swap interval this renderer was last asked for, honoured by the driver or not.
@@ -2487,22 +2484,11 @@ namespace CNA::Internal::Renderers
         /// Depth24Stencil8=3), passed as `int` to avoid coupling this renderer-agnostic header
         /// to the XNA namespace — mirrors CreateTexture3D/CreateTextureCube's `surfaceFormat`
         /// convention. EasyGL honors the exact requested format (None omits the
-        /// depth/stencil attachment entirely); **Vulkan now does too** — Task 911 made the
-        /// architectural change this comment used to describe as pending, so each render target
-        /// picks its own real `VkFormat` via `PickDepthFormat` (`VK_FORMAT_UNDEFINED` for
-        /// `DepthFormat::None`, i.e. no attachment at all) and each distinct format gets its own
-        /// render pass and pipeline-cache entries. `plans/plan_vulkan.md` D-04 / `VULKAN-481`.
-        /// **What this said before, kept so the correction is visible rather than silent:**
-        /// "Vulkan always allocates a combined depth+stencil buffer using its device-wide format
-        /// regardless of the exact value requested … a real architectural change, tracked as Task
-        /// 911 (Task 877)." True when written; the change landed. Since `VULKAN-215` the applied
-        /// format is also *reported* — `RenderTarget2D`/`RenderTargetCube.DepthStencilFormat` show
-        /// what was allocated rather than what was asked for.
-        ///
-        /// The **back buffer** is the one place the old sentence still half-applies: it allocates
-        /// depth unconditionally, even for a `None` request. That is measured and deliberate —
-        /// `VULKAN-349` weighed it and left it, recording that the cost is portability rather than
-        /// memory.
+        /// depth/stencil attachment entirely), as the retired Vulkan renderer did after Task 911
+        /// (`VULKAN-481`, `VULKAN-349`). Since `VULKAN-215` the
+        /// applied format is also *reported* —
+        /// `RenderTarget2D`/`RenderTargetCube.DepthStencilFormat` show what was allocated rather
+        /// than what was asked for.
         /// `mipMap` requests a full mip chain, auto-generated from level 0 when the target is
         /// unbound (matching FNA3D's OPENGL_ResolveTarget behavior) — all 3 renderers implement
         /// this (Task 336/878/906). `multiSampleCount` requests a multisampled color (and depth,
@@ -2587,10 +2573,10 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
 
         /// plans/plan_modern.md MOD-1699: whether the source text handed to `CreateEffectRenderer`
-        /// actually determines the pixels. Three renderers answer this differently from
-        /// `GraphicsCapability::CustomEffects`, and each way is legitimate: SOFTWARE and HEADLESS
-        /// *accept* any shader source and render with their own fixed path instead (a documented
-        /// decision, not a bug), and Vulkan compiles SPIR-V bytecode rather than GLSL text.
+        /// actually determines the pixels. Two renderers answer this differently from
+        /// `GraphicsCapability::CustomEffects`, legitimately: SOFTWARE and HEADLESS *accept* any
+        /// shader source and render with their own fixed path instead (a documented decision, not
+        /// a bug).
         /// Custom-shader callers need this distinction. False by default, like the other
         /// capability promises here.
         [[nodiscard]] virtual bool ExecutesShaderEffectSourceEXT() const { return false; }
@@ -2616,7 +2602,7 @@ namespace CNA::Internal::Renderers
          */
         [[nodiscard]] virtual bool SupportsBaseInstanceDrawingEXT() const { return false; }
 
-        /// plan_vulkan.md VULKAN-164: whether a `Texture3D` bound through
+        /// VULKAN-164: whether a `Texture3D` bound through
         /// `IEffectRenderer::BindTexture3D` is actually SAMPLED by the shader, as distinct from
         /// `GraphicsCapability::Texture3D`, which only promises that a volume can be uploaded and
         /// read back. The two were conflated until a renderer grew the second without the first.
@@ -2795,9 +2781,8 @@ namespace CNA::Internal::Renderers
          * per-instance IRenderTargetRenderer::HasRealDepthBuffer() query).
          *
          * Most renderers are 3D-capable and honor whatever depth/stencil format the presentation
-         * parameters request, so the default is `true`. A renderer that is entirely 2D-only
-         * (the native 2D renderer) never has a depth/stencil buffer regardless of what was requested and
-         * overrides this to `false`.
+         * parameters request, so the default is `true`. A renderer that never has a
+         * depth/stencil buffer, whatever was requested, overrides this to `false`.
          */
         [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
 
@@ -2851,7 +2836,7 @@ namespace CNA::Internal::Renderers
         /**
          * Renderer boundary used by common public draw/model entry points before they inspect,
          * pack, allocate, bind, or otherwise consume 3D input. Fully 3D-capable renderers retain
-         * the no-op default; a deliberately 2D-only renderer overrides this with its stable
+         * the no-op default; a renderer without 3D support overrides this with its stable
          * unsupported-operation diagnostic.
          */
         virtual void Ensure3DSupported(const char* /*operation*/) const {}
@@ -3015,7 +3000,7 @@ namespace CNA::Internal::Renderers
 
         /**
          * @brief Instanced indexed draw — default throws on renderers that don't support it. A
-         * permanently 2D-only renderer may opt into WarnAndStub, in which case this is a
+         * renderer without 3D support may opt into WarnAndStub, in which case this is a
          * warning-producing no-op.
          *
          * REMED-GFX-202: this route takes the SAME complete stream description the two ordinary
@@ -3064,7 +3049,7 @@ namespace CNA::Internal::Renderers
         virtual void SetContextRecoveryEnabled(bool /*enabled*/) {}
 
         /**
-         * @brief Selects how permanently unsupported 3D calls are handled by 2D-only renderers.
+         * @brief Selects how a renderer without 3D support handles unsupported 3D calls.
          *
          * The default is Throw, preserving each renderer's established behavior. WarnAndStub is
          * device-local and takes effect immediately; changing the policy clears the warn-once
@@ -3091,7 +3076,7 @@ namespace CNA::Internal::Renderers
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
         /// returns true except for multi-stream input, compiled effects and the float
         /// render-target entries, each of which requires explicit renderer opt-in. Every renderer
-        /// with a narrower contract -- including no-renderer, 2D-only, fixed-function,
+        /// with a narrower contract -- including no-renderer, fixed-function,
         /// experimental, or device-dependent capability gaps -- must override the applicable
         /// entries truthfully.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
@@ -3187,8 +3172,8 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool TryBeginDrawEXT() { return CanBeginDrawEXT(); }
 
         /// Inserts a named GPU debug label into the command stream.
-        /// Default implementation is a no-op; Vulkan renderer overrides with
-        /// vkCmdInsertDebugUtilsLabelEXT when VK_EXT_debug_utils is available.
+        /// Default implementation is a no-op; renderers with a native debug-label API override
+        /// it.
         virtual void SetStringMarkerEXT(const char* /*marker*/) {}
 
         /// Simulates a native graphics context or device loss.
@@ -3223,9 +3208,9 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Throws or emits a warn-once message according to the active policy.
          *
-         * Callers must invoke this only for operations permanently unsupported by a 2D-only
-         * renderer. If it returns, WarnAndStub is active and the caller must perform a safe no-op
-         * or return a valid null-object resource.
+         * Callers must invoke this only for operations permanently unsupported by a renderer
+         * without 3D support. If it returns, WarnAndStub is active and the caller must perform a
+         * safe no-op or return a valid null-object resource.
          *
          * const so a renderer's Ensure3DSupported() override (itself const, since it runs ahead
          * of any state mutation) can call this directly as its earliest-possible guard, instead of
@@ -3296,7 +3281,7 @@ namespace CNA::Internal::Renderers
      *                          window actually gives it, NOT PreferredBackBufferWidth/
      *                          Height, which have no effect in this mode. Settled by the
      *                          project owner on 2026-09-10 when the `dx` branch's
-     *                          implementation (plans/plan_dx.md DX-217) met a `next` test
+     *                          implementation (DX-217) met a `next` test
      *                          asserting the opposite; the earlier one-line wording was
      *                          ambiguous enough to support both readings.
      * - FixedHeightDynamicWidth – keeps the game's preferred height as the logical

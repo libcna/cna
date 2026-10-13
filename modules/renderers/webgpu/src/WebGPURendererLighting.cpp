@@ -71,8 +71,7 @@ namespace CNA::Internal::Renderers::WebGPU
         const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
         const bool haveSpot = punctualKind == 2 && params.punctualShadowMap != nullptr;
 
-        // The same float-for-float block the Vulkan renderer fills, so the two renderers answer a
-        // shadow query from identical numbers rather than from two readings of one description.
+        // The same float-for-float block the retired VULKAN renderer filled.
         float* out = state.uniforms.data();
         std::copy_n(params.lightViewProjColMajor, 16, out);
         std::copy_n(params.cascadeMatricesColMajor, 64, out + 16);
@@ -236,8 +235,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const auto* brdf = params.iblBrdfLut != nullptr
             ? dynamic_cast<const IWebGPUSamplable*>(params.iblBrdfLut) : nullptr;
 
-        // The same condition VulkanRenderer::FillPbrUboData applies: the flag alone is not enough,
-        // because a bundle missing any one of its three products cannot be evaluated at all.
+        // The flag alone is not enough, because a bundle missing any one of its three products
+        // cannot be evaluated at all.
         const bool haveIbl = params.iblEnabled && irradiance != nullptr && specular != nullptr &&
                              brdf != nullptr;
         if (haveIbl)
@@ -251,8 +250,8 @@ namespace CNA::Internal::Renderers::WebGPU
             params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1);
         state.uniforms[2] = params.iblIntensity;
         state.uniforms[3] = 0.0f;
-        // Slots 10, 11 and 12, which is where VulkanRenderer::PbrSlotSamplersRawEXT() and EasyGL's
-        // texture units read these three from (MOD-1225).
+        // Slots 10, 11 and 12, which is where EasyGL's texture units read these three from
+        // (MOD-1225).
         for (std::size_t i = 0; i < state.samplers.size(); ++i)
             state.samplers[i] = slotSamplers_[10 + i];
         return state;

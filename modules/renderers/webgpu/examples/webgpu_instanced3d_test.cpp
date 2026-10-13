@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 // WEBGPU-27/38/68: verify WebGPURenderer's instanced3d.wgsl / GetOrCreatePipelineInstanced3D()
 // / DrawInstancedPrimitivesEx() -- a genuine SECOND vertex buffer binding
-// (WGPUVertexStepMode_Instance) carrying a per-instance mat4 world transform, ported from
-// VulkanRenderer's instanced3d.{vert,frag}.glsl. Tested directly at the IGraphicsRenderer
+// (WGPUVertexStepMode_Instance) carrying a per-instance mat4 world transform, ported from the
+// retired VULKAN renderer's instanced3d.{vert,frag}.glsl. Tested directly at the IGraphicsRenderer
 // level (bypassing GraphicsDevice's own VertexBufferBinding/instance-frequency plumbing, which is
 // pre-existing and renderer-agnostic -- GraphicsDevice::DrawInstancedPrimitives() already forwards
 // to IGraphicsRenderer::DrawInstancedPrimitivesEx() unchanged), matching
 // examples/directx9_instanced_test.cpp's own established test-authoring convention for this exact API.
 // Deliberately uses only the renderer-agnostic IGraphicsRenderer/IVertexBufferRenderer/
 // IIndexBufferRenderer interfaces (Common/IGraphicsRenderer.hpp) rather than the concrete
-// WebGPURenderer class -- unlike D3D9/D3D11/Vulkan, this renderer's own header transitively
+// WebGPURenderer class -- unlike D3D9, this renderer's own header transitively
 // requires wgpu-native's webgpu.h, whose include path is only exposed to
 // cna_renderer_webgpu's own (PRIVATE-linked) translation units, not to a separate test
 // executable that merely links against it.
@@ -26,8 +26,7 @@
 // Check E -- a binding set with no per-instance stream falls back to a real (non-instanced)
 //   DrawIndexedPrimitivesEx() draw (stride-16 VertexPositionColor, VertexColorEnabled=false, a
 //   distinct pure-component DiffuseColor overriding the per-vertex colour) instead of throwing or
-//   corrupting the frame -- matches DirectX11Renderer::DrawInstancedPrimitivesEx()'s own
-//   identical fallback contract.
+//   corrupting the frame.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 

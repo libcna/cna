@@ -4,7 +4,7 @@
 //
 // Both classes hold a non-owning DirectX9Renderer* (owner_) -- a render target's Unbind must be
 // able to restore the owner's default back-buffer/depth-stencil surfaces, which only the owning
-// renderer instance knows how to do (mirrors D3D11RenderTargetRenderer's identical owner_ pattern).
+// renderer instance knows how to do.
 //
 // D3DPOOL_DEFAULT (not MANAGED, unlike D3D9Textures.hpp's plain textures) -- D3DUSAGE_RENDERTARGET
 // resources do not survive Reset(), so both classes implement ID3D9DefaultPoolResourceEXT and
@@ -15,19 +15,18 @@
 // Real XNA/D3D9 behavior either way: RenderTarget2D content does not survive a device Reset unless
 // RenderTargetUsage.PreserveContents (not implemented by this project on any renderer yet).
 //
-// RGBA8 storage only (D3DFMT_A8B8G8R8) -- same simplification D3D9Textures.hpp/D3D11 already use.
-// MSAA (2D only, D9-53's own note) is clamped to what the device's real
+// RGBA8 storage only (D3DFMT_A8B8G8R8) -- same simplification D3D9Textures.hpp already uses. MSAA
+// (2D only, D9-53's own note) is clamped to what the device's real
 // IDirect3D9::CheckDeviceMultiSampleType() reports (DirectX9Renderer::ClampMultiSampleCountEXT()),
-// never assumed -- an unsupported sample count silently falls back to 0 (no MSAA), matching
-// D3D11RenderTargetRenderer's own all-or-nothing clamp (no step-down ladder). An MSAA target is
-// bound as a separate offscreen D3DMULTISAMPLE color surface (D3D9 textures cannot themselves be
-// multisampled) and resolved into the sampleable D3DPOOL_DEFAULT texture via StretchRect on unbind
-// -- mirrors D3D11's own resolve-on-unbind convention. D3D9RenderTargetCubeRenderer deliberately does
-// NOT support MSAA, same as D3D11RenderTargetCubeRenderer's own precedent.
+// never assumed -- an unsupported sample count silently falls back to 0 (no MSAA), an
+// all-or-nothing clamp (no step-down ladder). An MSAA target is bound as a separate offscreen
+// D3DMULTISAMPLE color surface (D3D9 textures cannot themselves be multisampled) and resolved into
+// the sampleable D3DPOOL_DEFAULT texture via StretchRect on unbind. D3D9RenderTargetCubeRenderer
+// deliberately does NOT support MSAA.
 //
-// Mip-chain auto-generation on unbind (D3D11's documented mipMap behavior) is NOT implemented here
-// -- `mipMap` is accepted but only a single level is ever allocated. A genuine, named gap
-// (plans/plan_dx9.md's own D9-53 row), not a silent divergence.
+// Mip-chain auto-generation on unbind (IGraphicsRenderer's documented mipMap behavior) is NOT
+// implemented here -- `mipMap` is accepted but only a single level is ever allocated. A genuine,
+// named gap (plans/plan_dx9.md's own D9-53 row), not a silent divergence.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"
@@ -148,10 +147,9 @@ namespace CNA::Internal::Renderers::DirectX9
         int appliedMultiSampleCount_ = 0;
     };
 
-    /// Real D3D9 cube-map render target (D9-53). MSAA is deliberately not supported (matches
-    /// D3D11RenderTargetCubeRenderer's own precedent); a single depth-stencil surface is shared
-    /// across all 6 faces, rebound on each BindAsRenderTargetFace() call (only one face renders at
-    /// a time).
+    /// Real D3D9 cube-map render target (D9-53). MSAA is deliberately not supported; a single
+    /// depth-stencil surface is shared across all 6 faces, rebound on each BindAsRenderTargetFace()
+    /// call (only one face renders at a time).
     class D3D9RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public ID3D9DefaultPoolResourceEXT
     {
     public:

@@ -6,7 +6,7 @@
 // it is not subject to Vulkan's typical 128/256-byte push-constant limit -- all 3 checks below pass
 // with the real 4608-byte BoneBlock uniform.
 //
-// Checks A/B are directly ported from this project's own existing
+// Checks A/B are directly ported from the retired Vulkan renderer's
 // vulkan_skinnedeffect_translation_bone_test.cpp / vulkan_skinnedeffect_twobone_blend_test.cpp
 // (same geometry/bone values), using RenderTarget2D::GetData() instead of GetBackBufferData()
 // since this renderer's swapchain-download path segfaults (see plans/plan_sdlgpu.md's SDLGPU-39 row).

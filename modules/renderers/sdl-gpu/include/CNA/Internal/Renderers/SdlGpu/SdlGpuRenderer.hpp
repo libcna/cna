@@ -182,9 +182,10 @@ namespace CNA::Internal::Renderers::SdlGpu
      * @brief Binding of the engine-owned named-matrix block. CNAEXT. SMG-0021.
      *
      * CNA's geometry packages need several matrices at once, which the fixed 128-byte per-draw
-     * block has one slot for. The Vulkan renderer mirrors six engine-owned names into a block at
-     * binding 19 (`VulkanRenderer.cpp`, `SetUniformMat4`), and the portable shaders declare it as
-     * `EngineMatrices`. The names and their order are the contract, not a choice:
+     * block has one slot for. Six engine-owned names are mirrored into a block at binding 19 (the
+     * convention the retired Vulkan renderer's `SetUniformMat4` established), and the portable
+     * shaders declare it as `EngineMatrices`. The names and their order are the contract, not a
+     * choice:
      *
      * | slot | name |
      * |---|---|
@@ -249,8 +250,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief Highest sampler unit a custom `ShaderEffect` may bind, per texture kind. CNAEXT.
      *
-     * Four, matching `VulkanRenderer::kMaxEffectBoundTextures`, because that renderer's descriptor
-     * layout is the one CNA's portable shaders are written against.
+     * Four, because the descriptor layout CNA's portable shaders are written against -- the one
+     * the retired Vulkan renderer defined (`kMaxEffectBoundTextures`) -- has four units per kind.
      */
     inline constexpr int kMaxCustomEffectSamplersEXT = 4;
 
@@ -258,9 +259,10 @@ namespace CNA::Internal::Renderers::SdlGpu
      * @brief Where a portable shader puts a custom effect's own bound textures. CNAEXT.
      *
      * plans/plan_sdlgpu_modern_graphics.md `SMG-0016`. This is **not** a choice this renderer gets
-     * to make: CNA's portable shader sources are written against the Vulkan renderer's descriptor
-     * convention, so the binding number in a shared `*.vulkan.frag.glsl` already encodes which
-     * kind of texture goes at which unit. Set 1 holds the effect's own textures, and within it:
+     * to make: CNA's portable shader sources are written against the retired Vulkan renderer's
+     * descriptor convention, so the binding number in a shared `*.vulkan.frag.glsl` already encodes
+     * which kind of texture goes at which unit. Set 1 holds the effect's own textures, and within
+     * it:
      *
      * | binding | meaning |
      * |---|---|
@@ -432,8 +434,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// REMED-GFX-176: uploads exactly @p level, sized by that level's own dimensions. An
-        /// out-of-range level or a null source is ignored, matching VulkanTextureRenderer's
-        /// established convention for this void-returning interface method.
+        /// out-of-range level or a null source is ignored, the established convention for this
+        /// void-returning interface method.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         /**
          * @brief Returns exact DXT blocks for compressed textures.
@@ -840,12 +842,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief `SDL_gpu`-backed `RenderTargetCube` (Phase `SDLGPU-8`, `SDLGPU-36`).
      *
-     * Owns a single `SDL_GPU_TEXTURETYPE_CUBE` texture (6 layers). Only one face is ever the
-     * active render target at a time (matches `D3D11RenderTargetCubeRenderer`'s/
-     * `D3D12RenderTargetCubeRenderer`'s own shared-depth-buffer convention) -- clear/depth state is
-     * tracked per face, but there is one shared depth texture reused across whichever face is
-     * currently bound. MSAA resolves automatically via `SDL_GPUColorTargetInfo.resolve_texture`/
-     * `resolve_layer` at render-pass end (no manual resolve step needed, unlike D3D11/D3D12).
+     * Owns a single `SDL_GPU_TEXTURETYPE_CUBE` texture (6 layers). Only one face is ever the active
+     * render target at a time -- clear/depth state is tracked per face, but there is one shared
+     * depth texture reused across whichever face is currently bound. MSAA resolves automatically
+     * via `SDL_GPUColorTargetInfo.resolve_texture`/`resolve_layer` at render-pass end (no manual
+     * resolve step needed, unlike D3D11/D3D12).
      * The multisampled attachments are six independent, level-zero-only 2D textures because
      * `SDL_GPU_TEXTURETYPE_CUBE` has no multisampled variant and SDL_GPU forbids multisampled
      * arrays. REMED-GFX-188 regenerates only the resolved face's complete chain through clamped
@@ -1262,13 +1263,13 @@ namespace CNA::Internal::Renderers::SdlGpu
      * until the game runs, so `libshaderc` is linked into the real renderer binary here, not just
      * the build-time script.
      *
-     * Fixed vertex contract, matching every other renderer's own custom-`ShaderEffect` convention
-     * (`VulkanEffectRenderer`/`D3D11EffectRenderer`/`D3D12EffectRenderer`): `SpriteVertex`-shaped
-     * (pos `vec3` @0, uv `vec2` @12, color `vec4` @20, 36 bytes) -- a `SpriteBatch`-custom-shader
-     * facility, not a general arbitrary-vertex-format one (see
+     * Fixed vertex contract, the custom-`ShaderEffect` convention the retired
+     * `VulkanEffectRenderer`/`D3D11EffectRenderer`/`D3D12EffectRenderer` shared:
+     * `SpriteVertex`-shaped (pos `vec3` @0, uv `vec2` @12, color `vec4` @20, 36 bytes) -- a
+     * `SpriteBatch`-custom-shader facility, not a general arbitrary-vertex-format one (see
      * `ISpriteBatchRenderer::SetCustomEffect`'s own doc comment).
      *
-     * Fixed 128-byte uniform layout, mirroring `D3D11EffectRenderer`'s own byte-for-byte convention
+     * Fixed 128-byte uniform layout, byte-for-byte the retired `D3D11EffectRenderer`'s convention
      * (both vertex and fragment stages get their own copy, matching this renderer's established
      * "same PC struct in both stages" convention): `[0..15]` = vpSize (`vec4`, xy used, zw pad for
      * std140 alignment; set automatically once per sprite render via `SetViewportSizeEXT` -- the
@@ -1295,8 +1296,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * plans/plan_sdlgpu_modern_graphics.md `SMG-0007`. Selected by `CompileProgram` when the
          * payload begins with the SPIR-V magic word. Unlike the GLSL route this needs no runtime
          * shader compiler, so it is present in every build; what it does need is
-         * `RemapSpirvForSdlGpuEXT`, because a portable package's SPIR-V is laid out for CNA's
-         * Vulkan renderer and `SDL_gpu` mandates a different descriptor-set table.
+         * `RemapSpirvForSdlGpuEXT`, because a portable package's SPIR-V is laid out for the retired
+         * Vulkan renderer's descriptor convention and `SDL_gpu` mandates a different descriptor-set
+         * table.
          *
          * @param vertSpirv Vertex module bytes.
          * @param fragSpirv Fragment module bytes.
@@ -1886,7 +1888,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief plans/plan_street_sdlgpu.md STREETS-0004: `GraphicsDevice.SamplerStates[0..3]` as a
          *        custom effect's texture units saw them when its draw was queued.
          *
-         * XNA samples texture unit N through `SamplerStates[N]`. The Vulkan renderer does
+         * XNA samples texture unit N through `SamplerStates[N]`. The retired Vulkan renderer did
          * (VULKAN-166); this one bound the SpriteBatch's sampler to every unit of a sprite effect
          * and a nearest/clamp sampler to every unit of a 3D one. Captured at queue time, like
          * every other sampler state here, because the draw replays at `Present()`.
@@ -1897,7 +1899,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // (`GpuDrawParams`' single-map, cascade and punctual groups), captured when the draw is
         // queued -- a shadow map attached after the draw but before Present() is not this draw's.
         // `uniforms` is the shared `CnaShadowParams` block of shadow_sampling.glsl, filled
-        // float-for-float as the Vulkan and WebGPU renderers fill it. The default is all zeros,
+        // float-for-float as the WebGPU renderer fills it. The default is all zeros,
         // which that block reads as "no directional shadow, no punctual light".
         struct ShadowReceptionEXT
         {
@@ -2232,7 +2234,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
-            std::array<float, 32> uniforms{};  ///< mirrors VulkanRenderer::FillExtPushConst()'s 128-byte layout
+            std::array<float, 32> uniforms{};  ///< 128-byte per-draw uniform layout
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
@@ -2918,9 +2920,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief plans/plan_street_sdlgpu.md STREETS-0003: whether a half-float colour texture can
          *        be sampled with a linear filter here.
          *
-         * SDL_gpu has no filterability query, so this cannot ask the way the Vulkan renderer asks
-         * `vkGetPhysicalDeviceFormatProperties`. It does not have to: every backend SDL_gpu drives
-         * guarantees it -- Vulkan's required-format table mandates
+         * SDL_gpu has no filterability query, so this cannot ask the way the retired Vulkan
+         * renderer asked `vkGetPhysicalDeviceFormatProperties`. It does not have to: every backend
+         * SDL_gpu drives guarantees it -- Vulkan's required-format table mandates
          * `SAMPLED_IMAGE_FILTER_LINEAR` for R16G16B16A16_SFLOAT, D3D12 requires it from feature
          * level 11, and Metal filters RGBA16Float on every GPU family -- so the one live question
          * is whether this device made the format a sampleable render target at all.
@@ -2932,8 +2934,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Whether the stock lit shaders sample the shadow state. SMG-0032.
          *
          * BasicEffect's lit route, SkinnedEffect (both vertex formats) and both PBR families sample
-         * the single map, the cascade atlas and the punctual maps through the same
-         * shadow_sampling.glsl the Vulkan renderer compiles.
+         * the single map, the cascade atlas and the punctual maps through the shared
+         * src/shaders/shadow_sampling.glsl.
          *
          * @return Always true: the receiving shaders are created with the renderer.
          */
@@ -2941,7 +2943,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief plans/plan_street_sdlgpu.md STREETS-0002: the PBR shader really does consume an
-         *        `ImageBasedLightEXT` -- the split-sum term Vulkan, EasyGL and WebGPU evaluate.
+         *        `ImageBasedLightEXT` -- the split-sum term EasyGL and WebGPU evaluate.
          *
          * @return True while a device exists.
          */
@@ -3156,8 +3158,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Real `BlendState` mapping (`SDLGPU-18`) -- stores the full requested blend
          * equation (not just enabled/disabled), baked into every 3D/sprite pipeline's
          * `SDL_GPUColorTargetBlendState` at `Queue*Draw()` time. Blend is considered "enabled"
-         * unless the request is exactly `BlendState.Opaque`'s own values (`One`/`Zero`/`Add`),
-         * mirroring `VulkanRenderer::ApplyBlendState`'s own convention.
+         * unless the request is exactly `BlendState.Opaque`'s own values (`One`/`Zero`/`Add`).
          */
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
@@ -3227,9 +3228,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * `RenderQueuedDraws`. Per-draw (like the scissor, `REMED-GFX-068`) because this deferred
          * renderer replays draws at Present and `SetRenderTarget` resets the frame-global viewport
          * on bind/unbind, so a per-pass read of the live viewport would be wrong -- the same
-         * deferred-model reasoning `VulkanRenderer` (GFX-062) uses. An unset or degenerate
-         * (zero-size) viewport falls back to the pass's full render-target extents, byte-identical
-         * to the pre-fix behavior (SDL's own default full-target viewport).
+         * deferred-model reasoning the retired Vulkan renderer used (GFX-062). An unset or
+         * degenerate (zero-size) viewport falls back to the pass's full render-target extents,
+         * byte-identical to the pre-fix behavior (SDL's own default full-target viewport).
          */
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
         /**
@@ -3325,8 +3326,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * compiling @p vertSrc/@p fragSrc (GLSL source) to SPIR-V at runtime when this build has
          * a target-native `libshaderc` and a SPIR-V-capable SDL_gpu driver. An unavailable compiler
          * or compilation failure is reported via the returned renderer's
-         * `IsValid()`/`GetCompileError()` (matching `VulkanRenderer`/`DirectX11Renderer`'s own
-         * convention), not an exception.
+         * `IsValid()`/`GetCompileError()`, not an exception.
          */
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                             const std::string& fragSrc) override;
@@ -3337,7 +3337,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * `rts[0]` becomes the real draw target (identical to `SetRenderTarget2D(rts[0])`);
          * `rts[1..count-1]` are bound and independently cleared but do not receive draws -- no
          * shader in this codebase declares more than one fragment output, the same honest scope
-         * boundary this project's D3D11/D3D12 MRT support already established.
+         * boundary the retired D3D11/D3D12 MRT support established.
          */
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
@@ -3443,8 +3443,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Whether `SDL_CreateGPUDevice`'s `debug_mode` was requested for this device.
          *
-         * Mirrors `DirectX11Renderer::IsDebugLayerEnabledEXT()`'s identical `#ifndef NDEBUG`
-         * CNA-side toggle rationale (SDLGPU-6) — a debug build asks the Vulkan driver for
+         * An `#ifndef NDEBUG` CNA-side toggle (SDLGPU-6) — a debug build asks the Vulkan driver for
          * `SDL_gpu`'s own validation layer, a release build does not. CNAEXT.
          */
         CNAEXT [[nodiscard]] bool IsDebugModeEnabledEXT() const { return debugModeEnabled_; }
@@ -4389,7 +4388,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTextureFormat backbufferProxyFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
         bool backbufferReadbackEnabled_ = false;
         /// SDLGPU-6: whether SDL_CreateGPUDevice's debug_mode was requested (an #ifndef NDEBUG
-        /// CNA-side toggle, mirroring DirectX11Renderer::debugLayerEnabled_'s identical rationale).
+        /// CNA-side toggle).
         bool debugModeEnabled_ = false;
 
         SDL_GPUShader* spriteVertexShader_ = nullptr;
@@ -4649,9 +4648,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool depthWriteEnabled_ = false;
         bool blendEnabled_ = false;  ///< matches BlendState.Opaque (no blend), the real XNA default
 
-        // SDLGPU-18/19/20: "current" render state, mirroring VulkanRenderer's own
-        // blendParams_/dsParams_/cullMode_ pattern for a renderer whose pipeline objects are
-        // pre-baked/immutable, not a live pipeline-state-object mechanism. Captured into a
+        // SDLGPU-18/19/20: "current" render state -- the blendParams_/dsParams_/cullMode_ pattern
+        // the retired Vulkan renderer used for pipeline objects that are pre-baked/immutable, not
+        // a live pipeline-state-object mechanism. Captured into a
         // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
         BlendKeyParams blendParams_;
         std::array<int, 4> colorWriteMasks_{{15, 15, 15, 15}};  ///< REMED-GFX-077/-098: current per-MRT-slot masks

@@ -493,8 +493,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * `cubeTex_` layer still held the right content (which is why a full redraw and an
          * immediate readback both passed). `BindAsRenderTargetFace` now re-attaches this face's
          * own renderbuffer, exactly as the non-MSAA path already re-attaches this face's own
-         * cube-texture image. Six is what D3D11 has always allocated (a six-slice
-         * multisampled array); the cost is `size * size * samples * 4 * 6` bytes per cube target,
+         * cube-texture image. The cost is `size * size * samples * 4 * 6` bytes per cube target,
          * paid once at construction -- never per bind, and with no full-face copy anywhere.
          */
         std::array<::easygl::Renderbuffer, 6> msaaColorRbos_;
@@ -838,7 +837,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingMaxAnisotropy_ = 4; // SamplerState default
         int pendingMaxMipLevel_ = 0; // SamplerState default
         float pendingLodBias_ = 0.0f; // SamplerState default
-        // plans/plan_vulkan.md VULKAN-167: -1 means "the batch supplied no W", which keeps
+        // VULKAN-167: -1 means "the batch supplied no W", which keeps
         // ApplySamplerState's W-follows-U default for any caller that flushes sprites without
         // going through SetSamplerState. SpriteBatch always supplies one, so the sentinel only
         // survives for those other callers.
@@ -2032,7 +2031,7 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
-        /// plan_vulkan.md VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
+        /// VULKAN-164: plans/plan_graphics.md Task 863 gave this renderer
         /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
         /// bound volume through a `sampler3D`.
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }

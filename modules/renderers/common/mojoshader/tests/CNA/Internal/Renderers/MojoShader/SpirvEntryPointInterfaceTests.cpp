@@ -4,7 +4,7 @@
 // the committed compiled-effect corpus.
 //
 // This suite belongs to the SHARED MojoShader half rather than to any one renderer because the
-// SPIR-V profile and MOJOSHADER_linkSPIRVShaders() are shared: WebGPU, Vulkan and SDL_GPU all
+// SPIR-V profile and MOJOSHADER_linkSPIRVShaders() are shared: WebGPU and SDL_GPU both
 // consume exactly these bytes. The defect it guards was found through WebGPU only because WebGPU
 // is the backend whose consumer (naga) rejects the module instead of accepting it quietly.
 //
@@ -50,7 +50,7 @@ namespace
     // ------------------------------------------------------------------------------------------
     // The nine-function MojoShader effect backend, in its smallest honest form: enough to make
     // MOJOSHADER_compileEffect translate every pass and hand back its parse data. Same shape as
-    // spikes/webgpu-spirv-spike and tools/graphics/mojoshader_vulkan_probe.cpp.
+    // spikes/webgpu-spirv-spike.
     // ------------------------------------------------------------------------------------------
     struct ProbeShader
     {

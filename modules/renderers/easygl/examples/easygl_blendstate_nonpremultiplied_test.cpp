@@ -5,17 +5,10 @@
 // itself, unlike BlendState::AlphaBlend (Task 304), which expects the caller to have already
 // premultiplied the source.
 //
-// *** CRITICAL CAVEAT, carried from Task 304/868 — READ BEFORE TRUSTING A PASSING VULKAN RESULT ***
-// Task 304 found that Vulkan's ApplyBlendState is almost entirely broken: it ignores every
-// specific blend-factor/function request and hardcodes ONE equation for any non-Opaque BlendState
-// — and that hardcoded equation's COLOR-channel factors (SourceAlpha/InverseSourceAlpha) happen to
-// exactly match NonPremultiplied's own color factors, purely by coincidence (its alpha-channel
-// factors do NOT match — Opaque's One/Zero is hardcoded there instead of NonPremultiplied's real
-// SourceAlpha/InverseSourceAlpha, but this test never reads back alpha, so that mismatch is
-// invisible here). This means: a PASSING result on Vulkan is NOT evidence that Task 868 is fixed,
-// or that Vulkan's blend state handling works in general — it doesn't, for Additive or any custom
-// BlendState. See plans/plan_graphics.md Task 868 for the full, real finding. Do not close Task 868
-// based on this test passing.
+// Caveat carried from Task 304/868 (history): the retired VULKAN renderer's ApplyBlendState ignored
+// every blend-factor/function request and hardcoded one equation whose COLOR-channel factors
+// (SourceAlpha/InverseSourceAlpha) match NonPremultiplied's by coincidence, so a passing Vulkan
+// result was never evidence that Task 868 was fixed. See plans/plan_graphics.md Task 868.
 //
 // Source colour: Color(255, 0, 0, 128) — RAW (non-premultiplied) red at ~50% opacity. Background:
 // green (0,255,0,255).
@@ -98,7 +91,6 @@ protected:
         {
             std::printf("[PASS] BlendState::NonPremultiplied raw-alpha blend: centre=(%d,%d,%d), expected ~(128,127,0)\n",
                         got.getRProperty(), got.getGProperty(), got.getBProperty());
-            std::printf("[NOTE] A passing Vulkan result here does NOT mean Task 868 is fixed - see this file's header comment.\n");
             result_ = 0;
         }
         else

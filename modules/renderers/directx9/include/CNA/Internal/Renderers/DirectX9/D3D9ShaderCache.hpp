@@ -21,7 +21,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     /// Real D3D9 vertex/pixel shader object cache (D9-74). Creates lazily on first request,
     /// caches for the lifetime of this object -- mirrors this project's other GPU-object caches
-    /// (e.g. D3D11's own sampler-state cache) in shape, adapted to D3D9's register-based shader
+    /// in shape, adapted to D3D9's register-based shader
     /// objects (no state-object equivalent exists for shaders themselves; `IDirect3DVertexShader9`/
     /// `IDirect3DPixelShader9` already are the compiled, cacheable GPU object).
     class D3D9ShaderCache

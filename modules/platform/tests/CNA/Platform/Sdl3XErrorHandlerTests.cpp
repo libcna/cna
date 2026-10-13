@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_vulkan.md VULKAN-154 / VULKAN-157 (findings F-22 and F-23, which turned out to be one
+// VULKAN-154 / VULKAN-157 (findings F-22 and F-23, which turned out to be one
 // defect): an Xlib protocol error must not end the process.
 //
 // Xlib's DEFAULT error handler calls `exit()`. That is not a theoretical problem here -- it was

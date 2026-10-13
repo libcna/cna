@@ -6,7 +6,7 @@
 //
 // THE DEFECT
 // ----------
-// On VULKAN the public sequence
+// On the retired VULKAN renderer the public sequence
 //
 //     RenderTarget2D rt(dev, 16, 16, /*mipMap=*/true, Color, DepthFormat::None, 4, DiscardContents);
 //     ... render ...
@@ -64,9 +64,10 @@
 //
 // PROCESS ISOLATION
 // -----------------
-// Each leg runs in its own child process. The Vulkan symptom is not a signal, but the sibling defect
-// this file generalises (REMED-GFX-186) was, a control renderer may still abort, and "the FIRST
-// readback of the process" is a property leg G1 asserts -- which only a fresh process can give.
+// Each leg runs in its own child process. The Vulkan symptom was not a signal, but the sibling
+// defect this file generalises (REMED-GFX-186) was, a control renderer may still abort, and "the
+// FIRST readback of the process" is a property leg G1 asserts -- which only a fresh process can
+// give.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -182,7 +183,6 @@ namespace
 #if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
-        // plans/plan_apple_m4.md AM4-097: Metal included (it refused more than one descriptor before).
         true;
 #endif
 
@@ -1355,11 +1355,11 @@ class RenderTargetInvalidMipLevelTest : public Game
     /**
      * @brief H1 -- an MRT member's invalid level, kept strictly clear of REMED-GFX-190.
      *
-     * An MRT attachment is an ordinary `RenderTarget2D` read through the very same renderer route, so
-     * its invalid-level rejection IS this ticket's subject and is asserted here. Its generated mip
-     * CONTENT is NOT: **REMED-GFX-190** records that Vulkan does not regenerate the PRIMARY MRT
-     * attachment's chain, and this file must not claim otherwise, so only level 0 content and the
-     * refusal are asserted while level 1 is measured and printed.
+     * An MRT attachment is an ordinary `RenderTarget2D` read through the very same renderer route,
+     * so its invalid-level rejection IS this ticket's subject and is asserted here. Its generated
+     * mip CONTENT is NOT: **REMED-GFX-190** recorded that the retired VULKAN renderer did not
+     * regenerate the PRIMARY MRT attachment's chain, and this file must not claim otherwise, so
+     * only level 0 content and the refusal are asserted while level 1 is measured and printed.
      */
     void LegH1()
     {
@@ -1487,11 +1487,12 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
-        // REMED-GFX-191: Vulkan's render-target sample count follows the device-wide count. F1
-        // must therefore engage multisampling before device creation; target constructor requests
-        // alone would all report applied 0 and leave the nominal MSAA matrix on the single-sample
-        // path. F1 still requests 0 and 1 as explicit non-MSAA controls, and now reads every valid
-        // mip for both those targets and each actually multisampled target the renderer supports.
+        // REMED-GFX-191: a renderer may derive its render-target sample count from the device-wide
+        // count, as the retired VULKAN renderer did. F1 must therefore engage multisampling before
+        // device creation; target constructor requests alone would all report applied 0 and leave
+        // the nominal MSAA matrix on the single-sample path. F1 still requests 0 and 1 as explicit
+        // non-MSAA controls, and now reads every valid mip for both those targets and each actually
+        // multisampled target the renderer supports.
         if (onlyLeg_ == "F1") gdm_->setPreferMultiSamplingProperty(true);
     }
 

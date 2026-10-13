@@ -32,8 +32,8 @@ namespace
     // (GraphicsDeviceManager::INTERNAL_CreateGraphicsDeviceInformation, FNA's cap of 8).
     constexpr int ManagerMultiSampleRequest = 8;
 
-    // The applied count is either a fixed property of the renderer (CPU Software and Metal always
-    // multisample at 4x) or, with the "device" argument, the device's own clamp of the manager's
+    // The applied count is either a fixed property of the renderer (CPU Software always
+    // multisamples at 4x) or, with the "device" argument, the device's own clamp of the manager's
     // request. EasyGL's clamp is the driver's GL_MAX_SAMPLES -- 8 on radeonsi, 4 on llvmpipe --
     // so no constant written into the test registration can stand in for it.
     bool expectDeviceClamp = false;

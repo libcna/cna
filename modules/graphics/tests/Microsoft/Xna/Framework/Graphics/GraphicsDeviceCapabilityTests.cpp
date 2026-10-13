@@ -377,7 +377,7 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // THE MEASURED CONTRACT, one renderer at a time. Every row below is a real reading from the pixel
 // oracle in this file, not a reading of the source:
 //
-//   Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11  reports true, renders a real wireframe
+//   Software, SDL_GPU, D3D9                       reports true, renders a real wireframe
 //   EasyGL desktop/native-extension contexts       report true, render native wireframe
 //   EasyGL GLES/WebGL without polygon-mode ext     report false, refuse (SOFTWARE-178)
 //   WebGPU                                        reports FALSE, refuses the draw (WEBGPU-115)
@@ -458,7 +458,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
            "fallen back to IGraphicsRenderer's default true, which no no-op renderer can back";
 #else
     // Every other renderer in this file answers true, either because it renders a real wireframe
-    // (Software, Vulkan, SDL_GPU, D3D9, D3D11, asserted by the pixel oracle below) or
+    // (Software, SDL_GPU, D3D9, asserted by the pixel oracle below) or
     // because it inherits IGraphicsRenderer's default (Headless, which rasterizes nothing at all).
     EXPECT_TRUE(reported);
 #endif

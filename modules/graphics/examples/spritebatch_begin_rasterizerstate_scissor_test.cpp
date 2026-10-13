@@ -3,9 +3,9 @@
 // renderer. This is a shared-layer test -- the fix lives in SpriteBatch.cpp (setRasterizerStateProperty
 // in Begin), not in any renderer -- so the SAME source is registered against multiple renderers to
 // prove the shared change works across very different architectures (deferred BatchSnapshot on
-// Vulkan/SdlGpu, view-state on Bgfx, immediate on D3D11/EasyGL). The scissor rectangle itself is
-// already correct per renderer (GFX-013 Vulkan / GFX-068 SdlGpu / GFX-066 Bgfx / native D3D11); the
-// only thing under test here is whether the RasterizerState reaches it THROUGH Begin.
+// SdlGpu, immediate on EasyGL). The scissor rectangle itself is already correct per renderer
+// (GFX-068 SdlGpu); the only thing under test here is whether the RasterizerState reaches it
+// THROUGH Begin.
 //
 // Everything renders into an off-screen 64x64 RenderTarget2D and is read back with GetData(), the
 // portable path that works even on renderers without GetBackBufferData (SdlGpu). Scene: bind the RT,

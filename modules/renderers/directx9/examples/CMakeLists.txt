@@ -60,8 +60,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_directx9_ctest_command(_directx9_common_cmd cna_test_directx9_common)
     # This binary never creates a D3D9 device (pure-function mapping-table checks only), so it
     # legitimately never prints a "DXVK: <version>" line -- tell the wrapper's DXVK-engagement
-    # gate not to misreport that as a WineD3D fallback (mirrors DirectX11_Common's own
-    # CNA_D3D11_SKIP_DXVK_GATE usage). Harmless no-op when CMAKE_CROSSCOMPILING is false.
+    # gate not to misreport that as a WineD3D fallback. Harmless no-op when CMAKE_CROSSCOMPILING
+    # is false.
     cna_register_renderer_test(NAME DirectX9_Common COMMAND ${_directx9_common_cmd}
         TIMEOUT 30 LABELS "DIRECTX9" ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
 
@@ -228,12 +228,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_ShaderCache COMMAND ${_directx9_shadercache_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # D9-64: state-object pixel-behaviour tests, reusing the same renderer-agnostic EasyGL-authored
-    # sources D3D11/Vulkan already reuse verbatim (they only touch the public GraphicsDevice/
-    # BasicEffect API, nothing EasyGL-specific) -- real behavioural proof through the full public
-    # draw path, not just "the D3D9 state object was created/bound". Same 4-test subset
-    # DirectX11_BlendState_Opaque/DirectX11_BlendState_AlphaBlend/DirectX11_DepthStencilState_StencilEnable/
-    # DirectX11_RasterizerState_CullMode already established, not Vulkan's full set.
+    # D9-64: state-object pixel-behaviour tests, reusing the renderer-agnostic EasyGL-authored
+    # sources verbatim (they only touch the public GraphicsDevice/BasicEffect API, nothing
+    # EasyGL-specific) -- real behavioural proof through the full public draw path, not just "the
+    # D3D9 state object was created/bound". Same 4-test subset the retired DirectX11 suite
+    # established (DirectX11_BlendState_Opaque/DirectX11_BlendState_AlphaBlend/
+    # DirectX11_DepthStencilState_StencilEnable/DirectX11_RasterizerState_CullMode).
     cna_directx9_test(cna_test_directx9_blendstate_opaque ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_opaque_test.cpp)
     cna_directx9_ctest_command(_directx9_blend_opaque_cmd cna_test_directx9_blendstate_opaque)
     cna_register_renderer_test(NAME DirectX9_BlendState_Opaque COMMAND ${_directx9_blend_opaque_cmd}
@@ -307,10 +307,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
             TIMEOUT 60 LABELS "DIRECTX9" ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
 
         # D9-112: SpriteBatch::Begin(effect) wiring, through the real public
-        # SpriteBatch/ShaderEffect API (not the raw renderer), mirroring D3D11's own DX-71 test
-        # bar. CNA itself now links cna_renderer_d3d9_effect (the circular-link fix
-        # above), so this needs no extra target_link_libraries beyond the standard cna_directx9_test()
-        # macro set -- ShaderEffect's own constructor reaches DirectX9Renderer::
+        # SpriteBatch/ShaderEffect API (not the raw renderer), mirroring the retired D3D11
+        # renderer's DX-71 test bar. CNA itself now links cna_renderer_d3d9_effect (the
+        # circular-link fix above), so this needs no extra target_link_libraries beyond the standard
+        # cna_directx9_test() macro set -- ShaderEffect's own constructor reaches DirectX9Renderer::
         # CreateEffectRenderer() transitively through the real device.
         cna_directx9_test(cna_test_directx9_spritebatch_customeffect directx9_spritebatch_customeffect_test.cpp)
         cna_directx9_ctest_command(_directx9_sb_customeffect_cmd cna_test_directx9_spritebatch_customeffect)

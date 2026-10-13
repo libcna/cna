@@ -459,8 +459,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # WEBGPU-58: MSAA infrastructure for both the swapchain backbuffer and RenderTarget2D --
     # backbuffer MultiSampleCount=0 vs. PreferMultiSampling+ApplyChanges() (the real runtime
-    # ApplyMultiSampleCount() reconfigure path, mirroring vulkan_msaa_test.cpp's own Task 902
-    # verification), ApplyMultiSampleCount()'s clamped-return-value contract (8 -> 0 or 4, never
+    # ApplyMultiSampleCount() reconfigure path, as in Task 902's own verification),
+    # ApplyMultiSampleCount()'s clamped-return-value contract (8 -> 0 or 4, never
     # the raw unsupported request), and a RenderTarget2D created after backbuffer MSAA is engaged
     # unconditionally mirroring that same real sample count. KNOWN OPEN ISSUE, intentionally left
     # registered and failing rather than hidden: 3 of 6 checks in this test currently FAIL because
@@ -711,7 +711,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_RenderTarget_PassBoundary COMMAND cna_test_webgpu_rendertarget_pass_boundary
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # REMED-GFX-129: cross-renderer control for Vulkan's ordered-Clear correction.
+    # REMED-GFX-129: Clear() is an ordered command at its exact public call position.
     cna_webgpu_test(cna_test_webgpu_ordered_clear
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_register_renderer_test(NAME WebGPU_GraphicsDevice_OrderedClear COMMAND cna_test_webgpu_ordered_clear
@@ -851,12 +851,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 
     # REMED-GFX-169: every stock 3D effect must sample its textures through the public
-    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. Vulkan's
-    # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
-    # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
-    # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
-    # absent from their cache keys too. Vulkan is where the defect lives; the other renderers run the
-    # same public fixture as controls.
+    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. The defect lived
+    # in the retired VULKAN renderer, whose stock 3D descriptor builders hardcoded one default
+    # sampler; this renderer ran the same public fixture as a control.
     cna_webgpu_test(cna_test_webgpu_stock_effect_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME WebGPU_StockEffectSamplerContract COMMAND cna_test_webgpu_stock_effect_sampler

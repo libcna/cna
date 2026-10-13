@@ -28,4 +28,4 @@ Bgra4444|136,68,255,136
 #   * a colour channel the format does not store samples as 1.0
 #   * an alpha the format does not store samples as 1.0
 #   * Alpha8 is the one exception: (0, 0, 0, A)
-# It settles ClassicTextureFormatTests (right) against plan_vulkan.md VULKAN-174's blue = 0 (wrong).
+# It settles ClassicTextureFormatTests (right) against VULKAN-174's blue = 0 (wrong; retired renderer).

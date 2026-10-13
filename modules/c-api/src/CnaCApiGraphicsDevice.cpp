@@ -163,8 +163,9 @@ template<typename TCallable>
     return CNA_RESULT_SUCCESS;
 }
 
-// A draw route that a 2D-only backend cannot serve is reported as an explicit capability refusal
-// rather than as whatever generic failure that backend's first unsupported call happens to raise.
+// A draw route that a backend without 3D support cannot serve is reported as an explicit
+// capability refusal rather than as whatever generic failure that backend's first unsupported
+// call happens to raise.
 [[nodiscard]] CNA_Result EnsureThreeDSupported(GraphicsDevice& device) noexcept
 {
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) {

@@ -1198,8 +1198,8 @@ class RenderTargetEffectSourceTest : public Game
         // against the raw pattern instead would fold an unrelated colour-convention question into
         // this ticket.
         // plans/plan_apple_m4.md AM4-026: a renderer that reports no CustomEffects capability may
-        // refuse the effect at construction (Metal does) instead of returning an invalid one --
-        // the same declared boundary, reached one call earlier.
+        // refuse the effect at construction instead of returning an invalid one -- the same
+        // declared boundary, reached one call earlier.
         if (!dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
         {
             boundary("C1 " + std::string(kRendererName) + " reports no CustomEffects capability"
@@ -2313,9 +2313,8 @@ namespace
 #if CNA_GFX152_CAN_FORK
     // Matches CNA::Examples::kSkipExitCode (common/PixelTestGame.hpp) -- a leg that exits with this
     // code decided for itself, before this supervisor is involved, that its environment can't
-    // support the check (LLGL-55: e.g. the shared Vulkan-WSI-unavailable guard,
-    // examples/common/LlglVulkanWsiSkipGuard.cpp). That is not the same as the leg failing, so it
-    // must not be counted or reported as one.
+    // support the check (LLGL-55: e.g. RunPixelTest's VK_ERROR_SURFACE_LOST_KHR skip there). That
+    // is not the same as the leg failing, so it must not be counted or reported as one.
     constexpr int kLegSkipExitCode = 77;
 
     /**

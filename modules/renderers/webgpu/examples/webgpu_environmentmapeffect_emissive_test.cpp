@@ -3,7 +3,7 @@
 // (FNA Lighting.fxh: litRGB = lightSum*DiffuseColor + EmissiveColor), NOT
 // (EmissiveColor + lightSum)*DiffuseColor. The wrong form re-multiplies the already-ambient-folded
 // emissive by DiffuseColor a second time (and, because the CPU layer pre-folds Alpha into both
-// operands, also squares Alpha) -- identical root cause to the Vulkan/Bgfx/SdlGpu slices.
+// operands, also squares Alpha) -- identical root cause to the other renderers' slices.
 //
 // COLOR-SPACE HANDLING. WebGPU's swapchain/render-target format is chosen from surface
 // capabilities and is frequently *_Srgb (see ConfigureSurface()'s preferredFormats: BGRA8UnormSrgb

@@ -101,7 +101,7 @@ namespace
     ///
     /// CustomEffects says a renderer ACCEPTS an effect; ExecutesShaderEffectSourceEXT says the
     /// source decides the pixels; GetShaderDialectEXT says which source. A renderer that executes
-    /// declared HLSL (DirectX11) refuses GLSL at compile time, and one that accepts any
+    /// a declared non-GLSL dialect refuses GLSL at compile time, and one that accepts any
     /// source and keeps its own fixed path (Software, Headless: no dialect, not executed) may call
     /// the effect valid -- this test used to demand invalid there, and Software failed it.
     [[nodiscard]] GlslEffectValidity ExpectedGlslEffectValidity(const GraphicsDevice& gd)
@@ -109,8 +109,8 @@ namespace
         using CNA::ShaderDialectEXT;
         const ShaderDialectEXT dialect = gd.GetShaderDialectEXT();
         // plans/plan_apple_m4.md AM4-177: any declared non-GLSL dialect refuses this GLSL payload
-        // at compile time -- HLSL (DirectX11), and WGSL too: WebGPU executes its source, so the
-        // execution query below would otherwise have predicted a valid effect.
+        // at compile time -- WGSL included: WebGPU executes its source, so the execution query
+        // below would otherwise have predicted a valid effect.
         if (dialect == ShaderDialectEXT::Hlsl || dialect == ShaderDialectEXT::Msl ||
             dialect == ShaderDialectEXT::Wgsl || dialect == ShaderDialectEXT::SpirV)
             return GlslEffectValidity::Invalid;
@@ -357,12 +357,12 @@ TEST_F(CnjStockEffectTest, CustomGlslEffectStillWorks)
     // A renderer with no shader compiler (OpenGL ES 1.1's fixed-function pipeline has none at all)
     // cannot produce a valid custom-GLSL effect. Gate on the capability rather than the renderer
     // name, matching CnjTexture3DTests' own convention for the same situation.
-    // plan_vulkan.md VULKAN-403: the capability is the wrong question on its own, and CLAUDE.md
+    // VULKAN-403: the capability is the wrong question on its own, and CLAUDE.md
     // says so in as many words -- CustomEffects means the renderer ACCEPTS an effect, not that it
-    // runs your shader SOURCE. Vulkan accepts effects and reports true, then refuses this GLSL
-    // payload because its ShaderEffect takes SPIR-V ("SPIR-V size must be a multiple of 4 bytes").
-    // ExecutesShaderEffectSourceEXT() is the query that exists for exactly this distinction, and
-    // it is false there, so the fixture's expectation is the same as for a renderer with no
-    // compiler at all.
+    // runs your shader SOURCE. The retired VULKAN renderer accepted effects and reported true,
+    // then refused this GLSL payload because its ShaderEffect took SPIR-V ("SPIR-V size must be a
+    // multiple of 4 bytes"). ExecutesShaderEffectSourceEXT() is the query that exists for exactly
+    // this distinction, and it was false there, so the fixture's expectation is the same as for a
+    // renderer with no compiler at all.
     ExpectGlslEffectValidity(gd, *shaderEffect);
 }

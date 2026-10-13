@@ -809,7 +809,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_get_backbuffer_data_rgba8`",
-      "tests": "HEADLESS refusal and exact SDL_RENDERER pixels in `LifecycleSmoke.c`",
+      "tests": "HEADLESS refusal and exact OPENGLES3 pixels in `LifecycleSmoke.c`",
       "status": "implemented",
       "task": "CBIND-026",
       "approved_symbols": [
@@ -829,7 +829,7 @@
         "field"
       ],
       "mapping": "owned standalone or game-child `CNA_Handle` resources; versioned common/2D/storage snapshots; all constructors and factories through device, file, encoded-memory, RGBA8 and CPU-only creation; every typed full/mip/rectangle transfer through `CNA_Texture2DTransfer` plus `CNA_TextureDataType`; direct raw-RGBA8 upload through the native SetDataRGBA route; Texture format/block/alignment validation helpers; exact type-name count/copy; and PNG/JPEG memory/file encoding. Stream objects, native renderer pointers, weak pointers, protected construction and copy/move storage remain behind the adapter; their safe observable state is exposed without crossing the ABI The generic `SetData<T>`/`GetData<T>` overloads are `cna_texture2d_set_data`/`_get_data` with `T` supplied as a `CNA_TextureDataType`: the 18 named representations are the closed set this header's contract asserts, and `CNA_Texture2DTransfer` carries the level, the optional rectangle and the caller-array window the overloads differ by. A caller-defined `T` with no named representation travels as `CNA_TEXTURE_DATA_BYTE` where the surface format accepts it, because the generic templates forward with `sizeof(T)` and validate only the byte extent. The `std::nullptr_t` overload gets no route of its own because it is not an operation -- it exists so a literal `nullptr` keeps selecting the `Color` path in C++ overload resolution, and in C a null `data` pointer is refused by the single route's array-window validation, which is the same observable answer.",
-      "tests": "all 27 formats, 18 transfer representations, constructors/factories, common and 2D properties, full/rectangle/mip transfers, PNG/JPEG memory and file round-trips, both stream-decode variants, storage/type-name snapshots, lifecycle, atomic capacity failures and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "tests": "all 27 formats, 18 transfer representations, constructors/factories, common and 2D properties, full/rectangle/mip transfers, PNG/JPEG memory and file round-trips, both stream-decode variants, storage/type-name snapshots, lifecycle, atomic capacity failures and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureSmoke.c`, plus C/C++ ABI assertions under HEADLESS and OPENGLES3 and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035C4",
       "approved_symbols": [
@@ -997,7 +997,7 @@
         "field"
       ],
       "mapping": "owned game-child `CNA_Handle` resources; versioned 3D/cube create, property and full/mip/box/face/rectangle Color transfer descriptors; direct Texture3D raw-byte SetDataPointerEXT route; exact native type-name count/copy; generic Texture/GraphicsResource operations; RenderTargetCube inheritance; and copied-memory DDS cube decoding. Native renderer pointers, protected construction, copy/move storage and Sharp Runtime streams remain behind the adapter; missing storage returns an explicit atomic NOT_SUPPORTED result The two `std::nullptr_t` `GetData` shims are `cna_texturecube_get_data`'s null-destination refusal. Neither introduces a transfer: they exist so a literal `nullptr` keeps selecting the `Color` overload once the packed, float and raw templates joined the set, and C has no overload set to preserve -- a null destination with a non-zero window is refused by array-window validation before any native call. The **typed** cube and volume overloads beside them remain unbound and are tracked as such; there is no cube or volume analogue of `CNA_TextureDataType`.",
-      "tests": "all six cube faces, full/rectangle/mip transfers and validation, Texture3D capability refusal, DDS memory decoding refusal, common Texture and GraphicsResource state, RenderTargetCube inheritance, disposal/parent order and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureVolumeSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "tests": "all six cube faces, full/rectangle/mip transfers and validation, Texture3D capability refusal, DDS memory decoding refusal, common Texture and GraphicsResource state, RenderTargetCube inheritance, disposal/parent order and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureVolumeSmoke.c`, plus C/C++ ABI assertions under HEADLESS and OPENGLES3 and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035C5",
       "approved_symbols": [
@@ -1056,7 +1056,7 @@
         "event"
       ],
       "mapping": "owned game-child `CNA_VertexBufferHandle` resources created as static or dynamic buffers; copied declaration metadata, versioned info and caller-array transfer descriptors; all seven typed SetData/GetData families, raw-byte upload, dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter. `SetDataRawAtEXT` and `GetDataRawEXT` become `cna_vertex_buffer_set_data_raw_at` and `cna_vertex_buffer_get_data_raw`: the offset every other transfer route here carries indexes the caller's array, and these two index the buffer, which is what XNA's `offsetInBytes` means. **Documented deviation, about cost rather than result:** no renderer contract here takes a destination offset, so the window is composed on the CPU shadow and the whole buffer is re-uploaded `GetData<TVertex>` is `cna_vertex_buffer_get_data_raw` under the same flattening the set side uses -- the typed routes answer the seven built-in families a `CNA_VertexType` can name, and these answer the application-defined layout that has no identity for the ABI to carry. The two `DynamicVertexBuffer` templates are `VertexBuffer`'s own, appearing on the derived type only because `using VertexBuffer::SetData;` makes them declarations of it; the derived class's own contribution is the `SetDataOptions` family bound separately, and `CNA_VertexBufferCreateInfo.dynamic` is what selects the native class behind one handle.",
-      "tests": "all seven built-in vertex types through count and source/destination-window transfers, all four dynamic option overloads, raw upload, copied declaration independence, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `VertexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan, raw readback whole and windowed, a windowed upload that rewrites one vertex while its neighbour survives, and the refusals for a window past the end, an unaligned offset, a stride that is not the declaration's and a zero stride",
+      "tests": "all seven built-in vertex types through count and source/destination-window transfers, all four dynamic option overloads, raw upload, copied declaration independence, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; strict-C `VertexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan, raw readback whole and windowed, a windowed upload that rewrites one vertex while its neighbour survives, and the refusals for a window past the end, an unaligned offset, a stride that is not the declaration's and a zero stride",
       "status": "implemented",
       "task": "CBIND-035C6",
       "approved_symbols": [
@@ -1139,7 +1139,7 @@
         "event"
       ],
       "mapping": "owned game-child `CNA_IndexBufferHandle` resources created as static or dynamic 16/32-bit buffers; versioned create/info and caller-array transfer descriptors; count and window SetData/GetData routes, all dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter. `SetDataAtEXT` becomes `cna_index_buffer_set_data_at`, whose `buffer_offset_in_bytes` indexes the buffer while the descriptor's `start_index` keeps indexing the caller's array. **Documented deviations:** it accepts no `SetDataOptions` other than None, because a windowed upload promises to keep the rest of the buffer and `Discard` promises the opposite; and it costs a whole-buffer re-upload, since no renderer contract here takes a destination offset The generic `SetData<TIndex>`/`GetData<TIndex>` overloads are the same routes with the element width carried by `CNA_IndexBufferTransfer.index_element_size`, a closed set naming exactly the two widths an index buffer can hold; `SetDataBytesAtInternal` uses that width for byte arithmetic only, so either `TIndex` travels byte-for-byte. The nine `DynamicIndexBuffer` declarations are answered by the same handle: six are `IndexBuffer`'s own overloads appearing on the derived type because `using IndexBuffer::SetData;` makes them declarations of it -- a `using` declaration introduces no operation -- and the other three are its `SetDataOptions` overloads, carried by the descriptor's `options` field. `CNA_IndexBufferCreateInfo.dynamic` is what chooses the native class, which is why one handle serves both kinds. One arm is deliberately narrower than the declaration: `cna_index_buffer_set_data_at` refuses a `SetDataOptions` other than `None` by name, because a windowed upload promises to keep the rest of the buffer and `Discard` promises the opposite.",
-      "tests": "16-bit and 32-bit count/source-window/destination-window transfers, static and dynamic construction, Discard/NoOverwrite, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `IndexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan, and a windowed upload that rewrites one index while its neighbours survive, refusing a window past the end, an unaligned offset and a streaming hint",
+      "tests": "16-bit and 32-bit count/source-window/destination-window transfers, static and dynamic construction, Discard/NoOverwrite, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; strict-C `IndexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan, and a windowed upload that rewrites one index while its neighbours survive, refusing a window past the end, an unaligned offset and a streaming hint",
       "status": "implemented",
       "task": "CBIND-035C7",
       "approved_symbols": [
@@ -1201,7 +1201,7 @@
         "enum-value"
       ],
       "mapping": "fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h`",
-      "tests": "strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER",
+      "tests": "strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035D1",
       "approved_symbols": [
@@ -1237,7 +1237,7 @@
         "alias"
       ],
       "mapping": "owned immutable `CNA_EffectAnnotationHandle` values created from copied UTF-8 metadata/raw float storage plus owned mutable `CNA_EffectAnnotationCollectionHandle` snapshots; versioned metadata, exact string count/copy, all typed getters and copied count/index/name collection operations replace native vectors, references and iterators",
-      "tests": "all metadata/string/scalar/vector/matrix getters, empty fallbacks, raw Boolean/Int32 bits, collection add/count/index/name lookup, copy independence, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectAnnotationSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "tests": "all metadata/string/scalar/vector/matrix getters, empty fallbacks, raw Boolean/Int32 bits, collection add/count/index/name lookup, copy independence, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectAnnotationSmoke.c`, plus C/C++ ABI assertions under HEADLESS and OPENGLES3 and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035D2",
       "approved_symbols": [
@@ -1286,7 +1286,7 @@
         "alias"
       ],
       "mapping": "owned mutable `CNA_EffectParameterHandle` values and stable collection-element aliases plus owned `CNA_EffectParameterCollectionHandle` views; versioned copied metadata, exact strings, tagged scalar/array values, distinct matrix-transpose and texture overload identities, retained texture handles, nested element/member/annotation views and count/index/name/semantic operations replace native pointers, references, vectors and iterators; a route answers a const/non-const canonical overload pair once, since C has no second spelling of the same read",
-      "tests": "all scalar and array overloads including matrix transpose, empty defaults, metadata/strings, nested collections and annotations, stable aliases across growth/destruction, all texture overload dispatch plus Texture2D retention, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectParameterSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "tests": "all scalar and array overloads including matrix transpose, empty defaults, metadata/strings, nested collections and annotations, stable aliases across growth/destruction, all texture overload dispatch plus Texture2D retention, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectParameterSmoke.c`, plus C/C++ ABI assertions under HEADLESS and OPENGLES3 and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035D3",
       "approved_symbols": [
@@ -1392,7 +1392,7 @@
         "alias"
       ],
       "mapping": "owned `CNA_EffectPassHandle` / `CNA_EffectTechniqueHandle` values and stable collection-element aliases plus owned mutable pass/technique collection views; exact UTF-8 names, stable non-pointer technique identities, nested annotation/pass views, canonical Apply dispatch and count/index/name operations replace native owner pointers; `cna_effect_technique_create_reflected_ext` and `cna_effect_pass_create_indexed_ext` map the reflected constructors a compiled effect produces, with `cna_effect_technique_get_index_ext` and `cna_effect_pass_get_index_ext` reading the runtime index back -- separate from the technique identity, which is unique per instance and says nothing about ordering, references, unique-pointer vectors and iterators",
-      "tests": "default/named construction, canonical P0 creation, both reflected constructors with their index read back and the default-pass flag decided by pass count, two passes of one technique reporting their own indices, and the non-CNA_Bool flag refusal, stable unique technique identities, ownerless Apply dispatch, annotation/pass nesting, collection add/count/index/name behavior, stable aliases across growth/destruction, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectTechniqueSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "tests": "default/named construction, canonical P0 creation, both reflected constructors with their index read back and the default-pass flag decided by pass count, two passes of one technique reporting their own indices, and the non-CNA_Bool flag refusal, stable unique technique identities, ownerless Apply dispatch, annotation/pass nesting, collection add/count/index/name behavior, stable aliases across growth/destruction, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectTechniqueSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and OPENGLES3 and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035D4",
       "approved_symbols": [
@@ -1482,7 +1482,7 @@
         "alias"
       ],
       "mapping": "owned game-child `CNA_EffectHandle` values for the abstract Effect contract through a minimal concrete adapter plus native EffectMaterial, ShaderEffect and SpriteEffect instances; compiled bytecode judged as an argument before a renderer is consulted -- empty and structurally invalid bytes are refused as arguments, the MGFX container as an unsupported format, and acceptance of valid bytecode is the renderer's answer through `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS`; `cna_effect_get_is_compiled_ext` maps `GetCompiledRuntimePtr` as the one fact a C caller can act on, because the runtime object itself is renderer-owned implementation C can neither construct nor call into, and `cna_effect_clone` carries that state to the clone because `Clone()` is an ordinary virtual now and clones the runtime and parameter values itself; clone/dispose/apply, borrowed device, current technique, stable parameter/technique views, exact type/source strings, renderer and stock-sprite identity queries, all ShaderEffect uniform/texture/matrix routes, and transitive child-view/device/texture lifetime retention. Renderer-specific pointers and GpuDrawParams remain behind the adapter and are consumed through Effect Apply and CNA draw operations. `DeclareUniformBlockEXT` becomes `cna_shader_effect_declare_uniform_block_ext`, taking `CNA_StringView` members like every other named string in this ABI and copying them into NUL-terminated storage for a canonical signature that wants `const char* const*` -- a view carries a length, not a terminator, and may point into the middle of a larger buffer The `(GraphicsDevice&, const std::string& stockTechniqueName)` constructor is protected and takes no argument a caller chooses: each stock subclass passes the exact technique name XNA's embedded blob reflects, which is why it exists rather than a mutable-name property. It therefore has no route of its own for the same reason the protected copy constructor does not -- C cannot call it and the canonical API does not intend anyone to. What it produces is bound and asserted: each `cna_*_effect_create` route runs it, and the reflected name is read back through `cna_effect_get_techniques` and `cna_effect_technique_copy_name`.",
-      "tests": "base/material/shader/sprite construction and same-type clones, the three renderer-independent compiled-bytecode refusals, the compiled-runtime presence answer and its preservation across a clone asserted as a relationship rather than a constant, dispose/apply, current-technique/pass validation, exact type/source strings, device ownership, all shader uniform and matrix operations, renderer-state consistency, Texture2D/cube dispatch and retention, Texture3D backend refusal, transitive pass lifetime after parent-handle destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan, and a two-member std140 block declaration with its clear-by-zero-count form and the refusals for a negative block size and for either array being null with a non-zero count",
+      "tests": "base/material/shader/sprite construction and same-type clones, the three renderer-independent compiled-bytecode refusals, the compiled-runtime presence answer and its preservation across a clone asserted as a relationship rather than a constant, dispose/apply, current-technique/pass validation, exact type/source strings, device ownership, all shader uniform and matrix operations, renderer-state consistency, Texture2D/cube dispatch and retention, Texture3D backend refusal, transitive pass lifetime after parent-handle destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectSmoke.c`, plus C/C++ ABI assertions under HEADLESS and OPENGLES3 and ASan+UBSan, and a two-member std140 block declaration with its clear-by-zero-count form and the refusals for a negative block size and for either array being null with a non-zero count",
       "status": "implemented",
       "task": "CBIND-035D5",
       "approved_symbols": [
@@ -1572,7 +1572,7 @@
         "alias"
       ],
       "mapping": "owned `CNA_EffectHandle` BasicEffect game children plus standalone or stable nested `CNA_DirectionalLightHandle` values; generic IEffectMatrices/IEffectFog/IEffectLights operations, exact three-light indexed views and default lighting; all BasicEffect transform, vertex-color, material, alpha, texture, fog and lighting properties; same-device retained Texture2D handles and clone-aware ownership. Renderer-only GpuDrawParams remain private and are consumed through Apply/draw paths The four-argument `DirectionalLight` constructor is `cna_effect_lights_get_directional_light`, which hands back the three stable member views an effect owns -- and those three are what this constructor builds, so a write travels through to the effect's parameters, which is what the parameter arguments exist for; `cna_effect_clone` carries their cached values to a clone, which is what `cloneSource` is for. `cna_directional_light_create` is the *other* constructor, a standalone default light with no parameters behind it. **A C caller cannot bind a new light to three effect-parameter handles of its own choosing**: every parameter-bound light reachable here is one an effect owns, which is where the canonical API puts them.",
-      "tests": "exact BasicEffect and DirectionalLight defaults, all matrix/fog/light/material/texture properties, three stable shared light aliases, default three-point lighting constants, generic interface success/refusal, same-type state clone and texture retention, nested-light lifetime after parent destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `BasicEffectSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "tests": "exact BasicEffect and DirectionalLight defaults, all matrix/fog/light/material/texture properties, three stable shared light aliases, default three-point lighting constants, generic interface success/refusal, same-type state clone and texture retention, nested-light lifetime after parent destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `BasicEffectSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and OPENGLES3 and ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035D6",
       "approved_symbols": [
@@ -1685,7 +1685,7 @@
         "alias"
       ],
       "mapping": "owned `CNA_EffectHandle` game children with shared base clone/dispose/apply/type, reusable IEffectMatrices/IEffectFog/IEffectLights operations, and type-specific diffuse/emissive/alpha/vertex-color/alpha-test/two-layer/environment-map properties; indexed retained Texture2D layers and retained TextureCube environment maps require the same graphics device and clone independently; ReferenceAlpha preserves the native unclamped signed value and CompareFunction is validated at the C boundary; renderer-only GpuDrawParams remain private behind Apply/draw",
-      "tests": "exact defaults and type identities, every generic interface and concrete property, unclamped ReferenceAlpha boundaries, all valid CompareFunction identities plus invalid enum/bool/index refusal, EnvironmentMapEffect's always-on lighting rule and stable light views, same-device texture ownership, Texture2D/TextureCube retention and clone release ordering, cross-owner refusal, Apply, stale/wrong-kind/wrong-thread paths in strict-C `StockEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan",
+      "tests": "exact defaults and type identities, every generic interface and concrete property, unclamped ReferenceAlpha boundaries, all valid CompareFunction identities plus invalid enum/bool/index refusal, EnvironmentMapEffect's always-on lighting rule and stable light views, same-device texture ownership, Texture2D/TextureCube retention and clone release ordering, cross-owner refusal, Apply, stale/wrong-kind/wrong-thread paths in strict-C `StockEffectSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-035D7",
       "approved_symbols": [
@@ -1820,7 +1820,7 @@
         "alias"
       ],
       "mapping": "owned `CNA_EffectHandle` SkinnedEffect game children with shared clone/dispose/apply/type and reusable IEffectMatrices/IEffectFog/IEffectLights routes; fixed 72-bone maximum, bounded copied set and atomic count/capacity copy operations; complete diffuse/emissive/specular/alpha/per-pixel/weights/vertex-color state; retained same-device Texture2D assignment copied independently by clones. Always-on lighting maps false to INVALID_STATE and renderer-only GpuDrawParams remain private behind Apply/draw",
-      "tests": "exact defaults including all 72 identity bones, type and maximum constant, every generic and concrete property, all valid and invalid weights, bone count bounds, exact round-trip and atomic insufficient-capacity behavior, always-on lighting/default lights, same-device texture ownership and clone retention, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `SkinnedEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze MaxBones",
+      "tests": "exact defaults including all 72 identity bones, type and maximum constant, every generic and concrete property, all valid and invalid weights, bone count bounds, exact round-trip and atomic insufficient-capacity behavior, always-on lighting/default lights, same-device texture ownership and clone retention, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `SkinnedEffectSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; C/C++ assertions freeze MaxBones",
       "status": "implemented",
       "task": "CBIND-035D8",
       "approved_symbols": [
@@ -1893,7 +1893,7 @@
         "alias"
       ],
       "mapping": "owned `CNA_EffectHandle` ColorMatrixEffect, PbrEffect and SkinnedPbrEffect game children with shared clone/dispose/apply/type and reusable IEffectMatrices/IEffectFog/IEffectLights routes; fixed-layout finite color matrix and offset operations; complete PBR base-color/alpha/metallic/roughness/emissive state and seven fixed retained Texture2D slots shared by both PBR variants, the two specular slots included; the KHR material extensions as one route family per property -- index of refraction, specular factor and colour factor, normal scale, occlusion strength, alpha mode/cutoff, double-sidedness and output sRGB encoding -- with per-slot packed UV selectors, per-slot `CNA_TextureTransformEXT` transforms and the sRGB flag restricted to the three colour-carrying slots; fixed 72-bone maximum plus bounded copied set and atomic count/capacity copy operations for SkinnedPbrEffect. Always-on PBR lighting maps false to INVALID_STATE, while renderer-only draw parameters remain private behind Apply/draw",
-      "tests": "exact defaults and type identities for all three extensions, finite matrix/offset validation, grayscale/reset/clone, every generic PBR matrix/fog/light/material property, fixed texture-slot identities including both specular slots, every KHR material default and round-trip, all three alpha-mode identities and the refusal past the maximum, per-slot UV selectors and transforms over all seven slots, the sRGB flag accepted for exactly three slots and refused for the other four, and malformed/undefined-identity/non-boolean refusals, same-device ownership and five-slot clone retention, all valid and invalid weights, all 72 identity bones, bone bounds/round-trip/capacity atomicity, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `PbrEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze POD layout, texture slots and MaxBones",
+      "tests": "exact defaults and type identities for all three extensions, finite matrix/offset validation, grayscale/reset/clone, every generic PBR matrix/fog/light/material property, fixed texture-slot identities including both specular slots, every KHR material default and round-trip, all three alpha-mode identities and the refusal past the maximum, per-slot UV selectors and transforms over all seven slots, the sRGB flag accepted for exactly three slots and refused for the other four, and malformed/undefined-identity/non-boolean refusals, same-device ownership and five-slot clone retention, all valid and invalid weights, all 72 identity bones, bone bounds/round-trip/capacity atomicity, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `PbrEffectSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; C/C++ assertions freeze POD layout, texture slots and MaxBones",
       "status": "implemented",
       "task": "CBIND-051A",
       "approved_symbols": [
@@ -2127,7 +2127,7 @@
         "alias"
       ],
       "mapping": "owned stable `CNA_ModelBoneHandle` nodes plus owned live `CNA_ModelBoneCollectionHandle` views; exact UTF-8 names, signed indices, copied transforms, optional parent views, retained child relationships and count/index/name/contains operations replace raw pointers, references, vectors and iterators. The C safety boundary rejects self-parenting and ancestor cycles and uses weak parent metadata so an independently retained child never exposes a dangling parent",
-      "tests": "default and named construction including UTF-8, exact name count/copy and capacity atomicity, index/identity transform/mutation, empty collections, live children growth, parent and multiple child aliases, index/name/contains behavior, hierarchy retention after original-handle destruction, expired optional parents, cycle refusal and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelBoneSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles",
+      "tests": "default and named construction including UTF-8, exact name count/copy and capacity atomicity, index/identity transform/mutation, empty collections, live children growth, parent and multiple child aliases, index/name/contains behavior, hierarchy retention after original-handle destruction, expired optional parents, cycle refusal and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelBoneSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; C/C++ assertions freeze both handles",
       "status": "implemented",
       "task": "CBIND-035E1",
       "approved_symbols": [
@@ -2171,7 +2171,7 @@
         "alias"
       ],
       "mapping": "owned stable `CNA_ModelMeshPartHandle` objects with exact signed scalar state, optional retained same-device Effect/VertexBuffer/IndexBuffer associations and a C-owned opaque 64-bit tag; owned `CNA_ModelMeshPartCollectionHandle` snapshots retain shared part objects and replace raw pointers and iterators with count/index access. Indexed handles alias the same mutable part, and the representation also supports future ModelMesh-owned live views; the part's own topology as a validated `CNA_PrimitiveType`, and one sampler state per `CNA_PBR_TEXTURE_*` slot spanning both canonical arrays -- the five material maps and the two `KHR_materials_specular` maps -- so a caller has one vocabulary for a texture and its sampler",
-      "tests": "both constructors, signed scalar boundaries and mutation, optional effect/buffer getters and clearing, opaque tag round-trip, empty/two-part snapshots, shared mutation and lifetime after source-handle release, collection bounds/array overflow, resource retention blocking typed destroy and generic dispose, unsupported renderer behavior, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelMeshPartSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and the tag; the triangle-list default, every topology identity round-tripping, a sampler round trip over all seven slots, and undefined-topology, undefined-slot, null and malformed sampler-state refusals",
+      "tests": "both constructors, signed scalar boundaries and mutation, optional effect/buffer getters and clearing, opaque tag round-trip, empty/two-part snapshots, shared mutation and lifetime after source-handle release, collection bounds/array overflow, resource retention blocking typed destroy and generic dispose, unsupported renderer behavior, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelMeshPartSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; C/C++ assertions freeze both handles and the tag; the triangle-list default, every topology identity round-tripping, a sampler round trip over all seven slots, and undefined-topology, undefined-slot, null and malformed sampler-state refusals",
       "status": "implemented",
       "task": "CBIND-051C",
       "approved_symbols": [
@@ -2226,7 +2226,7 @@
         "alias"
       ],
       "mapping": "owned stable `CNA_ModelMeshHandle` game children with copied UTF-8 names, bounding spheres, retained parts and optional parent bones, opaque C tags, live part/effect views and capability-gated Draw; `CNA_ModelMeshCollectionHandle` snapshots replace mesh pointers/name indexers/iterators with count/index/find/contains aliases; `CNA_ModelEffectCollectionHandle` live views preserve duplicate Add, first-match Remove and identity semantics while retaining same-device effects",
-      "tests": "both constructors, UTF-8/capacity, exact signed part mutation through live aliases, bounding sphere and tag state, retained parent bones, dynamic unique effects from part mutation, explicit duplicate add/first removal/contains/index and disposal protection, mesh snapshot index/find/contains and transitive alias lifetime, safe surviving detached parts, renderer-capability Draw, invalid arrays/names/re-parenting and wrong-thread paths in strict-C `ModelMeshSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze all handles and the tag",
+      "tests": "both constructors, UTF-8/capacity, exact signed part mutation through live aliases, bounding sphere and tag state, retained parent bones, dynamic unique effects from part mutation, explicit duplicate add/first removal/contains/index and disposal protection, mesh snapshot index/find/contains and transitive alias lifetime, safe surviving detached parts, renderer-capability Draw, invalid arrays/names/re-parenting and wrong-thread paths in strict-C `ModelMeshSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; C/C++ assertions freeze all handles and the tag",
       "status": "implemented",
       "task": "CBIND-035E3",
       "approved_symbols": [
@@ -2286,7 +2286,7 @@
         "struct"
       ],
       "mapping": "owned stable `CNA_ModelHandle` with default, device aggregate and explicit mesh-parent/root constructors; retained immutable bone/mesh collection views, optional root, opaque 64-bit C tag, C context/release-callback ownership replacing `shared_ptr<void>`, count/copy local and absolute matrix operations, copied transform input and capability-gated Draw; imported cameras and skins read per index off the same handle and built by clear/append, the camera a versioned POD with its name read by count/copy and the skin naming this model's own meshes by index rather than by handle, since the model already owns them; the skeleton a skin borrows is retained beside it and handed out as a freshly owned handle, so destroying either handle never destroys the other's object; the merged bounding sphere as an optional; and the declared material variants read by index with a validated selection",
-      "tests": "default and both aggregate constructors, empty and retained bone/mesh views, arbitrary root and nullable mesh-parent selection, opaque tag, deterministic owned-context replacement/clear release, local set/copy and parent-composed absolute transforms with capacity atomicity, transitive lifetime after original handles, invalid array/count/root combinations, draw capability and wrong-thread/stale paths in strict-C `ModelSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze handle and tag; the empty defaults of a model with no scene data, a camera round-tripping field by field with its name read separately, a skin outliving the caller's skeleton handle, a skeleton-less skin refusing to hand one back, mesh indices validated against the model's own meshes, variant selection refused past the declared names and below -1, clearing both lists, and null/malformed/out-of-range/stale-handle refusals throughout",
+      "tests": "default and both aggregate constructors, empty and retained bone/mesh views, arbitrary root and nullable mesh-parent selection, opaque tag, deterministic owned-context replacement/clear release, local set/copy and parent-composed absolute transforms with capacity atomicity, transitive lifetime after original handles, invalid array/count/root combinations, draw capability and wrong-thread/stale paths in strict-C `ModelSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; C/C++ assertions freeze handle and tag; the empty defaults of a model with no scene data, a camera round-tripping field by field with its name read separately, a skin outliving the caller's skeleton handle, a skeleton-less skin refusing to hand one back, mesh indices validated against the model's own meshes, variant selection refused past the declared names and below -1, clearing both lists, and null/malformed/out-of-range/stale-handle refusals throughout",
       "status": "implemented",
       "task": "CBIND-051D",
       "approved_symbols": [
@@ -2349,7 +2349,7 @@
         "function"
       ],
       "mapping": "deep-copied fixed `CNA_MorphWeightKeyframeEXTDescriptor`, `CNA_MorphWeightTrackEXTDescriptor`, `CNA_MorphTargetDeltaEXTDescriptor` values plus an owned validated `CNA_MorphTargetDataEXTHandle`; count/copy access replaces nested vectors, standalone track evaluation and data blending use atomic caller buffers, and retained ModelMeshPart attachment exposes native SetMorphWeightsEXT without leaking System::Object pointers; three-component tangent deltas copied and replaced through their own routes, since glTF morphs the tangent direction only and the creation descriptor is unversioned",
-      "tests": "descriptor ABI, complete field copies, type identity, mutable weights/track, LINEAR/STEP/CUBICSPLINE evaluation and clamp, additive position blend, normalized normals, untouched vertex attributes, capacity atomicity, malformed shape/flag/time/count rejection, retained part attachment, upload success or native capability refusal, and stale/wrong-kind/wrong-thread paths in strict-C `MorphTargetSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; tangent deltas absent by default, set and copied back, cleared to empty, and refused for an out-of-range target, a null array with a non-zero count and a count that is neither zero nor the target's vertex count",
+      "tests": "descriptor ABI, complete field copies, type identity, mutable weights/track, LINEAR/STEP/CUBICSPLINE evaluation and clamp, additive position blend, normalized normals, untouched vertex attributes, capacity atomicity, malformed shape/flag/time/count rejection, retained part attachment, upload success or native capability refusal, and stale/wrong-kind/wrong-thread paths in strict-C `MorphTargetSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; tangent deltas absent by default, set and copied back, cleared to empty, and refused for an out-of-range target, a null array with a non-zero count and a count that is neither zero nor the target's vertex count",
       "status": "implemented",
       "task": "CBIND-051C",
       "approved_symbols": [
@@ -2394,7 +2394,7 @@
         "struct"
       ],
       "mapping": "owned stable `CNA_SkinnedModelEXTHandle` with deep-copied fixed skeleton, keyframe, bone-track and named-clip descriptors; atomic count/copy access replaces vectors, maps and TimeSpan values, and native transform sampling accepts seconds plus a canonical C boolean. A lifetime sidecar safely retains same-device VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D handles while exposing ordered part views, replace-by-name attach/remove and native owned-resource counts; fixed-width `CNA_CLIP_TARGET_SPACE_*_EXT` identities and per-clip target-space access on the owning `CNA_SkinningDataHandle`, kept off the published creation descriptor because that descriptor carries no size or version header and growing it would move every field after it",
-      "tests": "descriptor ABI and deep copy, skeleton arrays, sorted clip enumeration, clip mutation and complete track copies, interpolation/clamp/constant-time loop transform math, capacity atomicity, parent/time/bool/name validation, native move construction/assignment, attach mismatch and replace-by-name transfer, retained GPU-resource destroy/dispose protection and release, optional texture and owned counts, plus stale/wrong-kind/wrong-thread paths in strict-C `SkinnedModelSmoke.c` under HEADLESS and SDL_RENDERER with virtual dummy video plus ASan+UBSan; C/C++ assertions freeze all six public layouts; the joint-palette default every pre-existing clip had, a round trip through both target spaces, and out-of-range clip index, undefined identity and null-output refusals",
+      "tests": "descriptor ABI and deep copy, skeleton arrays, sorted clip enumeration, clip mutation and complete track copies, interpolation/clamp/constant-time loop transform math, capacity atomicity, parent/time/bool/name validation, native move construction/assignment, attach mismatch and replace-by-name transfer, retained GPU-resource destroy/dispose protection and release, optional texture and owned counts, plus stale/wrong-kind/wrong-thread paths in strict-C `SkinnedModelSmoke.c` under HEADLESS and OPENGLES3 with virtual dummy video plus ASan+UBSan; C/C++ assertions freeze all six public layouts; the joint-palette default every pre-existing clip had, a round trip through both target spaces, and out-of-range clip index, undefined identity and null-output refusals",
       "status": "implemented",
       "task": "CBIND-051C",
       "approved_symbols": [
@@ -2454,7 +2454,7 @@
         "alias"
       ],
       "mapping": "owned stable `CNA_SkinningDataHandle` and `CNA_AnimationPlayerHandle` values; SkinningData deeply copies fixed skeleton/root-prefix/named-clip descriptors and exposes deterministic count/copy/name access, while a player retains its SkinningData, selects clips by copied UTF-8 name, accepts finite seconds and canonical booleans, and atomically copies local/world/final skin matrices; the declared rig root's node index and name on the same handle, and an owned `CNA_ModelAnimationsEXTHandle` for the clips a scene declares apart from any one skeleton, read by sorted index because the canonical type keeps them in a hash map whose traversal order no C consumer may depend on",
-      "tests": "descriptor and handle ABI, deep-copy independence, exact type identity, every skeleton/root-prefix/clip field, retained player lifetime, bind-pose defaults, StartClip, relative/absolute update, clamp and constant-time loop behavior, current position/clip/name, exact local/world/skin composition, capacity atomicity, malformed prefix/flags/time/name plus stale/wrong-kind/wrong-thread paths in strict-C `AnimationPlayerSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and descriptor layout; the unset rig root older paths leave behind and a round trip through both of its fields, an empty and a populated clip set, sorted clip order, clip duration/track/target-space reads, the type name, duplicate clip names refused, and out-of-range, undefined-identity, null-output and stale-handle refusals in strict-C `AnimationPlayerSmoke.c`",
+      "tests": "descriptor and handle ABI, deep-copy independence, exact type identity, every skeleton/root-prefix/clip field, retained player lifetime, bind-pose defaults, StartClip, relative/absolute update, clamp and constant-time loop behavior, current position/clip/name, exact local/world/skin composition, capacity atomicity, malformed prefix/flags/time/name plus stale/wrong-kind/wrong-thread paths in strict-C `AnimationPlayerSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan; C/C++ assertions freeze both handles and descriptor layout; the unset rig root older paths leave behind and a round trip through both of its fields, an empty and a populated clip set, sorted clip order, clip duration/track/target-space reads, the type name, duplicate clip names refused, and out-of-range, undefined-identity, null-output and stale-handle refusals in strict-C `AnimationPlayerSmoke.c`",
       "status": "implemented",
       "task": "CBIND-051E",
       "approved_symbols": [
@@ -2520,7 +2520,7 @@
         "method"
       ],
       "mapping": "`cna_sprite_batch_begin` for the parameterless and sort-mode forms, `cna_sprite_batch_begin_with_states` for the state overloads, and `cna_sprite_batch_begin_with_effect` for every shape that carries a custom effect or a transform. The effect route takes all four state descriptors, the effect handle and the transform as nullable arguments, and the canonical overloads differ from one another only in which trailing arguments they carry -- so a null argument means exactly what the shorter overload means, a null transform is the identity, and `CNA_INVALID_HANDLE` selects the default sprite effect. The by-value and by-pointer state overloads reach the same route: the C side passes a descriptor or null either way, so neither shape needs a route of its own.",
-      "tests": "all sort modes and defaults in `LifecycleSmoke.c`; every state overload, both effect overloads, the explicit-state shapes, the non-finite-transform refusal, the undefined sort mode and a handle of the wrong family in `GraphicsSurfaceSmoke.c`, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "all sort modes and defaults in `LifecycleSmoke.c`; every state overload, both effect overloads, the explicit-state shapes, the non-finite-transform refusal, the undefined sort mode and a handle of the wrong family in `GraphicsSurfaceSmoke.c`, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-044A",
       "approved_symbols": [
@@ -2541,7 +2541,7 @@
         "method"
       ],
       "mapping": "`cna_sprite_batch_submit_many` for every overload that places a sprite by **destination rectangle**, and `cna_sprite_batch_submit_scaled_many` for every overload that places it by **position and scale**. The two are separate structures rather than one grown structure, because with a position the origin is measured in source pixels and the scale applies after that offset -- a destination rectangle cannot express it without repeating the canonical arithmetic -- and because appending fields would have changed the size of a structure consumers already compile against. A source rectangle of zero width and height is the empty optional that draws the whole texture; equal scale components are the uniform-scale overload",
-      "tests": "`LifecycleSmoke.c` submits both command families, covering the whole-texture and explicit source rectangle, uniform and non-uniform scale, rotation, origin and flip effects, plus the empty array and the refusals for an undefined effect bit, a non-finite scale, an unknown struct version and a handle of the wrong family; exact SDL_RENDERER pixels and the texture-retention lifetime are covered there too, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`LifecycleSmoke.c` submits both command families, covering the whole-texture and explicit source rectangle, uniform and non-uniform scale, rotation, origin and flip effects, plus the empty array and the refusals for an undefined effect bit, a non-finite scale, an unknown struct version and a handle of the wrong family; exact OPENGLES3 pixels and the texture-retention lifetime are covered there too, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-044B",
       "approved_symbols": [
@@ -2595,7 +2595,7 @@
         "method"
       ],
       "mapping": "`cna_keyboard_get_state`",
-      "tests": "HEADLESS/SDL_RENDERER capture and wrong-thread cases",
+      "tests": "HEADLESS/OPENGLES3 capture and wrong-thread cases",
       "status": "implemented",
       "task": "CBIND-025",
       "approved_symbols": [
@@ -2628,7 +2628,7 @@
         "struct"
       ],
       "mapping": "copied `CNA_MouseState` POD",
-      "tests": "ABI layout and HEADLESS/SDL_RENDERER snapshot tests",
+      "tests": "ABI layout and HEADLESS/OPENGLES3 snapshot tests",
       "status": "implemented",
       "task": "CBIND-029",
       "approved_symbols": [
@@ -2643,7 +2643,7 @@
         "method"
       ],
       "mapping": "`cna_mouse_get_state`",
-      "tests": "HEADLESS/SDL_RENDERER absence and wrong-thread snapshots",
+      "tests": "HEADLESS/OPENGLES3 absence and wrong-thread snapshots",
       "status": "implemented",
       "task": "CBIND-029",
       "approved_symbols": [
@@ -2757,7 +2757,7 @@
         "method"
       ],
       "mapping": "`cna_touch_get_capabilities/state`",
-      "tests": "HEADLESS/SDL_RENDERER empty-device and thread cases",
+      "tests": "HEADLESS/OPENGLES3 empty-device and thread cases",
       "status": "implemented",
       "task": "CBIND-029",
       "approved_symbols": [
@@ -2812,7 +2812,7 @@
         "class"
       ],
       "mapping": "owned game-child ContentManager `CNA_Handle` with UTF-8 root, resolved asset path and normalized cache key count/copy, builtin-loader registration, service-provider presence, graphics-device get/set, the manifest and `.xnb` reader-usage snapshots, three typed load routes and explicit unload/destroy",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -5292,7 +5292,7 @@
         "method"
       ],
       "mapping": "fixed-layout `CNA_Viewport` POD whose six public fields are the complete property set, plus `cna_viewport_init`/`cna_viewport_init_bounds`/`cna_viewport_init_from_rectangle` construction, aspect-ratio, bounds get/set, title-safe-area, `cna_viewport_project`/`cna_viewport_unproject` and exact UTF-8 string count/copy operations",
-      "tests": "all three constructors including the canonical zero-size unit-depth default, both zero-dimension aspect cases, bounds/title-safe-area round-trips, depth-range scaling, clip-space corners, an identity and a perspective project/unproject round trip, exact string bytes, capacity atomicity and null-argument failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and SDL_RENDERER",
+      "tests": "all three constructors including the canonical zero-size unit-depth default, both zero-dimension aspect cases, bounds/title-safe-area round-trips, depth-range scaling, clip-space corners, an identity and a perspective project/unproject round trip, exact string bytes, capacity atomicity and null-argument failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F1",
       "approved_symbols": [
@@ -5337,7 +5337,7 @@
         "operator"
       ],
       "mapping": "`CNA_ClearOptions` and `CNA_CLEAR_OPTION_*` at their native bit values; the native `|`, `&`, `~`, `|=` and `&=` overloads need no adapter because C's own bitwise operators apply directly to the fixed-width alias",
-      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and every bitwise combination in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and every bitwise combination in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F1",
       "approved_symbols": [
@@ -5360,7 +5360,7 @@
         "operator"
       ],
       "mapping": "native C `|`, `&`, `|=` and `&=` on the existing fixed-width `CNA_SpriteEffects` alias, whose bits equal the native mirroring bits",
-      "tests": "native-ordinal static assertions in `CnaCApiGraphics.cpp`, C/C++ ABI bit assertions and combine/mask sequences in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphics.cpp`, C/C++ ABI bit assertions and combine/mask sequences in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F1",
       "approved_symbols": [
@@ -5379,7 +5379,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GraphicsDeviceStatus` and `CNA_GRAPHICS_DEVICE_STATUS_*` at their native ordinals",
-      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F1",
       "approved_symbols": [
@@ -5398,7 +5398,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_Unsupported3DGraphicsCallBehavior` and `CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_*` at their native ordinals",
-      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F1",
       "approved_symbols": [
@@ -5414,7 +5414,7 @@
         "event"
       ],
       "mapping": "`cna_graphics_device_subscribe_event` with the four `CNA_GRAPHICS_DEVICE_EVENT_*` identities plus `cna_graphics_device_subscribe_resource_created`/`_destroyed` and `cna_graphics_device_unsubscribe`; owned registration handles replace native handler objects and copied `CNA_ResourceCreatedEventInfo`/`CNA_ResourceDestroyedEventInfo` values replace the native EventArgs. Game destruction invalidates live subscriptions after the canonical device has raised Disposing, so the handle stays releasable and never touches a destroyed handler",
-      "tests": "all six subscriptions, real resource-created/destroyed delivery through Texture2D creation and destruction, observed Disposing during game destruction, post-destruction release, unsubscription stopping delivery and null/unknown-identity/wrong-kind failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER",
+      "tests": "all six subscriptions, real resource-created/destroyed delivery through Texture2D creation and destruction, observed Disposing during game destruction, post-destruction release, unsubscription stopping delivery and null/unknown-identity/wrong-kind failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F2",
       "approved_symbols": [
@@ -5434,7 +5434,7 @@
         "destructor"
       ],
       "mapping": "no C constructor or destructor: the canonical device belongs to the running `Game`, which creates it from its adapter/profile/presentation state and destroys it during `cna_game_destroy`. `cna_game_get_graphics_device` borrows it for the active callback and `cna_graphics_device_dispose` reports the same ownership rule as an explicit callable `NOT_SUPPORTED` result",
-      "tests": "borrowed-device acquisition, callback-scoped expiry, explicit dispose refusal and device destruction through `cna_game_destroy` in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "borrowed-device acquisition, callback-scoped expiry, explicit dispose refusal and device destruction through `cna_game_destroy` in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F2",
       "approved_symbols": [
@@ -5495,7 +5495,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_get_is_disposed`, `_get_status`, `_get_adapter_index`, `_get_graphics_profile`, `_get`/`_set_scissor_rectangle`, `_get`/`_set_viewport`, `_get`/`_set_blend_factor`, `_get`/`_set_multi_sample_mask`, `_get`/`_set_reference_stencil`, `_get_type_name_size`/`_copy_type_name` and the explicit `_dispose` ownership result. The native `GraphicsAdapter&` becomes an index into the existing `cna_graphics_adapter_*` queries and no native reference crosses the ABI",
-      "tests": "every getter/setter round trip, canonical multisample-mask and reference-stencil defaults, non-finite viewport-depth rejection without mutation, exact type-name bytes with capacity atomicity, dispose refusal and null-output/stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "every getter/setter round trip, canonical multisample-mask and reference-stencil defaults, non-finite viewport-depth rejection without mutation, exact type-name bytes with capacity atomicity, dispose refusal and null-output/stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F2",
       "approved_symbols": [
@@ -5527,7 +5527,7 @@
         "method"
       ],
       "mapping": "fixed-layout `CNA_ResourceCreatedEventInfo` and `CNA_ResourceDestroyedEventInfo` values delivered by the device subscription callbacks; a C consumer never constructs the native args object. `getResourceProperty()` is reported as presence only because the canonical event is raised from the graphics-resource base constructor, where the object has no concrete type yet; `getNameProperty()` becomes a callback-scoped UTF-8 view and the caller-owned `System::Object*` tag is likewise reported as presence only",
-      "tests": "real created/destroyed delivery with exact structure size/version, empty-name and no-tag values and payload validation in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and SDL_RENDERER",
+      "tests": "real created/destroyed delivery with exact structure size/version, empty-name and no-tag values and payload validation in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F2",
       "approved_symbols": [
@@ -5549,7 +5549,7 @@
         "method"
       ],
       "mapping": "`cna_game_get_graphics_device` is the C route to the service's device. The interface itself is deliberately not instantiable or implementable from C: a C++ abstract base class cannot cross the ABI, and its only canonical implementation is the game-owned `GraphicsDeviceManager`",
-      "tests": "borrowed-device acquisition and callback-scoped expiry in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "borrowed-device acquisition and callback-scoped expiry in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F2",
       "approved_symbols": [
@@ -5606,7 +5606,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_get_texture`, `cna_graphics_device_set_texture` and `cna_graphics_device_unbind_texture`, each addressing a collection by `CNA_ShaderStage` plus slot index instead of returning a native collection reference",
-      "tests": "both stages across all 16 slots, bind/read/unbind round trips, unknown-stage and out-of-range rejection and stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "both stages across all 16 slots, bind/read/unbind round trips, unknown-stage and out-of-range rejection and stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F3",
       "approved_symbols": [
@@ -5626,7 +5626,7 @@
         "method"
       ],
       "mapping": "`CNA_TEXTURE_COLLECTION_MAX_TEXTURES` freezes the native slot count and the stage-addressed device operations replace the collection object: the indexing operator becomes `cna_graphics_device_get_texture` with a versioned `CNA_TextureSlotInfo`, the call operator becomes `cna_graphics_device_set_texture`, and `RemoveDisposedTexture` becomes `cna_graphics_device_unbind_texture`. No standalone collection is constructible from C, because the canonical default constructor produces a deviceless collection that no device ever consults; a slot filled by canonical CNA code reports as bound with an invalid handle rather than exposing a native `Texture*`",
-      "tests": "slot-count assertion against the native constant, initial empty slots, bind/read/unbind on both stages, self-unbinding on texture destruction, render-target rejection where the backend binds one, and invalid stage/slot/structure/handle failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER",
+      "tests": "slot-count assertion against the native constant, initial empty slots, bind/read/unbind on both stages, self-unbinding on texture destruction, render-target rejection where the backend binds one, and invalid stage/slot/structure/handle failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F3",
       "approved_symbols": [
@@ -5646,7 +5646,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_clear_rgba`, `cna_graphics_device_clear_color_depth`, `cna_graphics_device_clear_options`, `cna_graphics_device_present`, `cna_graphics_device_reset` and `cna_graphics_device_reset_with_parameters`. The reference and pointer adapter overloads collapse into one route whose nullable `adapter_index` pointer expresses the optional adapter; the renderer-private device window handle is preserved across a reset because a C caller never supplies it",
-      "tests": "every clear overload including unknown option bits and non-finite channel/depth rejection, present, both reset routes with observed resetting/reset event pairs, invalid parameters and an out-of-range adapter index in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "every clear overload including unknown option bits and non-finite channel/depth rejection, present, both reset routes with observed resetting/reset event pairs, invalid parameters and an out-of-range adapter index in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F4",
       "approved_symbols": [
@@ -5668,7 +5668,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_get_backbuffer_data_window` with a versioned `CNA_BackBufferReadback` carrying the optional source rectangle, destination start index and element count. The nullable native rectangle becomes an explicit flag plus value, and an element count smaller than the selected region is decided as `CNA_RESULT_BUFFER_TOO_SMALL` before any native read instead of surfacing as a generic native failure",
-      "tests": "rectangle and full-buffer windows, exact untouched destination bytes outside the window, capacity/structure rejection, undersized-region refusal and honest HEADLESS `NOT_SUPPORTED` in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
+      "tests": "rectangle and full-buffer windows, exact untouched destination bytes outside the window, capacity/structure rejection, undersized-region refusal and honest HEADLESS `NOT_SUPPORTED` in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F4",
       "approved_symbols": [
@@ -5683,7 +5683,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_set_vertex_buffer`, `_set_vertex_buffer_offset`, `_set_vertex_buffers`, `_get_vertex_buffer_count`, `_copy_vertex_buffers`, `_get_vertex_buffer`, `_set_index_buffer` and `_get_index_buffer`. The native `std::vector<VertexBufferBinding>` becomes a caller-owned `CNA_VertexBufferBinding` array with a count/copy contract, and the four equivalent index-buffer accessors collapse to one validated get/set pair. Reads report the owning C handle rather than a native pointer; a binding applied by canonical CNA code reports an invalid handle",
-      "tests": "empty-state reads, single and multi-binding application, explicit offsets, unbinding, count/copy capacity atomicity, negative offset/frequency rejection before any binding is applied, wrong-kind handle refusal and honest backend creation refusal in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "empty-state reads, single and multi-binding application, explicit offsets, unbinding, count/copy capacity atomicity, negative offset/frequency rejection before any binding is applied, wrong-kind handle refusal and honest backend creation refusal in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F4",
       "approved_symbols": [
@@ -5707,7 +5707,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_draw_primitives`, `_draw_indexed_primitives`, `_draw_instanced_primitives`, `_draw_user_primitives`, `_draw_user_indexed_primitives` and `cna_primitive_type_get_vertex_count`. The twenty-nine user-primitive overloads collapse into two calls whose versioned `CNA_UserPrimitives`/`CNA_UserIndices` descriptors carry the dimensions that select the canonical overload: vertex source, optional declaration and index width. A built-in vertex source is converted into native values before submission, because those structures embed a polymorphic Color and are never layout-compatible with their C PODs; a raw stream therefore always requires an explicit declaration, since the declaration-less canonical raw overloads read native objects. A backend without 3D support refuses every draw route as `NOT_SUPPORTED` instead of surfacing its first unsupported internal call",
-      "tests": "all five topologies through the vertex-count helper, unknown-topology and malformed-descriptor rejection, raw-stream-without-declaration refusal, both user routes for a converted and a raw stream with 16- and 32-bit indices under a bound BasicEffect, and capability-accurate refusal on SDL_RENDERER in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
+      "tests": "all five topologies through the vertex-count helper, unknown-topology and malformed-descriptor rejection, raw-stream-without-declaration refusal, both user routes for a converted and a raw stream with 16- and 32-bit indices under a bound BasicEffect, and capability-accurate draws in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F5",
       "approved_symbols": [
@@ -5753,7 +5753,7 @@
         "method"
       ],
       "mapping": "`cna_graphics_device_get_tracked_resource_count`, `_set_depth_test_enabled`, `_set_blend_enabled`, `_set_depth_write_enabled`, `_set_graphics_profile_ext`, `_set_context_recovery_enabled`, `_set_string_marker_ext`, `_get`/`_set_unsupported_3d_call_behavior`, `_set_current_effect` and `_recreate_renderer_for_multi_sample_count_ext`. The three pipeline-state toggles refuse a backend without 3D support as `NOT_SUPPORTED`; the marker takes a validated UTF-8 view; and because the device stores a borrowed `Effect*`, the C API keeps an assigned effect alive until it is replaced, cleared or the game is destroyed",
-      "tests": "tracked-resource count, all Boolean toggles including non-Boolean rejection and capability-accurate refusal, both profile values and an unknown one, valid and malformed UTF-8 markers, the unsupported-3D policy round trip, current-effect assignment/clearing with wrong-kind refusal, and negative multisample rejection in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "tracked-resource count, all Boolean toggles including non-Boolean rejection and capability-accurate refusal, both profile values and an unknown one, valid and malformed UTF-8 markers, the unsupported-3D policy round trip, current-effect assignment/clearing with wrong-kind refusal, and negative multisample rejection in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F5",
       "approved_symbols": [
@@ -5777,7 +5777,7 @@
         "method"
       ],
       "mapping": "no C route raises or registers these directly: every one takes or returns a native object — a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself — that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
-      "tests": "observed resource-created and resource-destroyed delivery from real Texture2D creation and destruction, tracked-resource count and renderer identity/capability queries in strict-C `GraphicsDeviceSmoke.c` and `LifecycleSmoke.c` under HEADLESS and SDL_RENDERER",
+      "tests": "observed resource-created and resource-destroyed delivery from real Texture2D creation and destruction, tracked-resource count and renderer identity/capability queries in strict-C `GraphicsDeviceSmoke.c` and `LifecycleSmoke.c` under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F5",
       "approved_symbols": [
@@ -5797,7 +5797,7 @@
         "method"
       ],
       "mapping": "`cna_sprite_batch_draw_string` with a versioned `CNA_SpriteTextCommand`, and `cna_sprite_batch_get_type_name_size`/`_copy_type_name`. All six `DrawString` overloads collapse into one command: both native text types are copied before layout, so a UTF-8 view expresses either, and the parameter shapes differ only in which transform fields stay at their defaults. `cna_sprite_batch_create` is the only C construction: the canonical default constructor produces a deviceless batch and the other takes a renderer-private object, so neither has a C form; `cna_sprite_batch_destroy` is the destructor route",
-      "tests": "exact type-name bytes with capacity atomicity, malformed and non-finite command rejection, refusal outside a begin/end interval, default and full transform draws, foreign-font refusal in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
+      "tests": "exact type-name bytes with capacity atomicity, malformed and non-finite command rejection, refusal outside a begin/end interval, default and full transform draws, foreign-font refusal in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F6",
       "signature_regex": "^(?:\\(\\)|\\(std::unique_ptr< ISpriteBatchRenderer > renderer\\)|\\(\\) override|\\(\\) const override|\\(const SpriteFont &spriteFont.*\\)|\\(Effect &effect.*\\))$",
@@ -5825,7 +5825,7 @@
         "method"
       ],
       "mapping": "owned game-child `CNA_OcclusionQueryHandle` values through `cna_occlusion_query_create`, `_begin`, `_end`, `_get_is_complete`, `_get_pixel_count`, `_has_renderer` and `_destroy`. Creation refuses a backend without the occlusion-query capability, and the handle is a full graphics resource: the generic `cna_graphics_resource_*` name, string, tag, device, disposal and disposing-subscription routes accept it, which is where the protected `Dispose(bool)` and `GetTypeName` behavior is observed The parameterless `Dispose()` and the base `Dispose(bool)` are `GraphicsResource`'s own declarations, appearing on this type because `using GraphicsResource::Dispose;` makes them declarations of it. Both are answered where the rule already points: an occlusion-query handle is accepted by `ResolveGraphicsResource`, so `cna_graphics_resource_dispose` is explicit disposal that keeps the handle and `cna_occlusion_query_destroy` is disposal plus release.",
-      "tests": "capability-accurate creation or refusal, begin/end, completeness and pixel-count reads, renderer state, generic graphics-resource string access, double destroy and null-output failures in strict-C `GraphicsDeviceSmoke.c`, plus a C/C++ handle-width assertion under HEADLESS and SDL_RENDERER",
+      "tests": "capability-accurate creation or refusal, begin/end, completeness and pixel-count reads, renderer state, generic graphics-resource string access, double destroy and null-output failures in strict-C `GraphicsDeviceSmoke.c`, plus a C/C++ handle-width assertion under HEADLESS and OPENGLES3",
       "status": "implemented",
       "task": "CBIND-035F6",
       "approved_symbols": [
@@ -5940,7 +5940,7 @@
         "event"
       ],
       "mapping": "owned `CNA_StorageContainerHandle` resources opened from a storage device: display-name and fully-qualified type-name count/copy, disposal state, the owning device's handle, explicit `cna_storage_container_dispose` and owned `Disposing` callback registration; directory create/exists/delete and file create/exists/delete; both `GetDirectoryNames` and both `GetFileNames` overloads expressed as a count plus an indexed copy, where an empty search pattern selects the no-argument overload; `CreateFile` and all three `OpenFile` overloads returning an owned `CNA_StorageStreamHandle` (`cna_storage_container_open_file`, `_open_file_access`, `_open_file_share`). `System::IO::Stream` never becomes a C type: the stream handle exposes read/write/seek/position/length/set-length/flush/capability/close only, and a stream is a child of its container just as a container is a child of its device",
-      "tests": "`StorageSmoke.c` display/type-name count-copy round trips and buffer-too-small refusal, disposal state, owning-device identity, one-shot `Disposing` delivery across repeated disposal, directory create/exists/list/delete including glob and empty-pattern listings and out-of-range name indexes, file create/exists/list/delete, byte-exact write/read round trip, seek from begin and end plus the negative-position I/O refusal, read-only write refusal, `SetLength` truncation, rejected file mode/access/share identities, the append-with-read refusal, the missing-file I/O result, and stream-before-container destruction ordering, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`StorageSmoke.c` display/type-name count-copy round trips and buffer-too-small refusal, disposal state, owning-device identity, one-shot `Disposing` delivery across repeated disposal, directory create/exists/list/delete including glob and empty-pattern listings and out-of-range name indexes, file create/exists/list/delete, byte-exact write/read round trip, seek from begin and end plus the negative-position I/O refusal, read-only write refusal, `SetLength` truncation, rejected file mode/access/share identities, the append-with-read refusal, the missing-file I/O result, and stream-before-container destruction ordering, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036A",
       "approved_symbols": [
@@ -5980,7 +5980,7 @@
         "event"
       ],
       "mapping": "owned `CNA_StorageDeviceHandle` resources: free space, total space and connection state; process-wide `DeviceChanged` callback registration, matching the canonical event's static storage; `DeleteContainer`; the four `BeginShowSelector`/`EndShowSelector` fake-async pairs collapsed into `cna_storage_device_show_selector`, `_for_player`, `_with_space` and `_for_player_with_space`, and the `BeginOpenContainer`/`EndOpenContainer` pair into `cna_storage_container_open`. CNA completes all of them before `Begin` returns, so each C route stays one synchronous call that still invokes the canonical completion callback and no `System::IAsyncResult` or operation handle is invented for work that never pends. `SetAppNameEXT` and `GetStorageRootEXT` become `cna_storage_set_app_name_ext` and root size/copy",
-      "tests": "`StorageSmoke.c` all four selector overloads with and without a completion callback, negative space and unknown player refusals, free/total/connection queries, `DeviceChanged` subscribe/unsubscribe and stale-registration refusal, container open with completion callback, container deletion including the escaping and empty title-name refusals, and container-before-device destruction ordering, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`StorageSmoke.c` all four selector overloads with and without a completion callback, negative space and unknown player refusals, free/total/connection queries, `DeviceChanged` subscribe/unsubscribe and stale-registration refusal, container open with completion callback, container deletion including the escaping and empty title-name refusals, and container-before-device destruction ordering, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036A",
       "approved_symbols": [
@@ -6031,7 +6031,7 @@
         "constructor"
       ],
       "mapping": "`cna_content_manager_create`, which supplies the root directory and the callback-scoped graphics device in one versioned creation structure",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -6046,7 +6046,7 @@
         "constructor"
       ],
       "mapping": "`cna_content_manager_create`, reachable only with a null service provider: `System::IServiceProvider` is a Sharp Runtime object that the C ABI must never expose. This is not a C-side weakness, which the old wording invited a reader to infer: a game's own content manager is constructed without a provider too, and no CNA content path resolves a service through one, so the field is inert on both sides of the boundary. Both kinds of manager reach their graphics device the same way, by having it set",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE; `cna_content_manager_get_has_service_provider` is asserted to report `CNA_FALSE` for every C-created manager",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE; `cna_content_manager_get_has_service_provider` is asserted to report `CNA_FALSE` for every C-created manager",
       "status": "partial",
       "task": "CBIND-074",
       "limitation": {
@@ -6066,7 +6066,7 @@
         "destructor"
       ],
       "mapping": "`cna_content_manager_destroy`, which disposes the native manager and releases the handle without destroying the resource handles it already issued",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -6080,7 +6080,7 @@
         "method"
       ],
       "mapping": "`cna_content_manager_get_asset_path_size`/`_copy_asset_path`, `cna_content_manager_get_normalized_key_size`/`_copy_normalized_key` and `cna_content_manager_register_builtin_loaders`. These three members are `public` only as a side effect of the `DEF_PROP` property macro leaving `public:` in effect; they are mapped because they are genuinely callable and deterministic, not because the C API needs them",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -6096,7 +6096,7 @@
         "method"
       ],
       "mapping": "`cna_content_manager_get_has_service_provider` reports presence only; the pointer itself is a Sharp Runtime object and never crosses the C boundary. It answers `CNA_FALSE` for a C-created manager and for a game's own alike, because CNA never supplies one and never resolves through one",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "partial",
       "task": "CBIND-074",
       "limitation": {
@@ -6115,7 +6115,7 @@
         "method"
       ],
       "mapping": "`cna_content_manager_set_graphics_device` and `cna_content_manager_get_graphics_device`. The canonical manager stores a raw device pointer, so the C layer answers with the borrowed handle that supplied it after re-validating that handle and confirming pointer identity; no renderer or device pointer is exposed",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -6130,7 +6130,7 @@
         "method"
       ],
       "mapping": "`cna_content_manager_refresh_content_manifest` plus count/index/copy routes over the manifest snapshot and the `.xnb` reader-usage summary. The canonical summary is unordered and recomputed per call, so the C routes sort it by reader name to make an index addressable; the manifest itself keeps the canonical stored order",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -6146,7 +6146,7 @@
         "function"
       ],
       "mapping": "`cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect`. Each returns an independently owned handle that uses the normal typed operations for that resource and outlives manager unload or destruction",
-      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B1",
       "approved_symbols": [
@@ -6243,7 +6243,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_ContentReaderHandle` created over an owned storage stream and an optional content-manager handle, released by `cna_content_reader_destroy`, plus asset-name count/copy, container version and platform, the six fixed-value reads and the bounding-sphere read into `CNA_*` PODs, the type-reader table and shared-resource passes, both bounds checks, and a capacity-checked exact-byte read. Neither `System::IO::Stream` nor `ContentManager` crosses the boundary: the reader borrows both through the adapter, the borrow blocks closing the stream, and the canonical disposal-recording callback and read limits keep their defaults because a C callback cannot receive a Sharp Runtime disposable",
-      "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036B2",
       "approved_symbols": [
@@ -6276,7 +6276,7 @@
         "method"
       ],
       "mapping": "`cna_content_reader_read_object_tag` runs the same dispatch protocol and reports only whether a non-null object was produced. The canonical return is a type-erased object, which has no C representation, so the value itself cannot be handed back; the route exists so a C consumer can advance past an untyped field and observe its presence",
-      "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "partial",
       "task": "CBIND-036B2",
       "limitation": {
@@ -6804,7 +6804,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_NetworkGamerHandle` with every canonical flag, the session-local identifier, the round-trip time as 100-nanosecond ticks and the owning session handle. The CNA extension setters keep their `_ext` suffix so a consumer can see which state the canonical API leaves permanently fixed. `getMachineProperty` becomes an independent owned copy rather than an alias, because the canonical setter already takes its machine by value and the canonical machine exposes no mutator, so a copy is observationally identical. No `NetworkSession` or `System::TimeSpan` pointer crosses the boundary",
-      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, removal of the empty machine refused as invalid state, and stale-handle refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, removal of the empty machine refused as invalid state, and stale-handle refusals, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036D",
       "approved_symbols": [
@@ -6853,7 +6853,7 @@
         "method"
       ],
       "mapping": "the local-gamer routes over the same owned `CNA_NetworkGamerHandle`, because a local gamer is a network gamer. Every route refuses a handle whose gamer is not local with `CNA_RESULT_INVALID_HANDLE` rather than reinterpreting it. Each canonical `ReceiveData` and `SendData` overload gets its own route so C never depends on overload resolution; a payload crosses as a pointer and a byte count, and the sender comes back as a borrowed gamer view that keeps its session alive. `CreateInternal` becomes `cna_local_network_gamer_create_ext`, and `ClearPacketQueue`/`EnqueuePacket` keep an `_ext` suffix as CNA extensions. No `PacketReader`, `PacketWriter` or `NetworkEvent` object crosses the boundary: the packet buffers arrive as their own handles and the event as the fixed `CNA_NetworkEventInfo` description",
-      "tests": "`NetSmoke.c` the local roster view, the backing signed-in gamer, the voice route's null refusal and the party-invite route's alone-in-the-party refusal, an enqueue/receive round trip with the sender view, the empty-queue zero answer, the offset overload refusing a packet that does not fit and keeping it queued, then writing at a valid offset, the packet-reader overload reporting the packet size, all six send overloads, an unknown send option and a null payload refused, a non-local gamer handle refused, and a session-less local gamer reporting no queued data, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` the local roster view, the backing signed-in gamer, the voice route's null refusal and the party-invite route's alone-in-the-party refusal, an enqueue/receive round trip with the sender view, the empty-queue zero answer, the offset overload refusing a packet that does not fit and keeping it queued, then writing at a valid offset, the packet-reader overload reporting the packet size, all six send overloads, an unknown send option and a null payload refused, a non-local gamer handle refused, and a session-less local gamer reporting no queued data, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E5",
       "approved_symbols": [
@@ -6886,7 +6886,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_NetworkMachineHandle` with a gamer count and indexed borrowed-view access to its roster, and a removal route that follows the canonical checks (a machine with no gamers, one that left, the local machine or a non-host caller answers `CNA_RESULT_INVALID_STATE`) and otherwise removes the machine from the session the caller hosts. A borrowed gamer view keeps its machine alive and blocks the machine's release; only a session populates the roster, so a machine created from C reports none",
-      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, the canonical always-throwing removal reported as unsupported, and stale-handle refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, the canonical always-throwing removal reported as unsupported, and stale-handle refusals, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036D",
       "approved_symbols": [
@@ -6942,7 +6942,7 @@
         "operator"
       ],
       "mapping": "an owned `CNA_AvailableNetworkSessionHandle` built from a versioned creation structure, with every scalar property, count/copy host gamertag and connect address, the connect port and session type, a copied `CNA_QualityOfService` and an independently copied property-list handle, plus both equality operators as explicit routes because C has no operator overloading. Only the round-trip sample can be carried into a quality of service, because that is the only measurement the canonical type accepts",
-      "tests": "`NetSmoke.c` builds two discovered sessions, one with a measured quality of service and one without, and asserts every scalar, both count/copy strings, the copied quality-of-service measurement, the independently copied property list, both equality operators in matching and differing cases, rejected reserved bytes and session-type identities, and a collection round trip covering count, an element copied out that survives its collection, out-of-range refusals, idempotent disposal and release, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` builds two discovered sessions, one with a measured quality of service and one without, and asserts every scalar, both count/copy strings, the copied quality-of-service measurement, the independently copied property list, both equality operators in matching and differing cases, rejected reserved bytes and session-type identities, and a collection round trip covering count, an element copied out that survives its collection, out-of-range refusals, idempotent disposal and release, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E1",
       "approved_symbols": [
@@ -6970,7 +6970,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_AvailableNetworkSessionCollectionHandle` with disposal state, explicit dispose and release, a count and an indexed copy-out. An element is copied rather than aliased, so it survives the collection it came from; the canonical factory copies its input the same way, so the source handles stay independently owned",
-      "tests": "`NetSmoke.c` builds two discovered sessions, one with a measured quality of service and one without, and asserts every scalar, both count/copy strings, the copied quality-of-service measurement, the independently copied property list, both equality operators in matching and differing cases, rejected reserved bytes and session-type identities, and a collection round trip covering count, an element copied out that survives its collection, out-of-range refusals, idempotent disposal and release, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` builds two discovered sessions, one with a measured quality of service and one without, and asserts every scalar, both count/copy strings, the copied quality-of-service measurement, the independently copied property list, both equality operators in matching and differing cases, rejected reserved bytes and session-type identities, and a collection round trip covering count, an element copied out that survives its collection, out-of-range refusals, idempotent disposal and release, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E1",
       "approved_symbols": [
@@ -6994,7 +6994,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_NetworkSessionHandle` that owns the caller-owned pointer the canonical creation hands back, with both limits as fixed constants, the queued-event identities and a fixed `CNA_NetworkEventInfo` payload, every state property and setter, all four rosters as a roster identity plus count and indexed borrowed views, an independently copied property list plus `cna_network_session_replace_session_properties` to apply mutations back to the live session, the exact type name, disposal, the pump, local-gamer addition, identifier lookup, ready reset, start and end, and the three CNA extension routes for queued events and remote-gamer add and remove. A borrowed gamer view keeps its session alive and blocks its release; a remote gamer is retained by the C layer for the session's lifetime, because the canonical call deliberately does not take ownership",
-      "tests": "`NetSmoke.c` creates a session from a published signed-in gamer and asserts every state property and setter, the session-property copy/mutate/replace/readback round trip, both throughput readings, the exact type name, all four rosters with borrowed views, the local-gamer add and its owned-gamer count, identifier lookup in both the found and not-found cases, ready reset, the queued start/end transitions the pump applies, a queued packet event with its rejected identities, remote-gamer addition surviving release of the caller's own handle, removal, the refusal to release a session that still has a borrowed view, disposal, the post-disposal pump refusal and instance counting, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` creates a session from a published signed-in gamer and asserts every state property and setter, the session-property copy/mutate/replace/readback round trip, both throughput readings, the exact type name, all four rosters with borrowed views, the local-gamer add and its owned-gamer count, identifier lookup in both the found and not-found cases, ready reset, the queued start/end transitions the pump applies, a queued packet event with its rejected identities, remote-gamer addition surviving release of the caller's own handle, removal, the refusal to release a session that still has a borrowed view, disposal, the post-disposal pump refusal and instance counting, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E2",
       "approved_symbols": [
@@ -7065,7 +7065,7 @@
         "method"
       ],
       "mapping": "`cna_network_session_create`, `_with_properties` and `_with_local_gamers`, one per canonical overload. The canonical synchronous overloads already drive their own fake-async pair to completion, so each C route is a single synchronous call. The first two take their local gamers from the process-wide signed-in collection and therefore surface the canonical host-selection failure while it is empty; the third takes an explicit list",
-      "tests": "`NetSmoke.c` creates a session from a published signed-in gamer and asserts every state property and setter, both throughput readings, the exact type name, all four rosters with borrowed views, the local-gamer add and its owned-gamer count, identifier lookup in both the found and not-found cases, ready reset, the queued start/end transitions the pump applies, a queued packet event with its rejected identities, remote-gamer addition surviving release of the caller's own handle, removal, the refusal to release a session that still has a borrowed view, disposal, the post-disposal pump refusal and instance counting, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` creates a session from a published signed-in gamer and asserts every state property and setter, both throughput readings, the exact type name, all four rosters with borrowed views, the local-gamer add and its owned-gamer count, identifier lookup in both the found and not-found cases, ready reset, the queued start/end transitions the pump applies, a queued packet event with its rejected identities, remote-gamer addition surviving release of the caller's own handle, removal, the refusal to release a session that still has a borrowed view, disposal, the post-disposal pump refusal and instance counting, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E2",
       "approved_symbols": [
@@ -7193,7 +7193,7 @@
         "method"
       ],
       "mapping": "the three `cna_network_session_create_*_async` routes, one per canonical `BeginCreate` overload, each collapsing its `Begin`/`End` pair into a single synchronous call because CNA completes the pair before `Begin` returns. Each still invokes the canonical completion delegate, which receives only the caller's own context because no operation object may cross the ABI, and no `std::any` state is exposed. These are deliberately not aliases of the synchronous creations: the canonical end step substitutes its own gamer limit rather than forwarding the caller's, and that difference is preserved",
-      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E4",
       "approved_symbols": [
@@ -7210,7 +7210,7 @@
         "method"
       ],
       "mapping": "`cna_network_session_find` and `_find_with_local_gamers` for the two synchronous overloads, plus `_find_async` and `_find_with_local_gamers_async` collapsing the `BeginFind`/`EndFind` pair with a completion callback. The result is an owned discovered-session collection. The canonical refusal of a local-only session type and the fact that only a SystemLink search reaches real discovery are both preserved rather than smoothed over",
-      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E4",
       "approved_symbols": [
@@ -7228,7 +7228,7 @@
         "method"
       ],
       "mapping": "`cna_network_session_join` and `_join_async` for a discovered session, and `cna_network_session_join_invited`, `_join_invited_with_local_gamers` and both `_async` forms for the invited path. Every `Begin`/`End` pair collapses into one synchronous call that still invokes the completion callback. The canonical fixed values the invited path builds its session from, and the joined session's non-host role, are both preserved",
-      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E4",
       "approved_symbols": [
@@ -7250,7 +7250,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_LogLevel` and the `CNA_LOG_LEVEL_*` identities at the canonical ordinals. The canonical values are explicit and deliberately not contiguous — `EXPERIMENT` is 100, not 6 — and the C identities preserve that exactly rather than renumbering into a dense range",
-      "tests": "C and C++ ABI assertions freeze every ordinal including the 100 gap; `CoreExtSmoke.c` logs at all seven levels and asserts that 6 is refused as `CNA_RESULT_INVALID_ARGUMENT`, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze every ordinal including the 100 gap; `CoreExtSmoke.c` logs at all seven levels and asserts that 6 is refused as `CNA_RESULT_INVALID_ARGUMENT`, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7272,7 +7272,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_LogCategory` and the `CNA_LOG_CATEGORY_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` logs through all nine categories and asserts that an out-of-range category is refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` logs through all nine categories and asserts that an out-of-range category is refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7296,7 +7296,7 @@
         "method"
       ],
       "mapping": "one `cna_logger_*` route per canonical static, so C never depends on a defaulted argument: the general `cna_logger_log` takes level, message, category and condition explicitly, each severity route takes message and category, and each conditional route takes message and condition because the canonical `*If` overloads accept no category and always log under `APPLICATION`. A message crosses as a borrowed `CNA_StringView` and is copied into an owned string before the canonical `std::string_view` is formed, so no view outlives its call. `cna_logger_set_minimum_level` and `_get_minimum_level` map the threshold, which is process-wide static state in the canonical logger and is documented as such. The class itself is never instantiated — it is a static-only utility — so no handle exists",
-      "tests": "`CoreExtSmoke.c` calls every route, drives the threshold to `FATAL` and back, asserts the getter observes each set value, and covers a null message view, a null output and an unknown level or category as `CNA_RESULT_INVALID_ARGUMENT`; the threshold is restored because it is process-wide. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` calls every route, drives the threshold to `FATAL` and back, asserts the getter observes each set value, and covers a null message view, a null output and an unknown level or category as `CNA_RESULT_INVALID_ARGUMENT`; the threshold is restored because it is process-wide. Runs under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7328,7 +7328,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_Platform` and the `CNA_PLATFORM_*` identities at the canonical ordinals. The platform-separation campaign renamed the canonical enum from `CNA::Platform` to `CNA::TargetPlatform` because the old name now belongs to the platform abstraction module; the C identities keep their names, which are already published and pinned in the ABI baseline",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the current platform and asserts it is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the current platform and asserts it is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7346,7 +7346,7 @@
         "function"
       ],
       "mapping": "`cna_platform_get_current`. The canonical query is a compile-time constant, so the C route needs no runtime, no device and no initialization",
-      "tests": "`CoreExtSmoke.c` asserts a valid identity and a null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` asserts a valid identity and a null-output refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7361,7 +7361,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_DesktopOS` and the `CNA_DESKTOP_OS_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the current operating system on a desktop build, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the current operating system on a desktop build, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7379,7 +7379,7 @@
         "function"
       ],
       "mapping": "`cna_desktop_os_get_current`. The canonical function throws on a non-desktop platform rather than returning a fallback, and the firewall converts that `CNA::CNAException` to `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE`; the refusal is preserved rather than replaced by an invented default",
-      "tests": "`CoreExtSmoke.c` branches on the platform the build actually targets — a desktop build asserts a valid identity, any other asserts the `CNA_RESULT_INVALID_STATE` refusal — plus a null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` branches on the platform the build actually targets — a desktop build asserts a valid identity, any other asserts the `CNA_RESULT_INVALID_STATE` refusal — plus a null-output refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7394,7 +7394,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GraphicsBackendCategory` and the `CNA_GRAPHICS_BACKEND_CATEGORY_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies every public renderer identity and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies every public renderer identity and checks every answer is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7414,7 +7414,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_category_get_name_size` and `cna_graphics_backend_category_copy_name`. The canonical function returns a `std::string_view` at static storage; C gets the project’s count/copy pair instead, so no pointer into CNA storage crosses the ABI",
-      "tests": "`CoreExtSmoke.c` round-trips all five names exactly, asserts the requirement is reported and nothing is written when the capacity is too small, and refuses an unknown category and a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` round-trips all five names exactly, asserts the requirement is reported and nothing is written when the capacity is too small, and refuses an unknown category and a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7428,7 +7428,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 14 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
-      "tests": "`CoreExtSmoke.c` classifies every public renderer identity, pins three fixed answers a consumer can rely on, and asserts that the unknown identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` classifies every public renderer identity, pins three fixed answers a consumer can rely on, and asserts that the unknown identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7442,7 +7442,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_get_current_category`",
-      "tests": "`CoreExtSmoke.c` asserts it agrees with classifying the compiled-in renderer identity, so the test needs no knowledge of which renderer this build selected, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` asserts it agrees with classifying the compiled-in renderer identity, so the test needs no knowledge of which renderer this build selected, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7457,7 +7457,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GraphicsBackendMaturity` and the `CNA_GRAPHICS_BACKEND_MATURITY_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of every public renderer identity and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of every public renderer identity and checks every answer is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7477,7 +7477,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_maturity_get_name_size` and `cna_graphics_backend_maturity_copy_name`, the same count/copy pair the category name uses, because the canonical overload also returns a static-storage `std::string_view`",
-      "tests": "`CoreExtSmoke.c` round-trips all five names exactly and refuses an unknown maturity and a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` round-trips all five names exactly and refuses an unknown maturity and a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7491,7 +7491,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 14 public renderer identities and refuses anything else",
-      "tests": "`CoreExtSmoke.c` reads the maturity of every public renderer identity and asserts that an out-of-range identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` reads the maturity of every public renderer identity and asserts that an out-of-range identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7505,7 +7505,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_backend_get_current_maturity`",
-      "tests": "`CoreExtSmoke.c` asserts it agrees with reading the maturity of the compiled-in renderer identity, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` asserts it agrees with reading the maturity of the compiled-in renderer identity, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7519,7 +7519,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_renderer_get_current_type`, returning the same `CNA_GraphicsRendererType` identity `cna_graphics_device_get_renderer_info` reports but without needing a device or any graphics initialization, because the canonical query is a compile-time constant. An identity is not a capability claim and the C documentation says so",
-      "tests": "`CoreExtSmoke.c` asserts a known identity and a null-output refusal, and cross-checks it against the compiled-in category and maturity answers, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` asserts a known identity and a null-output refusal, and cross-checks it against the compiled-in category and maturity answers, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7533,7 +7533,7 @@
         "function"
       ],
       "mapping": "`cna_graphics_renderer_get_current_name_size` and `cna_graphics_renderer_copy_current_name`. The canonical view points at a string literal; C gets the count/copy pair so no pointer into static CNA storage crosses the ABI. The text matches the `CNA_GRAPHICS_RENDERER` build option exactly",
-      "tests": "`CoreExtSmoke.c` round-trips the name, asserts the reported requirement matches the copied length, and covers the too-small capacity writing nothing plus a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` round-trips the name, asserts the reported requirement matches the copied length, and covers the too-small capacity writing nothing plus a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
@@ -7579,7 +7579,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GamePadType` and the `CNA_GAMEPAD_TYPE_*` identities at the canonical ordinals",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts every reported controller type is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts every reported controller type is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B1",
       "approved_symbols": [
@@ -7605,7 +7605,7 @@
         "method"
       ],
       "mapping": "the fixed 48-byte `CNA_GamePadCapabilities` value with `struct_size`/`struct_version`, one directly readable and writable field per canonical property and the controller type as a `CNA_GamePadType` identity. A value rather than a handle, because the canonical type is a copyable snapshot with no identity; direct fields rather than routes, because every canonical property has both a getter and a setter. The ten CNA extension properties keep an `_ext` suffix on their fields so a consumer can see which state has no XNA 4.0 counterpart. `cna_gamepad_capabilities_init` reproduces the canonical default constructor exactly: every flag false and the type `Unknown`",
-      "tests": "`InputSnapshotsSmoke.c` checks all 35 flags and the type after initialization, writes through the extension and core fields to prove they are settable, asserts a null-output refusal, and reads real capabilities for all four player slots inside the game callback -- cross-checking connection against the gamepad state snapshot so the two can never disagree, and asserting the canonical disconnected value whenever a slot is empty. Wrong-thread, bad-player-index, null-output and wrong-struct-version refusals are covered. C and C++ ABI assertions freeze the size, alignment and every offset. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` checks all 35 flags and the type after initialization, writes through the extension and core fields to prove they are settable, asserts a null-output refusal, and reads real capabilities for all four player slots inside the game callback -- cross-checking connection against the gamepad state snapshot so the two can never disagree, and asserting the canonical disconnected value whenever a slot is empty. Wrong-thread, bad-player-index, null-output and wrong-struct-version refusals are covered. C and C++ ABI assertions freeze the size, alignment and every offset. Runs under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B1",
       "approved_symbols": [
@@ -7692,7 +7692,7 @@
         "method"
       ],
       "mapping": "`cna_gamepad_get_capabilities`, which takes an active game handle for the same reason `cna_gamepad_get_state` does: CNA is event-driven, so a snapshot is only meaningful on the game thread of a running game. An empty slot is an ordinary answer -- the canonical disconnected value -- not a failure",
-      "tests": "`InputSnapshotsSmoke.c` reads all four slots inside the update callback and covers the wrong-thread, bad-player-index, null-output and wrong-struct-version refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` reads all four slots inside the update callback and covers the wrong-thread, bad-player-index, null-output and wrong-struct-version refusals, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B1",
       "approved_symbols": [
@@ -7706,7 +7706,7 @@
         "operator"
       ],
       "mapping": "no route, and none is needed: the canonical operators exist so a C++ scoped enumeration can be composed and masked at all, and the C identity is already a plain `CNA_GamePadButtonFlags` (`uint32_t`). A C consumer writes `|`, `&`, `~`, `|=` and `&=` directly on it, which is the same arithmetic the canonical operators perform. Every C route that accepts a mask validates it against `CNA_GAMEPAD_BUTTON_ALL`, so a bit the canonical enumeration does not define is refused rather than carried",
-      "tests": "`InputSnapshotsSmoke.c` composes masks with the C operators and feeds them to `cna_gamepad_buttons_init_from_mask`, `_is_pressed`, `_equals` and the snapshot constructors, and asserts an undefined bit is refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` composes masks with the C operators and feeds them to `cna_gamepad_buttons_init_from_mask`, `_is_pressed`, `_equals` and the snapshot constructors, and asserts an undefined bit is refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2",
       "approved_symbols": [
@@ -7726,7 +7726,7 @@
         "operator"
       ],
       "mapping": "the `CNA_GamePadButtonFlags` mask the C API already had, because the canonical type holds exactly one bit field and nothing else. `cna_gamepad_buttons_init` reproduces the default constructor, `_init_from_mask` the explicit one and `_init_from_button_array` the canonical factory. All eleven named property getters collapse into `cna_gamepad_buttons_is_pressed`, which answers a named button through the canonical getter that owns it and falls back to the same masked test for the identities this type exposes no getter for. Equality, inequality and the hash each get their own route because C has no operator overloading",
-      "tests": "`InputSnapshotsSmoke.c` covers the default, mask and array constructions including a repeated identity contributing once and an empty array, all eleven named getters pressed and released, an identity with no canonical getter, both comparisons in both directions, the hash matching the mask reinterpreted as signed, and every null-output and undefined-bit refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers the default, mask and array constructions including a repeated identity contributing once and an empty array, all eleven named getters pressed and released, an identity with no canonical getter, both comparisons in both directions, the hash matching the mask reinterpreted as signed, and every null-output and undefined-bit refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2",
       "approved_symbols": [
@@ -7759,7 +7759,7 @@
         "operator"
       ],
       "mapping": "the same `CNA_GamePadButtonFlags` mask restricted to the four `CNA_GAMEPAD_BUTTON_DPAD_*` bits, because the canonical type holds four button states and CNA itself derives them from a button mask. `cna_gamepad_dpad_init` reproduces the default constructor, `_init_from_states` the four-state constructor and `_init_from_button_array` the canonical factory, which ignores non-directional identities. The four named getters collapse into `cna_gamepad_dpad_is_pressed`, which routes through the canonical getters and refuses a non-directional button. Equality compares only the four directional bits, and the hash reproduces the canonical weighting — Down 1, Left 2, Right 4, Up 8 — which is its own numbering rather than the button bits",
-      "tests": "`InputSnapshotsSmoke.c` covers all three constructions including a mixed array whose non-directional entries are dropped, each direction pressed and released, equality ignoring a non-directional bit, both comparisons, all four hash weights individually, and every null-output, non-directional-button and invalid-array refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers all three constructions including a mixed array whose non-directional entries are dropped, each direction pressed and released, equality ignoring a non-directional bit, both comparisons, all four hash weights individually, and every null-output, non-directional-button and invalid-array refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2",
       "approved_symbols": [
@@ -7785,7 +7785,7 @@
         "operator"
       ],
       "mapping": "the fixed 16-byte `CNA_GamePadThumbSticks` value — two `CNA_Vector2` positions, directly readable, with no version prefix because the canonical type is an immutable pair. It is byte-identical to the first half of the `CNA_GamePadAnalogState` a snapshot already carried, which is asserted rather than assumed, so the ABI never grows two representations of the same four numbers. `cna_gamepad_thumb_sticks_init` reproduces the default constructor and `_init_from_positions` the public one, including its **square clamp** to the inclusive range minus one through one; the dead-zone constructor is private and stays behind `cna_gamepad_apply_dead_zone`",
-      "tests": "`InputSnapshotsSmoke.c` covers the zero default, an in-range construction kept verbatim, an out-of-range construction square-clamped on all four components, equal and unequal comparisons in both directions, hash agreement for equal values, and every null-input and null-output refusal; ABI assertions freeze the layout and its identity with the analog block. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers the zero default, an in-range construction kept verbatim, an out-of-range construction square-clamped on all four components, equal and unequal comparisons in both directions, hash agreement for equal values, and every null-input and null-output refusal; ABI assertions freeze the layout and its identity with the analog block. Runs under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2",
       "approved_symbols": [
@@ -7808,7 +7808,7 @@
         "operator"
       ],
       "mapping": "the fixed 8-byte `CNA_GamePadTriggers` value — two directly readable floats, byte-identical to the second half of `CNA_GamePadAnalogState`, for the same reason as the thumbstick pair. `cna_gamepad_triggers_init` reproduces the default constructor and `_init_from_positions` the public one, including its **clamp** to the inclusive range zero through one. Equality preserves the canonical epsilon comparison rather than becoming an exact one",
-      "tests": "`InputSnapshotsSmoke.c` covers the zero default, a construction kept verbatim, a construction clamped from below and above, the epsilon comparison proved with the next representable float above a value — a genuinely different float that still compares equal — an unequal comparison, hash agreement, and every null-input and null-output refusal; ABI assertions freeze the layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers the zero default, a construction kept verbatim, a construction clamped from below and above, the epsilon comparison proved with the next representable float above a value — a genuinely different float that still compares equal — an unequal comparison, hash agreement, and every null-input and null-output refusal; ABI assertions freeze the layout. Runs under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2",
       "approved_symbols": [
@@ -7831,7 +7831,7 @@
         "operator"
       ],
       "mapping": "the versioned `CNA_GamePadState` snapshot the C API already had, plus routes for everything the canonical type computes. `cna_gamepad_state_init` reproduces the default constructor; `_init_from_components` and `_init_from_values` reproduce the two public ones, including the canonical derivation of extra button bits — a trigger past `CNA_GAMEPAD_TRIGGER_THRESHOLD` adds its trigger bit and a stick past its dead zone adds the matching virtual direction bits. The four component getters become projections out of the snapshot, and the CNA extension packet-number setter keeps an `_ext` suffix. The snapshot carries one button mask, exactly as every state CNA itself builds does — the capture path derives both the button set and the pad from one raw mask — so a supplied directional pad is merged into the button set rather than kept beside it. The hash mixes only the button set and the packet number, matching the canonical implementation, and the string is the fixed fully-qualified type name because the canonical type does not override its conversion",
-      "tests": "`InputSnapshotsSmoke.c` covers the default snapshot, both constructions with their derived trigger and virtual stick bits asserted individually, the merged directional pad read back, all four component projections, the extension packet-number setter observed through equality, equal and unequal comparisons, the hash ignoring a changed analog value, the exact fixed string with its count/copy round trip and a too-small capacity writing nothing, and every null, invalid-snapshot and undefined-bit refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers the default snapshot, both constructions with their derived trigger and virtual stick bits asserted individually, the merged directional pad read back, all four component projections, the extension packet-number setter observed through equality, equal and unequal comparisons, the hash ignoring a changed analog value, the exact fixed string with its count/copy round trip and a too-small capacity writing nothing, and every null, invalid-snapshot and undefined-bit refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2",
       "approved_symbols": [
@@ -7860,7 +7860,7 @@
         "method"
       ],
       "mapping": "one `cna_gamepad_*` route per canonical static, each taking an active game handle for the same reason the state and capability captures do — CNA is event-driven, so a device query is only meaningful on the game thread of a running game. `ExcludeAxisDeadZone` is the exception: it is a pure value operation and takes no handle. The class itself has no handle, because its canonical constructor is deleted and every member is static. Two canonical shapes are preserved rather than collapsed: a query that reports availability through its return value and its answer through an output reference keeps both answers separate in C — `_get_gyro_ext`, `_get_accelerometer_ext` and `_get_touchpad_finger_ext` each take an availability output, so \"no sensor\" is an ordinary answer, not a failure — and the four identity strings use the project count/copy protocol. The touchpad finger query returns its four output references as one fixed `CNA_GamePadTouchpadFinger` value. No `std::string`, `Vector3` or CNA::Input enumeration crosses the boundary",
-      "tests": "`InputSnapshotsSmoke.c` calls every route inside the update callback and asserts the shape of an empty slot answer for each — false, zero, empty or an `Unknown` identity — plus the count/copy round trip for all four identity strings, an out-of-range player slot and a null output refused per route, an undefined button bit refused by the label query, and the wrong-thread refusal; the pure dead-zone exclusion is covered outside the callback including its non-finite refusal leaving the output untouched. C and C++ ABI assertions freeze the three identity enumerations and the touchpad-finger layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` calls every route inside the update callback and asserts the shape of an empty slot answer for each — false, zero, empty or an `Unknown` identity — plus the count/copy round trip for all four identity strings, an out-of-range player slot and a null output refused per route, an undefined button bit refused by the label query, and the wrong-thread refusal; the pure dead-zone exclusion is covered outside the callback including its non-finite refusal leaving the output untouched. C and C++ ABI assertions freeze the three identity enumerations and the touchpad-finger layout. Runs under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B3",
       "approved_symbols": [
@@ -7894,7 +7894,7 @@
         "constant"
       ],
       "mapping": "the `CNA_GAMEPAD_LEFT_DEAD_ZONE`, `CNA_GAMEPAD_RIGHT_DEAD_ZONE` and `CNA_GAMEPAD_TRIGGER_THRESHOLD` macros, which carry the canonical expressions verbatim so a C consumer computes the identical float rather than a rounded decimal copy",
-      "tests": "`InputSnapshotsSmoke.c` feeds each constant to `cna_gamepad_apply_dead_zone` and `cna_gamepad_exclude_axis_dead_zone` and asserts the boundary and midpoint results, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` feeds each constant to `cna_gamepad_apply_dead_zone` and `cna_gamepad_exclude_axis_dead_zone` and asserts the boundary and midpoint results, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B3",
       "approved_symbols": [
@@ -7911,7 +7911,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GamePadButtonLabel` and the `CNA_GAMEPAD_BUTTON_LABEL_*` identities at the canonical ordinals. **Borrowed into CBIND-037B3** from the input-extension slice, because `GamePad::GetButtonLabelEXT` returns it and cannot be mapped without it",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported label is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported label is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B3",
       "approved_symbols": [
@@ -7935,7 +7935,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GamePadConnectionState` and the `CNA_GAMEPAD_CONNECTION_STATE_*` identities at the canonical ordinals. **Borrowed into CBIND-037B3** because `GamePad::GetConnectionStateEXT` returns it",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported state is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported state is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B3",
       "approved_symbols": [
@@ -7953,7 +7953,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_PowerState` and the `CNA_POWER_STATE_*` identities at the canonical ordinals. **Borrowed into CBIND-037B3** because `GamePad::GetPowerInfoEXT` returns it. `CNA_POWER_STATE_ERROR` is a canonical answer the query itself produces, not a C failure, and is documented as such",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported state is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported state is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B3",
       "approved_symbols": [
@@ -7974,7 +7974,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_KeyState` and the `CNA_KEY_STATE_*` identities at the canonical ordinals, returned by `cna_keyboard_state_get_key_state`. The same question is also answerable as a boolean through `cna_keyboard_state_is_key_down`; both exist because the canonical API has both an indexer and a predicate",
-      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` reads a pressed and an unpressed key through the indexer route, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` reads a pressed and an unpressed key through the indexer route, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4a",
       "approved_symbols": [
@@ -7992,7 +7992,7 @@
         "operator"
       ],
       "mapping": "routes over the versioned `CNA_KeyboardState` 256-slot bit field the C API already had. `cna_keyboard_state_init` reproduces the default constructor and `_init_from_keys` **both** canonical set-taking constructors, since an initializer list and an unordered set are the same deduplicated array in C. The indexer becomes `_get_key_state`, and equality, inequality, the hash and the string each get their own route. **Documented deviation:** the canonical constructors silently drop a key outside the 256-slot field; C refuses instead, so a caller can never lose a key without being told, and the refusal matches every other keyboard route",
-      "tests": "`InputSnapshotsSmoke.c` covers the empty default, a construction whose duplicate key contributes once, the out-of-range refusal, the indexer in both states, equal and unequal comparisons in both directions, hash agreement for equal snapshots, the exact fixed string with a too-small capacity writing nothing, and every null and invalid-snapshot refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers the empty default, a construction whose duplicate key contributes once, the out-of-range refusal, the indexer in both states, equal and unequal comparisons in both directions, hash agreement for equal snapshots, the exact fixed string with a too-small capacity writing nothing, and every null and invalid-snapshot refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4a",
       "approved_symbols": [
@@ -8015,7 +8015,7 @@
         "method"
       ],
       "mapping": "one `cna_keyboard_*` route per canonical static, each taking an active game handle for the same reason the gamepad queries do. The class itself has no handle: its canonical constructor is deleted and every member is static. The player-slot overload becomes `cna_keyboard_get_state_for_player`, which reports the same snapshot for every slot because CNA has one keyboard. The two name families use the project count/copy protocol and their reverse lookups take a borrowed `CNA_StringView`, so no `std::string` crosses the boundary; an unknown name answers with the canonical none identity rather than failing",
-      "tests": "`InputSnapshotsSmoke.c` asserts every slot reports the identical snapshot, the modifier mask stays inside the defined bits, the scancode translation stays in range, both name families round-trip through count/copy and back through the reverse lookup, an unknown name answers `CNA_KEY_NONE`, and every out-of-range-key, out-of-range-slot, invalid-view and null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` asserts every slot reports the identical snapshot, the modifier mask stays inside the defined bits, the scancode translation stays in range, both name families round-trip through count/copy and back through the reverse lookup, an unknown name answers `CNA_KEY_NONE`, and every out-of-range-key, out-of-range-slot, invalid-view and null-output refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4a",
       "approved_symbols": [
@@ -8036,7 +8036,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_KeyModifiers` and the `CNA_KEY_MODIFIER_*` identities at the canonical bit values, plus `CNA_KEY_MODIFIER_ALL`. **Borrowed into CBIND-037B4a** from the input-extension slice, because `Keyboard::GetModStateEXT` returns it and cannot be mapped without it. Unlike the gamepad button identities, these really are flags, so they combine and mask with C's own operators",
-      "tests": "C and C++ ABI assertions freeze the bit values; `InputSnapshotsSmoke.c` asserts the reported mask contains no bit outside `CNA_KEY_MODIFIER_ALL`, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "C and C++ ABI assertions freeze the bit values; `InputSnapshotsSmoke.c` asserts the reported mask contains no bit outside `CNA_KEY_MODIFIER_ALL`, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4a",
       "approved_symbols": [
@@ -8060,7 +8060,7 @@
         "operator"
       ],
       "mapping": "no route, and none is needed: the canonical operators exist so a C++ scoped enumeration can be combined at all, and the C identity is already a plain `uint32_t` a consumer masks with `|`, `&` and `~` directly",
-      "tests": "`InputSnapshotsSmoke.c` masks the reported modifier state against `CNA_KEY_MODIFIER_ALL` with the C operators, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` masks the reported modifier state against `CNA_KEY_MODIFIER_ALL` with the C operators, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4a",
       "approved_symbols": [
@@ -8079,7 +8079,7 @@
         "method"
       ],
       "mapping": "`cna_keyboard_get_state_for_player`, which reports the same snapshot for every slot because CNA has one keyboard; the overload exists in C because the canonical API has it",
-      "tests": "`InputSnapshotsSmoke.c` asserts all four slots report a snapshot byte-identical to `cna_keyboard_get_state`, plus the out-of-range-slot and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` asserts all four slots report a snapshot byte-identical to `cna_keyboard_get_state`, plus the out-of-range-slot and null-output refusals, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4a",
       "approved_symbols": [
@@ -8095,7 +8095,7 @@
         "operator"
       ],
       "mapping": "routes over the versioned `CNA_MouseState` snapshot the C API already had, whose horizontal-wheel field is the CNA extension property. `cna_mouse_state_init` reproduces the default constructor, `_init_from_values` the eight-argument one — leaving the horizontal wheel at zero exactly as it does — and `_init_from_values_ext` the nine-argument CNA extension. Each takes the same `CNA_MouseButtonFlags` bit set the snapshot carries rather than five separately ordered button-state arguments, so a consumer cannot silently transpose two of them. Equality, inequality, the hash and the string each get their own route. Unlike the gamepad and keyboard snapshots this type **does** override its string conversion, and the C text reproduces the canonical format exactly, including `None` for no button and the omission of the horizontal wheel",
-      "tests": "`InputSnapshotsSmoke.c` covers the default value, both explicit constructions with the horizontal wheel checked in each, an undefined button bit refused, equal and unequal comparisons in both directions, the hash proved to ignore the buttons and the horizontal wheel, the exact text for a pressed and an empty snapshot, a too-small capacity writing nothing, and every null and invalid-snapshot refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers the default value, both explicit constructions with the horizontal wheel checked in each, an undefined button bit refused, equal and unequal comparisons in both directions, the hash proved to ignore the buttons and the horizontal wheel, the exact text for a pressed and an empty snapshot, a too-small capacity writing nothing, and every null and invalid-snapshot refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4b",
       "approved_symbols": [
@@ -8118,7 +8118,7 @@
         "method"
       ],
       "mapping": "one `cna_mouse_*` route per canonical static, each taking an active game handle. The class itself has no handle: its canonical constructor is deleted and every member is static. The window handle crosses as an opaque `uint64_t` the C API never dereferences, not as a `CNA_Handle`. A request no backend can satisfy answers `CNA_FALSE` through an applied output rather than failing, and `GetGlobalPositionEXT` — which the canonical API declares `void` with two output references — reports both coordinates and cannot fail. `INTERNAL_onClicked` becomes `cna_mouse_raise_clicked_ext`, which is what makes the clicked event observable without a real device, and `ResetForTests` becomes `_reset_for_tests_ext`, documented as clearing the bound window and dropping every subscription including ones this API handed out",
-      "tests": "`InputSnapshotsSmoke.c` round-trips the window handle and restores it, exercises position, capture, global position, warp and relative mode with their null-output refusals, raises a click and observes it, and proves the reset drops a live subscription so the handler stops running and the registration release afterwards is still a success, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` round-trips the window handle and restores it, exercises position, capture, global position, warp and relative mode with their null-output refusals, raises a click and observes it, and proves the reset drops a live subscription so the handler stops running and the registration release afterwards is still a success, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4b",
       "approved_symbols": [
@@ -8142,7 +8142,7 @@
         "field"
       ],
       "mapping": "`cna_mouse_subscribe_clicked_ext` and `cna_mouse_unsubscribe_clicked_ext` over an owned `CNA_MouseEventRegistrationHandle`. The canonical event is **static**, so the subscription belongs to the process and takes no game handle; the registration owns only its subscription token and detaches by token, which is why releasing it after the process event has been cleared is a no-op rather than a failure. The callback receives the native button number and the caller's own copied context; no multicast object crosses the ABI",
-      "tests": "`InputSnapshotsSmoke.c` subscribes, raises a click and asserts the handler ran with the right button, releases and asserts it stops running, covers double release and a never-created handle as `CNA_RESULT_INVALID_HANDLE`, and covers the null-callback and null-output refusals; the reset case proves a cleared event still releases cleanly. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` subscribes, raises a click and asserts the handler ran with the right button, releases and asserts it stops running, covers double release and a never-created handle as `CNA_RESULT_INVALID_HANDLE`, and covers the null-callback and null-output refusals; the reset case proves a cleared event still releases cleanly. Runs under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4b",
       "approved_symbols": [
@@ -8159,7 +8159,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_MouseCursorHandle`. `cna_mouse_cursor_create_ext` reproduces the default constructor — a cursor with nothing behind it, which is a real handle that can be set and released — and `cna_mouse_cursor_create_from_texture2d` maps the canonical factory, refusing a non-color texture format exactly as it does. The canonical destructor becomes `cna_mouse_cursor_destroy` and `Dispose` its own idempotent route, so a caller can release the native resource without giving up the handle",
-      "tests": "`InputSnapshotsSmoke.c` covers the empty cursor end to end, double disposal, double release refused as `CNA_RESULT_INVALID_HANDLE`, and a texture-derived cursor probed by **behavior**: whichever documented answer the backend gives, the success path is exercised fully and the refusal path is required to leave the output handle invalid. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers the empty cursor end to end, double disposal, double release refused as `CNA_RESULT_INVALID_HANDLE`, and a texture-derived cursor probed by **behavior**: whichever documented answer the backend gives, the success path is exercised fully and the refusal path is required to leave the output handle invalid. Runs under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c",
       "approved_symbols": [
@@ -8193,7 +8193,7 @@
         "method"
       ],
       "mapping": "all twelve collapse into `cna_mouse_cursor_get_stock_ext` with a `CNA_MOUSE_CURSOR_STOCK_*` identity, because the canonical accessors differ only in which singleton they return. The canonical stock cursors are **process-lifetime singletons whose disposal is a deliberate no-op**, so the handle is a borrowed view: destroying it releases the handle and never frees the shared native cursor, and disposing it succeeds without doing anything, exactly as the canonical `Dispose` does",
-      "tests": "`InputSnapshotsSmoke.c` resolves, sets and releases all twelve identities, refuses a thirteenth and a null output, and proves the no-op disposal by disposing and releasing one identity and then using a fresh handle for the same identity successfully, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` resolves, sets and releases all twelve identities, refuses a thirteenth and a null output, and proves the no-op disposal by disposing and releasing one identity and then using a fresh handle for the same identity successfully, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c",
       "approved_symbols": [
@@ -8218,7 +8218,7 @@
         "method"
       ],
       "mapping": "`cna_mouse_set_cursor_ext`, taking an owned or stock cursor handle. **Re-partitioned into CBIND-037B4c** from the mouse slice, because it cannot be mapped before a cursor handle exists. The canonical operation returns nothing, so a backend that cannot change the cursor — and a cursor with nothing behind it — succeed and change nothing",
-      "tests": "`InputSnapshotsSmoke.c` sets the empty cursor, every stock cursor and a texture-derived cursor when the backend produces one, and refuses a never-created handle, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` sets the empty cursor, every stock cursor and a texture-derived cursor when the backend produces one, and refuses a never-created handle, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c",
       "approved_symbols": [
@@ -8233,7 +8233,7 @@
         "constructor"
       ],
       "mapping": "`cna_mouse_cursor_create_ext`, which produces a cursor with nothing behind it — a real handle that can be set and released, exactly as the canonical default-constructed value can",
-      "tests": "`InputSnapshotsSmoke.c` creates one, sets it, disposes it twice and releases it, then refuses a second release, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` creates one, sets it, disposes it twice and releases it, then refuses a second release, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c",
       "approved_symbols": [
@@ -8248,7 +8248,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_TextInputType` with the nine `CNA_TEXT_INPUT_TYPE_*` identities at their canonical ordinals, plus `CNA_TEXT_INPUT_TYPE_MAXIMUM`. **Borrowed into CBIND-037B4d** from CBIND-037B7, because `StartTextInputWithTypeEXT` cannot be mapped without it. A route validates against the maximum and refuses an undefined identity, where the canonical conversion silently falls back to plain text",
-      "tests": "`InputSnapshotsSmoke.c` starts text input with every one of the nine identities and refuses the first undefined one; source-side `static_assert`s bind each identity to its native ordinal, and C/C++ ABI assertions freeze the width and every value under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` starts text input with every one of the nine identities and refuses the first undefined one; source-side `static_assert`s bind each identity to its native ordinal, and C/C++ ABI assertions freeze the width and every value under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8271,7 +8271,7 @@
         "class"
       ],
       "mapping": "the `input_text.h` family: `cna_text_input_*` free functions over the canonical static class, since C has no static class. Every route that reaches the platform backend takes an active game handle and is creation-thread bound, exactly as the other input families are; the three event subscriptions take none, because the canonical events belong to the process",
-      "tests": "`InputSnapshotsSmoke.c` covers every route, all three events, the null-guarded no-op paths and wrong-thread refusal under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan",
+      "tests": "`InputSnapshotsSmoke.c` covers every route, all three events, the null-guarded no-op paths and wrong-thread refusal under HEADLESS, OPENGLES3 and SOFTWARE plus ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8302,7 +8302,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_get_window_handle_ext` and `cna_text_input_set_window_handle_ext`, carrying the native window as an opaque `uint64_t` the C API never dereferences — not a `CNA_Handle`, and not the graphics device's native handle, which the C API deliberately does not hand out. Only zero is guarded, exactly as the canonical property is: a nonzero value must be a live native window supplied by the platform layer",
-      "tests": "`InputSnapshotsSmoke.c` round trips a bogus nonzero value without ever handing it to the backend, then proves the canonical reset clears it, so every later activation route takes the documented null-guarded path, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` round trips a bogus nonzero value without ever handing it to the backend, then proves the canonical reset clears it, so every later activation route takes the documented null-guarded path, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8317,7 +8317,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_is_active_ext`, reporting the answer through an output flag so an unbound window is an ordinary `CNA_FALSE` rather than a failure",
-      "tests": "`InputSnapshotsSmoke.c` asserts false with no window bound, both before and after a start, and refuses a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` asserts false with no window bound, both before and after a start, and refuses a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8332,7 +8332,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_is_screen_keyboard_shown_ext`, which queries the bound window handle",
-      "tests": "`InputSnapshotsSmoke.c` asserts false with no window bound and refuses a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` asserts false with no window bound and refuses a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8347,7 +8347,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_is_screen_keyboard_shown_for_window_ext`, kept a separate route rather than an optional argument because the canonical overload ignores the bound window handle entirely. The window crosses as the same opaque `uint64_t`",
-      "tests": "`InputSnapshotsSmoke.c` asserts false for the zero window and refuses a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` asserts false for the zero window and refuses a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8361,7 +8361,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_start_ext` and `cna_text_input_stop_ext`. Both return nothing canonically, so with no window bound they succeed and change nothing, preserving the canonical null guard rather than inventing a failure",
-      "tests": "`InputSnapshotsSmoke.c` starts and stops with no window bound and asserts the activity query stays false, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` starts and stops with no window bound and asserts the activity query stays false, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8376,7 +8376,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_start_with_type_ext`, taking a `CNA_TEXT_INPUT_TYPE_*` identity. **Documented deviation:** the canonical conversion falls back to plain text for an out-of-range value; C refuses with `CNA_RESULT_INVALID_ARGUMENT` instead, so a consumer is told about a bad identity rather than silently getting a different keyboard",
-      "tests": "`InputSnapshotsSmoke.c` calls it with all nine identities and refuses the first undefined one, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` calls it with all nine identities and refuses the first undefined one, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8390,7 +8390,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_set_input_rectangle_ext`, taking the existing fixed `CNA_Rectangle` by value. The canonical operation reports nothing back and passes a zero text-cursor offset to the backend, so a backend that ignores the hint — and an unbound window — succeed and change nothing",
-      "tests": "`InputSnapshotsSmoke.c` sets a rectangle with no window bound and asserts success, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` sets a rectangle with no window bound and asserts success, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8404,7 +8404,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_raise_text_input_ext`, `cna_text_input_raise_text_editing_ext` and `cna_text_input_raise_text_editing_candidates_ext`. These are what make the three events observable without a real keyboard, which is the only reason the canonical dispatchers are public. Input text is a borrowed `CNA_StringView` copied and UTF-8 validated before dispatch; a candidate list is a pointer plus a count. Two canonical behaviors are preserved rather than tidied up: the composition `start`/`length` are byte offsets forwarded verbatim and are deliberately not range-checked against the text, and `selected` is not range-checked against the candidate count, because the canonical dispatch checks neither",
-      "tests": "`InputSnapshotsSmoke.c` delivers an ASCII unit and a surrogate pair, a real multi-byte composition with a deliberately out-of-range start and a negative length, an empty composition, a two-entry candidate list, an empty list, and refuses invalid UTF-8, a negative count and a null array with a nonzero count — each refusal proved to have dispatched nothing. Runs under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan",
+      "tests": "`InputSnapshotsSmoke.c` delivers an ASCII unit and a surrogate pair, a real multi-byte composition with a deliberately out-of-range start and a negative length, an empty composition, a two-entry candidate list, an empty list, and refuses invalid UTF-8, a negative count and a null array with a nonzero count — each refusal proved to have dispatched nothing. Runs under HEADLESS, OPENGLES3 and SOFTWARE plus ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8420,7 +8420,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_reset_for_tests_ext`, documented as clearing the bound window handle and dropping every subscription to all three events — including registrations this API handed out, so releasing one afterwards is a no-op rather than a failure",
-      "tests": "`InputSnapshotsSmoke.c` subscribes to all three events, resets, proves no handler runs for any of them and that the window handle is back to zero, then releases all three registrations successfully, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` subscribes to all three events, resets, proves no handler runs for any of them and that the window handle is back to zero, then releases all three registrations successfully, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d",
       "approved_symbols": [
@@ -8435,7 +8435,7 @@
         "enum-value"
       ],
       "mapping": "a fixed-width `CNA_GestureType` bit set with one `CNA_GESTURE_TYPE_*` macro per canonical value at its canonical bit, plus `CNA_GESTURE_TYPE_ALL` for validation. The identities are pinned by C and C++ ABI assertions",
-      "tests": "`InputSnapshotsSmoke.c` constructs a sample with every single bit, with all of them combined, and refuses the first undefined bit, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` constructs a sample with every single bit, with all of them combined, and refuses the first undefined bit, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B5",
       "approved_symbols": [
@@ -8500,7 +8500,7 @@
         "constructor"
       ],
       "mapping": "`cna_gesture_sample_init` for the default, `cna_gesture_sample_init_from_values` for the six-argument form and `cna_gesture_sample_init_from_values_ext` for the eight-argument one. The six-argument form leaves both finger identifiers at `CNA_TOUCH_NO_FINGER`, exactly as the canonical constructor does, which is the only difference between the two public constructions",
-      "tests": "`InputSnapshotsSmoke.c` covers all three, the unset-finger default, an undefined gesture bit and the null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` covers all three, the unset-finger default, an undefined gesture bit and the null-output refusal, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B5",
       "approved_symbols": [
@@ -8667,7 +8667,7 @@
         "method"
       ],
       "mapping": "one `cna_touch_panel_*` getter or setter per canonical accessor. The orientation reuses the existing `CNA_DisplayOrientation` identity and the enabled gestures the new `CNA_GestureType` bit set, both validated against their defined bits. The window handle crosses as an opaque `uint64_t` the C API never dereferences, exactly as the mouse and text-input families spell it. The device-exists pair keeps an `_ext` suffix and is the live answer the canonical touch-collection connection getter reads. All of it is process-wide state a caller is expected to restore",
-      "tests": "`InputSnapshotsSmoke.c` round-trips every property and restores it, proves the device-exists flag reaches a captured snapshot's connection field, and covers the undefined-orientation, undefined-gesture and null-output refusals under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`InputSnapshotsSmoke.c` round-trips every property and restores it, proves the device-exists flag reaches a captured snapshot's connection field, and covers the undefined-orientation, undefined-gesture and null-output refusals under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B5",
       "approved_symbols": [
@@ -8978,7 +8978,7 @@
         "method"
       ],
       "mapping": "free `cna_haptics_*` routes rather than a handle, because the canonical constructor is deleted and every member is static — the same shape as `Mouse`, `Keyboard`, `TextInputEXT` and `TouchPanel`. Each takes an active game handle, because CNA is event-driven and a device query is only meaningful on the game thread of a running game. **The three open routes never fail for want of hardware:** they always hand back a real owned handle whose `cna_haptic_device_get_is_open` reports whether anything is behind it, exactly as the canonical factories return a closed device. As a `CNA::Input` surface with no XNA counterpart, the whole header takes no `_ext` suffixes, following `core_ext.h`",
-      "tests": "`HapticsSmoke.c` enumerates and opens every reported device, opens a deliberately nonexistent identifier, the mouse and a joystick, asserts each yields a usable handle, and covers the null-output and wrong-thread refusals under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`HapticsSmoke.c` enumerates and opens every reported device, opens a deliberately nonexistent identifier, the mouse and a joystick, asserts each yields a usable handle, and covers the null-output and wrong-thread refusals under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B6",
       "approved_symbols": [
@@ -9000,7 +9000,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_HapticDeviceHandle`. The canonical destructor becomes `cna_haptic_device_destroy` and `Dispose` its own idempotent route, so a caller can close the device without giving up the handle — the same split `MouseCursor` uses. A closed device is not an error state: every route on it succeeds and answers `CNA_FALSE`, zero or -1 through its output, which is what makes the family usable with no force-feedback hardware. Two canonical pass-throughs are preserved: the rumble strength, the gain and the autocenter are handed to the platform unvalidated, and freeing an unknown effect identifier is a successful no-op because the canonical operation reports nothing. `RunEffectEXT`'s defaulted iteration count is passed explicitly, since C has no defaulted arguments",
-      "tests": "`HapticsSmoke.c` drives every route on a closed device and on any real device the machine supplies, asserts the -1 effect identifier and the false answers a closed device must give, proves disposal is idempotent and leaves the handle usable, and covers double release, a never-created handle and every null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan with leak detection on",
+      "tests": "`HapticsSmoke.c` drives every route on a closed device and on any real device the machine supplies, asserts the -1 effect identifier and the false answers a closed device must give, proves disposal is idempotent and leaves the handle usable, and covers double release, a never-created handle and every null-output refusal, under HEADLESS, OPENGLES3 and SOFTWARE plus ASan+UBSan with leak detection on",
       "status": "implemented",
       "task": "CBIND-037B6",
       "approved_symbols": [
@@ -13892,7 +13892,7 @@
         "friend"
       ],
       "mapping": "`cna_graphics_renderer_set_preferred_ext` and `_set_preferred_by_name_ext` choose, `_get_selected_ext` and `_get_active_ext` report -- the second refusing with `CNA_RESULT_INVALID_STATE` before the latch, because until something is created there is no honest answer -- `_get_is_latched_ext` says which, `_get_available_count_ext`/`_copy_available_ext`/`_get_is_available_ext` answer what this build actually has, and `_set_fallback_chain_ext`, `_set_automatic_fallback_ext` and `_get_automatic_fallback_ext` drive the fallback. The span-returning getters become the count/copy pair every other collection in this ABI uses",
-      "tests": "`CoreExtSmoke.c` covers the whole family under HEADLESS, SDL_RENDERER and SOFTWARE: the build's own renderer present in the available set, the capacity-short refusal that writes nothing, the latched/unlatched split for the active renderer, the fallback round trip, and the refusals for an undefined identity, a null output and a chain with one bad entry -- which changes nothing rather than applying up to the mistake",
+      "tests": "`CoreExtSmoke.c` covers the whole family under HEADLESS, OPENGLES3 and SOFTWARE: the build's own renderer present in the available set, the capacity-short refusal that writes nothing, the latched/unlatched split for the active renderer, the fallback round trip, and the refusals for an undefined identity, a null output and a chain with one bad entry -- which changes nothing rather than applying up to the mistake",
       "status": "implemented",
       "task": "CBIND-049",
       "approved_symbols": [
@@ -14148,7 +14148,7 @@
         "constant"
       ],
       "mapping": "read through the owning `CNA_ModelHandle` rather than a handle of its own, since the report lives exactly as long as the Model it describes: a versioned `CNA_GltfImportReportEXT` carrying the twelve source-scene counts plus the four values the canonical report derives rather than stores, diagnostics read by discovery index into a versioned `CNA_GltfImportDiagnosticEXT`, and each entry's code, subject, message and individual details read by the usual count/copy pairs with no partial write. Fixed-width `CNA_GLTF_IMPORT_SEVERITY_*_EXT` and `CNA_GLTF_IMPORT_KIND_*_EXT` identities at the canonical ordinals. Written back through a counts-only setter that clears the list and an append route taking borrowed string views, which is what makes the whole family round-trippable from C",
-      "tests": "the all-zero empty default a non-glTF model reports, a full twelve-count round trip, each diagnostic kind moving exactly the derived answer it belongs to, discovery order and every diagnostic field, code/subject/message/detail round trips including an empty subject, exact-capacity copies that write no terminator, insufficient capacity reporting the requirement without a partial write, derived values refused on input rather than dropped, out-of-range diagnostic and detail indices, malformed structures, undefined severity and kind identities, a null detail array, and stale-handle paths in strict-C `ModelSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan",
+      "tests": "the all-zero empty default a non-glTF model reports, a full twelve-count round trip, each diagnostic kind moving exactly the derived answer it belongs to, discovery order and every diagnostic field, code/subject/message/detail round trips including an empty subject, exact-capacity copies that write no terminator, insufficient capacity reporting the requirement without a partial write, derived values refused on input rather than dropped, out-of-range diagnostic and detail indices, malformed structures, undefined severity and kind identities, a null detail array, and stale-handle paths in strict-C `ModelSmoke.c` under HEADLESS and OPENGLES3 plus ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-051B",
       "approved_symbols": [

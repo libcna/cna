@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
 //
-// REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) made every public render-target bind/unbind
-// cycle its own native render pass, recorded in the order the cycles were opened. Both stopped at
-// the same boundary: the BACKBUFFER stayed a single trailing pass at the end of the command buffer.
-// `VulkanRenderer::RecordCommandBuffer` records every render-target segment first and then
-// one swapchain pass which is passed `kAllSegments`; `SdlGpuRenderer::EnsureFrameRendered`
-// walks `passSegments_` and then opens one swapchain pass which is passed `kSwapchainSegment`. In
-// both, every backbuffer draw of the frame is replayed inside that one trailing pass regardless of
-// when the game issued it, so the public sequence
+// REMED-GFX-140 (the retired VULKAN renderer) and REMED-GFX-145 (SdlGpu) made every public
+// render-target bind/unbind cycle its own native render pass, recorded in the order the cycles
+// were opened. Both stopped at the same boundary: the BACKBUFFER stayed a single trailing pass at
+// the end of the command buffer. `VulkanRenderer::RecordCommandBuffer` recorded every
+// render-target segment first and then one swapchain pass which was passed `kAllSegments`;
+// `SdlGpuRenderer::EnsureFrameRendered` walked `passSegments_` and then opened one swapchain pass
+// which was passed `kSwapchainSegment`. In both, every backbuffer draw of the frame was replayed
+// inside that one trailing pass regardless of when the game issued it, so the public sequence
 //
 //     SetRenderTarget(t); draw red;  SetRenderTarget(nullptr); draw t at LEFT
 //     SetRenderTarget(t); draw green; SetRenderTarget(nullptr); draw t at RIGHT
 //
-// executes as
+// executed as
 //
 //     t pass (red) ; t pass (green) ; backbuffer pass (draw t at LEFT, draw t at RIGHT)
 //
-// and BOTH backbuffer draws sample the final green. The requested result is a red left and a green
+// and BOTH backbuffer draws sampled the final green. The requested result is a red left and a green
 // right. Nothing observable in `t` changes -- REMED-GFX-140's check `S6` covers exactly the
 // interleaving sequence and passes -- which is why the class survived two segmentation fixes: the
 // ordinary XNA pattern (render into targets, then compose them onto the backbuffer) is already the
@@ -46,15 +46,15 @@
 // way, so a failure never gets credited to or blamed on pass ordering:
 //
 //   * `mixedQueuesKeepPublicOrder` -- whether a SpriteBatch draw and a 3D draw issued inside ONE
-//     bind cycle keep their relative public order. Vulkan holds sprites and 3D draws in two
-//     separate queues (`activeBatches_`, `pending3D_`) and every pass replays all of the first and
-//     then all of the second, so within one segment a 3D draw always lands on top of a sprite
-//     issued after it. That is a distinct root cause from segment boundaries (SdlGpu already has
-//     one unified `drawOrder_`), so check O3 declares it. What segmentation DOES fix is the
-//     cross-segment case, O1/O2, which this file asserts unconditionally.
+//     bind cycle keep their relative public order. The retired VULKAN renderer held sprites and 3D
+//     draws in two separate queues (`activeBatches_`, `pending3D_`) and every pass replayed all of
+//     the first and then all of the second, so within one segment a 3D draw always landed on top of
+//     a sprite issued after it. That is a distinct root cause from segment boundaries (SdlGpu
+//     already has one unified `drawOrder_`), so check O3 declares it. What segmentation DOES fix is
+//     the cross-segment case, O1/O2, which this file asserts unconditionally.
 //   * `backbufferDepthOnlyClear` -- whether `Clear(ClearOptions::DepthBuffer, ...)` alone reaches
-//     the backbuffer. `VulkanRenderer::ClearDepth` is the one clear entry point that does
-//     not record a clear request at all, so a depth-only clear is dropped there.
+//     the backbuffer. The retired VULKAN renderer's `ClearDepth` was the one clear entry point
+//     that recorded no clear request at all, so a depth-only clear was dropped there.
 //
 // The palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison is
 // byte-exact on every renderer including sRGB ones. Every asserted region is a full-height VERTICAL
@@ -1338,9 +1338,8 @@ protected:
         white_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
             dev, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255}));
 
-        // A 2D-only renderer raises from VertexBuffer's constructor outright ("SDL_Renderer does not
-        // support 3D: CreateVertexBuffer"), so the 3D resources are built only where the contract
-        // says 3D rasterizes at all. Every check that touches them is gated on the same flag.
+        // The 3D resources are built only where the contract says 3D rasterizes at all. Every
+        // check that touches them is gated on the same flag.
         if (kContract.draws3D)
         {
             fx_ = std::make_unique<BasicEffect>(dev);

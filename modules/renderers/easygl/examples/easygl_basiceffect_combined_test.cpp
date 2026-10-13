@@ -19,9 +19,7 @@
 // each axis of a 2-wide/2-tall texture), each compared against its own independently-derived
 // expected value — this is also a genuine "does per-vertex UV reach the right texel" check.
 //
-// This is the capstone test for Phase 42 (Tasks 361-370): identical assertions run unmodified (up
-// to the standard per-renderer workarounds) on Vulkan and Bgfx, so a 3-way match against the same
-// FNA-derived expected values *is* the cross-renderer image comparison this task calls for.
+// This is the capstone test for Phase 42 (Tasks 361-370).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

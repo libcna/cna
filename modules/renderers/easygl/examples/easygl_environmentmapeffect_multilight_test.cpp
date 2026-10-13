@@ -111,8 +111,7 @@ class EnvironmentMapEffectMultiLightTest : public Game
     }
 
     // Bound so this test matches every sibling EnvironmentMapEffect test's practice of always
-    // setting a real cube (irrelevant here, since EnvironmentMapAmount=0 below isolates it out);
-    // Bgfx's own env-map path has no null-EnvironmentMap fallback, unlike EasyGL/Vulkan.
+    // setting a real cube (irrelevant here, since EnvironmentMapAmount=0 below isolates it out).
     std::unique_ptr<TextureCube> makeCube(GraphicsDevice& dev, Color col)
     {
         auto cube = std::make_unique<TextureCube>(dev, 1, false, SurfaceFormat::Color);

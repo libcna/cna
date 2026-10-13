@@ -136,8 +136,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
                            SdlGpu, Software);
 }
 
-// The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D11 and
-// D3D12 are covered through Wine on the private headless Mutter/Xwayland compositor; D3D9 remains
+// The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D9 remains
 // outside the asserted set until equivalent runtime evidence exists. Software is measured through
 // deterministic CPU readback.
 //

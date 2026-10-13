@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// Ad hoc diagnostic (deliberately untracked and repository-level, not owned by any module):
-// draws the same SpriteBatch rotate-around-origin scene as
-// modules/renderers/easygl/examples/easygl_spritebatch_rotation_golden_test.cpp
-// (Task 465/417) -- a 100x100 texture (top-left 20x20 = Red marker, rest = Blue) drawn rotated
-// 90 degrees around its own bottom-right corner -- and saves the resulting backbuffer to a real
-// PNG file on disk, proving a real screenshot can be produced under Xvfb. 2D-only renderers can't
-// run the SOFTWARE-renderer screenshot demo's raw-VertexBuffer 3D scene (SDL_Renderer throws on
-// CreateVertexBuffer), so this demo uses SpriteBatch instead.
+// Ad hoc diagnostic (deliberately untracked and repository-level, not owned by any module): draws
+// the same SpriteBatch rotate-around-origin scene as
+// modules/renderers/easygl/examples/easygl_spritebatch_rotation_golden_test.cpp (Task 465/417) -- a
+// 100x100 texture (top-left 20x20 = Red marker, rest = Blue) drawn rotated 90 degrees around its
+// own bottom-right corner -- and saves the resulting backbuffer to a real PNG file on disk, proving
+// a real screenshot can be produced under Xvfb. It uses SpriteBatch rather than the
+// SOFTWARE-renderer screenshot demo's raw-VertexBuffer 3D scene because the retired 2D-only
+// SDL_RENDERER threw on CreateVertexBuffer.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

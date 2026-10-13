@@ -34,14 +34,6 @@
 //     BACKGROUND. If column 3 ignored StencilWriteMask (treated as this same full mask), it would
 //     ALSO show BACKGROUND -- again the narrow/full pairing is what proves the write mask works.
 //
-// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState, tracked as
-// Task 870) never sets stencilTestEnable at all, so the stencil test never gates fragments
-// regardless of any property, including StencilMask/StencilWriteMask. Expect columns 1 and 3
-// (which expect PASS/GREEN) to pass on Vulkan purely by coincidence -- since nothing ever gates,
-// every column renders GREEN -- while columns 2 and 4 (which expect FAIL/BACKGROUND) correctly
-// fail, revealing the bug. This is a further reconfirmation of Task 870, not a new bug; do not
-// read columns 1/3 passing as evidence the masks work on Vulkan.
-//
 // Exit code 0 = all 4 checks PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

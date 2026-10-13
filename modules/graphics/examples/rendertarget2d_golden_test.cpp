@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-75: shared RenderTarget2D 2D golden for SKIA, EASYGL, and SDL_RENDERER.
+// SKIA-75: shared RenderTarget2D 2D golden, first written for SKIA, EASYGL and SDL_RENDERER.
 //
 // This source contains the checked-in level-0 RGBA oracle rather than a driver-dependent image
 // file. It deliberately limits itself to the exact common 2D contract: an opaque Point sprite

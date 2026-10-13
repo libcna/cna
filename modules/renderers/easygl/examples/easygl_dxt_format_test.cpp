@@ -90,11 +90,10 @@ class DxtFormatTest final : public Game
 
     void RunLeg(GraphicsDevice& dev, const char* name, SurfaceFormat format)
     {
-        // plan_vulkan.md VULKAN-172. This source is registered by more than one renderer now, and
-        // block-compressed storage is not universal: CNA's Vulkan renderer claims BC1/BC2/BC3 only
-        // on a device whose VkPhysicalDeviceFeatures.textureCompressionBC is true (and whose
-        // VkFormatProperties back the individual format), and refuses them by name where it is
-        // not. EasyGL claims all three on every profile, because its fallback decodes.
+        // VULKAN-172. This source is registered by more than one renderer now, and
+        // block-compressed storage is not universal: a renderer may claim BC1/BC2/BC3 only where
+        // its device backs them, and refuses them by name where it does not. EasyGL claims all
+        // three on every profile, because its fallback decodes.
         //
         // The gate is the RENDERER'S OWN CLAIM, never a renderer name and never a silent skip: a
         // claimed format must pass the pixel check below, an unclaimed one must refuse. So this

@@ -12,10 +12,10 @@
 //
 //     SetRenderTarget(A); Draw(...); Draw(...); SetRenderTarget(nullptr);
 //
-// `VulkanRenderer::RecordCommandBuffer` did exactly that: its Phase 1 collected ONE entry
-// per unique `VulkanRTSource` and replayed every queued sprite batch and 3D draw for that source
-// inside a single `vkCmdBeginRenderPass`/`vkCmdEndRenderPass`. Two bind cycles of one target in
-// one flush window therefore shared one load action.
+// The retired VULKAN renderer's `VulkanRenderer::RecordCommandBuffer` did exactly that: its Phase 1
+// collected ONE entry per unique `VulkanRTSource` and replayed every queued sprite batch and 3D
+// draw for that source inside a single `vkCmdBeginRenderPass`/`vkCmdEndRenderPass`. Two bind cycles
+// of one target in one flush window therefore shared one load action.
 //
 // Why this file's decisive checks all use DiscardContents
 // -------------------------------------------------------
@@ -43,12 +43,13 @@
 //     exactly (REMED-GFX-136's contract, `usage != DiscardContents`).
 //   * Depth/stencil -- its own contract, established by REMED-GFX-142 and enforced by
 //     `examples/rendertarget_depthstencil_usage_test`. Nothing here asserts depth.
-//   * An explicit Clear() inside a bind cycle -- REMED-GFX-129 records that Vulkan drops it on a
-//     PreserveContents target, because the clear colour is delivered ONLY through the render
-//     pass's load op and there is no vkCmdClearAttachments path. That is a SEPARATE defect from
-//     pass collapsing, so this file declares it per renderer (`clearOnPreserveTarget`) and asserts
-//     the declared behaviour either way -- checks X1/X2 are the exact GFX-129 reproduction, kept
-//     here so GFX-140's fix can be re-measured against it rather than assumed to have covered it.
+//   * An explicit Clear() inside a bind cycle -- REMED-GFX-129 recorded that the retired VULKAN
+//     renderer dropped it on a PreserveContents target, because the clear colour was delivered ONLY
+//     through the render pass's load op and there was no vkCmdClearAttachments path. That is a
+//     SEPARATE defect from pass collapsing, so this file declares it per renderer
+//     (`clearOnPreserveTarget`) and asserts the declared behaviour either way -- checks X1/X2 are
+//     the exact GFX-129 reproduction, kept here so GFX-140's fix can be re-measured against it
+//     rather than assumed to have covered it.
 //   * Clear ordering inside ONE cycle -- same root cause: a load-op-only clear necessarily runs
 //     before every draw of its pass, so "draw, then Clear, then draw" cannot wipe the first draw.
 //     Declared as `clearAfterDrawWins` and asserted, not glossed over.
@@ -127,8 +128,8 @@ namespace
         Support cubeReadback;  ///< RenderTargetCube::GetData at level 0.
         /**
          * REMED-GFX-129: an explicit Clear() issued while a PreserveContents target is bound is
-         * honoured. False is a declared, still-open defect -- Vulkan delivers the clear colour
-         * only through the render pass load op, which a preserving pass sets to LOAD.
+         * honoured. False is a declared defect, on a renderer that delivers the clear colour only
+         * through the render pass load op, which a preserving pass sets to LOAD.
          */
         bool    clearOnPreserveTarget;
         /**
@@ -138,9 +139,9 @@ namespace
         bool    clearAfterDrawWins;
         /**
          * Ask for a multisampled BACKBUFFER. Only true where that is the sole way a render target
-         * can engage MSAA at all: Vulkan gates `VulkanRenderTargetRenderer`'s MSAA resources on the
-         * renderer's own `sampleCount_`, so `multiSampleCount=4` on a target reports 0 unless the
-         * device itself was created multisampled. Where this is true, check K1 REQUIRES the target
+         * can engage MSAA at all: a renderer that gates its render-target MSAA resources on its own
+         * device-wide sample count reports 0 for `multiSampleCount=4` on a target unless the device
+         * itself was created multisampled. Where this is true, check K1 REQUIRES the target
          * to come back with a real applied sample count -- an MSAA check that silently degraded to
          * single-sample would be a false positive.
          */
@@ -912,9 +913,9 @@ class RenderTargetPassBoundaryTest : public Game
      *
      * The resolve of each segment must complete before the next segment loads, and the final
      * readback must see the resolved single-sample content of the LAST cycle only. A renderer where
-     * `MultiSampleCount` comes back 0 never engaged MSAA (Vulkan only multisamples a render target
-     * when the BACKBUFFER was created multisampled) -- that is reported, and the single-sample
-     * segmentation assertion still runs.
+     * `MultiSampleCount` comes back 0 never engaged MSAA (a renderer may multisample a render
+     * target only when the BACKBUFFER was created multisampled) -- that is reported, and the
+     * single-sample segmentation assertion still runs.
      */
     void RunMsaaCycles(GraphicsDevice& dev)
     {

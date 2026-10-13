@@ -9,7 +9,7 @@
 // RenderTarget2D and reads it back with GetData(). That is deliberate: on some renderers (notably
 // WebGPU) the fixed internal SpriteBatch pipeline does NOT consume ColorWriteChannels, so only the
 // keyed 3D pipeline path actually exercises the GFX-077 fix. The 3D path is common to every renderer
-// this harness is compiled for (SDL_GPU / WEBGPU / D3D11 / D3D9), so one scene verifies them all.
+// this harness is compiled for (SDL_GPU / WEBGPU / D3D9), so one scene verifies them all.
 //
 // Isolation strategy: the quad is drawn with Opaque blend (SrcBlend=One, DstBlend=Zero -> blend
 // disabled, output == source), so the ONLY thing that can preserve a destination channel is the
@@ -168,7 +168,7 @@ class Gfx077ColorWriteChannels3DTest : public Game
         // every renderer's RenderTarget2D GPU-readback fallback. This comment previously recorded
         // that a 1x1-rect read "reads back all zeros on D3D11/D3D9" -- that was the REMED-GFX-127
         // fabrication, not a property of the rectangle overload: the rectangle path does reach the
-        // renderer, it simply had no readback to reach on those renderers. Both now return real
+        // renderer, it simply had no readback to reach on those renderers. D3D9 now returns real
         // content; the whole-level read is kept here because it is what this GFX-077 scene asserts.
         std::vector<Color> pix(static_cast<std::size_t>(kRtW) * kRtH, Color(0, 0, 0, 0));
         target->GetData(0, nullptr, pix.data(), 0, static_cast<int>(pix.size()));

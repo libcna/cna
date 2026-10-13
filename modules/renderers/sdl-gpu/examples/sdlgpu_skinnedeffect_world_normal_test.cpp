@@ -11,8 +11,9 @@
 // the outer world normal matrix (audit Variant A); pbr_skinned3d used raw mat3(lp.world) (Variant
 // B). Every pre-existing skinned test uses World = Identity, where the missing/mis-applied factor
 // is the identity and the bug is invisible. This is the non-identity-World harness those tests
-// cannot cover -- a port of vulkan_skinnedeffect_world_normal_test.cpp using RenderTarget2D::GetData
-// readback (this renderer's swapchain-download path segfaults; see plans/plan_sdlgpu.md SDLGPU-39) and the
+// cannot cover -- a port of the retired Vulkan renderer's
+// vulkan_skinnedeffect_world_normal_test.cpp using RenderTarget2D::GetData readback (this
+// renderer's swapchain-download path segfaults; see plans/plan_sdlgpu.md SDLGPU-39) and the
 // standard GPU-display skip guard the other SdlGpu pixel tests use.
 //
 // Design notes that make the bug *numerically* visible (identical to the Vulkan harness):
@@ -26,7 +27,7 @@
 //   * AmbientLightColor = 0 and a single directional light, so the pixel is a pure N.L readout.
 //
 // SdlGpu render targets are R8G8B8A8_UNORM (linear, not sRGB), so the expected byte is the linear
-// N.L * 255 exactly, like EasyGL/Vulkan.
+// N.L * 255 exactly, like EasyGL.
 //
 // Cases and analytically-derived expectations (light chosen so -Direction = (0,1,0), diffuse
 // white, pixel intensity = 255 * max(N.L, 0)):

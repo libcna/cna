@@ -16,15 +16,13 @@
 // all of them left `EmissiveColor` at its default `(0,0,0)`. Fixed by baking `EmissiveColor` into
 // the forwarded diffuse color when `LightingEnabled=false`, matching
 // `EffectHelpers.SetMaterialColor`'s exact branching (this is shared C++ code, so one fix covers
-// all 3 renderers — no shader changes needed, since the value is baked into the uniform the
+// every renderer — no shader changes needed, since the value is baked into the uniform the
 // no-lighting shaders already multiply by).
 //
 // Scope note: `LightingEnabled=true`'s own emissive/ambient/specular combination (a much larger,
 // separate finding — see plans/plan_graphics.md Task 369 write-up for the full audit) is deliberately
 // NOT covered by this test; it needs its own dedicated task (new Task 885) since it also requires
-// forwarding `SpecularColor`/`SpecularPower`/multi-light data that doesn't exist anywhere yet, and
-// on Vulkan specifically would require expanding a push-constant budget shared with SkinnedEffect
-// — an architectural change outside this task's scope.
+// forwarding `SpecularColor`/`SpecularPower`/multi-light data that doesn't exist anywhere yet.
 //
 // Uses a distinctive, non-white 1x1 texture color (200,100,50) — reused from Tasks 366/367 — with
 // new DiffuseColor (0.3,0.2,0.1) and EmissiveColor (0.2,0.1,0.4) chosen so the correct sum

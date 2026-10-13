@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Phase 58/59/63 (WEBGPU-23/34/72): verify WebGPURenderer's alpha_test3d.wgsl /
 // alpha_test_colored3d shader / GetOrCreatePipelineAlphaTest3D() / DrawPrimitivesEx() dispatch for
-// AlphaTestEffect's per-pixel alpha discard, ported from VulkanRenderer's
+// AlphaTestEffect's per-pixel alpha discard, ported from the retired VULKAN renderer's
 // alpha_test3d.{vert,frag}.glsl. Reuses the exact same UBO (coloredBindGroupLayout_) and texture
 // (texturedBindGroupLayout_) bind groups as textured3d.wgsl -- AlphaTestEffect has no lighting, so
 // the primary uniform block's ambient/light0 slots are repurposed for

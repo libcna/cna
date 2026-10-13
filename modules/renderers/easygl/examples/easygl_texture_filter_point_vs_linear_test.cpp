@@ -2,7 +2,7 @@
 // Task 297: verify TextureFilter::Point vs Linear on a 3D stock effect (DualTextureEffect),
 // for both magnification and minification.
 //
-// CNA maps XNA's single TextureFilter value to one GL/Vulkan min+mag filter pair (matching FNA's
+// CNA maps XNA's single TextureFilter value to one GL min+mag filter pair (matching FNA's
 // flat enum — there is no separate min/mag control), and generates no mipmaps by default, so
 // magnification and minification share identical underlying sampler math here; this test still
 // exercises both scales explicitly since that's the task's ask, and to confirm scale itself

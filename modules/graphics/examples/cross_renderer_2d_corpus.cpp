@@ -5,9 +5,9 @@
 // too and no second comparator exists to drift.
 //
 // The existing cross_renderer_diagnostic_scene.cpp cannot serve here: it draws a BasicEffect
-// triangle through a VertexBuffer, which a 2D-only renderer rejects. This file is deliberately
-// renderer-agnostic in the same way -- no #ifdef, no renderer-specific include -- and is built
-// once per renderer so the SAME source produces one dump per renderer.
+// triangle through a VertexBuffer, which the retired 2D-only SDL_RENDERER rejected. This file is
+// deliberately renderer-agnostic in the same way -- no #ifdef, no renderer-specific include -- and
+// is built once per renderer so the SAME source produces one dump per renderer.
 //
 // What the corpus deliberately does NOT contain, and why, is the whitelist of known differences.
 // It is kept narrow on purpose: every construct below is one where two conforming 2D renderers may
@@ -18,15 +18,15 @@
 //     unspecified; every sprite here is point-sampled at an integer scale.
 //   * Mip selection and mip-linear blending -- the selection rule is not a shared contract between
 //     a renderer with only authored levels and one with a GL sampler chain.
-//   * Anisotropic filtering, MSAA, Additive blending -- capability-dependent; a 2D-only renderer
-//     may report them unsupported.
+//   * Anisotropic filtering, MSAA, Additive blending -- capability-dependent; a renderer may
+//     report them unsupported.
 //   * Rotation by a non-right angle -- the rasterized coverage of a rotated quad edge is
 //     implementation defined.
 //   * Non-opaque destinations -- the backbuffer's alpha handling at presentation differs; the
 //     corpus composites onto an opaque cleared background only.
 //
-// scripts/compare-easygl-vulkan-diagnostic.sh runs it for EasyGL and Vulkan; docs/vulkan-renderer.md
-// records the measured result.
+// It was written for scripts/compare-easygl-vulkan-diagnostic.sh, which compared EasyGL with the
+// retired VULKAN renderer; EasyGL still builds it (cna_corpus2d_easygl).
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"

@@ -4,13 +4,14 @@
 // time, including real MSAA (auto-resolved via SDL_GPUColorTargetInfo.resolve_texture/
 // resolve_layer at render-pass end) and mip generation.
 //
-// This renderer has no EnvironmentMapEffect yet (SDLGPU-33, deferred), so unlike
-// vulkan_rendertargetcube_msaa_test.cpp's reflection-vector sampling (which the Vulkan test's own
-// header comment documents as unable to discriminate between individual faces), verification here
-// uses a real per-face GPU readback (SdlGpuRenderTargetCubeRenderer::GetData, pulled forward from
+// This renderer has no EnvironmentMapEffect yet (SDLGPU-33, deferred), so unlike the retired
+// vulkan_rendertargetcube_msaa_test.cpp's reflection-vector sampling (which that test's own header
+// comment documented as unable to discriminate between individual faces), verification here uses a
+// real per-face GPU readback (SdlGpuRenderTargetCubeRenderer::GetData, pulled forward from
 // SDLGPU-39 -- targets a texture this renderer fully controls, not the swapchain, so it does not
-// hit the segfault documented in plans/plan_sdlgpu.md's SDLGPU-39 row) -- a stronger, per-face-precise
-// check than the reflection-based "some face came back non-garbage" bar other renderers settle for.
+// hit the segfault documented in plans/plan_sdlgpu.md's SDLGPU-39 row) -- a stronger,
+// per-face-precise check than the reflection-based "some face came back non-garbage" bar other
+// renderers settle for.
 //
 // Check A -- all 6 faces filled with distinct solid colors via Clear() (no draw), each read back
 //   individually and confirmed correct -- proves real per-face bind/clear/pass + readback.

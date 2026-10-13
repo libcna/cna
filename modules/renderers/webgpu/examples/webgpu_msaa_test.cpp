@@ -5,30 +5,29 @@
 // returning the base no-op 0/"unsupported" default), so GraphicsDeviceManager.PreferMultiSampling
 // had no effect at all on this renderer.
 //
-// Architecture note (see WebGPURenderer::sampleCount_'s own comment): unlike Vulkan's
-// per-draw MSAA/non-MSAA pipeline selection, this renderer treats MSAA as a single RENDERER-GLOBAL
-// sample count -- every one of the ~10 GetOrCreatePipeline*3D() families plus the 2 SpriteBatch
-// pipelines bake the SAME sampleCount_ into their own WGPUMultisampleState.count, invalidated and
-// rebuilt lazily whenever ApplyMultiSampleCount() actually changes it (a rare, not-a-hot-path
-// event -- mirrors VulkanRenderer::sampleCount_'s own precedent). RenderTarget2D instances
+// Architecture note (see WebGPURenderer::sampleCount_'s own comment): this renderer treats MSAA as
+// a single RENDERER-GLOBAL sample count -- every one of the ~10 GetOrCreatePipeline*3D() families
+// plus the 2 SpriteBatch pipelines bake the SAME sampleCount_ into their own
+// WGPUMultisampleState.count, invalidated and rebuilt lazily whenever ApplyMultiSampleCount()
+// actually changes it (a rare, not-a-hot-path event). RenderTarget2D instances
 // (WebGPURenderTargetRenderer) unconditionally mirror this global value at CONSTRUCTION time -- see
-// that class's own doc comment for why a Vulkan-style per-instance opt-out is not safe given this
+// that class's own doc comment for why a per-instance opt-out is not safe given this
 // renderer's single shared pipeline sample count.
 //
-// Methodology (matches every other MSAA test in this project family --
-// easygl/vulkan/bgfx_*_msaa_test.cpp): render a diagonal-edged triangle and read back a centre row.
-// A hard, unblended binary red/black transition proves no AA; genuinely blended (grayscale-ish)
-// intermediate pixel values at the SAME geometry prove a real multisample resolve happened -- a
-// signature a solid-fill test cannot distinguish from "MSAA was silently ignored".
+// Methodology (matches the other MSAA tests in this project family -- easygl_*_msaa_test.cpp):
+// render a diagonal-edged triangle and read back a centre row. A hard, unblended binary red/black
+// transition proves no AA; genuinely blended (grayscale-ish) intermediate pixel values at the SAME
+// geometry prove a real multisample resolve happened -- a signature a solid-fill test cannot
+// distinguish from "MSAA was silently ignored".
 //
 // Check A -- backbuffer, MultiSampleCount=0 (the default): diagonal edge is a hard binary
 //   transition.
 // Check B -- backbuffer, PreferMultiSampling toggled + GraphicsDeviceManager.ApplyChanges() called
-//   AFTER the renderer already exists (the real runtime-reconfigure path, exactly like
-//   vulkan_msaa_test.cpp's own Task 902 verification -- NOT the CNAEXT
+//   AFTER the renderer already exists (the real runtime-reconfigure path, as in Task 902's own
+//   verification -- NOT the CNAEXT
 //   GraphicsDevice::RecreateRendererForMultiSampleCount() test-only escape hatch, which does not
 //   work for this renderer since WebGPURenderer's constructor never reads
-//   GraphicsRendererCreateArgs::multiSampleCount at all, unlike VulkanRenderer's): diagonal
+//   GraphicsRendererCreateArgs::multiSampleCount at all): diagonal
 //   edge now has genuinely blended pixels.
 // Check C -- ApplyMultiSampleCount()'s clamped-return-value contract: requesting 8 (an unsupported
 //   count -- wgpu-native/WebGPU only has two legal WGPUMultisampleState.count values, 1 and 4,
@@ -39,9 +38,8 @@
 //   global state: getMultiSampleCountProperty() reports the SAME real applied value as Check C's
 //   backbuffer value (not the RT constructor's own requested value, which is deliberately passed
 //   as 0 here to prove the mirroring is unconditional), and a diagonal-edged triangle drawn into it
-//   (sampled back via SpriteBatch, same methodology as
-//   vulkan_rendertarget2d_msaa_test.cpp/easygl_rendertarget2d_msaa_test.cpp) shows the same
-//   genuinely blended signature as Check B.
+//   (sampled back via SpriteBatch, same methodology as easygl_rendertarget2d_msaa_test.cpp) shows
+//   the same genuinely blended signature as Check B.
 // Check E -- consistency cross-check: Check C's clamped-return value and Check B's direct visual
 //   blending evidence must agree (applied==4 iff blending was actually observed) -- catches a
 //   renderer that claims a sample count it never really applies, or vice versa.
@@ -196,8 +194,7 @@ class WebGpuMsaaTest : public Game
     // Renders the same diagonal triangle into a RenderTarget2D, samples it back onto the
     // backbuffer 1:1 via SpriteBatch (PointClamp, to avoid bilinear-filter blur masquerading as
     // the MSAA blending signature), and returns the full centre-row pixel colours -- same "sample
-    // back, don't GetData() the RT directly" methodology as
-    // vulkan_rendertarget2d_msaa_test.cpp/easygl_rendertarget2d_msaa_test.cpp.
+    // back, don't GetData() the RT directly" methodology as easygl_rendertarget2d_msaa_test.cpp.
     std::vector<Color> RenderRTRow(GraphicsDevice& device, RenderTarget2D& rt)
     {
         device.SetRenderTarget(&rt);
@@ -257,8 +254,8 @@ protected:
                       "transition (no AA)");
 
         // Check B: the REAL runtime path -- toggle PreferMultiSampling and re-apply on the
-        // ALREADY-CONSTRUCTED renderer (Task 902's own GraphicsDeviceManager plumbing), exactly
-        // like vulkan_msaa_test.cpp's own verification. GraphicsDeviceManager's own
+        // ALREADY-CONSTRUCTED renderer (Task 902's own GraphicsDeviceManager plumbing).
+        // GraphicsDeviceManager's own
         // "PreferMultiSampling==true -> request 8" default (GraphicsDeviceManager.cpp) exercises
         // this renderer's clamp-down-to-4 behaviour, not merely a pass-through of an
         // already-legal value.

@@ -164,7 +164,7 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
     // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
-    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
+    // `emptyScissorDrawsNothing` false: measured here.
     // `outOfBoundsScissorRejected` true: since SOFTWARE-226 GraphicsDevice itself rejects the
     // rectangle before any renderer sees it, so no renderer can declare clipping here; this row
     // predated that and was the only one still declaring false.

@@ -1,6 +1,6 @@
 # plans/plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
 # into the same SDL3 library every other renderer links against) -- no separate find_package
-# or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX.
+# or FetchContent is needed, unlike WEBGPU.
 cna_add_renderer()
 set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-194: does a SpriteBatch leave its own SamplerState behind in
+// VULKAN-194: does a SpriteBatch leave its own SamplerState behind in
 // GraphicsDevice.SamplerStates[0], so that the next 3D draw samples with it?
 //
 // What XNA actually does

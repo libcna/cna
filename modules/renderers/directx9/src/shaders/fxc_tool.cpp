@@ -5,8 +5,8 @@
 // Wine). Proven in Phase D9-0 (66/66 entry points compiled, 0 failures) -- moved here unchanged
 // from dx9-spike/fxc_tool.cpp, not rewritten. Its own ID3DInclude handler resolves
 // Macros.fxh/Common.fxh/Lighting.fxh/Structures.fxh relative to the .fx file's own directory,
-// which src/CNA/Internal/Renderers/D3DCommon/shaders/hlsl_compiler_tool.cpp does not need (no
-// XNA-style #include tree there).
+// which the retired D3DCommon's shaders/hlsl_compiler_tool.cpp did not need (no XNA-style
+// #include tree there).
 //
 // usage: fxc_tool.exe <file.fx> <entry> <target> <out.bin> [--strip]
 // --strip is a dead option -- Phase D9-0 found the real fxc silently ignores the Effect-framework

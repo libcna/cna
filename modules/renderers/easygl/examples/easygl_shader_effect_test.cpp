@@ -15,8 +15,7 @@
 //   → white texel × red uniform → red output
 //
 // The sampler2D 'texture1' uniform defaults to texture unit 0, where SpriteBatch
-// binds the sprite texture. The package source and Vulkan bytecode share the same
-// observable tint contract even though their renderer integration differs.
+// binds the sprite texture.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 

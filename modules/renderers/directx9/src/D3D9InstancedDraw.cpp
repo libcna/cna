@@ -8,10 +8,10 @@
 // (transcribed verbatim from Structures.fxh across D9-82b-f) declare no per-instance semantic.
 // Real XNA hardware instancing requires the game author's own custom Effect with a custom vertex
 // shader that reads the extra per-instance stream -- there is no "instanced BasicEffect" in real
-// XNA. This shader is CNA's own minimal stand-in for that custom-Effect role, matching every other
-// renderer's own identical choice (D3D11/Vulkan/Bgfx each authored their own equivalent
-// "instanced3d" shader rather than attempting to instance a stock effect) -- so this file does NOT
-// dispatch through D3D9EffectDraw.cpp's DrawPrimitivesExImpl(), by design.
+// XNA. This shader is CNA's own minimal stand-in for that custom-Effect role, the same choice the
+// retired D3D11, Vulkan and Bgfx renderers made (each authored its own equivalent "instanced3d"
+// shader rather than attempting to instance a stock effect) -- so this file does NOT dispatch
+// through D3D9EffectDraw.cpp's DrawPrimitivesExImpl(), by design.
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
@@ -76,8 +76,7 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
-        // D9-83: matches DirectX11Renderer::DrawInstancedPrimitivesEx's own fallback -- no
-        // per-instance VB means this isn't really an instanced draw at all.
+        // D9-83: no per-instance VB means this isn't really an instanced draw at all.
         const auto* instanceStream = FirstInstanceStream(params);
         if (instanceStream == nullptr)
         {
@@ -125,9 +124,8 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetPixelShader(instancedPS_.Get());
 
         // ViewProj: per-instance world comes from the instance stream instead, so (unlike every
-        // other draw path in this renderer) the `world` parameter is deliberately unused here --
-        // matches DirectX11Renderer::DrawInstancedPrimitivesEx's own identical choice. Same
-        // register=column transpose convention used everywhere else in this renderer.
+        // other draw path in this renderer) the `world` parameter is deliberately unused here.
+        // Same register=column transpose convention used everywhere else in this renderer.
         const Matrix vpT = Matrix::Transpose(view * projection);
         float vpRegs[16];
         vpT.ToColumnMajor(vpRegs);

@@ -7,9 +7,9 @@
 // THE CONTRACT. `SamplerStates[0]` filters the base 2D texture (`EnvironmentMapEffect.Texture`) and
 // `SamplerStates[1]` filters the cube (`EnvironmentMapEffect.EnvironmentMap`). This is not a summary
 // taken on trust: `env_map3d.frag.glsl` declares `binding = 0 sampler2D uTexture` and
-// `binding = 1 samplerCube uEnvMap`, and Vulkan's `GetOrCreateEnvMapDescSet` -- corrected under
-// REMED-GFX-169 and the reference this fixture measures every other renderer against -- writes
-// `slotSamplers_[0]` into binding 0 and `slotSamplers_[1]` into binding 1. The two slots are
+// `binding = 1 samplerCube uEnvMap`, and the retired VULKAN renderer's `GetOrCreateEnvMapDescSet`
+// -- corrected under REMED-GFX-169 and the reference this fixture was first measured against --
+// wrote `slotSamplers_[0]` into binding 0 and `slotSamplers_[1]` into binding 1. The two slots are
 // INDEPENDENT: changing one may not alter what the other resource looks like, both must be captured
 // when the draw is issued so a later public change cannot reach back into a queued command, and an
 // explicit sampler must never be replaced by a fixed constant. An unset slot uses the documented

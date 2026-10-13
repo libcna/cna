@@ -14,11 +14,9 @@
 //      StencilPass=Replace, ReferenceStencil=0), in the background colour -- this establishes a
 //      known baseline explicitly via a real draw, NOT via GraphicsDevice::Clear(), because
 //      GraphicsDevice::Clear ignores ClearOptions::Stencil entirely on every renderer (confirmed
-//      while writing this test, tracked as a new Task 871 -- see plans/plan_graphics.md) and this
-//      project's Vulkan render passes use stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE, so the
-//      stencil aspect's initial content is genuinely undefined there. Depth testing is disabled
-//      for every draw in this test (DepthBufferEnable=false throughout) to isolate stencil
-//      behaviour from the already-tracked depth-compare bug (Task 870).
+//      while writing this test, tracked as a new Task 871 -- see plans/plan_graphics.md). Depth
+//      testing is disabled for every draw in this test (DepthBufferEnable=false throughout) to
+//      isolate stencil behaviour from the already-tracked depth-compare bug (Task 870).
 //   2. Each column's LEFT half gets a second stamp: stencil=1 (same Always/Replace pattern),
 //      still in the background colour -- so after steps 1-2, stencil=1 on the left half, 0 on the
 //      right half, and the visible colour is still the background everywhere.
@@ -30,14 +28,6 @@
 //   (stencil==1, matches) -> GREEN; right half (stencil==0, no match) -> stays BACKGROUND.
 // Check B (StencilEnable=false): the stencil test is skipped entirely (FNA/XNA semantics: fragments
 //   always pass when disabled) -- BOTH halves -> GREEN, regardless of the stencil buffer contents.
-//
-// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState, tracked as
-// Task 870) never sets VkPipelineDepthStencilStateCreateInfo::stencilTestEnable/front/back at all
-// -- stencil testing is completely non-functional there regardless of StencilEnable. Expect Check
-// A to fail outright on Vulkan (both halves show GREEN, since no gating ever happens) while Check
-// B passes coincidentally (its expected result already matches "stencil test never gates
-// anything"). This is a reconfirmation of Task 870, not a new bug -- do not misread Check B's pass
-// as evidence stencil testing works.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 

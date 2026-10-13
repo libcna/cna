@@ -364,10 +364,10 @@ TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclar
 TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
 {
     // The declaration test above stops at the public VertexBuffer. This leg makes each selected
-    // renderer consume the uploaded buffer in an actual indexed draw, which is where Vulkan builds
-    // its pipeline input state and EasyGL checks the declaration against the selected stock
-    // program. A renderer can therefore accept an upload yet still fail here because one semantic
-    // is absent, misordered or has the wrong native format.
+    // renderer consume the uploaded buffer in an actual indexed draw, which is where a
+    // pipeline-based renderer builds its vertex input state and EasyGL checks the declaration
+    // against the selected stock program. A renderer can therefore accept an upload yet still fail
+    // here because one semantic is absent, misordered or has the wrong native format.
     GraphicsDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
     {
@@ -396,8 +396,8 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
         try
         {
             model.Draw(identity, identity, identity);
-            // Deferred renderers submit the draw here. Without Present, a Vulkan command can be
-            // recorded but never reach the driver's input-layout validation.
+            // Deferred renderers submit the draw here. Without Present, a command can be recorded
+            // but never reach the driver's input-layout validation.
             gd.Present();
         }
         catch (const std::exception& error)

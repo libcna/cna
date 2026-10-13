@@ -52,13 +52,12 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         /// Same two-concrete-type resolution as D3D9EffectDraw.cpp's own ResolveD3D9TextureEXT
-        /// (RenderTarget2D used as a SpriteBatch texture is the same real, legal ITextureRenderer
-        /// runtime type this project's D3D11 renderer already handles) -- duplicated per-file
-        /// rather than factored into a shared header, matching D3D11SpriteBatch.cpp's own
-        /// documented precedent for the identical situation. Previously this call site only tried
-        /// D3D9TextureRenderer and silently dropped the texture (drew untextured) for a
-        /// RenderTarget2D -- wrong, but not the crash; kept as dynamic_cast-safe here since the
-        /// crash's own root cause was the *effect*-draw path's static_cast, not this one.
+        /// (RenderTarget2D used as a SpriteBatch texture is a real, legal ITextureRenderer runtime
+        /// type) -- duplicated per-file rather than factored into a shared header. Previously this
+        /// call site only tried D3D9TextureRenderer and silently dropped the texture (drew
+        /// untextured) for a RenderTarget2D -- wrong, but not the crash; kept as dynamic_cast-safe
+        /// here since the crash's own root cause was the *effect*-draw path's static_cast, not this
+        /// one.
         IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
@@ -138,9 +137,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9SpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
-        // D9-112: flush on change (mirrors D3D11SpriteBatchRenderer::SetCustomEffect() exactly) --
-        // any pending batch was built expecting the PREVIOUS shader/effect, so it must be drawn
-        // before the switch takes effect, not silently redrawn with the new one.
+        // D9-112: flush on change -- any pending batch was built expecting the PREVIOUS
+        // shader/effect, so it must be drawn before the switch takes effect, not silently redrawn
+        // with the new one.
         if (customEffect_ != effect)
         {
             FlushBatch();
@@ -301,13 +300,11 @@ namespace CNA::Internal::Renderers::DirectX9
         // (D9-111's own design note) -- no separate declaration/layout needed for this path.
         //
         // Unlike the stock path's real XNA "MatrixTransform" register, a custom shader receives
-        // the current viewport size via a "vpSize" uniform instead (mirrors
-        // D3D11SpriteBatchRenderer's own established, CNAEXT, documented CNA convention for this
-        // mechanism -- SetViewportSizeEXT() there, the generic per-name SetUniformVec2() here,
-        // since D3D9EffectRenderer's name-based lookup makes a dedicated method unnecessary): the
-        // custom vertex shader is expected to build its own 2D->clip-space transform from
-        // viewport width/height, the same responsibility D3D11's own custom-shader contract
-        // already assigns to the shader author, for cross-renderer consistency.
+        // the current viewport size via a "vpSize" uniform instead (the CNAEXT convention the
+        // retired D3D11 renderer's SetViewportSizeEXT() established; the generic per-name
+        // SetUniformVec2() here, since D3D9EffectRenderer's name-based lookup makes a dedicated
+        // method unnecessary): the custom vertex shader is expected to build its own
+        // 2D->clip-space transform from viewport width/height.
         D3D9EffectRenderer* customRenderer = nullptr;
         if (customEffect_)
             customRenderer = dynamic_cast<D3D9EffectRenderer*>(customEffect_->GetEffectRendererPtr());

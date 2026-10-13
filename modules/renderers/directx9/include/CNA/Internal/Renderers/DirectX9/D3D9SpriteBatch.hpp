@@ -7,18 +7,18 @@
 // entry points were already present in d3d9_shaders.hpp/D3D9ShaderRegisters.hpp before this file
 // existed, a side effect of that pipeline sweeping every vendored .fx file, not new work here).
 //
-// Structurally mirrors D3D11SpriteBatchRenderer (CPU-side quad geometry: destination/source rect,
-// origin, rotation, scale, SpriteEffects flip -- same formula, reused verbatim, since it is
-// projection-agnostic pixel-space math) but drives a genuinely different shader and vertex
-// contract: D3D11's own sprite2d.hlsl is a CNA invention with no XNA equivalent, whereas D3D9
-// must draw Microsoft's real, unmodified SpriteEffect.fx (design decision 3) using its real
-// vertex contract (SpriteVertexShader's inout float4 color : COLOR0 / float2 texCoord : TEXCOORD0
-// / float4 position : SV_Position, matching FNA's own SpriteBatch.cs VertexPositionColorTexture4
-// per-corner shape: Position Vector3 @0, Color @12 (D3DDECLTYPE_UBYTE4N, matching D9-82's own
-// R,G,B,A-ascending finding, not D3DDECLTYPE_D3DCOLOR), TextureCoordinate Vector2 @16 -- the
-// EXISTING stride-24 D3D9VertexDeclarations layout, D9-22's own "VertexPositionColorTexture"
-// entry, reused as-is) and a real float4x4 MatrixTransform constant (v0, 4 registers) instead of
-// D3D11's own scalar ViewportSize pair.
+// Structurally mirrors the retired D3D11SpriteBatchRenderer (CPU-side quad geometry:
+// destination/source rect, origin, rotation, scale, SpriteEffects flip -- same formula, reused
+// verbatim, since it is projection-agnostic pixel-space math) but drives a genuinely different
+// shader and vertex contract: that renderer's sprite2d.hlsl was a CNA invention with no XNA
+// equivalent, whereas D3D9 must draw Microsoft's real, unmodified SpriteEffect.fx (design decision
+// 3) using its real vertex contract (SpriteVertexShader's inout float4 color : COLOR0 / float2
+// texCoord : TEXCOORD0 / float4 position : SV_Position, matching FNA's own SpriteBatch.cs
+// VertexPositionColorTexture4 per-corner shape: Position Vector3 @0, Color @12
+// (D3DDECLTYPE_UBYTE4N, matching D9-82's own R,G,B,A-ascending finding, not D3DDECLTYPE_D3DCOLOR),
+// TextureCoordinate Vector2 @16 -- the EXISTING stride-24 D3D9VertexDeclarations layout, D9-22's
+// own "VertexPositionColorTexture" entry, reused as-is) and a real float4x4 MatrixTransform
+// constant (v0, 4 registers) instead of the D3D11 renderer's scalar ViewportSize pair.
 //
 // Design decision 10: the D3D9 half-pixel offset (XNA's D3D9-era SpriteBatch compensates for
 // Direct3D 9's texel-center-at-integer-coordinate convention, which D3D10+/modern APIs do not
@@ -124,7 +124,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         /// D9-112: the custom Effect passed to SpriteBatch::Begin(effect), or nullptr for the
         /// stock SpriteEffect path. Not owned -- the caller (SpriteBatch/the game) owns its own
-        /// lifetime, matching D3D11SpriteBatchRenderer's own identical convention.
+        /// lifetime.
         Effect* customEffect_ = nullptr;
 
 #if defined(CNA_DIRECTX9_COMPILED_EFFECTS)
@@ -132,11 +132,10 @@ namespace CNA::Internal::Renderers::DirectX9
         std::uint32_t spriteMatrixParameterIndex_ = 0;
 #endif
 
-        // Defaults mirror D3D11SpriteBatchRenderer's own: Linear filter, Clamp address -- a
-        // SpriteBatch that never calls SetSamplerFilter/SetSamplerAddressMode behaves exactly as
-        // if the game had never touched sampler state. In practice SpriteBatch::Begin() (the
-        // public XNA layer) always calls both before the first Draw of any batch, so these are
-        // only ever observed pre-Begin().
+        // Defaults: Linear filter, Clamp address -- a SpriteBatch that never calls
+        // SetSamplerFilter/SetSamplerAddressMode behaves exactly as if the game had never touched
+        // sampler state. In practice SpriteBatch::Begin() (the public XNA layer) always calls both
+        // before the first Draw of any batch, so these are only ever observed pre-Begin().
         int pendingFilter_ = 0;   // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1; // TextureAddressMode::Clamp

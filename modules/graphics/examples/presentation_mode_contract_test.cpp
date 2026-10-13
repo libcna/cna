@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx.md DX-217: renderer-neutral behavioral contract for all five presentation modes.
+// DX-217: renderer-neutral behavioral contract for all five presentation modes.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"

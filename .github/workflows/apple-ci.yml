@@ -138,8 +138,8 @@ jobs:
       # preset description).
       #
       # The video driver is deliberately left alone. A hosted macOS runner has a real window
-      # server (the Metal workflow's GPU tests depend on it), and the window-creating cases here
-      # skip themselves cleanly if SDL video init ever fails. Forcing SDL_VIDEODRIVER=dummy would
+      # server, and the window-creating cases here skip themselves cleanly if SDL video init ever
+      # fails. Forcing SDL_VIDEODRIVER=dummy would
       # be worse than either outcome: the dummy driver accepts window creation but rejects
       # minimize/restore, turning a skip into a failure that says nothing about macOS.
       - name: Run platform and storage suites

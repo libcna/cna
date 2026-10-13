@@ -7,18 +7,14 @@
 // translation. Under NON-UNIFORM scale, the correct normal transform is
 // `transpose(inverse(World3x3))`, not `World3x3` directly.
 //
-// Auditing CNA's actual dispatch found this bug is real and confirmed on 2 of 3 renderers:
-//   - EasyGL: computed the "normal matrix" as the raw upper-left 3x3 of World on the CPU side
-//     (`BindDrawParams()`), never inverting/transposing it -- WRONG under non-uniform scale.
-//   - Vulkan: computes `transpose(inverse(mat3(world)))` directly in the vertex shader --
-//     already CORRECT, no fix needed.
-//   - Bgfx: transforms the normal by `mul(u_world, vec4(a_normal,0.0))` directly in the vertex
-//     shader -- WRONG under non-uniform scale, same shape as EasyGL's bug.
+// Auditing CNA's actual dispatch found this bug is real on EasyGL: it computed the "normal
+// matrix" as the raw upper-left 3x3 of World on the CPU side (`BindDrawParams()`), never
+// inverting/transposing it -- WRONG under non-uniform scale.
 // Notably, `EnvironmentMapEffect::OnApply()` ALREADY computes the correct
 // `WorldInverseTranspose` and stores it in its own `EffectParameter` (for API/content-pipeline
-// fidelity) -- but this correct value was never forwarded into the actual GPU dispatch path on
-// either buggy renderer, which independently (and incorrectly) derived their own "normal
-// matrix" from the raw World matrix instead.
+// fidelity) -- but this correct value was never forwarded into the actual GPU dispatch path,
+// which independently (and incorrectly) derived its own "normal matrix" from the raw World
+// matrix instead.
 //
 // To discriminate the two formulas, this test assigns every vertex a NON-axis-aligned normal
 // `(0, 1, 1)/sqrt(2)` (a synthetic normal decoupled from the quad's actual flat geometry --

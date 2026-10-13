@@ -6,7 +6,8 @@
 // ANY non-zero negative bias, even 1e-12, wins an exact-equal LESS comparison. Here the second
 // triangle is drawn 1e-4 behind the first instead (1e-4 in clip z, which is 1e-4 of depth under
 // XNA's [0,1] mapping and 5e-5 under OpenGL's [-1,1] one), so only a bias of the right size moves
-// it in front. Metal handed XNA's value to setDepthBias: unscaled and stayed red at every size.
+// it in front. The retired METAL renderer handed XNA's value to setDepthBias: unscaled and stayed
+// red at every size.
 //
 //   bias -3e-5  -> RED    (smaller than the gap on either depth mapping)
 //   bias -3e-4  -> GREEN  (larger than the gap on either depth mapping)

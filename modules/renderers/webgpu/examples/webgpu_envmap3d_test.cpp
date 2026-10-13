@@ -2,12 +2,12 @@
 // WEBGPU-25/36/74: verify WebGPURenderer's env_map3d.wgsl / GetOrCreatePipelineEnvMap3D() /
 // DrawPrimitivesEx()+DrawIndexedPrimitivesEx() dispatch for EnvironmentMapEffect (stride-32
 // VertexPositionNormalTexture, the same vertex layout as lit_textured3d.wgsl) -- this renderer's
-// first cube-map shader, ported from VulkanRenderer's env_map3d.{vert,frag}.glsl (itself
-// cross-checked against EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical GLSL formula
-// before porting). Also exercises WebGPUTextureCubeRenderer (CreateTextureCube()/SetData()), this
-// renderer's first cube-map texture support (a minimal, read-only-after-upload implementation --
-// see that class's own doc comment for the documented TextureCube/RenderTargetCube parity gaps
-// this does NOT close).
+// first cube-map shader, ported from the retired VULKAN renderer's env_map3d.{vert,frag}.glsl
+// (itself cross-checked against EasyGLRenderer::EnsureEnvMapped3DProgram()'s identical GLSL
+// formula before porting). Also
+// exercises WebGPUTextureCubeRenderer (CreateTextureCube()/SetData()), this renderer's first
+// cube-map texture support (a minimal, read-only-after-upload implementation -- see that class's
+// own doc comment for the documented TextureCube/RenderTargetCube parity gaps this does NOT close).
 //
 // All checks use World=View=Projection=Identity, a quad at z=0.5 with Normal=(0,0,-1) (facing the
 // camera at the origin, matching webgpu_littextured3d_test.cpp's own convention) and no directional

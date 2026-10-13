@@ -7656,9 +7656,9 @@ namespace CNA::Internal::Renderers::EasyGL
         // SamplerState's default MaxAnisotropy of 4, every subsequent Point/Linear draw on that
         // slot kept sampling anisotropically. Anisotropic taps average across the pixel footprint,
         // which is why the contaminated slot returned the same wide box average for all nine
-        // ordinals and no Point draw could ever return a stored texel again. Vulkan cannot have
-        // this defect because it builds a fresh VkSamplerCreateInfo per sampler; the mutable
-        // shared object is what makes the unconditional write necessary here.
+        // ordinals and no Point draw could ever return a stored texel again. A renderer that
+        // builds a fresh sampler object per state cannot have this defect; the mutable shared
+        // object is what makes the unconditional write necessary here.
         const AnisotropyLimits& aniso = CurrentContextAnisotropyLimits();
         if (aniso.supported)
         {
@@ -8404,19 +8404,15 @@ namespace CNA::Internal::Renderers::EasyGL
             vao.set_attribute_pointer(5, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)56);
             break;
         case 52:
-            // Task 11.10: this layout is independently duplicated (magic stride 52) in
-            // BgfxRenderer.cpp's MakeBgfxLayout and VulkanRenderer.cpp's
-            // GetOrCreatePipelineSkinned3D - none derive it from the canonical
+            // Task 11.10: this layout (magic stride 52) is not derived from the canonical
             // VertexPositionNormalTextureSkinned::getVertexDeclarationStatic() (5 VertexElements:
             // offset 0 Vector3 Position, 12 Vector3 Normal, 24 Vector2 TextureCoordinate,
             // 32 Vector4 BlendWeight, 48 Byte4 BlendIndices). If that struct's field order or
             // any individual offset ever changes (its total size is already guarded by
-            // VertexBuffer.cpp's own static_assert(sizeof(GpuVertex) == 52)), all 3 copies below
-            // must be updated together - investigated deriving this from a shared VertexElement
-            // list instead, but every renderer's API boundary currently only receives a raw
-            // stride, not a VertexDeclaration; doing so would mean widening IGraphicsRenderer's
-            // interface across all 4 renderers for every existing magic-stride case (16/32/52),
-            // not just this one - deferred as a larger cross-renderer refactor, not attempted here.
+            // VertexBuffer.cpp's own static_assert(sizeof(GpuVertex) == 52)), the copy below
+            // must be updated with it - deriving it from a shared VertexElement list would mean
+            // widening IGraphicsRenderer's interface for every existing magic-stride case
+            // (16/32/52), not just this one - deferred as a larger cross-renderer refactor.
             // SkinnedVertex: float3 pos + float3 normal + float2 uv + float4 weights + ubyte4 indices
             vao.enable_attribute(0);
             vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
@@ -11018,8 +11014,8 @@ namespace CNA::Internal::Renderers::EasyGL
     namespace
     {
         // REMED-GFX-234 / WEBGPU-158: a declaration that names no Normal is not a lit vertex at any
-        // stride, so a lit BasicEffect draw of one takes the unlit family -- the rule WebGPU,
-        // Vulkan, SDL_GPU and Direct3D 11 select their stock programs by. SOFTWARE-130 rightly made
+        // stride, so a lit BasicEffect draw of one takes the unlit family -- the rule WebGPU and
+        // SDL_GPU select their stock programs by. SOFTWARE-130 rightly made
         // the effect flags pick the program variant, and with it this question went unasked: the
         // lit program then read the disabled aNormal's (0,0,0) and normalized it. That is undefined
         // GLSL; macOS's GL lights such a vertex with no diffuse term at all, so the declared colour

@@ -18,13 +18,6 @@
 // alpha factors ever leaked into the colour computation, one of these two checks would show the
 // wrong result.
 //
-// NOTE: Vulkan's ApplyBlendState (Task 868, see plans/plan_graphics.md) hardcodes colorSrcBlend=
-// SourceAlpha, colorDstBlend=InverseSourceAlpha regardless of what's requested. At alpha=255 that
-// collapses to "source only" (SourceAlpha=1, InverseSourceAlpha=0) — which happens to match Check
-// A's expectation by coincidence, but NOT Check B's (which expects "destination only"). Expect
-// Check A to pass and Check B to fail on Vulkan; do not read a passing Check A as evidence Task
-// 868 is fixed.
-//
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

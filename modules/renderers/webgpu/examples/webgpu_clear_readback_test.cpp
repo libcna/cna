@@ -4,8 +4,7 @@
 // intervening real Present() -- WebGPU's swapchain-backed render target means a naive
 // implementation can only ever observe the *previous* frame's content (nothing is readable until
 // the frame has been submitted), so ReadBackbuffer() renders any pending Clear()/SpriteBatch work
-// on demand before mapping the readback buffer, matching the Vulkan/Bgfx renderers' own
-// on-demand-submit readback semantics (see WebGPURenderer::EnsureFrameRendered()).
+// on demand before mapping the readback buffer (see WebGPURenderer::EnsureFrameRendered()).
 //
 // Check A -- Clear(Red) is visible via GetBackBufferData() in the same Draw() call.
 // Check B -- a second Clear(Blue) right after replaces it (no stale/cached frame served).

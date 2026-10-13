@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_dx9.md Phase D9-11 (D9-111): validates D3D9EffectRenderer -- runtime D3DCompile() of a
 // custom vertex+pixel shader pair, per-stage name->register lookup via D9-110's CTAB parser, and
-// real uniform-driven pixel output. Mirrors D3D11EffectRenderer's own DX-58 test bar: "compile a
-// trivial custom vertex+pixel shader pair at runtime, draw a real triangle with it, read back the
-// exact pixel color driven by a uniform."
+// real uniform-driven pixel output. Mirrors the retired D3D11EffectRenderer's DX-58 test bar:
+// "compile a trivial custom vertex+pixel shader pair at runtime, draw a real triangle with it, read
+// back the exact pixel color driven by a uniform."
 //
 // Check A -- CompileProgram() succeeds for a real custom vertex+pixel shader pair (vs_2_0/ps_2_0
 //   under Reach).
@@ -92,8 +92,7 @@ this is not valid HLSL at all !!!
     // Matches this project's own established Matrix->HLSL-register convention
     // (D3D9EffectDraw.cpp's own UploadMatrixConstantVS): transpose, then column-major-pack into a
     // flat float[16] -- SetUniformMat4() takes a raw pointer, so the caller (here, the test itself,
-    // playing the role of game code) is responsible for this conversion, exactly as
-    // D3D11EffectRenderer's own SetUniformMat4() contract already requires of ITS callers.
+    // playing the role of game code) is responsible for this conversion.
     void ToShaderRegistersEXT(const Matrix& m, float out[16])
     {
         const Matrix transposed = Matrix::Transpose(m);

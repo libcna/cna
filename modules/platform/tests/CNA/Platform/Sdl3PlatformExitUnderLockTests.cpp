@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_vulkan.md VULKAN-159 (finding F-28): `~Sdl3Platform` must survive `exit()` reached
+// VULKAN-159 (finding F-28): `~Sdl3Platform` must survive `exit()` reached
 // from inside the SDL global-state critical section on its own thread.
 //
 // The hazard, measured rather than imagined. `~Sdl3Platform` locks `SdlGlobalStateMutex()`, and

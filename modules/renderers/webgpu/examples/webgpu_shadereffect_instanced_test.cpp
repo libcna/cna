@@ -5,11 +5,11 @@
 // The contract is XNA's own and there is only one of it: SetVertexBuffers with a binding whose
 // InstanceFrequency is above zero, then DrawInstancedPrimitives. Nothing about it is specific to a
 // stock effect -- the instanced drawing helper documents that an effect wanting its tint
-// stream "must be a ShaderEffect whose vertex input declares it", and Vulkan and EasyGL both
-// implement exactly that (vulkan_shader_effect_3d_test's check G, EasyGL's glVertexAttribDivisor
-// path). This renderer did not: DrawInstancedPrimitivesEx never looked at customEffectRenderer, so
-// an instanced ShaderEffect draw fell into the stock instanced3d family and was rendered with
-// CNA's shader instead of the game's -- a silent wrong-shader result, not a refusal.
+// stream "must be a ShaderEffect whose vertex input declares it", and EasyGL implements exactly
+// that (its glVertexAttribDivisor path). This renderer did not: DrawInstancedPrimitivesEx never
+// looked at customEffectRenderer, so an instanced ShaderEffect draw fell into the stock instanced3d
+// family and was rendered with CNA's shader instead of the game's -- a silent wrong-shader result,
+// not a refusal.
 //
 // The discriminating shape is four instances that differ ONLY in their per-instance record. Each
 // gets its own quadrant and its own colour from the instance stream, so:
@@ -79,8 +79,8 @@ namespace
     }
 
     // @location(0) is the mesh's own position. The instance stream's locations continue after the
-    // per-vertex declaration's element count, which is the convention EasyGL established and
-    // Vulkan copied -- one element per-vertex, so the instance half starts at 1.
+    // per-vertex declaration's element count, which is the convention EasyGL established -- one
+    // element per-vertex, so the instance half starts at 1.
     const char* const kVertexWgsl = R"WGSL(
 @vertex fn vs_main(
     @location(0) position: vec2f,

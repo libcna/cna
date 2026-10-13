@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-137 -- a VertexBuffer or IndexBuffer of ZERO elements.
+// VULKAN-137 -- a VertexBuffer or IndexBuffer of ZERO elements.
 //
-// `vkCreateBuffer` rejects a size of 0, so this renderer allocates `max(1, size)` for an empty
-// buffer, and this file was written to prove that padding invisible from the public API.
+// `vkCreateBuffer` rejects a size of 0, so the retired VULKAN renderer allocated `max(1, size)` for
+// an empty buffer, and this file was written to prove that padding invisible from the public API.
 //
 // plans/plan_vulkan_parity.md VKPAR-0022: the premise changed underneath it. Microsoft XNA rejects
 // a zero count, not only a negative one -- `vertexCount <= 0` and `indexCount <= 0` in every
 // constructor (plans/plan_software.md SOFTWARE-204) -- so an empty buffer is no longer a legal
 // object and the padding is unreachable through the public API. What is left to prove, on every
 // renderer this is registered for, is that the refusal comes first: XNA's exception, raised before
-// any native allocation, with the device still drawing afterwards. The CTest output gate still
-// fails the run on any `[Vulkan Validation]` line, which is what shows nothing native was touched.
+// any native allocation, with the device still drawing afterwards.
 //
 // Legs:
 //   A  A zero-element VertexBuffer is refused with ArgumentOutOfRangeException, naming the count,

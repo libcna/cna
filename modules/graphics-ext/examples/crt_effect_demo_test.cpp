@@ -161,7 +161,7 @@ class CRTEffectDemo : public Game
     }
 
     // Redraws sceneRT_ as a single full-screen quad through CRTEffect. Render-target sampling is
-    // already normalized by each renderer, so this stays the same on OpenGL and Vulkan.
+    // already normalized by each renderer, so this stays the same on all of them.
     void DrawCrtPass()
     {
         SamplerState pointClamp = SamplerState::PointClamp;

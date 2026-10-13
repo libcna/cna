@@ -15,9 +15,9 @@
 // applied for backbuffer draws), RED (drawn last) incorrectly overwrites, and the result is RED.
 //
 // Unbind, then sample the RT back via SpriteBatch onto the backbuffer — this uses the
-// RenderTarget2D sampling-after-unbind path already pixel-verified working on both EasyGL (Task
-// 87) and Vulkan (Task 148), isolating "does depth actually function inside the RT" as the only
-// new variable under test here.
+// RenderTarget2D sampling-after-unbind path already pixel-verified working on EasyGL (Task 87),
+// isolating "does depth actually function inside the RT" as the only new variable under test
+// here.
 //
 // Task 912 (Bgfx registration): the read-back is retried (Clear+Draw+Read, up to 20x) until
 // non-black — Bgfx's GetBackBufferData() only reliably reflects the first read call per rendered
@@ -27,8 +27,8 @@
 // shared test can finally be registered for Bgfx too (previously EasyGL/Vulkan only) — confirmed
 // this is the sole reason Bgfx originally appeared to fail this exact scenario (investigated as a
 // suspected separate bug, tracked as Task 912, and root-caused to this, not a distinct bug).
-// EasyGL/Vulkan are unaffected: both already produce the correct pixel on the very first read, so
-// the retry loop's condition is satisfied and it breaks after exactly one iteration.
+// EasyGL is unaffected: it already produces the correct pixel on the very first read, so the
+// retry loop's condition is satisfied and it breaks after exactly one iteration.
 //
 // Exit code 0 = PASS (GREEN, nearer quad correctly wins), 1 = FAIL.
 

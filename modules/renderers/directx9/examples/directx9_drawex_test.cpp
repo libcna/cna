@@ -63,8 +63,8 @@
 //   D3D9TextureRenderer* -- undefined behavior that read garbage where D3D9TextureRenderer's own
 //   `texture_` field would be and handed SetTexture() a bogus IDirect3DTexture9*, which crashed
 //   later when DXVK's async shader-compiler thread tried to actually use it. Fixed with a real
-//   two-concrete-type dynamic_cast resolution (ResolveD3D9TextureEXT), mirroring
-//   DirectX11Renderer.cpp's own established GetSrvForTextureEXT precedent for the identical
+//   two-concrete-type dynamic_cast resolution (ResolveD3D9TextureEXT), mirroring the retired
+//   DirectX11Renderer's GetSrvForTextureEXT precedent for the identical
 //   situation. This check's exact readback (matching Check A's own color) proves the render
 //   target's REAL content is genuinely sampled, not merely "didn't crash".
 // Check R -- BasicEffect PreferPerPixelLighting=true, textured (ShaderIndex 28/29 -- one of the 5

@@ -126,7 +126,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, SdlGpu, DirectX9);
 }
 
-// The renderers measured on a real display here. D3D9/D3D11 stay outside it because no D3D
+// The renderers measured on a real display here. D3D9 stays outside it because no D3D
 // display is reachable in this environment; every leg still PRINTS its reading there.
 /// plans/plan_runtimerenderer.md RTR-P9-6: the same set, evaluated at runtime.
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
@@ -156,25 +156,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// The skinned, PBR and instanced routes were deliberately left on the stride table and keep the
 /// guard; none of the cases in this matrix reaches them.
 ///
-/// plans/plan_vulkan.md VULKAN-146: Vulkan now does the same. Its BasicEffect-family pipelines
-/// take their VkVertexInputAttributeDescription offsets from the declaration's own elements,
-/// matched by (usage, usageIndex), and the layout is part of the pipeline key so two declarations
-/// of one stride cannot share a pipeline. Stride 32 asks the declaration for a normal, exactly as
-/// REMED-GFX-234 describes above. The families this plan has not converted yet -- alpha test, dual
-/// texture, environment map, skinned, PBR, instanced -- still infer from the stride and still
-/// refuse by name what they cannot express; none of the cases below reaches them.
-///
-/// plans/plan_dx.md DX-221/DX-222: DirectX11 does the same. Its ordinary and instanced draws build
-/// the D3D11 input layout from the declaration's own elements and offsets
-/// (D3DVertexFormatHelper), key the layout cache on the whole declaration, and no longer call
-/// RequireFaithfulDeclarationEXT. This predicate was not updated when that landed, so DirectX11 was
-/// still expected to refuse the colliding declarations it now renders -- ten failures on native
-/// Windows that were the test's, not the renderer's (plans/plan_windows_portability_closeout.md
-/// WINCLOSE-0013).
-///
-/// plans/plan_apple_m4.md AM4-035: Metal too. Every built-in pipeline's vertex descriptor is built
-/// from the declaration (MetalDeclaredVertexInput.hpp), each input matched by (usage, usageIndex),
-/// and the layout is part of the pipeline key; measured on an M4.
+/// The retired VULKAN (VULKAN-146), DIRECTX11 (DX-221/DX-222, WINCLOSE-0013) and METAL
+/// (plans/plan_apple_m4.md AM4-035) renderers translated the declaration too.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
     // plans/plan_apple_m4.md AM4-092: SDL_GPU builds its vertex input from the declaration since

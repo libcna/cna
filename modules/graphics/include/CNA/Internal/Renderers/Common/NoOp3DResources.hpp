@@ -8,7 +8,7 @@
 namespace CNA::Internal::Renderers
 {
     /**
-     * @brief Null-object 3D resources used by WarnAndStub on permanently 2D-only renderers.
+     * @brief Null-object 3D resources used by WarnAndStub on renderers without 3D support.
      *
      * These objects deliberately retain only the minimum observable bookkeeping needed to keep
      * the public XNA resource wrappers safe. They never allocate GPU resources or render.

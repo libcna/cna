@@ -6,7 +6,7 @@
 # FNA3D's sole shader entry point takes a compiled Direct3D 9 Effect binary, so the vendored XNA
 # stock effects (effects/, provenance in effects/README.md) are embedded into a generated header
 # rather than loaded from disk at run time -- a test binary stays self-contained, exactly like the
-# generated shader headers the Vulkan/SDL_GPU/sokol families carry.
+# generated shader headers the SDL_GPU family carries.
 set(CNA_FNA3D_STOCK_EFFECTS
     SpriteEffect
     BasicEffect

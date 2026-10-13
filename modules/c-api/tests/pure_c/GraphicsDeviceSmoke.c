@@ -1250,7 +1250,7 @@ static int validate_draw_and_extensions(CNA_Handle graphics_device)
     }
 
     /*
-     * Without bindings, every buffered draw route fails; a 2D-only backend refuses it outright.
+     * Without bindings, every buffered draw route fails; a backend without 3D refuses it outright.
      *
      * On a 3D backend the refusal is now XNA's own device-state guard rather than a native error
      * that leaked out as CNA_RESULT_INTERNAL. SOFTWARE-209 added the missing-effect guard and
@@ -1318,7 +1318,7 @@ static int validate_draw_and_extensions(CNA_Handle graphics_device)
     }
 
     if (supports_3d != CNA_TRUE) {
-        /* A 2D-only backend refuses every draw route; nothing further is observable here. */
+        /* A backend without 3D refuses every draw route; nothing further is observable here. */
         return cna_graphics_device_draw_user_primitives(graphics_device, &primitives) ==
             CNA_RESULT_NOT_SUPPORTED &&
             cna_graphics_device_draw_user_indexed_primitives(

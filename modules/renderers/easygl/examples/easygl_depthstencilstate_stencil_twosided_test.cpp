@@ -39,15 +39,6 @@
 //      buffer is 0x04, not 0x06) -- proving TwoSidedStencilMode is what changed the outcome, not
 //      some other confound.
 //
-// NOTE: this project's Vulkan renderer (VulkanRenderer::ApplyDepthStencilState, tracked as
-// Task 870) discards twoSidedStencilMode/ccwStencilFunc/ccwStencilPass/ccwStencilFail/
-// ccwStencilDepthFail entirely and never enables the stencil test at all, so neither column's
-// operation draw ever actually modifies the stencil buffer, and every read-back trivially passes
-// regardless of the requested reference value. Expect column A to pass on Vulkan purely by
-// coincidence (it already expects PASS) and column B to FAIL (it expects a genuine REJECT, which
-// Vulkan's bypassed stencil test cannot produce) -- a fifth reconfirmation of Task 870, not a new
-// bug.
-//
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"

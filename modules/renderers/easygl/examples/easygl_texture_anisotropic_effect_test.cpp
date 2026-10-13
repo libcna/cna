@@ -3,13 +3,9 @@
 // (DualTextureEffect).
 //
 // Audit findings this task confirmed via code reading (see plans/plan_graphics.md Task 299 for the
-// full writeup): Vulkan correctly queries the real device anisotropy cap
-// (VkPhysicalDeviceProperties::limits.maxSamplerAnisotropy) and clamps SamplerState.MaxAnisotropy
-// to it before creating the sampler — the only renderer where the requested level has any real
-// effect. EasyGL's TextureFilter::Anisotropic silently falls back to plain trilinear filtering
-// with NO anisotropic effect at all (the underlying easy-gl library has no anisotropy support
-// whatsoever). Bgfx enables its ANISOTROPIC sampler flags but ignores the requested
-// MaxAnisotropy level entirely (the parameter is unused in BgfxRenderer::ApplySamplerState).
+// full writeup): EasyGL's TextureFilter::Anisotropic silently falls back to plain trilinear
+// filtering with NO anisotropic effect at all (the underlying easy-gl library has no anisotropy
+// support whatsoever).
 //
 // A true visual anisotropic-quality pixel test (comparing detail preservation under oblique/
 // aspect-skewed minification) is inherently driver-dependent and fragile to assert precisely.

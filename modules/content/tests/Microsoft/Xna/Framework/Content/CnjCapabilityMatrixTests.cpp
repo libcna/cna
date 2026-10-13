@@ -202,11 +202,10 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 #endif  // SOUND_ENABLED
 
 
-// REMED-GFX-135: does THIS build's renderer actually store a cube face? Native 2D
-// creates no cube resource at all and Headless stores no pixel data by design, so
-// TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
-// deterministically instead of accepting the data and discarding it. Same constant and same
-// reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
+// REMED-GFX-135: does THIS build's renderer actually store a cube face? Headless stores no pixel
+// data by design, so TextureCube::SetData -- and therefore every content path that uploads a cube
+// -- now refuses deterministically instead of accepting the data and discarding it. Same constant
+// and same reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
 // plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
@@ -231,8 +230,7 @@ TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
     {
         // SAMPLE-078: a loose-file load reports its reader's failure as ContentLoadException, as
         // XNA does, carrying the cause in its message -- here the renderer's TextureCube refusal,
-        // from SetData on Headless and from construction on SDL_RENDERER
-        // (CNA plans/plan_apple_m4.md AM4-268).
+        // from SetData on Headless (CNA plans/plan_apple_m4.md AM4-268).
         try
         {
             (void)cm.Load<TextureCube>("cube");

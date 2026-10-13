@@ -4,8 +4,8 @@
 // semi-transparent white overlay sprite is drawn on top with BlendState::NonPremultiplied, and
 // the overlay's alpha is driven by Update()-based game state (a fade-in effect), proving the
 // full Update()-state -> SpriteBatch layering -> real alpha compositing -> EasyGL draw pipeline
-// works end to end -- a genuinely different scenario from Task 730's SDL_Renderer samples (none
-// of which exercise multi-layer alpha blending).
+// works end to end -- a genuinely different scenario from Task 730's 2D samples (none of which
+// exercised multi-layer alpha blending).
 //
 // Straight (non-premultiplied) alpha compositing formula: result = fg*a + bg*(1-a), where a is
 // the overlay's alpha in [0,1]. Background is solid Blue (0,0,255); overlay is solid White

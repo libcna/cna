@@ -312,8 +312,8 @@ protected:
 #if defined(CNA_GFX096_STAGED_SINGLE_FACE)
         // Bgfx submits one frame/view transition at a time for cube targets. Its
         // cross-renderer contract check therefore stages the singular producer,
-        // plural producer, and observers across frames. Vulkan retains the full
-        // same-frame all-six/A->B->A battery below.
+        // plural producer, and observers across frames. Every other renderer runs the
+        // full same-frame all-six/A->B->A battery below.
         auto& stagedDevice = getGraphicsDeviceProperty();
         if (stagedFrame_ == 0)
         {

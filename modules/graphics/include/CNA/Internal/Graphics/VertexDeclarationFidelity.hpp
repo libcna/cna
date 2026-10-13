@@ -15,12 +15,12 @@
  * @file
  * @brief REMED-GFX-DECL-GUARD -- the declaration-fidelity safety boundary.
  *
- * REMED-GFX-217 records that the rasterizing renderers then measured (Vulkan, Software, WebGPU,
- * SDL_GPU, D3D9, D3D11 and the since-retired D3D12) did not translate a `VertexDeclaration` at all: they select a native input layout
- * from a canonical byte-stride table and discard everything else the declaration states. A stride
- * does not determine element composition, so two declarations that share a stride share a native
- * layout, and the one that does not match it is read from the wrong bytes -- accepted, submitted,
- * and silently wrong.
+ * REMED-GFX-217 records that the rasterizing renderers then measured (Software, WebGPU, SDL_GPU,
+ * D3D9 and the since-retired Vulkan, D3D11 and D3D12) did not translate a `VertexDeclaration` at
+ * all: they select a native input layout from a canonical byte-stride table and discard
+ * everything else the declaration states. A stride does not determine element composition, so two
+ * declarations that share a stride share a native layout, and the one that does not match it is
+ * read from the wrong bytes -- accepted, submitted, and silently wrong.
  *
  * This file is NOT a translator. Complete per-renderer declaration translation stays in
  * `plans/plan_postaudit.md`. What it provides is the boundary that makes the gap safe until then: a pure
@@ -31,10 +31,10 @@
  * ## The rule is asymmetric, and deliberately so
  *
  * "The declaration must equal the table entry" is wrong and was rejected by the exit triage: a
- * position-only stride-12 declaration renders correctly on Vulkan today (its fallback layout also
- * binds a colour attribute at offset 12, but a declaration that names no colour supplies no colour
- * for a stock program to consume), and an equality rule would reject it. Only what the declaration
- * ACTUALLY DECLARES has to survive:
+ * position-only stride-12 declaration rendered correctly on the since-retired Vulkan renderer (its
+ * fallback layout also bound a colour attribute at offset 12, but a declaration that names no
+ * colour supplies no colour for a stock program to consume), and an equality rule would reject it.
+ * Only what the declaration ACTUALLY DECLARES has to survive:
  *
  *  - R0 the native record advance equals the declared stride;
  *  - R1 no native fetch reads bytes a declared element owns under any other semantic, usage index,
@@ -103,7 +103,7 @@ namespace CNA::Internal::Graphics
         /**
          * @brief The renderer refuses the stride itself, before any native work.
          *
-         * Software, WebGPU's ordinary route and D3D9/D3D11 all throw on an out-of-table
+         * Software, WebGPU's ordinary route and D3D9 all throw on an out-of-table
          * stride today. The guard abstains and leaves that rejection exactly as it is.
          */
         RendererRefusesIt,
@@ -111,16 +111,16 @@ namespace CNA::Internal::Graphics
          * @brief The renderer falls back to its `VertexPositionColor` layout: Position at offset 0
          * and a packed colour at offset 12, strided by the buffer's own stride.
          *
-         * Vulkan's and SDL_GPU's ordinary routes do this. It is why a position-only stride-12
-         * declaration renders correctly on Vulkan today.
+         * SDL_GPU's ordinary route does this, as the since-retired Vulkan renderer's did; it is
+         * why a position-only stride-12 declaration rendered correctly there.
          */
         PositionColorFallback,
         /**
          * @brief The renderer falls back to a position-only layout: Position at offset 0 and
          * nothing else.
          *
-         * The instanced modules of Vulkan and WebGPU do this for every stride their packed-colour
-         * table does not list.
+         * WebGPU's instanced module does this for every stride its packed-colour table does not
+         * list.
          */
         PositionOnlyFallback
     };
@@ -298,10 +298,10 @@ namespace CNA::Internal::Graphics
         }
 
         // THE CANONICAL STRIDE TABLE. Every renderer in REMED-GFX-217's scope transcribes exactly
-        // this: D3DVertexFormatHelper's kStride16..kStride68 arrays, EasyGLRenderer's
-        // ApplyLayout switch, VulkanRenderer's per-pipeline attribute arrays and
-        // SoftwareRenderer's BuildGenericClipVertex byte reader. All four agree because all
-        // four were derived from the same seven built-in XNA vertex types, whose declarations take
+        // this: EasyGLRenderer's ApplyLayout switch and SoftwareRenderer's BuildGenericClipVertex
+        // byte reader, as did the since-retired D3DVertexFormatHelper's kStride16..kStride68
+        // arrays and VulkanRenderer's per-pipeline attribute arrays. They agree because all of
+        // them were derived from the same seven built-in XNA vertex types, whose declarations take
         // their offsets from CNA/Internal/Graphics/BuiltInVertexStreams.hpp.
 
         inline constexpr InferredVertexElement kStride16[] = {
@@ -405,9 +405,9 @@ namespace CNA::Internal::Graphics
 
 
         // The two fallbacks a renderer uses for a stride the table above does not list. Both are
-        // measured behaviours, not guesses: Vulkan's ordinary route renders a position-only
-        // stride-12 buffer correctly through the first, and WebGPU's instanced module renders the
-        // same buffer correctly through the second.
+        // measured behaviours, not guesses: the since-retired Vulkan renderer's ordinary route
+        // rendered a position-only stride-12 buffer correctly through the first, and WebGPU's
+        // instanced module renders the same buffer correctly through the second.
         inline constexpr InferredVertexElement kPositionColorFallback[] = {
             {VertexElementUsage::Position, 0,  0, VertexElementFormat::Vector3},
             {VertexElementUsage::Color,    0, 12, VertexElementFormat::Color},

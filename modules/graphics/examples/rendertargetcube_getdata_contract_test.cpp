@@ -9,12 +9,12 @@
 // instead of handing back the shared layer's own zeroed scratch buffer. What it deliberately did
 // NOT do was implement the missing readback, and it recorded the consequence: only SdlGpu and
 // WebGPU could answer at all, while EasyGL, Vulkan, Bgfx, D3D9, D3D11 and D3D12 -- each of which
-// already owns the exact staging/blit/copy mechanism its plain-TextureCube sibling uses in the same
-// file -- refused. This file is the oracle for closing that gap.
+// already owned the exact staging/blit/copy mechanism its plain-TextureCube sibling used in the
+// same file -- refused. This file is the oracle for closing that gap.
 //
 // Why the content producer is drawn geometry and never Clear():
-//   * REMED-GFX-129 separately records a Vulkan PreserveContents Clear defect, so a Clear-based
-//     oracle would confuse two findings;
+//   * REMED-GFX-129 separately recorded a PreserveContents Clear defect (on the retired VULKAN
+//     renderer), so a Clear-based oracle would confuse two findings;
 //   * a uniform clear colour cannot detect a vertical flip, a horizontal flip, a 180-degree
 //     rotation, a wrong face, a stale previous face, or an unresolved multisample surface.
 // Every face is therefore painted by SpriteBatch quads into an asymmetric five-region pattern

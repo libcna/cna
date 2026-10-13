@@ -122,7 +122,7 @@ static int exit_with_main_thread_game(void)
     thrd_t exiting;
     if (!CNA_TEST_STAGE(cna_game_create(&create_info, &game) == CNA_RESULT_SUCCESS) ||
         !CNA_TEST_STAGE(cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS) ||
-        /* the update ran; a 2D-only renderer (SDL_RENDERER) refuses the vertex buffer itself */
+        /* the update ran, whether or not the device accepted the vertex buffer */
         !CNA_TEST_STAGE(created != 0) ||
         thrd_create(&exiting, exit_from_this_thread, NULL) != thrd_success) {
         return CNA_TEST_FAIL(1);

@@ -3,8 +3,8 @@
 //
 // ClassicTextureFormatTests.PointSamplingExpandsChannelsAndPreservesDeclaredRanges asserts that a
 // one- or two-channel format expands its missing colour channels AND its missing alpha to 1.0
-// (NormalizedByte2 -> (r, g, 255, 255)), while plan_vulkan.md VULKAN-174 pinned blue = 0 for the
-// same format in the Vulkan renderer's own test. Both were reasoned, neither was measured: the
+// (NormalizedByte2 -> (r, g, 255, 255)), while VULKAN-174 pinned blue = 0 for the same format in
+// the since-retired Vulkan renderer's own test. Both were reasoned, neither was measured: the
 // SOFTWARE-142 row says only "missing channels follow the XNA/D3D texture rule", and VULKAN-174's
 // zero is an anti-mutation argument about storage width, not a claim about sampling.
 //

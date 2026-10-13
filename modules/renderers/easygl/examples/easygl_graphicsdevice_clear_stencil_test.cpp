@@ -8,11 +8,11 @@
 // buffer to any value, requested or not, on any renderer.
 //
 // Checks A and B are spread across separate frames, one step per Draw() call. That was originally
-// described as unavoidable: Vulkan's renderer deferred every frame's draws into one render pass
-// whose clear ran before ALL of them regardless of where Clear() sat in the public call order, so a
-// same-frame "stamp, then Clear(), then compare" would always have seen the stamp win.
+// described as unavoidable: the retired VULKAN renderer deferred every frame's draws into one
+// render pass whose clear ran before ALL of them regardless of where Clear() sat in the public call
+// order, so a same-frame "stamp, then Clear(), then compare" would always have seen the stamp win.
 //
-// REMED-GFX-129 CORRECTED THAT CLAIM rather than working around it: a Clear() is now an ordered
+// REMED-GFX-129 CORRECTED THAT CLAIM rather than working around it: a Clear() became an ordered
 // command at its exact public call position on Vulkan too. The frame split is kept for A and B --
 // it is valid everywhere and they are Task 871's original regression -- and check C below makes the
 // same measurement WITHIN ONE FRAME, which is the shape the old note asserted could never work.

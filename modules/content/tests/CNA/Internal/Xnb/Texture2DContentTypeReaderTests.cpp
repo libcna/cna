@@ -190,7 +190,6 @@ TEST_F(Texture2DContentTypeReaderTest,
        PreservesEveryClassicCompressedFormatAndExactBlocks)
 {
     using namespace CNA::Testing::Renderers;
-    // plans/plan_apple_m4.md AM4-148: Metal keeps a DXT texture's exact blocks too.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,

@@ -87,7 +87,7 @@ namespace
         {
             // The build's own platform rather than "Headless": GraphicsDeviceManager creates the
             // selected renderer's device on it, and a renderer that presents to a native surface
-            // (DirectX11, every OpenGL profile) has none on Headless -- so on those builds SetUp
+            // (every OpenGL profile, for one) has none on Headless -- so on those builds SetUp
             // threw before a single drop was scripted. Only the event stream is under test here,
             // and the decorator replaces that whichever platform is underneath.
             auto platform = std::make_unique<ScriptedPlatform>(Platform::PlatformFactory::Create());

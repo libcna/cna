@@ -8,15 +8,14 @@
 // corner, and Width/Height define the projection extent. The rasterizer viewport (set separately
 // to Viewport.X/Y/Width/Height) then positions the [-1,1] clip result at the viewport's screen
 // rectangle. Viewport.X/Y are NEVER subtracted from the sprite coordinates -- placement is done
-// entirely by the rasterizer viewport. D3D11 (live RSGetViewports) and D3D9 (live GetViewport)
-// are already correct; EasyGL/Vulkan/Bgfx/SdlGpu/WebGPU/D3D12 baked the sprite NDC over the full
-// target and are AFFECTED.
+// entirely by the rasterizer viewport. D3D9 (live GetViewport) is already correct;
+// EasyGL/SdlGpu/WebGPU baked the sprite NDC over the full target and are AFFECTED.
 //
 // Pre-fix failure modes (both fail the assertions below):
-//   * "squish" (WebGPU/Vulkan/SdlGpu/D3D12): the rasterizer viewport is already the sub-region
+//   * "squish" (WebGPU/SdlGpu): the rasterizer viewport is already the sub-region
 //     (prior GFX-062/063/064 fixes), but the NDC was baked over the full target, so the sprite is
 //     compressed into the top-left of the viewport (a 17px-wide sprite shrinks to ~7px).
-//   * "ignored" (EasyGL/Bgfx): the sprite path reset the rasterizer viewport to the full target,
+//   * "ignored" (EasyGL): the sprite path reset the rasterizer viewport to the full target,
 //     so a custom viewport did nothing -- the sprite landed at its raw full-target absolute rect.
 //
 // Testing strategy: assertions read the BACKBUFFER via GetBackBufferData -- the top-left-consistent

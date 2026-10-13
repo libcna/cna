@@ -20,8 +20,8 @@ namespace CNA::Internal::Renderers::Fna3d
      * where the byte stride of the staged buffer is the only description available.
      *
      * The offsets and semantics are the repository-wide layout every other CNA renderer dispatches
-     * on (`D3DCommon::InputElementsForStride`, `EasyGLRenderer::ApplyLayout`), reproduced here in
-     * XNA vocabulary because that is what FNA3D takes.
+     * on (`EasyGLRenderer::ApplyLayout`), reproduced here in XNA vocabulary because that is what
+     * FNA3D takes.
      *
      * @param strideInBytes Byte stride of one vertex.
      * @return A non-owning view of immutable elements describing that stride. The storage is

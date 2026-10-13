@@ -274,9 +274,9 @@ TEST(GraphicsDevicePlatformWindowTests,
     //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
     //      the renderers that never create one;
     //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with VULKAN, where the device
-    //      reaches `PlatformTestDecorator`'s forwarded real Vulkan surface service holding a
-    //      window id that service has never seen.
+    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
+    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
+    //      holding a window id that service had never seen.
     //
     // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
     // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest
@@ -305,9 +305,9 @@ TEST(GraphicsDevicePlatformWindowTests,
     //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
     //      the renderers that never create one;
     //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with VULKAN, where the device
-    //      reaches `PlatformTestDecorator`'s forwarded real Vulkan surface service holding a
-    //      window id that service has never seen.
+    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
+    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
+    //      holding a window id that service had never seen.
     //
     // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
     // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest
@@ -336,9 +336,9 @@ TEST(GraphicsDevicePlatformWindowTests,
     //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
     //      the renderers that never create one;
     //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with VULKAN, where the device
-    //      reaches `PlatformTestDecorator`'s forwarded real Vulkan surface service holding a
-    //      window id that service has never seen.
+    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
+    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
+    //      holding a window id that service had never seen.
     //
     // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
     // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest
@@ -396,9 +396,9 @@ TEST(GraphicsDevicePlatformWindowTests,
     //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
     //      the renderers that never create one;
     //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with VULKAN, where the device
-    //      reaches `PlatformTestDecorator`'s forwarded real Vulkan surface service holding a
-    //      window id that service has never seen.
+    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
+    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
+    //      holding a window id that service had never seen.
     //
     // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
     // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest

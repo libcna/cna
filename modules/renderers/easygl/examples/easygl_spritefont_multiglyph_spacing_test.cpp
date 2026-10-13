@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 425: Pixel test -- draw multiple glyphs with spacing on EasyGL.
 //
-// Direct EasyGL port of Task 691's SDL_Renderer test, building on Task 424's established
+// Direct EasyGL port of Task 691's test, building on Task 424's established
 // single-glyph fixture pattern to additionally exercise the horizontal-advance math in the
 // shared, renderer-agnostic SpriteBatch::DrawString: for the 2nd+ glyph in a line,
 // `curOffset.X += spacing + cKern.X` (extra inter-character spacing plus the next glyph's own

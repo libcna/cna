@@ -10,8 +10,7 @@
 //   (instanceCount=2): paints at a DIFFERENT screen location with the SAME DiffuseColor -- proves
 //   two genuinely distinct instances were drawn, not just one.
 // Check C -- no per-instance stream falls back to a real DrawIndexedPrimitivesEx() draw
-//   (BasicEffect dispatch) rather than throwing, matching DirectX11Renderer's own identical
-//   fallback.
+//   (BasicEffect dispatch) rather than throwing.
 // Check D -- stream-frequency reset: a NORMAL (non-instanced) DrawIndexedColoredPrimitives() call
 //   issued immediately after the instanced draw still paints correctly -- proves
 //   SetStreamSourceFreq(0/1, 1) genuinely resets D3D9's own persistent per-stream frequency state,
@@ -62,9 +61,8 @@ namespace
     };
     const uint16_t kSmallTriIdx[3] = {0, 1, 2};
 
-    // Per-instance world matrix, 4 row-major float4 "rows" (64 bytes) -- matches
-    // DirectX11Renderer::DrawInstancedPrimitivesEx's own established convention for
-    // the per-instance stream of GpuDrawParams::vertexStreams. A pure translation matrix:
+    // Per-instance world matrix, 4 row-major float4 "rows" (64 bytes) -- the established convention
+    // for the per-instance stream of GpuDrawParams::vertexStreams. A pure translation matrix:
     // row3 = (Tx,Ty,Tz,1).
     struct InstanceRow { float row0[4], row1[4], row2[4], row3[4]; };
 

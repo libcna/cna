@@ -8,12 +8,12 @@
 //   colored_textured3d  (VertexPositionColorTexture,  stride 24)
 //   lit_textured3d      (VertexPositionNormalTexture, stride 32, LightingEnabled=false)
 //
-// Formula (the REMED-GFX-005 corrected, oracle-validated form, identical to Vulkan/Bgfx/EasyGL):
+// Formula (the REMED-GFX-005 corrected, oracle-validated form, identical to EasyGL's):
 //   keep     = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
 //   finalRGB = mix(FogColor, geomRGB, keep)                      (keep=1 -> no fog, 0 -> full fog)
 //
-// Shared scene (identical to the verified Vulkan fog tests, so results are numerically cross-renderer
-// comparable): blue geometry (0,0,255), red fog (255,0,0), FogStart=0, FogEnd=-0.9.
+// Shared scene (identical to the retired Vulkan renderer's verified fog tests): blue geometry
+// (0,0,255), red fog (255,0,0), FogStart=0, FogEnd=-0.9.
 //   Z=0.00 -> keep=1.0 -> pure blue        (0,0,255)
 //   Z=0.45 -> keep=0.5 -> mix -> purple    (128,0,128)
 //   Z=0.90 -> keep=0.0 -> pure red         (255,0,0)

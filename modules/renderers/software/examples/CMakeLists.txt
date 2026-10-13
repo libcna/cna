@@ -234,7 +234,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     # REMED-GFX-080: GraphicsDevice.ScissorRectangle must clip both the 2D SpriteBatch path and the
     # 3D raster path when RasterizerState.ScissorTestEnable is true, in framebuffer/target space
     # (effective clip = framebuffer ∩ Viewport ∩ Scissor) -- the Software counterpart of the GPU
-    # renderers' scissor contract (GFX-013 Vulkan, GFX-068 SdlGpu). Reuses GFX-073/079's RasterClipRect.
+    # renderers' scissor contract (GFX-013 on the retired VULKAN renderer, GFX-068 SdlGpu). Reuses
+    # GFX-073/079's RasterClipRect.
     cna_software_test(cna_test_software_scissor software_scissor_test.cpp)
     cna_register_renderer_test(NAME Software_Scissor COMMAND cna_test_software_scissor
         TIMEOUT 30 LABELS "Software")
@@ -746,7 +747,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertarget_pass_boundary
         TIMEOUT 60 LABELS "Software")
 
-    # REMED-GFX-129: cross-renderer control for Vulkan's ordered-Clear correction.
+    # REMED-GFX-129: Clear() is an ordered command at its exact public call position.
     cna_software_test(cna_test_software_ordered_clear
                       ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_register_renderer_test(NAME Software_GraphicsDevice_OrderedClear
@@ -796,12 +797,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
 
 
     # REMED-GFX-169: every stock 3D effect must sample its textures through the public
-    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. Vulkan's
-    # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
-    # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
-    # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
-    # absent from their cache keys too. Vulkan is where the defect lives; the other renderers run the
-    # same public fixture as controls.
+    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. The defect lived
+    # in the retired VULKAN renderer, whose stock 3D descriptor builders hardcoded one default
+    # sampler; this renderer ran the same public fixture as a control.
     cna_software_test(cna_test_software_stock_effect_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME Software_StockEffectSamplerContract COMMAND cna_test_software_stock_effect_sampler

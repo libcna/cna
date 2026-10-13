@@ -3,8 +3,8 @@
 // a small unlit, vertex-colored BasicEffect quad translated along the World-space X axis by a
 // fixed amount every Update() call, over several real frames, proving the full
 // Update()-state -> World matrix -> BasicEffect -> EasyGL draw -> backbuffer readback pipeline
-// works end to end for genuine 3D rendering (not just SpriteBatch, as Task 730's SDL_Renderer
-// samples already proved for 2D).
+// works end to end for genuine 3D rendering (not just SpriteBatch, as Task 730's 2D samples
+// already proved).
 //
 // View/Projection are left at BasicEffect's own real FNA-matching default (Identity), so NDC
 // space and BasicEffect's own "world" space coincide -- the screen-space mapping used by

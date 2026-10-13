@@ -12,7 +12,7 @@
 // queued for the OUTGOING target into its own render pass the instant the target actually
 // changes, so draws before/after a target switch land in the correct pass instead of collapsing
 // into one -- see WebGPURenderer::SetRenderTarget2D()'s own comment for the full design
-// discussion (and why this smaller change was chosen over VulkanRenderer's own per-draw
+// discussion (and why this smaller change was chosen over the retired VULKAN renderer's per-draw
 // target-tag/replay model).
 //
 // Check A -- Clear-only fill of a RenderTarget2D (DepthFormat::None), read back via GetData():

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // The descriptor binding contract for a WGSL `ShaderEffect` -- the one CNA's generated WGSL
-// (tools/shader_package) and its Vulkan SPIR-V share, so one portable package drives both renderers
-// -- and the explicit layouts built from a program's own WGSL.
+// (tools/shader_package) follows -- and the explicit layouts built from a program's own WGSL.
 //
 // THE CONTRACT (also in docs/webgpu-renderer.md)
 //
@@ -667,7 +666,7 @@ namespace CNA::Internal::Renderers::WebGPU
                     {
                         // Never nothing: a pipeline statically uses every binding its layout
                         // declares, so an unbound unit gets the renderer's own neutral texture of
-                        // the right shape -- the same rule Vulkan's typed fillers follow.
+                        // the right shape.
                         texture = NeutralTextureForDimensionEXT(slot.viewDimension);
                     }
                     entry.textureView = texture.View();

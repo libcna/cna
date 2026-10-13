@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// plan_vulkan.md VULKAN-240/VULKAN-241: compressed storage and content-loader preservation must be
-// sampled capabilities, not constructor/property claims. The same source runs on EasyGL and
-// Vulkan. It covers exact TextureCube blocks, readback, sampling, partial replacement, and native
-// DXT preservation through the DDS and XNB Texture2D/TextureCube loaders.
+// VULKAN-240/VULKAN-241: compressed storage and content-loader preservation must be
+// sampled capabilities, not constructor/property claims. It covers exact TextureCube blocks,
+// readback, sampling, partial replacement, and native DXT preservation through the DDS and XNB
+// Texture2D/TextureCube loaders.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"

@@ -83,13 +83,12 @@ class SurfaceFormatThrowsTest : public Game
         }
     }
 
-    /// plan_vulkan.md VULKAN-173: the renderer's OWN verdict, replacing three
+    /// VULKAN-173: the renderer's OWN verdict, replacing three
     /// `#if defined(CNA_GL_PROFILE_*)` guards that encoded an OpenGL fact in a file registered by
     /// more than one renderer family. The question these legs ask is "does THIS renderer store the
     /// format", and IGraphicsRenderer::ClassifySurfaceFormatEXT is the renderer-neutral way to ask
-    /// it -- an ES-3-class GL profile answers Supported exactly where the old macros did, and
-    /// CNA's Vulkan renderer answers it for the formats it has a core VkFormat for. Nothing is
-    /// skipped either way: a claimed format must construct, an unclaimed one must throw.
+    /// it -- an ES-3-class GL profile answers Supported exactly where the old macros did. Nothing
+    /// is skipped either way: a claimed format must construct, an unclaimed one must throw.
     void expectPerRendererClaim(GraphicsDevice& dev, const char* label, SurfaceFormat format,
                                 auto fn)
     {
@@ -255,14 +254,8 @@ protected:
         // needs nothing, and GraphicsProfile.Reach promises the game these formats work -- so the
         // driver decides how they are stored, never whether they are refused.
         //
-        // It used to say here that this file is shared with the Vulkan and Bgfx registrations,
-        // "which carry no GL profile macro and store no block-compressed content" -- true of Bgfx,
-        // and no longer true of Vulkan.
-        // plan_vulkan.md VULKAN-172: claim-driven, replacing a five-profile GL macro list. EasyGL
-        // accepts these on every profile because its fallback decodes; CNA's Vulkan renderer
-        // stores them natively as BC1/BC2/BC3 and claims them only where the device's
-        // textureCompressionBC feature and the per-format VkFormatProperties both say so. One
-        // question, asked of the renderer, answers for both.
+        // VULKAN-172: claim-driven, replacing a five-profile GL macro list. EasyGL
+        // accepts these on every profile because its fallback decodes.
         expectPerRendererClaim(dev, "Texture2D Dxt1", SurfaceFormat::Dxt1, [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });

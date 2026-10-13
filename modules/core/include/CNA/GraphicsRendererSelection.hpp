@@ -5,7 +5,7 @@
 //
 // Compile-time selection (-DCNA_GRAPHICS_RENDERER=<X>) remains the default and recommended mode.
 // This API does not replace it: in a single-renderer build it validates a request against the one
-// renderer that exists, which is still worth doing -- a game asking for VULKAN in an OPENGLES3
+// renderer that exists, which is still worth doing -- a game asking for WEBGPU in an OPENGLES3
 // build should be told so, not silently handed something else.
 //
 // Why this lives in the core module rather than alongside the registry in graphics: it holds only
@@ -50,7 +50,7 @@ namespace CNA
          *
          * Accepts exactly the CNA_GRAPHICS_RENDERER spellings, case-insensitively.
          *
-         * @param name The renderer name, e.g. "VULKAN".
+         * @param name The renderer name, e.g. "WEBGPU".
          * @throws System::ArgumentException if @p name is not a public renderer identity at all.
          * @throws System::InvalidOperationException under the same conditions as the overload above.
          */
@@ -116,7 +116,7 @@ namespace CNA
         // --- Fallback (design decisions 6 and 7) -------------------------------------------
         //
         // OFF by default. A renderer that is unavailable or fails to initialize is an ERROR, not an
-        // invitation to substitute something else: a game that asked for Vulkan and silently got a
+        // invitation to substitute something else: a game that asked for WebGPU and silently got a
         // CPU rasterizer is a worse outcome than a clear failure.
 
         /**

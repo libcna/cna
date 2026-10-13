@@ -40,8 +40,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // ------------------------------------------------------------------------------------
         // The nine-function MOJOSHADER_effectShaderContext, implemented directly against
         // MOJOSHADER_parse() with the portable SPIR-V profile. MojoShader has no WebGPU adapter,
-        // so every one of these is CNA's own; the shape follows the Vulkan backend's, which in
-        // turn follows mojoshader_sdlgpu.c's bookkeeping.
+        // so every one of these is CNA's own; the shape follows mojoshader_sdlgpu.c's
+        // bookkeeping.
         // ------------------------------------------------------------------------------------
 
         void* MOJOSHADERCALL BackendCompileShader(

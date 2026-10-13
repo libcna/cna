@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_dx.md DX-215: public-path render-target SurfaceFormat behavior.
+// DX-215: public-path render-target SurfaceFormat behavior.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"

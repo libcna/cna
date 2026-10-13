@@ -13,10 +13,11 @@
 // World instead of the inverse-transpose) dropped or mis-applied that outer world normal matrix.
 // Every pre-existing skinned test uses World = Identity, where the missing/mis-applied factor is
 // the identity and the bug is invisible. This is the non-identity-World harness those tests
-// structurally cannot cover -- a direct port of vulkan_skinnedeffect_world_normal_test.cpp, using
-// EasyGL's own GetBackBufferData readback path (the same one every other EasyGL pixel test uses).
+// structurally cannot cover -- a direct port of the retired VULKAN renderer's skinned world-normal
+// test, using EasyGL's own GetBackBufferData readback path (the same one every other EasyGL pixel
+// test uses).
 //
-// Design notes that make the bug *numerically* visible (identical to the Vulkan harness):
+// Design notes that make the bug *numerically* visible:
 //   * The quad lies in the XY plane facing the camera, and every World used here keeps it facing
 //     the camera and covering the centre pixel -- so a failure is a lighting difference, never an
 //     accidental "the geometry moved/turned edge-on" artifact.

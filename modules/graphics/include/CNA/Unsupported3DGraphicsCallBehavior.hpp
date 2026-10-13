@@ -3,7 +3,7 @@
 namespace CNA
 {
     /**
-     * @brief Controls how a permanently 2D-only graphics renderer handles unsupported 3D calls.
+     * @brief Controls how a graphics renderer without 3D support handles unsupported 3D calls.
      *
      * This policy complements GraphicsDevice::SupportsCapability(): capability queries describe
      * what the active renderer can do, while this policy controls what happens if application code

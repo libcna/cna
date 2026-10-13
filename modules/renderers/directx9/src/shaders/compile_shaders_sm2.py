@@ -2,10 +2,9 @@
 """Compile the vendored XNA Stock Effects HLSL to real D3D9 (SM2) bytecode and emit a checked-in
 C++ header with embedded byte arrays.
 
-plans/plan_dx9.md Phase D9-7 (D9-71). Mirrors src/CNA/Internal/Renderers/D3DCommon/shaders/
-compile_shaders_hlsl.py's role (cross-build a tiny D3DCompile()-calling .exe, run it once per
-shader through Wine, embed the resulting bytecode as C++ arrays) with three D3D9-specific
-differences:
+plans/plan_dx9.md Phase D9-7 (D9-71). It cross-builds a tiny D3DCompile()-calling .exe, runs it
+once per shader through Wine and embeds the resulting bytecode as C++ arrays -- the shape the retired
+Direct3D 11 renderer's HLSL generator had -- with three D3D9-specific points:
 
   1. The entry-point list is *parsed* from the vendored .fx files' own `compile [vp]s_2_0 ...`
      statements (design decision: never hand-maintained -- D9-70's own README table already found

@@ -66,8 +66,8 @@ namespace CNA::Internal::Renderers::DirectX9
                                         ps_.ReleaseAndGetAddressOf());
         if (FAILED(hr)) { compileError_ = "CreatePixelShader failed, hr=" + FormatHr(hr); return false; }
 
-        // D9-110: real, per-stage, compiler-assigned name -> register tables. Unlike D3D11's own
-        // fixed-slot convention, these genuinely differ per compiled shader.
+        // D9-110: real, per-stage, compiler-assigned name -> register tables. Unlike a fixed-slot
+        // cbuffer convention, these genuinely differ per compiled shader.
         vsConstants_ = ParseConstantTableEXT(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize());
         psConstants_ = ParseConstantTableEXT(psBlob->GetBufferPointer(), psBlob->GetBufferSize());
 
@@ -84,10 +84,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9EffectRenderer::Unbind()
     {
-        // Mirrors D3D11EffectRenderer::Unbind(): nothing to restore here either. The caller (D9-112:
-        // SpriteBatch's own custom-effect path) is responsible for rebinding SpriteEffect's stock
-        // shaders before its next stock-shader draw, exactly as it already restores vertex
-        // declarations/sampler state between batches.
+        // Nothing to restore here. The caller (D9-112: SpriteBatch's own custom-effect path) is
+        // responsible for rebinding SpriteEffect's stock shaders before its next stock-shader draw,
+        // exactly as it already restores vertex declarations/sampler state between batches.
     }
 
     void D3D9EffectRenderer::UploadEXT(const char* name, const float* data, int componentCount)
@@ -127,11 +126,11 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9EffectRenderer::SetUniformInt(const char* name, int value)
     {
-        // Matches D3D11EffectRenderer's own convention: custom-effect "int" uniforms are expected
-        // to be declared as HLSL float constants shader-side (a value-converted upload through the
-        // same Float4 register path, not the separate D3DXRS_INT4 register file) -- reasonable for
-        // this mechanism's own scope (SpriteBatch-custom-shader tinting/parameterization, not a
-        // general-purpose uniform system).
+        // Convention: custom-effect "int" uniforms are expected to be declared as HLSL float
+        // constants shader-side (a value-converted upload through the same Float4 register path,
+        // not the separate D3DXRS_INT4 register file) -- reasonable for this mechanism's own scope
+        // (SpriteBatch-custom-shader tinting/parameterization, not a general-purpose uniform
+        // system).
         const float f = static_cast<float>(value);
         UploadEXT(name, &f, 1);
     }

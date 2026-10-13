@@ -175,8 +175,8 @@ namespace
     /**
      * @brief Whether a `RenderTargetCube` can be rendered into and then sampled as an env map.
      *
-     * SDL_RENDERER has no 3D pipeline at all, and HEADLESS does not rasterize. Both are declared
-     * rather than asserted, exactly as the neighbouring render-target fixtures already do.
+     * HEADLESS does not rasterize. That is declared rather than asserted, exactly as the
+     * neighbouring render-target fixtures already do.
      */
     constexpr bool kRenderTargetCubeSupported =
 #if defined(CNA_RENDERER_HEADLESS)
@@ -989,9 +989,10 @@ class DeferredSourceLifetimeTest : public Game
      *
      * Every other leg's disposal happens before the record. This one happens after it: frame 1
      * queues producer and consumer and ends, so Present submits them; frame 2 then destroys the
-     * render target while that submission may still be executing (Vulkan keeps several frames in
-     * flight), and renders a fresh pair whose result must be exact. The subject is the GPU half of
-     * the ownership rule -- native storage must outlive submitted work, not merely the CPU record.
+     * render target while that submission may still be executing (a renderer may keep several
+     * frames in flight), and renders a fresh pair whose result must be exact. The subject is the
+     * GPU half of the ownership rule -- native storage must outlive submitted work, not merely the
+     * CPU record.
      */
     void LegL1(GraphicsDevice& dev, int frame)
     {
@@ -1203,8 +1204,8 @@ public:
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         // Leg J1's subject is a MULTISAMPLED source, and on renderers that tie render-target MSAA to
-        // the device's own sample count (Vulkan does) a render target can only engage it when the
-        // backbuffer itself was created multisampled. Requested ONLY in J1's own child process --
+        // the device's own sample count a render target can only engage it when the backbuffer
+        // itself was created multisampled. Requested ONLY in J1's own child process --
         // the supervisor runs one leg per child -- so no other leg's measurement moves, and the
         // in-process fallback keeps J1's honest "nothing to measure" declaration.
         if (onlyLeg_ == "J1") gdm_->setPreferMultiSamplingProperty(true);
@@ -1229,9 +1230,8 @@ namespace
 
     // Matches CNA::Examples::kSkipExitCode (common/PixelTestGame.hpp) -- a leg that exits with this
     // code decided for itself, before this supervisor is involved, that its environment can't
-    // support the check (LLGL-55: e.g. the shared Vulkan-WSI-unavailable guard,
-    // examples/common/LlglVulkanWsiSkipGuard.cpp). That is not the same as the leg failing, so it
-    // must not be counted or reported as one.
+    // support the check (LLGL-55: e.g. RunPixelTest's VK_ERROR_SURFACE_LOST_KHR skip there). That
+    // is not the same as the leg failing, so it must not be counted or reported as one.
     constexpr int kLegSkipExitCode = 77;
 
     /**

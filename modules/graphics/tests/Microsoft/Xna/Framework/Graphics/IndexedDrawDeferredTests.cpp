@@ -1030,8 +1030,8 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueued
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
-    // them, and an unmeasured renderer must not be asserted either way.
+    // D3D9 is excluded here: this deferred-queue contract was never measured on it, and an
+    // unmeasured renderer must not be asserted either way.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, Software);
     RequireIndexedRendering();
 
@@ -1120,8 +1120,8 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
-    // them, and an unmeasured renderer must not be asserted either way.
+    // D3D9 is excluded here: this deferred-queue contract was never measured on it, and an
+    // unmeasured renderer must not be asserted either way.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, Software);
     RequireIndexedRendering();
 

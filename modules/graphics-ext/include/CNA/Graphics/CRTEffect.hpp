@@ -18,8 +18,8 @@ namespace CNA::Graphics {
      * A portable `ShaderEffect` that emulates a period CRT monitor: darkened alternating
      * scanlines, an RGB sub-pixel mask (aperture grille or shadow mask), mild barrel-distortion
      * curvature of the screen edges, and a corner vignette. The built-in package selects GLSL on
-     * OpenGL-family renderers and SPIR-V on Vulkan. Every parameter is independently tunable and
-     * defaults to a moderate, generally-flattering combination.
+     * OpenGL-family renderers, SPIR-V on SDL_GPU and WGSL on WebGPU. Every parameter is
+     * independently tunable and defaults to a moderate, generally-flattering combination.
      *
      * @note Requires a single full-screen source, unlike `DepthEffect`. `getCurvature()`/
      * `getVignetteIntensity()` measure position from the drawn quad's own texture coordinate

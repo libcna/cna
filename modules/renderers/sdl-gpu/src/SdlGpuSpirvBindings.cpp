@@ -553,8 +553,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // SDL's own Vulkan backend negates the viewport height it is given
         // (its Vulkan backend's viewport setter: `currentViewport.y = viewport->y + viewport->h;
         // `currentViewport.height = -viewport->h;`), so clip space on SDL_gpu is Y-up. CNA's
-        // portable shaders are written to CNA's Vulkan renderer's convention, which is Y-down --
-        // that renderer passes a POSITIVE height precisely because its shaders emit NDC directly.
+        // portable shaders are written to the retired Vulkan renderer's convention, which is
+        // Y-down -- that renderer passed a POSITIVE height precisely because its shaders emit NDC
+        // directly.
         // A portable module therefore renders vertically mirrored here.
         //
         // This renderer's own stock sprite shader has always carried the matching negation by hand
@@ -597,11 +598,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             // The negation is applied ONCE, at the end of the entry point, by reading gl_Position
             // back and storing the product -- not per store. A shader may write it more than once,
             // and CNA's 3D portable programs deliberately write a component last
-            // (`rigid.vulkan.vert.glsl`: `gl_Position.y = -gl_Position.y;`, the Vulkan renderer's
-            // own convention for a 3D program). Negating each stored value would miss that one and
-            // mis-order the rest; negating the final value is right whatever shape wrote it, and
-            // leaves the net result exactly one flip away from what Vulkan shows, which is the
-            // whole correction (see the block comment above).
+            // (`rigid.vulkan.vert.glsl`: `gl_Position.y = -gl_Position.y;`, the retired Vulkan
+            // renderer's convention for a 3D program). Negating each stored value would miss that
+            // one and mis-order the rest; negating the final value is right whatever shape wrote
+            // it, and leaves the net result exactly one flip away from what Vulkan showed, which is
+            // the whole correction (see the block comment above).
             std::uint32_t vectorPointerType = 0;
             std::uint32_t vectorType = 0;
             std::uint32_t zeroIndex = 0;

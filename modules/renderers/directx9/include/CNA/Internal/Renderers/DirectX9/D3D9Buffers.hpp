@@ -11,8 +11,7 @@
 //
 // Sized lazily from the first real SetData() call (IGraphicsRenderer::CreateVertexBuffer() takes no
 // stride parameter), growing (never shrinking) via a fresh Lock/Unlock if a later SetData() call
-// needs more bytes than the current allocation -- same discipline D3D11Buffers.hpp already
-// established for this project.
+// needs more bytes than the current allocation.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
@@ -33,8 +32,7 @@ namespace CNA::Internal::Renderers::DirectX9
     /// underlying IDirect3DVertexBuffer9 and copy vertex data in; XNA SetDataOptions::Discard maps
     /// to D3DLOCK_DISCARD, NoOverwrite maps to D3DLOCK_NOOVERWRITE, and the options-less
     /// SetData()/SetDataOptions::None both use D3DLOCK_DISCARD (always GPU-sync-safe, matching
-    /// XNA's own "None may stall" allowance without actually forcing a stall -- same choice
-    /// D3D11VertexBufferRenderer already made).
+    /// XNA's own "None may stall" allowance without actually forcing a stall).
     class D3D9VertexBufferRenderer final : public IVertexBufferRenderer, public ID3D9DefaultPoolResourceEXT
     {
     public:

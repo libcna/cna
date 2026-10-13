@@ -681,12 +681,11 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_FailureKeepsOnlyProcessedPre
 TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 {
     GraphicsDevice gd;
-    // VertexBuffer/DrawPrimitives are inherently 3D concepts -- a permanently 2D-only renderer
-    // (SDL_RENDERER, ... if this test is ever run against them) has no real
+    // VertexBuffer/DrawPrimitives are inherently 3D concepts -- a renderer without 3D has no real
     // vertex-buffer factory to construct one at all, so there is no "empty vertex-buffer state
     // DrawPrimitives should reject" to observe. Found running this file for the first time against
-    // a native, CI-runnable 2D-only renderer -- this test was previously ungated and
-    // unconditionally required CreateVertexBuffer() to succeed.
+    // a native, CI-runnable 2D-only renderer (the retired SDL_RENDERER) -- this test was previously
+    // ungated and unconditionally required CreateVertexBuffer() to succeed.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     VertexBuffer vertexBuffer(gd, 3);

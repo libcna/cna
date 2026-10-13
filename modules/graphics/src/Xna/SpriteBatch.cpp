@@ -350,7 +350,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 // ONE call carrying all seven SamplerState properties. Three hooks for this job met
                 // when `next` merged into `sdlgpu` (2026-09-11): sdlgpu's complete-state
                 // SetSamplerState, the dx branch's SetSamplerAddressW + SetSamplerMipState, and the
-                // vulkan branch's SetSamplerAddressModeWEXT. All three have implementors, so the
+                // vulkan branch's SetSamplerAddressModeWEXT. All three had implementors, so the
                 // fan-out lives in IGraphicsRenderer::SetSamplerState's default body rather than
                 // here -- a renderer that overrides the complete hook gets everything directly, one
                 // that overrides only the older names keeps being told exactly as before, and this

@@ -33,8 +33,8 @@
 // The two axes are independent, so a draw cannot satisfy one by accident while breaking the other.
 //
 // Renderer scope. The permanent suite runs on the renderers whose stock (non-custom-effect) instanced
-// path consumes the per-instance stream and an exact index range: Bgfx, Vulkan, WebGPU, D3D9,
-// EasyGL (REMED-GFX-122) and, after REMED-GFX-123, D3D11 and D3D12.
+// path consumes the per-instance stream and an exact index range: WebGPU, D3D9 and EasyGL
+// (REMED-GFX-122).
 
 #include <algorithm>
 #include <array>
@@ -126,11 +126,11 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 
 // REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the renderers whose
 // instanced path has actually been corrected to consume VertexBufferBinding.VertexOffset and
-// InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
-// WebGPU (REMED-GFX-211/213), and Software (SOFTWARE-129). D3D9 runs the index-range contract above
-// and nothing here; whether
-// it honours the binding offsets is a separate question that belongs to its own measurement, not
-// to this file's compiled expectations, and no D3D display has been reachable to take it.
+// InstanceFrequency -- EasyGL (REMED-GFX-122), WebGPU (REMED-GFX-211/213) and Software
+// (SOFTWARE-129), and the since-retired D3D11/D3D12 (REMED-GFX-123), Vulkan and bgfx. D3D9 runs
+// the index-range contract above and nothing here; whether it honours the binding offsets is a
+// separate question that belongs to its own measurement, not to this file's compiled expectations,
+// and no D3D display has been reachable to take it.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
@@ -662,8 +662,8 @@ namespace
         //
         // Hardware instancing is this whole file's subject and needs BOTH a 3D pipeline and an
         // instancing path, so both capabilities are gated: a renderer with no 3D pipeline at all
-        // (e.g. SDL_RENDERER) and a renderer whose profile reports GraphicsCapability::Instancing =
-        // false each skip every leg here up front.
+        // and a renderer whose profile reports GraphicsCapability::Instancing = false each skip
+        // every leg here up front.
         void SetUp() override
         {
             device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
@@ -743,13 +743,12 @@ namespace
         // plans/plan_runtimerenderer.md RTR-P9-5: this member is now always defined -- it used to sit
         // behind CNA_INSTANCED_BINDING_OFFSET_ORACLE, but a declaration cannot be guarded by a
         // runtime predicate. The two tests that call it carry the renderer gate instead.
-        /// REMED-GFX-122's binding oracle, shared verbatim with REMED-GFX-123's D3D11/D3D12 route.
-        /// The mesh and instance buffers both begin with asymmetric decoys. `VertexOffset=3` and
-        /// instance `VertexOffset=1` are ELEMENT offsets while every native binding underneath is
-        /// expressed in bytes (GL pointers, `IASetVertexBuffers` offsets, a D3D12
-        /// `D3D12_VERTEX_BUFFER_VIEW.BufferLocation`); `InstanceFrequency=2` advances the matrix
-        /// once per two draw instances. Each defect therefore lights a different cell rather than
-        /// accidentally reproducing the expected pixels:
+        /// REMED-GFX-122's binding oracle (REMED-GFX-123 reused it verbatim for the since-retired
+        /// D3D11/D3D12 route). The mesh and instance buffers both begin with asymmetric decoys.
+        /// `VertexOffset=3` and instance `VertexOffset=1` are ELEMENT offsets while every native
+        /// binding underneath is expressed in bytes (GL pointers, for one); `InstanceFrequency=2`
+        /// advances the matrix once per two draw instances. Each defect therefore lights a
+        /// different cell rather than accidentally reproducing the expected pixels:
         ///
         ///   * an ignored per-vertex offset      -> the mesh prefix decoy in slot 6, band 0
         ///   * an ignored instance offset        -> band 3 (the instance prefix decoy), not 0/1

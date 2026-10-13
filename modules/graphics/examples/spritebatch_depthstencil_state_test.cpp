@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-058 -- does a SpriteBatch honour the DepthStencilState its Begin()
+// VULKAN-058 -- does a SpriteBatch honour the DepthStencilState its Begin()
 // installs?
 //
 // `SpriteBatch::Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState)`
@@ -10,9 +10,9 @@
 // then let a SpriteBatch fill only the marked region -- is an ordinary XNA idiom, and it is the
 // case a hardcoded "sprites never test anything" quietly turns into a full-screen fill.
 //
-// Renderer-agnostic and registered on Vulkan AND EasyGL, because the question is comparative: this
-// began as a candidate finding from VULKAN-096's read of the 2D pipeline, and it was the EasyGL run
-// that turned the candidate into a defect. Measured before the fix: leg A passed on both, leg B
+// Renderer-agnostic, because the question is comparative: this began as a candidate finding from
+// VULKAN-096's read of the retired VULKAN renderer's 2D pipeline, and it was the EasyGL run that
+// turned the candidate into a defect. Measured before the fix: leg A passed on both, leg B
 // gave the masked left half on EasyGL and the WHOLE target on Vulkan.
 //
 //   A  The control, and the leg that makes B mean anything: the stencil pattern is really in the

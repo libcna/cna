@@ -1,8 +1,7 @@
 // plans/plan_dx9.md Phase D9-8 (D9-82b/c/d/e/f): real effect-aware DrawPrimitivesEx/
 // DrawIndexedPrimitivesEx dispatch, ALL 5 XNA Stock Effects: BasicEffect (D9-82b), AlphaTestEffect
 // (D9-82c), DualTextureEffect (D9-82d), EnvironmentMapEffect (D9-82e), SkinnedEffect (D9-82f) --
-// matching the priority-cascade shape DirectX11Renderer::DrawPrimitivesExImpl already
-// established (flag-driven effect selection, GpuDrawParams as the only per-draw input).
+// a priority cascade (flag-driven effect selection, GpuDrawParams as the only per-draw input).
 //
 // BasicEffect coverage is bounded by which vertex layout this renderer actually supports (D9-22's
 // 5 stride-keyed D3DVERTEXELEMENT9 declarations: 16/20/24/32/52 bytes) -- BasicEffect's 32
@@ -25,8 +24,8 @@
 // That is 10 of BasicEffect's 32 ShaderIndex values via stride 16/20/24 (2/3/4/5/6/7) plus stride
 // 32's vertex-lit/one-light textured buckets (12/13/20/21) -- every OTHER combination whose
 // VSInput shape has no matching stride still throws a named "no matching CNA vertex layout" error
-// rather than silently drawing with the wrong stride. This is an honest, reported gap (matches
-// D3D11's own "dual_texture_colored3d was not ported" precedent), not a corner cut in secret.
+// rather than silently drawing with the wrong stride. This is an honest, reported gap, not a
+// corner cut in secret.
 // Stride 32's textured+lit bucket ALSO supplies BasicEffect's pixel-lighting-textured ShaderIndex
 // values (28/29, VSBasicPixelLightingTx also declares a VSInputNmTx parameter, D9-81 item 1,
 // resolved 2026-07-16 below) -- 12 of 32 ShaderIndex values are drawable in total, not 10; the
@@ -90,10 +89,10 @@ namespace CNA::Internal::Renderers::DirectX9
         /// undefined behavior that read whichever field happens to sit at D3D9TextureRenderer's own
         /// `texture_` offset in a D3D9RenderTargetRenderer's actual, different layout, handed a
         /// garbage IDirect3DTexture9* to SetTexture(), and crashed later when DXVK's async
-        /// shader-compiler thread actually tried to use it. Same two-concrete-type resolution as
-        /// DirectX11Renderer.cpp's own (anonymous-namespace-local, not exported)
-        /// GetSrvForTextureEXT -- duplicated per-file rather than factored into a shared header,
-        /// matching that precedent's own documented rationale.
+        /// shader-compiler thread actually tried to use it. Resolved by trying both concrete
+        /// types -- duplicated per-file (D3D9SpriteBatch.cpp has the same helper) rather than
+        /// factored into a shared header, the precedent the retired D3D11 renderer's
+        /// GetSrvForTextureEXT set.
         IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureRenderer* tex)
         {
             if (tex == nullptr) return nullptr;
@@ -551,8 +550,8 @@ namespace CNA::Internal::Renderers::DirectX9
             return;
         }
 
-        // D9-82b: same flag priority cascade DirectX11Renderer::DrawPrimitivesExImpl already
-        // established (GpuDrawParams is the only per-draw signal available to pick an effect).
+        // D9-82b: flag priority cascade (GpuDrawParams is the only per-draw signal available to
+        // pick an effect).
         const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex   = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap    = params.envMapping  && !needsAlphaTest && !needsDualTex;

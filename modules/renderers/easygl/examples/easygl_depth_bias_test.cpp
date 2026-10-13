@@ -3,9 +3,10 @@
 //
 // Verifies that RasterizerState.DepthBias and RasterizerState.SlopeScaleDepthBias are applied by
 // the EasyGL renderer (via real glPolygonOffset) and actually change the outcome of the depth test.
-// Direct adaptation of examples/vulkan_depth_bias_test.cpp (Task 328) -- same "shadow acne"-style
-// coplanar-redraw methodology, since it already cleanly discriminates real bias application from
-// a no-op; EasyGL previously had this exact stub ("depthBias"/"slopeScaleDepthBias" both unused).
+// Direct adaptation of the retired VULKAN renderer's depth-bias test (Task 328) -- same
+// "shadow acne"-style coplanar-redraw methodology, since it already cleanly discriminates real bias
+// application from a no-op; EasyGL previously had this exact stub
+// ("depthBias"/"slopeScaleDepthBias" both unused).
 //
 // Method:
 //   The depth buffer is cleared to 1.0 and DepthStencilState.DepthBufferFunction is explicitly set
