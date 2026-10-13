@@ -45,9 +45,9 @@ SCHEMA_VERSION = 1
 SKIPPED_MACROS = {"CNA_C_API"}
 
 
-def read_headers() -> dict[str, str]:
+def read_headers(header_dir: Path = HEADER_DIR) -> dict[str, str]:
     sources = {}
-    for path in sorted(HEADER_DIR.glob("*.h")):
+    for path in sorted(header_dir.glob("*.h")):
         text = path.read_text(encoding="utf-8")
         text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
         text = re.sub(r"//[^\n]*", "", text)
@@ -57,15 +57,19 @@ def read_headers() -> dict[str, str]:
         text = re.sub(r"\\\n[ \t]*", " ", text)
         sources[path.name] = text
     if not sources:
-        raise SystemExit(f"No public headers were found under {HEADER_DIR}.")
+        raise SystemExit(f"No public headers were found under {header_dir}.")
     return sources
 
 
 def collect_symbols(sources: dict[str, str]) -> tuple[dict[str, list[str]], list[str], dict[str, list[str]]]:
-    """Return (struct name -> field names), scalar typedef names, and macro names by category."""
+    """Return (struct name -> field names), scalar typedef names, and macro names by category.
+
+    A value macro that is neither a string nor a color is a number. Whether it is an integer or a
+    floating-point constant is the compiler's answer, not this parser's: the probe asks `_Generic`.
+    """
     structs: dict[str, list[str]] = {}
     scalars: list[str] = []
-    macros: dict[str, list[str]] = {"integers": [], "strings": [], "colors": []}
+    macros: dict[str, list[str]] = {"numbers": [], "strings": [], "colors": []}
 
     for text in sources.values():
         for match in re.finditer(r"typedef\s+struct\s+(CNA_[A-Za-z0-9_]+)\s*\{(.*?)\}\s*\1\s*;", text, re.S):
@@ -84,7 +88,11 @@ def collect_symbols(sources: dict[str, str]) -> tuple[dict[str, list[str]], list
 
         # `[ \t]` rather than `\s`: a whitespace class that matches newlines makes an include
         # guard -- a `#define` with no value at all -- swallow the following line as its value.
-        for match in re.finditer(r"^#define[ \t]+(CNA_[A-Z0-9_]+)[ \t]+(?!\()([^\n]+)$", text, re.M):
+        # A function-like macro has its `(` directly after the name, so the blank required there
+        # excludes it, while a value that opens with a parenthesis -- `(UINT32_C(1) << 4)`, a mask
+        # ORing such bits, a cast -- is measured like any other. Until CBIND-159 those were
+        # skipped, so every flag bit and the masks built from them were invisible to the baseline.
+        for match in re.finditer(r"^#define[ \t]+(CNA_[A-Z0-9_]+)[ \t]+([^\n]+)$", text, re.M):
             name, value = match.group(1), match.group(2).strip()
             if name in SKIPPED_MACROS:
                 continue
@@ -93,7 +101,7 @@ def collect_symbols(sources: dict[str, str]) -> tuple[dict[str, list[str]], list
             elif value.startswith('"'):
                 macros["strings"].append(name)
             else:
-                macros["integers"].append(name)
+                macros["numbers"].append(name)
 
     scalars = sorted(set(scalars) - set(structs))
     for key in macros:
@@ -108,6 +116,8 @@ def render_probe(structs: dict[str, list[str]], scalars: list[str], macros: dict
         "#include <CNA/C/cna.h>",
         "#include <stddef.h>",
         "#include <stdio.h>",
+        "",
+        "#define CNA_ABI_PROBE_FLOATING(x) _Generic((x), float: 1, double: 1, long double: 1, default: 0)",
         "",
         "int main(void)",
         "{",
@@ -132,11 +142,15 @@ def render_probe(structs: dict[str, list[str]], scalars: list[str], macros: dict
     for name in scalars:
         lines.append(f'    printf("SCALAR\\t{name}\\t%llu\\t%llu\\n",'
                      f' (unsigned long long)sizeof({name}), (unsigned long long)_Alignof({name}));')
-    for name in macros["integers"]:
-        # Printed through the widest signed and unsigned forms so a value of either signedness
-        # round-trips exactly; the sign test is what picks the correct one.
+    for name in macros["numbers"]:
+        # An integer is printed through the widest signed and unsigned forms so a value of either
+        # signedness round-trips exactly; the sign test is what picks the correct one. A floating
+        # constant is printed with the 17 significant digits that round-trip a double, rather than
+        # truncated to an integer as it was before CBIND-159 (CNA_MATH_PI was recorded as 3).
         lines.append(
-            f'    if (({name}) < 0) {{ printf("INT\\t{name}\\t%lld\\n", (long long)({name})); }}'
+            f'    if (CNA_ABI_PROBE_FLOATING({name})) {{'
+            f' printf("FLOAT\\t{name}\\t%.17g\\n", (double)({name})); }}'
+            f' else if (({name}) < 0) {{ printf("INT\\t{name}\\t%lld\\n", (long long)({name})); }}'
             f' else {{ printf("INT\\t{name}\\t%llu\\n", (unsigned long long)({name})); }}')
     for name in macros["strings"]:
         lines.append(f'    printf("STR\\t{name}\\t%s\\n", {name});')
@@ -150,8 +164,9 @@ def render_probe(structs: dict[str, list[str]], scalars: list[str], macros: dict
     return "\n".join(lines) + "\n"
 
 
-def measure(library: Path | None, compiler: str, compile_flags: list[str]) -> dict:
-    structs, scalars, macros = collect_symbols(read_headers())
+def measure(library: Path | None, compiler: str, compile_flags: list[str],
+            include_dir: Path = INCLUDE_DIR) -> dict:
+    structs, scalars, macros = collect_symbols(read_headers(include_dir / "CNA" / "C"))
     with tempfile.TemporaryDirectory() as workspace:
         work = Path(workspace)
         source = work / "abi_probe.c"
@@ -161,7 +176,7 @@ def measure(library: Path | None, compiler: str, compile_flags: list[str]) -> di
         # comparison it performs on purpose is not a defect. Conformance warnings are the
         # compatibility matrix's job.
         compile_command = [
-            compiler, "-std=c11", "-w", *compile_flags, "-I", str(INCLUDE_DIR), str(source),
+            compiler, "-std=c11", "-w", *compile_flags, "-I", str(include_dir), str(source),
             "-o", str(binary),
         ]
         if library is not None:
@@ -194,6 +209,7 @@ def measure(library: Path | None, compiler: str, compile_flags: list[str]) -> di
         "structs": {},
         "scalars": {},
         "integers": {},
+        "floats": {},
         "strings": {},
         "colors": {},
         "exports": [],
@@ -215,6 +231,8 @@ def measure(library: Path | None, compiler: str, compile_flags: list[str]) -> di
             measured["scalars"][parts[1]] = [int(parts[2]), int(parts[3])]
         elif kind == "INT":
             measured["integers"][parts[1]] = int(parts[2])
+        elif kind == "FLOAT":
+            measured["floats"][parts[1]] = float(parts[2])
         elif kind == "STR":
             measured["strings"][parts[1]] = "\t".join(parts[2:])
         elif kind == "COLOR":
@@ -287,7 +305,8 @@ def describe_differences(baseline: dict, measured: dict) -> tuple[list[str], lis
                 breaks.append(f"{label} changed: {key}: {old[key]!r} -> {new[key]!r}")
 
     for section, label in (("scalars", "scalar"), ("integers", "constant"),
-                           ("strings", "string constant"), ("colors", "color constant")):
+                           ("floats", "floating constant"), ("strings", "string constant"),
+                           ("colors", "color constant")):
         compare_map(section, baseline.get(section, {}), measured.get(section, {}), label)
 
     old_structs = baseline.get("structs", {})
@@ -377,7 +396,8 @@ def main() -> int:
     measured = measure(library, arguments.compiler, arguments.compile_flags)
     summary = (
         f"{len(measured['structs'])} structs, {len(measured['scalars'])} scalar types, "
-        f"{len(measured['integers'])} constants, {len(measured['strings'])} string constants, "
+        f"{len(measured['integers'])} constants, {len(measured['floats'])} floating constants, "
+        f"{len(measured['strings'])} string constants, "
         f"{len(measured['colors'])} color constants, "
         + (f"{len(measured['exports'])} exports" if "exports" in measured else "headers only"))
 

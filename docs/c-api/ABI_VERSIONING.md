@@ -643,7 +643,7 @@ something that reads them. `tools/c-api/abi_baseline.json` is a checked-in snaps
 |---|---|
 | Every struct's size and alignment, and every field's offset and size | `sizeof`, `_Alignof` and `offsetof` in a generated probe |
 | Every scalar typedef's width and alignment | the same probe |
-| Every integer, string and named-color constant's value | printed by the probe, so a macro's *expansion* is what is recorded |
+| Every integer, floating-point, string and named-color constant's value, flag bits written `(UINT32_C(1) << n)` and the masks built from them included | printed by the probe, so a macro's *expansion* is what is recorded; `_Generic` decides integer or floating |
 | The ABI version the headers declare, and the one the library reports | `CNA_ABI_VERSION` against `cna_get_abi_version()` |
 | Every `cna_*` symbol the shared object exports | `nm -D --defined-only` |
 
@@ -667,6 +667,13 @@ Two gates run it:
   introduced.
 - `CApiAbiBaseline` adds the two halves only a built library can answer — its own ABI version and
   its export list — and runs in each C API build tree.
+
+Until CBIND-159 the probe skipped every macro whose value opens with a parenthesis, so the
+capability and format-usage flag bits and `CNA_RENDERER_FORMAT_USAGE_ALL` were not
+recorded, and floating constants were recorded truncated (`CNA_MATH_PI` as `3`). Both are now
+measured, and `tools/c-api/test_generate_abi_baseline.py` (`CApiAbiBaselineTests`) proves that a
+moved or removed flag and a changed mask are reported as breaks, and that no value macro of the
+public headers goes unmeasured.
 
 What one cannot see, it skips **by name**: a header-only run reports the export list and the
 runtime version as skipped rather than passing over them in silence.

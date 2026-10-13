@@ -436,6 +436,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 COMMAND Python3::Interpreter
                     "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_abi_baseline.py" --check
                     --compiler "${CMAKE_C_COMPILER}")
+            # CBIND-159: the measurement itself -- a shift-form flag that moves or vanishes, or a
+            # mask built from such flags that changes, is a break; a floating constant is not
+            # truncated; no value macro of the public headers goes unmeasured.
+            add_test(NAME CApiAbiBaselineTests
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/test_generate_abi_baseline.py")
+            set_tests_properties(CApiAbiBaselineTests PROPERTIES
+                ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
         endif()
 
         # The other half: the library that was actually built, asked for its own ABI version and its

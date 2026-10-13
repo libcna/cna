@@ -22,6 +22,7 @@ on:
       - 'modules/c-api/include/**'
       - 'tools/c-api/abi_baseline.json'
       - 'tools/c-api/generate_abi_baseline.py'
+      - 'tools/c-api/test_generate_abi_baseline.py'
       - '.github/workflows/c-api-abi-baseline.yml'
   pull_request:
     branches: [next, develop, main]
@@ -29,6 +30,7 @@ on:
       - 'modules/c-api/include/**'
       - 'tools/c-api/abi_baseline.json'
       - 'tools/c-api/generate_abi_baseline.py'
+      - 'tools/c-api/test_generate_abi_baseline.py'
   workflow_dispatch:
 
 concurrency:
@@ -55,6 +57,12 @@ jobs:
 
       - name: Measure the headers against the baseline
         run: python3 tools/c-api/generate_abi_baseline.py --check
+
+      # The measurement's own regressions: flag bits, masks, floating constants, and that no value
+      # macro of the public headers goes unmeasured (CBIND-159).
+      - name: Test the constant measurement
+        working-directory: tools/c-api
+        run: python3 test_generate_abi_baseline.py -v
 
       # A gate that cannot fail is not a gate. This reinstates the exact mistake the baseline exists
       # to catch -- two fields of a public struct swapped -- and requires the check to reject it, so
