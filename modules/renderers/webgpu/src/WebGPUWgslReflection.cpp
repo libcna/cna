@@ -447,32 +447,9 @@ namespace CNA::Internal::Renderers::WebGPU
                     ParseFunction(attributes, result);
                     return;
                 }
-                if (keyword.text == "const" || keyword.text == "override")
-                {
-                    const std::string name = Next().text;
-                    if (Accept(":")) ParseType();
-                    if (Accept("="))
-                    {
-                        std::string expression;
-                        int depth = 0;
-                        while (Peek().kind != TokenKind::End &&
-                               !(depth == 0 && Peek().kind == TokenKind::Punct && Peek().text == ";"))
-                        {
-                            const Token t = Next();
-                            if (t.kind == TokenKind::Punct && (t.text == "(" || t.text == "["))
-                                ++depth;
-                            if (t.kind == TokenKind::Punct && (t.text == ")" || t.text == "]"))
-                                --depth;
-                            expression += t.text;
-                        }
-                        if (const auto value = ParseInteger(expression)) constants_[name] = *value;
-                    }
-                    Accept(";");
-                    return;
-                }
                 if (keyword.text == "enable" || keyword.text == "requires" ||
                     keyword.text == "diagnostic" || keyword.text == "const_assert" ||
-                    keyword.text == "let")
+                    keyword.text == "const" || keyword.text == "override" || keyword.text == "let")
                 {
                     SkipBalancedUntil(";");
                     return;
@@ -607,11 +584,15 @@ namespace CNA::Internal::Renderers::WebGPU
 
                 if (addressSpace == "uniform" || addressSpace == "storage")
                 {
-                    if (addressSpace == "uniform")
-                        resource.kind = WgslResourceKind::UniformBuffer;
-                    else
-                        resource.kind = access == "read_write" ? WgslResourceKind::StorageBuffer
-                                                               : WgslResourceKind::ReadOnlyStorageBuffer;
+                    if (addressSpace == "storage" && access == "read_write")
+                    {
+                        Fail("buffer '" + name + "' is var<storage, read_write>; a graphics stage on "
+                             "this renderer only reads storage (var<storage, read>), there is "
+                             "nothing CNA could bind to a writable block");
+                        return;
+                    }
+                    resource.kind = addressSpace == "uniform" ? WgslResourceKind::UniformBuffer
+                                                              : WgslResourceKind::ReadOnlyStorageBuffer;
                     const auto layout = WgslLayoutOf(resource.type, structs_, aliases_);
                     if (!layout)
                     {
@@ -702,27 +683,8 @@ namespace CNA::Internal::Renderers::WebGPU
                     r.multisampled = head == "texture_depth_multisampled_2d";
                     return true;
                 }
-                static constexpr Dim kStorage[] = {
-                    {"texture_storage_1d", WGPUTextureViewDimension_1D},
-                    {"texture_storage_2d", WGPUTextureViewDimension_2D},
-                    {"texture_storage_2d_array", WGPUTextureViewDimension_2DArray},
-                    {"texture_storage_3d", WGPUTextureViewDimension_3D},
-                };
-                for (const Dim& d : kStorage)
-                {
-                    if (head != d.suffix) continue;
-                    if (args.size() != 2) return false;
-                    r.kind = WgslResourceKind::StorageTexture;
-                    r.viewDimension = d.dim;
-                    r.storageFormat = WgslTexelFormatFromName(args[0]);
-                    if (r.storageFormat == WGPUTextureFormat_Undefined) return false;
-                    if (args[1] == "write") r.storageAccess = WGPUStorageTextureAccess_WriteOnly;
-                    else if (args[1] == "read") r.storageAccess = WGPUStorageTextureAccess_ReadOnly;
-                    else if (args[1] == "read_write")
-                        r.storageAccess = WGPUStorageTextureAccess_ReadWrite;
-                    else return false;
-                    return true;
-                }
+                // `texture_storage_*` deliberately falls through: nothing in CNA binds a storage
+                // image to a graphics stage, so the declaration is refused by its type name.
                 return false;
             }
 
@@ -784,10 +746,8 @@ namespace CNA::Internal::Renderers::WebGPU
                     entry.stage = WGPUShaderStage_Vertex;
                 else if (FindAttribute(attributes, "fragment") != nullptr)
                     entry.stage = WGPUShaderStage_Fragment;
-                else if (FindAttribute(attributes, "compute") != nullptr)
-                    entry.stage = WGPUShaderStage_Compute;
                 else
-                    return;   // an ordinary function
+                    return;   // an ordinary function, or a stage no graphics pipeline here uses
 
                 if (entry.stage == WGPUShaderStage_Vertex)
                 {
@@ -805,32 +765,6 @@ namespace CNA::Internal::Renderers::WebGPU
                     for (const WgslVertexInput& o : outputs)
                         entry.colorOutputCount = std::max(entry.colorOutputCount, o.location + 1);
                 }
-                if (entry.stage == WGPUShaderStage_Compute)
-                {
-                    const Attribute* size = FindAttribute(attributes, "workgroup_size");
-                    if (size == nullptr || size->args.empty())
-                    {
-                        Fail("compute entry point '" + name + "' has no @workgroup_size");
-                        return;
-                    }
-                    for (std::size_t axis = 0; axis < 3 && axis < size->args.size(); ++axis)
-                    {
-                        std::optional<std::uint64_t> value = ParseInteger(size->args[axis]);
-                        if (!value)
-                        {
-                            const auto it = constants_.find(size->args[axis]);
-                            if (it != constants_.end()) value = it->second;
-                        }
-                        if (!value)
-                        {
-                            Fail("compute entry point '" + name +
-                                 "' has a @workgroup_size this renderer cannot evaluate: '" +
-                                 size->args[axis] + "'");
-                            return;
-                        }
-                        entry.workgroupSize[axis] = static_cast<std::uint32_t>(*value);
-                    }
-                }
                 result.entryPoints.push_back(std::move(entry));
             }
 
@@ -840,7 +774,6 @@ namespace CNA::Internal::Renderers::WebGPU
             std::unordered_map<std::string, WgslStruct> structs_;
             std::unordered_map<std::string, std::vector<ParsedMember>> structMembers_;
             std::unordered_map<std::string, std::string> aliases_;
-            std::unordered_map<std::string, std::uint64_t> constants_;
         };
     }
 
@@ -929,49 +862,5 @@ namespace CNA::Internal::Renderers::WebGPU
                 return it->second.layout;
         }
         return std::nullopt;
-    }
-
-    WGPUTextureFormat WgslTexelFormatFromName(std::string_view name) noexcept
-    {
-        struct Entry { std::string_view name; WGPUTextureFormat format; };
-        static constexpr Entry kFormats[] = {
-            {"rgba8unorm", WGPUTextureFormat_RGBA8Unorm},
-            {"rgba8snorm", WGPUTextureFormat_RGBA8Snorm},
-            {"rgba8uint", WGPUTextureFormat_RGBA8Uint},
-            {"rgba8sint", WGPUTextureFormat_RGBA8Sint},
-            {"rgba16uint", WGPUTextureFormat_RGBA16Uint},
-            {"rgba16sint", WGPUTextureFormat_RGBA16Sint},
-            {"rgba16float", WGPUTextureFormat_RGBA16Float},
-            {"r32uint", WGPUTextureFormat_R32Uint},
-            {"r32sint", WGPUTextureFormat_R32Sint},
-            {"r32float", WGPUTextureFormat_R32Float},
-            {"rg32uint", WGPUTextureFormat_RG32Uint},
-            {"rg32sint", WGPUTextureFormat_RG32Sint},
-            {"rg32float", WGPUTextureFormat_RG32Float},
-            {"rgba32uint", WGPUTextureFormat_RGBA32Uint},
-            {"rgba32sint", WGPUTextureFormat_RGBA32Sint},
-            {"rgba32float", WGPUTextureFormat_RGBA32Float},
-            {"bgra8unorm", WGPUTextureFormat_BGRA8Unorm},
-            {"r8unorm", WGPUTextureFormat_R8Unorm},
-            {"r8snorm", WGPUTextureFormat_R8Snorm},
-            {"r8uint", WGPUTextureFormat_R8Uint},
-            {"r8sint", WGPUTextureFormat_R8Sint},
-            {"rg8unorm", WGPUTextureFormat_RG8Unorm},
-            {"rg8snorm", WGPUTextureFormat_RG8Snorm},
-            {"rg8uint", WGPUTextureFormat_RG8Uint},
-            {"rg8sint", WGPUTextureFormat_RG8Sint},
-            {"r16uint", WGPUTextureFormat_R16Uint},
-            {"r16sint", WGPUTextureFormat_R16Sint},
-            {"r16float", WGPUTextureFormat_R16Float},
-            {"rg16uint", WGPUTextureFormat_RG16Uint},
-            {"rg16sint", WGPUTextureFormat_RG16Sint},
-            {"rg16float", WGPUTextureFormat_RG16Float},
-            {"rgb10a2uint", WGPUTextureFormat_RGB10A2Uint},
-            {"rgb10a2unorm", WGPUTextureFormat_RGB10A2Unorm},
-            {"rg11b10ufloat", WGPUTextureFormat_RG11B10Ufloat},
-        };
-        for (const Entry& e : kFormats)
-            if (e.name == name) return e.format;
-        return WGPUTextureFormat_Undefined;
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// The one bindable form of a sampled texture in the WebGPU renderer (REMED-GFX-167), shared by the
-// classic renderer and the modern-resource records (plans/plan_webgpu_modern_graphics.md).
+// The one bindable form of a sampled texture in the WebGPU renderer (REMED-GFX-167): a view plus
+// the reference that keeps its texture alive for every queued draw that captured it.
 
 #pragma once
 

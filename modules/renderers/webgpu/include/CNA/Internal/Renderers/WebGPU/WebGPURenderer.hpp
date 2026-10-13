@@ -11,7 +11,7 @@
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
-#include "CNA/Internal/Renderers/WebGPU/WebGPUModern.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPUDescriptorEffect.hpp"
 
 #if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
@@ -172,12 +172,6 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         [[nodiscard]] WGPUTextureView View() const override { return view_; }
         [[nodiscard]] WebGPUSampledTextureEXT Sampled() const override { return {view_, sampled_}; }
-        /** @brief WMG-0008: whether this texture may bind as a compute storage image. @return True for rgba8unorm. */
-        [[nodiscard]] bool SupportsStorageBindingEXT() const noexcept { return storageCapable_; }
-        /** @brief WMG-0008: the level-zero storage view, created on first use. @return The view, or null. */
-        [[nodiscard]] WGPUTextureView StorageViewEXT() const;
-        /** @brief WMG-0008: that view plus its keep-alive. @return The binding, empty when unsupported. */
-        [[nodiscard]] WebGPUSampledTextureEXT StorageBindingEXT() const;
 
     private:
         WebGPURenderer* owner_ = nullptr;
@@ -199,10 +193,6 @@ namespace CNA::Internal::Renderers::WebGPU
         int surfaceFormat_ = 0;
         WGPUTextureFormat wgpuFormat_ = WGPUTextureFormat_RGBA8Unorm;
         bool compressed_ = false;
-        /// WMG-0008: rgba8unorm, so this texture carries STORAGE_BINDING and can be a compute image.
-        bool storageCapable_ = false;
-        mutable WGPUTextureView storageView_ = nullptr;
-        mutable std::shared_ptr<const WebGPUSampledResourceEXT> storageKeepAlive_;
         int blockBytes_ = 4;
         std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
@@ -982,12 +972,6 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param texture The volume, or null to clear the unit.
          */
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
-        /** @copydoc IEffectRenderer::BindTexture2DArrayEXT */
-        [[nodiscard]] bool BindTexture2DArrayEXT(
-            int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
-        /** @copydoc IEffectRenderer::BindStorageTexture2DEXT */
-        [[nodiscard]] bool BindStorageTexture2DEXT(
-            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
 
         /** @brief Which WGSL binding contract the compiled pair follows. */
         enum class ContractEXT
@@ -1031,6 +1015,8 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /// WMG-0006: the descriptor contract's fixed set-1 binding numbers, shared with Vulkan's
         /// SPIR-V route (VulkanEffectRenderer's own constants) so one generated program fits both.
+        /// Shipped packages declare these numbers, so they are never renumbered: 16..18, the
+        /// retired sampled 2D-array units, stay a reserved gap below the engine matrices at 19.
         static constexpr int kDescriptorMaxTextures = 4;
         static constexpr int kDescriptorCubeBase = 4;
         static constexpr int kDescriptorVolumeBase = 8;
@@ -1038,7 +1024,6 @@ namespace CNA::Internal::Renderers::WebGPU
         static constexpr int kDescriptorVec2ArrayBinding = 13;
         static constexpr int kDescriptorVec3ArrayBinding = 14;
         static constexpr int kDescriptorMat4ArrayBinding = 15;
-        static constexpr int kDescriptorTextureArrayBase = 16;
         static constexpr int kDescriptorEngineMatrixBinding = 19;
         static constexpr int kDescriptorSamplerOffset = 32;
         static constexpr int kDescriptorArrayCapacity = 72;
@@ -1077,7 +1062,6 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<WebGPUSampledTextureEXT, 4> descriptorTextures_{};
         std::array<WebGPUSampledTextureEXT, 4> descriptorCubes_{};
         std::array<WebGPUSampledTextureEXT, 4> descriptorVolumes_{};
-        std::array<WebGPUSampledTextureEXT, 3> descriptorTextureArrays_{};
 
         /// Compiles one WGSL string into a module inside a validation error scope; null on failure.
         WGPUShaderModule CompileModule(const std::string& wgsl, const char* label);
@@ -2207,11 +2191,12 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const override;
 
         // ------------------------------------------------------------------------------------
-        // plans/plan_webgpu_modern_graphics.md: the modern CNA Graphics API (CNAEXT). The records
-        // live in WebGPUModern.hpp; the renderer half is WebGPURendererModern.cpp.
+        // The CNAEXT surface beyond XNA 4.0: what this renderer's shaders really sample, debug
+        // labels, and the device limits and per-format usage the capability profile reports
+        // (WebGPURendererDevice.cpp).
         // ------------------------------------------------------------------------------------
 
-        /** @brief WMG: WGSL at vertex, fragment and compute; nothing else. @copydoc IGraphicsRenderer::SupportsShaderLanguageEXT */
+        /** @brief WGSL at vertex and fragment; nothing else. @copydoc IGraphicsRenderer::SupportsShaderLanguageEXT */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
         /**
          * @brief WMG-0014: this renderer's lit shaders really do sample a shadow map.
@@ -2311,205 +2296,36 @@ namespace CNA::Internal::Renderers::WebGPU
             return device_ != nullptr;
         }
 
-        /** @brief WMG: compute is core WebGPU. @return True. */
-        [[nodiscard]] bool SupportsComputeShadersEXT() const override { return device_ != nullptr; }
-        /**
-         * @brief WMG-0013: whether a draw can take its counts out of a GPU buffer here.
-         *
-         * `drawIndirect` is core WebGPU, but an argument block's `firstInstance` may only be
-         * non-zero with the optional `IndirectFirstInstance` feature, and the modern API's
-         * argument structs carry that field. Answered from the device this renderer actually
-         * created rather than from the family, the same way Vulkan answers it.
-         *
-         * @return True when the device has the feature.
-         */
-        [[nodiscard]] bool SupportsIndirectDrawEXT() const override
-        {
-            return device_ != nullptr && indirectFirstInstanceSupported_;
-        }
-        /** @copydoc IGraphicsRenderer::DrawPrimitivesIndirectEXT */
-        void DrawPrimitivesIndirectEXT(
-            const CNA::Internal::Renderers::IVertexBufferRenderer& vb,
-            const Microsoft::Xna::Framework::Matrix& world,
-            const Microsoft::Xna::Framework::Matrix& view,
-            const Microsoft::Xna::Framework::Matrix& projection,
-            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive,
-            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
-            int argumentByteOffset,
-            const CNA::Internal::Renderers::GpuDrawParams& params) override;
-        /** @copydoc IGraphicsRenderer::DrawIndexedPrimitivesIndirectEXT */
-        void DrawIndexedPrimitivesIndirectEXT(
-            const CNA::Internal::Renderers::IVertexBufferRenderer& vb,
-            const CNA::Internal::Renderers::IIndexBufferRenderer& ib,
-            const Microsoft::Xna::Framework::Matrix& world,
-            const Microsoft::Xna::Framework::Matrix& view,
-            const Microsoft::Xna::Framework::Matrix& projection,
-            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive,
-            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
-            int argumentByteOffset,
-            const CNA::Internal::Renderers::GpuDrawParams& params) override;
-        /**
-         * @brief WMG-0013: the body both indirect entry points share.
-         *
-         * @param vb                 The bound vertex buffer.
-         * @param ib                 The bound index buffer, or null for the non-indexed route.
-         * @param world              The world matrix.
-         * @param view               The view matrix.
-         * @param projection         The projection matrix.
-         * @param primitive          The topology; the buffer supplies counts, never this.
-         * @param argumentBuffer     The buffer holding the arguments.
-         * @param argumentByteOffset Where in it they start.
-         * @param params             The draw description the ordinary routes take.
-         */
-        void QueueIndirectDrawEXT(
-            const CNA::Internal::Renderers::IVertexBufferRenderer& vb,
-            const CNA::Internal::Renderers::IIndexBufferRenderer* ib,
-            const Microsoft::Xna::Framework::Matrix& world,
-            const Microsoft::Xna::Framework::Matrix& view,
-            const Microsoft::Xna::Framework::Matrix& projection,
-            Microsoft::Xna::Framework::Graphics::PrimitiveType primitive,
-            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
-            int argumentByteOffset,
-            const CNA::Internal::Renderers::GpuDrawParams& params);
-        /**
-         * @brief WMG-0008: whether a storage image binds to a compute program here. True.
-         *
-         * Both routes are implemented: a `StorageTexture2D` in any storage-capable format, and a
-         * plain `Texture2D` in `SurfaceFormat::Color`, which this renderer allocates with
-         * `STORAGE_BINDING` because `rgba8unorm` is a core WebGPU storage format. A `RenderTarget2D`
-         * is refused by name -- it carries the swap chain's format, which WebGPU does not allow as a
-         * storage image without an optional feature.
-         *
-         * @return True while a device exists.
-         */
-        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override { return device_ != nullptr; }
-        /** @brief WMG: creates a WGSL compute program. @param computeSrc WGSL. @return The program. */
-        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(const std::string& computeSrc) override;
-        /** @brief WMG: a storage buffer with the historical all-roles usage. @param byteSize Size. @return The buffer. */
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
-        /** @copydoc IGraphicsRenderer::CreateStorageBufferEXT */
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
-            std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess) override;
-        /** @copydoc IGraphicsRenderer::DispatchCompute */
-        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
-                             int groupsZ) override;
-        /**
-         * @brief WMG: nothing to do. Submission order is queue order on WebGPU, and every
-         *        dispatch, copy and upload is submitted in public-call order (WebGPUModern.hpp).
-         */
-        void MemoryBarrierEXT(int /*barrierBits*/) override {}
-        /** @copydoc IGraphicsRenderer::CreateTexture2DArrayEXT */
-        std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
-            int width, int height, int layerCount, int mipLevelCount, int surfaceFormat,
-            std::uint32_t usage) override;
-        /** @copydoc IGraphicsRenderer::CreateStorageTexture2DEXT */
-        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
-            int width, int height, int mipLevelCount, int surfaceFormat,
-            std::uint32_t usage) override;
-        /** @brief WMG: timestamp queries, where the adapter has them. @return True when requested. */
-        [[nodiscard]] bool SupportsGpuTimerEXT() const override { return timestampQuerySupported_; }
-        /** @copydoc IGraphicsRenderer::CreateGpuTimerEXT */
-        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
-        /** @brief WMG: WebGPU timestamps are nanoseconds. @return 1000 when timers exist, else 0. */
-        [[nodiscard]] std::uint64_t GetTimestampPeriodPicosecondsEXT() const override
-        {
-            return timestampQuerySupported_ ? 1000u : 0u;
-        }
         /** @copydoc IGraphicsRenderer::GetSurfaceFormatUsageSupportEXT */
         [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
             int surfaceFormat) const override;
-        /** @brief WMG: the device's `maxComputeWorkgroupsPerDimension`. @param axis Axis. @return The limit. */
-        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
-        /** @brief WMG: the device's `maxComputeWorkgroupSize{X,Y,Z}`. @param axis Axis. @return The limit. */
-        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
-        /** @brief WMG: `maxComputeInvocationsPerWorkgroup`. @return The limit. */
-        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
-        /** @brief WMG: `maxStorageBufferBindingSize`. @return Bytes. */
-        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
-        /** @brief WMG: `maxUniformBufferBindingSize`. @return Bytes. */
+        /** @brief `maxUniformBufferBindingSize`. @return Bytes. */
         [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
-        /** @brief WMG: `maxStorageBuffersPerShaderStage`. @return The limit. */
-        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
-        /** @brief WMG: `maxStorageBuffersPerShaderStage` (a vertex stage may read storage). @return The limit. */
-        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
-        /** @brief WMG: `maxTextureArrayLayers`. @return The limit. */
-        [[nodiscard]] int GetMaxTextureArrayLayersEXT() const override;
-        /** @brief WMG: `maxSampledTexturesPerShaderStage`. @return The limit. */
+        /** @brief `maxSampledTexturesPerShaderStage`. @return The limit. */
         [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
-        /** @brief WMG: `maxStorageTexturesPerShaderStage`. @return The limit. */
-        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override;
-        /** @brief WMG: `maxVertexBuffers`. @return The limit. */
+        /** @brief `maxVertexBuffers`. @return The limit. */
         [[nodiscard]] int GetMaxVertexInputBindingsEXT() const override;
-        /** @brief WMG: `maxVertexAttributes`. @return The limit. */
+        /** @brief `maxVertexAttributes`. @return The limit. */
         [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override;
-        /** @brief WMG: `maxColorAttachments`. @return The limit. */
+        /** @brief `maxColorAttachments`, capped at the four targets the MRT route carries. @return The limit. */
         [[nodiscard]] int GetMaxColorAttachmentsEXT() const override;
-        /** @brief WMG: `minStorageBufferOffsetAlignment`. @return Bytes. */
-        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
-        /** @brief WMG: `minUniformBufferOffsetAlignment`. @return Bytes. */
+        /** @brief `minUniformBufferOffsetAlignment`. @return Bytes. */
         [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
 
-        /** @brief One resolved resource of a queued compute dispatch. */
-        struct ModernBindingEXT
-        {
-            /** @brief Binding index in @group(0). */
-            std::uint32_t binding = 0;
-            /** @brief A bound storage or constant buffer, retained. */
-            std::shared_ptr<WebGPUStorageBufferRenderer> buffer;
-            /** @brief A bound storage texture, retained. */
-            std::shared_ptr<WebGPUStorageTexture2DRenderer> storageTexture;
-            /** @brief A bound sampled texture, retained. */
-            WebGPUSampledTextureEXT sampled;
-            /** @brief The texture view to bind (storage or sampled). */
-            WGPUTextureView textureView = nullptr;
-            /** @brief The sampler to bind. */
-            WGPUSampler sampler = nullptr;
-        };
-
-        /** @brief One immutable compute dispatch, captured at the public call. */
-        struct ModernDispatchEXT
-        {
-            /** @brief The compute pipeline. */
-            WGPUComputePipeline pipeline = nullptr;
-            /** @brief Its layouts. */
-            std::shared_ptr<WebGPUProgramLayoutEXT> layout;
-            /** @brief Work-group counts. */
-            std::array<std::uint32_t, 3> groups{};
-            /** @brief The @group(3) scalar block, by value. */
-            std::vector<std::uint8_t> scalarBytes;
-            /** @brief The @group(0) resources. */
-            std::vector<ModernBindingEXT> bindings;
-        };
-
-        /** @brief WMG: the device. @return The handle. */
+        /** @brief The device. @return The handle. */
         [[nodiscard]] WGPUDevice DeviceEXT() const noexcept { return device_; }
-        /** @brief WMG: the limits the device was created with. @return The limits. */
+        /** @brief The limits the device was created with. @return The limits. */
         [[nodiscard]] const WGPULimits& DeviceLimitsEXT() const noexcept { return deviceLimits_; }
-        /** @brief WMG: the adapter's description, as logged at device creation. @return The text. */
+        /** @brief The adapter's description, as logged at device creation. @return The text. */
         [[nodiscard]] const std::string& AdapterDescriptionEXT() const noexcept { return adapterDescription_; }
-        /** @brief WMG: adds a modern record to the detach registry. @param resource The record. */
-        void RegisterModernResourceEXT(IWebGPUModernResourceEXT* resource);
-        /** @brief WMG: removes one. @param resource The record. */
-        void UnregisterModernResourceEXT(IWebGPUModernResourceEXT* resource);
         /**
-         * @brief WMG: waits for an asynchronous WebGPU callback, pumping events, bounded.
+         * @brief Waits for an asynchronous WebGPU callback, pumping events, bounded.
          * @param completed Set by the callback.
          * @param operation Named in the timeout message.
          */
         void WaitForCompletionEXT(const bool& completed, const char* operation) const;
-        /** @brief WMG: pumps pending WebGPU callbacks once, without waiting. */
-        void ProcessEventsEXT() const;
         /**
-         * @brief WMG: records the draws already queued for the bound target into the device order.
-         *
-         * The bind cycle continues: its next segment loads what this one stored, and the cycle's
-         * own discard/clear is not applied again (the VMG-0014 trap).
-         */
-        void FlushPendingDrawsForModernEXT();
-        /** @brief WMG: flushes pending draws first when any of them captured a modern resource. */
-        void BeforeModernResourceWriteEXT();
-        /**
-         * @brief WMG: compiles WGSL inside a validation scope.
+         * @brief Compiles WGSL inside a validation scope.
          * @param wgsl The source.
          * @param label The module label.
          * @param error Receives the diagnostic on failure.
@@ -2518,51 +2334,7 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUShaderModule CreateShaderModuleCheckedEXT(
             const std::string& wgsl, const char* label, std::string& error);
         /**
-         * @brief WMG: creates a compute pipeline inside a validation scope.
-         * @param module The module.
-         * @param entryPoint Its entry point.
-         * @param layout The pipeline layout.
-         * @param error Receives the diagnostic on failure.
-         * @return The pipeline, or null.
-         */
-        [[nodiscard]] WGPUComputePipeline CreateComputePipelineCheckedEXT(
-            WGPUShaderModule module, const char* entryPoint, WGPUPipelineLayout layout,
-            std::string& error);
-        /** @brief WMG: the sampler `SamplerStates[unit]` describes. @param unit Unit. @return The sampler. */
-        [[nodiscard]] WGPUSampler SamplerForUnitEXT(int unit);
-        /** @brief WMG: encodes and submits one compute dispatch in public order. @param dispatch The dispatch. */
-        void SubmitComputeDispatchEXT(ModernDispatchEXT dispatch);
-        /**
-         * @brief WMG: writes bytes into a buffer at any byte offset, in public order.
-         * @param buffer Destination.
-         * @param offset First byte.
-         * @param data Source.
-         * @param size Byte count.
-         */
-        void WriteBufferBytesEXT(WGPUBuffer buffer, std::uint64_t offset, const void* data,
-                                 std::uint64_t size);
-        /**
-         * @brief WMG: copies bytes between buffers at any byte offsets, in public order.
-         * @param source Source buffer.
-         * @param sourceOffset First source byte.
-         * @param destination Destination buffer (may equal @p source; ranges do not overlap).
-         * @param destinationOffset First destination byte.
-         * @param size Byte count.
-         */
-        void CopyBufferBytesEXT(WGPUBuffer source, std::uint64_t sourceOffset,
-                                WGPUBuffer destination, std::uint64_t destinationOffset,
-                                std::uint64_t size);
-        /**
-         * @brief WMG: reads bytes back after every earlier public operation completed.
-         * @param source Source buffer.
-         * @param offset First byte.
-         * @param out Destination.
-         * @param size Byte count.
-         */
-        void ReadBufferBytesEXT(WGPUBuffer source, std::uint64_t offset, void* out,
-                                std::uint64_t size);
-        /**
-         * @brief WMG: uploads one tightly packed rectangle of one texture subresource.
+         * @brief Uploads one tightly packed rectangle of one texture subresource, in public order.
          * @param texture Destination.
          * @param mipLevel Level.
          * @param layer Array layer.
@@ -2575,27 +2347,8 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void WriteTextureRegionEXT(WGPUTexture texture, int mipLevel, int layer, int x, int y,
                                    int width, int height, int bytesPerTexel, const void* data);
-        /**
-         * @brief WMG: reads one rectangle of one texture subresource back, tightly packed.
-         * @param texture Source.
-         * @param mipLevel Level.
-         * @param layer Array layer.
-         * @param x Left.
-         * @param y Top.
-         * @param width Width.
-         * @param height Height.
-         * @param bytesPerTexel Texel size.
-         * @param data Destination.
-         */
-        void ReadTextureRegionEXT(WGPUTexture texture, int mipLevel, int layer, int x, int y,
-                                  int width, int height, int bytesPerTexel, void* data);
         /** @brief WMG-0006: every unit's `SamplerState`, captured at a draw call. @return The states. */
         [[nodiscard]] std::array<WebGPUSamplerStateEXT, 16> SamplerStatesEXT() const;
-        /** @brief WMG-0006: the storage buffers bound for a draw. @return Binding/buffer pairs. */
-        [[nodiscard]] std::vector<std::pair<std::uint32_t, std::shared_ptr<WebGPUStorageBufferRenderer>>>
-            DrawStorageBuffersEXT() const;
-        /** @copydoc IGraphicsRenderer::BindStorageBufferForDrawEXT */
-        void BindStorageBufferForDrawEXT(int binding, const IStorageBufferRenderer& buffer) override;
         /** @brief WMG-0006: the native sampler one captured state describes. @param state The state. @return The sampler. */
         [[nodiscard]] WGPUSampler SamplerForStateEXT(const WebGPUSamplerStateEXT& state);
         /**
@@ -2637,16 +2390,6 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] DescriptorEffectBindingsEXT BuildDescriptorEffectBindGroupsEXT(
             const WebGPUEffectRenderer& effect, const WebGPUDescriptorEffectSnapshotEXT& snapshot,
             std::vector<WGPUBuffer>& transient);
-
-        /**
-         * @brief WMG: writes one timestamp in public order, optionally resolving the set.
-         * @param querySet Two-entry timestamp set.
-         * @param index Entry to write.
-         * @param resolveBuffer When non-null, the set is resolved into it after the write.
-         * @param readbackBuffer When non-null, the resolve is copied into it.
-         */
-        void WriteTimestampEXT(WGPUQuerySet querySet, std::uint32_t index, WGPUBuffer resolveBuffer,
-                               WGPUBuffer readbackBuffer);
 
     private:
         friend class WebGPURenderTargetRenderer;
@@ -3848,62 +3591,27 @@ namespace CNA::Internal::Renderers::WebGPU
         /// destroy, which `WEBGPU-180` measured under four different modes.
         std::function<void(CNA::Internal::Renderers::RendererDeviceEvent)> deviceEventCallback_;
 
-        // ---- plans/plan_webgpu_modern_graphics.md ------------------------------------------
-        /// WMG-0003: the limits the device was REQUESTED with -- the adapter's own, so the modern
-        /// capability profile reports this adapter rather than WebGPU's guaranteed floor.
+        // ---- the device's own numbers, and the descriptor route's shared textures -----------
+        /// The limits the device was REQUESTED with -- the adapter's own, so the capability
+        /// profile reports this adapter rather than WebGPU's guaranteed floor.
         WGPULimits deviceLimits_ = WGPU_LIMITS_INIT;
-        /// WMG-0003: "<device> (<description>), <backend>, <adapter type>", logged once.
+        /// "<device> (<description>), <backend>, <adapter type>", logged once.
         std::string adapterDescription_;
         /// plans/plan_apple_m4.md AM4-091: the native API under the adapter, for the few answers
         /// that depend on it (WebGPUOcclusionQueryRenderer::PixelCountIsPreciseEXT).
         WGPUBackendType adapterBackendType_ = WGPUBackendType_Undefined;
-        /// WMG-0003: whether the device was created with `WGPUFeatureName_TimestampQuery`.
-        bool timestampQuerySupported_ = false;
-        /// WMG-0003: whether the device was created with `WGPUFeatureName_IndirectFirstInstance`.
-        bool indirectFirstInstanceSupported_ = false;
-        /// WMG: modern records to detach when this renderer is destroyed.
-        std::vector<IWebGPUModernResourceEXT*> liveModernResources_;
-        /// WMG: a queued draw captured a storage buffer, texture array or storage texture, so a
-        /// write to any of them must first put that draw into the device order.
-        bool pendingDrawsUseModernResourcesEXT_ = false;
-        /// WMG: the bound target's cycle was partially flushed by a modern command; its next
-        /// segment continues (loads) instead of re-applying the cycle's discard.
-        bool cycleContinuationEXT_ = false;
-        /// WMG-0006: storage buffers bound for the following draws, by @group(2) binding.
-        std::vector<std::pair<std::uint32_t, std::shared_ptr<WebGPUStorageBufferRenderer>>>
-            drawStorageBuffers_;
         /// WMG-0006: the neutral 1x1 white textures an unbound descriptor slot binds, per shape.
         WGPUTexture neutralCubeTexture_ = nullptr;
         WGPUTextureView neutralCubeView_ = nullptr;
         WGPUTexture neutralVolumeTexture_ = nullptr;
         WGPUTextureView neutralVolumeView_ = nullptr;
-        WGPUTexture neutralArrayTexture_ = nullptr;
-        WGPUTextureView neutralArrayView_ = nullptr;
         /// WEBGPUPERF-0003: the one reference object each neutral texture hands out.
         std::shared_ptr<const WebGPUSampledResourceEXT> neutralCubeKeepAliveEXT_;
         std::shared_ptr<const WebGPUSampledResourceEXT> neutralVolumeKeepAliveEXT_;
-        std::shared_ptr<const WebGPUSampledResourceEXT> neutralArrayKeepAliveEXT_;
-        /// WMG: the byte-granular buffer copy kernel (WebGPURendererModern.cpp).
-        WGPUShaderModule byteCopyModule_ = nullptr;
-        WGPUComputePipeline byteCopyPipeline_ = nullptr;
-        std::shared_ptr<WebGPUProgramLayoutEXT> byteCopyLayout_;
-        /// WMG-0003: "<device> (<description>), <backend> backend, <type>, vendor/device ids".
+        /// "<device> (<description>), <backend> backend, <type>, vendor/device ids".
         [[nodiscard]] static std::string DescribeAdapterEXT(WGPUAdapter adapter);
-        /// WMG: builds the byte-copy kernel on first use.
-        void EnsureByteCopyPipelineEXT();
-        /// WMG: encodes a byte-granular copy from a 4-aligned staging buffer into @p destination.
-        void EncodeByteCopyEXT(WGPUCommandEncoder encoder, WGPUBuffer destination,
-                               std::uint64_t destinationOffset, WGPUBuffer source,
-                               std::uint64_t sourceOffset, std::uint64_t size,
-                               std::vector<WGPUBuffer>& transient,
-                               std::vector<WGPUBindGroup>& bindGroups);
-        /// WMG: a command encoder for work submitted outside a render-target flush.
-        [[nodiscard]] WGPUCommandEncoder BeginModernEncoderEXT(const char* label);
-        /// WMG: finishes and submits @p encoder, then releases what only it referenced.
-        void SubmitModernEncoderEXT(WGPUCommandEncoder encoder, std::vector<WGPUBuffer> transient,
-                                    std::vector<WGPUBindGroup> bindGroups);
-        /// WMG: releases the modern device objects (byte-copy kernel).
-        void ReleaseModernDeviceObjectsEXT();
+        /// Releases the neutral textures; they are device-owned and rebuilt on first use.
+        void ReleaseNeutralTexturesEXT();
 
 
         /**
@@ -4433,28 +4141,8 @@ namespace CNA::Internal::Renderers::WebGPU
             std::array<SlotSamplerState, 3> samplers{};
         };
 
-        /**
-         * @brief plans/plan_webgpu_modern_graphics.md WMG-0013: a queued draw's indirect arguments.
-         *
-         * Empty on every ordinary draw, which is what @ref enabled being false means. When it is
-         * true the replay issues `drawIndirect`/`drawIndexedIndirect` and the command's own
-         * `vertexCount`/`indexCount` are not read at all -- they were never known on the CPU,
-         * which is the entire point of the route.
-         */
-        struct WebGPUIndirectArgsEXT
-        {
-            /// The public `StorageBuffer`'s renderer record, retained so a `Dispose()` between the
-            /// public call and the flush cannot leave this command holding a freed `WGPUBuffer`.
-            std::shared_ptr<const CNA::Internal::Renderers::IStorageBufferRenderer> lifetime;
-            WGPUBuffer    buffer = nullptr;  ///< The native argument buffer; never owned here.
-            std::uint64_t offset = 0;        ///< Byte offset of the arguments inside it.
-            bool          enabled = false;   ///< False on every ordinary draw.
-        };
-
         struct ColoredDrawCommand
         {
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -4523,8 +4211,6 @@ namespace CNA::Internal::Renderers::WebGPU
             /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -4983,8 +4669,6 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
             WebGPUShadowStateEXT shadow{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -5121,8 +4805,6 @@ namespace CNA::Internal::Renderers::WebGPU
             /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -5235,8 +4917,6 @@ namespace CNA::Internal::Renderers::WebGPU
             /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -5372,8 +5052,6 @@ namespace CNA::Internal::Renderers::WebGPU
             /// plans/plan_street_webgpu.md STREETW-0004: this draw's per-instance world
             /// matrices, or a disabled state for an ordinary draw.
             WebGPUInstanceStreamEXT instance{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
             /// queue time. Captured per command for the same reason the pipeline state is: a later
             /// SetVertexBuffer must not retroactively relayout an already-queued draw.
@@ -5502,8 +5180,6 @@ namespace CNA::Internal::Renderers::WebGPU
         // lighting/texture -- this shader family has neither).
         struct InstancedDrawCommand
         {
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -5610,8 +5286,6 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUShadowStateEXT shadow{};
             /// WMG-0022: this draw's image-based lighting, resolved at its public call.
             WebGPUIblStateEXT ibl{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -5765,8 +5439,6 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUInstanceStreamEXT instance{};
             /// WMG-0014: this draw's shadow reception, captured at its public call.
             WebGPUShadowStateEXT shadow{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -5881,8 +5553,6 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUShadowStateEXT shadow{};
             /// WMG-0022: this draw's image-based lighting, resolved at its public call.
             WebGPUIblStateEXT ibl{};
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
@@ -5989,8 +5659,6 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         struct CustomEffectDrawCommand
         {
-            /// WMG-0013: set only by the indirect entry points; see WebGPUIndirectArgsEXT.
-            WebGPUIndirectArgsEXT indirect{};
             std::vector<std::uint8_t> vertexData;
             /** @brief STREETPERF-0004: storage bound in place instead of `vertexData`/`indexData`. */
             ResidentGeometryEXT resident;
@@ -6064,10 +5732,6 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         struct CompiledEffectDrawCommand
         {
-            /// WMG-0013: always false here -- an indirect draw refuses a compiled effect by name,
-            /// because that route needs the primitive count this command deliberately leaves on
-            /// the GPU. Present so the replay's draw call is written once for every family.
-            WebGPUIndirectArgsEXT indirect{};
             /// One captured stream of vertex bytes, in the order the draw bound them.
             struct Stream
             {
@@ -6284,28 +5948,7 @@ namespace CNA::Internal::Renderers::WebGPU
         int recordedDebugMarkerCountEXT_ = 0;
         int recordedDebugRegionBeginCountEXT_ = 0;
         int recordedDebugRegionEndCountEXT_ = 0;
-        /**
-         * @brief WMG-0017: the query set of the GPU timer that is currently open, or null.
-         *
-         * While it is set, every real render pass writes this timer's end timestamp at its own end
-         * (and the first one after `Begin` writes the start at its beginning), so the pair brackets
-         * the work rather than measuring the gap between two passes of this renderer's own making.
-         * One timer at a time: a second concurrent `Begin` falls back to the empty-pass write,
-         * because a WGPURenderPassDescriptor carries exactly one set of timestamp writes.
-         */
-        WGPUQuerySet timerQuerySetEXT_ = nullptr;
     public:
-        /**
-         * @brief WMG-0027: forgets an open timed range whose query set is about to be released.
-         *
-         * Called by `WebGPUGpuTimerRenderer`'s destructor. A range left open past its timer's life
-         * would have every later render pass name a freed query set, which wgpu-native reports as
-         * a non-unwinding panic rather than as a recoverable error.
-         *
-         * @param querySet The dying timer's query set; ignored unless it owns the open range.
-         */
-        CNAEXT void ForgetOpenGpuTimerEXT(WGPUQuerySet querySet) noexcept;
-
         /**
          * @brief plans/plan_pre_sdlgpu_closeout.md PSG-0006: drops every queued draw that still
          * names a `ShaderEffect` renderer which is about to be destroyed.
@@ -6337,25 +5980,6 @@ namespace CNA::Internal::Renderers::WebGPU
         }
     private:
         int droppedDrawsForDestroyedEffectsEXT_ = 0;
-    public:
-    private:
-        /// WMG-0017: true until a pass has written the open timer's start timestamp.
-        bool timerWriteBeginEXT_ = false;
-        /// WMG-0017: whether any real pass carried this timer's writes; false means `End` must
-        /// fall back to an empty pass, so a timer opened around no drawing still reads zero
-        /// rather than reading whatever the query set last held.
-        bool timerWrotePassEXT_ = false;
-
-        /**
-         * @brief WMG-0013: issues this draw as an indirect one, or says it is not one.
-         *
-         * @param pass     The open render pass.
-         * @param indirect The command's captured arguments.
-         * @param indexed  Whether an index buffer is bound for this draw.
-         * @return True when the indirect command was issued, so the caller issues nothing.
-         */
-        [[nodiscard]] bool IssueIndirectDrawIfRequestedEXT(
-            WGPURenderPassEncoder pass, const WebGPUIndirectArgsEXT& indirect, bool indexed);
 
         void IssueDescriptorEffectDrawEXT(WGPURenderPassEncoder pass,
                                           const CustomEffectDrawCommand& command,

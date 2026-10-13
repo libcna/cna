@@ -1497,14 +1497,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // one. MSR-018 still permits the resource's mip chain and explicit per-level uploads --
         // the normal XNB content path -- without pretending an automatic generator exists.
         const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
-        // plans/plan_webgpu_modern_graphics.md WMG-0008: `rgba8unorm` is a core WebGPU storage
-        // format, and a Texture2D in it is what `ComputeShader::bindImage` binds. Usage flags are
-        // fixed at creation, so the flag is declared for exactly that format and no other -- asking
-        // for it on a format WebGPU cannot store into is a validation error that kills the texture.
-        storageCapable_ = wgpuFormat_ == WGPUTextureFormat_RGBA8Unorm;
         descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
                            WGPUTextureUsage_CopySrc |
-                           (storageCapable_ ? WGPUTextureUsage_StorageBinding : WGPUTextureUsage_None) |
                            (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
@@ -1542,8 +1536,6 @@ namespace CNA::Internal::Renderers::WebGPU
         // object's reference is right, and REMED-GFX-167 keeps the last one alive as long as a
         // command needs it. The device is going anyway, and DiscardQueuedCommands has already run.
         sampled_.reset();
-        storageKeepAlive_.reset();   // WMG-0008, for the same reason
-        if (storageView_ != nullptr) { wgpuTextureViewRelease(storageView_); storageView_ = nullptr; }
         if (view_ != nullptr) { wgpuTextureViewRelease(view_); view_ = nullptr; }
         if (texture_ != nullptr) { wgpuTextureRelease(texture_); texture_ = nullptr; }
     }
@@ -1554,14 +1546,8 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU Texture2D (recreated)");
         const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
-        // plans/plan_webgpu_modern_graphics.md WMG-0008: `rgba8unorm` is a core WebGPU storage
-        // format, and a Texture2D in it is what `ComputeShader::bindImage` binds. Usage flags are
-        // fixed at creation, so the flag is declared for exactly that format and no other -- asking
-        // for it on a format WebGPU cannot store into is a validation error that kills the texture.
-        storageCapable_ = wgpuFormat_ == WGPUTextureFormat_RGBA8Unorm;
         descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
                            WGPUTextureUsage_CopySrc |
-                           (storageCapable_ ? WGPUTextureUsage_StorageBinding : WGPUTextureUsage_None) |
                            (renderable ? WGPUTextureUsage_RenderAttachment : WGPUTextureUsage_None);
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_),
@@ -1604,8 +1590,6 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPUTextureRenderer::~WebGPUTextureRenderer()
     {
         if (owner_ != nullptr) owner_->UnregisterDeviceResourceEXT(this);   // WEBGPU-182
-        if (storageView_ != nullptr)
-            wgpuTextureViewRelease(storageView_);
         if (view_ != nullptr)
             wgpuTextureViewRelease(view_);
         if (texture_ != nullptr)
@@ -4297,7 +4281,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // all released below, so they go first.
         ReleaseBindingCacheEXT();
         ReleaseStreamArenasEXT();
-        ReleaseModernDeviceObjectsEXT();
+        ReleaseNeutralTexturesEXT();
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         // WEBGPU-167: the compiled-effect shader modules, bind-group layouts and pipelines are all
         // device-owned, so they belong here rather than in the destructor alone -- a device recreate
@@ -4472,11 +4456,6 @@ namespace CNA::Internal::Renderers::WebGPU
         for (IWebGPUDeviceResourceEXT* resource : liveDeviceResources_)
             if (resource != nullptr) resource->DetachOwnerEXT();
         liveDeviceResources_.clear();
-        // plans/plan_webgpu_modern_graphics.md: the modern records (storage buffers, compute
-        // programs, texture arrays, storage textures, timers) the same way.
-        for (IWebGPUModernResourceEXT* resource : liveModernResources_)
-            if (resource != nullptr) resource->DetachOwnerEXT();
-        liveModernResources_.clear();
         // One function for both the destructor and a device recreate, so the two can never drift
         // apart about what belongs to the device.
         ReleaseDeviceOwnedObjectsEXT();
@@ -4603,13 +4582,6 @@ namespace CNA::Internal::Renderers::WebGPU
 #endif
         float32Filterable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Filterable) != 0;
         float32Blendable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Blendable) != 0;
-        // plans/plan_webgpu_modern_graphics.md WMG-0003: the two optional features the modern API
-        // can use -- timestamp queries (GpuTimer) and a non-zero firstInstance in an indirect draw.
-        // Asked for when the adapter has them, and reported through the capability profile either way.
-        timestampQuerySupported_ =
-            wgpuAdapterHasFeature(adapter_, WGPUFeatureName_TimestampQuery) != 0;
-        indirectFirstInstanceSupported_ =
-            wgpuAdapterHasFeature(adapter_, WGPUFeatureName_IndirectFirstInstance) != 0;
         adapterDescription_ = DescribeAdapterEXT(adapter_);
         std::clog << "[WebGPU] Adapter: " << adapterDescription_ << '\n';
         WGPUAdapterInfo adapterInfo = WGPU_ADAPTER_INFO_INIT;
@@ -4627,14 +4599,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPU-182: the device half alone, so a recovery can re-run it against the adapter this
         // renderer already holds. WEBGPU-180 measured that the instance, adapter and surface all
         // survive a device replace, so none of them is rebuilt here.
-        std::array<WGPUFeatureName, 6> requiredFeatures{};
+        std::array<WGPUFeatureName, 4> requiredFeatures{};
         std::size_t requiredFeatureCount = 0;
         if (bcSupported_)
             requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_TextureCompressionBC;
-        if (timestampQuerySupported_)
-            requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_TimestampQuery;
-        if (indirectFirstInstanceSupported_)
-            requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_IndirectFirstInstance;
         if (float32Filterable_)
             requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_Float32Filterable;
         if (float32Blendable_)
@@ -4653,10 +4621,9 @@ namespace CNA::Internal::Renderers::WebGPU
             descriptor.requiredFeatureCount = requiredFeatureCount;
             descriptor.requiredFeatures = requiredFeatures.data();
         }
-        // plans/plan_webgpu_modern_graphics.md WMG-0003: request the ADAPTER's limits rather than
-        // WebGPU's guaranteed floor, so the modern capability profile (work-group sizes, binding
-        // counts, texture-array layers, storage sizes) describes this adapter. Nothing classic
-        // depends on the floor: a higher limit only permits more.
+        // Request the ADAPTER's limits rather than WebGPU's guaranteed floor, so the capability
+        // profile (binding counts, buffer sizes, attachment counts) describes this adapter.
+        // Nothing classic depends on the floor: a higher limit only permits more.
         WGPULimits adapterLimits = WGPU_LIMITS_INIT;
         const bool haveAdapterLimits =
             wgpuAdapterGetLimits(adapter_, &adapterLimits) == WGPUStatus_Success;
@@ -4695,7 +4662,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             maxVertexBuffers_ = static_cast<int>(limits.maxVertexBuffers);
         }
-        // WMG-0003: what the device was actually created with, which the modern limits report.
+        // What the device was actually created with, which the limit queries report.
         limits.nextInChain = nullptr;
         deviceLimits_ = limits;
     }
@@ -7417,9 +7384,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                 ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command))
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command))
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -7524,16 +7489,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -7667,9 +7630,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                    ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) ||
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) ||
             command.instanceCount == 0)
             return;
 
@@ -7716,16 +7677,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, command.instanceCount,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, command.instanceCount,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -8254,7 +8213,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             }
             snapshot->hasSpriteVertices = true;
             command.descriptor = std::move(snapshot);
-            if (!drawStorageBuffers_.empty()) pendingDrawsUseModernResourcesEXT_ = true;
         }
         else if (activeSpriteCustomEffect_ != nullptr)
             command.customUniforms = activeSpriteCustomEffect_->uniformStaging_;
@@ -8966,25 +8924,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // query set. occlusionQuerySet_ is null until the first OcclusionQuery is created, so a
             // frame with none leaves this at the default null -- the pass is created exactly as before.
             passDescriptor.occlusionQuerySet = occlusionQuerySet_;
-            // plans/plan_webgpu_modern_graphics.md WMG-0017: an open GPU timer brackets the work it
-            // was opened around by writing its timestamps at the boundaries of the REAL passes,
-            // which is the only place core WebGPU allows a timestamp. Two empty compute passes
-            // around the work measured a fixed overhead instead -- nothing orders an empty pass
-            // against a graphics submission it shares no resource with, so ten times the fill read
-            // back as no longer at all. The end index is rewritten by every pass while the timer is
-            // open, so the last one before End() is the one that survives, which is the interval
-            // the caller asked for.
-            WGPUPassTimestampWrites timerWrites = WGPU_PASS_TIMESTAMP_WRITES_INIT;
-            if (timerQuerySetEXT_ != nullptr)
-            {
-                timerWrites.querySet = timerQuerySetEXT_;
-                timerWrites.beginningOfPassWriteIndex =
-                    timerWriteBeginEXT_ ? 0u : WGPU_QUERY_SET_INDEX_UNDEFINED;
-                timerWrites.endOfPassWriteIndex = 1u;
-                passDescriptor.timestampWrites = &timerWrites;
-                timerWriteBeginEXT_ = false;
-                timerWrotePassEXT_ = true;
-            }
             WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
 
             if (trace)
@@ -9128,7 +9067,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // keeps native release strictly inside the device's lifetime.
     void WebGPURenderer::DiscardQueuedCommands()
     {
-        pendingDrawsUseModernResourcesEXT_ = false;
         drawOrder_.clear();
         clearCommands_.clear();
         markerCommands_.clear();  // WMG-0020: per bind cycle, exactly as the clears are.
@@ -9147,6 +9085,29 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         compiledEffectDrawCommands_.clear();
 #endif
+    }
+
+    void WebGPURenderer::ForgetEffectEXT(WebGPUEffectRenderer* effect) noexcept
+    {
+        // plans/plan_pre_sdlgpu_closeout.md PSG-0006. Both command kinds hold the effect as a raw
+        // pointer, so both have to let go of it here. Nulling is enough: every issue path already
+        // begins by refusing a command whose effect is null, so the draw becomes a no-op instead
+        // of a read of freed memory.
+        if (effect == nullptr) return;
+        for (SpriteCommand& sprite : spriteCommands_)
+        {
+            if (sprite.customEffect != effect) continue;
+            sprite.customEffect = nullptr;
+            sprite.descriptor.reset();
+            ++droppedDrawsForDestroyedEffectsEXT_;
+        }
+        for (CustomEffectDrawCommand& draw : customEffectDrawCommands_)
+        {
+            if (draw.effect != effect) continue;
+            draw.effect = nullptr;
+            draw.descriptor.reset();
+            ++droppedDrawsForDestroyedEffectsEXT_;
+        }
     }
 
     // ---- WEBGPU-84: occlusion queries -----------------------------------------------------------
@@ -9427,7 +9388,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // plans/plan_webgpu_modern_graphics.md WMG-0006: which binding contract this pair follows is
         // decided from the WGSL itself, before anything is compiled. The WEBGPU-76 contract puts its
         // one declared block at @group(0) @binding(0) and nothing anywhere else; the descriptor
-        // contract -- the one CNA's generated WGSL and its Vulkan SPIR-V share -- uses @group(1)/(2)
+        // contract -- the one CNA's generated WGSL and its Vulkan SPIR-V share -- uses @group(1)
         // for the effect's own resources, @group(3) @binding(0) for the scalar block, and samplers
         // at texture binding + 32. A module that is neither is Legacy, which is what it always was.
         {
@@ -9832,7 +9793,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             (world * view * projection).ToColumnMajor(wvp);
             effect->ApplyDrawMatrixEXT(*snapshot, wvp);
             command.descriptor = std::move(snapshot);
-            if (!drawStorageBuffers_.empty()) pendingDrawsUseModernResourcesEXT_ = true;
         }
         else
         {
@@ -10006,10 +9966,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
         Begin3DDrawState(pass, state);
         WebGPUEffectRenderer* effect = command.effect;
-        // WMG-0013: an indirect draw's vertexCount is zero by construction -- the count lives in
-        // the GPU buffer -- so it is not the "nothing to draw" signal it is for every other draw.
         if (effect == nullptr || !effect->valid_ ||
-            (command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command))
+            command.vertexCount == 0 || !HasVertexSourceEXT(command))
             return;
 
         // Vertex buffer.
@@ -10191,16 +10149,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, command.instanceCount, command.firstIndex,
-                    command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, command.instanceCount, command.firstIndex,
+                command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
         for (WGPUBuffer buffer : instanceBuffers) pendingBufferReleases_.push_back(buffer);
 
@@ -10384,9 +10340,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         Begin3DDrawState(pass, state);
         WebGPUEffectRenderer* effect = command.effect;
-        // WMG-0013: see the legacy twin -- an indirect draw carries no CPU vertex count.
         if (effect == nullptr || !effect->IsValid() || command.descriptor == nullptr ||
-            (command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command))
+            command.vertexCount == 0 || !HasVertexSourceEXT(command))
             return;
 
         WGPUBufferDescriptor vertexDescriptor{};
@@ -10521,15 +10476,13 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             WGPUBuffer indexBuffer =
                 BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
-                                                 command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
+                                             command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
         for (WGPUBuffer buffer : instanceBuffers) pendingBufferReleases_.push_back(buffer);
         state.boundPipeline = nullptr;
@@ -10538,38 +10491,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         ++nativeDrawIssueCount_;
     }
 
-    WGPUTextureView WebGPUTextureRenderer::StorageViewEXT() const
-    {
-        if (!storageCapable_ || texture_ == nullptr) return nullptr;
-        if (storageView_ == nullptr)
-        {
-            WGPUTextureViewDescriptor descriptor{};
-            descriptor.label = StringView("CNA WebGPU Texture2D StorageView");
-            descriptor.format = wgpuFormat_;
-            descriptor.dimension = WGPUTextureViewDimension_2D;
-            descriptor.baseMipLevel = 0;
-            descriptor.mipLevelCount = 1;   // a storage binding names exactly one level
-            descriptor.baseArrayLayer = 0;
-            descriptor.arrayLayerCount = 1;
-            descriptor.aspect = WGPUTextureAspect_All;
-            storageView_ = wgpuTextureCreateView(texture_, &descriptor);
-            storageKeepAlive_.reset();
-        }
-        return storageView_;
-    }
-
-    WebGPUSampledTextureEXT WebGPUTextureRenderer::StorageBindingEXT() const
-    {
-        WGPUTextureView view = StorageViewEXT();
-        if (view == nullptr) return {};
-        if (storageKeepAlive_ == nullptr)
-            storageKeepAlive_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, view);
-        return WebGPUSampledTextureEXT{view, storageKeepAlive_};
-    }
-
     // plans/plan_webgpu_modern_graphics.md WMG-0024: the compiled-effect block starts HERE, not
     // above IssueDescriptorEffectDrawEXT. That function and IssueDescriptorSpriteEXT are
-    // descriptor-contract ShaderEffect draws (WMG-0008/0009/0011); they had drifted inside this
+    // descriptor-contract ShaderEffect draws (WMG-0006); they had drifted inside this
     // block while their call sites stayed unguarded, so CNA_WEBGPU_COMPILED_EFFECTS=OFF built a
     // libcna.so with two undefined symbols that nothing resolved until the first ShaderEffect
     // draw. No tree had built that configuration before the SDL-free ones of this task.
@@ -11364,15 +11288,13 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
-                                                 command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount,
+                                             command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
 
         for (WGPUBuffer buffer : vertexBuffers)
@@ -12674,11 +12596,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         destination.sampleCount = static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount()));
         destination.width = target->GetWidth();
         destination.height = target->GetHeight();
-        // plans/plan_webgpu_modern_graphics.md WMG-0007: a cycle a modern command already partially
-        // flushed is CONTINUED here -- its discard (or its clear) was applied by that first flush,
-        // and re-applying it would erase every draw issued before the dispatch (the defect
-        // plans/plan_vulkan_modern_graphics.md VMG-0014 found on Vulkan).
-        destination.discardFirstSegment = !target->PreserveContents() && !cycleContinuationEXT_;
+        destination.discardFirstSegment = !target->PreserveContents();
         destination.passLabel = "CNA WebGPU RenderTarget RenderPass";
         destination.traceName = "rendertarget2d";
         // WEBGPU-85/87 MRT: when extra targets are bound alongside this slot-0 target, add one
@@ -12779,11 +12697,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         destination.sampleCount = static_cast<std::uint32_t>(std::max(1, cubeSamples));
         destination.width = target->GetSize();
         destination.height = target->GetSize();
-        // plans/plan_webgpu_modern_graphics.md WMG-0007: a cycle a modern command already partially
-        // flushed is CONTINUED here -- its discard (or its clear) was applied by that first flush,
-        // and re-applying it would erase every draw issued before the dispatch (the defect
-        // plans/plan_vulkan_modern_graphics.md VMG-0014 found on Vulkan).
-        destination.discardFirstSegment = !target->PreserveContents() && !cycleContinuationEXT_;
+        destination.discardFirstSegment = !target->PreserveContents();
         destination.passLabel = "CNA WebGPU RenderTargetCube RenderPass";
         destination.traceName = "rendertargetcube-face";
         ReplayOrderedSegments(encoder, destination);
@@ -12812,13 +12726,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // after calling this, exactly like the pre-existing SetRenderTarget2D() body did.
     void WebGPURenderer::FlushCurrentRenderTarget()
     {
-        // WMG-0007: every caller but FlushPendingDrawsForModernEXT ends the bind cycle here (it is
-        // about to bind something else); that one caller sets the flag again afterwards.
-        struct EndCycle
-        {
-            bool& flag;
-            ~EndCycle() { flag = false; }
-        } endCycle{cycleContinuationEXT_};
         if (currentRenderTarget_ != nullptr)
         {
             RenderPendingDrawsToRenderTarget(currentRenderTarget_);
@@ -13941,9 +13848,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // family below and was rendered with CNA's own shader instead of the game's -- a silent
         // wrong-shader result rather than a refusal, and the one case the two ordinary routes
         // already handled. It sits before the instance-stream search because a ShaderEffect draw
-        // with no per-instance stream is still an instanced draw (particle draws is
-        // exactly that: a storage buffer, a ShaderEffect and an instance COUNT), and the fallback
-        // below would have flattened it to a single instance.
+        // with no per-instance stream is still an instanced draw (an effect that derives each
+        // instance from its instance index alone is exactly that: a ShaderEffect and an instance
+        // COUNT), and the fallback below would have flattened it to a single instance.
         if (params.customEffectRenderer != nullptr)
         {
             QueueCustomEffectDraw(vb, &ib, world, view, projection, primitive, primitiveCount,
@@ -14146,9 +14053,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                  ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command))
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command))
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -14197,16 +14102,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -14217,9 +14120,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                   ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) || !command.texture)
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -14302,16 +14203,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -14323,9 +14222,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                      ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) || !command.texture)
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -14415,16 +14312,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -14553,9 +14448,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                    ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) || !command.texture)
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -14628,16 +14521,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -14756,9 +14647,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                      ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) ||
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) ||
             !command.texture0 || !command.texture1)
             return;
 
@@ -14854,16 +14743,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -15722,9 +15609,7 @@ namespace
                                              ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) || !command.baseColorTexture ||
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) || !command.baseColorTexture ||
             !command.normalMap || !command.metallicRoughnessMap ||
             !command.emissiveMap || !command.occlusionMap)
             return;
@@ -15794,16 +15679,14 @@ namespace
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -16407,9 +16290,7 @@ namespace
                                                  ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) || !command.texture)
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -16480,16 +16361,14 @@ namespace
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);
@@ -16894,9 +16773,7 @@ namespace
                                                     ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        // WMG-0013: an indirect draw's CPU vertex count is zero by construction -- its
-        // counts live in the GPU buffer -- so zero is not "nothing to draw" here.
-        if ((command.vertexCount == 0 && !command.indirect.enabled) || !HasVertexSourceEXT(command) || !command.baseColorTexture ||
+        if (command.vertexCount == 0 || !HasVertexSourceEXT(command) || !command.baseColorTexture ||
             !command.normalMap || !command.metallicRoughnessMap ||
             !command.emissiveMap || !command.occlusionMap)
             return;
@@ -16965,16 +16842,14 @@ namespace
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer = BindDrawIndicesEXT(pass, command.indexData, command.resident, command.index32);
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, true))
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, instances,
-                    command.firstIndex, command.baseVertex, 0);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, instances,
+                command.firstIndex, command.baseVertex, 0);
             if (indexBuffer != nullptr) pendingBufferReleases_.push_back(indexBuffer);
         }
         else
         {
-            if (!IssueIndirectDrawIfRequestedEXT(pass, command.indirect, false))
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, instances, 0, 0);
         }
 
         if (vertexBuffer != nullptr) pendingBufferReleases_.push_back(vertexBuffer);

@@ -8,7 +8,7 @@
 // WebGPU gives two ways to build a pipeline layout: an explicit one, which must name every binding
 // the shaders use with the right type, and `layout: auto`, which derives one from the shader. The
 // second does not work for this renderer. An automatically derived bind-group layout belongs to the
-// ONE pipeline it came from, and a `ShaderEffect` or `ComputeShader` owns many pipelines (one per
+// ONE pipeline it came from, and a `ShaderEffect` owns many pipelines (one per
 // render-target shape, blend state, vertex layout ...), all of which must accept the same bind
 // groups. So the layout has to be explicit, and the only complete description of what the shader
 // binds is the shader itself. wgpu-native exposes no reflection of a compiled module either.
@@ -35,7 +35,6 @@
 #error "CNA WebGPU WGSL reflection requires webgpu.h"
 #endif
 
-#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -50,18 +49,18 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         /** @brief `var<uniform>`. */
         UniformBuffer,
-        /** @brief `var<storage, read_write>`. */
-        StorageBuffer,
-        /** @brief `var<storage>` or `var<storage, read>`. */
+        /**
+         * @brief `var<storage>` or `var<storage, read>`: the std430 block the shader-package
+         *        generator emits for a uniform array of 4- or 8-byte elements. A graphics stage
+         *        on this renderer never writes storage, so `read_write` is refused by name.
+         */
         ReadOnlyStorageBuffer,
         /** @brief `sampler`. */
         Sampler,
         /** @brief `sampler_comparison`. */
         ComparisonSampler,
         /** @brief Any sampled `texture_*` type, depth textures included. */
-        SampledTexture,
-        /** @brief `texture_storage_*`. */
-        StorageTexture
+        SampledTexture
     };
 
     /** @brief WGSL size and alignment of one type, per the WGSL memory-layout rules. */
@@ -112,16 +111,12 @@ namespace CNA::Internal::Renderers::WebGPU
         WgslResourceKind kind = WgslResourceKind::UniformBuffer;
         /** @brief The declared type, whitespace-normalised. */
         std::string type;
-        /** @brief For a sampled or storage texture: its view dimension. */
+        /** @brief For a sampled texture: its view dimension. */
         WGPUTextureViewDimension viewDimension = WGPUTextureViewDimension_Undefined;
         /** @brief For a sampled texture: float, depth, sint or uint. Float means "declared f32". */
         WGPUTextureSampleType sampleType = WGPUTextureSampleType_Undefined;
         /** @brief For a sampled texture: whether it is a `texture_multisampled_*`. */
         bool multisampled = false;
-        /** @brief For a storage texture: its texel format. */
-        WGPUTextureFormat storageFormat = WGPUTextureFormat_Undefined;
-        /** @brief For a storage texture: its declared access. */
-        WGPUStorageTextureAccess storageAccess = WGPUStorageTextureAccess_Undefined;
         /** @brief For a buffer: the minimum binding size the declared type needs. */
         std::uint64_t minBindingSize = 0;
     };
@@ -135,15 +130,13 @@ namespace CNA::Internal::Renderers::WebGPU
         std::string type;
     };
 
-    /** @brief One entry point of the module. */
+    /** @brief One `@vertex` or `@fragment` entry point of the module. */
     struct WgslEntryPoint
     {
         /** @brief The pipeline stage the entry point is attributed with. */
         WGPUShaderStage stage = WGPUShaderStage_None;
         /** @brief Function name. */
         std::string name;
-        /** @brief Compute only: the literal `@workgroup_size`, missing axes defaulting to 1. */
-        std::array<std::uint32_t, 3> workgroupSize{1, 1, 1};
         /** @brief Vertex only: every `@location` input, parameters and struct members alike. */
         std::vector<WgslVertexInput> vertexInputs;
         /** @brief Fragment only: one past the highest `@location` output (0 when none). */
@@ -185,9 +178,10 @@ namespace CNA::Internal::Renderers::WebGPU
      * @brief Reflects the declaration surface of one WGSL module.
      *
      * Parses struct declarations (with WGSL layout rules, including `@align`/`@size`),
-     * `@group/@binding` resources, `alias` declarations and attributed entry points. Function bodies
-     * are skipped. A declaration whose type cannot be classified makes the result not-ok with a
-     * named reason.
+     * `@group/@binding` resources, `alias` declarations and `@vertex`/`@fragment` entry points.
+     * Function bodies are skipped. A declaration whose type cannot be classified, or that names a
+     * resource no graphics stage on this renderer can bind (`var<storage, read_write>`,
+     * `texture_storage_*`), makes the result not-ok with a named reason.
      *
      * @param source Complete WGSL module text.
      * @return The reflection; check @ref WgslModuleReflection::ok.
@@ -205,11 +199,4 @@ namespace CNA::Internal::Renderers::WebGPU
     [[nodiscard]] std::optional<WgslTypeLayout> WgslLayoutOf(
         std::string_view type, const std::unordered_map<std::string, WgslStruct>& structs,
         const std::unordered_map<std::string, std::string>& aliases = {});
-
-    /**
-     * @brief Maps a WGSL texel-format name (`rgba8unorm`, `r32float` ...) to its WebGPU format.
-     * @param name Format name as written in a `texture_storage_*` type.
-     * @return The format, or `WGPUTextureFormat_Undefined` for an unknown name.
-     */
-    [[nodiscard]] WGPUTextureFormat WgslTexelFormatFromName(std::string_view name) noexcept;
 }
