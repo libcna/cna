@@ -371,9 +371,9 @@ endif()
 # same members with or without it.
 #
 # Only for a shared runtime: named first, a shared runtime would replace a static one with lld and
-# mold. AUTO reads each program's own flags at the end of the configure
-# (_cna_note_static_cxx_runtimes). SHARED and STATIC decide for every program, for a runtime chosen
-# where CNA cannot see it: a compiler wrapper or spec file, a library's link options.
+# mold. AUTO decides for each program in each configuration (_cna_note_static_cxx_runtimes). SHARED
+# and STATIC decide for every program, for a runtime chosen where CNA cannot see it: a compiler
+# wrapper or spec file, a library's link options.
 set(CNA_CXX_RUNTIME_LINKAGE "AUTO" CACHE STRING
     "C++ runtime linkage of the programs that link CNA (AUTO, SHARED or STATIC)")
 set_property(CACHE CNA_CXX_RUNTIME_LINKAGE PROPERTY STRINGS AUTO SHARED STATIC)
@@ -400,11 +400,11 @@ function(cna_add_cxx_runtime_first_link_option target)
         return()
     endif()
     if(_cna_linkage STREQUAL "AUTO")
-        # Not for a program whose runtime is static in every configuration or in this one. An
-        # empty $<CONFIG> is "in" an empty list, hence the $<BOOL>.
-        set(_cna_static "$<TARGET_PROPERTY:CNA_CXX_STATIC_RUNTIME>")
-        set(_cna_config "$<UPPER_CASE:$<CONFIG>>")
-        set(_cna_runtime_option "$<$<NOT:$<OR:$<IN_LIST:ALL,${_cna_static}>,$<AND:$<BOOL:${_cna_config}>,$<IN_LIST:${_cna_config},${_cna_static}>>>>:${_cna_runtime_option}>")
+        # Not in a configuration in which the program's static-runtime flags, which
+        # _cna_note_static_cxx_runtimes copies with each flag replaced by CNA_STATIC, apply.
+        set(_cna_static "$<GENEX_EVAL:$<TARGET_PROPERTY:CNA_CXX_STATIC_RUNTIME>>")
+        set(_cna_runtime_option
+            "$<$<NOT:$<IN_LIST:CNA_STATIC,${_cna_static}>>:${_cna_runtime_option}>")
         get_property(_cna_scheduled GLOBAL PROPERTY CNA_CXX_RUNTIME_DETECTION_SCHEDULED)
         if(NOT _cna_scheduled)
             set_property(GLOBAL PROPERTY CNA_CXX_RUNTIME_DETECTION_SCHEDULED TRUE)
@@ -415,12 +415,14 @@ function(cna_add_cxx_runtime_first_link_option target)
     target_link_options(${target} INTERFACE "${_cna_runtime_option}")
 endfunction()
 
-# Sets CNA_CXX_STATIC_RUNTIME on every program whose flags link the C++ runtime statically or not
-# at all: ALL, or the configurations in which they do. The flags are those its link uses: its
-# directory's CMAKE_CXX_FLAGS and CMAKE_<EXE|SHARED|MODULE>_LINKER_FLAGS with their configuration
-# variants, toolchain and LDFLAGS initial values included, and its own LINK_OPTIONS, LINK_FLAGS and
-# LINK_LIBRARIES. Matched as text, generator expressions included: a runtime wrongly taken for
-# static only loses the option, never changes the program's runtime. -static-libgcc does not count.
+# Gives every program whose link names a static C++ runtime, or none, a CNA_CXX_STATIC_RUNTIME
+# property that evaluates to CNA_STATIC in the configurations in which it does. The property holds
+# a copy of each setting that names one, generator expressions kept and the flag replaced by
+# CNA_STATIC, so CMake itself decides per configuration: -static-libstdc++ inside
+# $<$<CONFIG:Release>:...> counts in Release only. Read: the program's directory's CMAKE_CXX_FLAGS
+# and CMAKE_<EXE|SHARED|MODULE>_LINKER_FLAGS with their configuration variants (toolchain and LDFLAGS
+# initial values included), and its LINK_FLAGS, LINK_OPTIONS and LINK_LIBRARIES. -static-libgcc
+# does not count.
 function(_cna_note_static_cxx_runtimes)
     set(_cna_static_flag "(^|[^A-Za-z0-9_+-])-(static|static-pie|static-libstdc\\+\\+|nostdlib|nostdlib\\+\\+|nodefaultlibs)($|[^A-Za-z0-9_+-])")
     get_property(_cna_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -441,8 +443,9 @@ function(_cna_note_static_cxx_runtimes)
         else()
             continue()
         endif()
+        # The directory's flags and LINK_FLAGS_<CONFIG> hold no generator expressions.
         get_target_property(_cna_directory ${_cna_target} SOURCE_DIR)
-        set(_cna_static_configs "")
+        set(_cna_marks "")
         foreach(_cna_config IN ITEMS "" ${_cna_configs})
             string(TOUPPER "${_cna_config}" _cna_config)
             set(_cna_suffix "")
@@ -455,28 +458,61 @@ function(_cna_note_static_cxx_runtimes)
                     DEFINITION ${_cna_variable}${_cna_suffix})
                 string(APPEND _cna_flags " ${_cna_value}")
             endforeach()
-            set(_cna_properties LINK_FLAGS${_cna_suffix})
-            if(NOT _cna_config)
-                list(APPEND _cna_properties LINK_OPTIONS LINK_LIBRARIES)
+            if(_cna_config)
+                get_property(_cna_value TARGET ${_cna_target} PROPERTY LINK_FLAGS${_cna_suffix})
+                string(APPEND _cna_flags " ${_cna_value}")
             endif()
-            foreach(_cna_property IN LISTS _cna_properties)
-                get_target_property(_cna_value ${_cna_target} ${_cna_property})
-                if(_cna_value)
-                    string(APPEND _cna_flags " ${_cna_value}")
-                endif()
-            endforeach()
             if(_cna_flags MATCHES "${_cna_static_flag}")
                 if(NOT _cna_config)
-                    set(_cna_static_configs ALL)
+                    set(_cna_marks CNA_STATIC)
                     break()
                 endif()
-                list(APPEND _cna_static_configs ${_cna_config})
+                list(APPEND _cna_marks "$<$<CONFIG:${_cna_config}>:CNA_STATIC>")
             endif()
         endforeach()
-        if(_cna_static_configs)
-            set_property(TARGET ${_cna_target} PROPERTY CNA_CXX_STATIC_RUNTIME ${_cna_static_configs})
+        if(NOT _cna_marks STREQUAL "CNA_STATIC")
+            set(_cna_link "")
+            foreach(_cna_property IN ITEMS LINK_FLAGS LINK_OPTIONS LINK_LIBRARIES)
+                get_property(_cna_value TARGET ${_cna_target} PROPERTY ${_cna_property})
+                list(APPEND _cna_link "${_cna_value}")
+            endforeach()
+            _cna_static_cxx_runtime_items("${_cna_link}" _cna_items)
+            list(APPEND _cna_marks ${_cna_items})
+        endif()
+        if(_cna_marks)
+            set_property(TARGET ${_cna_target} PROPERTY CNA_CXX_STATIC_RUNTIME "${_cna_marks}")
         endif()
     endforeach()
+endfunction()
+
+# The items of a link setting that name a static C++ runtime, each such flag replaced by CNA_STATIC.
+# An item is a list element, or several where a generator expression holds a list.
+function(_cna_static_cxx_runtime_items value output_variable)
+    set(_cna_items "")
+    set(_cna_item "")
+    foreach(_cna_piece IN LISTS value)
+        string(APPEND _cna_item "${_cna_piece}")
+        string(REGEX MATCHALL "\\$<" _cna_opened "${_cna_item}")
+        string(REGEX MATCHALL ">" _cna_closed "${_cna_item}")
+        list(LENGTH _cna_opened _cna_opened)
+        list(LENGTH _cna_closed _cna_closed)
+        if(_cna_opened GREATER _cna_closed)
+            string(APPEND _cna_item ";")
+            continue()
+        endif()
+        if(_cna_item MATCHES "${_cna_static_flag}")
+            # Until none is left: two flags can share the character between them.
+            while(_cna_item MATCHES "${_cna_static_flag}")
+                string(REGEX REPLACE "${_cna_static_flag}" "\\1;CNA_STATIC;\\3"
+                    _cna_item "${_cna_item}")
+            endwhile()
+            # Evaluated among link options, where a link-only item is its content.
+            string(REPLACE "$<LINK_ONLY:" "$<1:" _cna_item "${_cna_item}")
+            list(APPEND _cna_items "${_cna_item}")
+        endif()
+        set(_cna_item "")
+    endforeach()
+    set(${output_variable} "${_cna_items}" PARENT_SCOPE)
 endfunction()
 
 option(CNA_ENABLE_UNITY_BUILD
