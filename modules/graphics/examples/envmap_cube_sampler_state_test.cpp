@@ -115,9 +115,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "DIRECTX11";
 #else
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "UNKNOWN";

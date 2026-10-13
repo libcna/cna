@@ -88,7 +88,7 @@ endif()
 # include path does not propagate to CNA's own consumers. Native GCC builds masked this by
 # accident (this dev machine has a system-wide /usr/local/include/SDL3), but it is a hard
 # `SDL3/SDL.h: No such file or directory` failure under every cross-compile toolchain (Emscripten,
-# D3D9/D3D11 MinGW) that has no such fallback -- link SDL3::SDL3 explicitly instead of relying on
+# D3D9 MinGW) that has no such fallback -- link SDL3::SDL3 explicitly instead of relying on
 # transitive propagation, matching cna_devices_shutdown_ordering_harness's own pattern above.
 # Gated on the SDL3 audio selection because the harness calls CNA::Internal::Audio::DestroyMixer()
 # directly. That engine is the SDL3_mixer implementation and
@@ -193,28 +193,23 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     if(MINGW)
         # REMED-BUILD-013: without this, the .exe links fine but fails to *run* under Wine --
         # "libgcc_s_seh-1.dll/libstdc++-6.dll not found" (status c0000135) -- matching the same
-        # MinGW-runtime treatment every cna_directx9_test()/cna_directx11_test() executable already gets.
+        # MinGW-runtime treatment every cna_directx9_test() executable already gets.
         target_link_options(cna_strict_xna_api_check PRIVATE -static-libgcc -static-libstdc++)
         target_link_options(cna_strict_xna_api_check PRIVATE -Wl,--allow-multiple-definition)
         cna_copy_mingw_runtime(cna_strict_xna_api_check)
         cna_copy_sdl_runtime(cna_strict_xna_api_check)
     endif()
 
-    # REMED-BUILD-013: this target builds fine under the D3D9/D3D11 MinGW cross-compile (the
+    # REMED-BUILD-013: this target builds fine under the D3D9 MinGW cross-compile (the
     # CMAKE_CXX_COMPILER_ID guard above already admits it), but its own add_test() below is a plain
     # Windows PE executable command with no Wine wrapper -- unlike CnaTests (cmake/UnitTests.cmake),
     # cna_strict_xna_api_check never gets a CROSSCOMPILING_EMULATOR target property, so ctest tries
     # to exec the .exe natively on the Linux host ("unable to find an interpreter"). Never creates a
-    # D3D9/D3D11 device (pure link-time API-surface check, no window/GPU), so it needs the same
-    # *_SKIP_*_GATE=1 each renderer's own device-free CnaTests invocation already uses.
-    if(CMAKE_CROSSCOMPILING)
-        if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
-            set_target_properties(cna_strict_xna_api_check PROPERTIES CROSSCOMPILING_EMULATOR
-                "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
-            set_target_properties(cna_strict_xna_api_check PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-        endif()
+    # D3D9 device (pure link-time API-surface check, no window/GPU), so it needs the same
+    # CNA_D3D9_SKIP_DXVK_GATE=1 the device-free CnaTests invocation already uses.
+    if(CMAKE_CROSSCOMPILING AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
+        set_target_properties(cna_strict_xna_api_check PROPERTIES CROSSCOMPILING_EMULATOR
+            "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
     endif()
     add_test(NAME StrictXnaApiSurfaceCheck_Compile_Run COMMAND cna_strict_xna_api_check)
 

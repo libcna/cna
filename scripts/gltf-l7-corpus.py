@@ -20,7 +20,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
@@ -87,19 +86,13 @@ def compare_to_golden(actual_path: Path, golden_path: Path,
     return {"maximumRgbDelta": max_rgb, "maximumAlphaDelta": max_alpha}
 
 
-def wine_path(path: Path) -> str:
-    """Return an absolute path through Wine's standard Z: mapping."""
-    return "Z:" + str(path.resolve()).replace("/", "\\")
-
-
-def run_viewer(viewer: Path, viewer_runner: Path | None, windows_paths: bool,
+def run_viewer(viewer: Path, viewer_runner: Path | None,
                asset: Path, png: Path, extra_arguments: list[str], timeout: int,
                capture_environment: dict[str, str]) -> dict[str, Any]:
     environment = dict(os.environ)
     environment.update(capture_environment)
     command = ([str(viewer_runner)] if viewer_runner is not None else []) + [
-        str(viewer), wine_path(asset) if windows_paths else str(asset),
-        "--direct", "--capture", wine_path(png) if windows_paths else str(png),
+        str(viewer), str(asset), "--direct", "--capture", str(png),
         "--reference-capture", *extra_arguments,
     ]
     try:
@@ -129,7 +122,7 @@ def run_viewer(viewer: Path, viewer_runner: Path | None, windows_paths: bool,
 
 def validate_policy(policy: dict[str, Any], asset_ids: list[str]) -> None:
     if policy.get("schemaVersion") != 1 or policy.get("renderer") not in (
-        "OPENGLES3/EasyGL", "SOFTWARE", "DIRECTX11/DXVK",
+        "OPENGLES3/EasyGL", "SOFTWARE",
     ):
         raise RuntimeError("unsupported L7 policy schema or renderer")
     overrides = policy.get("overrides", {})
@@ -151,8 +144,7 @@ def main() -> int:
     parser.add_argument("--viewer-source", type=Path,
                         help="optional viewer checkout for provenance")
     parser.add_argument("--viewer-runner", type=Path,
-                        help="optional executable prepended to the viewer command (for example "
-                             "run-wine-dxvk.sh for a MinGW DirectX11 viewer)")
+                        help="optional executable prepended to the viewer command")
     parser.add_argument("--policy", type=Path,
                         help="override the committed EasyGL L7 policy (for example SOFTWARE)")
     parser.add_argument("--output", type=Path,
@@ -222,24 +214,6 @@ def main() -> int:
             "SDL_VIDEODRIVER": "x11",
             "SDL_AUDIODRIVER": "dummy",
         }
-    else:
-        if viewer_runner is None:
-            raise RuntimeError("DIRECTX11/DXVK policy requires --viewer-runner")
-        golden_root = repo / "tests/gltf-l7/directx11"
-        renderer_output_prefix = "CNA: graphics renderer: "
-        capture_environment = {
-            "SDL_AUDIODRIVER": "dummy",
-            # run-wine-dxvk.sh needs its info-level version marker to fail closed against WineD3D.
-            "DXVK_LOG_LEVEL": "info",
-        }
-        if os.environ.get("CNA_D3D11_VIRTUAL_DESKTOP"):
-            # Plain Xvfb is not enumerated as a Windows monitor by every Wine/SDL combination.
-            # Record and forward the wrapper's Wine-desktop trampoline so the report proves that
-            # production captures ran without opening windows on the host's physical display.
-            capture_environment["CNA_D3D11_VIRTUAL_DESKTOP"] = \
-                os.environ["CNA_D3D11_VIRTUAL_DESKTOP"]
-
-    windows_paths = policy["renderer"] == "DIRECTX11/DXVK"
 
     expectations = {
         asset_id: json.loads(
@@ -286,7 +260,6 @@ def main() -> int:
 
     results: list[dict[str, Any]] = []
     renderers: set[str] = set()
-    translation_layers: set[str] = set()
     try:
         for index, asset in enumerate(assets, 1):
             asset_id = asset["id"]
@@ -296,29 +269,25 @@ def main() -> int:
             disposition = override.get("disposition", "capture")
             extra_arguments = list(override.get("viewerArguments", []))
             run_1 = run_viewer(
-                viewer, viewer_runner, windows_paths, source,
+                viewer, viewer_runner, source,
                 first_root / f"{asset_id}.png", extra_arguments, args.timeout, capture_environment,
             )
             run_2 = run_viewer(
-                viewer, viewer_runner, windows_paths, source,
+                viewer, viewer_runner, source,
                 second_root / f"{asset_id}.png", extra_arguments, args.timeout, capture_environment,
             )
             for output_text in (run_1["output"], run_2["output"]):
                 for line in output_text.splitlines():
                     # plans/plan_gltf.md GLTF-467: matched ANYWHERE in the line, not only at its start.
                     # CNA's own logger prefixes its output with a severity/category tag
-                    # ("[INFO][RENDER] CNA: graphics renderer: SOFTWARE"), and the SOFTWARE and
-                    # DIRECTX11 markers go through that logger while EasyGL's and Vulkan's are
-                    # printed raw -- so a startswith() test made those two policies structurally
-                    # unrunnable the moment the tag was introduced, which is why this harness had
-                    # not been executed for them since. The check itself is unchanged in strength:
+                    # ("[INFO][RENDER] CNA: graphics renderer: SOFTWARE"), and the SOFTWARE marker
+                    # goes through that logger while EasyGL's is printed raw -- so a startswith()
+                    # test made that policy structurally unrunnable the moment the tag was
+                    # introduced, which is why this harness had not been executed for it since. The check itself is unchanged in strength:
                     # exactly one identity must be observed across both processes.
                     marker = line.find(renderer_output_prefix)
                     if marker >= 0:
                         renderers.add(line[marker + len(renderer_output_prefix):].strip())
-                    dxvk = re.match(r"^info:\s+DXVK:\s+(v?[0-9]+\.[0-9.]+)\s*$", line)
-                    if dxvk:
-                        translation_layers.add(f"DXVK {dxvk.group(1)}")
 
             base_result: dict[str, Any] = {
                 "id": asset_id,
@@ -412,11 +381,6 @@ def main() -> int:
             raise RuntimeError(
                 f"expected exactly one {policy['renderer']} renderer identity, got {sorted(renderers)}"
             )
-        if windows_paths and len(translation_layers) != 1:
-            raise RuntimeError(
-                "expected exactly one DXVK version marker, got "
-                f"{sorted(translation_layers)}"
-            )
 
         viewer_source = args.viewer_source.resolve() if args.viewer_source else None
         report = {
@@ -430,7 +394,6 @@ def main() -> int:
             "rejectedAssetCount": sum(r["disposition"] == "reject" for r in results),
             "renderer": policy["renderer"],
             "rendererEnvironment": sorted(renderers),
-            "translationLayerEnvironment": sorted(translation_layers),
             "cnaCommit": git_revision(repo),
             "viewerCommit": git_revision(viewer_source) if viewer_source else None,
             "viewerExecutableSha256": sha256(viewer),
@@ -440,7 +403,6 @@ def main() -> int:
                 "resolution": list(RESOLUTION),
                 "clearPixel": list(CLEAR),
                 "baseViewerArguments": ["--direct", "--capture", "--reference-capture"],
-                "windowsPathConvention": "Wine Z: drive" if windows_paths else None,
                 "environment": capture_environment,
             },
             "goldenComparison": comparison,

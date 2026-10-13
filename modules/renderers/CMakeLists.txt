@@ -63,17 +63,14 @@ function(cna_renderer_common_setup target)
     # becomes part of the renderer or framework include contract; every other family is SDL-free.
     target_include_directories(${RENDERER_TARGET} PRIVATE
         "${CNA_SOURCE_DIR}/modules/platform/src")
-    # D3D11's SpriteBatch renderer (plans/plan_dx.md DX-70/DX-71) calls back into
-    # Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s
-    # custom-Effect path -- a genuine, honest circular dependency between the renderer static
-    # library and the CNA graphics core (the renderer needs a CNA-defined symbol, while CNA needs
-    # the renderer to implement IGraphicsRenderer). Under single-pass archive resolution any
-    # executable linking CNA hit a real "undefined reference to Effect::Apply()" at link time.
-    # CMake's documented static-library-cycle support resolves this by repeating the archives on
-    # the final link line once this cycle is declared.
+    # A renderer library and the CNA graphics core depend on each other: CNA needs the renderer to
+    # implement IGraphicsRenderer, and a renderer calls back into CNA-defined symbols. Under
+    # single-pass archive resolution an executable linking CNA hits an undefined reference at link
+    # time; CMake's documented static-library-cycle support resolves it by repeating the archives
+    # on the final link line once this cycle is declared.
     #
     # The header-inlined IGraphicsRenderer defaults (HandleUnsupported3DCall -> CNA::Logger::Warn,
-    # the default instanced-draw guard, ...) give EVERY renderer the same structural reverse edge,
+    # the default instanced-draw guard, ...) give EVERY renderer this structural reverse edge,
     # and the module split surfaces it deterministically (first hit for real: a renderer's
     # cna_reference_dump link). Declared unconditionally: the reverse edges land on the specific
     # modules that define the symbols (Effect/VertexDeclaration/DxtUtil -> cna_graphics_core,
@@ -115,7 +112,7 @@ endfunction()
 # @param out_var Variable to receive the member targets, in the caller's scope.
 function(cna_graphics_archive_cycle out_var)
     set(_cna_cycle cna_input cna_graphics_core ${CNA_RENDERER_TARGETS})
-    foreach(_cna_helper IN ITEMS cna_renderer_d3dcommon cna_renderer_mojoshader_effect)
+    foreach(_cna_helper IN ITEMS cna_renderer_mojoshader_effect)
         if(TARGET ${_cna_helper})
             list(APPEND _cna_cycle ${_cna_helper})
         endif()
@@ -147,16 +144,9 @@ if(NOT _cna_metal_index EQUAL -1)
 endif()
 add_subdirectory(metal)
 
-# plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 family
-# only -- DIRECTX9 is confirmed independent (design decision 12). Entered whenever DIRECTX11 is
-# selected, default or not: the directx11 family links it PUBLIC.
-if("DIRECTX11" IN_LIST CNA_RENDERER_IDENTITIES)
-    add_subdirectory(common/d3d)
-endif()
-
 # plans/plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
 # compiled XNA effects. Entered only where cna_mojoshader was configured, which today means the
-# FNA3D renderer, or an opt-in SDL_GPU, EasyGL, WebGPU, SOFTWARE, DirectX 9 or DirectX 11
+# FNA3D renderer, or an opt-in SDL_GPU, EasyGL, WebGPU, SOFTWARE or DirectX 9
 # compiled-effect build with that family's CNA_*_COMPILED_EFFECTS option on.
 if(TARGET cna_mojoshader)
     add_subdirectory(common/mojoshader)

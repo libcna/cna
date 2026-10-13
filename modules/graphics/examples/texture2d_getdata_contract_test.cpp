@@ -112,9 +112,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_METAL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "METAL";

@@ -120,19 +120,19 @@ struct CapabilityExpectation
 
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
 // dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU,
-// EasyGL, Vulkan, WebGPU and DirectX 9/11 all pull MojoShader in only as an extra,
+// EasyGL, WebGPU and DirectX 9 all pull MojoShader in only as an extra,
 // off-by-default dependency none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS /
-// CNA_EASYGL_COMPILED_EFFECTS / CNA_VULKAN_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
-// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS / CNA_METAL_COMPILED_EFFECTS,
+// CNA_EASYGL_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
+// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_METAL_COMPILED_EFFECTS,
 // plans/plan_apple_m4.md AM4-144) -- selecting the renderer alone
-// is not enough to expect the capability true for any of those seven.
+// is not enough to expect the capability true for any of them.
 //
 // plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
 // plus the combined-image-sampler rewrite WGSL's shading model requires. WEBGPU-203 removed the
 // "native-only" half of that sentence: browser WebGPU still ingests WGSL and nothing else, but CNA
 // now translates this route's SPIR-V into WGSL, so an Emscripten build configures the option and
 // answers true here for the same reason a native one does.
-#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS) || defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS) || defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS) || defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS) || defined(CNA_RENDERER_METAL) && defined(CNA_METAL_COMPILED_EFFECTS)
+#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS) || defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS) || defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS) || defined(CNA_RENDERER_METAL) && defined(CNA_METAL_COMPILED_EFFECTS)
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;

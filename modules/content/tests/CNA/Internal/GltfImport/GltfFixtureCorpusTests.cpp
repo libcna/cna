@@ -446,154 +446,6 @@ TEST(GltfFixtureCorpus, ViewerRetakeMatrixIsPinnedCompleteAndStrict)
     EXPECT_NE(caseIds.end(), caseIds.find("sparse-index"));
 }
 
-TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
-{
-    // GLTF-386/390/391: the production-viewer retake proves D3D11 pixels through DXVK. This
-    // ordinary no-display gate proves that the report still names every input and exact golden,
-    // records the translation layer plus virtual desktop, and carries no active divergence.
-    const std::filesystem::path repository =
-        CorpusDirectory().parent_path().parent_path().parent_path();
-    const std::filesystem::path policyPath =
-        repository / "tests" / "gltf-l7" / "directx11-policy.json";
-    const std::filesystem::path reportPath =
-        repository / "docs" / "gltf-l7-directx11-report.json";
-
-    JsonValue policy;
-    const std::vector<std::uint8_t> policyBytes = ReadAllBytes(policyPath);
-    ASSERT_NO_THROW(policy = CNA::Internal::ParseJson(
-        std::string(policyBytes.begin(), policyBytes.end())));
-    ASSERT_EQ(JsonType::Object, policy.type);
-    EXPECT_EQ("DIRECTX11/DXVK", StringOr(policy, "renderer", ""));
-    EXPECT_EQ(0.0, NumberOr(Member(policy, "goldenComparison"), "rgbTolerance", -1.0));
-    EXPECT_EQ(0.0, NumberOr(Member(policy, "goldenComparison"), "alphaTolerance", -1.0));
-    const std::vector<std::string> tasks = Strings(Member(policy, "tasks"));
-    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-386"));
-    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-390"));
-    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-391"));
-
-    JsonValue report;
-    const std::vector<std::uint8_t> reportBytes = ReadAllBytes(reportPath);
-    ASSERT_NO_THROW(report = CNA::Internal::ParseJson(
-        std::string(reportBytes.begin(), reportBytes.end())));
-    ASSERT_EQ(JsonType::Object, report.type);
-    EXPECT_EQ("DIRECTX11/DXVK", StringOr(report, "renderer", ""));
-    EXPECT_EQ(148.0, NumberOr(report, "distinctAssetCount", -1.0));
-    EXPECT_EQ(140.0, NumberOr(report, "capturedAssetCount", -1.0));
-    EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
-    EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
-    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
-    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "alphaTolerance", -1.0));
-    EXPECT_EQ("Wine Z: drive", StringOr(Member(report, "capture"), "windowsPathConvention", ""));
-
-    const JsonValue& environment = Member(Member(report, "capture"), "environment");
-    EXPECT_EQ("dummy", StringOr(environment, "SDL_AUDIODRIVER", ""));
-    EXPECT_EQ("info", StringOr(environment, "DXVK_LOG_LEVEL", ""));
-    EXPECT_EQ("CNA,1280x1024", StringOr(environment, "CNA_D3D11_VIRTUAL_DESKTOP", ""));
-    const JsonValue& rendererEnvironment = Member(report, "rendererEnvironment");
-    ASSERT_EQ(JsonType::Array, rendererEnvironment.type);
-    ASSERT_EQ(1u, rendererEnvironment.arrayValue.size());
-    EXPECT_EQ("DIRECTX11", rendererEnvironment.arrayValue.front().stringValue);
-    const JsonValue& translationEnvironment = Member(report, "translationLayerEnvironment");
-    ASSERT_EQ(JsonType::Array, translationEnvironment.type);
-    ASSERT_EQ(1u, translationEnvironment.arrayValue.size());
-    // plans/plan_gltf.md GLTF-471: the pin is on the RELEASE, and the two strings below are the two
-    // spellings the same release logs. Upstream DXVK 2.6 prints "DXVK: v2.6"; Debian's `dxvk`
-    // 2.6+ds-1 prints "DXVK: 2.6.0". The committed report was captured against the former and this
-    // revision's re-capture against the latter, and both are DXVK 2.6 -- so accepting either keeps
-    // the assertion's actual job (a pinned DXVK release handled the run, never a silent WineD3D
-    // fallback, and exactly one layer version across both processes) while not failing on a distro
-    // packaging difference. Adding a THIRD spelling here would mean a different release; do not.
-    const std::string translationLayer = translationEnvironment.arrayValue.front().stringValue;
-    EXPECT_TRUE(translationLayer == "DXVK v2.6" || translationLayer == "DXVK 2.6.0")
-        << "unexpected translation-layer version '" << translationLayer
-        << "': the DirectX11 L7 goldens are pinned to DXVK 2.6";
-    const JsonValue& classification = Member(report, "classification");
-    const JsonValue& activeDivergences = Member(classification, "activeGoldenDivergences");
-    ASSERT_EQ(JsonType::Array, activeDivergences.type);
-    EXPECT_TRUE(activeDivergences.arrayValue.empty());
-    const JsonValue& resolvedDivergences = Member(classification, "resolvedDivergences");
-    ASSERT_EQ(JsonType::Array, resolvedDivergences.type);
-    EXPECT_EQ(2u, resolvedDivergences.arrayValue.size());
-
-    System::Security::Cryptography::SHA256 sha;
-    EXPECT_EQ(StringOr(report, "corpusManifestSha256", ""),
-              HexDigest(sha.ComputeHash(ReadAllBytes(CorpusDirectory() / "manifest.json"))));
-    EXPECT_EQ(StringOr(report, "viewerRunnerSha256", ""),
-              HexDigest(sha.ComputeHash(ReadAllBytes(repository / "scripts" / "run-wine-dxvk.sh"))));
-    const std::vector<std::string> fixtureIds = CorpusFixtureIds();
-    ASSERT_EQ(148u, fixtureIds.size());
-    const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
-    const JsonValue& assets = Member(report, "assets");
-    ASSERT_EQ(JsonType::Array, assets.type);
-    ASSERT_EQ(expectedIds.size(), assets.arrayValue.size());
-
-    std::set<std::string> seen;
-    std::set<std::string> capturedIds;
-    std::size_t rejected = 0;
-    for (const JsonValue& result : assets.arrayValue)
-    {
-        const std::string id = StringOr(result, "id", "");
-        ASSERT_NE(expectedIds.end(), expectedIds.find(id)) << "unknown DirectX11 L7 asset " << id;
-        EXPECT_TRUE(seen.insert(id).second) << "duplicate DirectX11 L7 result " << id;
-
-        const std::filesystem::path source =
-            CorpusDirectory() / StringOr(result, "source", "");
-        ASSERT_TRUE(std::filesystem::is_regular_file(source)) << source.string();
-        EXPECT_EQ(StringOr(result, "sourceSha256", ""),
-                  HexDigest(sha.ComputeHash(ReadAllBytes(source)))) << id;
-
-        const std::string disposition = StringOr(result, "disposition", "");
-        if (disposition == "capture")
-        {
-            capturedIds.insert(id);
-            const std::filesystem::path golden =
-                repository / StringOr(result, "golden", "");
-            ASSERT_TRUE(std::filesystem::is_regular_file(golden)) << golden.string();
-            const std::string digest = HexDigest(sha.ComputeHash(ReadAllBytes(golden)));
-            EXPECT_EQ(StringOr(result, "goldenPngSha256", ""), digest) << id;
-            EXPECT_EQ(StringOr(result, "twoProcessPngSha256", ""), digest) << id;
-            EXPECT_TRUE(BoolOr(result, "twoProcessPngByteIdentical", false)) << id;
-            EXPECT_EQ(0.0, NumberOr(Member(result, "comparison"), "maximumRgbDelta", -1.0)) << id;
-            EXPECT_EQ(0.0, NumberOr(Member(result, "comparison"), "maximumAlphaDelta", -1.0)) << id;
-            EXPECT_TRUE(NumberOr(result, "nonClearPixelCount", 0.0) > 0.0
-                        || BoolOr(result, "emptyForegroundAllowed", false)) << id;
-        }
-        else if (disposition == "reject")
-        {
-            ++rejected;
-            EXPECT_TRUE(BoolOr(result, "twoProcessDispositionIdentical", false)) << id;
-            EXPECT_FALSE(StringOr(result, "owningTask", "").empty()) << id;
-            EXPECT_FALSE(StringOr(result, "errorContains", "").empty()) << id;
-        }
-        else
-        {
-            ADD_FAILURE() << id << ": unknown DirectX11 L7 disposition " << disposition;
-        }
-    }
-    EXPECT_EQ(expectedIds, seen);
-    EXPECT_EQ(140u, capturedIds.size());
-    EXPECT_EQ(8u, rejected);
-
-    std::set<std::string> goldenIds;
-    const std::filesystem::path goldenRoot = repository / "tests" / "gltf-l7" / "directx11";
-    for (const std::filesystem::directory_entry& entry :
-         std::filesystem::directory_iterator(goldenRoot))
-    {
-        if (entry.is_regular_file() && entry.path().extension() == ".png")
-            goldenIds.insert(entry.path().stem().string());
-    }
-    EXPECT_EQ(capturedIds, goldenIds)
-        << "the DirectX11 L7 golden directory has a missing or stale PNG";
-
-    const std::filesystem::path script = repository / "scripts" / "gltf-l7-corpus.py";
-    const std::vector<std::uint8_t> scriptBytes = ReadAllBytes(script);
-    const std::string scriptText(scriptBytes.begin(), scriptBytes.end());
-    EXPECT_NE(std::string::npos, scriptText.find("tests/gltf-l7/directx11"));
-    EXPECT_NE(std::string::npos, scriptText.find("CNA_D3D11_VIRTUAL_DESKTOP"));
-    EXPECT_NE(std::string::npos, scriptText.find("DXVK_LOG_LEVEL"));
-    EXPECT_NE(std::string::npos, scriptText.find("if windows_paths and len(translation_layers) != 1"));
-}
-
 TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
 {
     // GLTF-387/390/391: the production-viewer retake proves CPU-rendered pixels. This ordinary
@@ -748,10 +600,9 @@ TEST(GltfFixtureCorpus, EveryL7GoldenCarriesTheVertexColourAlphaProductRatherTha
         const char* directory;
         const char* renderer;
     };
-    constexpr std::array<GoldenPolicy, 3> policies{{
+    constexpr std::array<GoldenPolicy, 2> policies{{
         {"easygl", "OPENGLES3/EasyGL"},
         {"software", "SOFTWARE"},
-        {"directx11", "DIRECTX11/DXVK"},
     }};
 
     // The authored numbers, from tools/gltf_fixtures/defs/skinning.py and the mat-* material set.

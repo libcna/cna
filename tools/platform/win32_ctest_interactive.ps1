@@ -11,8 +11,8 @@
 #
 # Usage (in the guest):
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   & C:\src\cna\tools\platform\win32_ctest_interactive.ps1 -BuildDir C:\cna\build\full-sdl3-d3d11 `
-#       -Label DIRECTX11 -OutDir C:\cna\report\dx11-parity-1
+#   & C:\src\cna\tools\platform\win32_ctest_interactive.ps1 -BuildDir C:\cna\build\full-sdl3-d3d9 `
+#       -Label DIRECTX9 -OutDir C:\cna\report\dx9-parity-1
 #
 # Output: <OutDir>\ctest-junit.xml, <OutDir>\ctest.out.txt, <OutDir>\summary.txt and summary.json.
 

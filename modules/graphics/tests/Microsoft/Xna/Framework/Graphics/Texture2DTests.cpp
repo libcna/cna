@@ -374,7 +374,7 @@ namespace
 
 TEST(Texture2DTest, SetDataSourceWindowOverloadCoversLogicalAndRawValueTypes)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, DirectX11, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Metal);
 
     GraphicsDevice device;
     // plans/plan_apple_m4.md AM4-142: Metal's Bgr565 exists only on Apple-family GPUs.
@@ -759,12 +759,10 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // plans/plan_webgpu.md WEBGPU-184 added WEBGPU to this list: core WebGPU has `rg8snorm` and
     // `rgba8snorm`, so the format is stored natively there too, with no expansion.
     // Software retains the signed values in its canonical CPU sampling plane.
-    // DirectX11 stores it as DXGI_FORMAT_R8G8_SNORM, x in the low byte -- CNA's own packing, and
-    // FNA3D's D3D11 mapping (WINCLOSE-0013).
     // plans/plan_apple_m4.md AM4-142: Metal stores it as MTLPixelFormatRG8Snorm on every device.
     // plans/plan_apple_m4.md AM4-189: and on FNA3D, natively signed-normalized on its OpenGL and
     // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software, DirectX11,
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software,
                         Metal, Fna3d))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
@@ -777,11 +775,10 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    // DirectX11 stores it as DXGI_FORMAT_R8G8B8A8_SNORM (WINCLOSE-0013); Metal as
-    // MTLPixelFormatRGBA8Snorm (AM4-142).
+    // Metal stores it as MTLPixelFormatRGBA8Snorm (AM4-142).
     // plans/plan_apple_m4.md AM4-189: and on FNA3D, natively signed-normalized on its OpenGL and
     // SDL_GPU drivers since MSR-019 -- the stale arm still expected its old refusal.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software, DirectX11,
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software,
                         Metal, Fna3d))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
@@ -795,14 +792,13 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
     // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
-    // DirectX11: DXGI_FORMAT_B5G5R5A1_UNORM, a<<15|r<<10|g<<5|b field for field (WINCLOSE-0013).
     // plans/plan_apple_m4.md AM4-142: Metal's MTLPixelFormatBGR5A1Unorm is the same packing, but
     // only Apple-family GPUs have it, so that leg asks the renderer.
     const bool metalPacked16 =
         CNA_RENDERER_IS(Metal) &&
         gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra5551)) ==
             CNA::Internal::Renderers::RendererFormatVerdict::Supported;
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software, DirectX11) ||
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software) ||
         metalPacked16)
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
@@ -820,20 +816,13 @@ TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreE
         CNA_RENDERER_IS(Metal) &&
         gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgr565)) ==
             CNA::Internal::Renderers::RendererFormatVerdict::Supported;
-    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11) && !metalPacked16)
+    if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software) && !metalPacked16)
         GTEST_SKIP() << "The active renderer has not promoted packed-16 Texture2D storage";
 
     using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
     ExpectPacked16TransferContract<Bgr565>(gd, SurfaceFormat::Bgr565);
     ExpectPacked16TransferContract<Bgra5551>(gd, SurfaceFormat::Bgra5551);
-    // WINCLOSE-0016: on DirectX11, B4G4R4A4_UNORM is optional and verified per device; a device
-    // that does not keep its texels refuses the format at construction instead.
-    if (CNA_RENDERER_IS(DirectX11) &&
-        gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
-            CNA::Internal::Renderers::RendererFormatVerdict::Unsupported)
-        EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Bgra4444), std::runtime_error);
-    else
-        ExpectPacked16TransferContract<Bgra4444>(gd, SurfaceFormat::Bgra4444);
+    ExpectPacked16TransferContract<Bgra4444>(gd, SurfaceFormat::Bgra4444);
 }
 
 TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialAndMipTransfersAreExact)
@@ -1176,13 +1165,6 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // named on purpose -- deriving the WHOLE predicate from ClassifySurfaceFormatEXT would turn
         // this sweep into a tautology against Texture2D's own gate and stop it asserting anything
         // about the renderer.
-        // WINCLOSE-0013: DirectX11 stores the packed 16-bit and signed-normalized pairs through the
-        // same DXGI formats FNA3D's D3D11 driver uses -- B5G6R5, B5G5R5A1, R8G8_SNORM,
-        // R8G8B8A8_SNORM -- each matching CNA's packing field for field. Named, like the flags
-        // above, and kept separate because its set is its own. Bgra4444 is the device-dependent
-        // one here too: B4G4R4A4_UNORM is optional on D3D11 hardware, so it is asked of the
-        // renderer below, which now asks the device.
-        const bool d3d11Packed16AndSignedNormalized = CNA_RENDERER_IS(DirectX11);
         // plans/plan_apple_m4.md AM4-142: Metal stores the signed-normalized pair as RG8Snorm and
         // RGBA8Snorm on every Metal device, so it is named. Its packed 16-bit trio -- B5G6R5Unorm,
         // BGR5A1Unorm and ABGR4Unorm, the mappings MoltenVK uses -- exists only on Apple-family
@@ -1195,7 +1177,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgr565)) ==
                 CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         const bool deviceA4R4G4B4 =
-            CNA_RENDERER_IS(SdlGpu, DirectX11) &&
+            CNA_RENDERER_IS(SdlGpu) &&
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
                 CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
@@ -1221,10 +1203,6 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
                                    || format == SurfaceFormat::Bgra5551
                                    || format == SurfaceFormat::Bgra4444))
             || (deviceA4R4G4B4 && format == SurfaceFormat::Bgra4444)
-            || (d3d11Packed16AndSignedNormalized && (format == SurfaceFormat::Bgr565
-                                                     || format == SurfaceFormat::Bgra5551
-                                                     || format == SurfaceFormat::NormalizedByte2
-                                                     || format == SurfaceFormat::NormalizedByte4))
             || (metalSignedNormalized && (format == SurfaceFormat::NormalizedByte2
                                           || format == SurfaceFormat::NormalizedByte4))
             || (metalPacked16 && (format == SurfaceFormat::Bgr565

@@ -29,23 +29,13 @@ option(CNA_BUILD_RENDERER_DESCRIPTOR_GATE
 #
 #   directx9  -- design decision 9's adapterQueries answer from real D3DCAPS9 / D3DFORMAT values
 #                (<d3d9.h>).
-#   directx11 -- DX-214/DX-225 gave it the same treatment as directx9: the descriptor creates a
-#                real ID3D11Device and answers adapterQueries from CheckFormatSupport rather than
-#                from a hardcoded table (<d3d11.h>, <dxgiformat.h>, <wrl/client.h>).
 #
 # None can be made self-contained without dropping behaviour, so for these the "compiled at
 # least once in a configuration where the family is available" rule is met by the family's OWN
-# target: a DIRECTX9 or DIRECTX11 build each compiles theirs for real. Every
-# other family's descriptor needs nothing but CNA's own headers, and this list is deliberately
-# hard to grow -- a new family is gated by default, and excluding it takes a deliberate edit
-# with a reason.
-#
-# directx11 was added when the `dx` branch merged into `next` (2026-09-10). On `dx`
-# the omission could not surface: every build there SELECTS a DirectX family, so the descriptor
-# was already deferred by the branch above this list. A native Linux build that selects a
-# non-DirectX renderer is the configuration that compiles it here, and it cannot -- the Windows
-# SDK headers it now includes do not exist on it.
-set(CNA_DESCRIPTOR_GATE_SDK_BOUND_FAMILIES directx9 directx11)
+# target: a DIRECTX9 build compiles it for real. Every other family's descriptor needs nothing but
+# CNA's own headers, and this list is deliberately hard to grow -- a new family is gated by
+# default, and excluding it takes a deliberate edit with a reason.
+set(CNA_DESCRIPTOR_GATE_SDK_BOUND_FAMILIES directx9)
 
 # Defines the descriptor gate target. Must be called from modules/renderers/CMakeLists.txt, after
 # CNA_SELECTED_RENDERER_FAMILIES has been established.

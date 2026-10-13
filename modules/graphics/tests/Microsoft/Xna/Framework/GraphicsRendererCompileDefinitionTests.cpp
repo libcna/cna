@@ -27,9 +27,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_STUB
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_DIRECTX11
-    ++enabled;
-#endif
     // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this
     // file's own history ever added a D3D9 entry here (found 2026-07-16 while merging
     // feature/sdlgpu). The full unfiltered CnaTests suite was never run under

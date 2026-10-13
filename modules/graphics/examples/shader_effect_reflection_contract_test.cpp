@@ -56,9 +56,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-#if defined(CNA_RENDERER_DIRECTX11)
-    constexpr const char* kRendererName = "D3D11";
-#elif defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
 #else
 #error "ShaderEffect reflection contract requires EasyGL or DirectX 11"

@@ -57,10 +57,7 @@ namespace
 // the GL PROFILE rather than of the renderer identity: EasyGL adapts one ES 3.00 source per
 // profile, and GL_TEXTURE_LOD_BIAS exists only on the desktop core profile -- the ES 3 profiles
 // have no such sampler parameter (docs/sampler-state-support.md).
-#if defined(CNA_RENDERER_DIRECTX11)
-    constexpr const char* kRendererName = "D3D11";
-    constexpr bool kLodBiasIsRepresentable = true;
-#elif defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
 #  if defined(CNA_GL_PROFILE_OPENGL33)
     constexpr bool kLodBiasIsRepresentable = true;

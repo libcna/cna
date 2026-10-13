@@ -836,12 +836,10 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
 
 TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract)
 {
-    // WINCLOSE-0013: DirectX11's ClassifyTexture3DFormatEXT states this same contract.
     // plans/plan_apple_m4.md AM4-147: Metal joined once its volume stored every uncompressed
     // classic format natively.
-    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Metal))
-        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL, DirectX11 "
-                        "and Metal";
+    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, Metal))
+        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL and Metal";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -857,15 +855,6 @@ TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContr
              SurfaceFormat::HdrBlendable})
     {
         SCOPED_TRACE(static_cast<int>(format));
-        // WINCLOSE-0016: DirectX11 verifies the optional B4G4R4A4_UNORM per device, and a device
-        // that does not keep its texels refuses Bgra4444 -- loudly, which is the contract too.
-        if (CNA_RENDERER_IS(DirectX11) && format == SurfaceFormat::Bgra4444 &&
-            device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)) ==
-                RendererFormatVerdict::Unsupported)
-        {
-            EXPECT_THROW(Texture3D(device, 2, 2, 2, false, format), System::NotSupportedException);
-            continue;
-        }
         // AM4-147: a Metal device without the packed 16-bit formats (not an Apple GPU) refuses
         // them for a volume exactly as it does for a Texture2D.
         if (CNA_RENDERER_IS(Metal) && !MetalMustStoreCubeOrVolumeFormat(device, format))

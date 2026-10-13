@@ -71,7 +71,6 @@ namespace CNA
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::DirectX9:
-            case GraphicsRendererType::DirectX11:
                 return GraphicsBackendMaturity::Production;
 
             case GraphicsRendererType::WebGL2:

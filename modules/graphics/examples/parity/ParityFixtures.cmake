@@ -186,6 +186,10 @@ set(CNA_CONFORMANCE_FIXTURES
     # missing their shader inputs render or refuse at the draw, never draw nothing and report
     # success.
     stock_effect_unsupplied_input
+    # from renderer_capability_truth_test.cpp (DX-211): a capability answer agrees with what the
+    # device does -- MSAA with the samples a four-sample Reset applies, the derived entries with
+    # their sources.
+    capability_truth
 )
 
 # Builds and registers every fixture for one renderer.

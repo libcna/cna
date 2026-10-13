@@ -61,11 +61,11 @@ cat > "${script}" <<EOF
 set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")
 set(CNA_APPLE_IOS ON)
-cna_apple_validate_renderer("DIRECTX11")
+cna_apple_validate_renderer("DIRECTX9")
 message(STATUS "PROBE-REACHED-END")
 EOF
 if refusal="$(cmake -P "${script}" 2>&1)"; then
-    echo "FAIL: DIRECTX11 was accepted for iOS" >&2
+    echo "FAIL: DIRECTX9 was accepted for iOS" >&2
     exit 1
 fi
 grep -q "CNA_APPLE_ALLOW_UNVALIDATED_RENDERER" <<< "${refusal}" || {

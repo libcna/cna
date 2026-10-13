@@ -170,10 +170,6 @@ namespace
     // D3DUSAGE_RENDERTARGET cube texture and GetMultiSampleCount() reports 0 by construction.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, false,
                                  Support::Exact, false, true};
-#elif defined(CNA_RENDERER_DIRECTX11)
-    // Already correct: a six-slice DXGI_SAMPLE_DESC array with one Texture2DMSArray RTV per slice.
-    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true,
-                                 Support::Exact, false, false};
 #elif defined(CNA_RENDERER_METAL)
     // plans/plan_apple_m4.md AM4-141: a multisampled cube face renders into that face's own 2D
     // multisample texture and resolves into the cube's slice.

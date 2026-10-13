@@ -667,9 +667,11 @@ if(CNA_BUILD_TESTS)
     )
     target_link_libraries(cna_c_api_renderer_environment_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_renderer_environment_smoke)
-    set(_cna_absent_renderer METAL)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" OR "METAL" IN_LIST CNA_GRAPHICS_RENDERERS)
-        set(_cna_absent_renderer DIRECTX11)
+    # DIRECTX9 builds only for Windows and WEBGL2 only for Emscripten, so one of them is always
+    # a real renderer this build does not contain.
+    set(_cna_absent_renderer DIRECTX9)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" OR "DIRECTX9" IN_LIST CNA_GRAPHICS_RENDERERS)
+        set(_cna_absent_renderer WEBGL2)
     endif()
     # "retired": a configuration naming a renderer CNA has retired is refused, never mapped onto
     # another renderer (docs/removed-renderers.md).

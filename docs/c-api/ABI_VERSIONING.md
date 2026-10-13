@@ -2,16 +2,17 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.48.0** (`RRC-031`, the 2026-10-13 retirement). It **retires
-the public renderer identity `VULKAN` (`8`)** together with the constant
-`CNA_GRAPHICS_RENDERER_VULKAN` that named it (`docs/removed-renderers.md`). The value is permanently
-reserved: every route that takes a `CNA_GraphicsRendererType` refuses it with
-`CNA_RESULT_INVALID_ARGUMENT`, and `cna_graphics_renderer_set_preferred_by_name_ext("VULKAN")`
-refuses the name with an error that says the renderer was retired. `CNA_GRAPHICS_RENDERER_MAXIMUM`
-stays `43` (`FNA3D`) and the next new identity still takes `52`. No route, structure, field,
-capability bit or exported symbol changes (3,205 exports), and no surviving identity is renumbered.
-What breaks is a binding that names the removed constant; the `0.x` rule below takes this minor
-increment, these release notes and an updated baseline.
+The current experimental ABI is **0.48.0** (`RRC-031`..`RRC-034`, the 2026-10-13 retirement). It
+**retires the public renderer identities `VULKAN` (`8`) and `DIRECTX11` (`14`)** together with the
+constants `CNA_GRAPHICS_RENDERER_VULKAN` and `CNA_GRAPHICS_RENDERER_DIRECTX11` that named them
+(`docs/removed-renderers.md`). The values are permanently reserved: every route that takes a
+`CNA_GraphicsRendererType` refuses them with `CNA_RESULT_INVALID_ARGUMENT`, and
+`cna_graphics_renderer_set_preferred_by_name_ext` refuses each name with an error that says the
+renderer was retired. `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`) and the next new
+identity still takes `52`. No route, structure, field, capability bit or exported symbol changes
+(3,205 exports), and no surviving identity is renumbered. What breaks is a binding that names a
+removed constant; the `0.x` rule below takes this minor increment, these release notes and an
+updated baseline.
 
 ### Previous ABI 0.47.0
 

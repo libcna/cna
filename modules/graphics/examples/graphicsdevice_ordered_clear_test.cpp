@@ -208,10 +208,6 @@ namespace
     constexpr Contract kContract{"DIRECTX9", true, true, true, true, true,
                                  true, true, true,
                                  true, true, false, false, false, true, true};
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr Contract kContract{"DIRECTX11", true, true, true, true, true,
-                                 true, true, true,
-                                 true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_METAL)
     constexpr Contract kContract{"METAL", true, true, true, true, true,
                                  true, true, true,

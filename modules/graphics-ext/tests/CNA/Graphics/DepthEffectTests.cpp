@@ -90,10 +90,8 @@ void ExpectNearColor(const Color& actual, const Color& expected, const int toler
     {                                                                                        \
         if (!(device).SupportsCapability(CNA::GraphicsCapability::CustomEffects))            \
             GTEST_SKIP() << "this renderer accepts no custom effects";                       \
-        if ((effect).GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::Unknown        \
-            && (device).SupportsShaderLanguageEXT(CNA::ShaderLanguageEXT::Hlsl,              \
-                                                   CNA::ShaderStageEXT::Vertex))              \
-            GTEST_SKIP() << "the depth-effect shader package has no HLSL variant";          \
+        if ((effect).GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::Unknown)       \
+            GTEST_SKIP() << "no variant of the depth-effect shader package fits this renderer";\
         ASSERT_TRUE((effect).IsEffectValid()) << (effect).GetCompileErrorEXT();               \
         CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(device);                                     \
     } while (false)

@@ -36,9 +36,7 @@ using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
 
 namespace
 {
-#if defined(CNA_RENDERER_DIRECTX11)
-    constexpr const char* kRendererName = "D3D11";
-#elif defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
 #elif defined(CNA_RENDERER_METAL)
     constexpr const char* kRendererName = "Metal";

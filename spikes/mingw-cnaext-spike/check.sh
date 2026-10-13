@@ -42,7 +42,7 @@ INC=(
 BASE=(-DCNA_CNAEXT -DSHARP_RUNTIME_HAS_NATIVE_INT128=1 -DXNA5 -DCNA_GL_PROFILE_OPENGLES3)
 
 fail=0
-for renderer in DIRECTX11 DIRECTX9; do
+for renderer in DIRECTX9; do
     echo "== CNA_RENDERER_$renderer =="
     for src in "$REPO"/modules/graphics-ext/src/*.cpp; do
         if ! $LAUNCHER "$CXX" -std=c++23 -fsyntax-only -Wall -Wextra -Wno-unused-parameter \
@@ -70,7 +70,7 @@ done
 echo "== MSVC-shaped min/max =="
 minmax_log="$(mktemp)"
 trap 'rm -f "$minmax_log"' EXIT
-$LAUNCHER "$CXX" -std=c++23 -fsyntax-only "${BASE[@]}" -DCNA_RENDERER_DIRECTX11 "${INC[@]}" \
+$LAUNCHER "$CXX" -std=c++23 -fsyntax-only "${BASE[@]}" -DCNA_RENDERER_DIRECTX9 "${INC[@]}" \
         "$REPO/spikes/mingw-cnaext-spike/msvc_minmax_collisions.cpp" >"$minmax_log" 2>&1 || true
 # Score on where the diagnostics *originate*, not on which files appear in the "In file included
 # from" chains -- every engine-layer header appears in those chains by construction, so matching

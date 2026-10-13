@@ -267,7 +267,7 @@ renderers/{sdl-renderer,sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
    per-frame is a review rejection.
 5. **Every public renderer identity keeps working throughout.** No task may reduce renderer
    coverage. Every renderer migration task names the exact renderer(s) it touches and rebuilds
-   them. There are **13 public renderer identities** over **11 implementation families** today;
+   them. There are **12 public renderer identities** over **10 implementation families** today;
    the plan was written against 46 identities, which grew to 50 and then shrank to 25 when
    `plans/plan_renderer_cleanup.md` retired 25 of them (the `ASCII` identity had already been
    withdrawn in favour of a renderer-neutral post-process effect), to 22 when `RRC-012`

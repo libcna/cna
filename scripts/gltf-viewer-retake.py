@@ -165,9 +165,9 @@ def mask_metrics(reference_path: Path, cna_path: Path) -> dict[str, float | int]
 def terminal_error(output: str) -> str:
     """The viewer's own diagnostic if it printed one, else the tail of whatever did run.
 
-    A single last line is not enough when the failing process is a *wrapper*: run-wine-dxvk.sh
-    reports its own refusals before exiting, and the last line is then /usr/bin/time's summary,
-    which says nothing. Fall back to the last few lines so the cause is in the message.
+    A single last line is not enough when the failing process is wrapped: the last line is then
+    /usr/bin/time's summary, which says nothing. Fall back to the last few lines so the cause is in
+    the message.
     """
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     for line in reversed(lines):
@@ -176,42 +176,17 @@ def terminal_error(output: str) -> str:
     return " | ".join(lines[-5:]) if lines else ""
 
 
-def wine_path(path: Path) -> str:
-    """Return an absolute path through Wine's standard Z: mapping."""
-    return "Z:" + str(path.resolve()).replace("/", "\\")
-
-
 def run_viewer(viewer: Path, asset: Path, png: Path,
-               arguments: tuple[str, ...], timeout: int,
-               viewer_runner: Path | None = None,
-               windows_paths: bool = False) -> dict[str, Any]:
+               arguments: tuple[str, ...], timeout: int) -> dict[str, Any]:
     environment = dict(os.environ)
-    if windows_paths:
-        # A Windows viewer under Wine must be left to pick its own video driver: forcing x11 makes
-        # SDL refuse the subsystem outright, and LIBGL_ALWAYS_SOFTWARE means nothing to D3D11.
-        # DXVK_LOG_LEVEL=info is what run-wine-dxvk.sh needs to fail closed against a silent
-        # WineD3D fallback, and the virtual-desktop trampoline is forwarded because plain Xvfb is
-        # not enumerated as a Windows monitor by every Wine/SDL combination. Same contract as the
-        # whole-corpus gate's DIRECTX11/DXVK branch.
-        environment.update({
-            "SDL_AUDIODRIVER": "dummy",
-            "DXVK_LOG_LEVEL": "info",
-        })
-        if os.environ.get("CNA_D3D11_VIRTUAL_DESKTOP"):
-            environment["CNA_D3D11_VIRTUAL_DESKTOP"] = os.environ["CNA_D3D11_VIRTUAL_DESKTOP"]
-    else:
-        environment.update({
-            "SDL_VIDEODRIVER": "x11",
-            "SDL_AUDIODRIVER": "dummy",
-            "LIBGL_ALWAYS_SOFTWARE": "1",
-        })
+    environment.update({
+        "SDL_VIDEODRIVER": "x11",
+        "SDL_AUDIODRIVER": "dummy",
+        "LIBGL_ALWAYS_SOFTWARE": "1",
+    })
     command = [
         "/usr/bin/time", "-f", "CNA_TIME elapsed=%e maxRssKiB=%M",
-        *([str(viewer_runner)] if viewer_runner is not None else []),
-        str(viewer),
-        wine_path(asset) if windows_paths else str(asset),
-        "--direct", "--capture",
-        wine_path(png) if windows_paths else str(png),
+        str(viewer), str(asset), "--direct", "--capture", str(png),
         "--reference-capture", *arguments,
     ]
     started = time.monotonic()
@@ -434,11 +409,6 @@ def main() -> int:
                         help="empty directory for disposable PNGs and sidecars")
     parser.add_argument("--report-out", type=Path,
                         help="optional aggregate JSON report path")
-    parser.add_argument("--viewer-runner", type=Path,
-                        help="executable prepended to the viewer command, for a viewer that is not "
-                             "a native binary (scripts/run-wine-dxvk.sh for the MinGW DirectX11 "
-                             "build). Asset and capture paths are then passed through Wine's Z: "
-                             "mapping, exactly as the whole-corpus gate does.")
     parser.add_argument("--goldens", type=Path,
                         help="renderer-owned L7 golden directory (default: tests/gltf-l7/easygl). "
                              "Gate C must run on more than one renderer (plans/plan_gltf.md §27.2 row 12) "
@@ -462,15 +432,8 @@ def main() -> int:
         parser.error("--timeout must be positive")
     if not os.environ.get("DISPLAY"):
         raise RuntimeError("DISPLAY is unset; run this harness below xvfb-run -a")
-    viewer_runner = args.viewer_runner.resolve() if args.viewer_runner else None
-    if viewer_runner is not None and (
-        not viewer_runner.is_file() or not os.access(viewer_runner, os.X_OK)
-    ):
-        raise RuntimeError(f"viewer runner is not executable: {viewer_runner}")
-    # A cross-compiled .exe is not executable on this host; the runner is what executes it.
-    if not viewer.is_file() or (viewer_runner is None and not os.access(viewer, os.X_OK)):
+    if not viewer.is_file() or not os.access(viewer, os.X_OK):
         raise RuntimeError(f"viewer is not executable: {viewer}")
-    windows_paths = viewer_runner is not None
     if not Path("/usr/bin/time").is_file():
         raise RuntimeError("/usr/bin/time is required for retake timing evidence")
     require_revision(renderer, PINNED_RENDERER_COMMIT, "reference renderer")
@@ -530,12 +493,10 @@ def main() -> int:
                 reference_png = output / f"{case.case_id}.reference.png"
                 raw_metadata = output / f"{case.case_id}.reference.raw.json"
                 first = run_viewer(
-                    viewer, asset, first_png, case.viewer_arguments, args.timeout,
-                    viewer_runner, windows_paths
+                    viewer, asset, first_png, case.viewer_arguments, args.timeout
                 )
                 second = run_viewer(
-                    viewer, asset, second_png, case.viewer_arguments, args.timeout,
-                    viewer_runner, windows_paths
+                    viewer, asset, second_png, case.viewer_arguments, args.timeout
                 )
                 if first_png.read_bytes() != second_png.read_bytes():
                     raise RuntimeError(
@@ -576,8 +537,7 @@ def main() -> int:
                 if case.contrast_arguments is not None:
                     contrast_png = output / f"{case.case_id}.contrast.png"
                     contrast_run = run_viewer(
-                        viewer, asset, contrast_png, case.contrast_arguments, args.timeout,
-                        viewer_runner, windows_paths
+                        viewer, asset, contrast_png, case.contrast_arguments, args.timeout
                     )
                     if first_png.read_bytes() == contrast_png.read_bytes():
                         raise RuntimeError(

@@ -329,15 +329,15 @@ target_compile_options(cna_project_options INTERFACE
     "$<$<CXX_COMPILER_ID:MSVC>:/utf-8;/bigobj>")
 
 # plans/plan_win32_native_validation.md WINNATIVE-0009. <windows.h> -- reached here through
-# <d3d11.h>, <d3d12.h>, <dxgi.h> and every other Windows SDK header -- defines min and max as
+# <d3d9.h> and every other Windows SDK header -- defines min and max as
 # function-like macros unless NOMINMAX is defined first. Every std::max(...) in a translation unit
 # that includes one is then parsed as a macro invocation:
 #
-#   D3D11RenderTargets.cpp(33): error C2589: '(': illegal token on right side of '::'
+#   error C2589: '(': illegal token on right side of '::'
 #
 # This never appeared in the MinGW cross-builds because mingw-w64's libstdc++ defines NOMINMAX for
-# you in os_defines.h. The Microsoft toolchain does not, so the first native-MSVC build of the
-# DirectX 11 renderer failed on it in four files. Declared once, here, beside /utf-8, rather than
+# you in os_defines.h. The Microsoft toolchain does not, so the first native-MSVC build of a
+# Windows renderer failed on it in four files. Declared once, here, beside /utf-8, rather than
 # in each renderer that happens to include a Windows header. WIN32_LEAN_AND_MEAN is deliberately
 # NOT set -- it removes whole headers rather than two macros, and some CNA code legitimately wants
 # what it excludes.
@@ -478,9 +478,9 @@ set(_cna_framework_modules
     content-pipeline storage
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
-    directx9 directx11 easygl fna3d headless
-    metal sdl-gpu sdl-renderer software stub vulkan webgpu
-    common/d3d common/mojoshader)
+    directx9 easygl fna3d headless
+    metal sdl-gpu sdl-renderer software stub webgpu
+    common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
 string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"

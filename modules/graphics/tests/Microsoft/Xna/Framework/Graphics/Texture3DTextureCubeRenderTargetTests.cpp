@@ -227,7 +227,7 @@ namespace
         // (SdlGpuRenderTargetCubeRenderer::SetData -> UploadTargetRegion).
         // plans/plan_apple_m4.md AM4-147: and Metal's single-sampled cube target, through the
         // plain cube's replace-and-preserve upload (MetalRenderTargetCubeUploadSupported).
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, SdlGpu,
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, SdlGpu,
                                Metal);
     }
 }
@@ -286,7 +286,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
 // their round trip in their own suites.
 TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, DirectX11, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, Metal);
 
     GraphicsDevice gd;
     RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,

@@ -206,6 +206,9 @@ _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
 #if defined(CNA_GRAPHICS_RENDERER_VULKAN)
 #error "CNA_GRAPHICS_RENDERER_VULKAN names a retired renderer and must not be defined"
 #endif
+#if defined(CNA_GRAPHICS_RENDERER_DIRECTX11)
+#error "CNA_GRAPHICS_RENDERER_DIRECTX11 names a retired renderer and must not be defined"
+#endif
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
                    CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12) &&
                    CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS == UINT32_C(13) &&

@@ -586,6 +586,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "Option_OPENGLES2|OPTION|OPENGLES2|REFUSE|removed-renderers.md"
         "LiveSetMemberAccepted_WEBGL2|SET|WEBGL2|ACCEPT|"
         "SetMember_VULKAN|SET|VULKAN|REFUSE|removed-renderers.md"
+        "Option_DIRECTX11|OPTION|DIRECTX11|REFUSE|removed-renderers.md"
         "LiveSelectorAccepted_SDL_GPU|SELECTOR|SDL_GPU|ACCEPT|"
         "LiveSelectorAccepted_FNA3D|SELECTOR|FNA3D|ACCEPT|"
         "LiveSetMemberAccepted_STUB|SET|STUB|ACCEPT|"

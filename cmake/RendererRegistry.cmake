@@ -35,7 +35,6 @@ function(_cna_renderer_identity_map out_var)
         HEADLESS     Headless
         SOFTWARE     Software
         STUB         Stub
-        DIRECTX11    DirectX11
         DIRECTX9     DirectX9
         SDL_GPU      SdlGpu
         METAL        Metal

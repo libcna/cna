@@ -26,7 +26,6 @@ option(CNA_RENDERER_SOFTWARE "Enable Software (CPU rasterizer) graphics renderer
 # validation modes/counters or SOFTWARE's real CPU rasterizer). Named "Stub" rather than "Null" to
 # avoid colliding with the <cstddef>/<cstdlib> NULL macro (see plans/plan_stub.md's naming section).
 option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
-option(CNA_RENDERER_DIRECTX11 "Enable Direct3D 11 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
 
@@ -114,12 +113,9 @@ if(CNA_PLATFORM STREQUAL "TERMINAL" AND NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_t
         "Choose a CPU renderer: ${_cna_terminal_renderers_text}.")
 endif()
 
-# plans/plan_dx.md design decision 2: DIRECTX11 genuinely cannot build anywhere but Windows (native or
-# MinGW/MSVC cross-compile) -- d3d11.h/dxgi.h do not exist elsewhere, so this is a hard
-# FATAL_ERROR. plans/plan_dx9.md design decision 1 extends this same gate to DIRECTX9 (d3d9.h is
-# equally Windows-only).
-if((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
-        AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+# plans/plan_dx9.md design decision 1: DIRECTX9 genuinely cannot build anywhere but Windows (native
+# or MinGW/MSVC cross-compile) -- d3d9.h does not exist elsewhere, so this is a hard FATAL_ERROR.
+if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_RENDERER} renderer only builds when targeting Windows. Either build "
         "natively on Windows, or cross-compile from Linux with "
@@ -288,21 +284,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "STUB")
     set(RENDERER_TARGET "cna_renderer_stub")
     list(APPEND _cna_identity_defines CNA_RENDERER_STUB)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_STUB")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
-    message(STATUS "CNA: Using DIRECTX11 graphics renderer")
-    set(RENDERER_DIR "modules/renderers/directx11")
-    set(RENDERER_TARGET "cna_renderer_directx11")
-    list(APPEND _cna_identity_defines CNA_RENDERER_DIRECTX11)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_DIRECTX11")
-    # plans/plan_fx.md FX-063: MojoShader ships a native D3D11 adapter, but remains an optional
-    # dependency for builds that do not execute compiled XNA Effect Framework bytecode.
-    option(CNA_DIRECTX11_COMPILED_EFFECTS
-           "Build DirectX 11 support for compiled XNA Effect bytecode (plans/plan_fx.md FX-063)" OFF)
-    if(CNA_DIRECTX11_COMPILED_EFFECTS)
-        include(cmake/ThirdPartyFNA3D.cmake)
-        cna_configure_mojoshader()
-        add_compile_definitions(CNA_DIRECTX11_COMPILED_EFFECTS)
-    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     message(STATUS "CNA: Using DIRECTX9 graphics renderer")
     set(RENDERER_DIR "modules/renderers/directx9")

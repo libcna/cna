@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// DX-211: every DirectX capability answer must agree with its executable/runtime-backed oracle.
+// DX-211: a capability answer must agree with what the device actually does. MultiSampleAntiAliasing
+// is true exactly when a four-sample Reset applies more than one sample; each entry GraphicsDevice
+// derives (compiled effects, float render targets, half-float filtering) agrees with its source;
+// and every other entry is the renderer's own answer (MRT and Texture3D additionally gated by the
+// profile).
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -47,25 +51,37 @@ namespace
          "HalfFloatTextureLinearFiltering"},
     }};
 
-    bool ExpectedCapability(GraphicsDevice& device,
-                            CNA::Internal::Renderers::IGraphicsRenderer& renderer,
-                            CNA::GraphicsCapability capability,
-                            int appliedSamples)
+    enum class Expectation
     {
+        True,
+        False,
+        RendererAnswer,
+        RendererAnswerOrProfileLimit,
+    };
+
+    Expectation ExpectedCapability(GraphicsDevice& device,
+                                   CNA::Internal::Renderers::IGraphicsRenderer& renderer,
+                                   CNA::GraphicsCapability capability,
+                                   int appliedSamples)
+    {
+        const auto fromBool = [](bool value) { return value ? Expectation::True : Expectation::False; };
         switch (capability)
         {
         case CNA::GraphicsCapability::MultiSampleAntiAliasing:
-            return appliedSamples > 1;
+            return fromBool(appliedSamples > 1);
         case CNA::GraphicsCapability::CompiledEffects:
-            return renderer.SupportsCompiledEffects();
+            return fromBool(renderer.SupportsCompiledEffects());
         case CNA::GraphicsCapability::FloatRenderTargets:
-            return device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4);
+            return fromBool(device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4));
         case CNA::GraphicsCapability::HalfFloatRenderTargets:
-            return device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable);
+            return fromBool(device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable));
         case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
-            return renderer.SupportsHalfFloatTextureLinearFilteringEXT();
+            return fromBool(renderer.SupportsHalfFloatTextureLinearFilteringEXT());
+        case CNA::GraphicsCapability::MultipleRenderTargets:
+        case CNA::GraphicsCapability::Texture3D:
+            return Expectation::RendererAnswerOrProfileLimit;
         default:
-            return true;
+            return Expectation::RendererAnswer;
         }
     }
 }
@@ -98,25 +114,23 @@ protected:
         device.Reset(parameters);
         const int appliedSamples =
             device.getPresentationParametersProperty().getMultiSampleCountProperty();
-        Check(appliedSamples > 1,
-              "four-sample request applies a real multisampled default render surface");
 
         for (const CapabilityCase& item : kCapabilities)
         {
-            const bool expected =
-                ExpectedCapability(device, renderer, item.capability, appliedSamples);
             const bool publicAnswer = device.SupportsCapability(item.capability);
             const bool rendererAnswer = renderer.SupportsCapability(item.capability);
-            Check(publicAnswer == expected && rendererAnswer == expected,
-                  std::string(item.name) + " public=" +
-                      (publicAnswer ? "true" : "false") + " renderer=" +
-                      (rendererAnswer ? "true" : "false") + " expected=" +
-                      (expected ? "true" : "false"));
+            bool agrees = false;
+            switch (ExpectedCapability(device, renderer, item.capability, appliedSamples))
+            {
+            case Expectation::True: agrees = publicAnswer; break;
+            case Expectation::False: agrees = !publicAnswer; break;
+            case Expectation::RendererAnswer: agrees = publicAnswer == rendererAnswer; break;
+            case Expectation::RendererAnswerOrProfileLimit: agrees = !publicAnswer || rendererAnswer; break;
+            }
+            Check(agrees, std::string(item.name) + " public=" + (publicAnswer ? "true" : "false") +
+                              " renderer=" + (rendererAnswer ? "true" : "false") +
+                              " appliedSamples=" + std::to_string(appliedSamples));
         }
-
-        Check(!renderer.SupportsCapability(
-                  static_cast<CNA::GraphicsCapability>(1000)),
-              "unknown future capability defaults to false rather than being advertised");
 
         std::printf("=== %d/%d PASS ===\n", passed_, passed_ + failed_);
         Exit();

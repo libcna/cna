@@ -391,7 +391,7 @@ namespace
     };
 }
 
-#if defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SOFTWARE)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
 // colours, one framebuffer snapshot. A triangle-list approximation of this draw fills the whole

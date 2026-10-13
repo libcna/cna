@@ -108,7 +108,6 @@ IDENTITIES = [
     ("HEADLESS", "Headless", 11),
     ("SOFTWARE", "Software", 12),
     ("STUB", "Stub", 13),
-    ("DIRECTX11", "DirectX11", 14),
     ("DIRECTX9", "DirectX9", 22),
     ("SDL_GPU", "SdlGpu", 31),
     ("METAL", "Metal", 42),
@@ -120,7 +119,7 @@ IDENTITIES = [
 # different semantics -- so this table only ever grows. SKIA (19) was retired in 2026-08; twenty-five
 # more on 2026-09-17, DIRECT2D (16), FREEDIRECT (21) and PORTABLEGL (46) on 2026-09-27, and
 # HTML_DOM (18), OPENGL4 (33), GDI (40) and SVG_DOM (44) on 2026-09-28, and OPENGLES2 (2),
-# WEBGL1 (5), DIRECTX12 (15) and CANVAS (17) on 2026-10-06, and VULKAN (8) on 2026-10-13
+# WEBGL1 (5), DIRECTX12 (15) and CANVAS (17) on 2026-10-06, and VULKAN (8) and DIRECTX11 (14) on 2026-10-13
 # (docs/removed-renderers.md).
 #
 # It is pinned here as well as in cmake/RendererIdentities.cmake on purpose. The CMake list exists
@@ -129,7 +128,7 @@ IDENTITIES = [
 # precedent is concrete: eleven identities were retired on 2026-08-30 and restored on 2026-09-04,
 # and nothing mechanical would have stopped that restoration from taking different numbers.
 RETIRED_IDENTITIES = {
-    "OPENGLES2": 2, "WEBGL1": 5, "BGFX": 7, "VULKAN": 8, "MAGNUM": 10, "DIRECTX12": 15, "DIRECT2D": 16,
+    "OPENGLES2": 2, "WEBGL1": 5, "BGFX": 7, "VULKAN": 8, "MAGNUM": 10, "DIRECTX11": 14, "DIRECTX12": 15, "DIRECT2D": 16,
     "CANVAS": 17, "HTML_DOM": 18, "SKIA": 19, "BLEND2D": 20,
     "FREEDIRECT": 21, "DIRECTX1": 23, "DIRECTX2": 24, "DIRECTX3": 25, "DIRECTX5": 26,
     "DIRECTX6": 27, "DIRECTX7": 28, "DIRECTX8": 29, "DIRECTX10": 30, "OPENGLES1": 32,

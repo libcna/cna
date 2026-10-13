@@ -120,8 +120,8 @@ namespace CNA
         /// than that the name is unknown. The same list, with each name's permanently reserved C
         /// ABI value, is cmake/RendererIdentities.cmake's CNA_RENDERER_RETIRED_IDENTITIES;
         /// scripts/check_renderer_identities.py holds the two equal (docs/removed-renderers.md).
-        constexpr std::array<std::string_view, 38> RetiredRendererNames{
-            "OPENGLES2", "WEBGL1", "BGFX", "VULKAN", "MAGNUM", "DIRECTX12", "DIRECT2D", "CANVAS",
+        constexpr std::array<std::string_view, 39> RetiredRendererNames{
+            "OPENGLES2", "WEBGL1", "BGFX", "VULKAN", "MAGNUM", "DIRECTX11", "DIRECTX12", "DIRECT2D", "CANVAS",
             "HTML_DOM", "SKIA", "BLEND2D", "FREEDIRECT", "DIRECTX1", "DIRECTX2", "DIRECTX3",
             "DIRECTX5", "DIRECTX6", "DIRECTX7", "DIRECTX8", "DIRECTX10", "OPENGLES1", "OPENGL4",
             "OPENGL1", "OPENGL2", "WICKED", "SOKOL", "DILIGENT", "GLIDE", "GDI", "LLGL", "SVG_DOM",

@@ -190,7 +190,7 @@ if (Want 'temp') {
             # A control first, with the machine's own TEMP. A raw failure count from the Unicode
             # run means nothing on its own: much of this corpus fails here for reasons that have
             # no connection to paths -- no FreeType on this machine, no video decoder, and the
-            # D3D11 cascade. What is being measured is the DIFFERENCE between the two runs.
+            # renderer cascade. What is being measured is the DIFFERENCE between the two runs.
             $controlXml = Join-Path $OutDir 'unicode-temp-control.xml'
             & $exe "--gtest_output=xml:$controlXml" "--gtest_filter=$filter" | Out-Null
             $controlFailures = Get-FailureSet $controlXml

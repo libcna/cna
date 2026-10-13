@@ -105,12 +105,7 @@ namespace
 
     // These fragments name the actual null branch (or the preselected default) for each semantic. Whitespace is ignored, but the map/fallback pairing is not: changing a normal
     // slot to white, or any other slot to the flat-normal texture, fails this table.
-    constexpr std::array<RendererAudit, 6> kAudits{{
-        {"directx11",
-         "params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT()",
-         "params.pbrMetallicRoughnessMap ? GetSrvForTextureEXT(params.pbrMetallicRoughnessMap) : GetOrCreateDefaultWhiteSrvEXT()",
-         "params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT()",
-         "params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT()"},
+    constexpr std::array<RendererAudit, 5> kAudits{{
         {"directx9",
          "params.pbrNormalMap, ResolveD3D9TextureEXT(GetOrCreateDefaultFlatNormalTextureEXT())",
          "params.pbrMetallicRoughnessMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT())",
@@ -148,7 +143,7 @@ namespace
         std::array<const char*, 18> evidence;
     };
 
-    constexpr std::array<RendererSlotAudit, 6> kSlotAudits{{
+    constexpr std::array<RendererSlotAudit, 5> kSlotAudits{{
         {"directx9", "sampler registers s0 through s6",
          {{R"(BindPbrSampler(device_.Get(), 0, params.texture0, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
               BindPbrSampler(device_.Get(), 1, params.pbrNormalMap, ResolveD3D9TextureEXT(GetOrCreateDefaultFlatNormalTextureEXT()));
@@ -164,30 +159,6 @@ namespace
               sampler2D OcclusionMap : register(s4);
               sampler2D SpecularMap : register(s5);
               sampler2D SpecularColorMap : register(s6);)"}}},
-        {"directx11", "SRV/sampler registers t0/s0 through t6/s6",
-         {{R"(srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
-                                        : GetOrCreateDefaultWhiteSrvEXT();
-              srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
-              srvs[2] = params.pbrMetallicRoughnessMap ? GetSrvForTextureEXT(params.pbrMetallicRoughnessMap) : GetOrCreateDefaultWhiteSrvEXT();
-              srvs[3] = params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT();
-              srvs[4] = params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT();
-              srvs[5] = params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT();
-              srvs[6] = params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT();)",
-           R"(context_->PSSetShaderResources(0, 13, srvs))",
-           R"(Texture2D uTexture : register(t0);
-              SamplerState uTextureSampler : register(s0);
-              Texture2D uNormalMap : register(t1);
-              SamplerState uNormalMapSampler : register(s1);
-              Texture2D uMetallicRoughnessMap : register(t2);
-              SamplerState uMetallicRoughnessSampler : register(s2);
-              Texture2D uEmissiveMap : register(t3);
-              SamplerState uEmissiveMapSampler : register(s3);
-              Texture2D uOcclusionMap : register(t4);
-              SamplerState uOcclusionMapSampler : register(s4);
-              Texture2D uSpecularMap : register(t5);
-              SamplerState uSpecularMapSampler : register(s5);
-              Texture2D uSpecularColorMap : register(t6);
-              SamplerState uSpecularColorMapSampler : register(s6);)"}}},
         {"easygl", "GL texture units 0,1,2,3,4",
          {{R"(p.prog.set_uniform(p.loc_texture, 0))",
            R"(params.texture0->BindGL(0))",
@@ -270,17 +241,12 @@ namespace
         std::array<const char*, 4> evidence;
     };
 
-    constexpr std::array<RendererAlphaAudit, 6> kAlphaAudits{{
+    constexpr std::array<RendererAlphaAudit, 5> kAlphaAudits{{
         {"directx9", {{
             R"(TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AlphaTest", params.alphaTest))",
             R"(float4 AlphaTest : register(c11))",
             R"(float alphaTestResult = (AlphaTest.y > 0.0))",
             R"(clip(alphaTestResult))"}}},
-        {"directx11", {{
-            R"(const bool needsPbr = params.pbr; const bool needsAlphaTest = !needsPbr)",
-            R"(perDraw.AlphaTest[0] = params.alphaTest[0])",
-            R"(bool passesAlphaTest = (AlphaTest.y > 0.0))",
-            R"(if ((passesAlphaTest ? AlphaTest.z : AlphaTest.w) < 0.0) discard;)"}}},
         {"easygl", {{
             R"(p.prog.set_uniform(p.loc_alphatest, params.alphaTest[0], params.alphaTest[1], params.alphaTest[2], params.alphaTest[3]))",
             R"("uniform vec4 uAlphaTest;\n")",
@@ -311,17 +277,12 @@ namespace
         std::array<const char*, 4> evidence;
     };
 
-    constexpr std::array<RendererPbrScalarAudit, 6> kPbrScalarAudits{{
+    constexpr std::array<RendererPbrScalarAudit, 5> kPbrScalarAudits{{
         {"directx9", {{
             R"(params.pbrNormalScale, params.pbrOcclusionStrength})",
             R"(float4 MetallicRoughnessFactor : register(c3))",
             R"(sampledNormal.xy *= MetallicRoughnessFactor.z;)",
             R"(occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);)"}}},
-        {"directx11", {{
-            R"(perDraw.PbrMapScales[0] = params.pbrNormalScale;)",
-            R"(perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;)",
-            R"(sampledNormal.xy *= PbrMapScales.x;)",
-            R"(occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);)"}}},
         {"easygl", {{
             R"(p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale))",
             R"(p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength))",
@@ -359,7 +320,7 @@ namespace
     // maps. A renderer passes only when it uploads the public draw field, evaluates both rows, and
     // applies slots 0/1/2/3/4 to the corresponding samples. The minimum copy count keeps separately
     // stored rigid/skinned shader variants in lockstep without depending on generated-header copies.
-    constexpr std::array<RendererPbrTextureTransformAudit, 6> kPbrTextureTransformAudits{{
+    constexpr std::array<RendererPbrTextureTransformAudit, 5> kPbrTextureTransformAudits{{
         {"directx9",
          "TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, \"TextureTransformRows\", &params.pbrTextureTransformRows[0][0])",
          "TextureTransformRows[slot * 2 + 1].xyz",
@@ -368,14 +329,6 @@ namespace
            "tex2D(MetallicRoughnessMap, CnaPbrTransformUv(pin.UV, 2))",
            "tex2D(EmissiveMap, CnaPbrTransformUv(pin.UV, 3))",
            "tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4))"}}, 2},
-        {"directx11",
-         "std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows",
-         "TextureTransformRows[slot * 2 + 1].xyz",
-         {{"uTexture.Sample(uTextureSampler, CnaPbrTransformUv(CNA_PBR_UV(0), 0))",
-           "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(CNA_PBR_UV(1), 1))",
-           "uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(CNA_PBR_UV(2), 2))",
-           "uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(CNA_PBR_UV(3), 3))",
-           "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4))"}}, 2},
         {"easygl",
          "const float* values = params.pbrTextureTransformRows[row]",
          "uTextureTransformRows[slot*2+1].xyz",
@@ -424,12 +377,8 @@ namespace
     // transported grazing endpoint instead of silently rebuilding core glTF's constant F90=1.
     // The copy count distinguishes separately stored rigid/skinned fragment programs from backends
     // that share one fragment program.
-    constexpr std::array<RendererPbrFresnelAudit, 6> kPbrFresnelAudits{{
+    constexpr std::array<RendererPbrFresnelAudit, 5> kPbrFresnelAudits{{
         {"directx9",
-         "float3 F0 = lerp(dielectricF0, albedo, metallic)",
-         "float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight), float3(1.0, 1.0, 1.0), metallic)",
-         "float3 F = F0 + (F90 - F0) *", 2},
-        {"directx11",
          "float3 F0 = lerp(dielectricF0, albedo, metallic)",
          "float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 2},
@@ -463,14 +412,10 @@ namespace
     // A shared fragment program needs one copy. Backends that compile distinct rigid and skinned
     // fragment sources need two, so one correct variant cannot hide a stale sibling in aggregate
     // source text. CPU evidence is checked independently below for all three public draw flags.
-    constexpr std::array<RendererPbrColorSpaceAudit, 6> kPbrColorSpaceAudits{{
+    constexpr std::array<RendererPbrColorSpaceAudit, 5> kPbrColorSpaceAudits{{
         {"directx9",
          "lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w)",
          "lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w)",
-         "lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w)", 2},
-        {"directx11",
-         "lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), PbrMapScales.z)",
-         "lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), PbrMapScales.w)",
          "lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w)", 2},
         {"easygl",
          "mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x)",
@@ -507,17 +452,12 @@ namespace
     // EasyGL constructs legacy and dual-UV programs from the same two rigid/skinned builders, so
     // its evidence deliberately includes the selected-UV variable rather than pretending the
     // final shader still contains a hard-coded vUV expression.
-    constexpr std::array<RendererPbrChannelAudit, 6> kPbrChannelAudits{{
+    constexpr std::array<RendererPbrChannelAudit, 5> kPbrChannelAudits{{
         {"directx9",
          "tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0",
          "mr.g * MetallicRoughnessFactor.y",
          "mr.b * MetallicRoughnessFactor.x",
          "tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r", 2},
-        {"directx11",
-         "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(CNA_PBR_UV(1), 1)).rgb * 2.0 - 1.0",
-         "mr.g * EmissiveRoughness.w",
-         "mr.b * AmbientMetallic.w",
-         "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4)).r", 2},
         {"easygl",
          "texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(\" + normalUv + \",1),uRtFlipV.y)).rgb*2.0-1.0",
          "mr.g*uRoughnessFactor",
@@ -553,15 +493,11 @@ namespace
     // emissive is a separate additive factor, and the MR factors are already locked beside their
     // G/B channel reads in kPbrChannelAudits. Copy counts keep separately stored rigid/skinned
     // fragments honest.
-    constexpr std::array<RendererPbrMaterialFactorAudit, 6> kPbrMaterialFactorAudits{{
+    constexpr std::array<RendererPbrMaterialFactorAudit, 5> kPbrMaterialFactorAudits{{
         {"directx9",
          "float3 albedo = baseColor * DiffuseColor.rgb",
          "float alpha = baseColorTex.a * DiffuseColor.a",
          "float3 emissive = EmissiveColor.xyz * emissiveSample", 2},
-        {"directx11",
-         "float3 albedo = baseColor * DiffuseColor.rgb",
-         "float alpha = baseColorTex.a * DiffuseColor.a",
-         "float3 emissive = EmissiveRoughness.xyz * emissiveSample", 2},
         {"easygl",
          "vec3 albedo=baseRGB*uDiffuseColor.rgb",
          "float alpha=baseColorTex.a*uDiffuseColor.a",
@@ -595,19 +531,13 @@ namespace
     // upload it to the PBR carrier, retain World independently for world-space shading, and use
     // the combined matrix for both rigid and post-skin positions. Whitespace is deliberately
     // ignored, but each native carrier/expression remains backend-specific.
-    constexpr std::array<RendererPbrTransformAudit, 6> kPbrTransformAudits{{
+    constexpr std::array<RendererPbrTransformAudit, 5> kPbrTransformAudits{{
         {"directx9",
          "world * view * projection",
          "UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, \"WorldViewProj\", world * view * projection)",
          "UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, \"World\", world)",
          "vout.Position = mul(float4(vin.Position, 1.0), WorldViewProj)",
          "vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj)"},
-        {"directx11",
-         "const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection)",
-         "D3DCommon::D3DPbrPerDrawConstants perDraw{}; wvp.ToColumnMajor(perDraw.Mvp)",
-         "world.ToColumnMajor(perDraw.World)",
-         "output.Position = mul(float4(input.Position, 1.0), Mvp)",
-         "output.Position = mul(skinnedPos, Mvp)"},
         {"easygl",
          "const Matrix wvp = world * view * projection",
          "p.prog.set_uniform_matrix4(p.loc_wvp, wvp_col)",
@@ -648,19 +578,13 @@ namespace
     // GLTF-231/232/379: doubleSided deliberately stays application-owned RasterizerState. This
     // inventory locks the renderer half of that boundary: CullMode::None reaches native no-cull
     // state, and the PBR rigid/skinned route consumes that same dynamic state or pipeline key.
-    constexpr std::array<RendererPbrCullAudit, 6> kPbrCullAudits{{
+    constexpr std::array<RendererPbrCullAudit, 5> kPbrCullAudits{{
         {"directx9", {{
             "case CullMode::None: return D3DCULL_NONE",
             "SetRenderStateCheckedEXT(D3DRS_CULLMODE, CullModeToD3D9(cullMode)",
             "void DirectX9Renderer::DrawPbrEffectEXT(",
             "const bool skinned = params.skinned",
             "device_->DrawIndexedPrimitive(ToD3D9Topology(primitive)"}}},
-        {"directx11", {{
-            "case CullMode::None: return D3D11_CULL_NONE",
-            "desc.CullMode = D3DCommon::CullModeToD3D11(cullMode)",
-            "context_->RSSetState(state.Get())",
-            "variant = params.skinned",
-            "D3DCommon::D3DShaderVariant::PbrSkinned3dDualUv"}}},
         {"easygl", {{
             "if (cullMode == 0) { device.set_cull_face_enabled(false); }",
             "device.set_cull_face(cullMode == 1 ? ::easygl::CullFace::Back : ::easygl::CullFace::Front)",
@@ -703,17 +627,12 @@ namespace
     // formed: the real 72-entry palette reaches the backend, and only the first requested 1/2/4
     // influence pairs contribute. The CPU-upload fragments are PBR-specific where a backend has
     // multiple stock skinning paths; the shader gates are paired with the PBR evidence below.
-    constexpr std::array<RendererPbrSkinningAudit, 6> kPbrSkinningAudits{{
+    constexpr std::array<RendererPbrSkinningAudit, 5> kPbrSkinningAudits{{
         {"directx9",
          "UploadBonesVS(device_.Get(), vsRegs, vsCount, params)",
          "0.0f, 0.0f, 0.0f, static_cast<float>(params.weightsPerVertex)",
          "if (weightsPerVertex >= 2.0) skinning += Bones[vin.BoneIndices.y] * vin.BoneWeights.y",
          "if (weightsPerVertex >= 4.0) skinning += Bones[vin.BoneIndices.z] * vin.BoneWeights.z"},
-        {"directx11",
-         "std::memcpy(bones.Bones, params.boneTransforms",
-         "lights.EyePosWeights[3] = params.skinned ? static_cast<float>(params.weightsPerVertex) : 0.0f",
-         "if (weightsPerVertex >= 2.0) skinMat += Bones[input.BoneIndices.y] * input.BoneWeights.y",
-         "if (weightsPerVertex >= 4.0) skinMat += Bones[input.BoneIndices.z] * input.BoneWeights.z"},
         {"easygl",
          "glUniformMatrix4fv(::metagl::UniformLocation{p.loc_bones}, params.boneCount, 0, params.boneTransforms)",
          "p.prog.set_uniform(p.loc_weightsPerVertex, params.weightsPerVertex)",
@@ -744,8 +663,6 @@ namespace
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
     {
         std::string source = RendererText(renderers / name);
-        if (std::string(name) == "directx11")
-            source += RendererText(renderers / "common" / "d3d");
         return source;
     }
 }
@@ -867,7 +784,7 @@ TEST(GltfRendererPbrFallbackPolicy, RigidAndSkinnedShaderVariantsKeepMatchingPbr
         const char* skinned;
         const char* declarations;
     };
-    constexpr std::array<ShaderPair, 2> pairs{{
+    constexpr std::array<ShaderPair, 1> pairs{{
         {"directx9", "directx9/src/shaders/cna/Pbr3D.hlsl",
          "directx9/src/shaders/cna/PbrSkinned3D.hlsl",
          R"(sampler2D Texture : register(s0);
@@ -877,22 +794,6 @@ TEST(GltfRendererPbrFallbackPolicy, RigidAndSkinnedShaderVariantsKeepMatchingPbr
             sampler2D OcclusionMap : register(s4);
             sampler2D SpecularMap : register(s5);
             sampler2D SpecularColorMap : register(s6);)"},
-        {"directx11", "common/d3d/src/shaders/pbr3d.frag.hlsl",
-         "common/d3d/src/shaders/pbr_skinned3d.frag.hlsl",
-         R"(Texture2D uTexture : register(t0);
-            SamplerState uTextureSampler : register(s0);
-            Texture2D uNormalMap : register(t1);
-            SamplerState uNormalMapSampler : register(s1);
-            Texture2D uMetallicRoughnessMap : register(t2);
-            SamplerState uMetallicRoughnessSampler : register(s2);
-            Texture2D uEmissiveMap : register(t3);
-            SamplerState uEmissiveMapSampler : register(s3);
-            Texture2D uOcclusionMap : register(t4);
-            SamplerState uOcclusionMapSampler : register(s4);
-            Texture2D uSpecularMap : register(t5);
-            SamplerState uSpecularMapSampler : register(s5);
-            Texture2D uSpecularColorMap : register(t6);
-            SamplerState uSpecularColorMapSampler : register(s6);)"},
     }};
 
     for (const ShaderPair& pair : pairs)
@@ -1095,9 +996,8 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererConsumesEveryUniversalPbrDra
     constexpr std::array<const char*, 2> grazingEndpoint{{"pbrDielectricF90", "pbrSpecularFactor"}};
     // The same set the specular partition below covers, so a renderer cannot be visible to one
     // audit and invisible to the other.
-    constexpr std::array<const char*, 6> pbrRenderers{{
-        "directx9", "directx11", "easygl", "metal", "sdl-gpu", 
-        "webgpu",
+    constexpr std::array<const char*, 5> pbrRenderers{{
+        "directx9", "easygl", "metal", "sdl-gpu", "webgpu",
     }};
 
     const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
@@ -1137,8 +1037,8 @@ TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRe
     // Both directions are asserted. A renderer moved into `sampling` without the bindings fails,
     // and so does one that grows them while still listed as factor-only, which is the direction a
     // half-finished backend would otherwise take unnoticed.
-    constexpr std::array<const char*, 6> sampling{{
-        "directx9", "directx11", "easygl", "sdl-gpu", "webgpu", "metal",
+    constexpr std::array<const char*, 5> sampling{{
+        "directx9", "easygl", "sdl-gpu", "webgpu", "metal",
     }};
     // Factor-only is not a capability decision -- it is unfinished work. `webgpu` left this set on
     // 2026-08-18 (`GLTF-344`): its PBR uniform block grew KHR_materials_specular's own inputs -- the
@@ -1234,44 +1134,6 @@ TEST(GltfRendererPbrFallbackPolicy, EasyGLSamplesBothKhrMaterialsSpecularTexture
     {
         EXPECT_GE(CountOccurrences(source, Normalize(shaderEvidence)), 2u)
             << "both rigid and skinned EasyGL PBR shaders must contain: " << shaderEvidence;
-    }
-}
-
-TEST(GltfRendererPbrFallbackPolicy, DirectX11SamplesBothKhrMaterialsSpecularTextures)
-{
-    const std::filesystem::path renderers =
-        RepositoryRoot() / "modules" / "renderers";
-    const std::string dx11 = RendererSlotText(renderers, "directx11");
-    ASSERT_FALSE(dx11.empty());
-
-    for (const char* evidence : {
-             "pbrDielectricF0Unclamped[0]",
-             "pbrSpecularFactor",
-             "pbrSpecularColorTextureIsSrgb",
-             "pbrSpecularTextureTransformRows",
-             "pbrTextureCoordinateSetMask & 0x7fu",
-             "uSpecularMap : register(t5)",
-             "uSpecularColorMap : register(t6)",
-             "CnaPbrSpecularTransformUv(CNA_PBR_UV(5), 0)",
-             "CnaPbrSpecularTransformUv(CNA_PBR_UV(6), 1)"})
-    {
-        EXPECT_NE(std::string::npos, dx11.find(Normalize(evidence)))
-            << "missing DirectX specular state: " << evidence;
-    }
-    EXPECT_GE(CountOccurrences(dx11, Normalize(
-        "min(SpecularFresnelInputs.xyz * specularColorTex, 1.0) * specularWeight")), 2u);
-    EXPECT_GE(CountOccurrences(dx11, Normalize(
-        "lerp(float3(specularWeight, specularWeight, specularWeight), "
-        "float3(1.0, 1.0, 1.0), metallic)")), 2u);
-
-    for (const char* evidence : {
-             "ID3D11ShaderResourceView* srvs[13]",
-             "context_->PSSetShaderResources(0, 13, srvs)",
-             "params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT()",
-             "params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT()"})
-    {
-        EXPECT_NE(std::string::npos, dx11.find(Normalize(evidence)))
-            << "missing DirectX 11 specular binding evidence: " << evidence;
     }
 }
 
@@ -1430,32 +1292,6 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
         EXPECT_EQ(2u, CountOccurrences(easy, Normalize(selector)))
             << "EasyGL rigid/skinned PBR builders must agree on selector: " << selector;
     }
-
-    // GLTF-386 applies the same complete contract to both modern DirectX renderers. Their shared
-    // HLSL keeps distinct DXBC variants so each PSO/input layout matches its authored stride.
-    const std::string directx11 = RendererSlotText(renderers, "directx11");
-    for (const char* evidence : {
-             "stride != 48 && stride != 60",
-             "stride != 68 && stride != 76",
-             "D3DShaderVariant::Pbr3dDualUv",
-             "D3DShaderVariant::PbrSkinned3dDualUv",
-             R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0 })",
-             R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 68, D3D11_INPUT_PER_VERTEX_DATA, 0 })",
-             "static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu)"})
-    {
-        EXPECT_NE(std::string::npos, directx11.find(Normalize(evidence)))
-            << "DirectX11 dual-UV PBR path is missing: " << evidence;
-    }
-    for (std::size_t slot = 0; slot < 7; ++slot)
-    {
-        const std::string sample = "CNA_PBR_UV(" + std::to_string(slot) + ")";
-        EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(sample)))
-            << "DirectX11 rigid/skinned shaders do not select the authored UV set for map slot "
-            << slot;
-    }
-    EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(
-        "int mask = int(TextureCoordinateSets.x + 0.5)")))
-        << "both DirectX11 dual-UV PBR fragment variants must decode the transported selector";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesTheCoreMaterialFactors)
@@ -1611,9 +1447,8 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJoi
         const char* name;
         const char* evidence;
     };
-    constexpr std::array<Audit, 6> audits{{
+    constexpr std::array<Audit, 5> audits{{
         {"directx9", "CnaSkinNormal(skinNormalMat, vin.Normal)"},
-        {"directx11", "CnaSkinNormal(skinNormalMat, input.Normal)"},
         {"easygl", "cnaSkinNormal(skinDirectionMat,aNormal)"},
         {"metal", "normalMat * CNA_INSTANCE_DIRECTION(in, boneNormal)"},   // AM4-143
         {"sdl-gpu", "cnaSkinNormal(skinNormalMat, inNormal)"},
@@ -1672,7 +1507,7 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderConsumesThePaletteAndIn
     // These aggregate-source gates are paired with the PBR-specific inverse-transpose inventory
     // above. Keep its inventory in exact lockstep, so a new backend cannot satisfy the generic
     // weight gates without also proving that its actual PBR path consumes the resulting matrix.
-    static_assert(kPbrSkinningAudits.size() == 6);
+    static_assert(kPbrSkinningAudits.size() == 5);
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsIntoTangentHandedness)
@@ -1683,12 +1518,9 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
         const char* rigid;
         const char* skinned;
     };
-    constexpr std::array<Audit, 6> audits{{
+    constexpr std::array<Audit, 5> audits{{
         {"directx9",
          "vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat)",
-         "* CnaDirectionHandedness(skinNormalMat)"},
-        {"directx11",
-         "input.Tangent.w * CnaDirectionHandedness(worldDirectionMat)",
          "* CnaDirectionHandedness(skinNormalMat)"},
         {"easygl",
          "aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness",
@@ -1720,28 +1552,6 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
     }
 }
 
-TEST(GltfRendererPbrFallbackPolicy, DirectX11KeepsOpaqueWhiteOnlyForThePbrBaseColour)
-{
-    // GLTF-386 bound opaque white for a missing SkinnedEffect texture so the untextured skin-unlit
-    // fixture drew, and DX-230 extended it to BasicEffect. plans/plan_graphics_shared_cleanup.md
-    // GSC-0004 then measured Microsoft XNA 4.0: every classic stock effect samples an unbound texture
-    // as opaque black (tools/xna-oracle/reference/null-texture/). The glTF importer now binds glTF's
-    // own white base colour for such a skin (GltfUnlitMaterial.AnUntexturedSkinSamplesGltfWhite...),
-    // so the renderer keeps white exactly where CNAEXT PBR defines it and nowhere else.
-    const std::string directx11 = RendererText(
-        RepositoryRoot() / "modules" / "renderers" / "directx11");
-    const std::string kOpaqueWhiteTexture0 = Normalize(R"(
-        srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
-                                  : GetOrCreateDefaultWhiteSrvEXT();
-    )");
-    EXPECT_EQ(1u, CountOccurrences(directx11, kOpaqueWhiteTexture0))
-        << "only the PBR base colour may fall back to opaque white; a classic stock effect samples "
-           "XNA's opaque black";
-    EXPECT_EQ(1u, CountOccurrences(directx11, kOpaqueWhiteTexture0 + Normalize(R"(
-        srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
-    )"))) << "the PBR branch specifically must keep the opaque-white texture0 fallback";
-}
-
 // --- plans/plan_gltf.md GLTF-462/GLTF-465: the stride-60 record, per renderer ---------------------------
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60RecordOrIsNamedAsNotYet)
@@ -1762,9 +1572,8 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60Record
 
     // Binds the record through its own stride table. Metal's is the canonical layout of an
     // undeclared buffer; a declared one is bound by its elements (plans/plan_apple_m4.md AM4-084).
-    constexpr std::array<const char*, 7> strideTable{{
-        "directx9", "directx11", "easygl", "software", "sdl-gpu",
-        "webgpu", "metal",
+    constexpr std::array<const char*, 6> strideTable{{
+        "directx9", "easygl", "software", "sdl-gpu", "webgpu", "metal",
     }};
     // No stride-60 row and no declaration path: the record degrades visibly (no attributes, or a
     // refusal) rather than being mis-bound. GLTF-465 owns closing these, and each needs pipeline or
@@ -1826,7 +1635,7 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrRendererEitherBindsTheStride8
     // Binds the record. EasyGL serves five GL profiles; SOFTWARE rasterises it on the CPU; the two
     // D3D families share one input-element table and one HLSL pair, which is why one row each of
     // shared code covers both.
-    constexpr std::array<Stride80Audit, 7> binds{{
+    constexpr std::array<Stride80Audit, 6> binds{{
         {"webgpu", "attributes[6].offset = 76;"},
         // GLTF-465: D3DDECLTYPE_D3DCOLOR is D3D9's own normalized four-byte colour element, read
         // into a float4 COLOR register -- exactly what the importer packs at offset 76.
@@ -1834,7 +1643,6 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrRendererEitherBindsTheStride8
         {"sdl-gpu", "attrs[slot].offset = skinned ? 76 : 56;"},
         {"easygl", "case 80:"},
         {"software", "if (stride == 80) UnpackColorBytes(raw.At(76), out.r, out.g, out.b, out.a);"},
-        {"directx11", "case 80: count = static_cast<UINT>(std::size(kStride80)); return kStride80;"},
         // plans/plan_apple_m4.md AM4-084: the canonical layout of an undeclared stride-80 buffer.
         {"metal", "elements.push_back(VertexElement(76, F::Color, U::Color, 0));"},
     }};
@@ -1902,7 +1710,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // EasyGL serves three GL profiles (OPENGLES3, OPENGL33, WEBGL2), so this is more than one
     // renderer identity; SOFTWARE is the CPU rasteriser, where the same product is evaluated per
     // fragment on the host.
-    constexpr std::array<VertexColourPbrAudit, 7> implemented{{
+    constexpr std::array<VertexColourPbrAudit, 6> implemented{{
         // WebGPU expands one marked WGSL source into a bare and a colour-carrying module, because
         // WGSL rejects a vertex input with no matching attribute (GLTF-465).
         {"webgpu", "let albedo = baseColor * u.diffuseColor.rgb * cnaVertexColor.rgb;"},
@@ -1913,7 +1721,6 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         {"directx9", "albedo *= pin.Color.rgb;"},
         {"sdl-gpu", "vec3 albedo = baseColor * pc.diffuseColor.rgb * cnaVertexColor.rgb;"},
         {"software", "if (stride == 60) UnpackColorBytes(raw.At(56), out.r, out.g, out.b, out.a);"},
-        {"directx11", "albedo *= input.Color.rgb;"},
         // plans/plan_apple_m4.md AM4-084.
         {"metal", "float3 albedo = baseColor * pu.diffuseColor.rgb * cnaVertexColor.rgb;"},
     }};
@@ -1929,7 +1736,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // The multiply is only half of §3.9.2: the same factor applies to the base colour's ALPHA, which
     // is what a BLEND-mode vertex-coloured primitive's transparency comes from. A renderer that
     // multiplied only the RGB would look right on an opaque asset and be wrong on a transparent one.
-    constexpr std::array<VertexColourPbrAudit, 7> alphaProduct{{
+    constexpr std::array<VertexColourPbrAudit, 6> alphaProduct{{
         {"webgpu", "let alpha = baseColorSample.a * u.diffuseColor.a * cnaVertexColor.a;"},
         {"easygl", "alpha=baseColorTex.a*uDiffuseColor.a*cnaVertexColor.a;"},
         {"directx9", "alpha  *= pin.Color.a;"},
@@ -1937,7 +1744,6 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         // SOFTWARE has no separate PBR fragment program: the interpolated vertex colour IS the
         // start of the product, alpha included, and the base colour factor multiplies into it.
         {"software", "float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;"},
-        {"directx11", "alpha *= input.Color.a;"},
         {"metal", "float alpha = baseColorTex.a * pu.diffuseColor.a * cnaVertexColor.a;"},
     }};
     for (const VertexColourPbrAudit& audit : alphaProduct)
@@ -1953,13 +1759,12 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // and stride-80 records always carry a colour slot, so a shader that multiplied unconditionally
     // would be relying on the opaque-white fill rather than on what the effect requested -- and would
     // silently ignore an application that set VertexColorEnabledEXT to false on coloured geometry.
-    constexpr std::array<VertexColourPbrAudit, 7> gate{{
+    constexpr std::array<VertexColourPbrAudit, 6> gate{{
         {"webgpu", "select(vec4f(1.0), input.color, u.light0DiffuseVertexColor.w > 0.5)"},
         {"easygl", "vec4 cnaVertexColor=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"},
         {"directx9", "if (VertexColorFlags.x > 0.5)"},
         {"sdl-gpu", "vec4 cnaVertexColor = (pc.vertexColorEnabled > 0.5) ? fragColor0 : vec4(1.0);"},
         {"software", "params.vertexColorEnabled"},
-        {"directx11", "if (VertexColorFlags.x > 0.5)"},
         // Metal asks when it builds the vertex input: a disabled colour is read from the constant
         // block's opaque white instead of the record, so the shader needs no switch of its own.
         {"metal", "!(params != nullptr && params->vertexColorEnabled && element != nullptr)"},
@@ -1976,11 +1781,10 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
     // The gate is worthless if nothing ever uploads it, and a uniform/constant that no draw writes is
     // exactly the shape of bug this whole audit keeps finding. Each implementing renderer must carry
     // GpuDrawParams::vertexColorEnabled to its own PBR draw.
-    constexpr std::array<VertexColourPbrAudit, 3> upload{{
+    constexpr std::array<VertexColourPbrAudit, 2> upload{{
         {"easygl", "p.loc_vertexcolor"},
         // SDL_GPU's PC block already carried the flag -- its own comment called it "unused".
         {"sdl-gpu", "float vertexColorEnabled; // plans/plan_gltf.md GLTF-465: gates the COLOR_0 product below"},
-        {"directx11", "perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;"},
     }};
     for (const VertexColourPbrAudit& audit : upload)
     {
@@ -2069,8 +1873,8 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrR
 
     // Evaluates the product -- the same set VertexColourReachesTheBaseColourProduct... verifies in
     // detail (RGB, alpha, the enable gate and the uniform upload, per renderer).
-    constexpr std::array<const char*, 7> applies{{
-        "easygl", "software", "directx11", "sdl-gpu", "directx9", "webgpu", "metal",
+    constexpr std::array<const char*, 6> applies{{
+        "easygl", "software", "sdl-gpu", "directx9", "webgpu", "metal",
     }};
     // Refuses the draw through the shared guard. Metal was the last renderer here, until
     // plans/plan_apple_m4.md AM4-084 implemented the product; the guard stays the one way a
@@ -2152,7 +1956,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
     };
     // Each row is the predicate that decides whether a PBR draw of that stride reaches the PBR
     // shader at all -- not the layout it would then be read with.
-    const std::array<RouteGate, 10> gates{{
+    const std::array<RouteGate, 8> gates{{
         {"webgpu", "the rigid PBR stride check", "if (pbrStride != 48 && pbrStride != 60)"},
         {"webgpu", "the skinned PBR stride check",
          "if (skinnedPbrStride != 68 && skinnedPbrStride != 80)"},
@@ -2167,10 +1971,6 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
         {"sdl-gpu", "QueuePbrDraw's own acceptance",
          "const bool acceptable = skinned ? (stride == 68u || stride == 80u)"
          "                                : (stride == 48u || stride == 60u);"},
-        {"directx11", "the rigid PBR stride check",
-         "if (needsPbr && !params.skinned && stride != 48 && stride != 60)"},
-        {"directx11", "the skinned PBR stride check",
-         "if (needsPbr && params.skinned && stride != 68 && stride != 76 && stride != 80)"},
         // An undeclared Metal buffer's route; a declared one selects by its elements.
         {"metal", "the rigid PBR stride check", "if (stride != 48 && stride != 60)"},
         {"metal", "the skinned PBR stride check", "if (stride != 68 && stride != 76 && stride != 80)"},
@@ -2218,7 +2018,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
     for (const RouteGate& gate : gates) { covered.insert(gate.renderer); }
     for (const UngatedRoute& route : ungated) { covered.insert(route.renderer); }
     const std::set<std::string> applies{
-        "easygl", "software", "directx11", "sdl-gpu", "directx9", "webgpu", "metal"};
+        "easygl", "software", "sdl-gpu", "directx9", "webgpu", "metal"};
     EXPECT_EQ(applies, covered)
         << "a renderer listed as applying COLOR_0 has no route-reachability disposition";
 }
@@ -2228,9 +2028,8 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     // A provider has a local CreateIndexBuffer32 implementation. The 2D/no-3D backends
     // deliberately inherit the shared, unconditionally throwing default. Keeping the two sets
     // disjoint makes a new renderer an audit failure, not an accidental 16-bit fallback.
-    constexpr std::array<const char*, 10> providers{{
-        "directx11", "directx9",
-        "easygl", "fna3d", "headless", "metal", "sdl-gpu",
+    constexpr std::array<const char*, 9> providers{{
+        "directx9", "easygl", "fna3d", "headless", "metal", "sdl-gpu",
         "software", "stub", "webgpu",
     }};
     constexpr std::array<const char*, 1> inheritedRejecters{{
@@ -2261,9 +2060,8 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
 
 TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFallBackToSixteenBits)
 {
-    constexpr std::array<const char*, 10> providers{{
-        "directx11", "directx9",
-        "easygl", "fna3d", "headless", "metal", "sdl-gpu",
+    constexpr std::array<const char*, 9> providers{{
+        "directx9", "easygl", "fna3d", "headless", "metal", "sdl-gpu",
         "software", "stub", "webgpu",
     }};
     constexpr std::array<const char*, 1> inheritedRejecters{{
@@ -2309,19 +2107,9 @@ TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSub
                       d3d9,
                       "casePrimitiveType::PointListEXT:returnD3DPT_POINTLIST;"));
 
-    const std::string d3d11 = RendererText(renderers / "directx11");
-    EXPECT_NE(std::string::npos, d3d11.find(
-        "casePrimitiveType::PointListEXT:returnprimitiveCount;"));
-    EXPECT_NE(std::string::npos, d3d11.find(
-        "casePrimitiveType::PointListEXT:returnD3D11_PRIMITIVE_TOPOLOGY_POINTLIST;"));
-
     const std::string pointSuite = Normalize(ReadFile(
         RepositoryRoot() / "modules" / "graphics" / "tests" / "Microsoft" / "Xna" /
         "Framework" / "Graphics" / "PointListPrimitiveTests.cpp"));
-    for (const std::string_view renderer : {"DIRECTX9", "DIRECTX11"})
-    {
-        EXPECT_NE(std::string::npos, pointSuite.find(
-            "defined(CNA_RENDERER_" + std::string(renderer) + ")"))
-            << renderer << " must remain in the shared point framebuffer suite";
-    }
+    EXPECT_NE(std::string::npos, pointSuite.find("defined(CNA_RENDERER_DIRECTX9)"))
+        << "DIRECTX9 must remain in the shared point framebuffer suite";
 }

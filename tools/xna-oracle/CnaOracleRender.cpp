@@ -95,8 +95,6 @@ namespace
         return "D3D9";
 #elif defined(CNA_RENDERER_EASYGL)
         return "EASYGL";
-#elif defined(CNA_RENDERER_DIRECTX11)
-        return "D3D11";
 #elif defined(CNA_RENDERER_WEBGPU)
         return "WEBGPU";
 #elif defined(CNA_RENDERER_SOFTWARE)

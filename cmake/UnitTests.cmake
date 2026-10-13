@@ -528,9 +528,7 @@ if(CNA_BUILD_TESTS)
     endforeach()
     message(STATUS "CNA: focused unit-test targets: ${CNA_FOCUSED_TEST_TARGETS}")
 
-    if(MINGW AND
-       ((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND CNA_DIRECTX9_COMPILED_EFFECTS) OR
-        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" AND CNA_DIRECTX11_COMPILED_EFFECTS)))
+    if(MINGW AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND CNA_DIRECTX9_COMPILED_EFFECTS)
         target_link_options(CnaRendererTests PRIVATE
             -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
         cna_copy_mingw_runtime(CnaRendererTests)
@@ -1082,31 +1080,18 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_build_config INTERFACE easy-gl)
     endif()
 
-    # plans/plan_dx.md DX-15 follow-up + plans/plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
-    # now that CnaTests.exe genuinely builds under the D3D9/D3D11 MinGW cross-targets,
-    # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
-    # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
-    # same at run time. Both need the same Wine wrapper DirectX9_Smoke/DirectX11_Smoke
-    # already use, or every ctest invocation in this build tree fails outright trying to exec a
-    # Windows PE natively on the Linux host. *_SKIP_*_GATE=1 because a bare --gtest_list_tests (or
-    # most individual unit tests) never creates a real graphics device, so the DXVK-presence
-    # gate those wrappers normally enforce would misfire here. MUST be set before
-    # gtest_discover_tests() below -- it reads this property immediately at configure time, not
-    # lazily at generate/test time. `CMAKE_CROSSCOMPILING` is used as the outer guard (equivalent
-    # to `MINGW` for every real build configuration this project uses, since these two renderers
-    # are only ever built via the MinGW cross-toolchain) so a D3D9 branch could be added without
-    # touching D3D11's own already-working invocation style.
-    if(CMAKE_CROSSCOMPILING)
-        if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
-            # D9-123: this renderer's own wrapper takes a simpler `env;VAR=1;script` form (no
-            # `${CMAKE_COMMAND} -E env`/explicit `bash` prefix) -- proven end-to-end for D3D9
-            # (`ctest -L D3D9` green) and for D3D11 when reused verbatim there too (Task 1106).
-            set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
-                "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
-            set_target_properties(CnaTests PROPERTIES
-                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-        endif()
+    # plans/plan_dx9.md D9-123 follow-up: CnaTests.exe builds under the D3D9 MinGW cross-target,
+    # and gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate
+    # tests -- as does any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below)
+    # at run time. Both need the Wine wrapper DirectX9_Smoke already uses, or every ctest
+    # invocation in this build tree fails outright trying to exec a Windows PE natively on the
+    # Linux host. CNA_D3D9_SKIP_DXVK_GATE=1 because a bare --gtest_list_tests (or most individual
+    # unit tests) never creates a real graphics device, so the DXVK-presence gate the wrapper
+    # normally enforces would misfire here. MUST be set before gtest_discover_tests() below -- it
+    # reads this property immediately at configure time, not lazily at generate/test time.
+    if(CMAKE_CROSSCOMPILING AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
+        set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
+            "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
     endif()
 
     include(GoogleTest)

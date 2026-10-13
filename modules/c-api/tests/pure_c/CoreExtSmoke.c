@@ -176,7 +176,6 @@ static const CNA_GraphicsRendererType live_renderer_identities[] = {
         CNA_GRAPHICS_RENDERER_HEADLESS,
         CNA_GRAPHICS_RENDERER_SOFTWARE,
         CNA_GRAPHICS_RENDERER_STUB,
-        CNA_GRAPHICS_RENDERER_DIRECTX11,
         CNA_GRAPHICS_RENDERER_DIRECTX9,
         CNA_GRAPHICS_RENDERER_SDL_GPU,
         CNA_GRAPHICS_RENDERER_METAL,
@@ -187,7 +186,7 @@ static const CNA_GraphicsRendererType live_renderer_identities[] = {
  * no route may accept one, and no surviving constant may take one over. Several sit above
  * CNA_GRAPHICS_RENDERER_MAXIMUM, so the gap sweep below does not reach them on its own. */
 static const CNA_GraphicsRendererType retired_renderer_identities[] = {
-        UINT32_C(2), UINT32_C(5), UINT32_C(7), UINT32_C(8), UINT32_C(10), UINT32_C(15), UINT32_C(16),
+        UINT32_C(2), UINT32_C(5), UINT32_C(7), UINT32_C(8), UINT32_C(10), UINT32_C(14), UINT32_C(15), UINT32_C(16),
         UINT32_C(17), UINT32_C(18), UINT32_C(19), UINT32_C(20), UINT32_C(21), UINT32_C(23),
         UINT32_C(24), UINT32_C(25), UINT32_C(26), UINT32_C(27), UINT32_C(28), UINT32_C(29),
         UINT32_C(30), UINT32_C(32), UINT32_C(33), UINT32_C(34), UINT32_C(35), UINT32_C(36),

@@ -159,11 +159,9 @@ namespace
         return std::any_cast<TextureCube>(typeReader->ReadUntyped(reader, std::any{}));
     }
 
-    /// WINCLOSE-0016: whether @p verdict is the one refusal in these format sweeps that is a DEVICE
-    /// fact. DirectX11 checks at device creation that B4G4R4A4_UNORM texels actually survive an
-    /// upload, because a driver may advertise the optional format and store zeros (VirtualBox's
-    /// SVGA driver does). On such a device the load must fail loudly; everywhere else, and for
-    /// every other format, the sweep still demands the exact bytes.
+    /// Whether @p verdict is the one refusal in these format sweeps that is a DEVICE fact. On such a
+    /// device the load must fail loudly; everywhere else, and for every other format, the sweep
+    /// still demands the exact bytes.
     [[nodiscard]] bool DeviceRefusesOptionalPackedFormat(
         SurfaceFormat format, CNA::Internal::Renderers::RendererFormatVerdict verdict)
     {
@@ -173,8 +171,9 @@ namespace
             return (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
                     format == SurfaceFormat::Bgra4444) &&
                    verdict == CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
-        return CNA_RENDERER_IS(DirectX11) && format == SurfaceFormat::Bgra4444 &&
-               verdict == CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
+        (void)format;
+        (void)verdict;
+        return false;
     }
 
     class Texture3DTextureCubeContentTypeReaderTest : public ::testing::Test
@@ -321,7 +320,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
     // plans/plan_apple_m4.md AM4-147: Metal's every uncompressed one.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
 
     constexpr std::array<SurfaceFormat, 15> formats{{
         SurfaceFormat::Color,
@@ -382,7 +381,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
     // plans/plan_apple_m4.md AM4-148: and Metal's, DXT included.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
 
     constexpr std::array<SurfaceFormat, 3> formats{{
         SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
@@ -555,7 +554,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
     // plans/plan_apple_m4.md AM4-147: so does Metal's.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
 
     struct FormatCase
     {
@@ -617,7 +616,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
     // plans/plan_apple_m4.md AM4-147: so does Metal's.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
 
     const std::vector<std::vector<std::uint8_t>> expected{
         {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u},

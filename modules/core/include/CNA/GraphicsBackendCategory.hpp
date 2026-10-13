@@ -10,9 +10,9 @@ namespace CNA
      * @brief What kind of implementation technology a graphics backend uses.
      *
      * Orthogonal to GraphicsBackendMaturity, which classifies recommendation confidence instead
-     * of implementation technology. For example FNA3D and DIRECTX11 can both end up on Direct3D 11,
-     * but FNA3D picks its driver at runtime (TranslationLayer) while DIRECTX11 talks to the real
-     * Direct3D 11 COM interfaces (Native).
+     * of implementation technology. For example FNA3D and DIRECTX9 both end up on Direct3D, but
+     * FNA3D picks its driver at runtime (TranslationLayer) while DIRECTX9 talks to the real
+     * Direct3D 9 COM interfaces (Native).
      */
     enum class GraphicsBackendCategory
     {
@@ -67,7 +67,6 @@ namespace CNA
         {
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
-            case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::Metal:
                 return GraphicsBackendCategory::Native;

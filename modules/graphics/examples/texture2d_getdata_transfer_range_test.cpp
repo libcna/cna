@@ -165,10 +165,6 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX9";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "DIRECTX11";
-    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_RENDERER_METAL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "METAL";

@@ -17,9 +17,9 @@ set(CNA_RENDERER_SHARED_EASYGL OPENGLES3 OPENGL33 WEBGL2)
 
 # Platform partitions. A combination spanning two of these can never build: the toolchain targets
 # one of them at a time.
-set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9 DIRECTX11)
+set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9)
 # Listing the browser renderer here is what makes the PAIRWISE rule state the reason -- a
-# WEBGL2 + DIRECTX11 request should be refused as "two platforms, one toolchain", not left to
+# WEBGL2 + DIRECTX9 request should be refused as "two platforms, one toolchain", not left to
 # whichever per-identity gate in RendererSelection.cmake happens to fire first.
 set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL2)
 set(CNA_RENDERER_MACOS_ONLY METAL)
@@ -29,8 +29,8 @@ set(CNA_RENDERER_MACOS_ONLY METAL)
 # The reason is taken from ARGN rather than a named third parameter, and joined. Every call site
 # below writes its reason as several adjacent string literals so it can be wrapped at a readable
 # width -- CMake passes those as SEPARATE arguments, so a named `reason` parameter captured only the
-# first fragment and silently discarded the rest. That is not cosmetic: a browser + DIRECTX11 request
-# reported "<X> builds only for Emscripten and DIRECTX11 only for" and stopped mid-sentence,
+# first fragment and silently discarded the rest. That is not cosmetic: a browser + Direct3D request
+# reported "<X> builds only for Emscripten and <Y> only for" and stopped mid-sentence,
 # naming neither the second platform nor the fact that one toolchain cannot target both, which is
 # the entire content of the explanation.
 function(_cna_reject_combination first second)

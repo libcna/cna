@@ -185,12 +185,6 @@ namespace
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr bool kCubeSupported = true;
-    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
-    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
-    constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_METAL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;

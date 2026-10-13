@@ -177,9 +177,6 @@ namespace
     // (REMED-GFX-139). This file only ever asserts level 0, so that boundary is untouched here.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, true,
                                  false, Support::Exact, false, true, true};
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, true,
-                                 true, Support::Exact, true, true, false};
 #elif defined(CNA_RENDERER_METAL)
     // plans/plan_apple_m4.md AM4-141: a multisampled cube face renders into that face's own 2D
     // multisample texture (kept across binds) and resolves into the cube's slice.

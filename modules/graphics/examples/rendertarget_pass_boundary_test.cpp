@@ -212,9 +212,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_METAL)
     // plans/plan_apple_m4.md AM4-026: Metal reports MultiSampleAntiAliasing false (METAL-259) and
     // clamps every requested sample count to zero, so no backbuffer setting can engage target MSAA

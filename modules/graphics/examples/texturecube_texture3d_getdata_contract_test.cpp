@@ -150,9 +150,6 @@ namespace
     // Texture3D half of this file needs a HiDef device to have anything to measure.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
-#elif defined(CNA_RENDERER_DIRECTX11)
-    constexpr Contract kContract{"DIRECTX11", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_METAL)
     constexpr Contract kContract{"METAL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};

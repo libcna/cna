@@ -39,8 +39,6 @@ namespace CNA
         /** @brief Stub (no-op, renders nothing). */
         Stub,
 
-        /** @brief Direct3D 11. */
-        DirectX11,
 
         /** @brief Direct3D 9. */
         DirectX9,
@@ -89,8 +87,6 @@ namespace CNA
         return GraphicsRendererType::Software;
 #elif defined(CNA_RENDERER_STUB)
         return GraphicsRendererType::Stub;
-#elif defined(CNA_RENDERER_DIRECTX11)
-        return GraphicsRendererType::DirectX11;
 #elif defined(CNA_RENDERER_DIRECTX9)
         return GraphicsRendererType::DirectX9;
 #elif defined(CNA_RENDERER_SDL_GPU)
@@ -131,7 +127,6 @@ namespace CNA
             case GraphicsRendererType::Headless:     return "HEADLESS";
             case GraphicsRendererType::Software:     return "SOFTWARE";
             case GraphicsRendererType::Stub:          return "STUB";
-            case GraphicsRendererType::DirectX11:        return "DIRECTX11";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:        return "SDL_GPU";
             case GraphicsRendererType::Metal:          return "METAL";

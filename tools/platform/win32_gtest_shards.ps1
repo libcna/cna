@@ -11,8 +11,8 @@
 #
 # Usage (in the guest):
 #   Set-ExecutionPolicy -Scope Process Bypass -Force
-#   & C:\src\cna\tools\platform\win32_gtest_shards.ps1 -Exe C:\cna\build\full-sdl3-d3d11\CnaTests.exe `
-#       -Shards 27 -Parallel 2 -OutDir C:\cna\report\dx11-round1 -WorkingDirectory C:\src\cna
+#   & C:\src\cna\tools\platform\win32_gtest_shards.ps1 -Exe C:\cna\build\full-sdl3-d3d9\CnaTests.exe `
+#       -Shards 27 -Parallel 2 -OutDir C:\cna\report\round1 -WorkingDirectory C:\src\cna
 #
 # Output: <OutDir>\shardNN.xml per shard, <OutDir>\summary.txt and <OutDir>\summary.json. A shard that
 # wrote no XML (a crash, a deadline) is reported with its exit code and the end of its output rather than
@@ -54,11 +54,6 @@ function Start-Shard([int] $index) {
     $arguments = @("--gtest_output=xml:$xml")
     if ($Filter) { $arguments += "--gtest_filter=$Filter" }
     $shardEnv = @("GTEST_TOTAL_SHARDS=$Shards", "GTEST_SHARD_INDEX=$index") + $Environment
-    # plans/plan_graphics_shared_cleanup.md GSC-0006: the Direct3D 11 debug layer; the listener fails a
-    # test on a fatal message and writes its report lines here.
-    if (($Environment | Where-Object { $_ -match '^CNA_D3D11_DEBUG_LAYER=1$' })) {
-        $shardEnv += "CNA_D3D_DEBUG_REPORT=$(Join-Path $OutDir "$tag.debuglayer.txt")"
-    }
     Start-Job -ScriptBlock {
         param($runner, $exe, $arguments, $wd, $outDir, $tag, $timeout, $shardEnv)
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
