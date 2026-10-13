@@ -80,9 +80,9 @@ endfunction()
 set(_build "${CNA_CXX_RUNTIME_WORKDIR}/build")
 set(_reset -G "Unix Makefiles" -DCMAKE_BUILD_TYPE= -DCMAKE_CXX_FLAGS= -DCMAKE_EXE_LINKER_FLAGS=
            -DCMAKE_EXE_LINKER_FLAGS_RELEASE= -DCNA_CXX_RUNTIME_LINKAGE=AUTO
-           -DPROBE_STATIC_RUNTIME=OFF -DPROBE_LINKER=)
+           -DPROBE_STATIC_RUNTIME=OFF -DPROBE_LINKER= -DPROBE_FETCHED_CNA=OFF)
 set(_shared_everywhere plain libgcc_option plain_shared config_libgcc_option bool_option
-                       libgcc_policy_target)
+                       libgcc_policy_target system_library_target)
 set(_static_everywhere libstdcxx_option both_options static_option static_pie_option
                        nostdlib_option link_flags link_libraries libstdcxx_shared directory_option
                        language_option policy_target policy_alias policy_through_module
@@ -95,6 +95,14 @@ expect("${_build}" default ON ${_shared_everywhere} ${_static_in_release} debug_
 expect("${_build}" default OFF ${_static_everywhere})
 if(NOT _output MATCHES "2 program\\(s\\) link imported targets defined in a subdirectory \\(hidden_policy, hidden_plain\\)[^\n]*CNA_CXX_RUNTIME_LINKAGE=SHARED")
     fail("default: no note of the programs whose imported targets CNA cannot read")
+endif()
+
+# CNA fetched into the build tree keeps its own directories.
+configure("${_build}" fetched ${_reset} -DPROBE_FETCHED_CNA=ON)
+expect("${_build}" fetched ON ${_shared_everywhere})
+expect("${_build}" fetched OFF hidden_policy_target hidden_plain_target)
+if(NOT _output MATCHES "2 program\\(s\\) link imported targets defined in a subdirectory \\(hidden_policy, hidden_plain\\)")
+    fail("fetched: the note does not name exactly the two imported targets outside CNA")
 endif()
 
 configure("${_build}" debug ${_reset} -DCMAKE_BUILD_TYPE=Debug)

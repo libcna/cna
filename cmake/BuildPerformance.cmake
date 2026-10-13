@@ -434,16 +434,20 @@ function(_cna_note_static_cxx_runtimes)
     endif()
     # An imported target that a subdirectory defines is not visible here, so its flags cannot be
     # read. CNA's own, in its source tree, are the system libraries it finds, which choose no
-    # runtime; a program that links any other is taken for static, as its runtime is unknown.
+    # runtime; a program that links any other is taken for static, as its runtime is unknown. A
+    # build tree inside CNA's source tree is not CNA's; CNA fetched into a build tree still is.
     get_filename_component(_cna_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}" DIRECTORY)
+    cmake_path(IS_PREFIX _cna_root "${CMAKE_BINARY_DIR}" NORMALIZE _cna_build_inside)
     set(_cna_hidden "")
     set(_cna_directories "${CMAKE_SOURCE_DIR}")
     while(_cna_directories)
         list(POP_FRONT _cna_directories _cna_directory)
         cmake_path(IS_PREFIX _cna_root "${_cna_directory}" NORMALIZE _cna_own)
-        cmake_path(IS_PREFIX CMAKE_BINARY_DIR "${_cna_directory}" NORMALIZE _cna_generated)
-        if(_cna_generated)
-            set(_cna_own FALSE)
+        if(_cna_own AND _cna_build_inside)
+            cmake_path(IS_PREFIX CMAKE_BINARY_DIR "${_cna_directory}" NORMALIZE _cna_generated)
+            if(_cna_generated)
+                set(_cna_own FALSE)
+            endif()
         endif()
         get_property(_cna_imported DIRECTORY "${_cna_directory}" PROPERTY IMPORTED_TARGETS)
         foreach(_cna_name IN LISTS _cna_imported)

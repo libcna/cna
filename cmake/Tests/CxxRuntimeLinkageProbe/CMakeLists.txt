@@ -6,7 +6,15 @@
 cmake_minimum_required(VERSION 3.20)
 project(CNACxxRuntimeLinkageProbe LANGUAGES CXX)
 
-include("${CNA_SOURCE_DIR}/cmake/BuildPerformance.cmake")
+if(PROBE_FETCHED_CNA)
+    # CNA fetched into the build tree, where FetchContent puts it.
+    set(_probe_cna "${CMAKE_BINARY_DIR}/fetched-cna")
+    file(COPY "${CNA_SOURCE_DIR}/cmake/BuildPerformance.cmake" DESTINATION "${_probe_cna}/cmake")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/system/CMakeLists.txt" DESTINATION "${_probe_cna}/system")
+else()
+    set(_probe_cna "${CNA_SOURCE_DIR}")
+endif()
+include("${_probe_cna}/cmake/BuildPerformance.cmake")
 
 if(PROBE_LINKER)
     add_link_options(-fuse-ld=${PROBE_LINKER})
@@ -101,6 +109,11 @@ target_link_libraries(libstdcxx_shared PRIVATE probe_module)
 target_link_options(libstdcxx_shared PRIVATE -static-libstdc++)
 
 add_subdirectory(consumer)
+if(PROBE_FETCHED_CNA)
+    add_subdirectory("${_probe_cna}/system" system)
+else()
+    add_subdirectory(system)
+endif()
 
 # Imported targets that only their own directory sees, outside CNA's source tree: CNA cannot read
 # them from the top-level directory.
