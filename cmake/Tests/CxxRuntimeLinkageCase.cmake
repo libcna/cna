@@ -81,15 +81,21 @@ set(_build "${CNA_CXX_RUNTIME_WORKDIR}/build")
 set(_reset -G "Unix Makefiles" -DCMAKE_BUILD_TYPE= -DCMAKE_CXX_FLAGS= -DCMAKE_EXE_LINKER_FLAGS=
            -DCMAKE_EXE_LINKER_FLAGS_RELEASE= -DCNA_CXX_RUNTIME_LINKAGE=AUTO
            -DPROBE_STATIC_RUNTIME=OFF -DPROBE_LINKER=)
-set(_shared_everywhere plain libgcc_option plain_shared config_libgcc_option bool_option)
+set(_shared_everywhere plain libgcc_option plain_shared config_libgcc_option bool_option
+                       libgcc_policy_target)
 set(_static_everywhere libstdcxx_option both_options static_option static_pie_option
                        nostdlib_option link_flags link_libraries libstdcxx_shared directory_option
-                       language_option)
-set(_static_in_release config_option if_option list_option config_libraries)
+                       language_option policy_target policy_alias policy_through_module
+                       flag_through_module release_linked_policy hidden_policy_target
+                       hidden_plain_target)
+set(_static_in_release config_option if_option list_option config_libraries release_policy_target)
 
 configure("${_build}" default ${_reset})
 expect("${_build}" default ON ${_shared_everywhere} ${_static_in_release} debug_option)
 expect("${_build}" default OFF ${_static_everywhere})
+if(NOT _output MATCHES "2 program\\(s\\) link imported targets defined in a subdirectory \\(hidden_policy, hidden_plain\\)[^\n]*CNA_CXX_RUNTIME_LINKAGE=SHARED")
+    fail("default: no note of the programs whose imported targets CNA cannot read")
+endif()
 
 configure("${_build}" debug ${_reset} -DCMAKE_BUILD_TYPE=Debug)
 expect("${_build}" debug ON ${_shared_everywhere} ${_static_in_release})
@@ -127,6 +133,9 @@ expect("${_build}" linkage-static OFF ${_shared_everywhere} debug_option)
 
 configure("${_build}" linkage-shared ${_reset} -DCNA_CXX_RUNTIME_LINKAGE=SHARED)
 expect("${_build}" linkage-shared ON ${_static_everywhere} ${_static_in_release})
+if(_output MATCHES "CNA_CXX_RUNTIME_LINKAGE=SHARED")
+    fail("linkage-shared: the note of unread imported targets appears although SHARED was given")
+endif()
 
 # A toolchain file's initial flags, read once by a new build tree.
 set(_toolchain "${CNA_CXX_RUNTIME_WORKDIR}/static-runtime-toolchain.cmake")
@@ -142,7 +151,7 @@ if(_ninja)
     configure("${_multi}" multi-config -G "Ninja Multi-Config" "-DCMAKE_MAKE_PROGRAM=${_ninja}")
     foreach(_config IN ITEMS Debug Release)
         file(READ "${_multi}/CMakeFiles/impl-${_config}.ninja" _rules)
-        foreach(_program IN ITEMS config_option debug_option plain)
+        foreach(_program IN ITEMS config_option debug_option release_policy_target plain)
             string(REGEX MATCH "\nbuild ${_config}/${_program}:[^\n]*\n([ ]+[^\n]*\n)*" _edge "${_rules}")
             if(NOT _edge)
                 message(FATAL_ERROR "multi-config: no ${_config} link of ${_program}")
@@ -177,11 +186,14 @@ endforeach()
 if(_readelf AND _linkers)
     foreach(_linker IN LISTS _linkers)
         configure("${_build}" ${_linker}-debug ${_reset} -DCMAKE_BUILD_TYPE=Debug -DPROBE_LINKER=${_linker})
-        expect_runtime("${_build}" ${_linker}-debug SHARED plain config_option config_libgcc_option)
-        expect_runtime("${_build}" ${_linker}-debug STATIC libstdcxx_option debug_option)
+        expect_runtime("${_build}" ${_linker}-debug SHARED plain config_option libgcc_policy_target
+            release_policy_target)
+        expect_runtime("${_build}" ${_linker}-debug STATIC libstdcxx_option debug_option
+            policy_target flag_through_module)
         configure("${_build}" ${_linker}-release ${_reset} -DCMAKE_BUILD_TYPE=Release -DPROBE_LINKER=${_linker})
-        expect_runtime("${_build}" ${_linker}-release SHARED plain debug_option config_libgcc_option)
-        expect_runtime("${_build}" ${_linker}-release STATIC config_option if_option)
+        expect_runtime("${_build}" ${_linker}-release SHARED plain debug_option libgcc_policy_target)
+        expect_runtime("${_build}" ${_linker}-release STATIC config_option if_option
+            release_policy_target policy_target)
     endforeach()
 else()
     message(STATUS "C++ runtime linkage: no readelf, mold or lld; the programs were not linked")

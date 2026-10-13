@@ -372,8 +372,8 @@ endif()
 #
 # Only for a shared runtime: named first, a shared runtime would replace a static one with lld and
 # mold. AUTO decides for each program in each configuration (_cna_note_static_cxx_runtimes). SHARED
-# and STATIC decide for every program, for a runtime chosen where CNA cannot see it: a compiler
-# wrapper or spec file, a library's link options.
+# and STATIC decide for every program, whatever AUTO would read, for a runtime chosen where CMake
+# cannot show it: a compiler wrapper or spec file, an imported target hidden in a subdirectory.
 set(CNA_CXX_RUNTIME_LINKAGE "AUTO" CACHE STRING
     "C++ runtime linkage of the programs that link CNA (AUTO, SHARED or STATIC)")
 set_property(CACHE CNA_CXX_RUNTIME_LINKAGE PROPERTY STRINGS AUTO SHARED STATIC)
@@ -421,8 +421,9 @@ endfunction()
 # CNA_STATIC, so CMake itself decides per configuration: -static-libstdc++ inside
 # $<$<CONFIG:Release>:...> counts in Release only. Read: the program's directory's CMAKE_CXX_FLAGS
 # and CMAKE_<EXE|SHARED|MODULE>_LINKER_FLAGS with their configuration variants (toolchain and LDFLAGS
-# initial values included), and its LINK_FLAGS, LINK_OPTIONS and LINK_LIBRARIES. -static-libgcc
-# does not count.
+# initial values included); its LINK_FLAGS, LINK_OPTIONS and LINK_LIBRARIES; and the
+# INTERFACE_LINK_OPTIONS and INTERFACE_LINK_LIBRARIES of every target its libraries reach. A target
+# linked only in some configurations is reached in all. -static-libgcc does not count.
 function(_cna_note_static_cxx_runtimes)
     set(_cna_static_flag "(^|[^A-Za-z0-9_+-])-(static|static-pie|static-libstdc\\+\\+|nostdlib|nostdlib\\+\\+|nodefaultlibs)($|[^A-Za-z0-9_+-])")
     get_property(_cna_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -431,6 +432,31 @@ function(_cna_note_static_cxx_runtimes)
     else()
         set(_cna_configs ${CMAKE_BUILD_TYPE})
     endif()
+    # An imported target that a subdirectory defines is not visible here, so its flags cannot be
+    # read. CNA's own, in its source tree, are the system libraries it finds, which choose no
+    # runtime; a program that links any other is taken for static, as its runtime is unknown.
+    get_filename_component(_cna_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}" DIRECTORY)
+    set(_cna_hidden "")
+    set(_cna_directories "${CMAKE_SOURCE_DIR}")
+    while(_cna_directories)
+        list(POP_FRONT _cna_directories _cna_directory)
+        cmake_path(IS_PREFIX _cna_root "${_cna_directory}" NORMALIZE _cna_own)
+        cmake_path(IS_PREFIX CMAKE_BINARY_DIR "${_cna_directory}" NORMALIZE _cna_generated)
+        if(_cna_generated)
+            set(_cna_own FALSE)
+        endif()
+        get_property(_cna_imported DIRECTORY "${_cna_directory}" PROPERTY IMPORTED_TARGETS)
+        foreach(_cna_name IN LISTS _cna_imported)
+            if(NOT _cna_own AND NOT TARGET "${_cna_name}")
+                list(APPEND _cna_hidden "${_cna_name}")
+            endif()
+        endforeach()
+        get_property(_cna_subdirectories DIRECTORY "${_cna_directory}" PROPERTY SUBDIRECTORIES)
+        list(APPEND _cna_directories ${_cna_subdirectories})
+    endwhile()
+
+    set(_cna_unread_programs "")
+    set(_cna_unread_targets "")
     cna_collect_buildsystem_targets("${CMAKE_SOURCE_DIR}" _cna_targets)
     foreach(_cna_target IN LISTS _cna_targets)
         get_target_property(_cna_type ${_cna_target} TYPE)
@@ -478,11 +504,52 @@ function(_cna_note_static_cxx_runtimes)
             endforeach()
             _cna_static_cxx_runtime_items("${_cna_link}" _cna_items)
             list(APPEND _cna_marks ${_cna_items})
+            get_property(_cna_libraries TARGET ${_cna_target} PROPERTY LINK_LIBRARIES)
+            _cna_cxx_runtime_link_targets("${_cna_libraries}" _cna_queue _cna_unread)
+            set(_cna_reached "")
+            while(_cna_queue)
+                list(POP_FRONT _cna_queue _cna_dependency)
+                if(_cna_dependency IN_LIST _cna_reached)
+                    continue()
+                endif()
+                list(APPEND _cna_reached "${_cna_dependency}")
+                if(NOT DEFINED "_cna_read_${_cna_dependency}")
+                    set(_cna_libraries "")
+                    foreach(_cna_property IN ITEMS INTERFACE_LINK_LIBRARIES
+                                                   INTERFACE_LINK_LIBRARIES_DIRECT)
+                        get_property(_cna_value TARGET ${_cna_dependency} PROPERTY ${_cna_property})
+                        list(APPEND _cna_libraries "${_cna_value}")
+                    endforeach()
+                    get_property(_cna_value TARGET ${_cna_dependency} PROPERTY INTERFACE_LINK_OPTIONS)
+                    _cna_static_cxx_runtime_items("${_cna_value};${_cna_libraries}"
+                        "_cna_items_${_cna_dependency}")
+                    _cna_cxx_runtime_link_targets("${_cna_libraries}"
+                        "_cna_next_${_cna_dependency}" "_cna_unread_${_cna_dependency}")
+                    set("_cna_read_${_cna_dependency}" TRUE)
+                endif()
+                list(APPEND _cna_marks ${_cna_items_${_cna_dependency}})
+                list(APPEND _cna_queue ${_cna_next_${_cna_dependency}})
+                list(APPEND _cna_unread ${_cna_unread_${_cna_dependency}})
+            endwhile()
+            if(_cna_unread)
+                list(APPEND _cna_marks CNA_STATIC)
+                list(APPEND _cna_unread_programs ${_cna_target})
+                list(APPEND _cna_unread_targets ${_cna_unread})
+            endif()
         endif()
         if(_cna_marks)
             set_property(TARGET ${_cna_target} PROPERTY CNA_CXX_STATIC_RUNTIME "${_cna_marks}")
         endif()
     endforeach()
+    if(_cna_unread_programs)
+        list(LENGTH _cna_unread_programs _cna_count)
+        list(REMOVE_DUPLICATES _cna_unread_targets)
+        string(REPLACE ";" ", " _cna_unread_targets "${_cna_unread_targets}")
+        message(STATUS "CNA: ${_cna_count} program(s) link imported targets defined in a "
+            "subdirectory (${_cna_unread_targets}), whose flags CNA cannot read, and do not get the "
+            "runtime-first link option (docs/link-size-architecture.md). If they link the C++ "
+            "runtime as a shared library, set CNA_CXX_RUNTIME_LINKAGE=SHARED.")
+    endif()
 endfunction()
 
 # The items of a link setting that name a static C++ runtime, each such flag replaced by CNA_STATIC.
@@ -513,6 +580,27 @@ function(_cna_static_cxx_runtime_items value output_variable)
         set(_cna_item "")
     endforeach()
     set(${output_variable} "${_cna_items}" PARENT_SCOPE)
+endfunction()
+
+# The targets a link setting names, inside generator expressions too, with aliases resolved. Names
+# of imported targets hidden from the top-level directory go to <hidden_variable>.
+function(_cna_cxx_runtime_link_targets value targets_variable hidden_variable)
+    string(REGEX MATCHALL "[A-Za-z0-9_.+-]+(::[A-Za-z0-9_.+-]+)*" _cna_names "${value}")
+    set(_cna_targets "")
+    set(_cna_unread "")
+    foreach(_cna_name IN LISTS _cna_names)
+        if(TARGET "${_cna_name}")
+            get_property(_cna_aliased TARGET "${_cna_name}" PROPERTY ALIASED_TARGET)
+            if(_cna_aliased)
+                set(_cna_name "${_cna_aliased}")
+            endif()
+            list(APPEND _cna_targets "${_cna_name}")
+        elseif(_cna_name IN_LIST _cna_hidden)
+            list(APPEND _cna_unread "${_cna_name}")
+        endif()
+    endforeach()
+    set(${targets_variable} "${_cna_targets}" PARENT_SCOPE)
+    set(${hidden_variable} "${_cna_unread}" PARENT_SCOPE)
 endfunction()
 
 option(CNA_ENABLE_UNITY_BUILD

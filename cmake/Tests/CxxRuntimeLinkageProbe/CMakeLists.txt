@@ -65,6 +65,35 @@ target_link_options(language_option PRIVATE $<$<LINK_LANGUAGE:CXX>:-static-libst
 probe_program(config_libraries)
 target_link_libraries(config_libraries PRIVATE $<$<CONFIG:Release>:-static-libstdc++>)
 
+# Through other targets' usage requirements.
+add_library(static_policy INTERFACE)
+target_link_options(static_policy INTERFACE -static-libstdc++)
+add_library(Probe::StaticPolicy ALIAS static_policy)
+add_library(libgcc_policy INTERFACE)
+target_link_options(libgcc_policy INTERFACE -static-libgcc)
+add_library(release_policy INTERFACE)
+target_link_options(release_policy INTERFACE $<$<CONFIG:Release>:-static-libstdc++>)
+add_library(policy_module STATIC "${CMAKE_BINARY_DIR}/module.cpp")
+target_link_libraries(policy_module PRIVATE static_policy)
+add_library(flag_module STATIC "${CMAKE_BINARY_DIR}/module.cpp")
+target_link_libraries(flag_module PRIVATE -static-libstdc++)
+
+probe_program(policy_target)
+target_link_libraries(policy_target PRIVATE static_policy)
+probe_program(policy_alias)
+target_link_libraries(policy_alias PRIVATE Probe::StaticPolicy)
+probe_program(policy_through_module)
+target_link_libraries(policy_through_module PRIVATE policy_module)
+probe_program(flag_through_module)
+target_link_libraries(flag_through_module PRIVATE flag_module)
+probe_program(libgcc_policy_target)
+target_link_libraries(libgcc_policy_target PRIVATE libgcc_policy)
+probe_program(release_policy_target)
+target_link_libraries(release_policy_target PRIVATE release_policy)
+# The target is reached in every configuration, the one it is linked in or not.
+probe_program(release_linked_policy)
+target_link_libraries(release_linked_policy PRIVATE $<$<CONFIG:Release>:static_policy>)
+
 add_library(plain_shared SHARED "${CMAKE_BINARY_DIR}/module.cpp")
 target_link_libraries(plain_shared PRIVATE probe_module)
 add_library(libstdcxx_shared SHARED "${CMAKE_BINARY_DIR}/module.cpp")
@@ -72,3 +101,16 @@ target_link_libraries(libstdcxx_shared PRIVATE probe_module)
 target_link_options(libstdcxx_shared PRIVATE -static-libstdc++)
 
 add_subdirectory(consumer)
+
+# Imported targets that only their own directory sees, outside CNA's source tree: CNA cannot read
+# them from the top-level directory.
+file(WRITE "${CMAKE_BINARY_DIR}/hidden/CMakeLists.txt" [[
+add_library(hidden_policy INTERFACE IMPORTED)
+set_property(TARGET hidden_policy PROPERTY INTERFACE_LINK_OPTIONS -static-libstdc++)
+probe_program(hidden_policy_target)
+target_link_libraries(hidden_policy_target PRIVATE hidden_policy)
+add_library(hidden_plain INTERFACE IMPORTED)
+probe_program(hidden_plain_target)
+target_link_libraries(hidden_plain_target PRIVATE hidden_plain)
+]])
+add_subdirectory("${CMAKE_BINARY_DIR}/hidden" hidden)
