@@ -89,8 +89,13 @@ was kept, except that an `IPlatform` implementation overrides `GetCameraService(
   size and frame rate through `StringReader`, `Int32Reader` and `SingleReader`, a Model's Tag may
   hold any value, a TimeSpan included -- and `ContentReader` refuses a table entry with no reader
   rather than installing one. So a family registers them with its own
-  (`detail::RegisterValueXnbReaders()`, the Decimal/DateTime/TimeSpan readers for models), and
-  `ContentManagerGamePathXnbTests` loads each family first from a `Game`'s declared-only state.
+  (`detail::RegisterValueXnbReaders()`, the Decimal/DateTime/TimeSpan readers for models).
+  `ContentManagerGamePathXnbTests` loads a Song, a Video and a Model first from a `Game`'s
+  declared-only state -- the three families whose first load used to fail -- and
+  `ContentXnbReaderFamilyClosureTests` pins the closures themselves: the families together install
+  exactly what `RegisterAllBuiltInXnbReaders()` installs, so no built-in reader is reachable only
+  by asking the registry by name, and for every committed `.xnb` fixture the root reader's family
+  alone installs every CNA-owned reader the fixture's type-reader table names.
 - **Install optional work when it is first used.** `FrameworkDispatcher` and the Guide frame hold
   plain function pointers that the optional subsystem sets on its first use. No static
   "registrar" object: in a static archive nothing references it, so it is dropped, and the usual

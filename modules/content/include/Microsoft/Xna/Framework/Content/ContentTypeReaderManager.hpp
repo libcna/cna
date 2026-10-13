@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include "System/Type.hpp"
 #include <typeindex>
+#include <vector>
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
@@ -162,6 +163,13 @@ namespace Microsoft::Xna::Framework::Content
          * @return A fresh reader, or nullptr when nothing is registered under the name.
          */
         std::unique_ptr<ContentTypeReaderBase> CreateRegisteredReader(const std::string& canonicalName);
+
+        /**
+         * @brief The canonical names a load could resolve now, without installing declared
+         *        readers: a snapshot of the registry's keys, for tests and diagnostics.
+         * @return The registered names, in no particular order.
+         */
+        [[nodiscard]] std::vector<std::string> RegisteredReaderNames();
 
         /** @brief Declares every built-in reader registered (Game's constructor). */
         void DeclareBuiltinXnbReaders();

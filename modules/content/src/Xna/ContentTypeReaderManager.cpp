@@ -175,6 +175,19 @@ namespace Microsoft::Xna::Framework::Content
             return factory();
         }
 
+        std::vector<std::string> RegisteredReaderNames()
+        {
+            const std::shared_lock lock(CreatorsMutex());
+            const auto& creators = ContentTypeReaderRegistryAccess::Creators();
+            std::vector<std::string> names;
+            names.reserve(creators.size());
+            for (const auto& [name, factory] : creators)
+            {
+                names.push_back(name);
+            }
+            return names;
+        }
+
         bool HasTypeCreator(const std::string& canonicalName)
         {
             const std::shared_lock lock(CreatorsMutex());
