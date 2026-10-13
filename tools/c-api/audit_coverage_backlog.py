@@ -70,7 +70,7 @@ BASE_HANDLED = {
 }
 # Types whose base family exists but which have no C presence of their own. Crediting these to the
 # base would assert a C caller can create one, and none can.
-BASE_NOT_HANDLED = {"StorageTexture2D", "Texture2DArray", "Texture3D"}
+BASE_NOT_HANDLED = {"Texture3D"}
 
 LIFE_VERBS = ("create", "destroy", "release", "clone")
 TEST_SEAM = re.compile(r"(TestPeer|TestAccess|TestHook|Peer)$|Internal$")

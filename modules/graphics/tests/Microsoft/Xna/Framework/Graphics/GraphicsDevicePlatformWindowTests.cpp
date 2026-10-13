@@ -23,9 +23,8 @@ namespace CNA::Internal
      *
      * `UpdateViewportFromWindow()` is private and `GameWindow` is a friend, because that call is
      * the framework's own reaction to a resize rather than something a game invokes. The test
-     * below reproduces exactly that reaction, so it needs the same access -- through the named
-     * test peer this codebase already uses for the equivalent cases (`Texture2DArray`,
-     * `StorageTexture2D`, `StorageBuffer`), rather than by widening the XNA-visible API.
+     * below reproduces exactly that reaction, so it needs the same access -- through a named test
+     * peer `GraphicsDevice` befriends, rather than by widening the XNA-visible API.
      */
     class GraphicsDevicePlatformWindowTestPeer
     {

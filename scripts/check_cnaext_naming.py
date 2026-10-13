@@ -27,17 +27,6 @@ EXEMPT = {
     "DepthEffect::GetTypeName": "override of an XNA base-class member",
     "DepthEffect::Clone": "override of an XNA base-class member",
     "DepthEffect::OnApply": "override of an XNA base-class member",
-    # Deliberate mirrors of System.Object's members, spelled as the rest of CNA spells them.
-    "PbrMaterial::GetHashCode": "mirrors System.Object.GetHashCode",
-    "PbrMaterial::ToString": "mirrors System.Object.ToString",
-    "PbrMaterialExtensions::GetHashCode": "mirrors System.Object.GetHashCode, as PbrMaterial does",
-    "PbrMaterialExtensions::ToString": "mirrors System.Object.ToString, as PbrMaterial does",
-    "Texture2DArray::GetTypeName": "override of System.Object.GetTypeName",
-    "Texture2DArray::Dispose": "override of GraphicsResource.Dispose",
-    "StorageTexture2D::GetTypeName": "override of System.Object.GetTypeName",
-    "StorageTexture2D::Dispose": "override of GraphicsResource.Dispose",
-    "StorageBuffer::GetTypeName": "override of System.Object.GetTypeName",
-    "StorageBuffer::Dispose": "override of GraphicsResource.Dispose",
     # Predates the engine layer and its naming rule, and is exposed through the C ABI
     # (modules/c-api/src/CnaCApiGraphicsExt.cpp), so the name is not this layer's to change.
     "AsciiPostProcessEffect::Draw": "predates MOD-6 and is part of the C ABI surface",

@@ -16581,7 +16581,7 @@
     },
     {
       "id": "graphics-test-peer-friendship",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::CompiledEffectTestAccess|GraphicsDevice::(?:GraphicsDevicePlatformWindowTestPeer|(?:StorageBuffer|StorageTexture2D|Texture2DArray)GraphicsDeviceTestPeer))$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Effect::CompiledEffectTestAccess|GraphicsDevice::GraphicsDevicePlatformWindowTestPeer)$",
       "kinds": [
         "method"
       ],
