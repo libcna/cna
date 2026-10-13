@@ -66,6 +66,12 @@ reference is represented; the generated census is
 behavioural fidelity is held by each module's tests. One member is deliberately left unimplemented
 (§6).
 
+**Bindings.** C and C# are the maintained bindings. CNA.NET (`libcna/cna-dotnet` `develop`) admits
+exactly C ABI 0.47.0 and pins one CNA `next` commit (`CNA_UPSTREAM_COMMIT` in its
+`.github/workflows/build.yml`); its CI builds and loads the native library from that commit. CNA
+`main`/`develop` are the v0.1.0 release (ABI 0.46.0), which CNA.NET refuses. The archived bindings in
+`cna-lab` stay pinned to older ABIs and are not maintained.
+
 **Content.** XNB readers (including LZX), CNA's `.cnb`/`.cnj`, direct glTF 2.0 loading, the
 `cna-content` build tool and the XNA Content Pipeline façade: `docs/content-pipeline.md`,
 `docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
