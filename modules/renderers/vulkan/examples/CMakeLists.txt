@@ -13,10 +13,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # plans/plan_native_platform_validation.md NPV-0106 used to skip this whole suite without SDL,
 # because its test macro named SDL3::SDL3 unconditionally. No example source here includes SDL; the
 # one SDL use left is common/PixelTestGame.hpp's display probe, which CNA_EXAMPLES_NO_SDL turns off
-# (DX12-0005). plans/plan_vulkan_modern_graphics.md VMG-0003: the
-# macro below links SDL only where it exists. That once let a CNA_ENABLE_SDL=OFF build run these
-# oracles on CNA's direct X11 and Wayland platforms; those were retired on 2026-10-06, and a
-# windowed Vulkan build now always reaches its window through SDL3.
+# (DX12-0005). The macro below links SDL only where it exists. That once let a CNA_ENABLE_SDL=OFF
+# build run these oracles on CNA's direct X11 and Wayland platforms; those were retired on
+# 2026-10-06, and a windowed Vulkan build now always reaches its window through SDL3.
 
 # Shared example-support headers ("common/PixelTestGame.hpp", ...) are owned by
 # the graphics module's examples directory.
@@ -286,13 +285,6 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_SwapchainOutOfDate COMMAND cna_test_vulkan_swapchain_outofdate
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 119: ShaderEffect with SPIR-V — SpriteBatch tint via custom push constants
-        # plan_vulkan.md VULKAN-253 / plan_modern.md MOD-2248/MOD-2249: a custom effect samples a
-        # texture the caller explicitly bound through set 1; storage image upload/compute/readback
-        # shares that ordered stream and its tracked layouts.
-
-
-
         # plan_vulkan.md VULKAN-164: SamplerState.AddressW decides what a bound Texture3D reads
         # outside [0,1] -- the test VULKAN-094 proposed and could not write.
         cna_vulkan_test(cna_test_vulkan_texture3d_addressw
@@ -401,7 +393,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # variant from it (MOD-2216/MOD-2217), and ShaderCodeEXT/ShaderPackageEXT live behind
         # ShaderEffect.hpp's own `#ifdef CNA_CNAEXT`. Registering it unconditionally made the whole
         # Vulkan example suite fail to compile in the default CNA_CNAEXT=OFF configuration, which is
-        # the one the classic XNA contract is tested in. Guarded like the MOD-2243 block below.
+        # the one the classic XNA contract is tested in.
         if(CNA_CNAEXT)
             cna_vulkan_test(cna_test_vulkan_shader_effect
                             vulkan_shader_effect_test.cpp)
@@ -1433,22 +1425,6 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_vulkan_capability_snapshot
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plans/plan_modern.md MOD-2240: feature/property discovery uses Vulkan's extensible query
-        # forms, enables only features consumed by implemented CNA paths, and keeps modern work on
-        # the existing ordered graphics queue without advertising native availability as support.
-        cna_vulkan_test(cna_test_vulkan_modern_feature_discovery
-                        vulkan_modern_feature_discovery_test.cpp)
-        cna_register_renderer_test(NAME Vulkan_ModernFeatureDiscovery
-            COMMAND cna_test_vulkan_modern_feature_discovery
-            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-        # plans/plan_modern.md MOD-2222/MOD-2224: all current SurfaceFormat values map to exact
-        # VkFormats; usage masks and numeric limits are the intersection of live physical-device
-        # facts with paths this renderer actually implements, and public construction of every
-        # base/mip/MSAA combination must agree with those answers.
-
-
-
         # plans/plan_modern.md MOD-2223: allocation identity plus end-to-end float/HDR clear,
         # draw, sampling, mixed-MRT and typed readback coverage.
         cna_vulkan_test(cna_test_vulkan_float_render_target
@@ -1456,73 +1432,6 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_FloatRenderTarget
             COMMAND cna_test_vulkan_float_render_target
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-        if(CNA_CNAEXT)
-            # plans/plan_street.md STREET-0005: an engine-layer effect whose world matrix changes
-            # every draw (a shadow caster, the depth/normal prepass) used to copy its whole uniform
-            # block into a fresh VkBuffer per draw. 1500 prepass draws placed by their world
-            # matrix alone must each land in their own cell, and retire no buffer per draw.
-
-
-
-            # plans/plan_street.md STREET-0007: the directional shadow casters' winding was mirrored
-            # against the pipelines' clockwise front face, so back-face culling kept the faces that
-            # face away from the light. A box drawn into cascade 0 with CullCounterClockwise must
-            # leave its top face's depth where the receiver reads it.
-
-
-
-            # plans/plan_modern.md MOD-2243: raw physical-device limits/usage combinations must
-            # agree with array factory decisions, and native image/view records must retire and
-            # survive device-first teardown without holding dead Vulkan handles.
-
-
-
-            # plans/plan_modern.md MOD-2229/MOD-2241/MOD-2242/MOD-2248: SPIR-V compute plus
-            # descriptor-qualified storage buffers, exact native usage/memory, staging copies,
-            # bounded native allocation/lifetime and logical barrier emission/elision.
-
-
-
-            # plans/plan_modern.md MOD-2245/2247: canonical indirect layouts, all geometry/base
-            # offsets, deferred argument/program lifetime, mixed SpriteBatch/compute/copy/3D order,
-            # one frame submit and the validation stream are one end-to-end contract.
-
-
-
-            # plans/plan_modern.md MOD-2246: selected queue timestamp facts, asynchronous result
-            # collection, query-pool reuse, zero device waits, ordered marker labels, balanced pass
-            # regions and one-copy structured logger delivery are one native contract.
-
-
-
-            # plans/plan_modern.md MOD-2252: every modern native record survives ordinary submit
-            # and swapchain recreation, queued work owns pre-present disposals, and device teardown
-            # disconnects externally retained records before destroying VkDevice.
-            cna_vulkan_test(cna_test_vulkan_modern_resource_lifetime
-                            vulkan_modern_resource_lifetime_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_ModernResourceLifetime
-                COMMAND cna_test_vulkan_modern_resource_lifetime
-                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-            # plans/plan_modern.md MOD-2253: 2,048 presented frames, 32 real resizes and one
-            # allocation/disposal cycle per frame prove modern caches and fence retirement remain
-            # bounded while routine commands add no queue/device-wide idle wait.
-            cna_vulkan_test(cna_test_vulkan_modern_allocator_stress
-                            vulkan_modern_allocator_stress_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_ModernAllocatorStress
-                COMMAND cna_test_vulkan_modern_allocator_stress
-                TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-            # plans/plan_modern.md MOD-2254: acquire OUT_OF_DATE and present
-            # SUBOPTIMAL/OUT_OF_DATE preserve deferred modern work, native resource identities
-            # and validation cleanliness through their exact production recovery branches.
-            cna_vulkan_test(cna_test_vulkan_modern_recovery
-                            vulkan_modern_recovery_test.cpp)
-            cna_register_renderer_test(NAME Vulkan_ModernRecovery
-                COMMAND cna_test_vulkan_modern_recovery
-                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-        endif()
 
         # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's
         # [0,1], and EasyGL's is OpenGL's [-1,1]. Measured positively across the range -- a 5x4
@@ -2741,9 +2650,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plan_vulkan.md VULKAN-350: a real window resize, which on Vulkan is a swapchain recreation.
         # The test plays the user dragging the window edge by resizing the SDL window behind the
         # game's back -- there is no public API for an outside resize to call instead -- so it
-        # exists only where SDL does (plans/plan_vulkan_modern_graphics.md VMG-0003). The modern
-        # recreation paths keep their own SDL-free coverage in Vulkan_ModernResourceLifetime and
-        # Vulkan_ModernAllocatorStress, which resize through GraphicsDeviceManager.
+        # exists only where SDL does.
         if(TARGET SDL3::SDL3)
             cna_vulkan_test(cna_test_vulkan_real_window_resize
                             ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp)

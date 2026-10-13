@@ -2,7 +2,7 @@
 // plans/plan_vulkan.md VULKAN-008: this renderer's capability reporting, captured as a checked-in
 // snapshot, and the oracle VULKAN-470 re-verifies against.
 //
-// **Read through the `GraphicsDevice` seam, never the renderer's own switch.** Six of the nineteen
+// **Read through the `GraphicsDevice` seam, never the renderer's own switch.** Four of the seventeen
 // `GraphicsCapability` members are answered ABOVE the renderer -- `GraphicsDevice::SupportsCapability`
 // resolves them itself -- so a snapshot taken from `IGraphicsRenderer` would record answers no
 // caller can ever observe, and miss the ones every caller gets.
@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/ProjectGraphicsProfile.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
@@ -43,6 +44,12 @@ using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
 
 namespace
 {
+    /// The snapshot records a HiDef device. Texture3D and MultipleRenderTargets are answered for
+    /// the device's graphics profile (BINDFIX-037), and the project default is Reach, which has
+    /// neither; without this the fixed `capability.Texture3D = true` row could never match. Set
+    /// as the PROGRAM's profile because Game's own GraphicsDevice is created before the manager.
+    const CNA::ProjectGraphicsProfileEXT kProfileOptIn{GraphicsProfile::HiDef};
+
     std::string Show(bool v) { return v ? "true" : "false"; }
     std::string Show(int v)  { return std::to_string(v); }
 
@@ -112,13 +119,11 @@ namespace
         { "capability.AdditiveBlending", "true", Origin::Fixed },
         { "capability.AnisotropicFiltering", "true", Origin::Device },
         { "capability.CompiledEffects", "false", Origin::Fixed },
-        { "capability.ComputeShaders", "true", Origin::Device },
         { "capability.CustomEffects", "true", Origin::Fixed },
         { "capability.DepthStencilBuffer", "true", Origin::Fixed },
         { "capability.FloatRenderTargets", "true", Origin::Device },
         { "capability.HalfFloatRenderTargets", "true", Origin::Device },
         { "capability.HalfFloatTextureLinearFiltering", "true", Origin::Device },
-        { "capability.IndirectDraw", "true", Origin::Device },
         { "capability.Instancing", "true", Origin::Fixed },
         { "capability.MultiSampleAntiAliasing", "true", Origin::Device },
         { "capability.MultiStreamVertexInput", "true", Origin::Fixed },
@@ -132,15 +137,11 @@ namespace
         { "feature.AnisotropicFiltering", "supported", Origin::Device },
         { "feature.BaseInstanceDrawing", "supported", Origin::Fixed },
         { "feature.CompiledXnaEffects", "unsupported", Origin::Fixed },
-        { "feature.ComputeImageBinding", "supported", Origin::Device },
-        { "feature.ComputeShaders", "supported", Origin::Device },
         { "feature.DepthStencilBuffer", "supported", Origin::Fixed },
         { "feature.Float16RenderTargets", "supported", Origin::Device },
         { "feature.Float16TextureLinearFiltering", "supported", Origin::Device },
         { "feature.Float32RenderTargets", "supported", Origin::Device },
-        { "feature.GpuTimers", "supported", Origin::Device },
         { "feature.ImageBasedLighting", "supported", Origin::Fixed },
-        { "feature.IndirectDrawing", "supported", Origin::Device },
         { "feature.InstancedDrawing", "supported", Origin::Fixed },
         { "feature.MultiSampleAntiAliasing", "supported", Origin::Device },
         { "feature.MultiStreamVertexInput", "supported", Origin::Fixed },
@@ -160,30 +161,15 @@ namespace
         { "feature.Texture3DStorage", "supported", Origin::Fixed },
         { "feature.ThreeDimensionalPipeline", "supported", Origin::Fixed },
         { "feature.WireFrameRasterization", "supported", Origin::Fixed },
-        { "limit.MaxComputeWorkGroupCountX", "65535", Origin::Device },
-        { "limit.MaxComputeWorkGroupCountY", "65535", Origin::Device },
-        { "limit.MaxComputeWorkGroupCountZ", "65535", Origin::Device },
-        { "limit.MaxComputeWorkGroupInvocations", "1024", Origin::Device },
-        { "limit.MaxComputeWorkGroupSizeX", "1024", Origin::Device },
-        { "limit.MaxComputeWorkGroupSizeY", "1024", Origin::Device },
-        { "limit.MaxComputeWorkGroupSizeZ", "1024", Origin::Device },
         { "limit.MaxColorAttachments", "4", Origin::Device },
-        { "limit.MaxComputeStorageBufferBindings", "1000000", Origin::Device },
         { "limit.MaxTextureDimension", "16384", Origin::Device },
-        { "limit.MaxSampledTexturesPerShaderStage", "15", Origin::Device },
-        { "limit.MaxStorageBufferBytes", "134217728", Origin::Device },
-        { "limit.MaxStorageImagesPerShaderStage", "1000000", Origin::Device },
-        { "limit.MaxTextureArrayLayers", "2048", Origin::Device },
+        { "limit.MaxSampledTexturesPerShaderStage", "12", Origin::Device },
         { "limit.MaxUniformBufferBytes", "65536", Origin::Device },
         { "limit.MaxVertexInputAttributes", "32", Origin::Device },
         { "limit.MaxVertexInputBindings", "16", Origin::Device },
-        { "limit.MaxVertexShaderStorageBlocks", "1000000", Origin::Device },
         { "limit.MaxVertexStreams", "16", Origin::Fixed },
-        { "limit.MinStorageBufferOffsetAlignment", "16", Origin::Device },
         { "limit.MinUniformBufferOffsetAlignment", "16", Origin::Device },
-        { "limit.TimestampPeriodPicoseconds", "1000", Origin::Device },
         { "query.executesShaderEffectSource", "false", Origin::Fixed },
-        { "query.maxComputeWorkGroupInvocations", "1024", Origin::Device },
         { "query.maxTextureDimension", "16384", Origin::Device },
         { "query.rendererName", "VULKAN", Origin::Fixed },
         { "query.shaderDialect", "SpirV", Origin::Fixed },
@@ -258,8 +244,6 @@ protected:
         { "capability.FloatRenderTargets", [](GraphicsDevice& d) { return Show(d.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets)); } },
         { "capability.HalfFloatRenderTargets", [](GraphicsDevice& d) { return Show(d.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets)); } },
         { "capability.HalfFloatTextureLinearFiltering", [](GraphicsDevice& d) { return Show(d.SupportsCapability(CNA::GraphicsCapability::HalfFloatTextureLinearFiltering)); } },
-        { "capability.ComputeShaders", [](GraphicsDevice& d) { return Show(d.SupportsCapability(CNA::GraphicsCapability::ComputeShaders)); } },
-        { "capability.IndirectDraw", [](GraphicsDevice& d) { return Show(d.SupportsCapability(CNA::GraphicsCapability::IndirectDraw)); } },
         { "feature.ThreeDimensionalPipeline", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ThreeDimensionalPipeline)); } },
         { "feature.DepthStencilBuffer", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::DepthStencilBuffer)); } },
         { "feature.MultiSampleAntiAliasing", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::MultiSampleAntiAliasing)); } },
@@ -280,12 +264,8 @@ protected:
         { "feature.Float32RenderTargets", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::Float32RenderTargets)); } },
         { "feature.Float16RenderTargets", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::Float16RenderTargets)); } },
         { "feature.Float16TextureLinearFiltering", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::Float16TextureLinearFiltering)); } },
-        { "feature.ComputeShaders", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ComputeShaders)); } },
-        { "feature.ComputeImageBinding", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ComputeImageBinding)); } },
-        { "feature.IndirectDrawing", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::IndirectDrawing)); } },
         { "feature.ShadowSampling", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ShadowSampling)); } },
         { "feature.ImageBasedLighting", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ImageBasedLighting)); } },
-        { "feature.GpuTimers", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::GpuTimers)); } },
         { "feature.ShaderDialectGlslDesktop", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ShaderDialectGlslDesktop)); } },
         { "feature.ShaderDialectGlslEs", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ShaderDialectGlslEs)); } },
         { "feature.ShaderDialectGlslVulkan", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ShaderDialectGlslVulkan)); } },
@@ -294,26 +274,12 @@ protected:
         { "feature.ShaderDialectWgsl", [](GraphicsDevice& d) { return ShowSupport(d.GetRendererFeatureSupportEXT(CNA::RendererFeature::ShaderDialectWgsl)); } },
         { "limit.MaxTextureDimension", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxTextureDimension)); } },
         { "limit.MaxVertexStreams", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxVertexStreams)); } },
-        { "limit.MaxComputeWorkGroupCountX", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeWorkGroupCountX)); } },
-        { "limit.MaxComputeWorkGroupCountY", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeWorkGroupCountY)); } },
-        { "limit.MaxComputeWorkGroupCountZ", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeWorkGroupCountZ)); } },
-        { "limit.MaxComputeWorkGroupSizeX", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeWorkGroupSizeX)); } },
-        { "limit.MaxComputeWorkGroupSizeY", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeWorkGroupSizeY)); } },
-        { "limit.MaxComputeWorkGroupSizeZ", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeWorkGroupSizeZ)); } },
-        { "limit.MaxComputeWorkGroupInvocations", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeWorkGroupInvocations)); } },
-        { "limit.MaxVertexShaderStorageBlocks", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxVertexShaderStorageBlocks)); } },
-        { "limit.MaxStorageBufferBytes", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxStorageBufferBytes)); } },
         { "limit.MaxUniformBufferBytes", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxUniformBufferBytes)); } },
-        { "limit.MaxComputeStorageBufferBindings", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxComputeStorageBufferBindings)); } },
-        { "limit.MaxTextureArrayLayers", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxTextureArrayLayers)); } },
         { "limit.MaxSampledTexturesPerShaderStage", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxSampledTexturesPerShaderStage)); } },
-        { "limit.MaxStorageImagesPerShaderStage", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxStorageImagesPerShaderStage)); } },
         { "limit.MaxVertexInputBindings", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxVertexInputBindings)); } },
         { "limit.MaxVertexInputAttributes", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxVertexInputAttributes)); } },
         { "limit.MaxColorAttachments", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MaxColorAttachments)); } },
-        { "limit.MinStorageBufferOffsetAlignment", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MinStorageBufferOffsetAlignment)); } },
         { "limit.MinUniformBufferOffsetAlignment", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::MinUniformBufferOffsetAlignment)); } },
-        { "limit.TimestampPeriodPicoseconds", [](GraphicsDevice& d) { return ShowLimit(d.GetRendererLimitEXT(CNA::RendererLimit::TimestampPeriodPicoseconds)); } },
         { "renderTargetFormat.Color", [](GraphicsDevice& d) { return Show(d.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Color)); } },
         { "renderTargetFormat.Bgr565", [](GraphicsDevice& d) { return Show(d.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Bgr565)); } },
         { "renderTargetFormat.Bgra5551", [](GraphicsDevice& d) { return Show(d.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Bgra5551)); } },
@@ -351,8 +317,6 @@ protected:
                   return Show(d.SupportsImageBasedLightingEXT()); } },
             { "query.maxTextureDimension", [](GraphicsDevice& d) {
                   return Show(d.GetMaxTextureDimension()); } },
-            { "query.maxComputeWorkGroupInvocations", [](GraphicsDevice& d) {
-                  return Show(d.GetMaxComputeWorkGroupInvocationsEXT()); } },
             { "query.rendererName", [](GraphicsDevice& d) {
                   return std::string(d.GetGraphicsRendererName()); } },
         };
@@ -444,8 +408,6 @@ protected:
             { "capability.HalfFloatRenderTargets",  "feature.Float16RenderTargets" },
             { "capability.HalfFloatTextureLinearFiltering",
               "feature.Float16TextureLinearFiltering" },
-            { "capability.ComputeShaders",          "feature.ComputeShaders" },
-            { "capability.IndirectDraw",            "feature.IndirectDrawing" },
         };
         int mirrorsChecked = 0;
         std::string mirrorMismatch;
@@ -463,11 +425,6 @@ protected:
               mirrorMismatch.empty() ? std::to_string(mirrorsChecked) + " pairs agree"
                                      : mirrorMismatch);
 
-        check((measured["capability.ComputeShaders"] == "true")
-                  == (measured["limit.MaxComputeWorkGroupInvocations"] != "0"),
-              "C compute limits are non-zero exactly when compute is reported",
-              "capability=" + measured["capability.ComputeShaders"] + " invocations="
-                  + measured["limit.MaxComputeWorkGroupInvocations"]);
         check((measured["capability.MultiStreamVertexInput"] == "true")
                   || measured["limit.MaxVertexStreams"] == "1",
               "C a renderer that refuses multi-stream input reports exactly one stream",

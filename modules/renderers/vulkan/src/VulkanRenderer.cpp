@@ -232,7 +232,7 @@ namespace CNA::Internal::Renderers::Vulkan
     // successful acquire that is then reported out of date would leave the image-available
     // semaphore signalled with no waiter.
     static std::uint32_t sSwapchainOutOfDateToInject = 0;
-    // plan_modern.md MOD-2254: presentation-result recovery needs a deterministic route too. The
+    // Presentation-result recovery needs a deterministic route too. The
     // real present still runs; only a successful return is replaced, so the wait semaphore is
     // consumed and the acquired image is released before the production recovery branch runs.
     static std::uint32_t sSwapchainPresentOutOfDateToInject = 0;
@@ -258,8 +258,7 @@ namespace CNA::Internal::Renderers::Vulkan
     // "missing" channels of storage that has all four would discard real data. Only a view over
     // the format's own native storage is expanded.
     //
-    // SAMPLED views only. A storage image must have the identity mapping (VUID-VkImageViewCreateInfo-
-    // imageViewFormatSwizzle) and a colour attachment is written, not expanded.
+    // SAMPLED views only: a colour attachment is written, not expanded.
     [[nodiscard]] static VkComponentMapping ClassicSampledSwizzleEXT(int surfaceFormatOrdinal,
                                                                      VkFormat storedFormat) noexcept
     {
@@ -557,30 +556,6 @@ namespace CNA::Internal::Renderers::Vulkan
         imgInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
         imageUsage_ = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        std::uint32_t spirvImageFormat = 0;
-        VulkanRenderer::VulkanSurfaceFormatStorageEXT storageImageFormat{};
-        if (VulkanRenderer::MapStorageImageFormatToStorageEXT(
-                surfaceFormat_, storageImageFormat, spirvImageFormat) &&
-            storageImageFormat.format == vkFormat_ &&
-            (!VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
-                 spirvImageFormat) ||
-             owner_->enabledDeviceFeatures_.shaderStorageImageExtendedFormats == VK_TRUE))
-        {
-            VkFormatProperties formatProperties{};
-            vkGetPhysicalDeviceFormatProperties(
-                owner_->physicalDevice_, vkFormat_, &formatProperties);
-            VkImageFormatProperties imageProperties{};
-            const VkImageUsageFlags candidateUsage = imageUsage_ | VK_IMAGE_USAGE_STORAGE_BIT;
-            if ((formatProperties.optimalTilingFeatures &
-                 VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
-                vkGetPhysicalDeviceImageFormatProperties(
-                    owner_->physicalDevice_, vkFormat_, VK_IMAGE_TYPE_2D,
-                    VK_IMAGE_TILING_OPTIMAL, candidateUsage, 0,
-                    &imageProperties) == VK_SUCCESS)
-            {
-                imageUsage_ = candidateUsage;
-            }
-        }
         imgInfo.usage         = imageUsage_;
         imgInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -652,12 +627,6 @@ namespace CNA::Internal::Renderers::Vulkan
             owner_->EndOneTimeCommands(initCb);
         }
 
-        mipUsageStates_.assign(
-            static_cast<std::size_t>(levelCount_),
-            VulkanResourceUsageState{
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true, false});
-
         // --- VkImageView ---
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -673,25 +642,6 @@ namespace CNA::Internal::Renderers::Vulkan
         viewInfo.components = ClassicSampledSwizzleEXT(surfaceFormat_, vkFormat_);
         if (vkCreateImageView(dev, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateImageView (texture) failed");
-        if ((imageUsage_ & VK_IMAGE_USAGE_STORAGE_BIT) != 0)
-        {
-            viewInfo.subresourceRange.levelCount = 1;
-            // A storage image must keep the identity mapping; the expansion above is a sampling
-            // rule, and a compute write through a swizzled view is invalid Vulkan.
-            viewInfo.components = VkComponentMapping{
-                VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
-                VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
-            if (vkCreateImageView(dev, &viewInfo, nullptr, &storageImageView_) != VK_SUCCESS)
-            {
-                vkDestroyImageView(dev, imageView_, nullptr);
-                vkDestroyImage(dev, image_, nullptr);
-                vkFreeMemory(dev, memory_, nullptr);
-                imageView_ = VK_NULL_HANDLE;
-                image_ = VK_NULL_HANDLE;
-                memory_ = VK_NULL_HANDLE;
-                throw std::runtime_error("vkCreateImageView (texture storage bridge) failed");
-            }
-        }
 
         // --- Descriptor set ---
         // plan_vulkan.md VULKAN-181: through AllocateTexSamplerDescSetEXT, which chains a further
@@ -733,7 +683,6 @@ namespace CNA::Internal::Renderers::Vulkan
         // never hit a stale set. Frees happen once the consuming frame's fence has completed.
         VulkanRenderer::RetiredResources r;
         owner_->EvictSampledViewFromCaches(imageView_, r);
-        owner_->EvictSampledViewFromCaches(storageImageView_, r);
         // VULKAN-181: freed from the pool it actually came from, which is no longer always the
         // base pool -- poolDescriptorSets is REMED-GFX-076's existing (pool, set) queue.
         if (descriptorSet_ != VK_NULL_HANDLE) {
@@ -741,38 +690,9 @@ namespace CNA::Internal::Renderers::Vulkan
             descriptorSet_ = VK_NULL_HANDLE; descriptorPool_ = VK_NULL_HANDLE;
         }
         if (imageView_     != VK_NULL_HANDLE) { r.imageViews.push_back(imageView_);         imageView_     = VK_NULL_HANDLE; }
-        if (storageImageView_ != VK_NULL_HANDLE) {
-            r.imageViews.push_back(storageImageView_);
-            storageImageView_ = VK_NULL_HANDLE;
-        }
         if (image_         != VK_NULL_HANDLE) { r.images.push_back(image_);                  image_         = VK_NULL_HANDLE; }
         if (memory_        != VK_NULL_HANDLE) { r.memories.push_back(memory_);               memory_        = VK_NULL_HANDLE; }
         owner_->RetireResources(std::move(r));
-    }
-
-    void VulkanTextureRenderer::PrepareForComputeEXT(
-        const VkCommandBuffer commandBuffer, const int accessMode)
-    {
-        if (!IsStorageImageCapableEXT())
-            throw std::logic_error("Vulkan texture has no storage-image bridge");
-        const VulkanResourceIntent intent = accessMode == 0
-            ? VulkanResourceIntent::ShaderRead
-            : (accessMode == 1 ? VulkanResourceIntent::ShaderWrite
-                               : VulkanResourceIntent::ShaderReadWrite);
-        owner_->RecordImageUsageEXT(
-            commandBuffer, image_, mipUsageStates_,
-            static_cast<std::uint32_t>(levelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
-            0, 1, 0, 1, intent);
-    }
-
-    void VulkanTextureRenderer::PrepareForSamplingEXT(
-        const VkCommandBuffer commandBuffer)
-    {
-        owner_->RecordImageUsageEXT(
-            commandBuffer, image_, mipUsageStates_,
-            static_cast<std::uint32_t>(levelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
-            0, static_cast<std::uint32_t>(levelCount_), 0, 1,
-            VulkanResourceIntent::SampledRead);
     }
 
     void VulkanTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
@@ -814,45 +734,19 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         vkUnmapMemory(dev, stagingMem);
 
-        if (!participatesInModernOrder_)
-        {
-            VkCommandBuffer cb = owner_->BeginOneTimeCommands();
-            owner_->RecordImageLayoutTransition(
-                cb, image_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            owner_->RecordBufferToImageCopy(
-                cb, stagingBuf, image_, static_cast<std::uint32_t>(width_),
-                static_cast<std::uint32_t>(height_));
-            owner_->RecordImageLayoutTransition(
-                cb, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            owner_->EndOneTimeCommands(cb);
-            vkDestroyBuffer(dev, stagingBuf, nullptr);
-            vkFreeMemory(dev, stagingMem, nullptr);
-            return;
-        }
-
-        VulkanRenderer::PendingModernCommand command;
-        command.kind = VulkanRenderer::PendingModernCommand::Kind::ImageUpload;
-        command.uploadTexture = std::dynamic_pointer_cast<VulkanTextureRenderer>(
-            ITextureRenderer::shared_from_this());
-        if (command.uploadTexture == nullptr)
-            throw std::logic_error("Vulkan texture upload lost its tracked image record");
-        command.uploadStagingBuffer = stagingBuf;
-        command.uploadRegion.imageSubresource = {
-            VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        command.uploadRegion.imageOffset = {0, 0, 0};
-        command.uploadRegion.imageExtent = {
-            static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
-
-        VulkanRenderer::RetiredResources retired;
-        retired.buffers.push_back(stagingBuf);
-        retired.memories.push_back(stagingMem);
-        retired.modernStagingAllocations = 1;
-        ++owner_->liveModernStagingAllocationCountEXT_;
-        ++owner_->modernStagingAllocationCountEXT_;
-        owner_->RetireResources(std::move(retired));
-        owner_->QueueStorageImageUploadEXT(std::move(command));
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        owner_->RecordImageLayoutTransition(
+            cb, image_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        owner_->RecordBufferToImageCopy(
+            cb, stagingBuf, image_, static_cast<std::uint32_t>(width_),
+            static_cast<std::uint32_t>(height_));
+        owner_->RecordImageLayoutTransition(
+            cb, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        owner_->EndOneTimeCommands(cb);
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
     }
 
     void VulkanTextureRenderer::KeepCompressedLevelEXT(int level, const std::uint8_t* blocks,
@@ -955,50 +849,24 @@ namespace CNA::Internal::Renderers::Vulkan
         if (blockExtent_ > 1)
             KeepCompressedLevelEXT(level, rgba, static_cast<std::size_t>(size));
 
-        if (!participatesInModernOrder_)
-        {
-            TransitionLevelLayout(
-                level, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-            VkCommandBuffer cb = owner_->BeginOneTimeCommands();
-            VkBufferImageCopy region{};
-            region.imageSubresource = {
-                VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 0, 1};
-            region.imageOffset = {0, 0, 0};
-            region.imageExtent = {
-                static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
-            vkCmdCopyBufferToImage(
-                cb, stagingBuf, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-            owner_->EndOneTimeCommands(cb);
-            TransitionLevelLayout(
-                level, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            vkDestroyBuffer(dev, stagingBuf, nullptr);
-            vkFreeMemory(dev, stagingMem, nullptr);
-            return;
-        }
-
-        VulkanRenderer::PendingModernCommand command;
-        command.kind = VulkanRenderer::PendingModernCommand::Kind::ImageUpload;
-        command.uploadTexture = std::dynamic_pointer_cast<VulkanTextureRenderer>(
-            ITextureRenderer::shared_from_this());
-        if (command.uploadTexture == nullptr)
-            throw std::logic_error("Vulkan texture mip upload lost its tracked image record");
-        command.uploadStagingBuffer = stagingBuf;
-        command.uploadRegion.imageSubresource = {
+        TransitionLevelLayout(
+            level, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkBufferImageCopy region{};
+        region.imageSubresource = {
             VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(level), 0, 1};
-        command.uploadRegion.imageOffset = {0, 0, 0};
-        command.uploadRegion.imageExtent = {
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {
             static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
-
-        VulkanRenderer::RetiredResources retired;
-        retired.buffers.push_back(stagingBuf);
-        retired.memories.push_back(stagingMem);
-        retired.modernStagingAllocations = 1;
-        ++owner_->liveModernStagingAllocationCountEXT_;
-        ++owner_->modernStagingAllocationCountEXT_;
-        owner_->RetireResources(std::move(retired));
-        owner_->QueueStorageImageUploadEXT(std::move(command));
+        vkCmdCopyBufferToImage(
+            cb, stagingBuf, image_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        owner_->EndOneTimeCommands(cb);
+        TransitionLevelLayout(
+            level, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
     }
 
     VulkanTextureRenderer::~VulkanTextureRenderer()
@@ -1008,508 +876,6 @@ namespace CNA::Internal::Renderers::Vulkan
         if (owner_) {
             auto& list = owner_->liveTextures_;
             list.erase(std::remove(list.begin(), list.end(), this), list.end());
-        }
-        ReleaseVulkanResources();
-    }
-
-    // =========================================================================
-    // MOD-2226 / MOD-2243: VulkanTexture2DArrayRenderer
-    // =========================================================================
-
-    VulkanTexture2DArrayRenderer::VulkanTexture2DArrayRenderer(
-        VulkanRenderer* owner, const int width, const int height, const int layerCount,
-        const int mipLevelCount, const int surfaceFormat, const std::uint32_t usage)
-        : owner_(owner)
-        , width_(width)
-        , height_(height)
-        , layerCount_(layerCount)
-        , mipLevelCount_(mipLevelCount)
-        , surfaceFormat_(surfaceFormat)
-        , usage_(usage)
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
-            throw std::runtime_error("Vulkan texture array: renderer device is unavailable");
-
-        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{};
-        if (!owner_->MapSurfaceFormatToStorageEXT(surfaceFormat_, storage))
-            throw System::NotSupportedException(
-                "Vulkan texture array: SurfaceFormat has no implemented native storage");
-        vkFormat_ = storage.format;
-        bytesPerTexel_ = storage.bytesPerTexel;
-        blockExtent_ = storage.blockExtent;
-
-        imageUsage_ = VK_IMAGE_USAGE_SAMPLED_BIT;
-        if ((usage_ & UINT32_C(4)) != 0) imageUsage_ |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        if ((usage_ & UINT32_C(8)) != 0) imageUsage_ |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.format = vkFormat_;
-        imageInfo.extent = {static_cast<std::uint32_t>(width_),
-                            static_cast<std::uint32_t>(height_), 1};
-        imageInfo.mipLevels = static_cast<std::uint32_t>(mipLevelCount_);
-        imageInfo.arrayLayers = static_cast<std::uint32_t>(layerCount_);
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = imageUsage_;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (vkCreateImage(owner_->device_, &imageInfo, nullptr, &image_) != VK_SUCCESS)
-            throw std::runtime_error("Vulkan texture array: vkCreateImage failed");
-
-        try
-        {
-            VkMemoryRequirements requirements{};
-            vkGetImageMemoryRequirements(owner_->device_, image_, &requirements);
-            VkMemoryAllocateInfo allocation{};
-            allocation.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocation.allocationSize = requirements.size;
-            allocation.memoryTypeIndex = owner_->FindMemoryType(
-                requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            if (vkAllocateMemory(owner_->device_, &allocation, nullptr, &memory_) != VK_SUCCESS)
-                throw std::runtime_error("Vulkan texture array: vkAllocateMemory failed");
-            if (vkBindImageMemory(owner_->device_, image_, memory_, 0) != VK_SUCCESS)
-                throw std::runtime_error("Vulkan texture array: vkBindImageMemory failed");
-
-            VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-            VkImageMemoryBarrier barrier{};
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = image_;
-            barrier.subresourceRange = {
-                VK_IMAGE_ASPECT_COLOR_BIT, 0, static_cast<std::uint32_t>(mipLevelCount_),
-                0, static_cast<std::uint32_t>(layerCount_)};
-            barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            vkCmdPipelineBarrier(
-                commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-            owner_->EndOneTimeCommands(commandBuffer);
-
-            VkImageViewCreateInfo viewInfo{};
-            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            viewInfo.image = image_;
-            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-            viewInfo.format = vkFormat_;
-            viewInfo.subresourceRange = barrier.subresourceRange;
-            if (vkCreateImageView(owner_->device_, &viewInfo, nullptr, &imageView_) != VK_SUCCESS)
-                throw std::runtime_error("Vulkan texture array: vkCreateImageView failed");
-            imageViewType_ = viewInfo.viewType;
-        }
-        catch (...)
-        {
-            if (imageView_ != VK_NULL_HANDLE)
-                vkDestroyImageView(owner_->device_, imageView_, nullptr);
-            if (image_ != VK_NULL_HANDLE)
-                vkDestroyImage(owner_->device_, image_, nullptr);
-            if (memory_ != VK_NULL_HANDLE)
-                vkFreeMemory(owner_->device_, memory_, nullptr);
-            imageView_ = VK_NULL_HANDLE;
-            memory_ = VK_NULL_HANDLE;
-            image_ = VK_NULL_HANDLE;
-            throw;
-        }
-    }
-
-    void VulkanTexture2DArrayRenderer::RecordTransition(
-        const VkCommandBuffer commandBuffer, const int layer, const int mipLevel,
-        const VkImageLayout oldLayout, const VkImageLayout newLayout) const
-    {
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = oldLayout;
-        barrier.newLayout = newLayout;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image_;
-        barrier.subresourceRange = {
-            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 1,
-            static_cast<std::uint32_t>(layer), 1};
-
-        VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-        {
-            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            barrier.dstAccessMask = newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
-        }
-        else
-        {
-            barrier.srcAccessMask = oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        }
-        vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0,
-                             0, nullptr, 0, nullptr, 1, &barrier);
-    }
-
-    bool VulkanTexture2DArrayRenderer::SetData(
-        const int layer, const int mipLevel, const int x, const int y,
-        const int width, const int height, const void* data, const std::size_t byteCount)
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
-            data == nullptr || (usage_ & UINT32_C(8)) == 0)
-            return false;
-
-        VkBuffer stagingBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        void* mapped = nullptr;
-        owner_->CreateBuffer(
-            static_cast<VkDeviceSize>(byteCount), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingMemory, &mapped);
-        std::memcpy(mapped, data, byteCount);
-        vkUnmapMemory(owner_->device_, stagingMemory);
-
-        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        VkBufferImageCopy copy{};
-        copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,
-                                 static_cast<std::uint32_t>(mipLevel),
-                                 static_cast<std::uint32_t>(layer), 1};
-        copy.imageOffset = {x, y, 0};
-        copy.imageExtent = {static_cast<std::uint32_t>(width),
-                            static_cast<std::uint32_t>(height), 1};
-        vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image_,
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        owner_->EndOneTimeCommands(commandBuffer);
-
-        vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
-        vkFreeMemory(owner_->device_, stagingMemory, nullptr);
-        return true;
-    }
-
-    bool VulkanTexture2DArrayRenderer::GetData(
-        const int layer, const int mipLevel, const int x, const int y,
-        const int width, const int height, void* data, const std::size_t byteCount) const
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
-            data == nullptr || (usage_ & UINT32_C(4)) == 0)
-            return false;
-
-        VkBuffer stagingBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        owner_->CreateBuffer(
-            static_cast<VkDeviceSize>(byteCount), VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingMemory);
-
-        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        VkBufferImageCopy copy{};
-        copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT,
-                                 static_cast<std::uint32_t>(mipLevel),
-                                 static_cast<std::uint32_t>(layer), 1};
-        copy.imageOffset = {x, y, 0};
-        copy.imageExtent = {static_cast<std::uint32_t>(width),
-                            static_cast<std::uint32_t>(height), 1};
-        vkCmdCopyImageToBuffer(commandBuffer, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               stagingBuffer, 1, &copy);
-        RecordTransition(commandBuffer, layer, mipLevel, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        owner_->EndOneTimeCommands(commandBuffer);
-
-        void* mapped = nullptr;
-        if (vkMapMemory(owner_->device_, stagingMemory, 0,
-                        static_cast<VkDeviceSize>(byteCount), 0, &mapped) != VK_SUCCESS)
-        {
-            vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
-            vkFreeMemory(owner_->device_, stagingMemory, nullptr);
-            return false;
-        }
-        std::memcpy(data, mapped, byteCount);
-        vkUnmapMemory(owner_->device_, stagingMemory);
-        vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
-        vkFreeMemory(owner_->device_, stagingMemory, nullptr);
-        return true;
-    }
-
-    void VulkanTexture2DArrayRenderer::ReleaseVulkanResources()
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
-        if (imageView_ == VK_NULL_HANDLE && image_ == VK_NULL_HANDLE && memory_ == VK_NULL_HANDLE)
-            return;
-        VulkanRenderer::RetiredResources retired;
-        owner_->EvictSampledViewFromCaches(imageView_, retired);
-        if (imageView_ != VK_NULL_HANDLE) retired.imageViews.push_back(imageView_);
-        if (image_ != VK_NULL_HANDLE) retired.images.push_back(image_);
-        if (memory_ != VK_NULL_HANDLE) retired.memories.push_back(memory_);
-        imageView_ = VK_NULL_HANDLE;
-        image_ = VK_NULL_HANDLE;
-        memory_ = VK_NULL_HANDLE;
-        ++owner_->retiredTexture2DArrayCountEXT_;
-        owner_->RetireResources(std::move(retired));
-    }
-
-    VulkanTexture2DArrayRenderer::~VulkanTexture2DArrayRenderer()
-    {
-        if (owner_ != nullptr)
-        {
-            auto& live = owner_->liveTexture2DArrays_;
-            live.erase(std::remove(live.begin(), live.end(), this), live.end());
-        }
-        ReleaseVulkanResources();
-    }
-
-    // =========================================================================
-    // MOD-2228: VulkanStorageTexture2DRenderer
-    // =========================================================================
-
-    VulkanStorageTexture2DRenderer::VulkanStorageTexture2DRenderer(
-        VulkanRenderer* owner, const int width, const int height, const int mipLevelCount,
-        const int surfaceFormat, const std::uint32_t usage)
-        : owner_(owner)
-        , width_(width)
-        , height_(height)
-        , mipLevelCount_(mipLevelCount)
-        , surfaceFormat_(surfaceFormat)
-        , usage_(usage)
-        , mipUsageStates_(static_cast<std::size_t>(mipLevelCount))
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
-            throw std::runtime_error("Vulkan storage texture: renderer device is unavailable");
-
-        VulkanRenderer::VulkanSurfaceFormatStorageEXT storage{};
-        std::uint32_t spirvImageFormat = 0;
-        if (!VulkanRenderer::MapStorageImageFormatToStorageEXT(
-                surfaceFormat_, storage, spirvImageFormat))
-        {
-            throw System::NotSupportedException(
-                "Vulkan storage texture: SurfaceFormat has no exact SPIR-V storage image format");
-        }
-        if (VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
-                spirvImageFormat) &&
-            owner_->enabledDeviceFeatures_.shaderStorageImageExtendedFormats != VK_TRUE)
-        {
-            throw System::NotSupportedException(
-                "Vulkan storage texture: the selected device did not enable "
-                "shaderStorageImageExtendedFormats for this SPIR-V image format");
-        }
-        vkFormat_ = storage.format;
-        bytesPerTexel_ = storage.bytesPerTexel;
-        imageUsage_ = VK_IMAGE_USAGE_STORAGE_BIT;
-        if ((usage_ & UINT32_C(4)) != 0) imageUsage_ |= VK_IMAGE_USAGE_SAMPLED_BIT;
-        if ((usage_ & UINT32_C(16)) != 0) imageUsage_ |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        if ((usage_ & UINT32_C(32)) != 0) imageUsage_ |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.format = vkFormat_;
-        imageInfo.extent = {static_cast<std::uint32_t>(width_),
-                            static_cast<std::uint32_t>(height_), 1};
-        imageInfo.mipLevels = static_cast<std::uint32_t>(mipLevelCount_);
-        imageInfo.arrayLayers = 1;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = imageUsage_;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (vkCreateImage(owner_->device_, &imageInfo, nullptr, &image_) != VK_SUCCESS)
-            throw std::runtime_error("Vulkan storage texture: vkCreateImage failed");
-
-        try
-        {
-            VkMemoryRequirements requirements{};
-            vkGetImageMemoryRequirements(owner_->device_, image_, &requirements);
-            VkMemoryAllocateInfo allocation{};
-            allocation.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            allocation.allocationSize = requirements.size;
-            allocation.memoryTypeIndex = owner_->FindMemoryType(
-                requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            if (vkAllocateMemory(owner_->device_, &allocation, nullptr, &memory_) != VK_SUCCESS)
-                throw std::runtime_error("Vulkan storage texture: vkAllocateMemory failed");
-            if (vkBindImageMemory(owner_->device_, image_, memory_, 0) != VK_SUCCESS)
-                throw std::runtime_error("Vulkan storage texture: vkBindImageMemory failed");
-
-            VkImageViewCreateInfo viewInfo{};
-            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            viewInfo.image = image_;
-            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            viewInfo.format = vkFormat_;
-            viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            if (vkCreateImageView(owner_->device_, &viewInfo, nullptr, &storageView_) != VK_SUCCESS)
-                throw std::runtime_error("Vulkan storage texture: storage vkCreateImageView failed");
-            if ((usage_ & UINT32_C(4)) != 0)
-            {
-                viewInfo.subresourceRange.levelCount = static_cast<std::uint32_t>(mipLevelCount_);
-                if (vkCreateImageView(
-                        owner_->device_, &viewInfo, nullptr, &sampledView_) != VK_SUCCESS)
-                    throw std::runtime_error(
-                        "Vulkan storage texture: sampled vkCreateImageView failed");
-            }
-        }
-        catch (...)
-        {
-            if (sampledView_ != VK_NULL_HANDLE)
-                vkDestroyImageView(owner_->device_, sampledView_, nullptr);
-            if (storageView_ != VK_NULL_HANDLE)
-                vkDestroyImageView(owner_->device_, storageView_, nullptr);
-            if (image_ != VK_NULL_HANDLE)
-                vkDestroyImage(owner_->device_, image_, nullptr);
-            if (memory_ != VK_NULL_HANDLE)
-                vkFreeMemory(owner_->device_, memory_, nullptr);
-            sampledView_ = VK_NULL_HANDLE;
-            storageView_ = VK_NULL_HANDLE;
-            image_ = VK_NULL_HANDLE;
-            memory_ = VK_NULL_HANDLE;
-            throw;
-        }
-    }
-
-    void VulkanStorageTexture2DRenderer::RecordUsage(
-        const VkCommandBuffer commandBuffer, const int mipLevel,
-        const VulkanResourceIntent intent) const
-    {
-        owner_->RecordImageUsageEXT(
-            commandBuffer, image_, mipUsageStates_,
-            static_cast<std::uint32_t>(mipLevelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
-            static_cast<std::uint32_t>(mipLevel), 1, 0, 1, intent);
-    }
-
-    bool VulkanStorageTexture2DRenderer::SetData(
-        const int mipLevel, const int x, const int y, const int width, const int height,
-        const void* data, const std::size_t byteCount)
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
-            data == nullptr || (usage_ & UINT32_C(32)) == 0)
-            return false;
-        VkBuffer stagingBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        void* mapped = nullptr;
-        owner_->CreateBuffer(
-            static_cast<VkDeviceSize>(byteCount), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingMemory, &mapped);
-        std::memcpy(mapped, data, byteCount);
-        vkUnmapMemory(owner_->device_, stagingMemory);
-
-        VulkanRenderer::PendingModernCommand command;
-        command.kind = VulkanRenderer::PendingModernCommand::Kind::ImageUpload;
-        command.uploadImage = std::dynamic_pointer_cast<VulkanStorageTexture2DRenderer>(
-            IStorageTexture2DRenderer::shared_from_this());
-        if (command.uploadImage == nullptr)
-            throw std::logic_error("Vulkan storage texture upload lost its tracked image record");
-        command.uploadStagingBuffer = stagingBuffer;
-        command.uploadRegion.imageSubresource = {
-            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 0, 1};
-        command.uploadRegion.imageOffset = {x, y, 0};
-        command.uploadRegion.imageExtent = {
-            static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height), 1};
-
-        // The immutable staging bytes join compute/copies in public-call order. Retire their
-        // native allocation behind the consuming frame fence now; the pending record retains the
-        // destination image and the handles remain alive through command recording and execution.
-        VulkanRenderer::RetiredResources retired;
-        retired.buffers.push_back(stagingBuffer);
-        retired.memories.push_back(stagingMemory);
-        retired.modernStagingAllocations = 1;
-        ++owner_->liveModernStagingAllocationCountEXT_;
-        ++owner_->modernStagingAllocationCountEXT_;
-        owner_->RetireResources(std::move(retired));
-        owner_->QueueStorageImageUploadEXT(std::move(command));
-        return true;
-    }
-
-    bool VulkanStorageTexture2DRenderer::GetData(
-        const int mipLevel, const int x, const int y, const int width, const int height,
-        void* data, const std::size_t byteCount) const
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE || image_ == VK_NULL_HANDLE ||
-            data == nullptr || (usage_ & UINT32_C(16)) == 0)
-            return false;
-        VkBuffer stagingBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        owner_->CreateBuffer(
-            static_cast<VkDeviceSize>(byteCount), VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingMemory);
-        owner_->FlushModernSampledRenderTargetsEXT();
-        VkCommandBuffer commandBuffer = owner_->BeginOneTimeCommands();
-        // Requested readback is the single synchronous boundary: replay every older immutable
-        // upload/compute/copy and this image copy in one ordered submission, rather than waiting
-        // once for the producer stream and again for the readback transfer.
-        for (const auto& command : owner_->pendingModernCommands_)
-            owner_->RecordModernCommandEXT(commandBuffer, command);
-        RecordUsage(commandBuffer, mipLevel, VulkanResourceIntent::TransferRead);
-        VkBufferImageCopy copy{};
-        copy.imageSubresource = {
-            VK_IMAGE_ASPECT_COLOR_BIT, static_cast<std::uint32_t>(mipLevel), 0, 1};
-        copy.imageOffset = {x, y, 0};
-        copy.imageExtent = {static_cast<std::uint32_t>(width),
-                            static_cast<std::uint32_t>(height), 1};
-        vkCmdCopyImageToBuffer(commandBuffer, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               stagingBuffer, 1, &copy);
-        owner_->EndOneTimeCommands(commandBuffer);
-        owner_->pendingModernCommands_.clear();
-        void* mapped = nullptr;
-        const VkResult result = vkMapMemory(
-            owner_->device_, stagingMemory, 0, static_cast<VkDeviceSize>(byteCount), 0, &mapped);
-        if (result == VK_SUCCESS) {
-            std::memcpy(data, mapped, byteCount);
-            vkUnmapMemory(owner_->device_, stagingMemory);
-        }
-        vkDestroyBuffer(owner_->device_, stagingBuffer, nullptr);
-        vkFreeMemory(owner_->device_, stagingMemory, nullptr);
-        return result == VK_SUCCESS;
-    }
-
-    void VulkanStorageTexture2DRenderer::PrepareForComputeEXT(
-        const VkCommandBuffer commandBuffer, const int accessMode)
-    {
-        const VulkanResourceIntent intent = accessMode == 0
-            ? VulkanResourceIntent::ShaderRead
-            : (accessMode == 1 ? VulkanResourceIntent::ShaderWrite
-                               : VulkanResourceIntent::ShaderReadWrite);
-        RecordUsage(commandBuffer, 0, intent);
-    }
-
-    void VulkanStorageTexture2DRenderer::PrepareForSamplingEXT(
-        const VkCommandBuffer commandBuffer)
-    {
-        owner_->RecordImageUsageEXT(
-            commandBuffer, image_, mipUsageStates_,
-            static_cast<std::uint32_t>(mipLevelCount_), VK_IMAGE_ASPECT_COLOR_BIT,
-            0, static_cast<std::uint32_t>(mipLevelCount_), 0, 1,
-            VulkanResourceIntent::SampledRead);
-    }
-
-    void VulkanStorageTexture2DRenderer::ReleaseVulkanResources()
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
-        if (sampledView_ == VK_NULL_HANDLE && storageView_ == VK_NULL_HANDLE &&
-            image_ == VK_NULL_HANDLE && memory_ == VK_NULL_HANDLE)
-            return;
-        VulkanRenderer::RetiredResources retired;
-        owner_->EvictSampledViewFromCaches(sampledView_, retired);
-        owner_->EvictSampledViewFromCaches(storageView_, retired);
-        if (sampledView_ != VK_NULL_HANDLE) retired.imageViews.push_back(sampledView_);
-        if (storageView_ != VK_NULL_HANDLE) retired.imageViews.push_back(storageView_);
-        if (image_ != VK_NULL_HANDLE) retired.images.push_back(image_);
-        if (memory_ != VK_NULL_HANDLE) retired.memories.push_back(memory_);
-        sampledView_ = VK_NULL_HANDLE;
-        storageView_ = VK_NULL_HANDLE;
-        image_ = VK_NULL_HANDLE;
-        memory_ = VK_NULL_HANDLE;
-        owner_->RetireResources(std::move(retired));
-    }
-
-    VulkanStorageTexture2DRenderer::~VulkanStorageTexture2DRenderer()
-    {
-        if (owner_ != nullptr) {
-            auto& live = owner_->liveStorageTexture2Ds_;
-            live.erase(std::remove(live.begin(), live.end(), this), live.end());
         }
         ReleaseVulkanResources();
     }
@@ -1616,30 +982,10 @@ namespace CNA::Internal::Renderers::Vulkan
         colorInfo.arrayLayers   = 1;
         colorInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         colorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        VkFormatProperties colorFormatProperties{};
-        vkGetPhysicalDeviceFormatProperties(
-            owner_->physicalDevice_, colorVkFormat_, &colorFormatProperties);
-        VkImageFormatProperties storageImageProperties{};
-        const VkImageUsageFlags baseColorUsage =
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        std::uint32_t spirvImageFormat = 0;
-        const bool storageImageCapable =
-            VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
-                colorVkFormat_, spirvImageFormat) &&
-            (!VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
-                 spirvImageFormat) ||
-             owner_->enabledDeviceFeatures_.shaderStorageImageExtendedFormats == VK_TRUE) &&
-            (colorFormatProperties.optimalTilingFeatures &
-             VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
-            vkGetPhysicalDeviceImageFormatProperties(
-                owner_->physicalDevice_, colorVkFormat_, VK_IMAGE_TYPE_2D,
-                VK_IMAGE_TILING_OPTIMAL, baseColorUsage | VK_IMAGE_USAGE_STORAGE_BIT, 0,
-                &storageImageProperties) == VK_SUCCESS;
         // TRANSFER_SRC/DST (Task 878): needed by MaybeGenerateMips' vkCmdBlitImage cascade when
         // levelCount_ > 1; harmless to always request even for non-mipmapped RTs.
-        colorInfo.usage         = baseColorUsage |
-                                  (storageImageCapable ? VK_IMAGE_USAGE_STORAGE_BIT : 0u);
+        colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         colorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
         colorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (vkCreateImage(dev, &colorInfo, nullptr, &colorImage_) != VK_SUCCESS)
@@ -1918,7 +1264,6 @@ namespace CNA::Internal::Renderers::Vulkan
         pass_->mipLevels     = levelCount_;
         pass_->mipLayer      = 0;
         pass_->trackedColorImage = colorImage_;
-        pass_->storageImageView = storageImageCapable ? colorView_ : VK_NULL_HANDLE;
         pass_->colorUsageStates.assign(
             static_cast<std::size_t>(levelCount_),
             VulkanResourceUsageState{
@@ -1935,33 +1280,6 @@ namespace CNA::Internal::Renderers::Vulkan
         VkLifetimeTraceEXT("rt2d.pass        renderer=%p pass=%p fb=0x%llx renderPass=0x%llx",
                            static_cast<const void*>(this), static_cast<const void*>(pass_.get()),
                            VkH(pass_->framebuffer), VkH(pass_->renderPass));
-    }
-
-    void VulkanRenderTargetRenderer::PrepareForComputeEXT(
-        const VkCommandBuffer commandBuffer, const int accessMode)
-    {
-        if (!IsStorageImageCapableEXT())
-            throw std::logic_error("Vulkan render target has no storage-image bridge");
-        const VulkanResourceIntent intent = accessMode == 0
-            ? VulkanResourceIntent::ShaderRead
-            : (accessMode == 1 ? VulkanResourceIntent::ShaderWrite
-                               : VulkanResourceIntent::ShaderReadWrite);
-        owner_->RecordImageUsageEXT(
-            commandBuffer, pass_->trackedColorImage, pass_->colorUsageStates,
-            static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
-            VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1, intent);
-    }
-
-    void VulkanRenderTargetRenderer::PrepareForSamplingEXT(
-        const VkCommandBuffer commandBuffer)
-    {
-        if (pass_ == nullptr || pass_->trackedColorImage == VK_NULL_HANDLE) return;
-        owner_->RecordImageUsageEXT(
-            commandBuffer, pass_->trackedColorImage, pass_->colorUsageStates,
-            static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
-            VK_IMAGE_ASPECT_COLOR_BIT, 0,
-            static_cast<std::uint32_t>(pass_->colorUsageStates.size()), 0, 1,
-            VulkanResourceIntent::SampledRead);
     }
 
     void VulkanRenderTargetRenderer::ReleaseVulkanResources()
@@ -2184,8 +1502,8 @@ namespace CNA::Internal::Renderers::Vulkan
             pass_.get(), pass_.get(), level,
             [&](const VkCommandBuffer cb)
             {
-                // Every level is sampled outside a render pass. MOD-2253 records transition,
-                // copy and restore behind the producer closure in the same submission.
+                // Every level is sampled outside a render pass. The transition, the copy and
+                // the restore are recorded behind the producer closure in the same submission.
                 owner_->RecordImageUsageEXT(
                     cb, colorImage_, pass_->colorUsageStates,
                     static_cast<std::uint32_t>(pass_->colorUsageStates.size()),
@@ -2485,9 +1803,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 // bindings are guaranteed to be the ones this batch was drawn with.
                 snapshot->customBoundSet =
                     customEffectRenderer_->GetOrCreateBoundTextureSetEXT(activeSegment_);
-                snapshot->customStorageSet =
-                    customEffectRenderer_->GetOrCreateDrawStorageSetEXT(
-                        snapshot->customStorageBuffers);
                 std::memcpy(snapshot->customPushConst, customEffectRenderer_->GetPushConst(),
                             sizeof(snapshot->customPushConst));
             }
@@ -3184,9 +2499,8 @@ namespace CNA::Internal::Renderers::Vulkan
         //    int -- falls out of the switch to the `return false` below. Refused, never claimed.
         //
         // The previous `default: return true` is what this replaces. GraphicsCapability's own
-        // documentation names that shape three times as the reason `ComputeShaders`,
-        // `IndirectDraw` and the float render-target entries had to be made derived: a catch-all
-        // true turns every future capability into an opt-out promise.
+        // documentation names that shape as the reason the float render-target entries had to be
+        // made derived: a catch-all true turns every future capability into an opt-out promise.
         switch (capability)
         {
             // ---- Answered from a real device property -------------------------------------
@@ -3259,15 +2573,15 @@ namespace CNA::Internal::Renderers::Vulkan
 
             // ---- Derived: answered above this switch by GraphicsDevice ----------------------
             // A game never reaches these cases -- GraphicsDevice::SupportsCapability answers all
-            // six from a renderer virtual before asking the renderer's switch. They are answered
+            // four from a renderer virtual before asking the renderer's switch. They are answered
             // here anyway, from the SAME virtual, so that a caller holding an IGraphicsRenderer
             // directly (the C ABI, a renderer test) cannot be told something the seam would deny.
             case CNA::GraphicsCapability::CompiledEffects:
                 return SupportsCompiledEffects();
+            // MRT-007 removes these two cases together with the enumerators.
             case CNA::GraphicsCapability::ComputeShaders:
-                return SupportsComputeShadersEXT();
             case CNA::GraphicsCapability::IndirectDraw:
-                return SupportsIndirectDrawEXT();
+                return false;
             case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
                 return SupportsHalfFloatTextureLinearFilteringEXT();
             case CNA::GraphicsCapability::FloatRenderTargets:
@@ -3290,19 +2604,11 @@ namespace CNA::Internal::Renderers::Vulkan
 
     bool VulkanRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
     {
+        // The two stages a ShaderEffect pipeline is built from, and nothing else: an unknown or
+        // out-of-range stage ordinal is refused rather than mapped to one of them.
         if (language != static_cast<int>(CNA::ShaderLanguageEXT::SpirV)) return false;
-        switch (static_cast<CNA::ShaderStageEXT>(stage))
-        {
-            case CNA::ShaderStageEXT::Vertex:
-            case CNA::ShaderStageEXT::Fragment:
-                return true;
-            case CNA::ShaderStageEXT::Compute:
-                return SupportsComputeShadersEXT();
-            case CNA::ShaderStageEXT::Unknown:
-            case CNA::ShaderStageEXT::Count:
-                return false;
-        }
-        return false;
+        return stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+               stage == static_cast<int>(CNA::ShaderStageEXT::Fragment);
     }
 
     void VulkanRenderer::RequirePbrStrideEXT(std::size_t stride, bool skinned) const
@@ -3461,10 +2767,9 @@ namespace CNA::Internal::Renderers::Vulkan
         switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
         {
             case SurfaceFormat::Color:
-                // MOD-2251: an off-screen XNA Color target is canonical RGBA8 storage, not a
-                // mirror of the presentation surface's platform-selected channel order. SPIR-V
-                // can name this exact storage representation (`rgba8`); it has no `bgra8` image
-                // format with which a common BGRA swapchain allocation could be legally matched.
+                // An off-screen XNA Color target is canonical RGBA8 storage, not a mirror of the
+                // presentation surface's platform-selected channel order, so its bytes are XNA's
+                // whatever swapchain format the platform picked.
                 out = { VK_FORMAT_R8G8B8A8_UNORM, 4 };
                 return true;
             case SurfaceFormat::Rgba64:
@@ -3778,84 +3083,6 @@ namespace CNA::Internal::Renderers::Vulkan
         return MapSurfaceFormatToStorageEXT(surfaceFormat, storage) && storage.blockExtent > 1;
     }
 
-    bool VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
-        const VkFormat format, std::uint32_t& imageFormat) noexcept
-    {
-        switch (format)
-        {
-            case VK_FORMAT_R32G32B32A32_SFLOAT: imageFormat = 1; return true;  // Rgba32f
-            case VK_FORMAT_R16G16B16A16_SFLOAT: imageFormat = 2; return true;  // Rgba16f
-            case VK_FORMAT_R32_SFLOAT:          imageFormat = 3; return true;  // R32f
-            case VK_FORMAT_R8G8B8A8_UNORM:      imageFormat = 4; return true;  // Rgba8
-            case VK_FORMAT_R8G8B8A8_SNORM:      imageFormat = 5; return true;  // Rgba8Snorm
-            case VK_FORMAT_R32G32_SFLOAT:       imageFormat = 6; return true;  // Rg32f
-            case VK_FORMAT_R16G16_SFLOAT:       imageFormat = 7; return true;  // Rg16f
-            case VK_FORMAT_R16_SFLOAT:          imageFormat = 9; return true;  // R16f
-            case VK_FORMAT_R16G16B16A16_UNORM:  imageFormat = 10; return true; // Rgba16
-            case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-                imageFormat = 11; return true;                                  // Rgb10A2
-            case VK_FORMAT_R16G16_UNORM:        imageFormat = 12; return true; // Rg16
-            case VK_FORMAT_R8G8_UNORM:          imageFormat = 13; return true; // Rg8
-            case VK_FORMAT_R16_UNORM:           imageFormat = 14; return true; // R16
-            case VK_FORMAT_R8_UNORM:            imageFormat = 15; return true; // R8
-            case VK_FORMAT_R8G8_SNORM:          imageFormat = 18; return true; // Rg8Snorm
-            default: imageFormat = 0; return false;
-        }
-    }
-
-    bool VulkanRenderer::MapStorageImageFormatToStorageEXT(
-        const int surfaceFormatOrdinal, VulkanSurfaceFormatStorageEXT& out,
-        std::uint32_t& imageFormat) noexcept
-    {
-        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        switch (static_cast<SurfaceFormat>(surfaceFormatOrdinal))
-        {
-            case SurfaceFormat::Color:
-                out = {VK_FORMAT_R8G8B8A8_UNORM, 4}; break;
-            case SurfaceFormat::NormalizedByte2:
-                out = {VK_FORMAT_R8G8_SNORM, 2}; break;
-            case SurfaceFormat::NormalizedByte4:
-                out = {VK_FORMAT_R8G8B8A8_SNORM, 4}; break;
-            case SurfaceFormat::Rgba1010102:
-                out = {VK_FORMAT_A2B10G10R10_UNORM_PACK32, 4}; break;
-            case SurfaceFormat::Rg32:
-                out = {VK_FORMAT_R16G16_UNORM, 4}; break;
-            case SurfaceFormat::Rgba64:
-                out = {VK_FORMAT_R16G16B16A16_UNORM, 8}; break;
-            case SurfaceFormat::Single:
-                out = {VK_FORMAT_R32_SFLOAT, 4}; break;
-            case SurfaceFormat::Vector2:
-                out = {VK_FORMAT_R32G32_SFLOAT, 8}; break;
-            case SurfaceFormat::Vector4:
-                out = {VK_FORMAT_R32G32B32A32_SFLOAT, 16}; break;
-            case SurfaceFormat::HalfSingle:
-                out = {VK_FORMAT_R16_SFLOAT, 2}; break;
-            case SurfaceFormat::HalfVector2:
-                out = {VK_FORMAT_R16G16_SFLOAT, 4}; break;
-            case SurfaceFormat::HalfVector4:
-            case SurfaceFormat::HdrBlendable:
-                out = {VK_FORMAT_R16G16B16A16_SFLOAT, 8}; break;
-            case SurfaceFormat::ByteEXT:
-                out = {VK_FORMAT_R8_UNORM, 1}; break;
-            case SurfaceFormat::UShortEXT:
-                out = {VK_FORMAT_R16_UNORM, 2}; break;
-            default:
-                out = {};
-                imageFormat = 0;
-                return false;
-        }
-        return MapVkFormatToSpirvStorageImageFormatEXT(out.format, imageFormat);
-    }
-
-    bool VulkanRenderer::StorageImageFormatRequiresExtendedFeatureEXT(
-        const std::uint32_t imageFormat) noexcept
-    {
-        // Vulkan's baseline set is exactly Rgba32f, Rgba16f, R32f, Rgba8 and Rgba8Snorm.
-        // Every other format-qualified OpTypeImage requires the
-        // StorageImageExtendedFormats capability and therefore the matching enabled feature.
-        return imageFormat < 1 || imageFormat > 5;
-    }
-
     CNA::RendererFormatSupport VulkanRenderer::GetSurfaceFormatUsageSupportEXT(
         const int surfaceFormat) const
     {
@@ -3873,9 +3100,6 @@ namespace CNA::Internal::Renderers::Vulkan
             static_cast<std::uint32_t>(RendererFormatUsage::Filterable) |
             static_cast<std::uint32_t>(RendererFormatUsage::RenderTarget) |
             static_cast<std::uint32_t>(RendererFormatUsage::Blendable) |
-            static_cast<std::uint32_t>(RendererFormatUsage::StorageRead) |
-            static_cast<std::uint32_t>(RendererFormatUsage::StorageWrite) |
-            static_cast<std::uint32_t>(RendererFormatUsage::StorageAtomic) |
             static_cast<std::uint32_t>(RendererFormatUsage::TransferSource) |
             static_cast<std::uint32_t>(RendererFormatUsage::TransferDestination) |
             static_cast<std::uint32_t>(RendererFormatUsage::Mipmapped) |
@@ -3900,46 +3124,6 @@ namespace CNA::Internal::Renderers::Vulkan
             ClassifySurfaceFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
         const bool sampled = hasImplementedStorage &&
             (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
-        VulkanSurfaceFormatStorageEXT storageImageStorage{};
-        VkImageFormatProperties storageImageProperties{};
-        constexpr VkImageUsageFlags storageImageUsage = VK_IMAGE_USAGE_STORAGE_BIT;
-        std::uint32_t spirvStorageImageFormat = 0;
-        const bool storageImage =
-            MapStorageImageFormatToStorageEXT(
-                surfaceFormat, storageImageStorage, spirvStorageImageFormat) &&
-            storageImageStorage.format == semanticFormat &&
-            (!StorageImageFormatRequiresExtendedFeatureEXT(spirvStorageImageFormat) ||
-             enabledDeviceFeatures_.shaderStorageImageExtendedFormats == VK_TRUE) &&
-            (optimal & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0 &&
-            vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                storageImageUsage, 0, &storageImageProperties) == VK_SUCCESS;
-        VkImageFormatProperties storageSampledImageProperties{};
-        constexpr VkImageUsageFlags storageSampledUsage =
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        const bool storageSampled = storageImage &&
-            (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0 &&
-            vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                storageSampledUsage, 0, &storageSampledImageProperties) == VK_SUCCESS;
-        VkImageFormatProperties storageTransferSourceProperties{};
-        constexpr VkImageUsageFlags storageTransferSourceUsage =
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        const bool storageTransferSource = storageImage &&
-            (optimal & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0 &&
-            vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                storageTransferSourceUsage, 0,
-                &storageTransferSourceProperties) == VK_SUCCESS;
-        VkImageFormatProperties storageTransferDestinationProperties{};
-        constexpr VkImageUsageFlags storageTransferDestinationUsage =
-            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        const bool storageTransferDestination = storageImage &&
-            (optimal & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0 &&
-            vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                storageTransferDestinationUsage, 0,
-                &storageTransferDestinationProperties) == VK_SUCCESS;
         const bool transferDestination = hasImplementedStorage &&
             (optimal & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0;
         VkImageFormatProperties transferSourceImageProperties{};
@@ -3950,15 +3134,11 @@ namespace CNA::Internal::Renderers::Vulkan
             vkGetPhysicalDeviceImageFormatProperties(
                 physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                 transferSourceTextureUsage, 0, &transferSourceImageProperties) == VK_SUCCESS;
-        setSupported(RendererFormatUsage::TextureStorage, hasImplementedStorage || storageImage);
-        setSupported(RendererFormatUsage::Sampled, sampled || storageSampled);
+        setSupported(RendererFormatUsage::TextureStorage, hasImplementedStorage);
+        setSupported(RendererFormatUsage::Sampled, sampled);
         setSupported(RendererFormatUsage::Filterable,
-                     (sampled || storageSampled) &&
-                         (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
-        setSupported(RendererFormatUsage::TransferDestination,
-                     transferDestination || storageTransferDestination);
-        setSupported(RendererFormatUsage::StorageRead, storageImage);
-        setSupported(RendererFormatUsage::StorageWrite, storageImage);
+                     sampled && (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0);
+        setSupported(RendererFormatUsage::TransferDestination, transferDestination);
 
         VkImageFormatProperties textureImageProperties{};
         constexpr VkImageUsageFlags textureUsage =
@@ -3968,8 +3148,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 physicalDevice_, semanticFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
                 textureUsage, 0, &textureImageProperties) == VK_SUCCESS &&
             textureImageProperties.maxMipLevels > 1;
-        setSupported(RendererFormatUsage::Mipmapped,
-                     mipmapped || (storageImage && storageImageProperties.maxMipLevels > 1));
+        setSupported(RendererFormatUsage::Mipmapped, mipmapped);
 
         const bool isColor = static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color;
         const bool renderTarget =
@@ -3982,10 +3161,10 @@ namespace CNA::Internal::Renderers::Vulkan
             vkGetPhysicalDeviceFormatProperties(
                 physicalDevice_, renderTargetStorage.format, &renderTargetProperties);
         setSupported(RendererFormatUsage::Sampled,
-                     sampled || storageSampled || (renderTarget &&
+                     sampled || (renderTarget &&
                          (renderTargetProperties.optimalTilingFeatures &
                           VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0));
-        const bool textureFilterable = (sampled || storageSampled) &&
+        const bool textureFilterable = sampled &&
             (optimal & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
         const bool renderTargetFilterable = renderTarget &&
             (renderTargetProperties.optimalTilingFeatures &
@@ -3998,7 +3177,7 @@ namespace CNA::Internal::Renderers::Vulkan
                          (renderTargetProperties.optimalTilingFeatures &
                           VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) != 0);
         setSupported(RendererFormatUsage::TransferSource,
-                     transferSource || storageTransferSource ||
+                     transferSource ||
                          (renderTarget &&
                           (renderTargetProperties.optimalTilingFeatures &
                            VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0));
@@ -4098,24 +3277,6 @@ namespace CNA::Internal::Renderers::Vulkan
         retiredMrtProxies_.clear();
 
         // Step 2: destroy buffers and memory.
-        // MOD-2241: compute pipelines own descriptor sets that name storage buffers. Tear those
-        // objects down first, then their buffers, while the device is idle and still alive.
-        for (auto* timer : liveGpuTimers_) {
-            timer->ReleaseVulkanResources();
-            timer->DisconnectOwner();
-        }
-        liveGpuTimers_.clear();
-        for (auto* shader : liveComputeShaders_) {
-            shader->ReleaseVulkanResources();
-            shader->DisconnectOwner();
-        }
-        liveComputeShaders_.clear();
-        boundComputeShader_ = nullptr;
-        for (auto* buffer : liveStorageBuffers_) {
-            buffer->ReleaseVulkanResources();
-            buffer->DisconnectOwner();
-        }
-        liveStorageBuffers_.clear();
         // Externally-owned render targets, vertex/index buffers (C++ objects may outlive this destructor).
         for (auto* rt : liveRenderTargets_) { rt->ReleaseVulkanResources(); rt->DisconnectOwner(); }
         liveRenderTargets_.clear();
@@ -4141,16 +3302,6 @@ namespace CNA::Internal::Renderers::Vulkan
         // Externally-owned textures.
         for (auto* tex : liveTextures_) { tex->ReleaseVulkanResources(); tex->DisconnectOwner(); }
         liveTextures_.clear();
-        for (auto* array : liveTexture2DArrays_) {
-            array->ReleaseVulkanResources();
-            array->DisconnectOwner();
-        }
-        liveTexture2DArrays_.clear();
-        for (auto* texture : liveStorageTexture2Ds_) {
-            texture->ReleaseVulkanResources();
-            texture->DisconnectOwner();
-        }
-        liveStorageTexture2Ds_.clear();
         // VULKAN-407: the three classes that used to be in no list at all. A Texture3D, TextureCube
         // or RenderTargetCube can outlive its GraphicsDevice -- MetalResourceHealth's own
         // base-move test exists to document exactly that -- and until this loop existed such an
@@ -4296,7 +3447,6 @@ namespace CNA::Internal::Renderers::Vulkan
         if (defaultOpaqueBlackImage_     != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultOpaqueBlackImage_, nullptr);       defaultOpaqueBlackImage_     = VK_NULL_HANDLE; }
         if (defaultOpaqueBlackMemory_    != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultOpaqueBlackMemory_, nullptr);        defaultOpaqueBlackMemory_    = VK_NULL_HANDLE; }
         // Default white texture (no free of descriptorSet — will be freed with the pool).
-        if (defaultWhiteArrayView_ != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteArrayView_, nullptr); defaultWhiteArrayView_ = VK_NULL_HANDLE; }
         if (defaultWhiteView_   != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultWhiteView_, nullptr);  defaultWhiteView_   = VK_NULL_HANDLE; }
         if (defaultWhiteImage_  != VK_NULL_HANDLE) { vkDestroyImage(device_, defaultWhiteImage_, nullptr);     defaultWhiteImage_  = VK_NULL_HANDLE; }
         if (defaultWhiteMemory_ != VK_NULL_HANDLE) { vkFreeMemory(device_, defaultWhiteMemory_, nullptr);       defaultWhiteMemory_ = VK_NULL_HANDLE; }
@@ -4389,13 +3539,6 @@ namespace CNA::Internal::Renderers::Vulkan
         for (auto& [fmt, rp] : rtRenderPassMsaaLoadByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassMsaaLoadByDepthFmt_.clear();
-        // VMG-0014: the split-head "store everything" variants share the same lifetime.
-        for (auto& [key, rp] : rtRenderPassStoreAllByDepthFmt_)
-            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
-        rtRenderPassStoreAllByDepthFmt_.clear();
-        for (auto& [key, rp] : rtRenderPassMsaaStoreAllByDepthFmt_)
-            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
-        rtRenderPassMsaaStoreAllByDepthFmt_.clear();
         // REMED-GFX-143: the per-load/store swapchain variants share renderPass_'s lifetime.
         DestroySwapchainPassVariants();
         if (renderPass_       != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,       nullptr); renderPass_       = VK_NULL_HANDLE; }
@@ -4484,7 +3627,7 @@ namespace CNA::Internal::Renderers::Vulkan
         exts.reserve(platformExtensions.size() + 3);
         for (const std::string& extension : platformExtensions)
             exts.push_back(extension.c_str());
-        // MOD-2246: debug labels are useful in RenderDoc even in a release build, so debug-utils
+        // Debug labels are useful in RenderDoc even in a release build, so debug-utils
         // availability is discovered independently of validation. A missing optional extension
         // leaves labels/messages unsupported instead of making instance creation fail.
         {
@@ -4627,9 +3770,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 renderer->validationMessageIdNames_.emplace_back(
                     d->pMessageIdName != nullptr ? d->pMessageIdName : "");
             }
-            // VULKAN-180: recording is unconditional; only the echo can be silenced. MOD-2246
-            // routes that single echo through CNA's structured logger rather than also writing a
-            // second raw stderr line, so a custom sink sees one classified GPU diagnostic.
+            // VULKAN-180: recording is unconditional; only the echo can be silenced. That single
+            // echo goes through CNA's structured logger rather than also writing a second raw
+            // stderr line, so a custom sink sees one classified GPU diagnostic.
             if (renderer == nullptr || renderer->validationEcho_)
             {
                 // Keep the established prefix inside the one structured logger record: the
@@ -4691,16 +3834,14 @@ namespace CNA::Internal::Renderers::Vulkan
             physicalDevice_      = dev;
             graphicsQueueFamily_ = *gfx;
             presentQueueFamily_  = *pres;
-            graphicsQueueFlags_  = qps[*gfx].queueFlags;
-            graphicsQueueTimestampValidBits_ = qps[*gfx].timestampValidBits;
             break;
         }
         if (physicalDevice_ == VK_NULL_HANDLE)
             throw std::runtime_error("Vulkan: no suitable GPU");
 
-        // plans/plan_modern.md MOD-2240: use Vulkan 1.1's extensible discovery entry points once,
-        // after the selected-device decision. Supported and enabled feature records stay separate:
-        // a native optional feature is not a CNA capability until an implemented path consumes it.
+        // Vulkan 1.1's extensible discovery entry points, queried once after the selected-device
+        // decision. The supported features are kept apart from the enabled ones: a native optional
+        // feature is not a CNA capability until an implemented path consumes it.
         VkPhysicalDeviceProperties2 properties2{};
         properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         vkGetPhysicalDeviceProperties2(physicalDevice_, &properties2);
@@ -4774,12 +3915,6 @@ namespace CNA::Internal::Renderers::Vulkan
             feat.occlusionQueryPrecise = VK_TRUE;
             occlusionQueryPreciseSupported_ = true;
         }
-        // MOD-2245: the public argument layouts always contain BaseInstance. Vulkan permits a
-        // non-zero value only when this core feature is enabled, so the renderer advertises the
-        // complete indirect contract only on devices that offer it rather than quietly accepting
-        // a zero-only subset.
-        if (supported.drawIndirectFirstInstance)
-            feat.drawIndirectFirstInstance = VK_TRUE;
         // plan_vulkan.md VULKAN-172: BCn formats may not be used at all unless this feature is
         // ENABLED, not merely reported -- an image created in VK_FORMAT_BC1_RGBA_UNORM_BLOCK on a
         // device where it was left false is invalid however encouraging VkFormatProperties looks.
@@ -4787,18 +3922,8 @@ namespace CNA::Internal::Renderers::Vulkan
             feat.textureCompressionBC = VK_TRUE;
             textureCompressionBCSupported_ = true;
         }
-        // MOD-2244 consumes every exact format-qualified storage-image representation the
-        // selected device exposes. Vulkan defines this feature as a whole-device guarantee for
-        // the extended format set (per-format support remains queryable even when it is false),
-        // and explicitly says enabling it has no practical effect. Preserve it in the enabled
-        // snapshot when offered so diagnostics state that the guarantee was accepted; legality is
-        // still decided per VkFormat and complete VkImage usage below.
-        if (supported.shaderStorageImageExtendedFormats)
-            feat.shaderStorageImageExtendedFormats = VK_TRUE;
-        // The enabled snapshot is deliberately narrower than the supported one. MOD-2241 and
-        // later rows extend it only together with the public path and native validation test that
-        // consume each newly enabled feature.
-        enabledDeviceFeatures_ = feat;
+        // The enabled set is deliberately narrower than the supported one: a feature joins it
+        // only together with the path that consumes it.
         // plan_vulkan.md VULKAN-179: SurfaceFormat::Bgra4444 is D3DFMT_A4R4G4B4, whose exact
         // Vulkan spelling VK_FORMAT_A4R4G4B4_UNORM_PACK16 came with VK_EXT_4444_formats and is core
         // only in 1.3, while this renderer's instance asks for 1.1. Enabling the extension where
@@ -4845,7 +3970,7 @@ namespace CNA::Internal::Renderers::Vulkan
         ci.pQueueCreateInfos = qis.data();
         VkPhysicalDeviceFeatures2 enabledFeatures2{};
         enabledFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        enabledFeatures2.features = enabledDeviceFeatures_;
+        enabledFeatures2.features = feat;
         if (formatA4R4G4B4Supported_) enabledFeatures2.pNext = &formats4444;
         ci.pNext = &enabledFeatures2;
         ci.pEnabledFeatures = nullptr;
@@ -5279,13 +4404,9 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VkRenderPass VulkanRenderer::GetOrCreateRTRenderPass(
-        VkFormat colorFmt, VkFormat depthFmt, bool discardContents, bool storeAll)
+        VkFormat colorFmt, VkFormat depthFmt, bool discardContents)
     {
-        // VMG-0014: storeAll only changes the discarding variant; the loading one stores already.
-        storeAll = storeAll && discardContents;
-        auto& cache = discardContents
-            ? (storeAll ? rtRenderPassStoreAllByDepthFmt_ : rtRenderPassByDepthFmt_)
-            : rtRenderPassLoadByDepthFmt_;
+        auto& cache = discardContents ? rtRenderPassByDepthFmt_ : rtRenderPassLoadByDepthFmt_;
         RTPassKey cacheKey{};
         cacheKey.colorFormats[0] = static_cast<int32_t>(colorFmt);
         cacheKey.depthFormat = static_cast<int32_t>(depthFmt);
@@ -5323,11 +4444,11 @@ namespace CNA::Internal::Renderers::Vulkan
         depthAtt.format         = depthFmt;
         depthAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
         depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.storeOp        = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
         depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.stencilStoreOp = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.stencilStoreOp = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
         // LOAD_OP_LOAD needs a defined layout, which UNDEFINED is not: the owning target
         // transitions its depth image once at construction (see VulkanRenderTargetRenderer's and
         // VulkanRenderTargetCubeRenderer's init barrier) so the FIRST preserving bind is legal, and
@@ -5403,17 +4524,13 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VkRenderPass VulkanRenderer::GetOrCreateRTRenderPassMsaa(
         VkFormat colorFmt, VkFormat depthFmt, bool discardContents,
-        VkSampleCountFlagBits samples, bool storeAll)
+        VkSampleCountFlagBits samples)
     {
-        // VMG-0014: storeAll only changes the discarding variant; the loading one stores already.
-        storeAll = storeAll && discardContents;
         // REMED-GFX-141: two caches, exactly like GetOrCreateRTRenderPass's own clear/load pair.
         // plan_vulkan.md VULKAN-216 / MOD-2223: keyed by colour format, depth format and sample
         // count. Render-pass compatibility requires every attachment format and sample count to
         // agree, so changing any member of that tuple genuinely needs another pass.
-        auto& cache = discardContents
-            ? (storeAll ? rtRenderPassMsaaStoreAllByDepthFmt_ : rtRenderPassMsaaByDepthFmt_)
-            : rtRenderPassMsaaLoadByDepthFmt_;
+        auto& cache = discardContents ? rtRenderPassMsaaByDepthFmt_ : rtRenderPassMsaaLoadByDepthFmt_;
         RTPassKey cacheKey{};
         cacheKey.colorFormats[0] = static_cast<int32_t>(colorFmt);
         cacheKey.depthFormat = static_cast<int32_t>(depthFmt);
@@ -5456,8 +4573,8 @@ namespace CNA::Internal::Renderers::Vulkan
         colorAtt.samples        = samples;
         colorAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                   : VK_ATTACHMENT_LOAD_OP_LOAD;
-        colorAtt.storeOp        = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
+        colorAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
         colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED
@@ -5479,11 +4596,11 @@ namespace CNA::Internal::Renderers::Vulkan
         depthAtt.format         = depthFmt;
         depthAtt.samples        = samples;
         depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.storeOp        = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
         depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-        depthAtt.stencilStoreOp = (discardContents && !storeAll) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                                 : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.stencilStoreOp = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
         depthAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED
                                                   : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -5554,17 +4671,12 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VkRenderPass VulkanRenderer::GetOrCreateMRTRenderPass(
         const std::vector<VkFormat>& colorFormats, VkSampleCountFlagBits sampleCount,
-        VkFormat depthFormat, uint32_t splitRole)
+        VkFormat depthFormat)
     {
         const uint32_t colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
         const bool msaa = sampleCount > VK_SAMPLE_COUNT_1_BIT;
         const bool hasDepth = depthFormat != VK_FORMAT_UNDEFINED;
-        // VMG-0014: splitRole 1 is a split head (stores every attachment) and 2 a continuation
-        // (loads what the head stored, and stores again in case the continuation is split too).
-        const bool splitStores = splitRole != 0;
-        const bool splitLoads  = splitRole == 2;
         RTPassKey key{};
-        key.splitRole = splitRole;
         key.colorCount = colorAttachmentCount;
         key.depthFormat = static_cast<int32_t>(depthFormat);
         key.samples = static_cast<uint32_t>(sampleCount);
@@ -5587,14 +4699,12 @@ namespace CNA::Internal::Renderers::Vulkan
             auto& color = atts[i];
             color.format         = colorFormats[i];
             color.samples        = sampleCount;
-            color.loadOp         = splitLoads ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-            color.storeOp        = (msaa && !splitStores) ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                          : VK_ATTACHMENT_STORE_OP_STORE;
+            color.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            color.storeOp        = msaa ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                        : VK_ATTACHMENT_STORE_OP_STORE;
             color.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            color.initialLayout  = !splitLoads ? VK_IMAGE_LAYOUT_UNDEFINED
-                                 : msaa        ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-                                               : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            color.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
             color.finalLayout    = msaa ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
                                         : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             if (msaa) {
@@ -5613,14 +4723,11 @@ namespace CNA::Internal::Renderers::Vulkan
             auto& depth = atts[depthIndex];
             depth.format         = depthFormat;
             depth.samples        = sampleCount;
-            depth.loadOp         = splitLoads ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depth.storeOp        = splitStores ? VK_ATTACHMENT_STORE_OP_STORE
-                                               : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            depth.stencilLoadOp  = splitLoads ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depth.stencilStoreOp = splitStores ? VK_ATTACHMENT_STORE_OP_STORE
-                                               : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            depth.initialLayout  = splitLoads ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-                                              : VK_IMAGE_LAYOUT_UNDEFINED;
+            depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depth.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
             depth.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         }
 
@@ -6318,18 +5425,6 @@ namespace CNA::Internal::Renderers::Vulkan
             r.descriptorSetLayouts.push_back(boundLayout_);
             boundLayout_ = VK_NULL_HANDLE;
         }
-        if (drawStorageSet_ != VK_NULL_HANDLE && drawStoragePool_ != VK_NULL_HANDLE) {
-            r.poolDescriptorSets.emplace_back(drawStoragePool_, drawStorageSet_);
-            drawStorageSet_ = VK_NULL_HANDLE;
-        }
-        if (drawStorageLayout_ != VK_NULL_HANDLE) {
-            r.descriptorSetLayouts.push_back(drawStorageLayout_);
-            drawStorageLayout_ = VK_NULL_HANDLE;
-        }
-        if (drawStoragePool_ != VK_NULL_HANDLE) {
-            r.descriptorPools.push_back(drawStoragePool_);
-            drawStoragePool_ = VK_NULL_HANDLE;
-        }
         // VULKAN-252: the array buffer is named by the same retired set, so it leaves on the same
         // fence rather than being destroyed under a frame that still reads it.
         if (uniformBuffer_ != VK_NULL_HANDLE) {
@@ -6383,49 +5478,19 @@ namespace CNA::Internal::Renderers::Vulkan
         if (refuseNonSpirv(vertSpv, "vertex") || refuseNonSpirv(fragSpv, "fragment"))
             return false;
 
-        drawStorageBindings_.clear();
+        // The vertex module's input locations are reflected so a draw can omit declaration
+        // fields the shader does not consume and refuse one it needs but was not given.
         vertexInputLocations_.clear();
-        const auto reflectSpirV = [this](
-            const std::string& blob, const VkShaderStageFlagBits stage,
-            const char* stageName) -> bool
         {
-            constexpr std::uint16_t OpTypePointer = 32;
-            constexpr std::uint16_t OpTypeStruct = 30;
             constexpr std::uint16_t OpVariable = 59;
             constexpr std::uint16_t OpDecorate = 71;
-            constexpr std::uint16_t OpMemberDecorate = 72;
-            constexpr std::uint32_t DecorationBlock = 2;
-            constexpr std::uint32_t DecorationBufferBlock = 3;
-            constexpr std::uint32_t DecorationNonWritable = 24;
             constexpr std::uint32_t DecorationLocation = 30;
-            constexpr std::uint32_t DecorationBinding = 33;
-            constexpr std::uint32_t DecorationDescriptorSet = 34;
             constexpr std::uint32_t StorageClassInput = 1;
-            constexpr std::uint32_t StorageClassUniform = 2;
-            constexpr std::uint32_t StorageClassStorageBuffer = 12;
-            struct PointerType
-            {
-                std::uint32_t storageClass = 0;
-                std::uint32_t pointeeType = 0;
-            };
-            struct Variable
-            {
-                std::uint32_t pointerType = 0;
-                std::uint32_t storageClass = 0;
-            };
 
-            std::vector<std::uint32_t> words(blob.size() / sizeof(std::uint32_t));
-            std::memcpy(words.data(), blob.data(), blob.size());
-            std::unordered_map<std::uint32_t, PointerType> pointers;
-            std::unordered_map<std::uint32_t, Variable> variables;
-            std::unordered_map<std::uint32_t, std::uint32_t> bindings;
-            std::unordered_map<std::uint32_t, std::uint32_t> sets;
+            std::vector<std::uint32_t> words(vertSpv.size() / sizeof(std::uint32_t));
+            std::memcpy(words.data(), vertSpv.data(), vertSpv.size());
+            std::vector<std::uint32_t> inputVariables;
             std::unordered_map<std::uint32_t, std::uint32_t> locations;
-            std::unordered_map<std::uint32_t, bool> blockTypes;
-            std::unordered_map<std::uint32_t, bool> bufferBlockTypes;
-            std::unordered_map<std::uint32_t, bool> nonWritable;
-            std::unordered_map<std::uint32_t, std::uint32_t> structMemberCounts;
-            std::unordered_map<std::uint64_t, bool> nonWritableMembers;
             for (std::size_t cursor = 5; cursor < words.size();)
             {
                 const std::uint32_t instruction = words[cursor];
@@ -6434,160 +5499,30 @@ namespace CNA::Internal::Renderers::Vulkan
                 const std::uint16_t opcode =
                     static_cast<std::uint16_t>(instruction & 0xffffu);
                 if (wordCount == 0 || cursor + wordCount > words.size()) {
-                    compileError_ = std::string("Vulkan ShaderEffect: malformed ") +
-                        stageName + " SPIR-V instruction stream";
+                    compileError_ =
+                        "Vulkan ShaderEffect: malformed vertex SPIR-V instruction stream";
                     return false;
                 }
-                if (opcode == OpTypePointer && wordCount == 4) {
-                    pointers[words[cursor + 1]] = {
-                        words[cursor + 2], words[cursor + 3]};
-                } else if (opcode == OpTypeStruct && wordCount >= 2) {
-                    structMemberCounts[words[cursor + 1]] = wordCount - 2;
-                } else if (opcode == OpVariable && wordCount >= 4) {
-                    variables[words[cursor + 2]] = {
-                        words[cursor + 1], words[cursor + 3]};
-                } else if (opcode == OpDecorate && wordCount >= 3) {
-                    const std::uint32_t target = words[cursor + 1];
-                    const std::uint32_t decoration = words[cursor + 2];
-                    if (decoration == DecorationBlock)
-                        blockTypes[target] = true;
-                    else if (decoration == DecorationBufferBlock)
-                        bufferBlockTypes[target] = true;
-                    else if (decoration == DecorationNonWritable)
-                        nonWritable[target] = true;
-                    else if (decoration == DecorationLocation && wordCount >= 4)
-                        locations[target] = words[cursor + 3];
-                    else if (decoration == DecorationBinding && wordCount >= 4)
-                        bindings[target] = words[cursor + 3];
-                    else if (decoration == DecorationDescriptorSet && wordCount >= 4)
-                        sets[target] = words[cursor + 3];
-                } else if (opcode == OpMemberDecorate && wordCount >= 4 &&
-                           words[cursor + 3] == DecorationNonWritable) {
-                    const std::uint64_t member =
-                        (static_cast<std::uint64_t>(words[cursor + 1]) << 32u) |
-                        words[cursor + 2];
-                    nonWritableMembers[member] = true;
+                if (opcode == OpVariable && wordCount >= 4) {
+                    if (words[cursor + 3] == StorageClassInput)
+                        inputVariables.push_back(words[cursor + 2]);
+                } else if (opcode == OpDecorate && wordCount >= 4 &&
+                           words[cursor + 2] == DecorationLocation) {
+                    locations[words[cursor + 1]] = words[cursor + 3];
                 }
                 cursor += wordCount;
             }
-
-            if (stage == VK_SHADER_STAGE_VERTEX_BIT)
+            for (const std::uint32_t variableId : inputVariables)
             {
-                for (const auto& [variableId, variable] : variables)
-                {
-                    if (variable.storageClass != StorageClassInput) continue;
-                    const auto location = locations.find(variableId);
-                    if (location != locations.end())
-                        vertexInputLocations_.push_back(location->second);
-                }
+                const auto location = locations.find(variableId);
+                if (location != locations.end())
+                    vertexInputLocations_.push_back(location->second);
             }
-
-            for (const auto& [variableId, variable] : variables)
-            {
-                const auto pointer = pointers.find(variable.pointerType);
-                if (pointer == pointers.end() ||
-                    pointer->second.storageClass != variable.storageClass)
-                    continue;
-                const bool storageBuffer =
-                    (variable.storageClass == StorageClassStorageBuffer &&
-                     blockTypes.contains(pointer->second.pointeeType)) ||
-                    (variable.storageClass == StorageClassUniform &&
-                     bufferBlockTypes.contains(pointer->second.pointeeType));
-                if (!storageBuffer) continue;
-
-                bool allMembersReadOnly = false;
-                const auto memberCount =
-                    structMemberCounts.find(pointer->second.pointeeType);
-                if (memberCount != structMemberCounts.end() && memberCount->second != 0) {
-                    allMembersReadOnly = true;
-                    for (std::uint32_t member = 0;
-                         member < memberCount->second && allMembersReadOnly; ++member) {
-                        const std::uint64_t key =
-                            (static_cast<std::uint64_t>(pointer->second.pointeeType) << 32u) |
-                            member;
-                        allMembersReadOnly = nonWritableMembers.contains(key);
-                    }
-                }
-                if (!nonWritable.contains(variableId) &&
-                    !nonWritable.contains(pointer->second.pointeeType) &&
-                    !allMembersReadOnly) {
-                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
-                        " storage buffers must be declared readonly; the draw binding API "
-                        "publishes shader-read access only";
-                    return false;
-                }
-
-                const auto binding = bindings.find(variableId);
-                const auto set = sets.find(variableId);
-                if (binding == bindings.end() || set == sets.end()) {
-                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
-                        " storage buffers need explicit descriptor set and binding decorations";
-                    return false;
-                }
-                if (set->second != 2) {
-                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
-                        " storage buffer binding " + std::to_string(binding->second) +
-                        " declares set " + std::to_string(set->second) +
-                        "; graphics storage buffers use set 2 (sets 0 and 1 are reserved by the "
-                        "draw and ShaderEffect resource contracts)";
-                    return false;
-                }
-                if (binding->second >
-                    static_cast<std::uint32_t>(std::numeric_limits<int>::max())) {
-                    compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
-                        " storage-buffer binding is not representable by the public int binding "
-                        "API";
-                    return false;
-                }
-
-                const auto existing = std::find_if(
-                    drawStorageBindings_.begin(), drawStorageBindings_.end(),
-                    [&](const DrawStorageBindingEXT& candidate) {
-                        return candidate.binding == binding->second;
-                    });
-                if (existing == drawStorageBindings_.end()) {
-                    drawStorageBindings_.push_back({binding->second, stage});
-                } else if ((existing->stages & stage) != 0) {
-                    compileError_ = std::string("Vulkan ShaderEffect: duplicate ") + stageName +
-                        " storage buffer binding " + std::to_string(binding->second);
-                    return false;
-                } else {
-                    existing->stages |= stage;
-                }
-            }
-            return true;
-        };
-        if (!reflectSpirV(vertSpv, VK_SHADER_STAGE_VERTEX_BIT, "vertex") ||
-            !reflectSpirV(fragSpv, VK_SHADER_STAGE_FRAGMENT_BIT, "fragment"))
-            return false;
-        std::sort(
-            drawStorageBindings_.begin(), drawStorageBindings_.end(),
-            [](const DrawStorageBindingEXT& left, const DrawStorageBindingEXT& right) {
-                return left.binding < right.binding;
-            });
+        }
         std::sort(vertexInputLocations_.begin(), vertexInputLocations_.end());
         vertexInputLocations_.erase(
             std::unique(vertexInputLocations_.begin(), vertexInputLocations_.end()),
             vertexInputLocations_.end());
-        const auto countStage = [this](const VkShaderStageFlagBits stage) {
-            return static_cast<std::uint32_t>(std::count_if(
-                drawStorageBindings_.begin(), drawStorageBindings_.end(),
-                [stage](const DrawStorageBindingEXT& binding) {
-                    return (binding.stages & stage) != 0;
-                }));
-        };
-        const auto& limits = owner_->physicalDeviceProperties_.limits;
-        if (countStage(VK_SHADER_STAGE_VERTEX_BIT) >
-                limits.maxPerStageDescriptorStorageBuffers ||
-            countStage(VK_SHADER_STAGE_FRAGMENT_BIT) >
-                limits.maxPerStageDescriptorStorageBuffers ||
-            drawStorageBindings_.size() > limits.maxDescriptorSetStorageBuffers ||
-            (!drawStorageBindings_.empty() && limits.maxBoundDescriptorSets < 3)) {
-            compileError_ =
-                "Vulkan ShaderEffect: reflected graphics storage buffers exceed the selected "
-                "device descriptor limits";
-            return false;
-        }
 
         VkShaderModuleCreateInfo mci{};
         mci.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -6600,47 +5535,6 @@ namespace CNA::Internal::Renderers::Vulkan
         mci.pCode    = reinterpret_cast<const uint32_t*>(fragSpv.data());
         if (vkCreateShaderModule(owner_->device_, &mci, nullptr, &fragModule_) != VK_SUCCESS) {
             compileError_ = "Failed to create fragment shader module"; return false;
-        }
-
-        if (!drawStorageBindings_.empty())
-        {
-            std::vector<VkDescriptorSetLayoutBinding> bindings;
-            bindings.reserve(drawStorageBindings_.size());
-            for (const DrawStorageBindingEXT& reflected : drawStorageBindings_) {
-                VkDescriptorSetLayoutBinding binding{};
-                binding.binding = reflected.binding;
-                binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                binding.descriptorCount = 1;
-                binding.stageFlags = reflected.stages;
-                bindings.push_back(binding);
-            }
-            VkDescriptorSetLayoutCreateInfo layoutInfo{};
-            layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            layoutInfo.bindingCount = static_cast<std::uint32_t>(bindings.size());
-            layoutInfo.pBindings = bindings.data();
-            if (vkCreateDescriptorSetLayout(
-                    owner_->device_, &layoutInfo, nullptr, &drawStorageLayout_) != VK_SUCCESS) {
-                compileError_ =
-                    "Vulkan ShaderEffect: failed to create graphics storage-buffer layout";
-                return false;
-            }
-
-            VkDescriptorPoolSize poolSize{};
-            poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            poolSize.descriptorCount =
-                static_cast<std::uint32_t>(bindings.size()) * DrawStorageSetCapacity;
-            VkDescriptorPoolCreateInfo poolInfo{};
-            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-            poolInfo.maxSets = DrawStorageSetCapacity;
-            poolInfo.poolSizeCount = 1;
-            poolInfo.pPoolSizes = &poolSize;
-            if (vkCreateDescriptorPool(
-                    owner_->device_, &poolInfo, nullptr, &drawStoragePool_) != VK_SUCCESS) {
-                compileError_ =
-                    "Vulkan ShaderEffect: failed to create graphics storage-buffer pool";
-                return false;
-            }
         }
 
         VkPushConstantRange pcRange{};
@@ -6657,11 +5551,10 @@ namespace CNA::Internal::Renderers::Vulkan
         // Declaring a set a shader does not use costs nothing at draw time: an unbound set is only
         // an error if something reads it.
         EnsureBoundTextureLayoutEXT();
-        const VkDescriptorSetLayout setLayouts[] = {
-            owner_->descriptorSetLayout_, boundLayout_, drawStorageLayout_};
+        const VkDescriptorSetLayout setLayouts[] = { owner_->descriptorSetLayout_, boundLayout_ };
         VkPipelineLayoutCreateInfo pli{};
         pli.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pli.setLayoutCount         = drawStorageLayout_ != VK_NULL_HANDLE ? 3u : 2u;
+        pli.setLayoutCount         = 2;
         pli.pSetLayouts            = setLayouts;
         pli.pushConstantRangeCount = 1;
         pli.pPushConstantRanges    = &pcRange;
@@ -6782,7 +5675,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 " for a ShaderEffect; unit " + std::to_string(unit) +
                 " was asked for. Refused rather than binding it somewhere else.");
         boundTextures_[static_cast<std::size_t>(unit)] = texture;
-        boundStorageTextures_[static_cast<std::size_t>(unit)].reset();
         boundSetDirty_ = true;
     }
 
@@ -6791,10 +5683,11 @@ namespace CNA::Internal::Renderers::Vulkan
         if (boundLayout_ != VK_NULL_HANDLE || !owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         std::array<VkDescriptorSetLayoutBinding, kEffectBoundBindingCount> lb{};
         for (int i = 0; i < kEffectBoundBindingCount; ++i) {
-            const bool isUniformBuffer =
-                (i >= kEffectFloatArrayBinding && i < kEffectTextureArrayBindingBase) ||
-                i == kEffectEngineMatrixBinding;
-            lb[static_cast<std::size_t>(i)].binding         = static_cast<uint32_t>(i);
+            // Bindings 0..11 are the three sampler kinds; 12..15 the four arrays and 19 the
+            // engine matrices, all uniform buffers. 16..18 are reserved and never declared.
+            const int binding = EffectBoundBindingForSlotEXT(i);
+            const bool isUniformBuffer = binding >= kEffectFloatArrayBinding;
+            lb[static_cast<std::size_t>(i)].binding         = static_cast<uint32_t>(binding);
             lb[static_cast<std::size_t>(i)].descriptorType  =
                 isUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
                                 : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -6924,9 +5817,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 owner_->slotSamplers_[static_cast<std::size_t>(u)] != VK_NULL_HANDLE
                     ? owner_->slotSamplers_[static_cast<std::size_t>(u)]
                     : owner_->defaultSampler_;
-            auto& storage = boundStorageTextures_[static_cast<std::size_t>(u)];
-            if (storage != nullptr)
-                owner_->NoteSampledStorageTextureEXT(segment, storage);
             owner_->NoteSampledTextureEXT(
                 segment, boundTextures_[static_cast<std::size_t>(u)]);
         }
@@ -6940,9 +5830,8 @@ namespace CNA::Internal::Renderers::Vulkan
         const VkDescriptorPoolSize sizes[] = {
             { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
               static_cast<uint32_t>(VulkanRenderer::kEffectPoolMaxSets
-                                    * (kEffectFloatArrayBinding +
-                                       kEffectTextureArrayBindingCount)) },
-            // VULKAN-252/MOD-2237: five uniform-buffer descriptors per set, sized with the samplers
+                                    * kEffectFloatArrayBinding) },
+            // VULKAN-252: five uniform-buffer descriptors per set, sized with the samplers
             // so a pool that can hold N sets can hold N of BOTH kinds -- an under-sized second
             // pool size fails the allocation just as surely as an under-sized first one.
             { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -6967,36 +5856,22 @@ namespace CNA::Internal::Renderers::Vulkan
         owner_->EnsureDefaultWhiteTexture();
         owner_->EnsureEnvMapResources();            // VULKAN-254: creates defaultWhiteCubeView_
         owner_->EnsureDefaultWhiteVolumeTexture();
-        // VULKAN-252/MOD-2237: the same argument one level up -- a set must be FULLY written, so
-        // the four array bindings and caster-matrix binding need a real buffer even when untouched.
-        // Arrays then hold zeros and the two matrices hold identities.
+        // VULKAN-252: the same argument one level up -- a set must be FULLY written, so the four
+        // array bindings and the engine-matrix binding need a real buffer even when untouched.
+        // Arrays then hold zeros and the matrices hold identities.
         EnsureUniformArrayStorageEXT();
-        std::array<VkDescriptorImageInfo,
-                   kEffectFloatArrayBinding + kEffectTextureArrayBindingCount> infos{};
+        std::array<VkDescriptorImageInfo, kEffectFloatArrayBinding> infos{};
         std::array<VkWriteDescriptorSet, kEffectBoundBindingCount>  writes{};
         for (int i = 0; i < kEffectFloatArrayBinding; ++i) {
             const int unit = i % kMaxEffectBoundTextures;
             VkImageView view = VK_NULL_HANDLE;
             if (i < kEffectCubeBindingBase) {
-                auto& storage = boundStorageTextures_[static_cast<std::size_t>(unit)];
-                if (storage != nullptr) {
-                    if (!storage->IsFilterableEXT() &&
-                        owner_->samplerSlotState_[static_cast<std::size_t>(unit)].filter != 1)
-                    {
-                        throw System::NotSupportedException(
-                            "CNA Vulkan: a StorageTexture2D without Filterable usage was paired "
-                            "with a linear or anisotropic sampler in unit " +
-                            std::to_string(unit));
-                    }
-                    view = storage->GetSampledImageViewEXT();
-                } else {
-                    // Texture2D and RenderTarget2D have different concrete renderer types but
-                    // both implement this sampled-view contract. Testing only the upload-texture
-                    // type silently substituted white whenever an effect bound a render target.
-                    auto* vk = dynamic_cast<IVulkanSamplable*>(
-                        boundTextures_[static_cast<std::size_t>(unit)]);
-                    view = (vk != nullptr) ? vk->GetVkImageView() : owner_->defaultWhiteView_;
-                }
+                // Texture2D and RenderTarget2D have different concrete renderer types but both
+                // implement this sampled-view contract. Testing only the upload-texture type
+                // silently substituted white whenever an effect bound a render target.
+                auto* vk = dynamic_cast<IVulkanSamplable*>(
+                    boundTextures_[static_cast<std::size_t>(unit)]);
+                view = (vk != nullptr) ? vk->GetVkImageView() : owner_->defaultWhiteView_;
             } else if (i < kEffectVolumeBindingBase) {
                 auto* vk = dynamic_cast<IVulkanCubeSamplable*>(
                     boundCubes_[static_cast<std::size_t>(unit)]);
@@ -7073,39 +5948,14 @@ namespace CNA::Internal::Renderers::Vulkan
             engineInfo = {engineBuffer, engineOffset, engineBytes};
             engineMatrixSerial_ = owner_->engineMatrixChunkSerial_;
         }
-        auto& engineWrite = writes[static_cast<std::size_t>(kEffectEngineMatrixBinding)];
+        // The last layout slot; its binding number is 19, not its position (see the header).
+        auto& engineWrite = writes.back();
         engineWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         engineWrite.dstSet = set;
         engineWrite.dstBinding = static_cast<std::uint32_t>(kEffectEngineMatrixBinding);
         engineWrite.descriptorCount = 1;
         engineWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         engineWrite.pBufferInfo = &engineInfo;
-        // MOD-2226: sampler2DArray has its own bindings and its own dimensional filler. A 2D view
-        // in one of these descriptors is invalid even if it refers to the same 1x1 image.
-        for (int unit = 0; unit < kEffectTextureArrayBindingCount; ++unit) {
-            auto* vk = dynamic_cast<VulkanTexture2DArrayRenderer*>(
-                boundTextureArrays_[static_cast<std::size_t>(unit)].get());
-            if (vk != nullptr && !vk->IsFilterableEXT() &&
-                owner_->samplerSlotState_[static_cast<std::size_t>(unit)].filter != 1)
-            {
-                throw System::NotSupportedException(
-                    "CNA Vulkan: a Texture2DArray without Filterable usage was paired with a "
-                    "linear or anisotropic sampler in unit " + std::to_string(unit));
-            }
-            const std::size_t infoIndex =
-                static_cast<std::size_t>(kEffectFloatArrayBinding + unit);
-            infos[infoIndex] = {
-                wantSamplers[static_cast<std::size_t>(unit)],
-                vk != nullptr ? vk->GetVkArrayImageView() : owner_->defaultWhiteArrayView_,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-            auto& w = writes[static_cast<std::size_t>(kEffectTextureArrayBindingBase + unit)];
-            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            w.dstSet = set;
-            w.dstBinding = static_cast<std::uint32_t>(kEffectTextureArrayBindingBase + unit);
-            w.descriptorCount = 1;
-            w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            w.pImageInfo = &infos[infoIndex];
-        }
         vkUpdateDescriptorSets(owner_->device_, kEffectBoundBindingCount, writes.data(), 0,
                                nullptr);
 
@@ -7123,95 +5973,6 @@ namespace CNA::Internal::Renderers::Vulkan
         boundSetSamplers_ = wantSamplers;
         boundSetDirty_    = false;
         return boundSet_;
-    }
-
-    VkDescriptorSet VulkanEffectRenderer::GetOrCreateDrawStorageSetEXT(
-        std::vector<std::pair<std::shared_ptr<VulkanStorageBufferRenderer>,
-                              VulkanResourceIntent>>& uses)
-    {
-        uses.clear();
-        if (drawStorageBindings_.empty()) return VK_NULL_HANDLE;
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE ||
-            drawStorageLayout_ == VK_NULL_HANDLE || drawStoragePool_ == VK_NULL_HANDLE)
-            throw std::runtime_error(
-                "CNA Vulkan: the ShaderEffect graphics storage-buffer layout is unavailable");
-
-        std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> buffers;
-        buffers.reserve(drawStorageBindings_.size());
-        for (const DrawStorageBindingEXT& reflected : drawStorageBindings_)
-        {
-            const auto found = owner_->boundDrawStorageBuffers_.find(reflected.binding);
-            std::shared_ptr<VulkanStorageBufferRenderer> buffer =
-                found == owner_->boundDrawStorageBuffers_.end()
-                    ? nullptr : found->second.lock();
-            if (buffer == nullptr || !buffer->IsOwnedByEXT(owner_) ||
-                buffer->GetBufferEXT() == VK_NULL_HANDLE) {
-                throw System::NotSupportedException(
-                    "CNA Vulkan: ShaderEffect descriptor set 2 binding " +
-                    std::to_string(reflected.binding) +
-                    " has no live storage buffer; call BindStorageBufferForDrawEXT before draw");
-            }
-            buffers.push_back(std::move(buffer));
-        }
-
-        bool reusable = drawStorageSet_ != VK_NULL_HANDLE &&
-                        drawStorageSetBuffers_.size() == buffers.size();
-        for (std::size_t i = 0; reusable && i < buffers.size(); ++i)
-            reusable = drawStorageSetBuffers_[i].lock() == buffers[i];
-        if (!reusable)
-        {
-            if (drawStorageSet_ != VK_NULL_HANDLE) {
-                VulkanRenderer::RetiredResources retired;
-                retired.poolDescriptorSets.emplace_back(drawStoragePool_, drawStorageSet_);
-                owner_->RetireResources(std::move(retired));
-                drawStorageSet_ = VK_NULL_HANDLE;
-            }
-
-            VkDescriptorSetAllocateInfo allocate{};
-            allocate.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocate.descriptorPool = drawStoragePool_;
-            allocate.descriptorSetCount = 1;
-            allocate.pSetLayouts = &drawStorageLayout_;
-            if (vkAllocateDescriptorSets(
-                    owner_->device_, &allocate, &drawStorageSet_) != VK_SUCCESS) {
-                throw System::NotSupportedException(
-                    "CNA Vulkan: a ShaderEffect exhausted its bounded 64-set graphics storage "
-                    "snapshot pool before older frame-fence retirements completed");
-            }
-
-            std::vector<VkDescriptorBufferInfo> infos(buffers.size());
-            std::vector<VkWriteDescriptorSet> writes(buffers.size());
-            for (std::size_t i = 0; i < buffers.size(); ++i)
-            {
-                infos[i].buffer = buffers[i]->GetBufferEXT();
-                infos[i].offset = 0;
-                infos[i].range = VK_WHOLE_SIZE;
-                writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                writes[i].dstSet = drawStorageSet_;
-                writes[i].dstBinding = drawStorageBindings_[i].binding;
-                writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                writes[i].descriptorCount = 1;
-                writes[i].pBufferInfo = &infos[i];
-            }
-            vkUpdateDescriptorSets(
-                owner_->device_, static_cast<std::uint32_t>(writes.size()),
-                writes.data(), 0, nullptr);
-            drawStorageSetBuffers_.assign(buffers.begin(), buffers.end());
-        }
-
-        uses.reserve(buffers.size());
-        for (std::size_t i = 0; i < buffers.size(); ++i)
-        {
-            const VkShaderStageFlags stages = drawStorageBindings_[i].stages;
-            const VulkanResourceIntent intent =
-                stages == VK_SHADER_STAGE_VERTEX_BIT
-                    ? VulkanResourceIntent::VertexShaderRead
-                    : (stages == VK_SHADER_STAGE_FRAGMENT_BIT
-                           ? VulkanResourceIntent::FragmentShaderRead
-                           : VulkanResourceIntent::GraphicsShaderRead);
-            uses.emplace_back(std::move(buffers[i]), intent);
-        }
-        return drawStorageSet_;
     }
 
     void VulkanEffectRenderer::BindTextureCube(
@@ -7240,45 +6001,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 " was asked for. Refused rather than binding it somewhere else.");
         boundVolumes_[static_cast<std::size_t>(unit)] = texture;
         boundSetDirty_ = true;
-    }
-
-    bool VulkanEffectRenderer::BindTexture2DArrayEXT(
-        const int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
-    {
-        if (unit < 0 || unit >= kEffectTextureArrayBindingCount)
-            throw System::NotSupportedException(
-                "The Vulkan renderer accepts texture-array sampler units 0.." +
-                std::to_string(kEffectTextureArrayBindingCount - 1) + "; unit " +
-                std::to_string(unit) + " was asked for");
-        if (texture != nullptr &&
-            dynamic_cast<IVulkanArraySamplable*>(texture.get()) == nullptr)
-            return false;
-        boundTextureArrays_[static_cast<std::size_t>(unit)] = std::move(texture);
-        boundSetDirty_ = true;
-        return true;
-    }
-
-    bool VulkanEffectRenderer::BindStorageTexture2DEXT(
-        const int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
-    {
-        if (unit < 0 || unit >= kMaxEffectBoundTextures)
-            throw System::NotSupportedException(
-                "The Vulkan renderer accepts sampled storage-texture units 0.." +
-                std::to_string(kMaxEffectBoundTextures - 1) + "; unit " +
-                std::to_string(unit) + " was asked for");
-        if (texture == nullptr) {
-            boundStorageTextures_[static_cast<std::size_t>(unit)].reset();
-            boundSetDirty_ = true;
-            return true;
-        }
-        auto native = std::dynamic_pointer_cast<VulkanStorageTexture2DRenderer>(texture);
-        if (native == nullptr || !native->IsOwnedByEXT(owner_) ||
-            !native->HasUsageEXT(UINT32_C(4)))
-            return false;
-        boundStorageTextures_[static_cast<std::size_t>(unit)] = std::move(native);
-        boundTextures_[static_cast<std::size_t>(unit)] = nullptr;
-        boundSetDirty_ = true;
-        return true;
     }
 
     void VulkanEffectRenderer::SetUniformInt(const char* /*name*/, int value)
@@ -8941,9 +7663,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (indexData == nullptr)
             throw System::NotSupportedException(
                 "CNA Vulkan: an indexed multi-stream draw contains no index data.");
-        // A zero-count draw is a legal no-op and is also used as the state-only seed for an
-        // indirect record whose actual count remains on the GPU. There is no selected index
-        // window to compact in that case.
+        // A zero-count draw is a legal no-op; there is no selected index window to compact.
         if (indexCount == 0)
             return VulkanIndexedStreamWindowEXT{};
 
@@ -9610,9 +8330,6 @@ namespace CNA::Internal::Renderers::Vulkan
         vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         if (vkCreateImageView(dev, &vci, nullptr, &defaultWhiteView_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateImageView (default white 2D) failed");
-        vci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-        if (vkCreateImageView(dev, &vci, nullptr, &defaultWhiteArrayView_) != VK_SUCCESS)
-            throw std::runtime_error("vkCreateImageView (default white 2D array) failed");
 
         // Descriptor set. Through the same chaining allocator every texture's set comes from
         // (plans/plan_street.md STREET-0003): the white texture is created on the first draw that
@@ -14219,8 +12936,8 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::runtime_error("vkQueueSubmit failed for synchronous command submission");
         }
 
-        // MOD-2253: synchronous transfers and CPU readback still wait for the requested work, but
-        // they wait only for this submission's completion token. Queue/device-wide idle calls also
+        // Synchronous transfers and CPU readback still wait for the requested work, but they
+        // wait only for this submission's completion token. Queue/device-wide idle calls also
         // wait for unrelated work and make later concurrency impossible without buying correctness.
         const auto waitBegin = std::chrono::steady_clock::now();
         const VkResult waitResult =
@@ -14387,66 +13104,6 @@ namespace CNA::Internal::Renderers::Vulkan
                    std::find(flushSegments->begin(), flushSegments->end(), segment)
                        != flushSegments->end();
         };
-        auto chooseTimestampForFlush = [&](const PendingTimestamp& event) {
-            const bool endpointSegmentRecorded =
-                recordedByFlush(event.rt.get(), event.segment);
-            // An open range may cross this flush boundary. Recording its selected Begin now and
-            // its End in a later queue submission preserves the whole interval; recording an End
-            // whose earlier Begin is not present here could silently truncate it.
-            if (event.begin && endpointSegmentRecorded) return true;
-
-            // A public timer may surround a temporary render-target bind: Begin is then attached
-            // to the empty backbuffer segment before the bind, and End to the empty backbuffer
-            // segment after it. A narrow target readback cannot record either backbuffer segment,
-            // but it must retain the two timestamp commands that bracket the selected off-screen
-            // work. Take the pair only when the complete range exists, contains selected graphics
-            // work, and contains no graphics or modern command the narrow flush will omit. This
-            // keeps the readback narrow instead of silently timing a partial range.
-            const PendingTimestamp* begin = nullptr;
-            const PendingTimestamp* end = nullptr;
-            for (const auto& candidate : pendingTimestamps_)
-            {
-                if (candidate.timer != event.timer || candidate.serial != event.serial) continue;
-                (candidate.begin ? begin : end) = &candidate;
-            }
-            if (begin == nullptr || end == nullptr || begin->order >= end->order)
-                return false;
-
-            bool containsSelectedWork = false;
-            bool containsOmittedWork = false;
-            const auto classifyGraphicsCommand = [&](const auto& command) {
-                if (command.order <= begin->order || command.order >= end->order) return;
-                if (recordedByFlush(command.rt.get(), command.segment))
-                    containsSelectedWork = true;
-                else
-                    containsOmittedWork = true;
-            };
-            for (const auto& batch : activeBatches_) classifyGraphicsCommand(batch);
-            for (const auto& draw : pending3D_) classifyGraphicsCommand(draw);
-            for (const auto& clear : pendingClears_) classifyGraphicsCommand(clear);
-            for (const auto& command : pendingModernCommands_)
-                if (command.order > begin->order && command.order < end->order)
-                    containsOmittedWork = true;
-            if (!containsSelectedWork) return false;
-            if (!containsOmittedWork) return true;
-
-            // Submit Begin before the selected work, but leave End for the later full submission
-            // that consumes the omitted work. The query then spans both submissions rather than
-            // reporting a deceptively short partial range.
-            return event.begin && event.timer != nullptr && !event.timer->beginRecorded_;
-        };
-        std::vector<std::uint64_t> timestampOrdersForFlush;
-        if (rtOnly)
-        {
-            for (const auto& event : pendingTimestamps_)
-                if (chooseTimestampForFlush(event))
-                    timestampOrdersForFlush.push_back(event.order);
-        }
-        const auto timestampRecordedByFlush = [&](const PendingTimestamp& event) {
-            return std::find(
-                       timestampOrdersForFlush.begin(), timestampOrdersForFlush.end(),
-                       event.order) != timestampOrdersForFlush.end();
-        };
         // All draws are already queued at this point. Size the current frame slot before any
         // command records a reference to its buffers; an overfull arena must never drop later
         // draws (large scenes otherwise lose buildings, vehicles and vegetation in draw order).
@@ -14591,25 +13248,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 q->recordedThisFrame_ = false;
                 if (q->pool_ != VK_NULL_HANDLE)
                     vkCmdResetQueryPool(cb, q->pool_, 0, 1);
-            }
-        }
-
-        // MOD-2246: reset a timer's two slots in the same command buffer that writes its begin
-        // timestamp. Reset is deliberately recorded rather than performed through a one-time
-        // submit, so Begin()/End() add no queue/device wait and one pool is recycled indefinitely.
-        {
-            std::vector<VkQueryPool> timerPools;
-            for (const auto& event : pendingTimestamps_)
-            {
-                if (!event.begin || event.pool == VK_NULL_HANDLE) continue;
-                if (rtOnly && !timestampRecordedByFlush(event)) continue;
-                if (std::find(timerPools.begin(), timerPools.end(), event.pool) == timerPools.end())
-                    timerPools.push_back(event.pool);
-            }
-            for (const VkQueryPool pool : timerPools)
-            {
-                vkCmdResetQueryPool(cb, pool, 0, 2);
-                ++gpuTimerQueryResetCountEXT_;
             }
         }
 
@@ -14867,11 +13505,6 @@ namespace CNA::Internal::Renderers::Vulkan
                     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         activeLayout, 1, 1, &snapshot->customBoundSet, 0, nullptr);
                 }
-                if (snapshot->hasCustomEffect &&
-                    snapshot->customStorageSet != VK_NULL_HANDLE) {
-                    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        activeLayout, 2, 1, &snapshot->customStorageSet, 0, nullptr);
-                }
                 for (const auto& d : draws) {
                     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         activeLayout, 0, 1, &d.descSet, 0, nullptr);
@@ -14921,8 +13554,7 @@ namespace CNA::Internal::Renderers::Vulkan
             vkCmdEndQuery(cb, query->pool_, 0);
             query->recordedThisFrame_ = true;
             // MSR-026: do not poll this generation while the pool still exposes the previous
-            // generation's available result ahead of this submission's queued reset. This is the
-            // same frame-fence ownership rule used by VulkanGpuTimerRenderer below.
+            // generation's available result ahead of this submission's queued reset.
             if (rtOnly)
             {
                 query->completionFence_ = VK_NULL_HANDLE;
@@ -14969,9 +13601,8 @@ namespace CNA::Internal::Renderers::Vulkan
                     continue;
                 }
                 if (draw.vbData.empty() && draw.residentVb == VK_NULL_HANDLE) continue;
-                const bool indexedDraw = draw.indirectBuffer != VK_NULL_HANDLE
-                    ? draw.indirectIndexed
-                    : (!draw.ibData.empty() || draw.residentIb != VK_NULL_HANDLE);
+                const bool indexedDraw =
+                    !draw.ibData.empty() || draw.residentIb != VK_NULL_HANDLE;
                 VkDeviceSize nativeIbOff = ibOff;
                 if (indexedDraw && draw.residentIb == VK_NULL_HANDLE) {
                     const VkDeviceSize indexAlignment =
@@ -15244,10 +13875,6 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (sets[0] != VK_NULL_HANDLE && sets[1] != VK_NULL_HANDLE)
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 draw.customLayout, 0, 2, sets, 0, nullptr);
-                    if (draw.customStorageSet != VK_NULL_HANDLE)
-                        vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                draw.customLayout, 2, 1,
-                                                &draw.customStorageSet, 0, nullptr);
                 } else
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
                 if (draw.useCompiledEffect) {
@@ -15466,18 +14093,7 @@ namespace CNA::Internal::Renderers::Vulkan
                     vkCmdBindIndexBuffer(
                         cb, frame3DIB_[currentFrame_], nativeIbOff, draw.indexType);
                 }
-                if (draw.indirectBuffer != VK_NULL_HANDLE)
-                {
-                    if (indexedDraw)
-                        vkCmdDrawIndexedIndirect(
-                            cb, draw.indirectBuffer, draw.indirectByteOffset,
-                            1, sizeof(VkDrawIndexedIndirectCommand));
-                    else
-                        vkCmdDrawIndirect(
-                            cb, draw.indirectBuffer, draw.indirectByteOffset,
-                            1, sizeof(VkDrawIndirectCommand));
-                }
-                else if (indexedDraw)
+                if (indexedDraw)
                 {
                     vkCmdDrawIndexed(cb, draw.drawCount, draw.instanceCount, 0, draw.baseVertex,
                                      draw.firstInstance);
@@ -15494,43 +14110,6 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             // Task 447/854's close of a query left open at the end of a render pass's own draw
             // list now happens once per SEGMENT, in closeOpenQuery3D, not once per slice.
-        };
-
-        std::vector<std::uint64_t> recordedTimestampOrders;
-        auto recordGpuTimestamp = [&](const PendingTimestamp& event)
-        {
-            if ((rtOnly && !timestampRecordedByFlush(event)) || event.timer == nullptr ||
-                event.pool == VK_NULL_HANDLE || event.timer->serial_ != event.serial)
-                return;
-            vkCmdWriteTimestamp(
-                cb,
-                event.begin ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-                            : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                event.pool, event.begin ? 0u : 1u);
-            recordedTimestampOrders.push_back(event.order);
-            if (event.begin)
-            {
-                event.timer->beginRecorded_ = true;
-                return;
-            }
-
-            event.timer->endRecorded_ = true;
-            // A new pool's result/availability contents are undefined until its first recorded
-            // reset executes. Associate this sample with the full-frame fence so poll cannot cache
-            // that pre-reset payload as result 0. A narrow target readback waits its submission
-            // before returning, so it may mark completion immediately from the caller's view.
-            if (rtOnly)
-            {
-                event.timer->completionFence_ = VK_NULL_HANDLE;
-                event.timer->submissionGeneration_ = 0;
-                event.timer->submissionComplete_ = true;
-            }
-            else
-            {
-                event.timer->completionFence_ = inFlightFences_[currentFrame_];
-                event.timer->submissionGeneration_ = frameGeneration_ + 1;
-                event.timer->submissionComplete_ = false;
-            }
         };
 
         // REMED-GFX-157: replay ONE order slice of a segment with both draw families interleaved in
@@ -15556,14 +14135,13 @@ namespace CNA::Internal::Renderers::Vulkan
                                        float vpW, float vpH,
                                        uint64_t afterOrder, uint64_t beforeOrder)
         {
-            enum class Kind { Sprite, Draw3D, Timestamp };
+            enum class Kind { Sprite, Draw3D };
             struct Item {
                 uint64_t order;
                 Kind kind;
-                const PendingTimestamp* timestamp = nullptr;
             };
             std::vector<Item> items;
-            items.reserve(activeBatches_.size() + pending3D_.size() + pendingTimestamps_.size());
+            items.reserve(activeBatches_.size() + pending3D_.size());
             for (const auto& e : activeBatches_) {
                 if (e.rt.get() != targetRT || e.segment != segment) continue;
                 if (e.order <= afterOrder || e.order >= beforeOrder) continue;
@@ -15574,23 +14152,12 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (d.order <= afterOrder || d.order >= beforeOrder) continue;
                 items.push_back({ d.order, Kind::Draw3D });
             }
-            for (const auto& event : pendingTimestamps_) {
-                if (event.rt.get() != targetRT || event.segment != segment) continue;
-                if (event.order <= afterOrder || event.order >= beforeOrder) continue;
-                items.push_back({ event.order, Kind::Timestamp, &event });
-            }
             if (items.empty()) return;
             std::sort(items.begin(), items.end(),
                       [](const Item& a, const Item& b) { return a.order < b.order; });
 
             std::size_t i = 0;
             while (i < items.size()) {
-                if (items[i].kind == Kind::Timestamp)
-                {
-                    recordGpuTimestamp(*items[i].timestamp);
-                    ++i;
-                    continue;
-                }
                 std::size_t j = i;
                 while (j + 1 < items.size() && items[j + 1].kind == items[i].kind) ++j;
                 const uint64_t lo = items[i].order - 1;
@@ -15674,14 +14241,6 @@ namespace CNA::Internal::Renderers::Vulkan
             seg.firstOrder = std::min(seg.firstOrder, draw.order);
             seg.lastOrder = std::max(seg.lastOrder, draw.order);
         }
-        // MOD-2246: a timer range can legitimately surround a render-target bind cycle, so its
-        // endpoints may live in otherwise-empty backbuffer segments on either side. Retaining
-        // those segments is what places the timestamps on opposite sides of the measured pass.
-        for (const auto& event : pendingTimestamps_) {
-            PassSegment& seg = segmentFor(event.segment, event.rt.get());
-            seg.firstOrder = std::min(seg.firstOrder, event.order);
-            seg.lastOrder = std::max(seg.lastOrder, event.order);
-        }
         std::sort(segments.begin(), segments.end(),
                   [](const PassSegment& l, const PassSegment& r) { return l.id < r.id; });
 
@@ -15700,31 +14259,6 @@ namespace CNA::Internal::Renderers::Vulkan
                                    return !recordedByFlush(seg.rt, seg.id);
                                }),
                            segments.end());
-
-        std::uint64_t flushMaxOrder = 0;
-        if (rtOnly)
-        {
-            for (const auto& seg : segments)
-                flushMaxOrder = std::max(flushMaxOrder, seg.lastOrder);
-            const void* readbackGroup = onlyRT != nullptr
-                ? onlyRT->DepthStencilOwnerEXT() : nullptr;
-            for (const auto& command : pendingModernCommands_)
-            {
-                bool writesReadbackTarget = false;
-                for (const auto& image : command.storageImages)
-                {
-                    if (image.renderTarget != nullptr &&
-                        image.renderTarget->PassEXT() != nullptr &&
-                        image.renderTarget->PassEXT()->DepthStencilOwnerEXT() == readbackGroup)
-                    {
-                        writesReadbackTarget = true;
-                        break;
-                    }
-                }
-                if (writesReadbackTarget)
-                    flushMaxOrder = std::max(flushMaxOrder, command.order);
-            }
-        }
 
         // REMED-GFX-143: the swapchain image must be cleared/stored and left in PRESENT_SRC_KHR
         // every rendered frame even when the game drew nothing to it, which the single trailing pass
@@ -15766,99 +14300,7 @@ namespace CNA::Internal::Renderers::Vulkan
             ++recordedDebugRegionEndCountEXT_;
         };
 
-        std::vector<bool> modernRecorded(pendingModernCommands_.size(), false);
-        auto recordModernBeforeSegment = [&](const std::uint64_t segment)
-        {
-            for (std::size_t i = 0; i < pendingModernCommands_.size(); ++i)
-            {
-                const auto& command = pendingModernCommands_[i];
-                if (modernRecorded[i] || command.segment >= segment) continue;
-                if (rtOnly && command.order > flushMaxOrder) continue;
-                RecordModernCommandEXT(cb, command);
-                modernRecorded[i] = true;
-            }
-        };
-
-        // A narrow readback omits backbuffer segments by design. Keep the eligible timestamp
-        // endpoints from those otherwise-empty segments in the same global command order around
-        // the off-screen segments they measure, without creating or acquiring a backbuffer pass.
-        std::vector<const PendingTimestamp*> detachedTimestamps;
-        if (rtOnly)
-        {
-            for (const auto& event : pendingTimestamps_)
-            {
-                if (timestampRecordedByFlush(event) &&
-                    !recordedByFlush(event.rt.get(), event.segment))
-                    detachedTimestamps.push_back(&event);
-            }
-            std::sort(
-                detachedTimestamps.begin(), detachedTimestamps.end(),
-                [](const PendingTimestamp* left, const PendingTimestamp* right) {
-                    return left->order < right->order;
-                });
-        }
-        std::size_t nextDetachedTimestamp = 0;
-        auto recordDetachedTimestampsBefore = [&](const std::uint64_t order)
-        {
-            while (nextDetachedTimestamp < detachedTimestamps.size() &&
-                   detachedTimestamps[nextDetachedTimestamp]->order < order)
-            {
-                recordGpuTimestamp(*detachedTimestamps[nextDetachedTimestamp]);
-                ++nextDetachedTimestamp;
-            }
-        };
-
         for (const auto& seg : segments) {
-            // MOD-2247: a modern command closes its issuing graphics segment and precedes every
-            // later segment. Record it outside both render passes, at that exact boundary.
-            recordModernBeforeSegment(seg.id);
-            recordDetachedTimestampsBefore(seg.firstOrder);
-            // MOD-2251: image descriptors declare SHADER_READ_ONLY_OPTIMAL. Apply the transition
-            // after every earlier compute producer and before entering the consuming render pass.
-            for (const auto& use : pendingSampledImages_)
-            {
-                if (use.segment != seg.id) continue;
-                if (use.storage != nullptr)
-                    use.storage->PrepareForSamplingEXT(cb);
-                else if (use.renderTarget != nullptr)
-                    use.renderTarget->PrepareForSamplingEXT(cb);
-                else if (use.texture != nullptr)
-                    use.texture->PrepareForSamplingEXT(cb);
-            }
-            // MOD-2250: a graphics storage descriptor is a shader read, not a vertex-input read.
-            // Transition every retained draw snapshot here, outside the render pass and after any
-            // compute producer that split the preceding segment.
-            for (const auto& batch : activeBatches_)
-            {
-                if (batch.segment != seg.id || batch.snapshot == nullptr) continue;
-                for (const auto& [buffer, intent] :
-                     batch.snapshot->customStorageBuffers)
-                    RecordBufferUsageEXT(
-                        cb, buffer->GetBufferEXT(), buffer->usageState_, intent);
-            }
-            for (const auto& draw : pending3D_)
-            {
-                if (draw.segment != seg.id) continue;
-                for (const auto& [buffer, intent] : draw.customStorageBuffers)
-                    RecordBufferUsageEXT(
-                        cb, buffer->GetBufferEXT(), buffer->usageState_, intent);
-            }
-            // MOD-2248: indirect fetch dependencies are buffer-specific and must be recorded
-            // outside the render pass. A modern producer necessarily split the prior segment, so
-            // this point is both the exact ordered boundary and legal Vulkan command placement.
-            for (const auto& draw : pending3D_)
-            {
-                if (draw.segment != seg.id || draw.indirectBuffer == VK_NULL_HANDLE) continue;
-                const auto argumentLifetime =
-                    std::dynamic_pointer_cast<const VulkanStorageBufferRenderer>(
-                        draw.indirectBufferLifetime);
-                if (argumentLifetime == nullptr)
-                    throw std::logic_error(
-                        "Vulkan indirect draw lost its tracked argument-buffer record");
-                RecordBufferUsageEXT(
-                    cb, draw.indirectBuffer, argumentLifetime->usageState_,
-                    VulkanResourceIntent::IndirectRead);
-            }
             // plan_vulkan.md VULKAN-216: every pipeline built while recording this segment has to
             // rasterize with the sample count THIS segment's attachments carry. Set once per
             // segment rather than threaded through fourteen factory signatures, because it is a
@@ -15886,13 +14328,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 // set by ANY clear in the cycle, which is precisely how "draw, then Clear" ended up
                 // running the clear first.
                 const PendingClear* folded =
-                    (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder &&
-                     std::none_of(
-                         pendingTimestamps_.begin(), pendingTimestamps_.end(),
-                         [&seg](const PendingTimestamp& event) {
-                             return event.rt.get() == seg.rt && event.segment == seg.id &&
-                                    event.order < seg.clears.front()->order;
-                         }))
+                    (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder)
                         ? seg.clears.front()
                         : nullptr;
 
@@ -16021,22 +14457,6 @@ namespace CNA::Internal::Renderers::Vulkan
             }
 
             VulkanRTSource* rt = seg.rt;
-            // MOD-2251: a target may have been used as a GENERAL-layout compute image between
-            // bind cycles. Its render pass declares SHADER_READ_ONLY_OPTIMAL (preserve/resolve)
-            // or UNDEFINED (discard) as the external colour state, so first chain the compute
-            // access into the pass's existing fragment-to-colour external dependency. Normal
-            // render-target cycles already end in this layout and pay nothing here.
-            if (auto* pass = dynamic_cast<VulkanTargetPassEXT*>(rt);
-                pass != nullptr && !pass->colorUsageStates.empty() &&
-                pass->colorUsageStates.front().layout !=
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            {
-                RecordImageUsageEXT(
-                    cb, pass->trackedColorImage, pass->colorUsageStates,
-                    static_cast<std::uint32_t>(pass->colorUsageStates.size()),
-                    VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1,
-                    VulkanResourceIntent::SampledRead);
-            }
             VkLifetimeTraceEXT("record.segment   seg=%llu rt=%p fb=0x%llx pass=0x%llx %dx%d "
                                "clears=%zu firstDraw=%llu",
                                static_cast<unsigned long long>(seg.id),
@@ -16058,19 +14478,9 @@ namespace CNA::Internal::Renderers::Vulkan
             // for the discarding case because the shared layer issues a Clear() on EVERY
             // DiscardContents bind, so an unfolded version would pay one extra full-target clear per
             // bind for a result the load action already produces.
-            // VMG-0014: a segment continuing a bind cycle a modern command split loads what the
-            // previous segment stored, so nothing may ride its load action.
-            const bool splitLoads  = splitLoadSegmentsEXT_.count(seg.id) != 0;
-            const bool splitStores = splitStoreSegmentsEXT_.count(seg.id) != 0;
             const PendingClear* folded =
                 (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder &&
-                 std::none_of(
-                     pendingTimestamps_.begin(), pendingTimestamps_.end(),
-                     [&seg](const PendingTimestamp& event) {
-                         return event.rt.get() == seg.rt && event.segment == seg.id &&
-                                event.order < seg.clears.front()->order;
-                     }) &&
-                 rt->ColorLoadOpIsClearEXT() && !splitLoads)
+                 rt->ColorLoadOpIsClearEXT())
                     ? seg.clears.front()
                     : nullptr;
             // A segment with no folded clear keeps the pre-fix fallback to the frame-global values.
@@ -16094,8 +14504,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 };
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            rtRp.renderPass      = (splitLoads || splitStores) ? SplitRenderPassEXT(*rt, splitLoads)
-                                                           : rt->GetRenderPass();
+            rtRp.renderPass      = rt->GetRenderPass();
             rtRp.framebuffer     = rt->GetFramebuffer();
             const uint32_t rtW   = static_cast<uint32_t>(rt->GetWidth());
             const uint32_t rtH   = static_cast<uint32_t>(rt->GetHeight());
@@ -16133,9 +14542,9 @@ namespace CNA::Internal::Renderers::Vulkan
 
             // Task 878: regenerate this RT's mip chain (no-op unless it actually owns mips).
             rt->MaybeGenerateMips(cb);
-            // MOD-2251: render-pass finalLayout (and mip generation) leaves every level sampled,
-            // but the producing access remains a write. Retain both facts so a later compute image
-            // access gets COLOR/TRANSFER -> COMPUTE visibility as well as the GENERAL transition.
+            // The render pass's finalLayout (and mip generation) leaves every level sampled, but
+            // the producing access was a write. Both facts are kept so a later readback or upload
+            // of this target chains its transfer barrier to the stage that actually produced it.
             if (auto* pass = dynamic_cast<VulkanTargetPassEXT*>(rt);
                 pass != nullptr && pass->trackedColorImage != VK_NULL_HANDLE)
             {
@@ -16151,11 +14560,6 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             endDebugRegion();
         }
-
-        // A modern command issued after the frame's final graphics command has no following
-        // segment to pull it in, but it still precedes submission/presentation.
-        recordDetachedTimestampsBefore(std::numeric_limits<std::uint64_t>::max());
-        recordModernBeforeSegment(std::numeric_limits<std::uint64_t>::max());
 
         // REMED-GFX-074: a RenderTargetsOnly readback flush stops here -- no backbuffer pass, no
         // swapchain, no backbuffer readback. Consume the deferred entries this record emitted so
@@ -16174,22 +14578,6 @@ namespace CNA::Internal::Renderers::Vulkan
             pendingClears_.erase(std::remove_if(pendingClears_.begin(), pendingClears_.end(),
                 [&recordedByFlush](const PendingClear& c) { return recordedByFlush(c.rt.get(), c.segment); }),
                 pendingClears_.end());
-            pendingTimestamps_.erase(
-                std::remove_if(
-                    pendingTimestamps_.begin(), pendingTimestamps_.end(),
-                    [&](const PendingTimestamp& event) {
-                        return std::find(
-                                   recordedTimestampOrders.begin(),
-                                   recordedTimestampOrders.end(), event.order) !=
-                               recordedTimestampOrders.end();
-                    }),
-                pendingTimestamps_.end());
-            std::vector<PendingModernCommand> unrecordedModernCommands;
-            unrecordedModernCommands.reserve(pendingModernCommands_.size());
-            for (std::size_t i = 0; i < pendingModernCommands_.size(); ++i)
-                if (!modernRecorded[i])
-                    unrecordedModernCommands.push_back(std::move(pendingModernCommands_[i]));
-            pendingModernCommands_ = std::move(unrecordedModernCommands);
             // REMED-GFX-151: a consumed cycle's sampling dependencies are spent with it, so the
             // graph stays the size of the still-pending frame rather than growing per readback.
             if (flushSegments != nullptr)
@@ -16201,15 +14589,6 @@ namespace CNA::Internal::Renderers::Vulkan
                                    != flushSegments->end();
                         }),
                     segmentSampledGroups_.end());
-                pendingSampledImages_.erase(
-                    std::remove_if(
-                        pendingSampledImages_.begin(), pendingSampledImages_.end(),
-                        [flushSegments](const PendingSampledImageUseEXT& use) {
-                            return std::find(
-                                flushSegments->begin(), flushSegments->end(), use.segment) !=
-                                flushSegments->end();
-                        }),
-                    pendingSampledImages_.end());
             }
             if (afterRenderTargets) afterRenderTargets(cb);
             if (vkEndCommandBuffer(cb) != VK_SUCCESS)
@@ -16223,15 +14602,8 @@ namespace CNA::Internal::Renderers::Vulkan
         activeBatches_.clear();
         pending3D_.clear();
         pendingClears_.clear();
-        pendingTimestamps_.clear();
-        pendingModernCommands_.clear();
-        // VMG-0014: every split segment was just recorded. Only the still-open segment can take
-        // more work, and it keeps its role for as long as it stays open.
-        std::erase_if(splitStoreSegmentsEXT_, [this](uint64_t id) { return id < currentSegment_; });
-        std::erase_if(splitLoadSegmentsEXT_, [this](uint64_t id) { return id < currentSegment_; });
         // REMED-GFX-151: the whole frame was just recorded, so no sampling dependency survives it.
         segmentSampledGroups_.clear();
-        pendingSampledImages_.clear();
         // VULKAN-160: and this is the one instant at which a sampler can safely leave the cache.
         // Both gates are open here: the pending queues are empty, so no CPU record still holds a
         // sampler handle, and the GPU side is handled by retiring rather than destroying.
@@ -16695,9 +15067,8 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // plan_vulkan.md VULKAN-392: the ONLY place this renderer calls vkDeviceWaitIdle, so
         // GetDeviceWaitIdleCountEXT() cannot under-count and a stall reintroduced anywhere is
-        // visible to a test. MOD-2253 removed the readback caller; the three remaining callers are
-        // all reconfiguration or teardown: the destructor, RecreateSwapchain and
-        // ApplyMultiSampleCount.
+        // visible to a test. The three callers are all reconfiguration or teardown: the
+        // destructor, RecreateSwapchain and ApplyMultiSampleCount.
         ++deviceWaitIdleCountEXT_;
         vkDeviceWaitIdle(device_);
     }
@@ -16813,125 +15184,8 @@ namespace CNA::Internal::Renderers::Vulkan
         return tex;
     }
 
-    std::unique_ptr<ITexture2DArrayRenderer> VulkanRenderer::CreateTexture2DArrayEXT(
-        const int width, const int height, const int layerCount, const int mipLevelCount,
-        const int surfaceFormat, const std::uint32_t usage)
-    {
-        constexpr std::uint32_t allowedUsage = UINT32_C(1) | UINT32_C(2) |
-                                               UINT32_C(4) | UINT32_C(8);
-        if (device_ == VK_NULL_HANDLE || physicalDevice_ == VK_NULL_HANDLE || width <= 0 ||
-            height <= 0 || layerCount <= 0 || mipLevelCount <= 0 ||
-            (usage & UINT32_C(1)) == 0 || (usage & ~allowedUsage) != 0)
-            return nullptr;
-
-        int maximumMipLevelCount = 1;
-        for (int extent = std::max(width, height); extent > 1; extent /= 2)
-            ++maximumMipLevelCount;
-        if (mipLevelCount > maximumMipLevelCount) return nullptr;
-
-        VulkanSurfaceFormatStorageEXT storage{};
-        if (!MapSurfaceFormatToStorageEXT(surfaceFormat, storage)) return nullptr;
-
-        VkFormatProperties formatProperties{};
-        vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &formatProperties);
-        VkFormatFeatureFlags requiredFeatures = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-        VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_SAMPLED_BIT;
-        if ((usage & UINT32_C(2)) != 0)
-            requiredFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-        if ((usage & UINT32_C(4)) != 0)
-        {
-            requiredFeatures |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
-            imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        }
-        if ((usage & UINT32_C(8)) != 0)
-        {
-            requiredFeatures |= VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-            imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        }
-        if ((formatProperties.optimalTilingFeatures & requiredFeatures) != requiredFeatures)
-            return nullptr;
-
-        VkImageFormatProperties imageProperties{};
-        if (vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, storage.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                imageUsage, 0, &imageProperties) != VK_SUCCESS ||
-            static_cast<std::uint32_t>(width) > imageProperties.maxExtent.width ||
-            static_cast<std::uint32_t>(height) > imageProperties.maxExtent.height ||
-            static_cast<std::uint32_t>(layerCount) > imageProperties.maxArrayLayers ||
-            static_cast<std::uint32_t>(mipLevelCount) > imageProperties.maxMipLevels)
-            return nullptr;
-
-        auto array = std::make_unique<VulkanTexture2DArrayRenderer>(
-            this, width, height, layerCount, mipLevelCount, surfaceFormat, usage);
-        liveTexture2DArrays_.push_back(array.get());
-        return array;
-    }
-
-    std::unique_ptr<IStorageTexture2DRenderer> VulkanRenderer::CreateStorageTexture2DEXT(
-        const int width, const int height, const int mipLevelCount,
-        const int surfaceFormat, const std::uint32_t usage)
-    {
-        constexpr std::uint32_t allowedUsage = UINT32_C(1) | UINT32_C(2) |
-                                               UINT32_C(4) | UINT32_C(8) |
-                                               UINT32_C(16) | UINT32_C(32);
-        if (device_ == VK_NULL_HANDLE || physicalDevice_ == VK_NULL_HANDLE || width <= 0 ||
-            height <= 0 || mipLevelCount <= 0 || (usage & (UINT32_C(1) | UINT32_C(2))) == 0 ||
-            (usage & ~allowedUsage) != 0 ||
-            ((usage & UINT32_C(8)) != 0 && (usage & UINT32_C(4)) == 0))
-            return nullptr;
-
-        int maximumMipLevelCount = 1;
-        for (int extent = std::max(width, height); extent > 1; extent /= 2)
-            ++maximumMipLevelCount;
-        if (mipLevelCount > maximumMipLevelCount || GetMaxStorageImagesPerShaderStageEXT() <= 0)
-            return nullptr;
-
-        VulkanSurfaceFormatStorageEXT storage{};
-        std::uint32_t spirvStorageImageFormat = 0;
-        if (!MapStorageImageFormatToStorageEXT(
-                surfaceFormat, storage, spirvStorageImageFormat))
-            return nullptr;
-        if (StorageImageFormatRequiresExtendedFeatureEXT(spirvStorageImageFormat) &&
-            enabledDeviceFeatures_.shaderStorageImageExtendedFormats != VK_TRUE)
-            return nullptr;
-        VkFormatProperties formatProperties{};
-        vkGetPhysicalDeviceFormatProperties(physicalDevice_, storage.format, &formatProperties);
-        VkFormatFeatureFlags requiredFeatures = VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-        VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_STORAGE_BIT;
-        if ((usage & UINT32_C(4)) != 0) {
-            requiredFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-            imageUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-        }
-        if ((usage & UINT32_C(8)) != 0)
-            requiredFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
-        if ((usage & UINT32_C(16)) != 0) {
-            requiredFeatures |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
-            imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        }
-        if ((usage & UINT32_C(32)) != 0) {
-            requiredFeatures |= VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-            imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        }
-        if ((formatProperties.optimalTilingFeatures & requiredFeatures) != requiredFeatures)
-            return nullptr;
-
-        VkImageFormatProperties imageProperties{};
-        if (vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, storage.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                imageUsage, 0, &imageProperties) != VK_SUCCESS ||
-            static_cast<std::uint32_t>(width) > imageProperties.maxExtent.width ||
-            static_cast<std::uint32_t>(height) > imageProperties.maxExtent.height ||
-            static_cast<std::uint32_t>(mipLevelCount) > imageProperties.maxMipLevels)
-            return nullptr;
-
-        auto texture = std::make_unique<VulkanStorageTexture2DRenderer>(
-            this, width, height, mipLevelCount, surfaceFormat, usage);
-        liveStorageTexture2Ds_.push_back(texture.get());
-        return texture;
-    }
-
     // =========================================================================
-    // MOD-2241: Vulkan compute shaders and storage buffers
+    // Device limits
     // =========================================================================
 
     namespace
@@ -16942,1483 +15196,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 ? std::numeric_limits<int>::max()
                 : static_cast<int>(value);
         }
-    }
-
-    VulkanStorageBufferRenderer::VulkanStorageBufferRenderer(
-        VulkanRenderer* owner, const std::size_t byteSize,
-        const std::uint32_t usage, const std::uint32_t cpuAccess)
-        : owner_(owner)
-        , byteSize_(byteSize)
-        , usage_(usage)
-        , cpuAccess_(cpuAccess)
-    {
-        constexpr std::uint32_t AllowedUsage = UINT32_C(0x7F);
-        constexpr std::uint32_t AllowedCpuAccess = UINT32_C(0x03);
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
-            throw std::runtime_error("Vulkan storage buffer: renderer device is unavailable");
-        if (byteSize_ == 0)
-            throw std::invalid_argument("Vulkan storage buffer: byte size must be positive");
-        if (usage_ == 0 || (usage_ & ~AllowedUsage) != 0)
-            throw std::invalid_argument("Vulkan storage buffer: usage mask is invalid");
-        if ((cpuAccess_ & ~AllowedCpuAccess) != 0)
-            throw std::invalid_argument("Vulkan storage buffer: CPU-access mask is invalid");
-        if ((usage_ & (UINT32_C(1) << 0)) != 0 &&
-            static_cast<VkDeviceSize>(byteSize_) >
-                owner_->physicalDeviceProperties_.limits.maxStorageBufferRange)
-            throw std::invalid_argument(
-                "Vulkan storage buffer: byte size exceeds maxStorageBufferRange");
-        if ((usage_ & (UINT32_C(1) << 6)) != 0 &&
-            static_cast<VkDeviceSize>(byteSize_) >
-                owner_->physicalDeviceProperties_.limits.maxUniformBufferRange)
-            throw std::invalid_argument(
-                "Vulkan storage buffer: byte size exceeds maxUniformBufferRange");
-
-        if ((usage_ & (UINT32_C(1) << 0)) != 0)
-            vkUsage_ |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-        if ((usage_ & (UINT32_C(1) << 1)) != 0)
-            vkUsage_ |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        if ((usage_ & (UINT32_C(1) << 2)) != 0)
-            vkUsage_ |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        if ((usage_ & (UINT32_C(1) << 3)) != 0)
-            vkUsage_ |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-        if ((usage_ & (UINT32_C(1) << 4)) != 0)
-            vkUsage_ |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        if ((usage_ & (UINT32_C(1) << 5)) != 0)
-            vkUsage_ |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-        if ((usage_ & (UINT32_C(1) << 6)) != 0)
-            vkUsage_ |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-
-        memoryProperties_ = cpuAccess_ == 0
-            ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-            : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        try {
-            owner_->CreateBuffer(
-                static_cast<VkDeviceSize>(byteSize_), vkUsage_, memoryProperties_,
-                buffer_, memory_, cpuAccess_ == 0 ? nullptr : &mapped_);
-        } catch (...) {
-            ReleaseVulkanResources();
-            throw;
-        }
-    }
-
-    VulkanStorageBufferRenderer::~VulkanStorageBufferRenderer()
-    {
-        if (owner_ != nullptr)
-        {
-            for (auto* shader : owner_->liveComputeShaders_)
-                shader->ForgetStorageBufferEXT(this);
-            auto& live = owner_->liveStorageBuffers_;
-            live.erase(std::remove(live.begin(), live.end(), this), live.end());
-        }
-        ReleaseVulkanResources();
-    }
-
-    void VulkanStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
-    {
-        if (!SetDataRangeEXT(0, data, byteSize))
-            throw std::runtime_error(
-                "Vulkan storage buffer SetData requires declared CPU write access");
-    }
-
-    void VulkanStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
-    {
-        if (!GetDataRangeEXT(0, out, byteSize))
-            throw std::runtime_error(
-                "Vulkan storage buffer GetData requires declared CPU read access");
-    }
-
-    bool VulkanStorageBufferRenderer::SetDataRangeEXT(
-        const std::size_t byteOffset, const void* data, const std::size_t byteSize)
-    {
-        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
-            throw std::invalid_argument("Vulkan storage buffer SetData range exceeds allocation");
-        if (data == nullptr && byteSize != 0)
-            throw std::invalid_argument("Vulkan storage buffer SetData source is null");
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
-            throw std::runtime_error("Vulkan storage buffer SetData after device disposal");
-        if ((cpuAccess_ & (UINT32_C(1) << 1)) == 0 || mapped_ == nullptr) return false;
-        // A host write is itself an ordered public operation. Complete older deferred modern
-        // uses before changing their mapped input bytes; ordinary dispatch/copy paths do not wait.
-        owner_->FlushPendingModernCommandsForHostEXT(
-            this, VulkanResourceIntent::CpuWrite);
-        if (byteSize != 0) {
-            std::memcpy(static_cast<std::byte*>(mapped_) + byteOffset, data, byteSize);
-            owner_->NoteHostBufferUsageEXT(usageState_, VulkanResourceIntent::CpuWrite);
-        }
-        return true;
-    }
-
-    bool VulkanStorageBufferRenderer::GetDataRangeEXT(
-        const std::size_t byteOffset, void* out, const std::size_t byteSize) const
-    {
-        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
-            throw std::invalid_argument("Vulkan storage buffer GetData range exceeds allocation");
-        if (out == nullptr && byteSize != 0)
-            throw std::invalid_argument("Vulkan storage buffer GetData destination is null");
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE)
-            throw std::runtime_error("Vulkan storage buffer GetData after device disposal");
-        if ((cpuAccess_ & (UINT32_C(1) << 0)) == 0 || mapped_ == nullptr) return false;
-        // Requested host readback is the synchronization boundary; routine dispatch and copy
-        // remain deferred in the frame stream.
-        owner_->FlushPendingModernCommandsForHostEXT(
-            this, VulkanResourceIntent::CpuRead);
-        if (byteSize != 0) {
-            owner_->NoteHostBufferUsageEXT(usageState_, VulkanResourceIntent::CpuRead);
-            std::memcpy(out, static_cast<const std::byte*>(mapped_) + byteOffset, byteSize);
-        }
-        return true;
-    }
-
-    bool VulkanStorageBufferRenderer::CopyToEXT(
-        IStorageBufferRenderer& destination, const std::size_t sourceByteOffset,
-        const std::size_t destinationByteOffset, const std::size_t byteSize)
-    {
-        auto* target = dynamic_cast<VulkanStorageBufferRenderer*>(&destination);
-        if (target == nullptr || owner_ == nullptr || target->owner_ != owner_ ||
-            owner_->device_ == VK_NULL_HANDLE)
-            return false;
-        if ((usage_ & (UINT32_C(1) << 1)) == 0 ||
-            (target->usage_ & (UINT32_C(1) << 2)) == 0)
-            return false;
-        if (sourceByteOffset > byteSize_ || byteSize > byteSize_ - sourceByteOffset ||
-            destinationByteOffset > target->byteSize_ ||
-            byteSize > target->byteSize_ - destinationByteOffset)
-            throw std::invalid_argument("Vulkan storage buffer copy range exceeds allocation");
-        if (target == this && byteSize != 0 &&
-            sourceByteOffset < destinationByteOffset + byteSize &&
-            destinationByteOffset < sourceByteOffset + byteSize)
-            throw std::invalid_argument("Vulkan storage buffer copy ranges overlap");
-        if (byteSize == 0) return true;
-
-        VulkanRenderer::PendingModernCommand command;
-        command.kind = VulkanRenderer::PendingModernCommand::Kind::BufferCopy;
-        command.copySource = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
-            IStorageBufferRenderer::shared_from_this());
-        command.copyDestination = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
-            target->IStorageBufferRenderer::shared_from_this());
-        command.sourceOffset = static_cast<VkDeviceSize>(sourceByteOffset);
-        command.destinationOffset = static_cast<VkDeviceSize>(destinationByteOffset);
-        command.byteSize = static_cast<VkDeviceSize>(byteSize);
-        owner_->QueueStorageBufferCopyEXT(std::move(command));
-        return true;
-    }
-
-    void VulkanStorageBufferRenderer::ReleaseVulkanResources()
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
-        if (mapped_ != nullptr) {
-            vkUnmapMemory(owner_->device_, memory_);
-            mapped_ = nullptr;
-        }
-        // MOD-2245: an indirect draw can be recorded after the public StorageBuffer was disposed.
-        // Its pending record retains this renderer object until command recording, and releasing
-        // the last share then hands the handles to the current frame's existing fence retirement
-        // rather than destroying a VkBuffer already named by that command buffer.
-        VulkanRenderer::RetiredResources retired;
-        owner_->EvictComputeBufferFromCachesEXT(buffer_, retired);
-        if (buffer_ != VK_NULL_HANDLE) {
-            retired.buffers.push_back(buffer_);
-            buffer_ = VK_NULL_HANDLE;
-        }
-        if (memory_ != VK_NULL_HANDLE) {
-            retired.memories.push_back(memory_);
-            memory_ = VK_NULL_HANDLE;
-        }
-        if (!retired.buffers.empty() || !retired.memories.empty())
-            owner_->RetireResources(std::move(retired));
-    }
-
-    VulkanComputeShaderRenderer::VulkanComputeShaderRenderer(
-        VulkanRenderer* owner, const std::string& computeSrc)
-        : owner_(owner)
-    {
-        CompileProgram(computeSrc);
-    }
-
-    VulkanComputeShaderRenderer::~VulkanComputeShaderRenderer()
-    {
-        if (owner_ != nullptr)
-        {
-            if (owner_->boundComputeShader_ == this) owner_->boundComputeShader_ = nullptr;
-            auto& live = owner_->liveComputeShaders_;
-            live.erase(std::remove(live.begin(), live.end(), this), live.end());
-        }
-        ReleaseVulkanResources();
-    }
-
-    void VulkanComputeShaderRenderer::ReleaseProgramEXT()
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
-        VulkanRenderer::RetiredResources retired;
-        if (pipeline_ != VK_NULL_HANDLE) {
-            retired.pipelines.push_back(pipeline_);
-            pipeline_ = VK_NULL_HANDLE;
-            if (owner_->liveComputePipelineCountEXT_ > 0)
-                --owner_->liveComputePipelineCountEXT_;
-        }
-        if (pipelineLayout_ != VK_NULL_HANDLE) {
-            retired.pipelineLayouts.push_back(pipelineLayout_);
-            pipelineLayout_ = VK_NULL_HANDLE;
-            if (owner_->liveComputePipelineLayoutCountEXT_ > 0)
-                --owner_->liveComputePipelineLayoutCountEXT_;
-        }
-        if (shaderModule_ != VK_NULL_HANDLE) {
-            retired.shaderModules.push_back(shaderModule_);
-            shaderModule_ = VK_NULL_HANDLE;
-        }
-        if (descriptorPool_ != VK_NULL_HANDLE) {
-            retired.descriptorPools.push_back(descriptorPool_);
-            descriptorPool_ = VK_NULL_HANDLE;
-            const std::size_t liveSets = descriptorCache_.size();
-            owner_->liveComputeDescriptorSetCountEXT_ =
-                liveSets < owner_->liveComputeDescriptorSetCountEXT_
-                    ? owner_->liveComputeDescriptorSetCountEXT_ - liveSets
-                    : 0;
-            descriptorCache_.clear();
-        }
-        if (descriptorSetLayout_ != VK_NULL_HANDLE) {
-            retired.descriptorSetLayouts.push_back(descriptorSetLayout_);
-            descriptorSetLayout_ = VK_NULL_HANDLE;
-        }
-        const bool hasRetiredResources =
-            !retired.pipelines.empty() || !retired.pipelineLayouts.empty() ||
-            !retired.shaderModules.empty() || !retired.descriptorPools.empty() ||
-            !retired.descriptorSetLayouts.empty();
-        if (hasRetiredResources)
-            owner_->RetireResources(std::move(retired));
-    }
-
-    void VulkanComputeShaderRenderer::ReleaseVulkanResources()
-    {
-        ReleaseProgramEXT();
-        constantBuffers_.clear();
-        constantBindingSlots_.clear();
-        storageBuffers_.clear();
-        storageBindingSlots_.clear();
-        storageImages_.clear();
-        renderTargetImages_.clear();
-        textureImages_.clear();
-        storageImageSlots_.clear();
-        storageImageBindingSlots_.clear();
-        sampledTextures_.clear();
-        sampledRenderTargets_.clear();
-        sampledImageBindingSlots_.clear();
-        scalarSlots_.clear();
-        pushConstantBytes_.clear();
-    }
-
-    bool VulkanComputeShaderRenderer::CompileProgram(const std::string& computeSrc)
-    {
-        ReleaseProgramEXT();
-        compileError_.clear();
-        constantBindingSlots_.clear();
-        constantBuffers_.clear();
-        storageBindingSlots_.clear();
-        storageBuffers_.clear();
-        storageImageBindingSlots_.clear();
-        storageImageSlots_.clear();
-        storageImages_.clear();
-        renderTargetImages_.clear();
-        textureImages_.clear();
-        sampledImageBindingSlots_.clear();
-        sampledTextures_.clear();
-        sampledRenderTargets_.clear();
-        scalarSlots_.clear();
-        pushConstantBytes_.clear();
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) {
-            compileError_ = "Vulkan compute shader: renderer device is unavailable";
-            return false;
-        }
-        if ((computeSrc.size() & 3u) != 0 ||
-            computeSrc.size() < 5 * sizeof(uint32_t)) {
-            compileError_ = "Vulkan compute shader: source must be a complete SPIR-V word stream";
-            return false;
-        }
-
-        std::vector<uint32_t> words(computeSrc.size() / sizeof(uint32_t));
-        std::memcpy(words.data(), computeSrc.data(), computeSrc.size());
-        if (words.front() != 0x07230203u) {
-            compileError_ = "Vulkan compute shader: source is not SPIR-V bytecode";
-            return false;
-        }
-
-        struct PointerType
-        {
-            uint32_t storageClass = 0;
-            uint32_t pointeeType = 0;
-        };
-        struct Variable
-        {
-            uint32_t pointerType = 0;
-            uint32_t storageClass = 0;
-        };
-        struct ScalarType
-        {
-            ScalarKind kind = ScalarKind::Int32;
-            bool supported = false;
-        };
-        struct ImageType
-        {
-            uint32_t sampledType = 0;
-            uint32_t dimension = 0;
-            uint32_t depth = 0;
-            uint32_t arrayed = 0;
-            uint32_t multisampled = 0;
-            uint32_t sampled = 0;
-            uint32_t format = 0;
-        };
-
-        constexpr uint16_t OpMemberName = 6;
-        constexpr uint16_t OpTypeInt = 21;
-        constexpr uint16_t OpTypeFloat = 22;
-        constexpr uint16_t OpTypeImage = 25;
-        constexpr uint16_t OpTypeSampledImage = 27;
-        constexpr uint16_t OpTypeStruct = 30;
-        constexpr uint16_t OpTypePointer = 32;
-        constexpr uint16_t OpVariable = 59;
-        constexpr uint16_t OpDecorate = 71;
-        constexpr uint16_t OpMemberDecorate = 72;
-        constexpr uint32_t DecorationBlock = 2;
-        constexpr uint32_t DecorationBufferBlock = 3;
-        constexpr uint32_t DecorationBinding = 33;
-        constexpr uint32_t DecorationDescriptorSet = 34;
-        constexpr uint32_t DecorationOffset = 35;
-        constexpr uint32_t DecorationNonWritable = 24;
-        constexpr uint32_t DecorationNonReadable = 25;
-        constexpr uint32_t StorageClassUniformConstant = 0;
-        constexpr uint32_t StorageClassUniform = 2;
-        constexpr uint32_t StorageClassPushConstant = 9;
-        constexpr uint32_t StorageClassStorageBuffer = 12;
-
-        const auto memberKey = [](const uint32_t type, const uint32_t member) {
-            return (static_cast<uint64_t>(type) << 32u) | member;
-        };
-        const auto decodeLiteralString = [](
-            const uint32_t* data, const std::size_t count, bool& complete) {
-            std::string value;
-            value.reserve(count * sizeof(uint32_t));
-            complete = false;
-            for (std::size_t i = 0; i < count && !complete; ++i) {
-                for (unsigned byte = 0; byte < 4; ++byte) {
-                    const char ch = static_cast<char>((data[i] >> (byte * 8u)) & 0xffu);
-                    if (ch == '\0') {
-                        complete = true;
-                        break;
-                    }
-                    value.push_back(ch);
-                }
-            }
-            return value;
-        };
-
-        std::unordered_map<uint32_t, uint32_t> bindingById;
-        std::unordered_map<uint32_t, uint32_t> descriptorSetById;
-        std::unordered_map<uint32_t, PointerType> pointerTypes;
-        std::unordered_map<uint32_t, Variable> variables;
-        std::unordered_map<uint32_t, std::vector<uint32_t>> structMembers;
-        std::unordered_map<uint32_t, ScalarType> scalarTypes;
-        std::unordered_map<uint32_t, ImageType> imageTypes;
-        std::unordered_map<uint32_t, uint32_t> sampledImageTypes;
-        std::unordered_map<uint64_t, std::string> memberNames;
-        std::unordered_map<uint64_t, uint32_t> memberOffsets;
-        std::unordered_map<uint32_t, bool> blockTypes;
-        std::unordered_map<uint32_t, bool> bufferBlockTypes;
-        std::unordered_map<uint32_t, bool> nonWritableIds;
-        std::unordered_map<uint32_t, bool> nonReadableIds;
-        for (std::size_t cursor = 5; cursor < words.size();)
-        {
-            const uint32_t instruction = words[cursor];
-            const uint16_t wordCount = static_cast<uint16_t>(instruction >> 16u);
-            const uint16_t opcode = static_cast<uint16_t>(instruction & 0xffffu);
-            if (wordCount == 0 || cursor + wordCount > words.size()) {
-                compileError_ = "Vulkan compute shader: malformed SPIR-V instruction stream";
-                return false;
-            }
-            if (opcode == OpMemberName && wordCount >= 4) {
-                bool complete = false;
-                std::string name = decodeLiteralString(
-                    &words[cursor + 3], wordCount - 3, complete);
-                if (!complete) {
-                    compileError_ =
-                        "Vulkan compute shader: unterminated SPIR-V member name";
-                    return false;
-                }
-                memberNames[memberKey(words[cursor + 1], words[cursor + 2])] =
-                    std::move(name);
-            } else if (opcode == OpTypeInt && wordCount == 4) {
-                const bool isInt32 = words[cursor + 2] == 32 && words[cursor + 3] == 1;
-                scalarTypes[words[cursor + 1]] = {ScalarKind::Int32, isInt32};
-            } else if (opcode == OpTypeFloat && wordCount == 3) {
-                scalarTypes[words[cursor + 1]] = {
-                    ScalarKind::Float32, words[cursor + 2] == 32};
-            } else if (opcode == OpTypeImage && wordCount >= 9) {
-                imageTypes[words[cursor + 1]] = {
-                    words[cursor + 2], words[cursor + 3], words[cursor + 4],
-                    words[cursor + 5], words[cursor + 6], words[cursor + 7],
-                    words[cursor + 8]};
-            } else if (opcode == OpTypeSampledImage && wordCount == 3) {
-                sampledImageTypes[words[cursor + 1]] = words[cursor + 2];
-            } else if (opcode == OpTypeStruct && wordCount >= 2) {
-                structMembers[words[cursor + 1]] = std::vector<uint32_t>(
-                    words.begin() + static_cast<std::ptrdiff_t>(cursor + 2),
-                    words.begin() + static_cast<std::ptrdiff_t>(cursor + wordCount));
-            } else if (opcode == OpTypePointer && wordCount == 4) {
-                pointerTypes[words[cursor + 1]] = {
-                    words[cursor + 2], words[cursor + 3]};
-            } else if (opcode == OpVariable && wordCount >= 4) {
-                variables[words[cursor + 2]] = {
-                    words[cursor + 1], words[cursor + 3]};
-            } else if (opcode == OpDecorate && wordCount >= 3) {
-                const uint32_t target = words[cursor + 1];
-                const uint32_t decoration = words[cursor + 2];
-                if (decoration == DecorationBlock)
-                    blockTypes[target] = true;
-                else if (decoration == DecorationBufferBlock)
-                    bufferBlockTypes[target] = true;
-                else if (decoration == DecorationBinding && wordCount >= 4)
-                    bindingById[target] = words[cursor + 3];
-                else if (decoration == DecorationDescriptorSet && wordCount >= 4)
-                    descriptorSetById[target] = words[cursor + 3];
-                else if (decoration == DecorationNonWritable)
-                    nonWritableIds[target] = true;
-                else if (decoration == DecorationNonReadable)
-                    nonReadableIds[target] = true;
-            } else if (opcode == OpMemberDecorate && wordCount >= 4 &&
-                       words[cursor + 3] == DecorationOffset) {
-                if (wordCount < 5) {
-                    compileError_ =
-                        "Vulkan compute shader: malformed SPIR-V member Offset decoration";
-                    return false;
-                }
-                memberOffsets[memberKey(words[cursor + 1], words[cursor + 2])] =
-                    words[cursor + 4];
-            }
-            cursor += wordCount;
-        }
-
-        for (const auto& [variableId, variable] : variables)
-        {
-            const auto pointerIt = pointerTypes.find(variable.pointerType);
-            if (pointerIt == pointerTypes.end()) {
-                compileError_ =
-                    "Vulkan compute shader: SPIR-V variable has an unknown pointer type";
-                return false;
-            }
-            const PointerType& pointer = pointerIt->second;
-            if (pointer.storageClass != variable.storageClass) {
-                compileError_ =
-                    "Vulkan compute shader: SPIR-V variable and pointer storage classes differ";
-                return false;
-            }
-
-            if (variable.storageClass == StorageClassPushConstant)
-            {
-                const auto membersIt = structMembers.find(pointer.pointeeType);
-                if (membersIt == structMembers.end() ||
-                    !blockTypes.contains(pointer.pointeeType)) {
-                    compileError_ =
-                        "Vulkan compute shader: push constants must use a reflected Block "
-                        "structure";
-                    return false;
-                }
-                if (!pushConstantBytes_.empty() || !scalarSlots_.empty()) {
-                    compileError_ =
-                        "Vulkan compute shader: multiple push-constant blocks are unsupported";
-                    return false;
-                }
-                uint32_t byteSize = 0;
-                std::unordered_map<uint32_t, std::string> nameByOffset;
-                for (std::size_t member = 0; member < membersIt->second.size(); ++member)
-                {
-                    const uint64_t key = memberKey(
-                        pointer.pointeeType, static_cast<uint32_t>(member));
-                    const auto nameIt = memberNames.find(key);
-                    const auto offsetIt = memberOffsets.find(key);
-                    const auto scalarIt = scalarTypes.find(membersIt->second[member]);
-                    if (nameIt == memberNames.end() || nameIt->second.empty()) {
-                        compileError_ =
-                            "Vulkan compute shader: every scalar push constant needs an "
-                            "OpMemberName for name-based binding";
-                        return false;
-                    }
-                    if (offsetIt == memberOffsets.end() || (offsetIt->second & 3u) != 0) {
-                        compileError_ =
-                            "Vulkan compute shader: push-constant member '" + nameIt->second +
-                            "' needs a four-byte-aligned Offset decoration";
-                        return false;
-                    }
-                    if (scalarIt == scalarTypes.end() || !scalarIt->second.supported) {
-                        compileError_ =
-                            "Vulkan compute shader: push-constant member '" + nameIt->second +
-                            "' is not a signed int32 or float32 scalar";
-                        return false;
-                    }
-                    if (const auto occupied = nameByOffset.find(offsetIt->second);
-                        occupied != nameByOffset.end()) {
-                        compileError_ =
-                            "Vulkan compute shader: push constants '" + occupied->second +
-                            "' and '" + nameIt->second + "' overlap at offset " +
-                            std::to_string(offsetIt->second);
-                        return false;
-                    }
-                    nameByOffset.emplace(offsetIt->second, nameIt->second);
-                    if (!scalarSlots_.emplace(
-                            nameIt->second,
-                            ScalarSlot{scalarIt->second.kind, offsetIt->second}).second) {
-                        compileError_ =
-                            "Vulkan compute shader: duplicate push-constant member name '" +
-                            nameIt->second + "'";
-                        return false;
-                    }
-                    if (offsetIt->second > std::numeric_limits<uint32_t>::max() - 4u) {
-                        compileError_ =
-                            "Vulkan compute shader: push-constant offset overflows its range";
-                        return false;
-                    }
-                    byteSize = std::max(byteSize, offsetIt->second + 4u);
-                }
-                if (byteSize == 0 || byteSize >
-                    owner_->physicalDeviceProperties_.limits.maxPushConstantsSize) {
-                    compileError_ =
-                        "Vulkan compute shader: reflected push-constant range exceeds the "
-                        "selected device limit";
-                    return false;
-                }
-                pushConstantBytes_.assign(byteSize, 0);
-                continue;
-            }
-
-            if (variable.storageClass != StorageClassUniformConstant &&
-                variable.storageClass != StorageClassUniform &&
-                variable.storageClass != StorageClassStorageBuffer)
-                continue;
-
-            const auto bindingIt = bindingById.find(variableId);
-            const auto setIt = descriptorSetById.find(variableId);
-            if (bindingIt == bindingById.end() || setIt == descriptorSetById.end()) {
-                compileError_ =
-                    "Vulkan compute shader: every descriptor resource needs explicit set and "
-                    "binding decorations";
-                return false;
-            }
-            if (setIt->second != 0) {
-                compileError_ =
-                    "Vulkan compute shader: only descriptor set 0 is supported; resource binding " +
-                    std::to_string(bindingIt->second) + " declares set " +
-                    std::to_string(setIt->second);
-                return false;
-            }
-
-            const bool isStorageBuffer =
-                (variable.storageClass == StorageClassStorageBuffer &&
-                 blockTypes.contains(pointer.pointeeType)) ||
-                (variable.storageClass == StorageClassUniform &&
-                 bufferBlockTypes.contains(pointer.pointeeType));
-            const bool isConstantBuffer =
-                variable.storageClass == StorageClassUniform &&
-                blockTypes.contains(pointer.pointeeType);
-            const auto imageIt = imageTypes.find(pointer.pointeeType);
-            const bool isStorageImage =
-                variable.storageClass == StorageClassUniformConstant &&
-                imageIt != imageTypes.end() && imageIt->second.sampled == 2;
-            const auto sampledTypeIt = sampledImageTypes.find(pointer.pointeeType);
-            const auto sampledImageIt = sampledTypeIt != sampledImageTypes.end()
-                ? imageTypes.find(sampledTypeIt->second)
-                : imageTypes.end();
-            const bool isSampledImage =
-                variable.storageClass == StorageClassUniformConstant &&
-                sampledImageIt != imageTypes.end() && sampledImageIt->second.sampled == 1;
-            const bool duplicateBinding =
-                std::find(constantBindingSlots_.begin(), constantBindingSlots_.end(),
-                          bindingIt->second) != constantBindingSlots_.end() ||
-                std::find(storageBindingSlots_.begin(), storageBindingSlots_.end(),
-                          bindingIt->second) != storageBindingSlots_.end() ||
-                std::find(storageImageBindingSlots_.begin(), storageImageBindingSlots_.end(),
-                          bindingIt->second) != storageImageBindingSlots_.end() ||
-                std::find(sampledImageBindingSlots_.begin(), sampledImageBindingSlots_.end(),
-                          bindingIt->second) != sampledImageBindingSlots_.end();
-            if (duplicateBinding) {
-                compileError_ =
-                    "Vulkan compute shader: duplicate set 0 descriptor binding " +
-                    std::to_string(bindingIt->second);
-                return false;
-            }
-            if (isStorageBuffer) {
-                storageBindingSlots_.push_back(bindingIt->second);
-                storageBuffers_.emplace(bindingIt->second, nullptr);
-                continue;
-            }
-            if (isConstantBuffer) {
-                constantBindingSlots_.push_back(bindingIt->second);
-                constantBuffers_.emplace(bindingIt->second, nullptr);
-                continue;
-            }
-            if (isStorageImage) {
-                const ImageType& image = imageIt->second;
-                if (image.dimension != 1 || image.depth != 0 || image.arrayed != 0 ||
-                    image.multisampled != 0 || image.format == 0)
-                {
-                    compileError_ =
-                        "Vulkan compute shader: set 0 binding " +
-                        std::to_string(bindingIt->second) +
-                        " is not a format-qualified, non-arrayed, single-sample image2D";
-                    return false;
-                }
-                const bool nonWritable = nonWritableIds.contains(variableId) ||
-                                         nonWritableIds.contains(variable.pointerType) ||
-                                         nonWritableIds.contains(pointer.pointeeType);
-                const bool nonReadable = nonReadableIds.contains(variableId) ||
-                                         nonReadableIds.contains(variable.pointerType) ||
-                                         nonReadableIds.contains(pointer.pointeeType);
-                if (nonWritable && nonReadable) {
-                    compileError_ =
-                        "Vulkan compute shader: storage image binding " +
-                        std::to_string(bindingIt->second) +
-                        " is both NonWritable and NonReadable";
-                    return false;
-                }
-                const int accessMode = nonWritable ? 0 : (nonReadable ? 1 : 2);
-                storageImageBindingSlots_.push_back(bindingIt->second);
-                storageImageSlots_.emplace(
-                    bindingIt->second, StorageImageSlot{image.format, accessMode});
-                storageImages_.emplace(bindingIt->second, nullptr);
-                renderTargetImages_.emplace(bindingIt->second, nullptr);
-                textureImages_.emplace(bindingIt->second, nullptr);
-                continue;
-            }
-            if (isSampledImage) {
-                const ImageType& image = sampledImageIt->second;
-                const auto sampledScalarIt = scalarTypes.find(image.sampledType);
-                if (image.dimension != 1 || image.depth != 0 || image.arrayed != 0 ||
-                    image.multisampled != 0 || image.format != 0 ||
-                    sampledScalarIt == scalarTypes.end() ||
-                    !sampledScalarIt->second.supported ||
-                    sampledScalarIt->second.kind != ScalarKind::Float32)
-                {
-                    compileError_ =
-                        "Vulkan compute shader: set 0 binding " +
-                        std::to_string(bindingIt->second) +
-                        " is not an unqualified, non-arrayed, single-sample float32 sampler2D";
-                    return false;
-                }
-                sampledImageBindingSlots_.push_back(bindingIt->second);
-                sampledTextures_.emplace(bindingIt->second, nullptr);
-                sampledRenderTargets_.emplace(bindingIt->second, nullptr);
-                continue;
-            }
-            {
-                compileError_ =
-                    "Vulkan compute shader: set 0 binding " +
-                    std::to_string(bindingIt->second) +
-                    " is neither a reflected constant buffer, storage buffer, storage image2D "
-                    "nor sampler2D";
-                return false;
-            }
-        }
-        std::sort(constantBindingSlots_.begin(), constantBindingSlots_.end());
-        std::sort(storageBindingSlots_.begin(), storageBindingSlots_.end());
-        std::sort(storageImageBindingSlots_.begin(), storageImageBindingSlots_.end());
-        std::sort(sampledImageBindingSlots_.begin(), sampledImageBindingSlots_.end());
-        const auto constantCount = static_cast<uint32_t>(constantBindingSlots_.size());
-        const auto storageCount = static_cast<uint32_t>(storageBindingSlots_.size());
-        const auto storageImageCount =
-            static_cast<uint32_t>(storageImageBindingSlots_.size());
-        const auto sampledImageCount =
-            static_cast<uint32_t>(sampledImageBindingSlots_.size());
-        if (storageCount >
-                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorStorageBuffers ||
-            storageCount >
-                owner_->physicalDeviceProperties_.limits.maxDescriptorSetStorageBuffers) {
-            compileError_ =
-                "Vulkan compute shader: reflected storage-buffer count exceeds the selected "
-                "device descriptor limits";
-            return false;
-        }
-        if (constantCount >
-                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorUniformBuffers ||
-            constantCount >
-                owner_->physicalDeviceProperties_.limits.maxDescriptorSetUniformBuffers) {
-            compileError_ =
-                "Vulkan compute shader: reflected constant-buffer count exceeds the selected "
-                "device descriptor limits";
-            return false;
-        }
-        if (storageImageCount >
-                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorStorageImages ||
-            storageImageCount >
-                owner_->physicalDeviceProperties_.limits.maxDescriptorSetStorageImages) {
-            compileError_ =
-                "Vulkan compute shader: reflected storage-image count exceeds the selected "
-                "device descriptor limits";
-            return false;
-        }
-        if (sampledImageCount >
-                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorSampledImages ||
-            sampledImageCount >
-                owner_->physicalDeviceProperties_.limits.maxDescriptorSetSampledImages ||
-            sampledImageCount >
-                owner_->physicalDeviceProperties_.limits.maxPerStageDescriptorSamplers ||
-            sampledImageCount >
-                owner_->physicalDeviceProperties_.limits.maxDescriptorSetSamplers) {
-            compileError_ =
-                "Vulkan compute shader: reflected sampled-image/sampler count exceeds the selected "
-                "device descriptor limits";
-            return false;
-        }
-        if (static_cast<std::uint64_t>(constantCount) + storageCount + storageImageCount +
-                sampledImageCount >
-            owner_->physicalDeviceProperties_.limits.maxPerStageResources) {
-            compileError_ =
-                "Vulkan compute shader: reflected descriptor count exceeds the selected "
-                "device's total per-stage resource limit";
-            return false;
-        }
-
-        VkShaderModuleCreateInfo moduleInfo{};
-        moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        moduleInfo.codeSize = computeSrc.size();
-        moduleInfo.pCode = words.data();
-        VkResult result = vkCreateShaderModule(
-            owner_->device_, &moduleInfo, nullptr, &shaderModule_);
-        if (result != VK_SUCCESS) {
-            compileError_ = "Vulkan compute shader: vkCreateShaderModule failed (" +
-                std::to_string(static_cast<int>(result)) + ")";
-            ReleaseProgramEXT();
-            return false;
-        }
-
-        std::vector<VkDescriptorSetLayoutBinding> bindings;
-        bindings.reserve(constantBindingSlots_.size() + storageBindingSlots_.size() +
-                         storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
-        for (const uint32_t binding : constantBindingSlots_) {
-            bindings.push_back({binding, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-                                VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
-        }
-        for (const uint32_t binding : storageBindingSlots_) {
-            bindings.push_back({binding, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
-                                VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
-        }
-        for (const uint32_t binding : storageImageBindingSlots_) {
-            bindings.push_back({binding, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1,
-                                VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
-        }
-        for (const uint32_t binding : sampledImageBindingSlots_) {
-            bindings.push_back({binding, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
-                                VK_SHADER_STAGE_COMPUTE_BIT, nullptr});
-        }
-        std::sort(bindings.begin(), bindings.end(), [](const auto& left, const auto& right) {
-            return left.binding < right.binding;
-        });
-        if (!bindings.empty()) {
-            VkDescriptorSetLayoutCreateInfo setLayoutInfo{};
-            setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            setLayoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-            setLayoutInfo.pBindings = bindings.data();
-            result = vkCreateDescriptorSetLayout(
-                owner_->device_, &setLayoutInfo, nullptr, &descriptorSetLayout_);
-            if (result != VK_SUCCESS) {
-                compileError_ = "Vulkan compute shader: vkCreateDescriptorSetLayout failed (" +
-                    std::to_string(static_cast<int>(result)) + ")";
-                ReleaseProgramEXT();
-                return false;
-            }
-
-            std::vector<VkDescriptorPoolSize> poolSizes;
-            if (constantCount != 0)
-                poolSizes.push_back({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                     constantCount * DescriptorCacheCapacity});
-            if (storageCount != 0)
-                poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                     storageCount * DescriptorCacheCapacity});
-            if (storageImageCount != 0)
-                poolSizes.push_back({VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                                     storageImageCount * DescriptorCacheCapacity});
-            if (sampledImageCount != 0)
-                poolSizes.push_back({VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                     sampledImageCount * DescriptorCacheCapacity});
-            VkDescriptorPoolCreateInfo poolInfo{};
-            poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-            poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-            poolInfo.maxSets = DescriptorCacheCapacity;
-            poolInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
-            poolInfo.pPoolSizes = poolSizes.data();
-            result = vkCreateDescriptorPool(owner_->device_, &poolInfo, nullptr, &descriptorPool_);
-            if (result != VK_SUCCESS) {
-                compileError_ = "Vulkan compute shader: vkCreateDescriptorPool failed (" +
-                    std::to_string(static_cast<int>(result)) + ")";
-                ReleaseProgramEXT();
-                return false;
-            }
-
-            VkDescriptorSetAllocateInfo allocateInfo{};
-            allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocateInfo.descriptorPool = descriptorPool_;
-            allocateInfo.descriptorSetCount = 1;
-            allocateInfo.pSetLayouts = &descriptorSetLayout_;
-            DescriptorCacheEntry first;
-            result = vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &first.set);
-            if (result != VK_SUCCESS) {
-                compileError_ = "Vulkan compute shader: vkAllocateDescriptorSets failed (" +
-                    std::to_string(static_cast<int>(result)) + ")";
-                ReleaseProgramEXT();
-                return false;
-            }
-            descriptorCache_.push_back(std::move(first));
-            ++owner_->liveComputeDescriptorSetCountEXT_;
-            ++owner_->computeDescriptorSetAllocationCountEXT_;
-        }
-
-        VkPushConstantRange pushConstantRange{};
-        if (!pushConstantBytes_.empty()) {
-            pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-            pushConstantRange.offset = 0;
-            pushConstantRange.size = static_cast<uint32_t>(pushConstantBytes_.size());
-        }
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = descriptorSetLayout_ != VK_NULL_HANDLE ? 1u : 0u;
-        pipelineLayoutInfo.pSetLayouts =
-            descriptorSetLayout_ != VK_NULL_HANDLE ? &descriptorSetLayout_ : nullptr;
-        pipelineLayoutInfo.pushConstantRangeCount =
-            pushConstantBytes_.empty() ? 0u : 1u;
-        pipelineLayoutInfo.pPushConstantRanges =
-            pushConstantBytes_.empty() ? nullptr : &pushConstantRange;
-        result = vkCreatePipelineLayout(
-            owner_->device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_);
-        if (result != VK_SUCCESS) {
-            compileError_ = "Vulkan compute shader: vkCreatePipelineLayout failed (" +
-                std::to_string(static_cast<int>(result)) + ")";
-            ReleaseProgramEXT();
-            return false;
-        }
-        ++owner_->liveComputePipelineLayoutCountEXT_;
-        ++owner_->computePipelineLayoutCreationCountEXT_;
-
-        VkPipelineShaderStageCreateInfo stage{};
-        stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        stage.module = shaderModule_;
-        stage.pName = "main";
-        VkComputePipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        pipelineInfo.stage = stage;
-        pipelineInfo.layout = pipelineLayout_;
-        result = vkCreateComputePipelines(
-            owner_->device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
-        if (result != VK_SUCCESS) {
-            compileError_ = "Vulkan compute shader: vkCreateComputePipelines failed (" +
-                std::to_string(static_cast<int>(result)) + ")";
-            ReleaseProgramEXT();
-            return false;
-        }
-        ++owner_->liveComputePipelineCountEXT_;
-        ++owner_->computePipelineCreationCountEXT_;
-        return true;
-    }
-
-    void VulkanComputeShaderRenderer::Bind()
-    {
-        if (!IsValid())
-            throw std::runtime_error("Vulkan compute shader Bind called for an invalid program");
-        owner_->boundComputeShader_ = this;
-    }
-
-    void VulkanComputeShaderRenderer::SetUniformInt(const char* name, const int value)
-    {
-        if (!IsValid())
-            throw std::runtime_error(
-                "Vulkan compute shader: cannot set a scalar on an invalid program");
-        const std::string key = name != nullptr ? name : "";
-        const auto slot = scalarSlots_.find(key);
-        if (slot == scalarSlots_.end())
-            throw std::out_of_range(
-                "Vulkan compute shader: no reflected int32 push constant named '" + key + "'");
-        if (slot->second.kind != ScalarKind::Int32)
-            throw std::invalid_argument(
-                "Vulkan compute shader: push constant '" + key + "' is float32, not int32");
-        std::memcpy(pushConstantBytes_.data() + slot->second.offset, &value, sizeof(value));
-    }
-
-    void VulkanComputeShaderRenderer::SetUniformFloat(const char* name, const float value)
-    {
-        if (!IsValid())
-            throw std::runtime_error(
-                "Vulkan compute shader: cannot set a scalar on an invalid program");
-        const std::string key = name != nullptr ? name : "";
-        const auto slot = scalarSlots_.find(key);
-        if (slot == scalarSlots_.end())
-            throw std::out_of_range(
-                "Vulkan compute shader: no reflected float32 push constant named '" + key + "'");
-        if (slot->second.kind != ScalarKind::Float32)
-            throw std::invalid_argument(
-                "Vulkan compute shader: push constant '" + key + "' is int32, not float32");
-        std::memcpy(pushConstantBytes_.data() + slot->second.offset, &value, sizeof(value));
-    }
-
-    void VulkanComputeShaderRenderer::BindStorageBuffer(
-        const int binding, IStorageBufferRenderer* buffer)
-    {
-        if (binding < 0 ||
-            !storageBuffers_.contains(static_cast<uint32_t>(binding)))
-            throw std::out_of_range(
-                "Vulkan compute shader: storage binding " + std::to_string(binding) +
-                " is not declared by this SPIR-V module in set 0");
-        auto* native = dynamic_cast<VulkanStorageBufferRenderer*>(buffer);
-        if (buffer != nullptr &&
-            (native == nullptr || !native->IsOwnedByEXT(owner_)))
-            throw std::invalid_argument(
-                "Vulkan compute shader: storage buffer belongs to another renderer");
-        storageBuffers_[static_cast<uint32_t>(binding)] = native;
-    }
-
-    bool VulkanComputeShaderRenderer::BindConstantBufferEXT(
-        const int binding, IStorageBufferRenderer* buffer)
-    {
-        if (binding < 0 ||
-            !constantBuffers_.contains(static_cast<uint32_t>(binding)))
-            throw std::out_of_range(
-                "Vulkan compute shader: constant binding " + std::to_string(binding) +
-                " is not declared by this SPIR-V module in set 0");
-        auto* native = dynamic_cast<VulkanStorageBufferRenderer*>(buffer);
-        if (buffer != nullptr &&
-            (native == nullptr || !native->IsOwnedByEXT(owner_)))
-            throw std::invalid_argument(
-                "Vulkan compute shader: constant buffer belongs to another renderer");
-        if (native != nullptr &&
-            (native->GetUsageEXT() & (UINT32_C(1) << 6)) == 0)
-            return false;
-        constantBuffers_[static_cast<uint32_t>(binding)] = native;
-        return true;
-    }
-
-    void VulkanComputeShaderRenderer::BindImageTexture(
-        const int unit, ITextureRenderer* texture, const int accessMode)
-    {
-        if (unit < 0 ||
-            !storageImageSlots_.contains(static_cast<std::uint32_t>(unit)))
-            throw std::out_of_range(
-                "Vulkan compute shader: storage-image binding " + std::to_string(unit) +
-                " is not declared by this SPIR-V module in set 0");
-        if (accessMode < 0 || accessMode > 2)
-            throw std::invalid_argument(
-                "Vulkan compute shader: storage-image access is outside GraphicsImageAccess");
-        const auto& slot = storageImageSlots_.at(static_cast<std::uint32_t>(unit));
-        if (slot.accessMode != accessMode)
-            throw std::invalid_argument(
-                "Vulkan compute shader: storage-image access does not match the SPIR-V "
-                "NonReadable/NonWritable declaration");
-        if (texture == nullptr) {
-            renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
-            storageImages_[static_cast<std::uint32_t>(unit)].reset();
-            textureImages_[static_cast<std::uint32_t>(unit)].reset();
-            return;
-        }
-        if (auto* raw = dynamic_cast<VulkanRenderTargetRenderer*>(texture))
-        {
-            auto native = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
-                texture->shared_from_this());
-            if (native == nullptr || !native->IsOwnedByEXT(owner_) ||
-                !native->IsStorageImageCapableEXT())
-                throw System::NotSupportedException(
-                    "CNA Vulkan: this RenderTarget2D format/allocation has no legal "
-                    "storage-image bridge");
-            std::uint32_t nativeImageFormat = 0;
-            if (!VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
-                    native->GetVkFormatEXT(), nativeImageFormat) ||
-                nativeImageFormat != slot.spirvImageFormat)
-                throw std::invalid_argument(
-                    "Vulkan compute shader: render-target format does not match the SPIR-V "
-                    "image format at binding " + std::to_string(unit));
-            renderTargetImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
-            storageImages_[static_cast<std::uint32_t>(unit)].reset();
-            textureImages_[static_cast<std::uint32_t>(unit)].reset();
-            return;
-        }
-        auto native = std::dynamic_pointer_cast<VulkanTextureRenderer>(
-            texture->shared_from_this());
-        if (native == nullptr || !native->IsOwnedByEXT(owner_) ||
-            !native->IsStorageImageCapableEXT())
-            throw System::NotSupportedException(
-                "CNA Vulkan: this Texture2D format/allocation has no legal storage-image bridge");
-        std::uint32_t nativeImageFormat = 0;
-        if (!VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
-                native->GetVkFormatEXT(), nativeImageFormat) ||
-            nativeImageFormat != slot.spirvImageFormat)
-            throw std::invalid_argument(
-                "Vulkan compute shader: texture format does not match the SPIR-V image "
-                "format at binding " + std::to_string(unit));
-        native->participatesInModernOrder_ = true;
-        textureImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
-        storageImages_[static_cast<std::uint32_t>(unit)].reset();
-        renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
-    }
-
-    bool VulkanComputeShaderRenderer::BindStorageTexture2DEXT(
-        const int unit, std::shared_ptr<IStorageTexture2DRenderer> texture,
-        const int accessMode)
-    {
-        if (unit < 0 ||
-            !storageImageSlots_.contains(static_cast<std::uint32_t>(unit)))
-            throw std::out_of_range(
-                "Vulkan compute shader: storage-image binding " + std::to_string(unit) +
-                " is not declared by this SPIR-V module in set 0");
-        if (accessMode < 0 || accessMode > 2)
-            throw std::invalid_argument(
-                "Vulkan compute shader: storage-image access is outside GraphicsImageAccess");
-        const auto& slot = storageImageSlots_.at(static_cast<std::uint32_t>(unit));
-        if (slot.accessMode != accessMode)
-            throw std::invalid_argument(
-                "Vulkan compute shader: storage-image access does not match the SPIR-V "
-                "NonReadable/NonWritable declaration");
-        if (texture == nullptr) {
-            storageImages_[static_cast<std::uint32_t>(unit)].reset();
-            renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
-            textureImages_[static_cast<std::uint32_t>(unit)].reset();
-            return true;
-        }
-        auto native = std::dynamic_pointer_cast<VulkanStorageTexture2DRenderer>(texture);
-        if (native == nullptr || !native->IsOwnedByEXT(owner_)) return false;
-        std::uint32_t nativeImageFormat = 0;
-        if (!VulkanRenderer::MapVkFormatToSpirvStorageImageFormatEXT(
-                native->GetVkFormatEXT(), nativeImageFormat) ||
-            nativeImageFormat != slot.spirvImageFormat)
-        {
-            throw std::invalid_argument(
-                "Vulkan compute shader: storage texture format does not match the SPIR-V image "
-                "format at binding " + std::to_string(unit));
-        }
-        const std::uint32_t accessUsage = accessMode == 0 ? UINT32_C(1) :
-                                          accessMode == 1 ? UINT32_C(2) : UINT32_C(3);
-        if (!native->HasUsageEXT(accessUsage))
-            throw std::invalid_argument(
-                "Vulkan compute shader: storage texture usage does not cover the requested "
-                "access");
-        storageImages_[static_cast<std::uint32_t>(unit)] = std::move(native);
-        renderTargetImages_[static_cast<std::uint32_t>(unit)].reset();
-        textureImages_[static_cast<std::uint32_t>(unit)].reset();
-        return true;
-    }
-
-    void VulkanComputeShaderRenderer::BindTexture(
-        const int unit, ITextureRenderer* texture)
-    {
-        if (unit < 0 ||
-            !sampledTextures_.contains(static_cast<std::uint32_t>(unit)))
-            throw std::out_of_range(
-                "Vulkan compute shader: sampled-image binding " + std::to_string(unit) +
-                " is not declared by this SPIR-V module in set 0");
-        if (texture == nullptr) {
-            sampledTextures_[static_cast<std::uint32_t>(unit)].reset();
-            sampledRenderTargets_[static_cast<std::uint32_t>(unit)].reset();
-            return;
-        }
-        if (dynamic_cast<VulkanRenderTargetRenderer*>(texture) != nullptr)
-        {
-            auto native = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
-                texture->shared_from_this());
-            if (native == nullptr || !native->IsOwnedByEXT(owner_))
-                throw std::invalid_argument(
-                    "Vulkan compute shader: sampled RenderTarget2D belongs to another renderer");
-            sampledRenderTargets_[static_cast<std::uint32_t>(unit)] = std::move(native);
-            sampledTextures_[static_cast<std::uint32_t>(unit)].reset();
-            return;
-        }
-        auto native = std::dynamic_pointer_cast<VulkanTextureRenderer>(
-            texture->shared_from_this());
-        if (native == nullptr || !native->IsOwnedByEXT(owner_))
-            throw std::invalid_argument(
-                "Vulkan compute shader: sampled Texture2D belongs to another renderer");
-        native->participatesInModernOrder_ = true;
-        sampledTextures_[static_cast<std::uint32_t>(unit)] = std::move(native);
-        sampledRenderTargets_[static_cast<std::uint32_t>(unit)].reset();
-    }
-
-    void VulkanComputeShaderRenderer::ForgetStorageBufferEXT(
-        const VulkanStorageBufferRenderer* buffer) noexcept
-    {
-        for (auto& [binding, bound] : constantBuffers_) {
-            static_cast<void>(binding);
-            if (bound == buffer) bound = nullptr;
-        }
-        for (auto& [binding, bound] : storageBuffers_) {
-            static_cast<void>(binding);
-            if (bound == buffer) bound = nullptr;
-        }
-    }
-
-    bool VulkanComputeShaderRenderer::ReferencesSamplerEXT(
-        const VkSampler sampler) const noexcept
-    {
-        for (const auto& entry : descriptorCache_)
-            if (entry.initialized &&
-                std::find(entry.samplers.begin(), entry.samplers.end(), sampler) !=
-                    entry.samplers.end())
-                return true;
-        return false;
-    }
-
-    void VulkanComputeShaderRenderer::EvictDescriptorSetsReferencingEXT(
-        const VkBuffer buffer, const VkImageView imageView,
-        std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>>& retiredSets)
-    {
-        if (descriptorPool_ == VK_NULL_HANDLE ||
-            (buffer == VK_NULL_HANDLE && imageView == VK_NULL_HANDLE))
-            return;
-        for (auto it = descriptorCache_.begin(); it != descriptorCache_.end();)
-        {
-            const bool referencesBuffer = buffer != VK_NULL_HANDLE &&
-                std::find(it->buffers.begin(), it->buffers.end(), buffer) !=
-                    it->buffers.end();
-            const bool referencesImage = imageView != VK_NULL_HANDLE &&
-                std::find(it->images.begin(), it->images.end(), imageView) !=
-                    it->images.end();
-            if (!it->initialized || (!referencesBuffer && !referencesImage)) {
-                ++it;
-                continue;
-            }
-            if (it->set != VK_NULL_HANDLE)
-                retiredSets.emplace_back(descriptorPool_, it->set);
-            it = descriptorCache_.erase(it);
-            if (owner_ != nullptr && owner_->liveComputeDescriptorSetCountEXT_ != 0)
-                --owner_->liveComputeDescriptorSetCountEXT_;
-        }
-    }
-
-    VkDescriptorSet VulkanComputeShaderRenderer::GetOrCreateDescriptorSetEXT(
-        const std::vector<VkBuffer>& buffers, const std::vector<VkImageView>& images,
-        const std::vector<VkSampler>& samplers,
-        const std::vector<VkDescriptorBufferInfo>& constantBufferInfos,
-        const std::vector<VkDescriptorBufferInfo>& bufferInfos,
-        const std::vector<VkDescriptorImageInfo>& storageImageInfos,
-        const std::vector<VkDescriptorImageInfo>& sampledImageInfos)
-    {
-        if (descriptorSetLayout_ == VK_NULL_HANDLE) return VK_NULL_HANDLE;
-
-        DescriptorCacheEntry* selected = nullptr;
-        for (auto& entry : descriptorCache_)
-        {
-            if (entry.initialized && entry.buffers == buffers && entry.images == images &&
-                entry.samplers == samplers)
-                return entry.set;
-            if (!entry.initialized && selected == nullptr) selected = &entry;
-        }
-        if (selected == nullptr)
-        {
-            if (descriptorCache_.size() >= DescriptorCacheCapacity)
-                throw std::runtime_error(
-                    "Vulkan compute shader: immutable descriptor snapshot cache is full");
-            VkDescriptorSetAllocateInfo allocateInfo{};
-            allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocateInfo.descriptorPool = descriptorPool_;
-            allocateInfo.descriptorSetCount = 1;
-            allocateInfo.pSetLayouts = &descriptorSetLayout_;
-            DescriptorCacheEntry entry;
-            if (vkAllocateDescriptorSets(owner_->device_, &allocateInfo, &entry.set) != VK_SUCCESS)
-                throw std::runtime_error(
-                    "Vulkan compute shader: descriptor snapshot allocation failed");
-            descriptorCache_.push_back(std::move(entry));
-            selected = &descriptorCache_.back();
-            ++owner_->liveComputeDescriptorSetCountEXT_;
-            ++owner_->computeDescriptorSetAllocationCountEXT_;
-        }
-
-        std::vector<VkWriteDescriptorSet> writes(
-            constantBindingSlots_.size() + storageBindingSlots_.size() +
-            storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
-        for (std::size_t i = 0; i < constantBindingSlots_.size(); ++i)
-        {
-            auto& write = writes[i];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = selected->set;
-            write.dstBinding = constantBindingSlots_[i];
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            write.pBufferInfo = &constantBufferInfos[i];
-        }
-        for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i)
-        {
-            auto& write = writes[constantBindingSlots_.size() + i];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = selected->set;
-            write.dstBinding = storageBindingSlots_[i];
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            write.pBufferInfo = &bufferInfos[i];
-        }
-        for (std::size_t i = 0; i < storageImageBindingSlots_.size(); ++i)
-        {
-            auto& write = writes[constantBindingSlots_.size() +
-                                 storageBindingSlots_.size() + i];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = selected->set;
-            write.dstBinding = storageImageBindingSlots_[i];
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            write.pImageInfo = &storageImageInfos[i];
-        }
-        for (std::size_t i = 0; i < sampledImageBindingSlots_.size(); ++i)
-        {
-            auto& write = writes[
-                constantBindingSlots_.size() + storageBindingSlots_.size() +
-                storageImageBindingSlots_.size() + i];
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = selected->set;
-            write.dstBinding = sampledImageBindingSlots_[i];
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            write.pImageInfo = &sampledImageInfos[i];
-        }
-        vkUpdateDescriptorSets(owner_->device_, static_cast<std::uint32_t>(writes.size()),
-                               writes.data(), 0, nullptr);
-        selected->buffers = buffers;
-        selected->images = images;
-        selected->samplers = samplers;
-        selected->initialized = true;
-        return selected->set;
-    }
-
-    void VulkanComputeShaderRenderer::DispatchEXT(
-        const int groupsX, const int groupsY, const int groupsZ)
-    {
-        if (!IsValid())
-            throw std::runtime_error("Vulkan compute shader: cannot dispatch an invalid program");
-        const int groups[3] = {groupsX, groupsY, groupsZ};
-        for (int axis = 0; axis < 3; ++axis) {
-            if (groups[axis] <= 0 ||
-                groups[axis] > owner_->GetMaxComputeWorkGroupCountEXT(axis))
-                throw std::invalid_argument(
-                    "Vulkan compute shader: dispatch group count exceeds the device limit");
-        }
-
-        // Snapshot public bindings before command recording. MOD-2247 can enqueue the resulting
-        // immutable state without a later bind/setUniform call changing an already-issued dispatch.
-        const auto constantBuffers = constantBuffers_;
-        const auto storageBuffers = storageBuffers_;
-        const auto storageImages = storageImages_;
-        const auto renderTargetImages = renderTargetImages_;
-        const auto textureImages = textureImages_;
-        const auto sampledTextures = sampledTextures_;
-        const auto sampledRenderTargets = sampledRenderTargets_;
-        const auto pushConstantBytes = pushConstantBytes_;
-        for (const uint32_t binding : constantBindingSlots_) {
-            if (constantBuffers.at(binding) == nullptr)
-                throw std::runtime_error(
-                    "Vulkan compute shader: required set 0 constant binding " +
-                    std::to_string(binding) + " is not bound");
-        }
-        for (const uint32_t binding : storageBindingSlots_) {
-            if (storageBuffers.at(binding) == nullptr)
-                throw std::runtime_error(
-                    "Vulkan compute shader: required set 0 storage binding " +
-                    std::to_string(binding) + " is not bound");
-        }
-        for (const uint32_t binding : storageImageBindingSlots_) {
-            if (storageImages.at(binding) == nullptr &&
-                renderTargetImages.at(binding) == nullptr &&
-                textureImages.at(binding) == nullptr)
-                throw std::runtime_error(
-                    "Vulkan compute shader: required set 0 storage-image binding " +
-                    std::to_string(binding) + " is not bound");
-        }
-        for (const uint32_t binding : sampledImageBindingSlots_) {
-            if (sampledTextures.at(binding) == nullptr &&
-                sampledRenderTargets.at(binding) == nullptr)
-                throw std::runtime_error(
-                    "Vulkan compute shader: required set 0 sampled-image binding " +
-                    std::to_string(binding) + " is not bound");
-        }
-
-        std::vector<VkDescriptorBufferInfo> constantInfos(constantBindingSlots_.size());
-        std::vector<VkDescriptorBufferInfo> infos(storageBindingSlots_.size());
-        std::vector<VkBuffer> bufferHandles;
-        std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedConstantBuffers;
-        std::vector<std::shared_ptr<VulkanStorageBufferRenderer>> retainedBuffers;
-        bufferHandles.reserve(constantBindingSlots_.size() + storageBindingSlots_.size());
-        retainedConstantBuffers.reserve(constantBindingSlots_.size());
-        retainedBuffers.reserve(storageBindingSlots_.size());
-        std::vector<VkDescriptorImageInfo> imageInfos(storageImageBindingSlots_.size());
-        std::vector<VkImageView> imageViews;
-        imageViews.reserve(
-            storageImageBindingSlots_.size() + sampledImageBindingSlots_.size());
-        std::vector<VkDescriptorImageInfo> sampledImageInfos(
-            sampledImageBindingSlots_.size());
-        std::vector<VkSampler> sampledSamplers;
-        sampledSamplers.reserve(sampledImageBindingSlots_.size());
-        for (std::size_t i = 0; i < constantBindingSlots_.size(); ++i) {
-            const uint32_t binding = constantBindingSlots_[i];
-            auto* buffer = constantBuffers.at(binding);
-            auto retained = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
-                buffer->IStorageBufferRenderer::shared_from_this());
-            retainedConstantBuffers.push_back(retained);
-            bufferHandles.push_back(buffer->GetBufferEXT());
-            auto& info = constantInfos[i];
-            info.buffer = buffer->GetBufferEXT();
-            info.offset = 0;
-            info.range = static_cast<VkDeviceSize>(buffer->GetByteSize());
-        }
-        for (std::size_t i = 0; i < storageBindingSlots_.size(); ++i) {
-            const uint32_t binding = storageBindingSlots_[i];
-            auto* buffer = storageBuffers.at(binding);
-            auto retained = std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(
-                buffer->IStorageBufferRenderer::shared_from_this());
-            retainedBuffers.push_back(retained);
-            bufferHandles.push_back(buffer->GetBufferEXT());
-            auto& info = infos[i];
-            info.buffer = buffer->GetBufferEXT();
-            info.offset = 0;
-            info.range = static_cast<VkDeviceSize>(buffer->GetByteSize());
-        }
-        for (std::size_t i = 0; i < storageImageBindingSlots_.size(); ++i) {
-            const uint32_t binding = storageImageBindingSlots_[i];
-            auto& info = imageInfos[i];
-            info.imageView = storageImages.at(binding) != nullptr
-                ? storageImages.at(binding)->GetStorageImageViewEXT()
-                : (renderTargetImages.at(binding) != nullptr
-                    ? renderTargetImages.at(binding)->GetStorageImageViewEXT()
-                    : textureImages.at(binding)->GetStorageImageViewEXT());
-            info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            imageViews.push_back(info.imageView);
-        }
-        for (std::size_t i = 0; i < sampledImageBindingSlots_.size(); ++i) {
-            const uint32_t binding = sampledImageBindingSlots_[i];
-            auto& info = sampledImageInfos[i];
-            info.sampler = binding < std::size(owner_->slotSamplers_) &&
-                           owner_->slotSamplers_[binding] != VK_NULL_HANDLE
-                ? owner_->slotSamplers_[binding]
-                : owner_->defaultSampler_;
-            info.imageView = sampledRenderTargets.at(binding) != nullptr
-                ? sampledRenderTargets.at(binding)->GetVkImageView()
-                : sampledTextures.at(binding)->GetVkImageView();
-            info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageViews.push_back(info.imageView);
-            sampledSamplers.push_back(info.sampler);
-        }
-        const VkDescriptorSet descriptorSet = GetOrCreateDescriptorSetEXT(
-            bufferHandles, imageViews, sampledSamplers, constantInfos, infos, imageInfos,
-            sampledImageInfos);
-
-        VulkanRenderer::PendingModernCommand command;
-        command.kind = VulkanRenderer::PendingModernCommand::Kind::Compute;
-        command.pipeline = pipeline_;
-        command.pipelineLayout = pipelineLayout_;
-        command.descriptorSet = descriptorSet;
-        command.pushConstantBytes = std::move(pushConstantBytes);
-        command.groupsX = static_cast<std::uint32_t>(groupsX);
-        command.groupsY = static_cast<std::uint32_t>(groupsY);
-        command.groupsZ = static_cast<std::uint32_t>(groupsZ);
-        command.constantBuffers = std::move(retainedConstantBuffers);
-        command.storageBuffers = std::move(retainedBuffers);
-        for (const uint32_t binding : storageImageBindingSlots_) {
-            command.storageImages.push_back({
-                storageImages.at(binding), renderTargetImages.at(binding),
-                textureImages.at(binding),
-                storageImageSlots_.at(binding).accessMode});
-        }
-        for (const uint32_t binding : sampledImageBindingSlots_) {
-            command.sampledImages.push_back({
-                sampledTextures.at(binding), sampledRenderTargets.at(binding)});
-        }
-        owner_->QueueComputeDispatchEXT(std::move(command));
-    }
-
-    std::unique_ptr<IComputeShaderRenderer> VulkanRenderer::CreateComputeShader(
-        const std::string& computeSrc)
-    {
-        if (!SupportsComputeShadersEXT()) return nullptr;
-        auto shader = std::make_unique<VulkanComputeShaderRenderer>(this, computeSrc);
-        liveComputeShaders_.push_back(shader.get());
-        return shader;
-    }
-
-    std::unique_ptr<IStorageBufferRenderer> VulkanRenderer::CreateStorageBuffer(
-        const std::size_t byteSize)
-    {
-        if (!SupportsComputeShadersEXT()) return nullptr;
-        constexpr std::uint32_t LegacyUsage = UINT32_C(0x0F);
-        constexpr std::uint32_t LegacyCpuAccess = UINT32_C(0x03);
-        auto buffer = std::make_unique<VulkanStorageBufferRenderer>(
-            this, byteSize, LegacyUsage, LegacyCpuAccess);
-        liveStorageBuffers_.push_back(buffer.get());
-        return buffer;
-    }
-
-    std::unique_ptr<IStorageBufferRenderer> VulkanRenderer::CreateStorageBufferEXT(
-        const std::size_t byteSize, const std::uint32_t usage,
-        const std::uint32_t cpuAccess)
-    {
-        constexpr std::uint32_t Storage = UINT32_C(1) << 0;
-        constexpr std::uint32_t IndirectArguments = UINT32_C(1) << 3;
-        constexpr std::uint32_t Constant = UINT32_C(1) << 6;
-        if (byteSize == 0 || usage == 0 ||
-            (usage & ~UINT32_C(0x7F)) != 0 || (cpuAccess & ~UINT32_C(0x03)) != 0)
-            return nullptr;
-        if ((usage & Storage) != 0 && !SupportsComputeShadersEXT()) return nullptr;
-        if ((usage & IndirectArguments) != 0 && !SupportsIndirectDrawEXT()) return nullptr;
-        if ((usage & Constant) != 0) {
-            const std::uint64_t maximum = GetMaxUniformBufferBytesEXT();
-            if (maximum == 0 || static_cast<std::uint64_t>(byteSize) > maximum)
-                return nullptr;
-        }
-        auto buffer = std::make_unique<VulkanStorageBufferRenderer>(
-            this, byteSize, usage, cpuAccess);
-        liveStorageBuffers_.push_back(buffer.get());
-        return buffer;
-    }
-
-    void VulkanRenderer::DispatchCompute(
-        IComputeShaderRenderer* shader, const int groupsX,
-        const int groupsY, const int groupsZ)
-    {
-        auto* native = dynamic_cast<VulkanComputeShaderRenderer*>(shader);
-        if (native == nullptr)
-            throw std::invalid_argument(
-                "Vulkan DispatchCompute requires a Vulkan compute shader");
-        if (boundComputeShader_ != native)
-            throw std::runtime_error(
-                "Vulkan DispatchCompute requires the compute shader to be bound first");
-        native->DispatchEXT(groupsX, groupsY, groupsZ);
-    }
-
-    void VulkanRenderer::MemoryBarrierEXT(int /*barrierBits*/)
-    {
-        // Dispatch and copy records already carry their producer/consumer dependencies in the
-        // renderer's one ordered stream. The compatibility call is therefore fulfilled without a
-        // second command queue, submit, or wait; MOD-2248's resource tracker selects the masks.
-    }
-
-    bool VulkanRenderer::SupportsComputeShadersEXT() const
-    {
-        const auto& limits = physicalDeviceProperties_.limits;
-        return device_ != VK_NULL_HANDLE
-            && (graphicsQueueFlags_ & VK_QUEUE_COMPUTE_BIT) != 0
-            && limits.maxComputeWorkGroupInvocations > 0
-            && limits.maxPerStageDescriptorStorageBuffers >=
-                VulkanComputeShaderRenderer::BaselineStorageBindingCount
-            && limits.maxDescriptorSetStorageBuffers >=
-                VulkanComputeShaderRenderer::BaselineStorageBindingCount
-            && limits.maxStorageBufferRange > 0
-            && limits.maxPushConstantsSize >= 4;
-    }
-
-    int VulkanRenderer::GetMaxComputeWorkGroupCountEXT(const int axis) const
-    {
-        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
-        return ClampVulkanLimitToInt(
-            physicalDeviceProperties_.limits.maxComputeWorkGroupCount[axis]);
-    }
-
-    int VulkanRenderer::GetMaxComputeWorkGroupSizeEXT(const int axis) const
-    {
-        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
-        return ClampVulkanLimitToInt(
-            physicalDeviceProperties_.limits.maxComputeWorkGroupSize[axis]);
-    }
-
-    int VulkanRenderer::GetMaxComputeWorkGroupInvocationsEXT() const
-    {
-        if (!SupportsComputeShadersEXT()) return 0;
-        return ClampVulkanLimitToInt(
-            physicalDeviceProperties_.limits.maxComputeWorkGroupInvocations);
     }
 
     int VulkanRenderer::GetMaxTextureDimension() const
@@ -18433,13 +15210,6 @@ namespace CNA::Internal::Renderers::Vulkan
         return GetMaxVertexInputBindingsEXT();
     }
 
-    std::uint64_t VulkanRenderer::GetMaxStorageBufferBytesEXT() const
-    {
-        return SupportsComputeShadersEXT()
-            ? physicalDeviceProperties_.limits.maxStorageBufferRange
-            : UINT64_C(0);
-    }
-
     std::uint64_t VulkanRenderer::GetMaxUniformBufferBytesEXT() const
     {
         return device_ != VK_NULL_HANDLE
@@ -18447,91 +15217,18 @@ namespace CNA::Internal::Renderers::Vulkan
             : UINT64_C(0);
     }
 
-    int VulkanRenderer::GetMaxComputeStorageBufferBindingsEXT() const
-    {
-        if (!SupportsComputeShadersEXT()) return 0;
-        const auto& limits = physicalDeviceProperties_.limits;
-        return ClampVulkanLimitToInt(std::min(
-            limits.maxPerStageDescriptorStorageBuffers,
-            limits.maxDescriptorSetStorageBuffers));
-    }
-
-    int VulkanRenderer::GetMaxVertexShaderStorageBlocksEXT() const
-    {
-        if (!SupportsComputeShadersEXT() ||
-            physicalDeviceProperties_.limits.maxBoundDescriptorSets < 3)
-            return 0;
-        const auto& limits = physicalDeviceProperties_.limits;
-        return ClampVulkanLimitToInt(std::min(
-            limits.maxPerStageDescriptorStorageBuffers,
-            limits.maxDescriptorSetStorageBuffers));
-    }
-
-    void VulkanRenderer::BindStorageBufferForDrawEXT(
-        const int binding, const IStorageBufferRenderer& buffer)
-    {
-        if (binding < 0)
-            throw std::out_of_range(
-                "CNA Vulkan: graphics storage-buffer binding must not be negative");
-        const auto* native = dynamic_cast<const VulkanStorageBufferRenderer*>(&buffer);
-        if (native == nullptr || !native->IsOwnedByEXT(this) ||
-            native->GetBufferEXT() == VK_NULL_HANDLE)
-            throw std::invalid_argument(
-                "CNA Vulkan: graphics storage-buffer binding requires a live buffer from this "
-                "renderer");
-        if ((native->GetUsageEXT() & UINT32_C(1)) == 0)
-            throw System::NotSupportedException(
-                "CNA Vulkan: graphics shader binding requires StorageBufferUsage::Storage");
-        const auto base = std::const_pointer_cast<IStorageBufferRenderer>(
-            buffer.shared_from_this());
-        const auto retained =
-            std::dynamic_pointer_cast<VulkanStorageBufferRenderer>(base);
-        if (retained == nullptr)
-            throw std::logic_error(
-                "CNA Vulkan: graphics storage-buffer binding lost its shared native record");
-        boundDrawStorageBuffers_[static_cast<std::uint32_t>(binding)] = retained;
-    }
-
-    int VulkanRenderer::GetMaxTextureArrayLayersEXT() const
-    {
-        if (physicalDevice_ == VK_NULL_HANDLE) return 0;
-        VulkanSurfaceFormatStorageEXT storage{};
-        if (!MapSurfaceFormatToStorageEXT(
-                static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color),
-                storage))
-            return 0;
-        VkImageFormatProperties properties{};
-        constexpr VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
-        if (vkGetPhysicalDeviceImageFormatProperties(
-                physicalDevice_, storage.format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL,
-                usage, 0, &properties) != VK_SUCCESS)
-            return 0;
-        return ClampVulkanLimitToInt(properties.maxArrayLayers);
-    }
-
     int VulkanRenderer::GetMaxSampledTexturesPerShaderStageEXT() const
     {
         if (device_ == VK_NULL_HANDLE) return 0;
         const auto& limits = physicalDeviceProperties_.limits;
         constexpr std::uint32_t implementedSampledBindings =
-            static_cast<std::uint32_t>(
-                VulkanEffectRenderer::kMaxEffectBoundTextures * 3 +
-                VulkanEffectRenderer::kEffectTextureArrayBindingCount);
+            static_cast<std::uint32_t>(VulkanEffectRenderer::kMaxEffectBoundTextures * 3);
         return ClampVulkanLimitToInt(std::min({
             implementedSampledBindings,
             limits.maxPerStageDescriptorSamplers,
             limits.maxPerStageDescriptorSampledImages,
             limits.maxDescriptorSetSamplers,
             limits.maxDescriptorSetSampledImages}));
-    }
-
-    int VulkanRenderer::GetMaxStorageImagesPerShaderStageEXT() const
-    {
-        if (!SupportsComputeShadersEXT()) return 0;
-        const auto& limits = physicalDeviceProperties_.limits;
-        return ClampVulkanLimitToInt(std::min(
-            limits.maxPerStageDescriptorStorageImages,
-            limits.maxDescriptorSetStorageImages));
     }
 
     int VulkanRenderer::GetMaxVertexInputBindingsEXT() const
@@ -18559,45 +15256,11 @@ namespace CNA::Internal::Renderers::Vulkan
             physicalDeviceProperties_.limits.maxColorAttachments));
     }
 
-    std::uint64_t VulkanRenderer::GetMinStorageBufferOffsetAlignmentEXT() const
-    {
-        return SupportsComputeShadersEXT()
-            ? physicalDeviceProperties_.limits.minStorageBufferOffsetAlignment
-            : UINT64_C(0);
-    }
-
     std::uint64_t VulkanRenderer::GetMinUniformBufferOffsetAlignmentEXT() const
     {
         return device_ != VK_NULL_HANDLE
             ? physicalDeviceProperties_.limits.minUniformBufferOffsetAlignment
             : UINT64_C(0);
-    }
-
-    std::uint64_t VulkanRenderer::GetTimestampPeriodPicosecondsEXT() const
-    {
-        if (!SupportsGpuTimerEXT()) return 0;
-        const long double picoseconds =
-            static_cast<long double>(physicalDeviceProperties_.limits.timestampPeriod) * 1000.0L;
-        if (!(picoseconds > 0.0L)) return 0;
-        if (picoseconds >=
-            static_cast<long double>(std::numeric_limits<std::uint64_t>::max()))
-            return std::numeric_limits<std::uint64_t>::max();
-        return std::max<std::uint64_t>(
-            1, static_cast<std::uint64_t>(std::llround(picoseconds)));
-    }
-
-    bool VulkanRenderer::SupportsGpuTimerEXT() const
-    {
-        return device_ != VK_NULL_HANDLE && graphicsQueueTimestampValidBits_ != 0 &&
-               physicalDeviceProperties_.limits.timestampPeriod > 0.0f;
-    }
-
-    std::unique_ptr<IGpuTimerRenderer> VulkanRenderer::CreateGpuTimerEXT()
-    {
-        if (!SupportsGpuTimerEXT()) return nullptr;
-        auto timer = std::make_unique<VulkanGpuTimerRenderer>(this);
-        if (timer->pool_ == VK_NULL_HANDLE) return nullptr;
-        return timer;
     }
 
     std::unique_ptr<ISpriteBatchRenderer> VulkanRenderer::CreateSpriteBatch()
@@ -18668,250 +15331,31 @@ namespace CNA::Internal::Renderers::Vulkan
         ++currentSegment_;
     }
 
-    void VulkanRenderer::SplitRenderPassForModernCommandEXT()
-    {
-        // Compute and transfer commands are illegal inside a render pass. Advancing the logical
-        // segment leaves the target bound but guarantees that later graphics work receives a new
-        // native pass, with the modern command recorded between the two passes.
-        //
-        // plans/plan_vulkan_modern_graphics.md VMG-0014: the two native passes are ONE public bind
-        // cycle, so the second must continue the first rather than begin the target again. The
-        // target's own pass would clear a DiscardContents target and throw its depth away, which
-        // erased every draw issued before the dispatch. The segment being closed stores all of its
-        // attachments and the one being opened loads them -- but only when the closed segment has
-        // content (or is itself a continuation), so a dispatch issued straight after the bind still
-        // gets the bind's own load action. The backbuffer needs none of this: every backbuffer
-        // cycle after the frame's first already takes the swapchain pass's LOAD variant.
-        if (currentRT_ != nullptr)
-        {
-            const uint64_t head = currentSegment_;
-            const auto inHead = [head](const auto& entry) { return entry.segment == head; };
-            const bool headHasContent =
-                splitLoadSegmentsEXT_.count(head) != 0 ||
-                std::any_of(pendingClears_.begin(), pendingClears_.end(), inHead) ||
-                std::any_of(activeBatches_.begin(), activeBatches_.end(), inHead) ||
-                std::any_of(pending3D_.begin(), pending3D_.end(), inHead);
-            BeginRenderPassSegmentEXT(currentRT_);
-            if (headHasContent)
-            {
-                splitStoreSegmentsEXT_.insert(head);
-                splitLoadSegmentsEXT_.insert(currentSegment_);
-            }
-            return;
-        }
-        BeginRenderPassSegmentEXT(currentRT_);
-    }
-
-    VkRenderPass VulkanRenderer::SplitRenderPassEXT(VulkanRTSource& rt, const bool continuation)
-    {
-        // Each variant is substituted only when the target's own pass is the ordinary variant of
-        // the same shape, so the framebuffer is compatible by construction; anything else keeps its
-        // own pass exactly as before.
-        if (auto* mrt = dynamic_cast<VulkanMRTProxy*>(&rt))
-        {
-            std::vector<VkFormat> formats;
-            for (uint32_t i = 0; i < mrt->GetColorAttachmentCount(); ++i)
-                formats.push_back(mrt->GetColorFormatEXT(i));
-            const VkSampleCountFlagBits samples = mrt->GetMsaaSampleCountEXT();
-            const VkFormat depth = mrt->GetDepthFormat();
-            if (GetOrCreateMRTRenderPass(formats, samples, depth) != mrt->GetRenderPass())
-                return mrt->GetRenderPass();
-            return GetOrCreateMRTRenderPass(formats, samples, depth, continuation ? 2u : 1u);
-        }
-        if (auto* pass = dynamic_cast<VulkanTargetPassEXT*>(&rt))
-        {
-            const bool discard = pass->loadOpIsClear;
-            if (pass->msaa)
-            {
-                if (GetOrCreateRTRenderPassMsaa(pass->colorFormat, pass->depthFormat, discard,
-                                                pass->samples) != pass->renderPass)
-                    return pass->renderPass;
-                return GetOrCreateRTRenderPassMsaa(pass->colorFormat, pass->depthFormat,
-                                                   discard && !continuation, pass->samples, true);
-            }
-            if (GetOrCreateRTRenderPass(pass->colorFormat, pass->depthFormat, discard) !=
-                pass->renderPass)
-                return pass->renderPass;
-            return GetOrCreateRTRenderPass(pass->colorFormat, pass->depthFormat,
-                                           discard && !continuation, true);
-        }
-        return rt.GetRenderPass();
-    }
-
-    void VulkanRenderer::QueueComputeDispatchEXT(PendingModernCommand&& command)
-    {
-        command.segment = currentSegment_;
-        command.rt = currentRT_;
-        command.order = NextCommandOrderEXT();
-        pendingModernCommands_.push_back(std::move(command));
-        SplitRenderPassForModernCommandEXT();
-    }
-
-    void VulkanRenderer::QueueStorageBufferCopyEXT(PendingModernCommand&& command)
-    {
-        command.segment = currentSegment_;
-        command.rt = currentRT_;
-        command.order = NextCommandOrderEXT();
-        pendingModernCommands_.push_back(std::move(command));
-        SplitRenderPassForModernCommandEXT();
-    }
-
-    void VulkanRenderer::QueueStorageImageUploadEXT(PendingModernCommand&& command)
-    {
-        command.segment = currentSegment_;
-        command.rt = currentRT_;
-        command.order = NextCommandOrderEXT();
-        pendingModernCommands_.push_back(std::move(command));
-        SplitRenderPassForModernCommandEXT();
-    }
-
     VulkanRenderer::NativeResourceUsageEXT VulkanRenderer::DescribeResourceIntentEXT(
-        const VulkanResourceIntent intent, const bool image)
+        const VulkanResourceIntent intent)
     {
         NativeResourceUsageEXT usage;
         switch (intent)
         {
-        case VulkanResourceIntent::None:
-            break;
-        case VulkanResourceIntent::CpuRead:
-            usage.stages = VK_PIPELINE_STAGE_HOST_BIT;
-            usage.access = VK_ACCESS_HOST_READ_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        case VulkanResourceIntent::CpuWrite:
-            usage.stages = VK_PIPELINE_STAGE_HOST_BIT;
-            usage.access = VK_ACCESS_HOST_WRITE_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            usage.writes = true;
-            break;
         case VulkanResourceIntent::TransferRead:
             usage.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
             usage.access = VK_ACCESS_TRANSFER_READ_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-                                 : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             break;
         case VulkanResourceIntent::TransferWrite:
             usage.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
             usage.access = VK_ACCESS_TRANSFER_WRITE_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-                                 : VK_IMAGE_LAYOUT_UNDEFINED;
-            usage.writes = true;
-            break;
-        case VulkanResourceIntent::TransferReadWrite:
-            usage.stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            usage.access = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            usage.writes = true;
-            break;
-        case VulkanResourceIntent::ShaderRead:
-            usage.stages = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            usage.access = VK_ACCESS_SHADER_READ_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        case VulkanResourceIntent::ShaderWrite:
-            usage.stages = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            usage.access = VK_ACCESS_SHADER_WRITE_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            usage.writes = true;
-            break;
-        case VulkanResourceIntent::ShaderReadWrite:
-            usage.stages = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-            usage.access = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            usage.writes = true;
-            break;
-        case VulkanResourceIntent::VertexShaderRead:
-            usage.stages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-            usage.access = VK_ACCESS_SHADER_READ_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        case VulkanResourceIntent::FragmentShaderRead:
-            usage.stages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            usage.access = VK_ACCESS_SHADER_READ_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        case VulkanResourceIntent::GraphicsShaderRead:
-            usage.stages =
-                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            usage.access = VK_ACCESS_SHADER_READ_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        case VulkanResourceIntent::RenderTargetWrite:
-            usage.stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            usage.access = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                           VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-                                 : VK_IMAGE_LAYOUT_UNDEFINED;
+            usage.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             usage.writes = true;
             break;
         case VulkanResourceIntent::SampledRead:
             usage.stages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             usage.access = VK_ACCESS_SHADER_READ_BIT;
-            usage.layout = image ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                 : VK_IMAGE_LAYOUT_UNDEFINED;
-            break;
-        case VulkanResourceIntent::IndirectRead:
-            usage.stages = VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
-            usage.access = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
-            break;
-        case VulkanResourceIntent::VertexRead:
-            usage.stages = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-            usage.access = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-            break;
-        case VulkanResourceIntent::IndexRead:
-            usage.stages = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-            usage.access = VK_ACCESS_INDEX_READ_BIT;
+            usage.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             break;
         }
         return usage;
-    }
-
-    void VulkanRenderer::NoteHostBufferUsageEXT(
-        VulkanResourceUsageState& state, const VulkanResourceIntent intent) const
-    {
-        if (intent != VulkanResourceIntent::CpuRead &&
-            intent != VulkanResourceIntent::CpuWrite)
-            throw std::logic_error("Vulkan logical tracker: host note requires a CPU intent");
-        const NativeResourceUsageEXT usage = DescribeResourceIntentEXT(intent, false);
-        state = {usage.stages, usage.access, usage.layout, true, usage.writes};
-    }
-
-    bool VulkanRenderer::RecordBufferUsageEXT(
-        const VkCommandBuffer cb, const VkBuffer buffer,
-        VulkanResourceUsageState& state, const VulkanResourceIntent intent)
-    {
-        const NativeResourceUsageEXT next = DescribeResourceIntentEXT(intent, false);
-        if (!state.initialized)
-        {
-            state = {next.stages, next.access, next.layout, true, next.writes};
-            return false;
-        }
-
-        if (!state.writes && !next.writes)
-        {
-            state.stages |= next.stages;
-            state.access |= next.access;
-            ++logicalResourceBarrierElisionCountEXT_;
-            return false;
-        }
-
-        VkBufferMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        barrier.srcAccessMask = state.access;
-        barrier.dstAccessMask = next.access;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.buffer = buffer;
-        barrier.offset = 0;
-        barrier.size = VK_WHOLE_SIZE;
-        vkCmdPipelineBarrier(
-            cb, state.stages, next.stages, 0,
-            0, nullptr, 1, &barrier, 0, nullptr);
-        ++logicalResourceBarrierCountEXT_;
-        state = {next.stages, next.access, next.layout, true, next.writes};
-        return true;
     }
 
     std::size_t VulkanRenderer::RecordImageUsageEXT(
@@ -18927,9 +15371,9 @@ namespace CNA::Internal::Renderers::Vulkan
             baseMipLevel > totalMipLevels || levelCount > totalMipLevels - baseMipLevel ||
             baseArrayLayer > states.size() / totalMipLevels ||
             layerCount > states.size() / totalMipLevels - baseArrayLayer)
-            throw std::logic_error("Vulkan logical tracker: image subresource range is invalid");
+            throw std::logic_error("Vulkan render-target tracker: image subresource range is invalid");
 
-        const NativeResourceUsageEXT next = DescribeResourceIntentEXT(intent, true);
+        const NativeResourceUsageEXT next = DescribeResourceIntentEXT(intent);
         std::vector<VkImageMemoryBarrier> barriers;
         barriers.reserve(static_cast<std::size_t>(levelCount) * layerCount);
         VkPipelineStageFlags sourceStages = 0;
@@ -18946,7 +15390,6 @@ namespace CNA::Internal::Renderers::Vulkan
                 {
                     state.stages |= next.stages;
                     state.access |= next.access;
-                    ++logicalResourceBarrierElisionCountEXT_;
                     continue;
                 }
 
@@ -18971,182 +15414,7 @@ namespace CNA::Internal::Renderers::Vulkan
             cb, sourceStages, next.stages, 0,
             0, nullptr, 0, nullptr,
             static_cast<std::uint32_t>(barriers.size()), barriers.data());
-        logicalResourceBarrierCountEXT_ += barriers.size();
         return barriers.size();
-    }
-
-    void VulkanRenderer::RecordModernCommandEXT(
-        const VkCommandBuffer cb, const PendingModernCommand& command)
-    {
-        if (command.kind == PendingModernCommand::Kind::BufferCopy)
-        {
-            if (command.copySource == command.copyDestination)
-                RecordBufferUsageEXT(
-                    cb, command.copySource->GetBufferEXT(), command.copySource->usageState_,
-                    VulkanResourceIntent::TransferReadWrite);
-            else
-            {
-                RecordBufferUsageEXT(
-                    cb, command.copySource->GetBufferEXT(), command.copySource->usageState_,
-                    VulkanResourceIntent::TransferRead);
-                RecordBufferUsageEXT(
-                    cb, command.copyDestination->GetBufferEXT(),
-                    command.copyDestination->usageState_,
-                    VulkanResourceIntent::TransferWrite);
-            }
-            VkBufferCopy region{};
-            region.srcOffset = command.sourceOffset;
-            region.dstOffset = command.destinationOffset;
-            region.size = command.byteSize;
-            vkCmdCopyBuffer(
-                cb, command.copySource->GetBufferEXT(),
-                command.copyDestination->GetBufferEXT(), 1, &region);
-            return;
-        }
-
-        if (command.kind == PendingModernCommand::Kind::ImageUpload)
-        {
-            if ((command.uploadImage == nullptr) == (command.uploadTexture == nullptr) ||
-                command.uploadStagingBuffer == VK_NULL_HANDLE)
-                throw std::logic_error("Vulkan texture upload record is incomplete");
-            VkImage targetImage = VK_NULL_HANDLE;
-            if (command.uploadImage != nullptr)
-            {
-                const int mipLevel = static_cast<int>(
-                    command.uploadRegion.imageSubresource.mipLevel);
-                command.uploadImage->RecordUsage(
-                    cb, mipLevel, VulkanResourceIntent::TransferWrite);
-                targetImage = command.uploadImage->image_;
-            }
-            else
-            {
-                RecordImageUsageEXT(
-                    cb, command.uploadTexture->image_, command.uploadTexture->mipUsageStates_,
-                    static_cast<std::uint32_t>(command.uploadTexture->levelCount_),
-                    VK_IMAGE_ASPECT_COLOR_BIT,
-                    command.uploadRegion.imageSubresource.mipLevel, 1, 0, 1,
-                    VulkanResourceIntent::TransferWrite);
-                targetImage = command.uploadTexture->image_;
-            }
-            vkCmdCopyBufferToImage(
-                cb, command.uploadStagingBuffer, targetImage,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &command.uploadRegion);
-            return;
-        }
-
-        std::vector<VulkanStorageBufferRenderer*> trackedBuffers;
-        trackedBuffers.reserve(
-            command.storageBuffers.size() + command.constantBuffers.size());
-        for (const auto& buffer : command.storageBuffers)
-        {
-            if (std::find(trackedBuffers.begin(), trackedBuffers.end(), buffer.get()) !=
-                trackedBuffers.end())
-                continue;
-            RecordBufferUsageEXT(
-                cb, buffer->GetBufferEXT(), buffer->usageState_,
-                VulkanResourceIntent::ShaderReadWrite);
-            trackedBuffers.push_back(buffer.get());
-        }
-        for (const auto& buffer : command.constantBuffers)
-        {
-            if (std::find(trackedBuffers.begin(), trackedBuffers.end(), buffer.get()) !=
-                trackedBuffers.end())
-                continue;
-            RecordBufferUsageEXT(
-                cb, buffer->GetBufferEXT(), buffer->usageState_,
-                VulkanResourceIntent::ShaderRead);
-            trackedBuffers.push_back(buffer.get());
-        }
-        for (const auto& image : command.storageImages)
-        {
-            if (image.image != nullptr)
-                image.image->PrepareForComputeEXT(cb, image.accessMode);
-            else if (image.renderTarget != nullptr)
-                image.renderTarget->PrepareForComputeEXT(cb, image.accessMode);
-            else if (image.texture != nullptr)
-                image.texture->PrepareForComputeEXT(cb, image.accessMode);
-            else
-                throw std::logic_error(
-                    "Vulkan compute dispatch lost its retained storage-image record");
-        }
-        for (const auto& image : command.sampledImages)
-        {
-            if (image.renderTarget != nullptr)
-                image.renderTarget->PrepareForSamplingEXT(cb);
-            else if (image.texture != nullptr)
-                image.texture->PrepareForSamplingEXT(cb);
-            else
-                throw std::logic_error(
-                    "Vulkan compute dispatch lost its retained sampled-image record");
-        }
-        vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, command.pipeline);
-        if (command.descriptorSet != VK_NULL_HANDLE)
-            vkCmdBindDescriptorSets(
-                cb, VK_PIPELINE_BIND_POINT_COMPUTE, command.pipelineLayout, 0,
-                1, &command.descriptorSet, 0, nullptr);
-        if (!command.pushConstantBytes.empty())
-            vkCmdPushConstants(
-                cb, command.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                static_cast<std::uint32_t>(command.pushConstantBytes.size()),
-                command.pushConstantBytes.data());
-        vkCmdDispatch(cb, command.groupsX, command.groupsY, command.groupsZ);
-    }
-
-    void VulkanRenderer::FlushModernSampledRenderTargetsEXT()
-    {
-        std::vector<std::shared_ptr<VulkanRenderTargetRenderer>> targets;
-        std::vector<const void*> groups;
-        for (const auto& command : pendingModernCommands_)
-        {
-            for (const auto& sampled : command.sampledImages)
-            {
-                if (sampled.renderTarget == nullptr ||
-                    sampled.renderTarget->PassEXT() == nullptr)
-                    continue;
-                const void* group =
-                    sampled.renderTarget->PassEXT()->DepthStencilOwnerEXT();
-                if (std::find(groups.begin(), groups.end(), group) != groups.end())
-                    continue;
-                groups.push_back(group);
-                targets.push_back(sampled.renderTarget);
-            }
-        }
-        for (const auto& target : targets)
-        {
-            FlushDeferredRenderTarget(
-                target->PassEXT().get(), target->PassEXT().get(), 0,
-                [](const VkCommandBuffer) {});
-        }
-    }
-
-    void VulkanRenderer::FlushPendingModernCommandsForHostEXT(
-        const VulkanStorageBufferRenderer* targetBuffer,
-        const VulkanResourceIntent hostIntent)
-    {
-        // A synchronous result read may be the first operation that materializes a render target
-        // sampled by an older compute dispatch. Submit those producer passes first; the closure in
-        // FlushDeferredRenderTarget preserves every cross-target dependency and public call order.
-        FlushModernSampledRenderTargetsEXT();
-        bool targetNeedsBarrier = false;
-        if (targetBuffer != nullptr && targetBuffer->usageState_.initialized)
-        {
-            const NativeResourceUsageEXT next =
-                DescribeResourceIntentEXT(hostIntent, false);
-            const bool hasDeviceUse =
-                (targetBuffer->usageState_.stages & ~VK_PIPELINE_STAGE_HOST_BIT) != 0;
-            targetNeedsBarrier = hasDeviceUse &&
-                (targetBuffer->usageState_.writes || next.writes);
-        }
-        if (pendingModernCommands_.empty() && !targetNeedsBarrier) return;
-        VkCommandBuffer cb = BeginOneTimeCommands();
-        for (const auto& command : pendingModernCommands_)
-            RecordModernCommandEXT(cb, command);
-        if (targetBuffer != nullptr &&
-            (targetBuffer->usageState_.stages & ~VK_PIPELINE_STAGE_HOST_BIT) != 0)
-            RecordBufferUsageEXT(
-                cb, targetBuffer->GetBufferEXT(), targetBuffer->usageState_, hostIntent);
-        EndOneTimeCommands(cb);
-        pendingModernCommands_.clear();
     }
 
     // REMED-GFX-140 / Task 875: record this bind cycle's clear values, and mark the cycle as
@@ -19177,20 +15445,6 @@ namespace CNA::Internal::Renderers::Vulkan
                            static_cast<const void*>(currentRT_.get()),
                            static_cast<unsigned long long>(currentSegment_),
                            color ? 1 : 0, depth ? 1 : 0, stencil ? 1 : 0);
-    }
-
-    void VulkanRenderer::QueueGpuTimestampEXT(VulkanGpuTimerRenderer* timer, const bool begin)
-    {
-        if (timer == nullptr || timer->pool_ == VK_NULL_HANDLE) return;
-        PendingTimestamp event;
-        event.timer = timer;
-        event.pool = timer->pool_;
-        event.serial = timer->serial_;
-        event.begin = begin;
-        event.segment = currentSegment_;
-        event.rt = currentRT_;
-        event.order = NextCommandOrderEXT();
-        pendingTimestamps_.push_back(std::move(event));
     }
 
     namespace
@@ -19460,14 +15714,14 @@ namespace CNA::Internal::Renderers::Vulkan
                      retired.buffers.size() + retired.memories.size() +
                      retired.framebuffers.size() + retired.pipelines.size() +
                      retired.pipelineLayouts.size() + retired.shaderModules.size() +
-                     retired.descriptorSetLayouts.size() + retired.descriptorPools.size() +
+                     retired.descriptorSetLayouts.size() +
                      retired.queryPools.size() + retired.descriptorSets.size() +
                      retired.poolDescriptorSets.size() + retired.samplers.size();
         }
         return count;
     }
 
-    // Evict every persistent graphics or compute descriptor-set cache entry keyed on a dying view,
+    // Evict every persistent descriptor-set cache entry keyed on a dying view,
     // moving the cached VkDescriptorSet into `into` for frame-fence-gated free. Prevents a later
     // resource that reuses the freed VkImageView handle value from being handed a stale descriptor
     // set that still references the destroyed image.
@@ -19499,24 +15753,10 @@ namespace CNA::Internal::Renderers::Vulkan
         EvictViewFromEffectCache(pbrDescSets_,         descriptorPoolPbr_,         view, into);
         EvictViewFromEffectCache(pbrSkinnedDescSets_,  descriptorPoolPbrSkinned_,  view, into);
         EvictViewFromEffectCache(shadowDescSets_,      descriptorPoolShadow_,      view, into);
-        for (auto* shader : liveComputeShaders_)
-            if (shader != nullptr)
-                shader->EvictDescriptorSetsReferencingEXT(
-                    VK_NULL_HANDLE, view, into.poolDescriptorSets);
         VkLifetimeTraceEXT("cache.evict      view=0x%llx evictedSets=%zu gen=%llu",
                            VkH(view),
                            into.descriptorSets.size() + into.poolDescriptorSets.size() - before,
                            static_cast<unsigned long long>(frameGeneration_));
-    }
-
-    void VulkanRenderer::EvictComputeBufferFromCachesEXT(
-        const VkBuffer buffer, RetiredResources& into)
-    {
-        if (buffer == VK_NULL_HANDLE) return;
-        for (auto* shader : liveComputeShaders_)
-            if (shader != nullptr)
-                shader->EvictDescriptorSetsReferencingEXT(
-                    buffer, VK_NULL_HANDLE, into.poolDescriptorSets);
     }
 
     // REMED-GFX-076: drop every entry in one effect descriptor-set cache (all frame slots) that
@@ -19598,8 +15838,6 @@ namespace CNA::Internal::Renderers::Vulkan
         const auto pinned = [this](VkSampler s) {
             if (s == defaultSampler_) return true;
             for (VkSampler slot : slotSamplers_) if (slot == s) return true;
-            for (const auto* shader : liveComputeShaders_)
-                if (shader != nullptr && shader->ReferencesSamplerEXT(s)) return true;
             return false;
         };
 
@@ -19681,7 +15919,7 @@ namespace CNA::Internal::Renderers::Vulkan
             for (VkDescriptorSet s : r.descriptorSets)
                 if (s != VK_NULL_HANDLE && descriptorPool_ != VK_NULL_HANDLE)
                     vkFreeDescriptorSets(device_, descriptorPool_, 1, &s);
-            // Effect/compute-cache sets evicted on a referenced resource's death, each freed from
+            // Effect-cache sets evicted on a referenced resource's death, each freed from
             // its own pool (created with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT).
             for (auto& ps : r.poolDescriptorSets)
                 if (ps.second != VK_NULL_HANDLE && ps.first != VK_NULL_HANDLE)
@@ -19699,15 +15937,9 @@ namespace CNA::Internal::Renderers::Vulkan
             for (VkPipelineLayout pl : r.pipelineLayouts) if (pl != VK_NULL_HANDLE) vkDestroyPipelineLayout(device_, pl, nullptr);
             for (VkShaderModule sm : r.shaderModules) if (sm != VK_NULL_HANDLE) vkDestroyShaderModule(device_, sm, nullptr);
             for (VkQueryPool qp : r.queryPools)      if (qp != VK_NULL_HANDLE) vkDestroyQueryPool(device_, qp, nullptr);
-            for (VkDescriptorPool dp : r.descriptorPools)
-                if (dp != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, dp, nullptr);
             // VULKAN-253: after the sets allocated from them have been freed above.
             for (VkDescriptorSetLayout dl : r.descriptorSetLayouts)
                 if (dl != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device_, dl, nullptr);
-            liveModernStagingAllocationCountEXT_ =
-                r.modernStagingAllocations < liveModernStagingAllocationCountEXT_
-                    ? liveModernStagingAllocationCountEXT_ - r.modernStagingAllocations
-                    : 0;
         };
         // STREETPERF-0001: both queues are compacted in one pass. Erasing each eligible entry
         // from the vector on its own moved everything behind it, once per entry -- cna-street
@@ -19749,16 +15981,6 @@ namespace CNA::Internal::Renderers::Vulkan
         for (auto& d : pending3D_)
             if (d.occlusionQuery == q) d.occlusionQuery = nullptr;
         if (activeOcclusionQuery_ == q) activeOcclusionQuery_ = nullptr;
-    }
-
-    void VulkanRenderer::PurgeDeferredGpuTimer(VulkanGpuTimerRenderer* timer)
-    {
-        if (timer == nullptr) return;
-        pendingTimestamps_.erase(
-            std::remove_if(
-                pendingTimestamps_.begin(), pendingTimestamps_.end(),
-                [timer](const PendingTimestamp& event) { return event.timer == timer; }),
-            pendingTimestamps_.end());
     }
 
     // REMED-GFX-166: see the header. The two counts at the end are the whole point -- they say, at
@@ -19832,39 +16054,7 @@ namespace CNA::Internal::Renderers::Vulkan
     void VulkanRenderer::NoteSampledTextureEXT(
         const uint64_t segment, const ITextureRenderer* texture)
     {
-        if (const auto* raw = dynamic_cast<const VulkanRenderTargetRenderer*>(texture))
-        {
-            if (raw->PassEXT() == nullptr) return;
-            NoteSampledRenderTargetGroupEXT(
-                segment, raw->PassEXT()->DepthStencilOwnerEXT());
-            auto retained = std::dynamic_pointer_cast<VulkanRenderTargetRenderer>(
-                const_cast<ITextureRenderer*>(texture)->shared_from_this());
-            if (retained == nullptr) return;
-            for (const auto& use : pendingSampledImages_)
-                if (use.segment == segment && use.renderTarget == retained) return;
-            pendingSampledImages_.push_back(
-                {segment, nullptr, std::move(retained), nullptr});
-            return;
-        }
-        const auto* raw = dynamic_cast<const VulkanTextureRenderer*>(texture);
-        if (raw == nullptr || !raw->IsStorageImageCapableEXT()) return;
-        auto retained = std::dynamic_pointer_cast<VulkanTextureRenderer>(
-            const_cast<ITextureRenderer*>(texture)->shared_from_this());
-        if (retained == nullptr) return;
-        for (const auto& use : pendingSampledImages_)
-            if (use.segment == segment && use.texture == retained) return;
-        pendingSampledImages_.push_back(
-            {segment, nullptr, nullptr, std::move(retained)});
-    }
-
-    void VulkanRenderer::NoteSampledStorageTextureEXT(
-        const uint64_t segment,
-        std::shared_ptr<VulkanStorageTexture2DRenderer> texture)
-    {
-        if (texture == nullptr) return;
-        for (const auto& use : pendingSampledImages_)
-            if (use.segment == segment && use.storage == texture) return;
-        pendingSampledImages_.push_back({segment, std::move(texture), nullptr, nullptr});
+        NoteSampledRenderTargetGroupEXT(segment, SampledRenderTargetGroupEXT(texture));
     }
 
     // REMED-GFX-151: every render target this draw samples, in one place, so a new stock-effect
@@ -19906,10 +16096,7 @@ namespace CNA::Internal::Renderers::Vulkan
     //
     // The set is now a transitive closure: seed with every pending segment of `rt`'s own group, then
     // repeatedly pull in, for each segment already in the set, the pending segments of every group
-    // that segment samples which PRECEDE it. MOD-2244 applies the same rule to every render-target
-    // image bound by a modern command included before the readback, including the issuing target's
-    // preceding segment. Thus B.GetData() cannot record an A -> B compute copy while leaving A's
-    // render pass pending for Present().
+    // that segment samples which PRECEDE it.
     //
     // Deliberately a closure and not "every off-screen segment up to `rt`'s last one": the wider
     // rule also fixes the finding, but it advances UNRELATED targets early, and a backbuffer draw
@@ -19983,59 +16170,17 @@ namespace CNA::Internal::Renderers::Vulkan
         auto alreadyNeeded = [&flushSegments](uint64_t id) {
             return std::find(flushSegments.begin(), flushSegments.end(), id) != flushSegments.end();
         };
-        auto segmentLastOrder = [&](const std::uint64_t id) {
-            std::uint64_t last = 0;
-            for (const auto& clear : pendingClears_)
-                if (clear.segment == id) last = std::max(last, clear.order);
-            for (const auto& batch : activeBatches_)
-                if (batch.segment == id) last = std::max(last, batch.order);
-            for (const auto& draw : pending3D_)
-                if (draw.segment == id) last = std::max(last, draw.order);
-            for (const auto& event : pendingTimestamps_)
-                if (event.segment == id) last = std::max(last, event.order);
-            return last;
-        };
-        std::uint64_t flushMaxOrder = 0;
         auto addFlushSegment = [&](const std::uint64_t id) {
             if (alreadyNeeded(id)) return false;
             flushSegments.push_back(id);
-            flushMaxOrder = std::max(flushMaxOrder, segmentLastOrder(id));
             return true;
         };
         for (const auto& s : pendingSegments)
             for (const void* g : groups)
                 if (s.group == g && addFlushSegment(s.id)) break;
 
-        const void* readbackGroup = rt->DepthStencilOwnerEXT();
-        const auto commandUsesGroup = [](const PendingModernCommand& command,
-                                         const void* group) {
-            for (const auto& image : command.storageImages)
-                if (image.renderTarget != nullptr &&
-                    image.renderTarget->PassEXT() != nullptr &&
-                    image.renderTarget->PassEXT()->DepthStencilOwnerEXT() == group)
-                    return true;
-            return false;
-        };
-        // A compute operation may be the target's final producer even when no later graphics
-        // segment exists to give it an order bound. Include the latest operation touching the
-        // target; every earlier modern operation is then recorded in public order.
-        for (const auto& command : pendingModernCommands_)
-            if (commandUsesGroup(command, readbackGroup))
-                flushMaxOrder = std::max(flushMaxOrder, command.order);
-
-        auto addGroupBefore = [&](const void* group, const std::uint64_t segment) {
-            bool added = false;
-            if (group == nullptr) return added;
-            for (const auto& pending : pendingSegments)
-                if (pending.group == group && pending.id <= segment)
-                    added = addFlushSegment(pending.id) || added;
-            return added;
-        };
-
-        // Close both dependency kinds to a fixed point. Graphics segments can sample prior
-        // render targets, while every modern command that will be recorded can read/write a
-        // target produced by an earlier segment. The issuing target is included as well so a
-        // command never overtakes graphics that preceded it in the same bind cycle.
+        // Close the sampling dependency to a fixed point: a graphics segment can sample render
+        // targets that earlier segments produced.
         bool expanded = true;
         while (expanded)
         {
@@ -20058,27 +16203,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     }
                 }
             }
-            for (const auto& command : pendingModernCommands_)
-            {
-                if (command.order > flushMaxOrder) continue;
-                if (command.rt != nullptr)
-                    expanded = addGroupBefore(
-                        command.rt->DepthStencilOwnerEXT(), command.segment) || expanded;
-                for (const auto& image : command.storageImages)
-                    if (image.renderTarget != nullptr && image.renderTarget->PassEXT() != nullptr)
-                        expanded = addGroupBefore(
-                            image.renderTarget->PassEXT()->DepthStencilOwnerEXT(),
-                            command.segment) || expanded;
-                for (const auto& image : command.sampledImages)
-                    if (image.renderTarget != nullptr && image.renderTarget->PassEXT() != nullptr)
-                        expanded = addGroupBefore(
-                            image.renderTarget->PassEXT()->DepthStencilOwnerEXT(),
-                            command.segment) || expanded;
-            }
         }
         std::sort(flushSegments.begin(), flushSegments.end());
 
-        // MOD-2253: RecordCommandBuffer may refill this frame slot's persistently mapped vertex/
+        // RecordCommandBuffer may refill this frame slot's persistently mapped vertex/
         // uniform rings. Wait only for that slot, exactly as SubmitFrame does, instead of idling
         // the whole device. The readback submission itself follows every older graphics-queue
         // submission by Vulkan queue order and gets its own completion fence below.
@@ -20124,8 +16252,8 @@ namespace CNA::Internal::Renderers::Vulkan
             return false;
         VkDebugUtilsMessengerCallbackDataEXT data{};
         data.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CALLBACK_DATA_EXT;
-        data.pMessageIdName = "CNA-MOD-2246";
-        data.messageIdNumber = 2246;
+        data.pMessageIdName = "CNA-VulkanDebugUtils";
+        data.messageIdNumber = 1;
         data.pMessage = message;
         pfnSubmitDebugMessage_(
             instance_, VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
@@ -20378,7 +16506,8 @@ namespace CNA::Internal::Renderers::Vulkan
             else
             {
                 d.ibData.resize(indexBytes);
-                // VMG-0017: an indirect draw queues no CPU-side indices (see DrawPrimitivesEx).
+                // memcpy's pointers must be valid even for zero bytes, which an empty vector's
+                // data() need not be.
                 if (indexBytes != 0)
                     std::memcpy(d.ibData.data(), indexData, indexBytes);
             }
@@ -20397,7 +16526,6 @@ namespace CNA::Internal::Renderers::Vulkan
             else
             {
                 d.vbData.resize(drawCount * stride);
-                // VMG-0017: an indirect draw's CPU-side vertex count is zero.
                 if (!d.vbData.empty())
                     std::memcpy(d.vbData.data(),
                                 static_cast<const uint8_t*>(vb.GetMappedPtr()) +
@@ -20474,8 +16602,6 @@ namespace CNA::Internal::Renderers::Vulkan
         d.descSet = GetOrCreateTexSamplerDescSet(texView, slotSamplers_[0] != VK_NULL_HANDLE
                                                            ? slotSamplers_[0] : defaultSampler_);
         d.customBoundSet = fx->GetOrCreateBoundTextureSetEXT(currentSegment_);
-        d.customStorageSet =
-            fx->GetOrCreateDrawStorageSetEXT(d.customStorageBuffers);
         d.customLayout   = fx->GetPipelineLayout();
 
         // Created HERE rather than at record time, unlike every stock family: a 3D draw already
@@ -20969,8 +17095,8 @@ namespace CNA::Internal::Renderers::Vulkan
         else
         {
             d.vbData.resize(drawCount * stride);
-            // VMG-0017: an indirect draw's CPU-side count is zero, and memcpy's pointers must be
-            // valid even for zero bytes -- which an empty vector's data() need not be.
+            // memcpy's pointers must be valid even for zero bytes, which an empty vector's data()
+            // need not be.
             if (!d.vbData.empty())
                 std::memcpy(d.vbData.data(),
                             static_cast<const uint8_t*>(vb.GetMappedPtr()) +
@@ -21238,7 +17364,6 @@ namespace CNA::Internal::Renderers::Vulkan
         else
         {
             d.ibData.resize(static_cast<std::size_t>(indexCount) * indexSize);
-            // VMG-0017: see DrawPrimitivesEx -- an indirect draw queues no CPU-side indices.
             if (!d.ibData.empty())
                 std::memcpy(d.ibData.data(), selectedIndices,
                             static_cast<std::size_t>(indexCount) * indexSize);
@@ -21764,9 +17889,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         static_cast<std::size_t>(vertexCount) * pvStride);
         }
 
-        // Copy index data (with startIndex offset) only for the indexed public route. The private
-        // non-indexed form is used by Vulkan indirect drawing so it can share the exact instanced
-        // effect/pipeline capture without inventing an index buffer.
+        // Copy index data (with startIndex offset) only for the indexed route.
         if (ib != nullptr && drawCount > 0 && ib->GetBuffer() != VK_NULL_HANDLE)
         {
             d.residentIb = ib->BindForDrawEXT();
@@ -21980,248 +18103,6 @@ namespace CNA::Internal::Renderers::Vulkan
         }
 #endif
         PushPending3DDraw(std::move(d));
-    }
-
-    bool VulkanRenderer::SupportsIndirectDrawEXT() const
-    {
-        return device_ != VK_NULL_HANDLE &&
-               enabledDeviceFeatures_.drawIndirectFirstInstance == VK_TRUE;
-    }
-
-    void VulkanRenderer::DrawPrimitivesIndirectEXT(
-        const IVertexBufferRenderer& vb,
-        const Matrix& world, const Matrix& view, const Matrix& projection,
-        const PrimitiveType primitive,
-        const IStorageBufferRenderer& argumentBuffer,
-        const int argumentByteOffset, const GpuDrawParams& params)
-    {
-        QueueIndirectDrawEXT(
-            vb, nullptr, world, view, projection, primitive,
-            argumentBuffer, argumentByteOffset, params);
-    }
-
-    void VulkanRenderer::DrawIndexedPrimitivesIndirectEXT(
-        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
-        const Matrix& world, const Matrix& view, const Matrix& projection,
-        const PrimitiveType primitive,
-        const IStorageBufferRenderer& argumentBuffer,
-        const int argumentByteOffset, const GpuDrawParams& params)
-    {
-        QueueIndirectDrawEXT(
-            vb, &ib, world, view, projection, primitive,
-            argumentBuffer, argumentByteOffset, params);
-    }
-
-    void VulkanRenderer::QueueIndirectDrawEXT(
-        const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer* ib_in,
-        const Matrix& world, const Matrix& view, const Matrix& projection,
-        const PrimitiveType primitive,
-        const IStorageBufferRenderer& argumentBuffer,
-        const int argumentByteOffset, const GpuDrawParams& params)
-    {
-        if (!SupportsIndirectDrawEXT())
-            throw System::NotSupportedException(
-                "CNA Vulkan: the selected device cannot execute non-zero indirect "
-                "first-instance commands.");
-        if (params.compiledEffectRuntime != nullptr)
-            throw System::NotSupportedException(
-                "CNA Vulkan: an indirect draw does not accept a compiled (FX) effect; its "
-                "draw routes require the primitive count that this command keeps on the GPU.");
-
-        const auto* nativeArguments =
-            dynamic_cast<const VulkanStorageBufferRenderer*>(&argumentBuffer);
-        if (nativeArguments == nullptr || !nativeArguments->IsOwnedByEXT(this) ||
-            nativeArguments->GetBufferEXT() == VK_NULL_HANDLE)
-            throw std::invalid_argument(
-                "CNA Vulkan: indirect arguments must belong to this Vulkan device.");
-
-        // StorageBuffer owns its renderer record through shared_ptr. Retaining that same record is
-        // what makes public Dispose() logically immediate without invalidating a deferred native
-        // command. A directly-created unique renderer object has no such portable lifetime and is
-        // refused instead of leaving a borrowed VkBuffer in pending3D_.
-        std::shared_ptr<const IStorageBufferRenderer> argumentLifetime =
-            argumentBuffer.weak_from_this().lock();
-        if (argumentLifetime == nullptr)
-            throw System::NotSupportedException(
-                "CNA Vulkan: a deferred indirect draw requires a tracked StorageBuffer so its "
-                "native argument allocation can be retained through command recording.");
-
-        // Build the effect, declaration, pipeline-family and render-state snapshot through the
-        // ordinary path, but with a legal zero primitive count. The actual counts are deliberately
-        // never copied to the CPU; the complete geometry windows below are the only safe snapshot
-        // for arguments that may have been produced by compute.
-        GpuDrawParams seed = params;
-        seed.firstInstance = 0;
-        const std::size_t pendingBefore = pending3D_.size();
-        if (FirstInstanceStream(seed) != nullptr)
-            DrawInstancedPrimitivesCoreEXT(
-                vb_in, ib_in, world, view, projection, primitive, 0, 1, seed);
-        else if (ib_in != nullptr)
-            DrawIndexedPrimitivesEx(
-                vb_in, *ib_in, world, view, projection, primitive, 0, seed);
-        else
-            DrawPrimitivesEx(
-                vb_in, world, view, projection, primitive, 0, seed);
-        if (pending3D_.size() != pendingBefore + 1)
-            throw std::runtime_error(
-                "CNA Vulkan: indirect state capture did not produce exactly one deferred draw.");
-
-        Pending3DDraw draw = std::move(pending3D_.back());
-        pending3D_.pop_back();
-        // STREETPERF-0003: this route builds its own snapshots below (from the folded first
-        // record, and the whole index buffer), so the capture's in-place bindings do not apply.
-        draw.residentVb = VK_NULL_HANDLE;
-        draw.residentVbOffset = 0;
-        draw.residentIb = VK_NULL_HANDLE;
-        draw.residentIbOffset = 0;
-        const int foldedOffset = ib_in != nullptr ? params.baseVertex : params.vertexStart;
-        if (foldedOffset < 0)
-            throw std::invalid_argument(
-                "CNA Vulkan: the folded vertex-buffer offset cannot be negative.");
-
-        if (HasMultipleVertexStreams(params))
-        {
-            int recordCount = std::numeric_limits<int>::max();
-            std::size_t combinedStride = 0;
-            bool sawPerVertexStream = false;
-            for (int i = 0; i < params.vertexStreamCount; ++i)
-            {
-                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
-                if (stream.instanceFrequency != 0) continue;
-                sawPerVertexStream = true;
-                if (stream.buffer == nullptr || stream.vertexOffset < 0 ||
-                    foldedOffset > stream.vertexCount - stream.vertexOffset)
-                    throw std::invalid_argument(
-                        "CNA Vulkan: an indirect per-vertex stream offset leaves its buffer.");
-                if (stream.strideInBytes <= 0 ||
-                    combinedStride > kFrame3DVBSize -
-                        static_cast<std::size_t>(stream.strideInBytes))
-                    throw System::NotSupportedException(
-                        "CNA Vulkan: the indirect per-vertex stream stride exceeds the "
-                        "bounded staging arena.");
-                combinedStride += static_cast<std::size_t>(stream.strideInBytes);
-                recordCount = std::min(
-                    recordCount,
-                    stream.vertexCount - stream.vertexOffset - foldedOffset);
-            }
-            if (!sawPerVertexStream) recordCount = 0;
-            if (combinedStride != 0 &&
-                static_cast<std::size_t>(recordCount) > kFrame3DVBSize / combinedStride)
-                throw System::NotSupportedException(
-                    "CNA Vulkan: the complete indirect vertex snapshot exceeds the renderer's "
-                    "bounded per-frame staging arena.");
-            VulkanPackedStreamsEXT packed = PackVulkanStreamsEXT(
-                params, /*instanceRate=*/false, foldedOffset, recordCount);
-            draw.vbData = std::move(packed.bytes);
-            draw.stride = packed.stride;
-        }
-        else
-        {
-            const GpuVertexStreamBinding* stream = FirstPerVertexStream(params);
-            const auto& vb = stream != nullptr && stream->buffer != nullptr
-                ? static_cast<const VulkanVertexBufferRenderer&>(*stream->buffer)
-                : static_cast<const VulkanVertexBufferRenderer&>(vb_in);
-            const int relativeOffset = stream != nullptr ? stream->vertexOffset : 0;
-            if (relativeOffset < 0 ||
-                foldedOffset > vb.GetVertexCount() - relativeOffset)
-                throw std::invalid_argument(
-                    "CNA Vulkan: the indirect vertex-buffer binding offset leaves its buffer.");
-            const int firstRecord = foldedOffset + relativeOffset;
-            const int recordCount = vb.GetVertexCount() - firstRecord;
-            if (draw.stride != 0 &&
-                static_cast<std::size_t>(recordCount) > kFrame3DVBSize / draw.stride)
-                throw System::NotSupportedException(
-                    "CNA Vulkan: the complete indirect vertex snapshot exceeds the renderer's "
-                    "bounded per-frame staging arena.");
-            draw.vbData.resize(static_cast<std::size_t>(recordCount) * draw.stride);
-            if (!draw.vbData.empty())
-                std::memcpy(
-                    draw.vbData.data(),
-                    static_cast<const std::uint8_t*>(vb.GetMappedPtr()) +
-                        static_cast<std::size_t>(firstRecord) * draw.stride,
-                    draw.vbData.size());
-        }
-
-        draw.ibData.clear();
-        if (ib_in != nullptr)
-        {
-            const auto& ib = static_cast<const VulkanIndexBufferRenderer&>(*ib_in);
-            const std::size_t indexSize = ib.IsThirtyTwoBit()
-                ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
-            if (static_cast<std::size_t>(ib.GetIndexCount()) >
-                kFrame3DIBSize / indexSize)
-                throw System::NotSupportedException(
-                    "CNA Vulkan: the complete indirect index snapshot exceeds the renderer's "
-                    "bounded per-frame staging arena.");
-            draw.ibData.resize(
-                static_cast<std::size_t>(ib.GetIndexCount()) * indexSize);
-            if (!draw.ibData.empty())
-                std::memcpy(draw.ibData.data(), ib.GetMappedPtr(), draw.ibData.size());
-            draw.indexType = ib.IsThirtyTwoBit()
-                ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
-        }
-
-        if (FirstInstanceStream(params) != nullptr)
-        {
-            int logicalRecordCount = std::numeric_limits<int>::max();
-            std::size_t combinedStride = 0;
-            bool sawInstanceStream = false;
-            for (int i = 0; i < params.vertexStreamCount; ++i)
-            {
-                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
-                if (stream.instanceFrequency <= 0) continue;
-                sawInstanceStream = true;
-                if (stream.buffer == nullptr || stream.vertexOffset < 0 ||
-                    stream.vertexOffset > stream.vertexCount)
-                    throw std::invalid_argument(
-                        "CNA Vulkan: an indirect instance-stream offset leaves its buffer.");
-                if (stream.strideInBytes <= 0 ||
-                    combinedStride > kFrame3DInstVBSize -
-                        static_cast<std::size_t>(stream.strideInBytes))
-                    throw System::NotSupportedException(
-                        "CNA Vulkan: the indirect instance-stream stride exceeds the bounded "
-                        "staging arena.");
-                combinedStride += static_cast<std::size_t>(stream.strideInBytes);
-                const std::uint64_t available =
-                    static_cast<std::uint64_t>(stream.vertexCount - stream.vertexOffset) *
-                    static_cast<std::uint64_t>(stream.instanceFrequency);
-                logicalRecordCount = std::min(
-                    logicalRecordCount,
-                    available > static_cast<std::uint64_t>(std::numeric_limits<int>::max())
-                        ? std::numeric_limits<int>::max()
-                        : static_cast<int>(available));
-            }
-            if (!sawInstanceStream) logicalRecordCount = 0;
-            if (combinedStride != 0 &&
-                static_cast<std::size_t>(logicalRecordCount) >
-                    kFrame3DInstVBSize / combinedStride)
-                throw System::NotSupportedException(
-                    "CNA Vulkan: the complete indirect instance snapshot exceeds the renderer's "
-                    "bounded per-frame staging arena.");
-            VulkanPackedStreamsEXT packedInstances = PackVulkanStreamsEXT(
-                params, /*instanceRate=*/true, /*firstRecord=*/0, logicalRecordCount);
-            draw.instVbData = std::move(packedInstances.bytes);
-            draw.instVbStride = packedInstances.stride;
-            draw.useInstanced = true;
-        }
-
-        if (draw.vbData.size() > kFrame3DVBSize ||
-            draw.ibData.size() > kFrame3DIBSize ||
-            draw.instVbData.size() > kFrame3DInstVBSize)
-            throw System::NotSupportedException(
-                "CNA Vulkan: the complete indirect geometry snapshot exceeds the renderer's "
-                "bounded per-frame staging arena.");
-
-        draw.drawCount = 0;
-        draw.instanceCount = 1;
-        draw.firstInstance = 0;
-        draw.baseVertex = 0;
-        draw.wireframe = false;
-        draw.indirectBuffer = nativeArguments->GetBufferEXT();
-        draw.indirectByteOffset = static_cast<VkDeviceSize>(argumentByteOffset);
-        draw.indirectIndexed = ib_in != nullptr;
-        draw.indirectBufferLifetime = std::move(argumentLifetime);
-        pending3D_.push_back(std::move(draw));
     }
 
     // ---- Graphics state ----
@@ -23676,148 +19557,6 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     int VulkanOcclusionQueryRenderer::PixelCount() const { return pixelCount_; }
-
-    // --- VulkanGpuTimerRenderer ---
-
-    VulkanGpuTimerRenderer::VulkanGpuTimerRenderer(VulkanRenderer* owner)
-        : owner_(owner)
-    {
-        if (owner_ == nullptr || !owner_->SupportsGpuTimerEXT()) return;
-        VkQueryPoolCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        info.queryCount = 2;
-        if (vkCreateQueryPool(owner_->device_, &info, nullptr, &pool_) != VK_SUCCESS)
-        {
-            pool_ = VK_NULL_HANDLE;
-            return;
-        }
-        ++owner_->gpuTimerQueryPoolCreateCountEXT_;
-        owner_->liveGpuTimers_.push_back(this);
-    }
-
-    VulkanGpuTimerRenderer::~VulkanGpuTimerRenderer()
-    {
-        if (owner_ != nullptr)
-        {
-            auto& timers = owner_->liveGpuTimers_;
-            timers.erase(std::remove(timers.begin(), timers.end(), this), timers.end());
-        }
-        ReleaseVulkanResources();
-    }
-
-    void VulkanGpuTimerRenderer::ReleaseVulkanResources()
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE) return;
-        owner_->PurgeDeferredGpuTimer(this);
-        if (pool_ != VK_NULL_HANDLE)
-        {
-            VulkanRenderer::RetiredResources retired;
-            retired.queryPools.push_back(pool_);
-            pool_ = VK_NULL_HANDLE;
-            owner_->RetireResources(std::move(retired));
-        }
-        open_ = false;
-        ended_ = false;
-        beginRecorded_ = false;
-        endRecorded_ = false;
-        completionFence_ = VK_NULL_HANDLE;
-        submissionGeneration_ = 0;
-        submissionComplete_ = false;
-        resultCached_ = false;
-        completedTimestamps_ = {};
-    }
-
-    void VulkanGpuTimerRenderer::Begin()
-    {
-        if (owner_ == nullptr || pool_ == VK_NULL_HANDLE || open_) return;
-        // The public wrapper exposes only one pending result. Reopening therefore discards an
-        // unrecorded older range and recycles this same pair; a submitted older use is ordered
-        // before the reset by the renderer's single graphics queue.
-        owner_->PurgeDeferredGpuTimer(this);
-        ++serial_;
-        open_ = true;
-        ended_ = false;
-        beginRecorded_ = false;
-        endRecorded_ = false;
-        completionFence_ = VK_NULL_HANDLE;
-        submissionGeneration_ = 0;
-        submissionComplete_ = false;
-        resultCached_ = false;
-        completedTimestamps_ = {};
-        owner_->QueueGpuTimestampEXT(this, true);
-    }
-
-    void VulkanGpuTimerRenderer::End()
-    {
-        if (owner_ == nullptr || pool_ == VK_NULL_HANDLE || !open_) return;
-        owner_->QueueGpuTimestampEXT(this, false);
-        open_ = false;
-        ended_ = true;
-    }
-
-    bool VulkanGpuTimerRenderer::IsResultAvailable() const
-    {
-        if (owner_ == nullptr || owner_->device_ == VK_NULL_HANDLE ||
-            pool_ == VK_NULL_HANDLE || !ended_ || !beginRecorded_ || !endRecorded_)
-            return false;
-        if (resultCached_) return true;
-        if (!submissionComplete_)
-        {
-            if (submissionGeneration_ != 0 &&
-                owner_->completedFrameGeneration_ >= submissionGeneration_)
-            {
-                submissionComplete_ = true;
-            }
-            else if (completionFence_ != VK_NULL_HANDLE &&
-                     vkGetFenceStatus(owner_->device_, completionFence_) == VK_SUCCESS)
-            {
-                submissionComplete_ = true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-        // Read an explicit availability word beside each value. In particular this prevents a
-        // newly allocated pool's undefined result payload from being mistaken for a completed
-        // first sample while the submitted reset/write commands are still ahead in the queue.
-        std::array<std::uint64_t, 4> valuesAndAvailability{};
-        if (vkGetQueryPoolResults(
-                owner_->device_, pool_, 0, 2, sizeof(valuesAndAvailability),
-                valuesAndAvailability.data(), sizeof(std::uint64_t) * 2,
-                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) != VK_SUCCESS ||
-            valuesAndAvailability[1] == 0 || valuesAndAvailability[3] == 0)
-            return false;
-        completedTimestamps_ = { valuesAndAvailability[0], valuesAndAvailability[2] };
-        resultCached_ = true;
-        return true;
-    }
-
-    std::uint64_t VulkanGpuTimerRenderer::ElapsedNanoseconds() const
-    {
-        if (!IsResultAvailable()) return 0;
-
-        const std::uint32_t validBits = owner_->graphicsQueueTimestampValidBits_;
-        std::uint64_t ticks = 0;
-        if (validBits >= 64)
-        {
-            ticks = completedTimestamps_[1] - completedTimestamps_[0];
-        }
-        else if (validBits != 0)
-        {
-            const std::uint64_t mask = (UINT64_C(1) << validBits) - 1;
-            ticks = (completedTimestamps_[1] - completedTimestamps_[0]) & mask;
-        }
-
-        const long double nanoseconds = static_cast<long double>(ticks) *
-            static_cast<long double>(owner_->physicalDeviceProperties_.limits.timestampPeriod);
-        if (!(nanoseconds > 0.0L)) return 0;
-        if (nanoseconds >=
-            static_cast<long double>(std::numeric_limits<std::uint64_t>::max()))
-            return std::numeric_limits<std::uint64_t>::max();
-        return static_cast<std::uint64_t>(std::llround(nanoseconds));
-    }
 
     // --- VulkanRenderTargetCubeRenderer ---
 
