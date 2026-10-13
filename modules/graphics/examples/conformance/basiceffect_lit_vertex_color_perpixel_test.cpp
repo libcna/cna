@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-200 (finding F-37) -- the per-pixel half of the lit, vertex-coloured,
+// VULKAN-200 (finding F-37), first registered by the retired VULKAN suite. Moved here so every
+// conformance suite runs it -- the per-pixel half of the lit, vertex-coloured,
 // 36-byte layout.
 //
 // `easygl_basiceffect_lit_vertex_color_test.cpp` (plans/plan_fx.md FX-125) covers this layout on

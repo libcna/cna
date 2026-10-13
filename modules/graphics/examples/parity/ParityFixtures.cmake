@@ -190,6 +190,12 @@ set(CNA_CONFORMANCE_FIXTURES
     # device does -- MSAA with the samples a four-sample Reset applies, the derived entries with
     # their sources.
     capability_truth
+    # registered only by the retired VULKAN suite (VULKAN-200/201, F-37): the 36-byte
+    # Position+Normal+Colour+TexCoord record XNA's ModelProcessor emits, lit per pixel (the vertex
+    # colour multiplies the whole lit bracket in the fragment stage) and unlit (a colour gradient
+    # with DiffuseColor 2 saturates per vertex, as Direct3D 9's oD0 does).
+    basiceffect_lit_vertex_color_perpixel
+    basiceffect_unlit_vertex_color_36byte
 )
 
 # Builds and registers every fixture for one renderer.

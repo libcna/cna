@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-201 (finding F-37) -- the same 36-byte layout as
+// VULKAN-201 (finding F-37), first registered by the retired VULKAN suite. Moved here so every
+// conformance suite runs it -- the same 36-byte layout as
 // `basiceffect_lit_vertex_color_perpixel_test.cpp`, with lighting OFF.
 //
 // `VULKAN-200` gave the lit family a colour input for Position+Normal+Colour+TexCoord, the layout
