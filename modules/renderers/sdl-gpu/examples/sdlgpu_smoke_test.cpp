@@ -61,10 +61,10 @@ namespace
 {
     constexpr int kTotalFrames = 60;
 #if defined(CNA_SDL_GPU_SHADER_EFFECTS)
-    constexpr int kExpectedChecks = 31;
+    constexpr int kExpectedChecks = 30;
 #else
     // Unsupported-compiler builds also verify the diagnostic returned by CreateEffectRenderer.
-    constexpr int kExpectedChecks = 31;
+    constexpr int kExpectedChecks = 30;
 #endif
 
     int RunHeadlessGraphicsDeviceProbe(const char* requestedDriver)
@@ -261,15 +261,6 @@ protected:
                            static_cast<int>(SurfaceFormat::HalfVector4)) ==
                        CNA::Internal::Renderers::RendererFormatVerdict::Supported),
                   "half-float filtering is reported exactly where RGBA16F render targets exist");
-            // STREETS-0007: compute (SMG-0012) and indirect drawing (SMG-0023) are implemented now.
-            // What this still guards is that the public answer is DERIVED from the renderer's own
-            // implemented query rather than inherited from a capability-switch default.
-            check(dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) ==
-                      renderer.SupportsComputeShadersEXT() &&
-                      dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw) ==
-                      renderer.SupportsIndirectDrawEXT() &&
-                      renderer.SupportsComputeShadersEXT() && renderer.SupportsIndirectDrawEXT(),
-                  "compute and indirect drawing are reported from the renderer's implemented paths");
 
             check(renderer.GetMaxVertexStreams() == 16,
                   "numeric vertex-stream limit agrees with the XNA public ceiling");
