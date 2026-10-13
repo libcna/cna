@@ -695,43 +695,6 @@ CNA_Result cna_graphics_device_get_display_color_space_ext(
     });
 }
 
-CNA_Result cna_graphics_device_get_max_compute_work_group_size_ext(
-    const CNA_Handle graphics_device,
-    const int32_t axis,
-    int32_t* const out_size)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_size == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_max_compute_work_group_size_ext: out_size is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> object{};
-        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        *out_size = static_cast<int32_t>(static_cast<int32_t>(object->value->GetMaxComputeWorkGroupSizeEXT(static_cast<int>(axis))));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
-    const CNA_Handle graphics_device,
-    int32_t* const out_invocations)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_invocations == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_max_compute_work_group_invocations_ext: out_invocations is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> object{};
-        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        *out_invocations = static_cast<int32_t>(static_cast<int32_t>(object->value->GetMaxComputeWorkGroupInvocationsEXT()));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_graphics_device_copy_type_name(
     const CNA_Handle graphics_device,
     char* const destination,
@@ -980,25 +943,6 @@ CNA_Result cna_graphics_device_supports_display_color_space_ext(
             return routeResult;
         }
         *out_supported = CNA::C::Detail::ToCBool(object->value->SupportsDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space)));
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_max_compute_work_group_count_ext(
-    const CNA_Handle graphics_device,
-    const int32_t axis,
-    int32_t* const out_count)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_count == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_max_compute_work_group_count_ext: out_count is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> object{};
-        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        *out_count = static_cast<int32_t>(object->value->GetMaxComputeWorkGroupCountEXT(static_cast<int>(axis)));
         return CNA_RESULT_SUCCESS;
     });
 }

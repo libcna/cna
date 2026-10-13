@@ -67,28 +67,6 @@ CNA_Result cna_ascii_post_process_effect_get_quantize_mode(
 }
 #endif
 
-CNA_Result cna_indirect_draw_arguments_init(
-    CNA_IndirectDrawArguments* const out_arguments)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_arguments == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_indirect_draw_arguments_init: out_arguments is null.");
-        }
-        return IndirectDrawArgumentsInit(out_arguments);
-    });
-}
-
-CNA_Result cna_indirect_draw_indexed_arguments_init(
-    CNA_IndirectDrawIndexedArguments* const out_arguments)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_arguments == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_indirect_draw_indexed_arguments_init: out_arguments is null.");
-        }
-        return IndirectDrawIndexedArgumentsInit(out_arguments);
-    });
-}
-
 CNA_Result cna_image_based_light_ext_init(
     CNA_ImageBasedLightEXT* const out_light)
 {

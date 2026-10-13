@@ -44,7 +44,6 @@ namespace CNA::Graphics
             {
                 case CNA::ShaderStageEXT::Vertex:
                 case CNA::ShaderStageEXT::Fragment:
-                case CNA::ShaderStageEXT::Compute:
                     return;
                 case CNA::ShaderStageEXT::Unknown:
                 case CNA::ShaderStageEXT::Count:

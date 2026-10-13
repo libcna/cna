@@ -41,7 +41,16 @@ identity's value is permanently reserved and never reassigned, so 2, 5, 7, 10, 1
 renderer, and every route that takes a renderer identity refuses it with
 `CNA_RESULT_INVALID_ARGUMENT` — "not a public CNA renderer identity" — exactly as it refuses a value
 that was never assigned. Walking the range and keeping what is accepted is therefore correct; walking
-it and *assuming* each value names a renderer is not. The capability range has no such gaps.
+it and *assuming* each value names a renderer is not. The capability range has no such gaps: the
+two capabilities of the retired modern GPU layer (`COMPUTE_SHADERS` 17, `INDIRECT_DRAW` 18) were the
+last two values, so removing them moved `CNA_GRAPHICS_CAPABILITY_MAXIMUM` back to 16.
+
+The detailed renderer-feature and renderer-limit ranges, by contrast, have gaps for the same reason
+the renderer range does. Features 18, 19, 20 and 23 and limits 2–10, 12, 13, 15, 19 and 21 named
+compute, storage, texture-array, indirect-draw and timestamp contracts of that retired layer; they are
+permanently reserved, and `cna_graphics_device_get_renderer_feature_support_ext` and
+`cna_graphics_device_get_renderer_limit_ext` refuse them with `CNA_RESULT_INVALID_ARGUMENT`. Format
+usage bits 5–7 are reserved the same way and `CNA_RENDERER_FORMAT_USAGE_ALL` excludes them.
 
 Both ranges are held against CNA's own enumerations at compile time, because they had already
 fallen behind: `TINYGL`, `IGL` and `PIXIJS` existed as CNA renderers with no C identity at all, so

@@ -23,8 +23,7 @@ namespace CNA::Graphics
         [[nodiscard]] bool IsValidStage(const CNA::ShaderStageEXT stage) noexcept
         {
             return stage == CNA::ShaderStageEXT::Vertex
-                || stage == CNA::ShaderStageEXT::Fragment
-                || stage == CNA::ShaderStageEXT::Compute;
+                || stage == CNA::ShaderStageEXT::Fragment;
         }
 
         [[nodiscard]] bool IsValidBindingType(const ShaderBindingTypeEXT type) noexcept
@@ -34,10 +33,6 @@ namespace CNA::Graphics
                 case ShaderBindingTypeEXT::SampledTexture2D:
                 case ShaderBindingTypeEXT::SampledTextureCube:
                 case ShaderBindingTypeEXT::SampledTexture3D:
-                case ShaderBindingTypeEXT::SampledTexture2DArray:
-                case ShaderBindingTypeEXT::StorageBuffer:
-                case ShaderBindingTypeEXT::StorageTexture2D:
-                case ShaderBindingTypeEXT::ConstantBuffer:
                     return true;
                 case ShaderBindingTypeEXT::Count:
                     return false;
@@ -82,7 +77,6 @@ namespace CNA::Graphics
                 case CNA::ShaderStageEXT::Unknown: return "Unknown";
                 case CNA::ShaderStageEXT::Vertex: return "Vertex";
                 case CNA::ShaderStageEXT::Fragment: return "Fragment";
-                case CNA::ShaderStageEXT::Compute: return "Compute";
                 case CNA::ShaderStageEXT::Count: return "Count";
             }
             return "InvalidStage";
@@ -125,57 +119,6 @@ namespace CNA::Graphics
                                 CNA::RendererFeature::Texture3DSampling))
                             AddFailure(failures, prefix + "requires Texture3DSampling");
                         break;
-                    case ShaderBindingTypeEXT::SampledTexture2DArray:
-                    {
-                        const auto limit = device.GetRendererLimitEXT(
-                            CNA::RendererLimit::MaxTextureArrayLayers);
-                        if (!limit.known || limit.value == 0)
-                            AddFailure(failures, prefix + "requires sampled texture arrays");
-                        break;
-                    }
-                    case ShaderBindingTypeEXT::StorageBuffer:
-                        if (!device.SupportsCapability(
-                                CNA::GraphicsCapability::ComputeShaders))
-                            AddFailure(failures, prefix + "requires ComputeShaders");
-                        if (binding.getStage() == CNA::ShaderStageEXT::Vertex)
-                        {
-                            const auto limit = device.GetRendererLimitEXT(
-                                CNA::RendererLimit::MaxVertexShaderStorageBlocks);
-                            if (!limit.known || limit.value == 0
-                                || static_cast<std::uint64_t>(binding.getBinding()) >= limit.value)
-                                AddFailure(
-                                    failures, prefix + "exceeds vertex storage-buffer bindings");
-                        }
-                        break;
-                    case ShaderBindingTypeEXT::StorageTexture2D:
-                        if (binding.getStage() == CNA::ShaderStageEXT::Compute)
-                        {
-                            if (!device.SupportsCapability(
-                                    CNA::GraphicsCapability::ComputeShaders))
-                                AddFailure(failures, prefix + "requires ComputeShaders");
-                            const auto limit = device.GetRendererLimitEXT(
-                                CNA::RendererLimit::MaxStorageImagesPerShaderStage);
-                            if (!limit.known || limit.value == 0 ||
-                                static_cast<std::uint64_t>(binding.getBinding()) >= limit.value)
-                                AddFailure(failures, prefix +
-                                    "exceeds compute storage-image bindings");
-                        }
-                        break;
-                    case ShaderBindingTypeEXT::ConstantBuffer:
-                    {
-                        const auto limit = device.GetRendererLimitEXT(
-                            CNA::RendererLimit::MaxUniformBufferBytes);
-                        if (!limit.known || limit.value == 0)
-                            AddFailure(failures, prefix + "requires constant buffers");
-                        if (binding.getStage() != CNA::ShaderStageEXT::Compute)
-                            AddFailure(
-                                failures, prefix +
-                                "has no portable non-compute binding route yet");
-                        else if (!device.SupportsCapability(
-                                     CNA::GraphicsCapability::ComputeShaders))
-                            AddFailure(failures, prefix + "requires ComputeShaders");
-                        break;
-                    }
                     case ShaderBindingTypeEXT::Count:
                         break;
                 }
@@ -340,9 +283,6 @@ namespace CNA::Graphics
         if (needsGraphics
             && !device.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
             AddFailure(packageFailures, "graphics stages require CustomEffects");
-        if (requiresStage(CNA::ShaderStageEXT::Compute)
-            && !device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
-            AddFailure(packageFailures, "the compute stage requires ComputeShaders");
         AddBindingRequirementFailures(device, bindingRequirements_, packageFailures);
 
         std::vector<std::string> considered;

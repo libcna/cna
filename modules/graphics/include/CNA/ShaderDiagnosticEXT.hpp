@@ -64,7 +64,7 @@ namespace CNA
          *
          * Common `source:line:column`, `source:line(column)` and `file(line,column)` forms are
          * recognized. A location stays zero rather than being invented when the renderer supplies
-         * only text. `VS`/`vertex`, `FS`/`fragment` and `CS`/`compute` markers override the fallback
+         * only text. `VS`/`vertex` and `FS`/`fragment` markers override the fallback
          * stage and remain in effect for continuation lines. Each non-empty log line becomes one
          * independently owned record.
          *

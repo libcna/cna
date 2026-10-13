@@ -217,12 +217,6 @@ struct ResolvedSpriteCommand final {
         case CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING:
             *outCapability = CNA::GraphicsCapability::HalfFloatTextureLinearFiltering;
             return true;
-        case CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS:
-            *outCapability = CNA::GraphicsCapability::ComputeShaders;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW:
-            *outCapability = CNA::GraphicsCapability::IndirectDraw;
-            return true;
         default:
             return false;
     }
@@ -265,10 +259,6 @@ struct ResolvedSpriteCommand final {
             return CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS;
         case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
             return CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING;
-        case CNA::GraphicsCapability::ComputeShaders:
-            return CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS;
-        case CNA::GraphicsCapability::IndirectDraw:
-            return CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW;
     }
     return CNA_GRAPHICS_CAPABILITY_MAXIMUM + UINT32_C(1);
 }
@@ -278,8 +268,8 @@ static_assert(
         CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE &&
     static_cast<uint32_t>(CNA::RendererFeature::ShaderEffectSourceExecution) ==
         CNA_RENDERER_FEATURE_SHADER_EFFECT_SOURCE_EXECUTION &&
-    static_cast<uint32_t>(CNA::RendererFeature::ComputeImageBinding) ==
-        CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING &&
+    static_cast<uint32_t>(CNA::RendererFeature::ImageBasedLighting) ==
+        CNA_RENDERER_FEATURE_IMAGE_BASED_LIGHTING &&
     static_cast<uint32_t>(CNA::RendererFeature::ShaderDialectWgsl) ==
         CNA_RENDERER_FEATURE_SHADER_DIALECT_WGSL &&
     static_cast<uint32_t>(CNA::RendererFeature::Texture3DSampling) ==
@@ -292,11 +282,11 @@ static_assert(
 static_assert(
     static_cast<uint32_t>(CNA::RendererLimit::MaxTextureDimension) ==
         CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION &&
-    static_cast<uint32_t>(CNA::RendererLimit::MaxComputeWorkGroupInvocations) ==
-        CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_INVOCATIONS &&
-    static_cast<uint32_t>(CNA::RendererLimit::MaxVertexShaderStorageBlocks) ==
-        CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS &&
-    static_cast<uint32_t>(CNA::RendererLimit::TimestampPeriodPicoseconds) ==
+    static_cast<uint32_t>(CNA::RendererLimit::MaxUniformBufferBytes) ==
+        CNA_RENDERER_LIMIT_MAX_UNIFORM_BUFFER_BYTES &&
+    static_cast<uint32_t>(CNA::RendererLimit::MaxColorAttachments) ==
+        CNA_RENDERER_LIMIT_MAX_COLOR_ATTACHMENTS &&
+    static_cast<uint32_t>(CNA::RendererLimit::MinUniformBufferOffsetAlignment) ==
         CNA_RENDERER_LIMIT_MAXIMUM &&
     static_cast<uint32_t>(CNA::RendererLimit::Count) ==
         CNA_RENDERER_LIMIT_MAXIMUM + UINT32_C(1));
@@ -308,7 +298,13 @@ static_assert(
     if (outFeature == nullptr || feature > CNA_RENDERER_FEATURE_MAXIMUM) {
         return false;
     }
-    *outFeature = static_cast<CNA::RendererFeature>(feature);
+    // A reserved ordinal (a retired feature) is in range but names nothing.
+    const auto native = static_cast<CNA::RendererFeature>(feature);
+    const auto defined = CNA::AllRendererFeatures();
+    if (std::find(defined.begin(), defined.end(), native) == defined.end()) {
+        return false;
+    }
+    *outFeature = native;
     return true;
 }
 
@@ -319,7 +315,12 @@ static_assert(
     if (outLimit == nullptr || limit > CNA_RENDERER_LIMIT_MAXIMUM) {
         return false;
     }
-    *outLimit = static_cast<CNA::RendererLimit>(limit);
+    const auto native = static_cast<CNA::RendererLimit>(limit);
+    const auto defined = CNA::AllRendererLimits();
+    if (std::find(defined.begin(), defined.end(), native) == defined.end()) {
+        return false;
+    }
+    *outLimit = native;
     return true;
 }
 

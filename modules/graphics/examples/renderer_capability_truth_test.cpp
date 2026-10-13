@@ -26,7 +26,7 @@ namespace
         const char* name;
     };
 
-    constexpr std::array<CapabilityCase, 19> kCapabilities{{
+    constexpr std::array<CapabilityCase, 17> kCapabilities{{
         {CNA::GraphicsCapability::ThreeD, "ThreeD"},
         {CNA::GraphicsCapability::DepthStencilBuffer, "DepthStencilBuffer"},
         {CNA::GraphicsCapability::MultiSampleAntiAliasing, "MultiSampleAntiAliasing"},
@@ -45,8 +45,6 @@ namespace
         {CNA::GraphicsCapability::HalfFloatRenderTargets, "HalfFloatRenderTargets"},
         {CNA::GraphicsCapability::HalfFloatTextureLinearFiltering,
          "HalfFloatTextureLinearFiltering"},
-        {CNA::GraphicsCapability::ComputeShaders, "ComputeShaders"},
-        {CNA::GraphicsCapability::IndirectDraw, "IndirectDraw"},
     }};
 
     bool ExpectedCapability(GraphicsDevice& device,
@@ -66,10 +64,6 @@ namespace
             return device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable);
         case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
             return renderer.SupportsHalfFloatTextureLinearFilteringEXT();
-        case CNA::GraphicsCapability::ComputeShaders:
-            return renderer.SupportsComputeShadersEXT();
-        case CNA::GraphicsCapability::IndirectDraw:
-            return renderer.SupportsIndirectDrawEXT();
         default:
             return true;
         }
@@ -123,11 +117,6 @@ protected:
         Check(!renderer.SupportsCapability(
                   static_cast<CNA::GraphicsCapability>(1000)),
               "unknown future capability defaults to false rather than being advertised");
-        Check(renderer.SupportsComputeShadersEXT() ==
-                  device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) &&
-                  renderer.SupportsIndirectDrawEXT() ==
-                  device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
-              "compute and indirect extension flags agree with public capability reporting");
 
         std::printf("=== %d/%d PASS ===\n", passed_, passed_ + failed_);
         Exit();

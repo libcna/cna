@@ -11,39 +11,12 @@ IIndexBufferRenderer,"SetData16WithOptions :: void (const void *, int, SetDataOp
 IIndexBufferRenderer,"SetData32WithOptions :: void (const void *, int, SetDataOptions)",176,default-delegates-or-value,classic-xna-observable,buffer=override,buffer=override,=,SDLGPU-78
 IIndexBufferRenderer,GetIndexCount :: int () const,181,required,classic-xna-observable,buffer=override,buffer=override,=,SDLGPU-78
 IIndexBufferRenderer,IsThirtyTwoBit :: bool () const,182,default-false,classic-xna-observable,buffer=override,buffer=override,=,SDLGPU-78
-IGpuTimerRenderer,~ :: void (),203,defaulted-destructor,out,timer=override,unavailable,out,out: plans/plan_modern.md
-IGpuTimerRenderer,Begin :: void (),206,required,out,timer=override,unavailable,out,out: plans/plan_modern.md
-IGpuTimerRenderer,End :: void (),209,required,out,timer=override,unavailable,out,out: plans/plan_modern.md
-IGpuTimerRenderer,IsResultAvailable :: bool () const,212,required,out,timer=override,unavailable,out,out: plans/plan_modern.md
-IGpuTimerRenderer,ElapsedNanoseconds :: std::uint64_t () const,215,required,out,timer=override,unavailable,out,out: plans/plan_modern.md
 IOcclusionQueryRenderer,~ :: void (),221,defaulted-destructor,classic-xna-observable,query=override,unavailable,⛔,SDLGPU-80
 IOcclusionQueryRenderer,Begin :: void (),222,required,classic-xna-observable,query=override,unavailable,⛔,SDLGPU-80
 IOcclusionQueryRenderer,End :: void (),223,required,classic-xna-observable,query=override,unavailable,⛔,SDLGPU-80
 IOcclusionQueryRenderer,IsComplete :: bool () const,224,required,classic-xna-observable,query=override,unavailable,⛔,SDLGPU-80
 IOcclusionQueryRenderer,PixelCount :: int () const,225,required,classic-xna-observable,query=override,unavailable,⛔,SDLGPU-80
 IOcclusionQueryRenderer,PixelCountIsPreciseEXT :: bool () const noexcept,233,default-true,out,query=override,unavailable,out,out: CNAEXT precision metadata; the classic query limit is SDLGPU-80
-IStorageBufferRenderer,~ :: void (),251,defaulted-destructor,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,"SetData :: void (const void *, std::size_t)",259,required,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,"GetData :: void (void *, std::size_t) const",267,required,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,"SetDataRangeEXT :: bool (std::size_t, const void *, std::size_t)",276,default-false,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,"GetDataRangeEXT :: bool (std::size_t, void *, std::size_t) const",291,default-false,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,"CopyToEXT :: bool (IStorageBufferRenderer &, std::size_t, std::size_t, std::size_t)",307,default-false,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,GetByteSize :: std::size_t () const,315,required,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,GetUsageEXT :: std::uint32_t () const,321,default-delegates-or-value,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IStorageBufferRenderer,GetCpuAccessEXT :: std::uint32_t () const,331,default-delegates-or-value,out,storage=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,~ :: void (),350,defaulted-destructor,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,CompileProgram :: bool (const std::string &),358,required,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,Bind :: void (),361,required,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,"SetUniformInt :: void (const char *, int)",369,default-no-op,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,"SetUniformFloat :: void (const char *, float)",377,default-no-op,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,"BindStorageBuffer :: void (int, IStorageBufferRenderer *)",385,default-no-op,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,"BindConstantBufferEXT :: bool (int, IStorageBufferRenderer *)",397,default-false,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,"BindImageTexture :: void (int, ITextureRenderer *, int)",410,default-no-op,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,"BindStorageTexture2DEXT :: bool (int, std::shared_ptr<IStorageTexture2DRenderer>, int)",425,default-false,out,compute=inherited:default-false,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,"BindTexture :: void (int, ITextureRenderer *)",443,default-no-op,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,UsesDirectSampledTextureBindingsEXT :: bool () const,454,default-false,out,compute=inherited:default-false,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,IsValid :: bool () const,460,required,out,compute=override,unavailable,out,out: plans/plan_modern.md
-IComputeShaderRenderer,GetCompileError :: std::string () const,463,required,out,compute=override,unavailable,out,out: plans/plan_modern.md
 ITextureCubeRenderer,~ :: void () noexcept,477,defaulted-destructor,classic-xna-observable,TextureCube=override;RenderTargetCube=override,TextureCube=override;RenderTargetCube=override,=,SDLGPU-70/73/74/81
 ITextureCubeRenderer,"SetData :: bool (int, int, int, int, int, int, const void *, int)",508,required,classic-xna-observable,TextureCube=override;RenderTargetCube=override,TextureCube=override;RenderTargetCube=override,=,SDLGPU-70/73/74/81
 ITextureCubeRenderer,"SetCompressedDataEXT :: bool (int, int, int, int, int, int, const void *, int)",527,default-false,classic-xna-observable,TextureCube=override;RenderTargetCube=inherited:default-false,TextureCube=override;RenderTargetCube=inherited:default-false,=,SDLGPU-70/73/74/81
@@ -58,12 +31,6 @@ ITexture3DRenderer,"GetData :: bool (int, int, int, int, int, int, int, void *, 
 ITexture3DRenderer,BindGL :: void (int) const,653,default-no-op,out,Texture3D=override,Texture3D=inherited:default-no-op,out,out: EasyGL-native binding hook; SDL_GPU binds sampled texture descriptors
 ITexture3DRenderer,"GetDimensionsEXT :: void (int &, int &, int &) const noexcept",658,default-implementation,out,Texture3D=inherited:default-implementation,Texture3D=inherited:default-implementation,out,out: unused renderer helper; public Texture3D owns its dimensions
 ITexture3DRenderer,GetSurfaceFormatEXT :: int () const noexcept,663,default-zero,out,Texture3D=inherited:default-zero,Texture3D=inherited:default-zero,out,out: unused renderer metadata; public Texture3D owns its SurfaceFormat
-ITexture2DArrayRenderer,~ :: void (),680,defaulted-destructor,out,unavailable,unavailable,out,out: plans/plan_modern.md MOD-2226
-ITexture2DArrayRenderer,"SetData :: bool (int, int, int, int, int, int, const void *, std::size_t)",687,default-false,out,unavailable,unavailable,out,out: plans/plan_modern.md MOD-2226
-ITexture2DArrayRenderer,"GetData :: bool (int, int, int, int, int, int, void *, std::size_t) const",699,default-false,out,unavailable,unavailable,out,out: plans/plan_modern.md MOD-2226
-IStorageTexture2DRenderer,~ :: void (),720,defaulted-destructor,out,unavailable,unavailable,out,out: plans/plan_modern.md MOD-2227
-IStorageTexture2DRenderer,"SetData :: bool (int, int, int, int, int, const void *, std::size_t)",733,default-false,out,unavailable,unavailable,out,out: plans/plan_modern.md MOD-2227
-IStorageTexture2DRenderer,"GetData :: bool (int, int, int, int, int, void *, std::size_t) const",751,default-false,out,unavailable,unavailable,out,out: plans/plan_modern.md MOD-2227
 ITextureRenderer,~ :: void () noexcept,766,defaulted-destructor,classic-xna-observable,Texture2D=override;RenderTarget2D=override,Texture2D=override;RenderTarget2D=override,=,SDLGPU-69/72/74/81
 ITextureRenderer,GetWidth :: int () const,767,required,classic-xna-observable,Texture2D=override;RenderTarget2D=override,Texture2D=override;RenderTarget2D=override,=,SDLGPU-69/72/74/81
 ITextureRenderer,GetHeight :: int () const,768,required,classic-xna-observable,Texture2D=override;RenderTarget2D=override,Texture2D=override;RenderTarget2D=override,=,SDLGPU-69/72/74/81
@@ -112,8 +79,6 @@ IEffectRenderer,"SetUniformMat4Array :: void (const char *, const float *, int)"
 IEffectRenderer,"BindTexture :: void (int, ITextureRenderer *)",1199,default-no-op,out,ShaderEffect=override,ShaderEffect=inherited:default-no-op,out,out: existing CNAEXT ShaderEffect
 IEffectRenderer,"BindTextureCube :: void (int, ITextureCubeRenderer *)",1206,default-no-op,out,ShaderEffect=override,ShaderEffect=inherited:default-no-op,out,out: existing CNAEXT ShaderEffect
 IEffectRenderer,"BindTexture3D :: void (int, ITexture3DRenderer *)",1213,default-no-op,out,ShaderEffect=override,ShaderEffect=inherited:default-no-op,out,out: existing CNAEXT ShaderEffect
-IEffectRenderer,"BindTexture2DArrayEXT :: bool (int, std::shared_ptr<ITexture2DArrayRenderer>)",1225,default-false,out,ShaderEffect=inherited:default-false,ShaderEffect=inherited:default-false,out,out: existing CNAEXT ShaderEffect
-IEffectRenderer,"BindStorageTexture2DEXT :: bool (int, std::shared_ptr<IStorageTexture2DRenderer>)",1237,default-false,out,ShaderEffect=inherited:default-false,ShaderEffect=inherited:default-false,out,out: existing CNAEXT ShaderEffect
 ISpriteBatchRenderer,~ :: void () noexcept,1247,defaulted-destructor,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81
 ISpriteBatchRenderer,Begin :: void (),1248,required,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81
 ISpriteBatchRenderer,End :: void (),1249,required,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81
@@ -173,8 +138,6 @@ IGraphicsRenderer,"ReadBackbuffer :: void (int, int, int, int, uint8_t *)",2623,
 IGraphicsRenderer,CreateOcclusionQuery :: std::unique_ptr<IOcclusionQueryRenderer> (),2630,default-null,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-68/69/70/71/72/73/74/80
 IGraphicsRenderer,"CreateTexture3D :: std::unique_ptr<ITexture3DRenderer> (int, int, int, bool, int)",2631,default-null,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-68/69/70/71/72/73/74/80
 IGraphicsRenderer,"CreateTextureCube :: std::unique_ptr<ITextureCubeRenderer> (int, bool, int)",2632,default-null,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-68/69/70/71/72/73/74/80
-IGraphicsRenderer,"CreateTexture2DArrayEXT :: std::unique_ptr<ITexture2DArrayRenderer> (int, int, int, int, int, std::uint32_t)",2649,default-null,out,renderer=inherited:default-null,renderer=inherited:default-null,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,"CreateStorageTexture2DEXT :: std::unique_ptr<IStorageTexture2DRenderer> (int, int, int, int, std::uint32_t)",2670,default-null,out,renderer=inherited:default-null,renderer=inherited:default-null,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,"CreateRenderTarget2D :: std::unique_ptr<IRenderTargetRenderer> (int, int, int, bool, bool, int)",2705,default-null,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-68/69/70/71/72/73/74/80
 IGraphicsRenderer,"CreateRenderTarget2DEXT :: std::unique_ptr<IRenderTargetRenderer> (int, int, int, bool, bool, int, int)",2714,default-delegates-or-value,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-68/69/70/71/72/73/74/80
 IGraphicsRenderer,SupportsHalfFloatTextureLinearFilteringEXT :: bool () const,2725,default-false,out,renderer=override,renderer=inherited:default-false,out,out: plans/plan_modern.md MOD-123
@@ -184,40 +147,19 @@ IGraphicsRenderer,"CreateRenderTargetCubeEXT :: std::unique_ptr<IRenderTargetCub
 IGraphicsRenderer,"CreateEffectRenderer :: std::unique_ptr<IEffectRenderer> (const std::string &, const std::string &)",2764,default-null,out,renderer=override,renderer=override,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,"CreateCompiledEffect :: std::unique_ptr<ICompiledEffectRuntime> (const std::uint8_t *, std::size_t)",2771,default-null,classic-xna-observable,renderer=inherited:default-null,renderer=override,=,SDLGPU-79
 IGraphicsRenderer,SupportsCompiledEffects :: bool () const,2781,default-implementation,classic-xna-observable,renderer=inherited:default-implementation,renderer=override,=,SDLGPU-79
-IGraphicsRenderer,CreateComputeShader :: std::unique_ptr<IComputeShaderRenderer> (const std::string &),2787,default-null,out,renderer=override,renderer=inherited:default-null,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,CreateStorageBuffer :: std::unique_ptr<IStorageBufferRenderer> (std::size_t),2794,default-null,out,renderer=override,renderer=inherited:default-null,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,"CreateStorageBufferEXT :: std::unique_ptr<IStorageBufferRenderer> (std::size_t, std::uint32_t, std::uint32_t)",2813,default-null,out,renderer=override,renderer=inherited:default-null,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,"DispatchCompute :: void (IComputeShaderRenderer *, int, int, int)",2820,default-no-op,out,renderer=override,renderer=inherited:default-no-op,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,MemoryBarrierEXT :: void (int),2825,default-no-op,out,renderer=override,renderer=inherited:default-no-op,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,ExecutesShaderEffectSourceEXT :: bool () const,2835,default-false,out,renderer=override,renderer=inherited:default-false,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SupportsShadowSamplingEXT :: bool () const,2844,default-implementation,out,renderer=override,renderer=inherited:default-implementation,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SupportsImageBasedLightingEXT :: bool () const,2849,default-false,out,renderer=override,renderer=inherited:default-false,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,SupportsComputeShadersEXT :: bool () const,2855,default-implementation,out,renderer=override,renderer=inherited:default-implementation,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,SupportsIndirectDrawEXT :: bool () const,2862,default-implementation,out,renderer=override,renderer=inherited:default-implementation,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SupportsBaseInstanceDrawingEXT :: bool () const,2869,default-false,out,renderer=inherited:default-false,renderer=inherited:default-false,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,SupportsComputeImageBindingEXT :: bool () const,2877,default-false,out,renderer=override,renderer=inherited:default-false,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SupportsTexture3DSamplingEXT :: bool () const,2886,default-false,out,renderer=override,renderer=inherited:default-false,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetDisplayColorSpaceEXT :: CNA::DisplayColorSpace () const,2894,default-delegates-or-value,out,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SetDisplayColorSpaceEXT :: bool (const CNA::DisplayColorSpace),2904,default-delegates-or-value,out,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxVertexShaderStorageBlocksEXT :: int () const,2914,default-zero,out,renderer=override,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,"BindStorageBufferForDrawEXT :: void (int, const IStorageBufferRenderer &)",2920,default-no-op,out,renderer=override,renderer=inherited:default-no-op,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,SupportsGpuTimerEXT :: bool () const,2926,default-implementation,out,renderer=override,renderer=inherited:default-implementation,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,CreateGpuTimerEXT :: std::unique_ptr<IGpuTimerRenderer> (),2931,default-null,out,renderer=override,renderer=inherited:default-null,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxComputeWorkGroupCountEXT :: int (int) const,2936,default-zero,out,renderer=override,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxComputeWorkGroupSizeEXT :: int (int) const,2939,default-zero,out,renderer=override,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxComputeWorkGroupInvocationsEXT :: int () const,2942,default-zero,out,renderer=override,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxStorageBufferBytesEXT :: std::uint64_t () const,2948,default-zero,out,renderer=override,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetMaxUniformBufferBytesEXT :: std::uint64_t () const,2954,default-zero,out,renderer=override,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxComputeStorageBufferBindingsEXT :: int () const,2960,default-zero,out,renderer=inherited:default-zero,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxTextureArrayLayersEXT :: int () const,2966,default-implementation,out,renderer=inherited:default-implementation,renderer=inherited:default-implementation,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetMaxSampledTexturesPerShaderStageEXT :: int () const,2972,default-zero,out,renderer=inherited:default-zero,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMaxStorageImagesPerShaderStageEXT :: int () const,2978,default-zero,out,renderer=inherited:default-zero,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetMaxVertexInputBindingsEXT :: int () const,2984,default-zero,out,renderer=inherited:default-zero,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetMaxVertexInputAttributesEXT :: int () const,2990,default-zero,out,renderer=inherited:default-zero,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetMaxColorAttachmentsEXT :: int () const,2996,default-implementation,out,renderer=inherited:default-implementation,renderer=inherited:default-implementation,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetMinStorageBufferOffsetAlignmentEXT :: std::uint64_t () const,3002,default-zero,out,renderer=inherited:default-zero,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetMinUniformBufferOffsetAlignmentEXT :: std::uint64_t () const,3011,default-zero,out,renderer=override,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,GetTimestampPeriodPicosecondsEXT :: std::uint64_t () const,3020,default-zero,out,renderer=inherited:default-zero,renderer=inherited:default-zero,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,"SetRenderTargetCubeFace :: void (IRenderTargetCubeRenderer *, int)",3024,default-delegates-or-value,classic-xna-observable,renderer=override,renderer=inherited:default-delegates-or-value,=,SDLGPU-68/69/70/71/72/73/74/80
 IGraphicsRenderer,"SetRenderTargets :: void (const RenderTargetBindingDescriptor *, int)",3034,required,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-68/69/70/71/72/73/74/80
 IGraphicsRenderer,"ApplyBlendState :: void (int, int, int, int, int, int, const BlendWriteState &)",3047,default-no-op,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-58/65/66/67
@@ -251,8 +193,6 @@ IGraphicsRenderer,"DrawIndexedColoredPrimitives :: void (const IVertexBufferRend
 IGraphicsRenderer,"DrawPrimitivesEx :: void (const IVertexBufferRenderer &, const Matrix &, const Matrix &, const Matrix &, PrimitiveType, int, const GpuDrawParams &)",3260,default-delegates-or-value,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-59/60/66/78/79
 IGraphicsRenderer,"DrawIndexedPrimitivesEx :: void (const IVertexBufferRenderer &, const IIndexBufferRenderer &, const Matrix &, const Matrix &, const Matrix &, PrimitiveType, int, const GpuDrawParams &)",3274,default-delegates-or-value,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-59/60/66/78/79
 IGraphicsRenderer,"DrawInstancedPrimitivesEx :: void (const IVertexBufferRenderer &, const IIndexBufferRenderer &, const Matrix &, const Matrix &, const Matrix &, PrimitiveType, int, int, const GpuDrawParams &)",3306,default-throws,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-59/60/66/78/79
-IGraphicsRenderer,"DrawPrimitivesIndirectEXT :: void (const IVertexBufferRenderer &, const Matrix &, const Matrix &, const Matrix &, PrimitiveType, const IStorageBufferRenderer &, int, const GpuDrawParams &)",3355,default-throws,out,renderer=override,renderer=inherited:default-throws,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,"DrawIndexedPrimitivesIndirectEXT :: void (const IVertexBufferRenderer &, const IIndexBufferRenderer &, const Matrix &, const Matrix &, const Matrix &, PrimitiveType, const IStorageBufferRenderer &, int, const GpuDrawParams &)",3383,default-throws,out,renderer=override,renderer=inherited:default-throws,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SetContextRecoveryEnabled :: void (bool),3403,default-implementation,out,renderer=override,renderer=inherited:default-implementation,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SetUnsupported3DGraphicsCallBehavior :: void (CNA::Unsupported3DGraphicsCallBehavior),3412,default-delegates-or-value,out,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,out,out: CNAEXT 2D-renderer policy
 IGraphicsRenderer,GetUnsupported3DGraphicsCallBehavior :: CNA::Unsupported3DGraphicsCallBehavior () const,3424,default-delegates-or-value,out,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,out,out: CNAEXT 2D-renderer policy

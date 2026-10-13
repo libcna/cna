@@ -28,16 +28,8 @@ namespace CNA::Graphics
         SampledTextureCube = 1,
         /** @brief A sampled three-dimensional texture. */
         SampledTexture3D = 2,
-        /** @brief A sampled two-dimensional texture array. */
-        SampledTexture2DArray = 3,
-        /** @brief A shader storage buffer. */
-        StorageBuffer = 4,
-        /** @brief A two-dimensional storage texture. */
-        StorageTexture2D = 5,
-        /** @brief A read-only uniform/constant buffer. */
-        ConstantBuffer = 6,
         /** @brief Number of declared binding kinds; not itself a binding kind. */
-        Count = 7
+        Count = 3
     };
 
     /** @brief One renderer-neutral logical resource binding required by a shader package. */
@@ -200,8 +192,8 @@ namespace CNA::Graphics
          *
          * Binary formats are preferred in fixed order (`SpirV`, then `Dxil`), followed by text
          * languages in their public identity order. Declaration order never affects selection.
-         * Each required language/stage pair is queried from the live renderer; graphics and
-         * compute capabilities plus portable binding requirements are checked separately.
+         * Each required language/stage pair is queried from the live renderer; the graphics
+         * capability and portable binding requirements are checked separately.
          * Duplicate code for one language/stage makes that language ambiguous and unusable.
          *
          * @param device Live graphics device whose implemented paths and capabilities are queried.

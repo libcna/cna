@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <iterator>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -25,9 +27,8 @@ static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 32);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Unknown) == 0);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Restricted) == 3);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxTextureDimension) == 0);
-static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxVertexShaderStorageBlocks) == 9);
-static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::TimestampPeriodPicoseconds) == 21);
-static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::Count) == 22);
+static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxUniformBufferBytes) == 11);
+static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MinUniformBufferOffsetAlignment) == 20);
 
 namespace
 {
@@ -56,12 +57,22 @@ TEST(RendererCapabilityProfileTest, EmptyProfileKeepsInvalidAndUnauditedAnswersU
 
 TEST(RendererCapabilityProfileTest, CatalogsAreCompleteStableAndSelfDescribing)
 {
+    // The ordinals of the retired modern GPU layer stay reserved: the catalogs skip them, and
+    // they name nothing.
+    constexpr std::uint32_t kReservedFeatures[] = {18, 19, 20, 23};
+    constexpr std::uint32_t kReservedLimits[] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 19, 21};
+
     const auto features = CNA::AllRendererFeatures();
-    ASSERT_EQ(features.size(), static_cast<std::size_t>(CNA::RendererFeature::Count));
+    ASSERT_EQ(features.size(), static_cast<std::size_t>(CNA::RendererFeature::Count) -
+                                   std::size(kReservedFeatures));
     std::unordered_set<std::string> featureNames;
     for (std::size_t i = 0; i < features.size(); ++i)
     {
-        EXPECT_EQ(static_cast<std::size_t>(features[i]), i);
+        if (i > 0)
+            EXPECT_LT(static_cast<std::uint32_t>(features[i - 1]),
+                      static_cast<std::uint32_t>(features[i]));
+        EXPECT_LT(static_cast<std::uint32_t>(features[i]),
+                  static_cast<std::uint32_t>(CNA::RendererFeature::Count));
         const std::string name(CNA::GetRendererFeatureName(features[i]));
         EXPECT_FALSE(name.empty());
         EXPECT_NE(name, "UnknownRendererFeature");
@@ -72,13 +83,31 @@ TEST(RendererCapabilityProfileTest, CatalogsAreCompleteStableAndSelfDescribing)
               "UnknownRendererFeature");
     EXPECT_EQ(CNA::GetRendererFeatureDescription(CNA::RendererFeature::Count),
               "Invalid detailed renderer feature identity.");
+    const CNA::RendererCapabilityProfile empty;
+    for (const std::uint32_t reserved : kReservedFeatures)
+    {
+        const auto feature = static_cast<CNA::RendererFeature>(reserved);
+        EXPECT_EQ(CNA::GetRendererFeatureName(feature), "UnknownRendererFeature") << reserved;
+        EXPECT_EQ(std::count(features.begin(), features.end(), feature), 0) << reserved;
+        EXPECT_EQ(empty.GetFeature(feature).support, CNA::RendererFeatureSupport::Unknown);
+    }
 
     const auto limits = CNA::AllRendererLimits();
-    ASSERT_EQ(limits.size(), static_cast<std::size_t>(CNA::RendererLimit::Count));
+    // Ordinal 21 was the last retired limit, so it sits at Count rather than inside the range.
+    const auto reservedInRange = std::count_if(
+        std::begin(kReservedLimits), std::end(kReservedLimits), [](const std::uint32_t ordinal) {
+            return ordinal < static_cast<std::uint32_t>(CNA::RendererLimit::Count);
+        });
+    ASSERT_EQ(limits.size(), static_cast<std::size_t>(CNA::RendererLimit::Count) -
+                                 static_cast<std::size_t>(reservedInRange));
     std::unordered_set<std::string> limitNames;
     for (std::size_t i = 0; i < limits.size(); ++i)
     {
-        EXPECT_EQ(static_cast<std::size_t>(limits[i]), i);
+        if (i > 0)
+            EXPECT_LT(static_cast<std::uint32_t>(limits[i - 1]),
+                      static_cast<std::uint32_t>(limits[i]));
+        EXPECT_LT(static_cast<std::uint32_t>(limits[i]),
+                  static_cast<std::uint32_t>(CNA::RendererLimit::Count));
         const std::string name(CNA::GetRendererLimitName(limits[i]));
         EXPECT_FALSE(name.empty());
         EXPECT_NE(name, "UnknownRendererLimit");
@@ -86,6 +115,13 @@ TEST(RendererCapabilityProfileTest, CatalogsAreCompleteStableAndSelfDescribing)
     }
     EXPECT_EQ(CNA::GetRendererLimitName(CNA::RendererLimit::Count),
               "UnknownRendererLimit");
+    for (const std::uint32_t reserved : kReservedLimits)
+    {
+        const auto limit = static_cast<CNA::RendererLimit>(reserved);
+        EXPECT_EQ(CNA::GetRendererLimitName(limit), "UnknownRendererLimit") << reserved;
+        EXPECT_EQ(std::count(limits.begin(), limits.end(), limit), 0) << reserved;
+        EXPECT_FALSE(empty.GetLimit(limit).known);
+    }
 }
 
 TEST(RendererCapabilityProfileTest, FormatMasksDistinguishUnknownFromUnsupported)
@@ -145,11 +181,7 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotMapsEveryLegacyCapabilityExpli
         std::pair{CNA::RendererFeature::Float16RenderTargets,
                   CNA::GraphicsCapability::HalfFloatRenderTargets},
         std::pair{CNA::RendererFeature::Float16TextureLinearFiltering,
-                  CNA::GraphicsCapability::HalfFloatTextureLinearFiltering},
-        std::pair{CNA::RendererFeature::ComputeShaders,
-                  CNA::GraphicsCapability::ComputeShaders},
-        std::pair{CNA::RendererFeature::IndirectDrawing,
-                  CNA::GraphicsCapability::IndirectDraw}
+                  CNA::GraphicsCapability::HalfFloatTextureLinearFiltering}
     };
 
     for (const auto [feature, legacy] : mappings)

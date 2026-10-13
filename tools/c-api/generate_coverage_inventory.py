@@ -854,9 +854,6 @@ CNAEXT_SLICE_OWNERS: dict[str, str] = {
     "graphics/ImageBasedLightEXT": "CBIND-091",
     # CBIND-092 -- 157 rows
     "graphics-ext/DebugDraw": "CBIND-092",
-    "graphics/GraphicsImageAccess": "CBIND-092",
-    "graphics/GraphicsMemoryBarrier": "CBIND-092",
-    "graphics/IndirectDrawArguments": "CBIND-092",
     # CBIND-093 -- 48 rows
     "core/AssemblyInfo": "CBIND-093",
     "graphics/BasicEffect": "CBIND-093",

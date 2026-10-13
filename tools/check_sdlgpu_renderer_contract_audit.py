@@ -29,20 +29,8 @@ INTERFACE_IMPLEMENTATIONS = {
         (("buffer", "EasyGLIndexBufferRenderer"),),
         (("buffer", "SdlGpuIndexBufferRenderer"),),
     ),
-    "IGpuTimerRenderer": (
-        (("timer", "EasyGLGpuTimerRenderer"),),
-        (),
-    ),
     "IOcclusionQueryRenderer": (
         (("query", "EasyGLOcclusionQueryRenderer"),),
-        (),
-    ),
-    "IStorageBufferRenderer": (
-        (("storage", "EasyGLStorageBufferRenderer"),),
-        (),
-    ),
-    "IComputeShaderRenderer": (
-        (("compute", "EasyGLComputeShaderRenderer"),),
         (),
     ),
     "ITextureCubeRenderer": (
@@ -58,14 +46,6 @@ INTERFACE_IMPLEMENTATIONS = {
     "ITexture3DRenderer": (
         (("Texture3D", "EasyGLTexture3DRenderer"),),
         (("Texture3D", "SdlGpuTexture3DRenderer"),),
-    ),
-    "ITexture2DArrayRenderer": (
-        (),
-        (),
-    ),
-    "IStorageTexture2DRenderer": (
-        (),
-        (),
     ),
     "ITextureRenderer": (
         (
@@ -104,57 +84,27 @@ INTERFACE_IMPLEMENTATIONS = {
 }
 
 OUT_INTERFACES = {
-    "IGpuTimerRenderer",
-    "IStorageBufferRenderer",
-    "ITexture2DArrayRenderer",
-    "IStorageTexture2DRenderer",
-    "IComputeShaderRenderer",
     "IEffectRenderer",
 }
 
 OUT_GRAPHICS_METHODS = {
     "GetShaderDialectEXT",
     "CreateEffectRenderer",
-    "CreateComputeShader",
-    "CreateStorageBuffer",
-    "CreateStorageBufferEXT",
-    "CreateTexture2DArrayEXT",
-    "CreateStorageTexture2DEXT",
-    "DispatchCompute",
-    "MemoryBarrierEXT",
     "ExecutesShaderEffectSourceEXT",
     "SupportsShadowSamplingEXT",
     "SupportsImageBasedLightingEXT",
-    "SupportsComputeShadersEXT",
-    "SupportsIndirectDrawEXT",
     "SupportsBaseInstanceDrawingEXT",
-    "SupportsComputeImageBindingEXT",
     "SupportsTexture3DSamplingEXT",
     "SupportsShaderLanguageEXT",
     "GetSurfaceFormatUsageSupportEXT",
     "GetDisplayColorSpaceEXT",
     "SetDisplayColorSpaceEXT",
-    "GetMaxVertexShaderStorageBlocksEXT",
-    "GetMaxStorageBufferBytesEXT",
     "GetMaxUniformBufferBytesEXT",
-    "GetMaxComputeStorageBufferBindingsEXT",
-    "GetMaxTextureArrayLayersEXT",
     "GetMaxSampledTexturesPerShaderStageEXT",
-    "GetMaxStorageImagesPerShaderStageEXT",
     "GetMaxVertexInputBindingsEXT",
     "GetMaxVertexInputAttributesEXT",
     "GetMaxColorAttachmentsEXT",
-    "GetMinStorageBufferOffsetAlignmentEXT",
     "GetMinUniformBufferOffsetAlignmentEXT",
-    "GetTimestampPeriodPicosecondsEXT",
-    "BindStorageBufferForDrawEXT",
-    "SupportsGpuTimerEXT",
-    "CreateGpuTimerEXT",
-    "GetMaxComputeWorkGroupCountEXT",
-    "GetMaxComputeWorkGroupSizeEXT",
-    "GetMaxComputeWorkGroupInvocationsEXT",
-    "DrawPrimitivesIndirectEXT",
-    "DrawIndexedPrimitivesIndirectEXT",
     "SetContextRecoveryEnabled",
     "SetUnsupported3DGraphicsCallBehavior",
     "GetUnsupported3DGraphicsCallBehavior",
@@ -209,12 +159,7 @@ OUT_GRAPHICS_EVIDENCE = {
 INTERFACE_EVIDENCE = {
     "IVertexBufferRenderer": "SDLGPU-59/78",
     "IIndexBufferRenderer": "SDLGPU-78",
-    "IGpuTimerRenderer": "out: plans/plan_modern.md",
     "IOcclusionQueryRenderer": "SDLGPU-80",
-    "IStorageBufferRenderer": "out: plans/plan_modern.md",
-    "ITexture2DArrayRenderer": "out: plans/plan_modern.md MOD-2226",
-    "IStorageTexture2DRenderer": "out: plans/plan_modern.md MOD-2227",
-    "IComputeShaderRenderer": "out: plans/plan_modern.md",
     "ITextureCubeRenderer": "SDLGPU-70/73/74/81",
     "ITexture3DRenderer": "SDLGPU-71/79/81",
     "ITextureRenderer": "SDLGPU-69/72/74/81",

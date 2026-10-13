@@ -198,32 +198,6 @@ namespace CNA::Internal::Renderers
      * returns 0 (no visible samples) or 1 (at least one visible sample), not an
      * exact pixel count. This matches FNA's behaviour on GLES3.
      */
-    /// plans/plan_modern.md MOD-2163: a GPU-side elapsed-time query around a range of commands.
-    ///
-    /// Deliberately not an occlusion query with a different name. The two look alike and are not:
-    /// an occlusion query counts samples and is answered by the rasteriser, while this measures
-    /// wall-clock time *on the GPU* and needs `GL_EXT_disjoint_timer_query` on ES or GL 3.3 on the
-    /// desktop. A renderer without it must report false rather than substitute a CPU clock, because
-    /// a CPU number wearing a GPU name is worse than no number -- it is a measurement of when the
-    /// driver returned, which is exactly the thing GPU timing exists to see past.
-    class IGpuTimerRenderer
-    {
-    public:
-        virtual ~IGpuTimerRenderer() = default;
-
-        /// Starts the timed range. Only one may be open at a time on most implementations.
-        virtual void Begin() = 0;
-
-        /// Ends the timed range. The result becomes available asynchronously, usually a frame later.
-        virtual void End() = 0;
-
-        /// Whether the GPU has finished and the result can be read without stalling.
-        [[nodiscard]] virtual bool IsResultAvailable() const = 0;
-
-        /// The elapsed GPU time in nanoseconds, or zero when no result is available.
-        [[nodiscard]] virtual std::uint64_t ElapsedNanoseconds() const = 0;
-    };
-
     class IOcclusionQueryRenderer
     {
     public:
@@ -240,235 +214,6 @@ namespace CNA::Internal::Renderers
         /// ratio -- the lensflare idiom -- gets 1/area rather than a fraction there, so it needs
         /// to be able to ask. Backends that genuinely count leave this alone.
         [[nodiscard]] virtual bool PixelCountIsPreciseEXT() const noexcept { return true; }
-    };
-
-    class ITextureRenderer;
-    class IStorageTexture2DRenderer;
-
-    /**
-     * @brief A GPU buffer a compute shader reads and writes (an SSBO, in GL terms).
-     *
-     * plans/plan_modern.md `MOD-1501`. Deliberately byte-oriented and free of every XNA type: a storage
-     * buffer holds whatever a shader says it holds, and a higher-level caller may place a typed view over it.
-     */
-    class IStorageBufferRenderer
-        : public std::enable_shared_from_this<IStorageBufferRenderer>
-    {
-    public:
-        /** @brief Virtual destructor. */
-        virtual ~IStorageBufferRenderer() = default;
-
-        /**
-         * @brief Uploads bytes into the buffer, starting at its beginning.
-         *
-         * @param data     The source bytes; must hold at least @p byteSize readable bytes.
-         * @param byteSize How many bytes to upload; must not exceed @ref GetByteSize.
-         */
-        virtual void SetData(const void* data, std::size_t byteSize) = 0;
-
-        /**
-         * @brief Reads bytes back out of the buffer, starting at its beginning.
-         *
-         * @param out      Receives the bytes; must have room for at least @p byteSize.
-         * @param byteSize How many bytes to read; must not exceed @ref GetByteSize.
-         */
-        virtual void GetData(void* out, std::size_t byteSize) const = 0;
-
-        /**
-         * @brief Uploads bytes into an exact buffer range.
-         * @param byteOffset First destination byte.
-         * @param data Source bytes.
-         * @param byteSize Number of bytes to upload.
-         * @return True when the complete range was accepted.
-         */
-        virtual bool SetDataRangeEXT(
-            std::size_t byteOffset, const void* data, std::size_t byteSize)
-        {
-            if (byteOffset != 0) return false;
-            SetData(data, byteSize);
-            return true;
-        }
-
-        /**
-         * @brief Reads bytes from an exact buffer range.
-         * @param byteOffset First source byte.
-         * @param out Destination bytes.
-         * @param byteSize Number of bytes to read.
-         * @return True when the complete range was accepted.
-         */
-        virtual bool GetDataRangeEXT(
-            std::size_t byteOffset, void* out, std::size_t byteSize) const
-        {
-            if (byteOffset != 0) return false;
-            GetData(out, byteSize);
-            return true;
-        }
-
-        /**
-         * @brief Copies bytes to another renderer-side storage buffer.
-         * @param destination Destination buffer record.
-         * @param sourceByteOffset First source byte.
-         * @param destinationByteOffset First destination byte.
-         * @param byteSize Number of bytes to copy.
-         * @return True when the complete GPU-side copy was accepted.
-         */
-        virtual bool CopyToEXT(
-            IStorageBufferRenderer& /*destination*/, std::size_t /*sourceByteOffset*/,
-            std::size_t /*destinationByteOffset*/, std::size_t /*byteSize*/)
-        {
-            return false;
-        }
-
-        /** @brief Returns the buffer's size in bytes. */
-        [[nodiscard]] virtual std::size_t GetByteSize() const = 0;
-
-        /**
-         * @brief Returns the immutable portable usage mask.
-         * @return Raw `storage-buffer usage` bits.
-         */
-        [[nodiscard]] virtual std::uint32_t GetUsageEXT() const
-        {
-            // Compatible pre-descriptor behavior: storage, two-way transfer and indirect use.
-            return UINT32_C(0x0F);
-        }
-
-        /**
-         * @brief Returns the immutable portable direct CPU-access mask.
-         * @return Raw `storage-buffer CPU-access` bits.
-         */
-        [[nodiscard]] virtual std::uint32_t GetCpuAccessEXT() const
-        {
-            return UINT32_C(0x03);
-        }
-    };
-
-    /**
-     * @brief One compiled compute program, and the bindings a dispatch of it reads.
-     *
-     * plans/plan_modern.md `MOD-1500`. Mirrors `IEffectRenderer`'s shape: the renderer owns the compiled
-     * object, the interface exposes only what a caller must be able to say about it, and no XNA
-     * type appears in a signature -- an image binding arrives as an `ITextureRenderer`, and the
-     * access mode as an ordinal (`CNA::GraphicsImageAccess`) rather than as an enumeration this
-     * header would have to include.
-     */
-    class IComputeShaderRenderer
-    {
-    public:
-        /** @brief Virtual destructor. */
-        virtual ~IComputeShaderRenderer() = default;
-
-        /**
-         * @brief Compiles and links the program.
-         *
-         * @param computeSrc The compute-shader source, in whatever language the renderer takes.
-         * @return True when the program linked; @ref GetCompileError says why when it did not.
-         */
-        virtual bool CompileProgram(const std::string& computeSrc) = 0;
-
-        /** @brief Makes this the program a following dispatch runs. */
-        virtual void Bind() = 0;
-
-        /**
-         * @brief Sets a scalar integer uniform.
-         *
-         * @param name  The uniform's name in the source.
-         * @param value The value.
-         */
-        virtual void SetUniformInt(const char* /*name*/, int /*value*/) {}
-
-        /**
-         * @brief Sets a scalar float uniform.
-         *
-         * @param name  The uniform's name in the source.
-         * @param value The value.
-         */
-        virtual void SetUniformFloat(const char* /*name*/, float /*value*/) {}
-
-        /**
-         * @brief Binds a storage buffer to one of the program's binding points.
-         *
-         * @param binding The binding index the shader declares.
-         * @param buffer  The buffer, or null to unbind.
-         */
-        virtual void BindStorageBuffer(int /*binding*/, IStorageBufferRenderer* /*buffer*/) {}
-
-        /**
-         * @brief Binds a read-only uniform/constant buffer to one program binding point.
-         *
-         * Returning false is the renderer-neutral refusal path; implementations must not accept
-         * and silently discard a constant-buffer binding.
-         *
-         * @param binding The binding index declared by the shader.
-         * @param buffer Shared buffer record, or null to clear the slot.
-         * @return True when the binding operation is implemented and accepted.
-         */
-        [[nodiscard]] virtual bool BindConstantBufferEXT(
-            int /*binding*/, IStorageBufferRenderer* /*buffer*/)
-        {
-            return false;
-        }
-
-        /**
-         * @brief Binds a texture as a readable/writable image.
-         *
-         * @param unit       The image unit the shader declares.
-         * @param texture    The texture, or null to unbind.
-         * @param accessMode A `CNA::GraphicsImageAccess` ordinal.
-         */
-        virtual void BindImageTexture(int /*unit*/, ITextureRenderer* /*texture*/,
-                                      int /*accessMode*/) {}
-
-        /**
-         * @brief Binds a tracked storage texture to a compute image slot.
-         *
-         * The shared record, rather than the public resource, is retained so deferred work can
-         * safely outlive public disposal. Returning false is the renderer-neutral refusal path;
-         * implementations must not accept and discard the binding.
-         *
-         * @param unit Direct image binding declared by the compute program.
-         * @param texture Renderer-owned storage texture record, or null to clear the slot.
-         * @param accessMode A `CNA::GraphicsImageAccess` ordinal.
-         * @return True when the binding was implemented and accepted.
-         */
-        [[nodiscard]] virtual bool BindStorageTexture2DEXT(
-            int /*unit*/, std::shared_ptr<IStorageTexture2DRenderer> /*texture*/,
-            int /*accessMode*/)
-        {
-            return false;
-        }
-
-        /**
-         * @brief Binds a texture to a sampler unit the program can sample.
-         *
-         * plans/plan_modern.md `MOD-1552`. Distinct from @ref BindImageTexture in what it needs of the
-         * texture: sampling has no immutability requirement, so this works where an image binding
-         * does not. The caller still sets the sampler uniform itself, with @ref SetUniformInt, for
-         * the same reason `IEffectRenderer` does -- the unit is data, not a name this layer knows.
-         *
-         * @param unit    The texture unit to bind to.
-         * @param texture The texture, or null to unbind.
-         */
-        virtual void BindTexture(int /*unit*/, ITextureRenderer* /*texture*/) {}
-
-        /**
-         * @brief Returns whether sampled textures use direct descriptor binding numbers.
-         *
-         * Source-language renderers return false and receive a matching integer sampler uniform
-         * after @ref BindTexture. Descriptor-language renderers return true because @p unit is
-         * already the shader binding and no name-based uniform exists.
-         *
-         * @return True when the sampled-texture binding is direct.
-         */
-        [[nodiscard]] virtual bool UsesDirectSampledTextureBindingsEXT() const
-        {
-            return false;
-        }
-
-        /** @brief Returns whether a program is currently linked and usable. */
-        [[nodiscard]] virtual bool IsValid() const = 0;
-
-        /** @brief Returns the compiler/linker log from the last failed @ref CompileProgram. */
-        [[nodiscard]] virtual std::string GetCompileError() const = 0;
     };
 
     /**
@@ -791,99 +536,6 @@ namespace CNA::Internal::Renderers
         }
         /** @brief Returns the raw SurfaceFormat ordinal used to create this texture. */
         [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
-    };
-
-    /**
-     * @brief Renderer-owned record for one sampled two-dimensional texture array.
-     *
-     * A sampled texture array can own this record through shared lifetime identity so future
-     * sampled bindings can retain internal work safely without retaining or dereferencing the
-     * public `GraphicsResource`. The interface intentionally exposes no native image/view handle.
-     * Layer and mip transfers are part of plans/plan_modern.md `MOD-2226`; defaults refuse them
-     * so a renderer cannot claim success by silently discarding bytes.
-     */
-    class ITexture2DArrayRenderer
-        : public std::enable_shared_from_this<ITexture2DArrayRenderer>
-    {
-    public:
-        /** @brief Releases the renderer-owned texture-array record. */
-        virtual ~ITexture2DArrayRenderer() = default;
-
-        /**
-         * @brief Uploads one validated rectangle of one array subresource.
-         *
-         * @return True only after the entire byte range has been accepted by the renderer.
-         */
-        [[nodiscard]] virtual bool SetData(
-            int /*layer*/, int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
-            const void* /*data*/, std::size_t /*byteCount*/)
-        {
-            return false;
-        }
-
-        /**
-         * @brief Reads one validated rectangle of one array subresource.
-         *
-         * @return True only after the entire requested byte range has been written.
-         */
-        [[nodiscard]] virtual bool GetData(
-            int /*layer*/, int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
-            void* /*data*/, std::size_t /*byteCount*/) const
-        {
-            return false;
-        }
-    };
-
-    /**
-     * @brief Renderer-owned record for one two-dimensional storage texture.
-     *
-     * A storage texture can own this record through shared lifetime identity so a
-     * deferred compute binding can retain native work without retaining or dereferencing the
-     * public `GraphicsResource`. The interface deliberately exposes no native image/view handle.
-     * Defaults refuse transfers so an unimplemented renderer cannot silently discard bytes.
-     */
-    class IStorageTexture2DRenderer
-        : public std::enable_shared_from_this<IStorageTexture2DRenderer>
-    {
-    public:
-        /** @brief Releases the renderer-owned storage-texture record. */
-        virtual ~IStorageTexture2DRenderer() = default;
-
-        /**
-         * @brief Uploads one validated rectangle of one mip level.
-         * @param mipLevel Zero-based mip level.
-         * @param x Rectangle origin on the x axis.
-         * @param y Rectangle origin on the y axis.
-         * @param width Rectangle width in texels.
-         * @param height Rectangle height in texels.
-         * @param data Source bytes.
-         * @param byteCount Exact source-byte count.
-         * @return True only after the complete byte range has been accepted.
-         */
-        [[nodiscard]] virtual bool SetData(
-            int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
-            const void* /*data*/, std::size_t /*byteCount*/)
-        {
-            return false;
-        }
-
-        /**
-         * @brief Reads one validated rectangle of one mip level.
-         * @param mipLevel Zero-based mip level.
-         * @param x Rectangle origin on the x axis.
-         * @param y Rectangle origin on the y axis.
-         * @param width Rectangle width in texels.
-         * @param height Rectangle height in texels.
-         * @param data Destination bytes.
-         * @param byteCount Exact destination-byte count.
-         * @return True only after the complete requested byte range has been written.
-         */
-        [[nodiscard]] virtual bool GetData(
-            int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
-            void* /*data*/, std::size_t /*byteCount*/) const
-        {
-            return false;
-        }
     };
 
     /**
@@ -1307,34 +959,6 @@ namespace CNA::Internal::Renderers
         /// simultaneously since each occupies a distinct binding target; the shader's own sampler
         /// type (`sampler2D`/`samplerCube`/`sampler3D`) determines which one is actually sampled.
         virtual void BindTexture3D(int unit, ITexture3DRenderer* texture) {}
-        /**
-         * @brief Binds or clears a sampled two-dimensional texture array.
-         *
-         * The shared record is intentional: an accepted deferred draw must not retain the public
-         * `GraphicsResource`, but its renderer work must remain alive until the consumer releases
-         * it. A null record clears the unit. False means the renderer did not implement this path.
-         *
-         * @param unit Zero-based texture-array sampler unit.
-         * @param texture Renderer-owned array record, or null to clear the unit.
-         * @return True when the binding operation was implemented and accepted.
-         */
-        [[nodiscard]] virtual bool BindTexture2DArrayEXT(
-            int /*unit*/, std::shared_ptr<ITexture2DArrayRenderer> /*texture*/)
-        {
-            return false;
-        }
-
-        /**
-         * @brief Binds or clears a storage texture through an ordinary sampled `texture2D` slot.
-         * @param unit Zero-based 2D sampler unit.
-         * @param texture Shared renderer record, or null to clear the unit.
-         * @return True when sampled storage textures are implemented and the request was accepted.
-         */
-        [[nodiscard]] virtual bool BindStorageTexture2DEXT(
-            int /*unit*/, std::shared_ptr<IStorageTexture2DRenderer> /*texture*/)
-        {
-            return false;
-        }
     };
 
     class ISpriteBatchRenderer
@@ -2858,49 +2482,6 @@ namespace CNA::Internal::Renderers
         virtual std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) { return nullptr; }
         virtual std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
 
-        /**
-         * @brief Creates a sampled two-dimensional texture array, or refuses it by returning null.
-         *
-         * This renderer-neutral factory is false by default. A renderer may override it only when
-         * its `MaxTextureArrayLayers` and every requested per-format usage bit describe the same
-         * implemented path. Native hardware availability alone is not sufficient.
-         *
-         * @param width Level-zero width in texels.
-         * @param height Level-zero height in texels.
-         * @param layerCount Number of array layers.
-         * @param mipLevelCount Number of allocated mip levels.
-         * @param surfaceFormat `SurfaceFormat` ordinal.
-         * @param usage `texture-array usage` bit mask.
-         * @return Renderer-owned record, or null when this path is unavailable.
-         */
-        virtual std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
-            int /*width*/, int /*height*/, int /*layerCount*/, int /*mipLevelCount*/,
-            int /*surfaceFormat*/, std::uint32_t /*usage*/)
-        {
-            return nullptr;
-        }
-
-        /**
-         * @brief Creates a two-dimensional storage texture, or refuses it by returning null.
-         *
-         * The factory is false by default. A renderer may override it only when its published
-         * storage-image limit and all requested per-format usages describe the same implemented
-         * allocation and transfer path.
-         *
-         * @param width Level-zero width in texels.
-         * @param height Level-zero height in texels.
-         * @param mipLevelCount Number of allocated mip levels.
-         * @param surfaceFormat `SurfaceFormat` ordinal.
-         * @param usage `storage-texture usage` bit mask.
-         * @return Renderer-owned record, or null when this path is unavailable.
-         */
-        virtual std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
-            int /*width*/, int /*height*/, int /*mipLevelCount*/, int /*surfaceFormat*/,
-            std::uint32_t /*usage*/)
-        {
-            return nullptr;
-        }
-
         /// Creates an off-screen FBO-backed render target. Returns nullptr on
         /// renderers that do not support render targets. `depthFormat` is the raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::DepthFormat (None=0, Depth16=1, Depth24=2,
@@ -3006,50 +2587,6 @@ namespace CNA::Internal::Renderers
         /// CompiledEffects so an old catch-all cannot accidentally advertise a native runtime.
         [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
 
-        /// plans/plan_modern.md MOD-1502: compute shaders and storage buffers. Every default is the
-        /// honest "this renderer cannot", so all renderer families compile unchanged and none of
-        /// them accidentally claims a feature it has never heard of -- the same opt-in shape
-        /// SupportsCompiledEffects uses, and for the same reason.
-        virtual std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
-            const std::string& /*computeSrc*/)
-        {
-            return nullptr;
-        }
-
-        /// Creates a storage buffer of @p byteSize bytes, or null where unsupported.
-        virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
-            std::size_t /*byteSize*/)
-        {
-            return nullptr;
-        }
-
-        /**
-         * @brief Creates a buffer with exact portable usage and direct CPU-access intent.
-         *
-         * This separate null default prevents an older renderer from accepting roles its native
-         * allocation did not declare. Individual roles carry their own capability requirements;
-         * in particular, indirect-only buffers do not require compute support. The compatible
-         * constructor continues through the factory above.
-         *
-         * @param byteSize Positive allocation size.
-         * @param usage Raw `storage-buffer usage` bits.
-         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
-         * @return Renderer-side buffer record, or null when unsupported.
-         */
-        virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
-            std::size_t /*byteSize*/, std::uint32_t /*usage*/, std::uint32_t /*cpuAccess*/)
-        {
-            return nullptr;
-        }
-
-        /// Runs the bound compute program over a grid of work groups. A no-op where unsupported.
-        virtual void DispatchCompute(IComputeShaderRenderer* /*shader*/, int /*groupsX*/,
-                                     int /*groupsY*/, int /*groupsZ*/) {}
-
-        /// Orders memory access after a dispatch. `barrierBits` is a `CNA::GraphicsMemoryBarrier`
-        /// bitmask, which each renderer translates into its own native bits.
-        virtual void MemoryBarrierEXT(int /*barrierBits*/) {}
-
         /// plans/plan_modern.md MOD-1699: whether the source text handed to `CreateEffectRenderer`
         /// actually determines the pixels. Three renderers answer this differently from
         /// `GraphicsCapability::CustomEffects`, and each way is legitimate: SOFTWARE and HEADLESS
@@ -3073,33 +2610,12 @@ namespace CNA::Internal::Renderers
         /// `iblBrdfLut`). Same reasoning as `SupportsShadowSamplingEXT`, and the same default.
         [[nodiscard]] virtual bool SupportsImageBasedLightingEXT() const { return false; }
 
-        /// plans/plan_modern.md MOD-1500: whether this renderer really implements compute. False by
-        /// default, and consulted by GraphicsDevice for GraphicsCapability::ComputeShaders rather
-        /// than that capability being answered by a renderer's own switch -- many of those end in
-        /// `default: return true`.
-        [[nodiscard]] virtual bool SupportsComputeShadersEXT() const { return false; }
-
-        /// plans/plan_modern.md MOD-2090: whether this renderer really issues indirect draws --
-        /// `DrawPrimitivesIndirectEXT` and `DrawIndexedPrimitivesIndirectEXT` below. False by
-        /// default, and consulted by GraphicsDevice for GraphicsCapability::IndirectDraw rather
-        /// than that capability being answered by a renderer's own switch, for the reason
-        /// SupportsComputeShadersEXT states.
-        [[nodiscard]] virtual bool SupportsIndirectDrawEXT() const { return false; }
-
         /**
          * @brief Reports whether instanced draws consume a non-zero first-instance value.
          *
          * @return `true` when `GpuDrawParams::firstInstance` is supported; otherwise `false`.
          */
         [[nodiscard]] virtual bool SupportsBaseInstanceDrawingEXT() const { return false; }
-
-        /// plans/plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
-        /// image. Separate from `SupportsComputeShadersEXT` because the two genuinely differ: GL ES
-        /// 3.1 requires an *immutable* texture (`glTexStorage2D`) for `glBindImageTexture`, and
-        /// CNA's textures are allocated mutably (`glTexImage2D`), so an ES context that fully
-        /// supports compute still cannot bind one. Desktop GL accepts a mutable texture. False by
-        /// default, like every other promise here.
-        [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
 
         /// plan_vulkan.md VULKAN-164: whether a `Texture3D` bound through
         /// `IEffectRenderer::BindTexture3D` is actually SAMPLED by the shader, as distinct from
@@ -3131,47 +2647,6 @@ namespace CNA::Internal::Renderers
             return space == CNA::DisplayColorSpace::Srgb;
         }
 
-        /// plans/plan_modern.md MOD-2091: how many storage buffers a VERTEX shader on this context may
-        /// read. GL ES 3.1 permits this to be zero -- a context can support compute completely and
-        /// still refuse an SSBO in a vertex stage -- so it is a separate number rather than
-        /// something derivable from `SupportsComputeShadersEXT()`. Zero means "not there", which is
-        /// what every renderer without compute returns.
-        [[nodiscard]] virtual int GetMaxVertexShaderStorageBlocksEXT() const { return 0; }
-
-        /// plans/plan_modern.md MOD-2091: binds a storage buffer to a binding point a following DRAW's
-        /// shaders read, rather than a following dispatch's. The binding points are the same set
-        /// `IComputeShaderRenderer::BindStorageBuffer` uses; what differs is only which stage reads
-        /// them, which is why this is on the renderer rather than on a program.
-        virtual void BindStorageBufferForDrawEXT(int /*binding*/,
-                                                 const IStorageBufferRenderer& /*buffer*/) {}
-
-        /// plans/plan_modern.md MOD-2163: whether this renderer can measure GPU time around a range of
-        /// commands. False by default, and false is the honest answer wherever the underlying API
-        /// has no timer query -- see IGpuTimerRenderer for why a CPU fallback is not offered.
-        [[nodiscard]] virtual bool SupportsGpuTimerEXT() const { return false; }
-
-        /// plans/plan_modern.md MOD-2163: creates a GPU timer, or null where SupportsGpuTimerEXT() is
-        /// false. Null rather than a stub that returns zeroes, so a caller cannot mistake "no
-        /// timer here" for "this pass took no time".
-        virtual std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() { return nullptr; }
-
-        /// plans/plan_modern.md MOD-1505: the dispatch limits this context guarantees, per axis
-        /// (0 = x, 1 = y, 2 = z). Zero means "unknown or unsupported", which is what every
-        /// renderer without compute returns.
-        [[nodiscard]] virtual int GetMaxComputeWorkGroupCountEXT(int /*axis*/) const { return 0; }
-
-        /// The largest local size a compute shader may declare, per axis.
-        [[nodiscard]] virtual int GetMaxComputeWorkGroupSizeEXT(int /*axis*/) const { return 0; }
-
-        /// The largest product of a compute shader's local sizes.
-        [[nodiscard]] virtual int GetMaxComputeWorkGroupInvocationsEXT() const { return 0; }
-
-        /**
-         * @brief Returns the largest byte range usable by one storage-buffer binding.
-         * @return Maximum bytes, or zero when storage buffers are unavailable or unclassified.
-         */
-        [[nodiscard]] virtual std::uint64_t GetMaxStorageBufferBytesEXT() const { return 0; }
-
         /**
          * @brief Returns the largest byte range usable by one uniform/constant-buffer binding.
          * @return Maximum bytes, or zero when constant buffers are unavailable or unclassified.
@@ -3179,28 +2654,10 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual std::uint64_t GetMaxUniformBufferBytesEXT() const { return 0; }
 
         /**
-         * @brief Returns the maximum compute-stage storage-buffer binding count.
-         * @return Maximum binding count, or zero when unsupported or unclassified.
-         */
-        [[nodiscard]] virtual int GetMaxComputeStorageBufferBindingsEXT() const { return 0; }
-
-        /**
-         * @brief Returns the maximum sampled two-dimensional texture-array layer count.
-         * @return Maximum layer count, or zero when texture arrays are unsupported or unclassified.
-         */
-        [[nodiscard]] virtual int GetMaxTextureArrayLayersEXT() const { return 0; }
-
-        /**
          * @brief Returns the maximum sampled-texture count visible to one shader stage.
          * @return Maximum sampled textures, or zero when unsupported or unclassified.
          */
         [[nodiscard]] virtual int GetMaxSampledTexturesPerShaderStageEXT() const { return 0; }
-
-        /**
-         * @brief Returns the maximum storage-image count visible to one shader stage.
-         * @return Maximum storage images, or zero when unsupported or unclassified.
-         */
-        [[nodiscard]] virtual int GetMaxStorageImagesPerShaderStageEXT() const { return 0; }
 
         /**
          * @brief Returns the maximum native vertex-buffer bindings consumed by one draw.
@@ -3221,15 +2678,6 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual int GetMaxColorAttachmentsEXT() const { return 0; }
 
         /**
-         * @brief Returns required storage-buffer binding-offset alignment in bytes.
-         * @return Required alignment, or zero when storage buffers are unavailable or unclassified.
-         */
-        [[nodiscard]] virtual std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const
-        {
-            return 0;
-        }
-
-        /**
          * @brief Returns required uniform/constant-buffer binding-offset alignment in bytes.
          * @return Required alignment, or zero when constant buffers are unavailable or unclassified.
          */
@@ -3237,12 +2685,6 @@ namespace CNA::Internal::Renderers
         {
             return 0;
         }
-
-        /**
-         * @brief Returns one GPU timestamp tick's duration in picoseconds.
-         * @return Picoseconds per tick, rounded to the nearest integer, or zero when unavailable.
-         */
-        [[nodiscard]] virtual std::uint64_t GetTimestampPeriodPicosecondsEXT() const { return 0; }
 
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
@@ -3614,75 +3056,6 @@ namespace CNA::Internal::Renderers
             }
             throw std::runtime_error(
                 "DrawInstancedPrimitives is not supported on this graphics renderer.");
-        }
-
-        /**
-         * @brief Draws with the count and offsets read out of a GPU buffer instead of passed in.
-         *
-         * plans/plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
-         * @p argumentByteOffset, and the renderer never looks at it: the numbers are fetched by
-         * the GPU as the command is issued, which is the whole point -- a compute shader can
-         * decide how much to draw without the answer travelling back through the CPU.
-         *
-         * The consequence is that **none of the range validation the ordinary routes perform is
-         * possible here.** `GraphicsDevice` checks that a requested primitive range fits the bound
-         * buffers before every other draw; that check cannot exist for this one, because the range
-         * is in GPU memory. A wrong count is undefined behaviour rather than an exception, and the
-         * shader that wrote it owns the obligation. Everything the CPU *can* still check --
-         * that a buffer is bound, an effect applied, and the argument offset inside the buffer --
-         * is checked in `GraphicsDevice` exactly as it is for the other routes.
-         *
-         * @param vb                 The bound vertex buffer, as for `DrawPrimitivesEx`.
-         * @param world              The world matrix.
-         * @param view               The view matrix.
-         * @param projection         The projection matrix.
-         * @param primitive          The topology; the argument buffer supplies only counts, never this.
-         * @param argumentBuffer     The buffer holding the arguments. Never null.
-         * @param argumentByteOffset Where in it they start, in bytes.
-         * @param params             The same complete draw description the ordinary routes take.
-         */
-        virtual void DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
-                                               const Matrix& world,
-                                               const Matrix& view,
-                                               const Matrix& projection,
-                                               PrimitiveType primitive,
-                                               const IStorageBufferRenderer& argumentBuffer,
-                                               int argumentByteOffset,
-                                               const GpuDrawParams& params)
-        {
-            (void)vb; (void)world; (void)view; (void)projection; (void)primitive;
-            (void)argumentBuffer; (void)argumentByteOffset; (void)params;
-            throw std::runtime_error(
-                "Indirect drawing is not supported on this graphics renderer.");
-        }
-
-        /**
-         * @brief Indexed counterpart of @ref DrawPrimitivesIndirectEXT.
-         *
-         * @param vb                 The bound vertex buffer.
-         * @param ib                 The bound index buffer.
-         * @param world              The world matrix.
-         * @param view               The view matrix.
-         * @param projection         The projection matrix.
-         * @param primitive          The topology.
-         * @param argumentBuffer     The buffer holding a `CNA::IndirectDrawIndexedArguments`.
-         * @param argumentByteOffset Where in it they start, in bytes.
-         * @param params             The same complete draw description the ordinary routes take.
-         */
-        virtual void DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
-                                                      const IIndexBufferRenderer& ib,
-                                                      const Matrix& world,
-                                                      const Matrix& view,
-                                                      const Matrix& projection,
-                                                      PrimitiveType primitive,
-                                                      const IStorageBufferRenderer& argumentBuffer,
-                                                      int argumentByteOffset,
-                                                      const GpuDrawParams& params)
-        {
-            (void)vb; (void)ib; (void)world; (void)view; (void)projection; (void)primitive;
-            (void)argumentBuffer; (void)argumentByteOffset; (void)params;
-            throw std::runtime_error(
-                "Indirect drawing is not supported on this graphics renderer.");
         }
 
         /// Disables context-loss recovery on the running renderer.

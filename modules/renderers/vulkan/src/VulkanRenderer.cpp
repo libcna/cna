@@ -2578,10 +2578,6 @@ namespace CNA::Internal::Renderers::Vulkan
             // directly (the C ABI, a renderer test) cannot be told something the seam would deny.
             case CNA::GraphicsCapability::CompiledEffects:
                 return SupportsCompiledEffects();
-            // MRT-007 removes these two cases together with the enumerators.
-            case CNA::GraphicsCapability::ComputeShaders:
-            case CNA::GraphicsCapability::IndirectDraw:
-                return false;
             case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
                 return SupportsHalfFloatTextureLinearFilteringEXT();
             case CNA::GraphicsCapability::FloatRenderTargets:

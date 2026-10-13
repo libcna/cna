@@ -37,9 +37,8 @@ namespace CNA
     /**
      * @brief Identifies the programmable pipeline stage an explicit shader payload implements.
      *
-     * Values are public and append-only. `Fragment` is used instead of the XNA-era `Pixel` name
-     * because this enum also describes modern renderer payloads and is independent of XNA sampler
-     * collection stages.
+     * Values are public. `Fragment` is used instead of the XNA-era `Pixel` name because this enum
+     * describes explicit shader payloads and is independent of XNA sampler collection stages.
      */
     enum class ShaderStageEXT : int
     {
@@ -49,10 +48,8 @@ namespace CNA
         Vertex = 1,
         /** @brief Fragment- or pixel-processing stage. */
         Fragment = 2,
-        /** @brief Compute-dispatch stage. */
-        Compute = 3,
         /** @brief Number of declared stage identities; not itself a shader stage. */
-        Count = 4
+        Count = 3
     };
 
     /**

@@ -380,7 +380,6 @@ static CNA_Result on_load(CNA_Handle game, const CNA_GameTime *game_time,
 
   CNA_Bool supported = CNA_FALSE;
   uint32_t color_space = 0;
-  int32_t limit = 0;
   if (cna_graphics_device_executes_shader_effect_source_ext(
           graphics_device, &supported) != CNA_RESULT_SUCCESS ||
       cna_graphics_device_supports_image_based_lighting_ext(
@@ -394,12 +393,6 @@ static CNA_Result on_load(CNA_Handle game, const CNA_GameTime *game_time,
           graphics_device, color_space, &supported)) ||
       !is_supported(cna_graphics_device_set_display_color_space_ext(
           graphics_device, color_space, &supported)) ||
-      cna_graphics_device_get_max_compute_work_group_count_ext(
-          graphics_device, 0, &limit) != CNA_RESULT_SUCCESS ||
-      cna_graphics_device_get_max_compute_work_group_size_ext(
-          graphics_device, 0, &limit) != CNA_RESULT_SUCCESS ||
-      cna_graphics_device_get_max_compute_work_group_invocations_ext(
-          graphics_device, &limit) != CNA_RESULT_SUCCESS ||
       !is_supported(cna_graphics_device_notify_content_lost_resources_ext(
           graphics_device))) {
     return CNA_RESULT_INVALID_STATE;
@@ -440,8 +433,6 @@ static int validate_effects(void) {
 }
 
 int main(void) {
-  CNA_IndirectDrawArguments draw = {0};
-  CNA_IndirectDrawIndexedArguments indexed = {0};
   CNA_ImageBasedLightEXT light = {0};
   CNA_Bool valid = CNA_TRUE;
   uint64_t title_bytes = 0;
@@ -449,11 +440,7 @@ int main(void) {
   const CNA_StringView title = {name, sizeof(name) - 1U};
   const CNA_StringView uniform_name = {"u_test", 6U};
   const float uniform_values[16] = {0};
-  if (cna_indirect_draw_arguments_init(&draw) != CNA_RESULT_SUCCESS ||
-      cna_indirect_draw_indexed_arguments_init(&indexed) !=
-          CNA_RESULT_SUCCESS ||
-      draw.vertex_count != 0U || indexed.index_count != 0U ||
-      cna_image_based_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
+  if (cna_image_based_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
       cna_image_based_light_ext_is_valid(&light, &valid) !=
           CNA_RESULT_SUCCESS ||
       valid != CNA_FALSE ||

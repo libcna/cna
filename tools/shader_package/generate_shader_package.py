@@ -21,7 +21,7 @@ from typing import Any
 
 
 SKIP = 77
-STAGES = {"vertex": 0, "fragment": 1, "compute": 2}
+STAGES = {"vertex": 0, "fragment": 1}
 FORMATS = {"text", "spirv", "wgsl"}
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 NAMESPACE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$")
@@ -31,10 +31,9 @@ SHADERC_ENV_VERSION_VULKAN_1_0 = 1 << 22
 SHADERC_SPIRV_VERSION_1_0 = 0x010000
 SHADERC_OPTIMIZATION_ZERO = 0
 SHADERC_OPTIMIZATION_PERFORMANCE = 2
-# plans/plan_vulkan_modern_graphics.md VMG-0012: "performance" (the default, and what every package
-# before this one uses) drops OpName/OpMemberName, and Vulkan's ComputeShader::setUniform binds a
-# scalar by its push-constant member NAME -- so a package that uses named scalar uniforms says
-# "zero", which keeps the names. Recorded in the header like every other compiler option.
+# "performance" (the default, and what every checked-in package uses) drops OpName/OpMemberName;
+# "zero" keeps the names for a consumer that reflects push-constant members by name. Recorded in
+# the header like every other compiler option.
 OPTIMIZATION_LEVELS = {"performance": SHADERC_OPTIMIZATION_PERFORMANCE, "zero": SHADERC_OPTIMIZATION_ZERO}
 
 
@@ -559,7 +558,7 @@ def generate(manifest: dict[str, Any], manifest_raw: bytes, payloads: list[Paylo
         assert library_path is not None and naga_path is not None
         naga = naga_toolchain(naga_path)
         # Always unoptimized: WGSL keeps every block member's name, which the WebGPU renderer's
-        # name-based scalar uniforms (ComputeShader::setUniform) need, and it stays readable.
+        # name-based uniform reflection reads, and it stays readable.
         compiler = ShadercCompiler(library_path, "zero")
         try:
             if toolchain is None:

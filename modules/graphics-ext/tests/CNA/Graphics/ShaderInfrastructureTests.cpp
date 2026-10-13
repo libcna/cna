@@ -109,14 +109,14 @@ TEST(ShaderCodeEXTTest, BinaryOwnsEveryFieldAndSurvivesCallerMutation)
 {
     std::vector<std::uint8_t> bytes = {0x03, 0x02, 0x23, 0x07};
     ShaderCodeEXT code(
-        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
-        "main", "compute/cull.spv", bytes);
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+        "main", "effect/tonemap.frag.spv", bytes);
 
     bytes[0] = 0;
     EXPECT_EQ(code.getLanguage(), CNA::ShaderLanguageEXT::SpirV);
-    EXPECT_EQ(code.getStage(), CNA::ShaderStageEXT::Compute);
+    EXPECT_EQ(code.getStage(), CNA::ShaderStageEXT::Fragment);
     EXPECT_EQ(code.getEntryPoint(), "main");
-    EXPECT_EQ(code.getSourceLabel(), "compute/cull.spv");
+    EXPECT_EQ(code.getSourceLabel(), "effect/tonemap.frag.spv");
     EXPECT_FALSE(code.isText());
     EXPECT_TRUE(code.isBinary());
     EXPECT_EQ(code.getPayloadByteSize(), 4U);
@@ -202,14 +202,14 @@ TEST(ShaderCodeEXTTest, EmptyEntryPointAndPayloadsAreRejectedButAnEmptyLabelIsAl
         CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
         "", "text", "source"), std::invalid_argument);
     EXPECT_THROW(ShaderCodeEXT(
-        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
         "", "binary", std::vector<std::uint8_t>{1, 2, 3, 4}),
         std::invalid_argument);
     EXPECT_THROW(ShaderCodeEXT(
         CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
         "main", "text", ""), std::invalid_argument);
     EXPECT_THROW(ShaderCodeEXT(
-        CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Compute,
+        CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Vertex,
         "main", "binary", std::vector<std::uint8_t>{}), std::invalid_argument);
 
     const ShaderCodeEXT unlabeled(
@@ -223,15 +223,15 @@ TEST(ShaderCodeEXTTest, SpirVRequiresWholeWordsWhileDxilRemainsByteAddressed)
     for (const std::size_t byteCount : {1U, 2U, 3U, 5U, 6U, 7U})
     {
         EXPECT_THROW(ShaderCodeEXT(
-            CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+            CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
             "main", "bad.spv", std::vector<std::uint8_t>(byteCount, 0)),
             std::invalid_argument);
     }
     EXPECT_NO_THROW(ShaderCodeEXT(
-        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+        CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
         "main", "one-word.spv", std::vector<std::uint8_t>(4, 0)));
     EXPECT_NO_THROW(ShaderCodeEXT(
-        CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Compute,
+        CNA::ShaderLanguageEXT::Dxil, CNA::ShaderStageEXT::Fragment,
         "main", "byte.dxil", std::vector<std::uint8_t>{0}));
 }
 
@@ -280,7 +280,7 @@ TEST(ShaderPackageEXTTest, OwnsMultiLanguageVariantsStagesAndBindingsAcrossCopyA
                   CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment}));
     EXPECT_TRUE(package.requiresStage(CNA::ShaderStageEXT::Vertex));
     EXPECT_TRUE(package.requiresStage(CNA::ShaderStageEXT::Fragment));
-    EXPECT_FALSE(package.requiresStage(CNA::ShaderStageEXT::Compute));
+    EXPECT_FALSE(package.requiresStage(CNA::ShaderStageEXT::Unknown));
     EXPECT_FALSE(package.requiresStage(static_cast<CNA::ShaderStageEXT>(999)));
     ASSERT_EQ(package.getBindingRequirements().size(), 1U);
     const auto& binding = package.getBindingRequirements()[0];
@@ -300,11 +300,7 @@ TEST(ShaderPackageEXTTest, BindingKindsHaveStableUniqueOrdinals)
     EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTexture2D), 0);
     EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTextureCube), 1);
     EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTexture3D), 2);
-    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::SampledTexture2DArray), 3);
-    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::StorageBuffer), 4);
-    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::StorageTexture2D), 5);
-    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::ConstantBuffer), 6);
-    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::Count), 7);
+    EXPECT_EQ(static_cast<int>(ShaderBindingTypeEXT::Count), 3);
 }
 
 TEST(ShaderPackageEXTTest, BindingRequirementRejectsInvalidFields)
@@ -423,7 +419,7 @@ TEST(ShaderPackageEXTTest, BindingsAreUniquePerStageAndConsistentAcrossStages)
                 "texture", 0, ShaderBindingTypeEXT::SampledTexture2D,
                 CNA::ShaderStageEXT::Vertex),
             ShaderBindingRequirementEXT(
-                "texture", 0, ShaderBindingTypeEXT::StorageBuffer,
+                "texture", 0, ShaderBindingTypeEXT::SampledTextureCube,
                 CNA::ShaderStageEXT::Fragment)}), std::invalid_argument);
     EXPECT_NO_THROW(ShaderPackageEXT(
         variants, stages,
@@ -511,7 +507,7 @@ TEST(ShaderPackageSelectionEXTTest, StablePreferenceIgnoresDeclarationOrderAndOw
         EXPECT_EQ(selection.getCode()[1].getStage(), CNA::ShaderStageEXT::Vertex);
         ASSERT_NE(selection.findStage(CNA::ShaderStageEXT::Vertex), nullptr);
         EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Vertex)->getSourceLabel(), "vertex");
-        EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Compute), nullptr);
+        EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Unknown), nullptr);
         EXPECT_NE(selection.getDiagnostic().find(": selected"), std::string::npos);
     }
 }
@@ -565,121 +561,6 @@ TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
     EXPECT_NE(selection.getDiagnostic().find("ambiguous duplicate Vertex"), std::string::npos);
     EXPECT_NE(selection.getDiagnostic().find("first"), std::string::npos);
     EXPECT_NE(selection.getDiagnostic().find("second"), std::string::npos);
-}
-
-TEST(ShaderPackageSelectionEXTTest, FragmentStorageRequiresAnAvailableBufferRoute)
-{
-    CnaTest::RetroGraphics::HiDefDevice device;
-    if (device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
-        GTEST_SKIP() << "this renderer has a storage-buffer creation route";
-
-    CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
-    for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
-                                 CNA::ShaderLanguageEXT::Wgsl,
-                                 CNA::ShaderLanguageEXT::Hlsl,
-                                 CNA::ShaderLanguageEXT::GlslDesktop,
-                                 CNA::ShaderLanguageEXT::GlslEs})
-    {
-        if (device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Fragment))
-        {
-            language = candidate;
-            break;
-        }
-    }
-    if (language == CNA::ShaderLanguageEXT::Unknown)
-        GTEST_SKIP() << "this renderer has no selectable fragment language";
-
-    std::vector<ShaderCodeEXT> variants;
-    if (language == CNA::ShaderLanguageEXT::SpirV)
-        variants.emplace_back(language, CNA::ShaderStageEXT::Fragment, "main", "fragment",
-                              std::vector<std::uint8_t>{1, 2, 3, 4});
-    else
-        variants.emplace_back(language, CNA::ShaderStageEXT::Fragment, "main", "fragment", "source");
-    const auto selection = ShaderPackageEXT(
-        std::move(variants), {CNA::ShaderStageEXT::Fragment},
-        {ShaderBindingRequirementEXT("lights", 6, ShaderBindingTypeEXT::StorageBuffer,
-                                     CNA::ShaderStageEXT::Fragment)}).selectFor(device);
-
-    EXPECT_FALSE(selection.isUsable());
-    EXPECT_NE(selection.getDiagnostic().find("requires ComputeShaders"), std::string::npos);
-}
-
-TEST(ShaderPackageSelectionEXTTest, RequiredVertexStorageBindingIsCapabilityChecked)
-{
-    CnaTest::RetroGraphics::HiDefDevice device;
-    CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
-    for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
-                                 CNA::ShaderLanguageEXT::Wgsl,
-                                 CNA::ShaderLanguageEXT::Hlsl,
-                                 CNA::ShaderLanguageEXT::GlslDesktop,
-                                 CNA::ShaderLanguageEXT::GlslEs})
-    {
-        if (device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Vertex))
-        {
-            language = candidate;
-            break;
-        }
-    }
-    if (language == CNA::ShaderLanguageEXT::Unknown)
-        GTEST_SKIP() << "this renderer has no selectable vertex language";
-
-    std::vector<ShaderCodeEXT> variants;
-    if (language == CNA::ShaderLanguageEXT::SpirV)
-        variants.emplace_back(
-            language, CNA::ShaderStageEXT::Vertex, "main", "vertex",
-            std::vector<std::uint8_t>{1, 2, 3, 4});
-    else
-        variants.emplace_back(
-            language, CNA::ShaderStageEXT::Vertex, "main", "vertex", "source");
-    const auto selection = ShaderPackageEXT(
-        std::move(variants), {CNA::ShaderStageEXT::Vertex},
-        {ShaderBindingRequirementEXT(
-            "instances", 2147483647, ShaderBindingTypeEXT::StorageBuffer,
-            CNA::ShaderStageEXT::Vertex)}).selectFor(device);
-
-    EXPECT_FALSE(selection.isUsable());
-    EXPECT_NE(
-        selection.getDiagnostic().find("exceeds vertex storage-buffer bindings"),
-        std::string::npos);
-}
-
-TEST(ShaderPackageSelectionEXTTest, ConstantBuffersHaveOnlyThePublishedComputeRoute)
-{
-    CnaTest::RetroGraphics::HiDefDevice device;
-    CNA::ShaderLanguageEXT language = CNA::ShaderLanguageEXT::Unknown;
-    for (const auto candidate : {CNA::ShaderLanguageEXT::SpirV,
-                                 CNA::ShaderLanguageEXT::Wgsl,
-                                 CNA::ShaderLanguageEXT::Hlsl,
-                                 CNA::ShaderLanguageEXT::GlslDesktop,
-                                 CNA::ShaderLanguageEXT::GlslEs})
-    {
-        if (device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Vertex))
-        {
-            language = candidate;
-            break;
-        }
-    }
-    if (language == CNA::ShaderLanguageEXT::Unknown)
-        GTEST_SKIP() << "this renderer has no selectable vertex language";
-
-    std::vector<ShaderCodeEXT> variants;
-    if (language == CNA::ShaderLanguageEXT::SpirV)
-        variants.emplace_back(
-            language, CNA::ShaderStageEXT::Vertex, "main", "vertex",
-            std::vector<std::uint8_t>{1, 2, 3, 4});
-    else
-        variants.emplace_back(
-            language, CNA::ShaderStageEXT::Vertex, "main", "vertex", "source");
-    const auto selection = ShaderPackageEXT(
-        std::move(variants), {CNA::ShaderStageEXT::Vertex},
-        {ShaderBindingRequirementEXT(
-            "Parameters", 0, ShaderBindingTypeEXT::ConstantBuffer,
-            CNA::ShaderStageEXT::Vertex)}).selectFor(device);
-
-    EXPECT_FALSE(selection.isUsable());
-    EXPECT_NE(
-        selection.getDiagnostic().find("has no portable non-compute binding route yet"),
-        std::string::npos);
 }
 
 TEST(ShaderPackageOverloadTest, ShaderEffectRejectsMismatchedCodeAndWrongPackageStages)

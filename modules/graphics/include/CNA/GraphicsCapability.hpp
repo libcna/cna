@@ -160,39 +160,6 @@ namespace CNA
          * Reported for the half-float formats (`HalfSingle`/`HalfVector2`/`HalfVector4`/
          * `HdrBlendable`); 32-bit float filtering is a separate capability.
          */
-        HalfFloatTextureLinearFiltering,
-
-        /**
-         * @brief Compute shaders and the storage buffers they read and write.
-         *
-         * GL ES 3.1 / desktop GL 4.3 and later, Vulkan and D3D11 can express this; every
-         * fixed-function and 2D-only renderer cannot, and neither can the GL profiles below 3.1
-         * that several CNA renderers target.
-         *
-         * @note **Derived**, like `FloatRenderTargets` and `CompiledEffects` and for the same
-         * reason: it is answered by `IGraphicsRenderer::SupportsComputeShadersEXT()`, whose default
-         * is false, never by a renderer's own capability switch -- many of those end in
-         * `default: return true`, which would have every renderer claim compute it has never heard
-         * of. See `plans/plan_modern.md` MOD-1500.
-         */
-        ComputeShaders,
-
-        /**
-         * @brief Indirect draws: the vertex/index count, instance count and offsets of a draw are
-         * read out of a GPU buffer instead of being passed as arguments.
-         *
-         * This is the one piece of GPU-driven rendering the reference renderer's profile floor can
-         * actually reach (`plans/plan_modern.md` MOD-2090): GL ES 3.1 and desktop GL 4.0 have
-         * `glDrawArraysIndirect`/`glDrawElementsIndirect`, and mesh shaders and the rest of that
-         * family do not exist below GL 4.6. What it buys is the ability for a compute shader to
-         * decide how much to draw without the answer travelling back through the CPU -- which is a
-         * pipeline stall, not merely a copy.
-         *
-         * @note **Derived**, like `ComputeShaders` and for the same reason: it is answered by
-         * `IGraphicsRenderer::SupportsIndirectDrawEXT()`, whose default is false, and never by a
-         * renderer's own capability switch -- many of those end in `default: return true`, which
-         * would have every renderer claim an entry point it has never called.
-         */
-        IndirectDraw
+        HalfFloatTextureLinearFiltering
     };
 } // CNA
