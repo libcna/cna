@@ -61,10 +61,10 @@ namespace
 {
     constexpr int kTotalFrames = 60;
 #if defined(CNA_SDL_GPU_SHADER_EFFECTS)
-    constexpr int kExpectedChecks = 30;
+    constexpr int kExpectedChecks = 31;
 #else
     // Unsupported-compiler builds also verify the diagnostic returned by CreateEffectRenderer.
-    constexpr int kExpectedChecks = 30;
+    constexpr int kExpectedChecks = 31;
 #endif
 
     int RunHeadlessGraphicsDeviceProbe(const char* requestedDriver)
@@ -209,8 +209,13 @@ protected:
                       unavailableEffect->GetCompileError().find("target-native") != std::string::npos,
                   "unavailable ShaderEffect construction returns a precise diagnostic");
 #endif
-            check(dev.SupportsCapability(CNA::GraphicsCapability::Texture3D),
-                  "Texture3D is reported because storage and transfer are real");
+            // BINDFIX-037 made the public Texture3D answer a profile fact too: XNA's Reach profile
+            // has no volume textures. The renderer's promise and the public answer stay two checks.
+            check(renderer.SupportsCapability(CNA::GraphicsCapability::Texture3D),
+                  "Texture3D storage and transfer are implemented by the renderer");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::Texture3D) ==
+                      (dev.getGraphicsProfileProperty() == GraphicsProfile::HiDef),
+                  "the public Texture3D answer follows the XNA profile (false under Reach)");
             check(dev.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending),
                   "AdditiveBlending is reported because the pixel contract passes");
             check(dev.SupportsCapability(CNA::GraphicsCapability::CompiledEffects) ==
