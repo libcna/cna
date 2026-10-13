@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTERFACE_HEADER = ROOT / "modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+LEASE_HEADER = ROOT / "modules/graphics/include/CNA/Internal/Renderers/Common/RendererThreadContextLease.hpp"
 SDL_HEADER = ROOT / "modules/renderers/sdl-gpu/include/CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 EASYGL_HEADER = ROOT / "modules/renderers/easygl/include/CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 MANIFEST = ROOT / "plans/sdlgpu_renderer_contract_audit.csv"
@@ -240,6 +241,14 @@ GRAPHICS_EVIDENCE_GROUPS = (
         "SDLGPU-79",
         {"CreateCompiledEffect", "SupportsCompiledEffects"},
     ),
+    # Hooks the renderer contract gained after this audit was written. The evidence names the task
+    # that introduced each one; whether SDL_GPU's inherited default is acceptable has not been
+    # reviewed, so the generator still reports those rows as unresolved.
+    ("XNA-MISSING-011", {"PresentRegionEXT"}),
+    ("SOFTWARE-160", {"ApplyRasterizerMultiSampleState"}),
+    ("SOFTWARE-322", {"RequiresManagedBufferedDrawRangeValidationEXT"}),
+    ("SOFTWARE-333", {"HasRealBackBufferDepthBuffer", "HasRealBackBufferStencilBuffer"}),
+    ("FULLSCREEN-001", {"TryBeginDrawEXT"}),
 )
 
 GRAPHICS_EVIDENCE = {
@@ -356,7 +365,7 @@ ALLOWED_CLASSIC_SDL_INHERITED: set[tuple[str, str, str]] = {
 }
 
 ALLOWED_CLASSIC_SDL_UNAVAILABLE = {
-    ("IRendererThreadContextLease", "~ :: void ()"),
+    ("IRendererThreadContextLease", "~ :: void () noexcept"),
 }
 
 ALLOWED_CLASSIC_SDL_LIMITATIONS = {
@@ -638,7 +647,7 @@ def expected_rows(sdl_build: Path, easygl_build: Path) -> list[dict[str, str]]:
         if class_name.startswith("EasyGL")
     }
     interface_records = ast_records(
-        sdl_entry, "CNA::Internal::Renderers::I", interface_names, {INTERFACE_HEADER})
+        sdl_entry, "CNA::Internal::Renderers::I", interface_names, {INTERFACE_HEADER, LEASE_HEADER})
     sdl_records = ast_records(
         sdl_entry, "CNA::Internal::Renderers::SdlGpu::SdlGpu", sdl_class_names, {SDL_HEADER})
     easygl_records = ast_records(
@@ -646,6 +655,9 @@ def expected_rows(sdl_build: Path, easygl_build: Path) -> list[dict[str, str]]:
         {EASYGL_HEADER, Path(easygl_entry["file"])})
 
     interface_source = INTERFACE_HEADER.read_text(encoding="utf-8")
+    # IRendererThreadContextLease lives in its own header; default-body classification reads
+    # byte offsets, so each interface must be read against the file that declares it.
+    lease_source = LEASE_HEADER.read_text(encoding="utf-8")
     sdl_source = SDL_HEADER.read_text(encoding="utf-8")
     easygl_source = EASYGL_HEADER.read_text(encoding="utf-8")
     sdl_methods = {
@@ -660,7 +672,8 @@ def expected_rows(sdl_build: Path, easygl_build: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for interface in INTERFACE_IMPLEMENTATIONS:
         easygl_implementations, sdl_implementations = INTERFACE_IMPLEMENTATIONS[interface]
-        for method in record_methods(interface_records[interface], interface, interface_source):
+        source = lease_source if interface == "IRendererThreadContextLease" else interface_source
+        for method in record_methods(interface_records[interface], interface, source):
             scope = scope_for(interface, method.name)
             easygl_status = implementation_status(method, easygl_implementations, easygl_methods)
             sdl_status = implementation_status(method, sdl_implementations, sdl_methods)
@@ -761,7 +774,7 @@ def validate(rows: list[dict[str, str]]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sdl-build", type=Path, default=ROOT / "cmake-build-sdlgpu")
-    parser.add_argument("--easygl-build", type=Path, default=ROOT / "cmake-build-debug")
+    parser.add_argument("--easygl-build", type=Path, default=ROOT / "cmake-build-multi")
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
     rows = expected_rows(args.sdl_build.resolve(), args.easygl_build.resolve())
