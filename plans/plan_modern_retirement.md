@@ -24,6 +24,7 @@ of the retired layer, is rewritten against public CNA APIs first.
 | MRT-009 | Tests and tooling: capability truth/snapshot/contract/defaults/profile tests, `ShaderInfrastructureTests`, SDL_GPU contract audit manifest, shader-package generator compute stage | done |
 | MRT-010 | Documentation: `docs/vulkan-renderer.md` rewritten against the surviving renderer; `docs/modern-gpu-baseline.md` deleted; capability-profile, WebGPU, diagnostics, parity-ledger and FNA3D documents corrected | done |
 | MRT-011 | Validation: HEADLESS/C API, multi-renderer, Vulkan, WebGPU, SDL_GPU, EasyGL and MinGW DirectX 11 builds; glTF/PBR/IBL/shadow, graphics-ext, C API and ABI suites; simulator build, tests and smoke | done |
+| MRT-012 | cna-dotnet `modules` branch admits C ABI 0.47.0: `GraphicsCapability.ComputeShaders`/`IndirectDraw`, their `CnaGraphicsCapability` twins and the storage format-usage members removed; policy, allowlist, fixtures, CI pins and tests move from 0.46.0 | done |
 
 Ordinal policy: surviving `RendererFeature`, `RendererLimit` and `RendererFormatUsage` values keep
 their numbers; the retired ordinals and bits are permanently reserved (as retired renderer
@@ -33,4 +34,6 @@ Outcome (2026-10-13): MRT-001 in living-room-simulator `develop` (5e3f541, 58ec4
 MRT-002..006 one commit per renderer family; MRT-007/008/009 one commit, because the C ABI and the
 tests must change with the C++ enumerations to keep every tree building; MRT-010 the documentation.
 Validation is recorded in the MRT-007/008/009 commit message. Runtime evidence for DirectX 11 is
-Wine+DXVK only; Metal (not built here) was never an implementer of the retired layer.
+Wine+DXVK only; Metal (not built here) was never an implementer of the retired layer. MRT-012 is
+cna-dotnet `modules` f1f88e1; its `develop` stays on 0.46.0 until CNA `modules` reaches `next`, and
+CI's native-library secret must then hold a 0.47.0 build.
