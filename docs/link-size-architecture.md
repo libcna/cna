@@ -84,6 +84,13 @@ was kept, except that an `IPlatform` implementation overrides `GetCameraService(
   new `ContentManager` or `RegisterBuiltinLoaders()` for `.cnb` loaders). The registries'
   observable answers are pinned by `ContentTypeReaderManagerTests` and the `.cnb` registry tests,
   which cover removal followed by a load.
+- **A family installs every reader its files may name.** A real pipeline's `.xnb` names value
+  readers beside the asset's own -- a Song's duration goes through `Int32Reader`, a Video's name,
+  size and frame rate through `StringReader`, `Int32Reader` and `SingleReader`, a Model's Tag may
+  hold any value, a TimeSpan included -- and `ContentReader` refuses a table entry with no reader
+  rather than installing one. So a family registers them with its own
+  (`detail::RegisterValueXnbReaders()`, the Decimal/DateTime/TimeSpan readers for models), and
+  `ContentManagerGamePathXnbTests` loads each family first from a `Game`'s declared-only state.
 - **Install optional work when it is first used.** `FrameworkDispatcher` and the Guide frame hold
   plain function pointers that the optional subsystem sets on its first use. No static
   "registrar" object: in a static archive nothing references it, so it is dropped, and the usual
@@ -211,8 +218,11 @@ replace a static one. It is decided for each program in each configuration, in t
    program that links any other does not get the option, which configure reports with the
    targets' names (declare `SHARED` if their runtime is shared).
 4. What no CMake setting shows -- a compiler wrapper or spec file, a flag that a generator
-   expression computes rather than names -- `AUTO` cannot see, and the program is taken to link
-   the shared runtime; declare `STATIC`.
+   expression computes rather than names, a static runtime named by hand
+   (`-Wl,-Bstatic -lstdc++` with no `-static-libstdc++`, which is a linker input rather than a
+   driver flag) -- `AUTO` cannot see, and the program is taken to link the shared runtime; declare
+   `STATIC`. Left to `AUTO`, such a program gets the option after its hand-named static runtime,
+   and lld then links `libstdc++.so` it did not ask for (mold and GNU ld keep the static one).
 
 `CnaCxxRuntimeLinkage` (`cmake/Tests/CxxRuntimeLinkageCase.cmake`) configures programs that ask
 in the ways 1-3 list, with single- and multi-configuration generators, checks their link lines,
@@ -223,7 +233,9 @@ With a static runtime CNA adds nothing, and where the runtime archive goes is th
 choice. The driver names it last, so lld and mold resolve a standard-library symbol to the first
 archive member on the command line that defines it, which is CNA's: with `-static-libstdc++` the multi-renderer 2D probe linked
 glTF and Draco with lld, and the system Guide and the avatar catalog as well with mold (49.7 MB
-stripped). Naming the static runtime first,
+stripped). Which members ride along depends on the tree -- whichever member of whichever archive
+comes first with the symbol a shared library needs -- so the single-renderer Release probe linked
+the Guide and the catalog with lld as well (39.5 MB). Naming the static runtime first,
 `target_link_options(MyGame PRIVATE "SHELL:-Wl,--push-state,-Bstatic -lstdc++ -Wl,--pop-state")`,
 gives each linker the small closure again (13.2 MB with mold or lld, 13.6 MB with GNU ld, every
 footprint gate passing).

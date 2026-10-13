@@ -51,6 +51,12 @@ endif()
 # per iteration. With libcna.so the engine and its debug information exist once; an executable holds
 # only its own code, and CMAKE_LINK_DEPENDS_NO_SHARED keeps a rebuilt libcna.so from relinking them.
 #
+# The price: an executable linked before a change to a class layout or a vtable inside libcna.so
+# keeps its old copy relocations and misbehaves against the new library (the dynamic linker warns
+# "Symbol ... has different size in shared object, consider re-linking"). After such a change,
+# delete the tree's executables and relink them before trusting its tests; an incremental build
+# will not do it (handoff.md §5.2).
+#
 # ELF with GNU/Clang only. A Windows DLL needs export annotations CNA does not carry, and an
 # Emscripten SHARED library is a side module (see modules/c-api/CMakeLists.txt CABI-14), so both keep
 # the static link. $<COMPILE_ONLY> needs CMake 3.27. Must be decided before sharp-runtime and the CNA
