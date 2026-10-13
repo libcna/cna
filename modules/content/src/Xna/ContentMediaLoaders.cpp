@@ -175,6 +175,9 @@ namespace Microsoft::Xna::Framework::Content
     {
         manager.RegisterBuiltinTypeReader<Media::Song, SongTypeReader>();
         RegisterCnbLoader();
+        // A real content pipeline dispatches the song's duration through Int32Reader, so an .xnb
+        // song's type-reader table names a value reader beside SongReader.
+        detail::RegisterValueXnbReaders();
         detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterSongXnbReader);
     }
 
@@ -195,7 +198,10 @@ namespace Microsoft::Xna::Framework::Content
         manager.RegisterBuiltinTypeReader<Media::Video, VideoTypeReader>();
         RegisterCnbLoader();
         // The reader and metadata-only Video constructor are backend-independent; playback is
-        // what reports NotSupportedException in a no-video build.
+        // what reports NotSupportedException in a no-video build. A real content pipeline
+        // dispatches the video's file name, size, frame rate and duration through StringReader,
+        // Int32Reader and SingleReader, so the table names the value readers beside VideoReader.
+        detail::RegisterValueXnbReaders();
         detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterVideoXnbReader);
     }
 }

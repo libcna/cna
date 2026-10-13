@@ -28,6 +28,7 @@
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "CNA/Internal/PathContainment.hpp"
+#include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -4843,9 +4844,16 @@ namespace Microsoft::Xna::Framework::Content
         manager.RegisterBuiltinTypeReader<Graphics::Model, ModelTypeReader>();
         RegisterCnbLoader();
         // An .xnb model holds vertex and index buffers, its effects (stock, material, compiled)
-        // with their textures, and a Tag that may be any value.
+        // with their textures, and a Tag on the model, each mesh and each mesh part that may be
+        // any serialized value: the Effect family brings the primitive and math readers, and the
+        // Decimal, DateTime and TimeSpan readers are a model's as well (XNA's SkinningSample keeps
+        // animation clips in Model.Tag, whose durations and keyframe times are TimeSpans). The
+        // readers of a game's own Tag types are registered with those types.
         detail::BuiltinContent<std::shared_ptr<Graphics::Effect>>::Register(manager);
-        detail::RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterModelXnbReaders);
+        detail::RegisterDeclaredXnbReaders([] {
+            CNA::Internal::Xnb::RegisterDecimalDateTimeXnbReaders();
+            CNA::Internal::Xnb::RegisterModelXnbReaders();
+        });
     }
 
     void detail::BuiltinContent<Graphics::AnimationClipEXT>::RegisterCnbLoader()
