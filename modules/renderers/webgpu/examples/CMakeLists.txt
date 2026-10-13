@@ -521,23 +521,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_webgpu_effect_outlived_by_draw
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plans/plan_webgpu_modern_graphics.md WMG-0027: a long run over the modern resources, whose
-    # oracle is the renderer's own uncaptured-error count plus RSS/fd/thread deltas.
-
-
-
     # plans/plan_webgpu_modern_graphics.md WMG-0021: a per-instance vertex stream on the custom
     # ShaderEffect route -- four instances that differ only in their per-instance record.
     cna_webgpu_test(cna_test_webgpu_shadereffect_instanced webgpu_shadereffect_instanced_test.cpp)
     cna_register_renderer_test(NAME WebGPU_ShaderEffectInstanced
         COMMAND cna_test_webgpu_shadereffect_instanced
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plans/plan_webgpu_modern_graphics.md WMG-0020: GPU debug labels. SetStringMarkerEXT reaches
-    # the command stream as an ordered entry, and the debug groups the renderer opens around its
-    # own render and compute passes are balanced.
-
-
 
     # WEBGPU-84: real GPU occlusion queries -- the same quad reads back 0 samples behind an occluder
     # and a full target of samples in front, with two independent per-slot query results.

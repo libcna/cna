@@ -5,13 +5,12 @@
 // The old switch handled three members and ended `default: return true`. Two things followed, and
 // this test is shaped around both rather than around the source change:
 //
-//   A  **The renderer and GraphicsDevice disagreed.** Six members are answered above the renderer,
+//   A  **The renderer and GraphicsDevice disagreed.** Four members are answered above the renderer,
 //      by a virtual whose default is false (CompiledEffects, Float/HalfFloat render targets,
-//      HalfFloatTextureLinearFiltering, ComputeShaders, IndirectDraw). GraphicsDevice therefore
-//      said false while IGraphicsRenderer::SupportsCapability -- the answer a C-ABI caller or a
-//      renderer-level test gets -- said true through the catch-all. This leg asks BOTH seams the
-//      same 19 questions and requires the same 19 answers. It fails six times on the old code and
-//      needs no mutation to do it.
+//      HalfFloatTextureLinearFiltering). GraphicsDevice therefore said false while
+//      IGraphicsRenderer::SupportsCapability -- the answer a C-ABI caller or a renderer-level
+//      test gets -- said true through the catch-all. This leg asks BOTH seams the same questions
+//      and requires the same answers. It failed on the old code and needs no mutation to do it.
 //   B  **A value that is not an enumerator was claimed too.** Casting an out-of-range int returned
 //      true. It must be refused.
 //
@@ -94,8 +93,6 @@ namespace
         { GraphicsCapability::FloatRenderTargets,              "FloatRenderTargets" },
         { GraphicsCapability::HalfFloatRenderTargets,          "HalfFloatRenderTargets" },
         { GraphicsCapability::HalfFloatTextureLinearFiltering, "HalfFloatTextureLinearFiltering" },
-        { GraphicsCapability::ComputeShaders,                  "ComputeShaders" },
-        { GraphicsCapability::IndirectDraw,                    "IndirectDraw" },
     };
 
     constexpr int kSize = 64;
@@ -248,23 +245,6 @@ class VulkanCapabilityContractTest : public Game
                       dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector4),
                   "C HalfFloatTextureLinearFiltering matches the sampled target format path",
                   std::string("capability=") + (supported ? "true" : "false") + ", " + how);
-        }
-
-        // VULKAN-470 / MOD-2241 / MOD-2245. The indirect answer is gated on Vulkan's
-        // drawIndirectFirstInstance feature because CNA's canonical command layout promises that
-        // fifth/fourth word rather than a zero-only subset. This selected device offers it, and
-        // the same renderer also exposes the storage-buffer allocation that carries the command.
-        {
-            const bool indirect = r.SupportsCapability(GraphicsCapability::IndirectDraw);
-            const bool compute  = r.SupportsCapability(GraphicsCapability::ComputeShaders);
-            const auto buffer   = const_cast<VulkanRenderer&>(r).CreateStorageBuffer(64);
-            const bool nativeIndirect =
-                r.GetEnabledDeviceFeaturesEXT().drawIndirectFirstInstance == VK_TRUE;
-            check(indirect == nativeIndirect && compute && buffer != nullptr,
-                  "C IndirectDraw follows enabled first-instance support and has storage",
-                  std::string("indirect=") + (indirect ? "true" : "false")
-                      + " compute=" + (compute ? "true" : "false")
-                      + " storageBuffer=" + (buffer == nullptr ? "null" : "created"));
         }
     }
 

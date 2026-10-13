@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/graphics_ext.h"
-#include "CNA/IndirectDrawArguments.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
@@ -114,28 +113,6 @@ static_assert(
 } // namespace
 
 namespace {
-
-[[nodiscard]] CNA_Result IndirectDrawArgumentsInit(CNA_IndirectDrawArguments* const outArguments)
-{
-    const CNA::IndirectDrawArguments defaults;
-    outArguments->vertex_count = defaults.VertexCount;
-    outArguments->instance_count = defaults.InstanceCount;
-    outArguments->first_vertex = defaults.FirstVertex;
-    outArguments->base_instance = defaults.BaseInstance;
-    return CNA_RESULT_SUCCESS;
-}
-
-[[nodiscard]] CNA_Result IndirectDrawIndexedArgumentsInit(
-    CNA_IndirectDrawIndexedArguments* const outArguments)
-{
-    const CNA::IndirectDrawIndexedArguments defaults;
-    outArguments->index_count = defaults.IndexCount;
-    outArguments->instance_count = defaults.InstanceCount;
-    outArguments->first_index = defaults.FirstIndex;
-    outArguments->base_vertex = defaults.BaseVertex;
-    outArguments->base_instance = defaults.BaseInstance;
-    return CNA_RESULT_SUCCESS;
-}
 
 [[nodiscard]] CNA_Result ImageBasedLightExtInit(CNA_ImageBasedLightEXT* const outLight)
 {

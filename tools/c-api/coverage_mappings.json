@@ -43,13 +43,11 @@
       "task": "CBIND-022",
       "approved_symbols": [
         "CPP-0AD811006F89",
-        "CPP-14D50E98F431",
         "CPP-16E44B3EE81D",
         "CPP-2686F48A400C",
         "CPP-326C6CE542D3",
         "CPP-4140F921C436",
         "CPP-4E67BD46FDF3",
-        "CPP-77FE4BB2AC38",
         "CPP-8008706469CA",
         "CPP-85BA004F795F",
         "CPP-BAE4A95CFB55",
@@ -88,15 +86,12 @@
         "CPP-0321916375F6",
         "CPP-0594B13461FD",
         "CPP-081E3F114981",
-        "CPP-0A964A339A4C",
         "CPP-15637715C890",
         "CPP-1ECFBF987DE7",
         "CPP-21444E6C4BD7",
         "CPP-22865497B8CF",
         "CPP-24CF9762C548",
-        "CPP-276B117DF525",
         "CPP-27D04E9C7664",
-        "CPP-29083F5E5970",
         "CPP-29D506AB889B",
         "CPP-2AAF934D6B11",
         "CPP-2E2AFCE65A79",
@@ -108,25 +103,19 @@
         "CPP-4988512E355A",
         "CPP-4A187982BAEF",
         "CPP-4BEF656576EB",
-        "CPP-4D648BCCCAB4",
-        "CPP-4EE2523A75B1",
         "CPP-52DFBFDC5FD9",
-        "CPP-5484A445D269",
         "CPP-55B5444B3022",
         "CPP-59946829254A",
         "CPP-5A5A3FBB7AEF",
         "CPP-5CC67E35946B",
         "CPP-5CDF841B804A",
         "CPP-60AF9EDC1444",
-        "CPP-62CF070930C6",
         "CPP-642430BB9561",
-        "CPP-663F803991CF",
         "CPP-66EE57328F4A",
         "CPP-6C2CBA52A507",
         "CPP-6E2D49C71E9A",
         "CPP-6E9F0C49E4AD",
         "CPP-706938A4867E",
-        "CPP-712A242F3986",
         "CPP-77B2B6286945",
         "CPP-7866ACFF2F46",
         "CPP-7B4A3CCF6FF1",
@@ -135,13 +124,10 @@
         "CPP-8364535C57B0",
         "CPP-84C43853116C",
         "CPP-86A1A64160B5",
-        "CPP-876FEF785976",
-        "CPP-8988B88183CE",
         "CPP-8B7ED48ABD4E",
         "CPP-8ED0AAA8B9A3",
         "CPP-90145EED1F2A",
         "CPP-92BCEF1795CF",
-        "CPP-930E7708FF49",
         "CPP-9348974B8FBC",
         "CPP-97735393BF73",
         "CPP-A01DC032E76C",
@@ -157,14 +143,11 @@
         "CPP-D106392B82C1",
         "CPP-D1881C9C41DE",
         "CPP-D557FF320950",
-        "CPP-D73A2B27D674",
         "CPP-D8EAECF63C7E",
         "CPP-D9128195E092",
         "CPP-DB0E02663D27",
         "CPP-DC1EDC1D8786",
         "CPP-DFFD3B3E5922",
-        "CPP-E636A0F9BBA8",
-        "CPP-E85E303E1C93",
         "CPP-EA72552B227B",
         "CPP-EB04F741BB32",
         "CPP-EB55BBA29AF1",
@@ -14440,68 +14423,6 @@
       ]
     },
     {
-      "id": "graphics-image-access-identity",
-      "qualified_name_regex": "^CNA::GraphicsImageAccess(?:::[A-Za-z0-9_]+)?$",
-      "kinds": [
-        "enum",
-        "enum-value"
-      ],
-      "mapping": "`CNA_GraphicsImageAccess` and the `CNA_GRAPHICS_IMAGE_ACCESS_*` constants at the canonical ordinals. The header is not behind `CNA_CNAEXT`, so the identity and its static assertion exist in every build even though its only consumer, `cna_compute_shader_bind_image`, needs the layer.",
-      "tests": "Retained C routes are exercised by GraphicsExtSmoke.c and other pure-C smoke tests; core behavior is covered by the focused graphics tests.",
-      "status": "implemented",
-      "task": "CBIND-084A",
-      "approved_symbols": [
-        "CPP-5F2D6BC05C36",
-        "CPP-6B9C73BEACC4",
-        "CPP-909A6B701F8C",
-        "CPP-D5F82FCA204D"
-      ]
-    },
-    {
-      "id": "graphics-memory-barrier-identity",
-      "qualified_name_regex": "^CNA::GraphicsMemoryBarrier(?:::[A-Za-z0-9_]+)?$",
-      "kinds": [
-        "enum",
-        "enum-value"
-      ],
-      "mapping": "`CNA_GraphicsMemoryBarrier` and the `CNA_GRAPHICS_MEMORY_BARRIER_*` bits at the canonical values, including `_ALL` as the same fold of the same members, proved by a static assertion.",
-      "tests": "Retained C routes are exercised by GraphicsExtSmoke.c and other pure-C smoke tests; core behavior is covered by the focused graphics tests.",
-      "status": "implemented",
-      "task": "CBIND-084A",
-      "approved_symbols": [
-        "CPP-0A2A34613C65",
-        "CPP-0D9C978E9769",
-        "CPP-2244E87C4993",
-        "CPP-47A8305135B1",
-        "CPP-514E4736059E",
-        "CPP-540B670C7B97",
-        "CPP-8B54F8747338",
-        "CPP-8EE0B7A9DA24",
-        "CPP-907910BEDFFA",
-        "CPP-EBA436E20E4A",
-        "CPP-F11B1C94552E",
-        "CPP-F2A98EBCE5E1"
-      ]
-    },
-    {
-      "id": "graphics-memory-barrier-operations",
-      "qualified_name_regex": "^CNA::(?:operator\\||operator&|HasBarrier)$",
-      "kinds": [
-        "operator",
-        "function"
-      ],
-      "mapping": "C's own `|` and `&` on the fixed-width identity, which is what the canonical `constexpr` operators do to the underlying value; `HasBarrier` additionally becomes `cna_graphics_memory_barrier_has`, because a containment test is the one of the three a caller can get wrong by writing `&` and comparing against zero.",
-      "tests": "Retained C routes are exercised by GraphicsExtSmoke.c and other pure-C smoke tests; core behavior is covered by the focused graphics tests.",
-      "status": "implemented",
-      "task": "CBIND-084A",
-      "approved_symbols": [
-        "CPP-2D4D3C927E83",
-        "CPP-43A0432F220E",
-        "CPP-9F8F29E965C3"
-      ],
-      "header_regex": "^modules/graphics/include/CNA/GraphicsMemoryBarrier\\.hpp$"
-    },
-    {
       "id": "content-lost-inward-notifications",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:DynamicIndexBuffer|DynamicVertexBuffer|RenderTarget2D|RenderTargetCube)::(?:NotifyContentLostEXT|ClearContentLostEXT)$",
       "kinds": [
@@ -14894,31 +14815,6 @@
       ]
     },
     {
-      "id": "indirect-draw-arguments",
-      "qualified_name_regex": "^CNA::IndirectDraw(?:Indexed)?Arguments(?:::[A-Za-z0-9_]+)?$",
-      "kinds": [
-        "struct",
-        "field"
-      ],
-      "mapping": "`CNA_IndirectDrawArguments` and `CNA_IndirectDrawIndexedArguments` with their initializers.\n\n**These two are the only PODs in the engine-layer header without a `struct_size`/`struct_version` pair, and deliberately so**: the GPU reads them verbatim, so the layout *is* the contract and the ABI may not version or pad them. Compile-time assertions pin sixteen and twenty bytes against the canonical structs on both sides of the boundary.\n\nThey live in the always-compiled graphics module rather than under `CNA_CNAEXT` -- they are the GPU's command format, not part of the engine layer -- so both initializers work in **every** build.",
-      "tests": "Retained C routes are exercised by GraphicsExtSmoke.c and other pure-C smoke tests; core behavior is covered by the focused graphics tests.",
-      "status": "implemented",
-      "task": "CBIND-092C",
-      "approved_symbols": [
-        "CPP-0013A57FD984",
-        "CPP-0EAF648478D1",
-        "CPP-1689CEEADBEE",
-        "CPP-31451CCED37E",
-        "CPP-442CDBBDD79C",
-        "CPP-5ADDCD93599B",
-        "CPP-5B1C300585A0",
-        "CPP-75740C24B901",
-        "CPP-8C70758A650A",
-        "CPP-9675C506DE9B",
-        "CPP-A6FBA621C7FD"
-      ]
-    },
-    {
       "id": "debug-draw",
       "qualified_name_regex": "^CNA::Graphics::(?:DebugDraw(?:::[A-Za-z0-9_~]+)?|add(?:PointLight|SpotLight|DirectionalLight|ProbeVolume|ClusterSlice|Cascade)Gizmo)$",
       "kinds": [
@@ -14994,26 +14890,21 @@
     },
     {
       "id": "graphics-device-ext-surface",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:DrawPrimitivesIndirectEXT|DrawIndexedPrimitivesIndirectEXT|NotifyContentLostResourcesEXT|SupportsSurfaceFormatAsRenderTargetEXT|ExecutesShaderEffectSourceEXT|SupportsImageBasedLightingEXT|GetDisplayColorSpaceEXT|SetDisplayColorSpaceEXT|SupportsDisplayColorSpaceEXT|GetMaxComputeWorkGroupCountEXT|GetMaxComputeWorkGroupSizeEXT|GetMaxComputeWorkGroupInvocationsEXT)$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:NotifyContentLostResourcesEXT|SupportsSurfaceFormatAsRenderTargetEXT|ExecutesShaderEffectSourceEXT|SupportsImageBasedLightingEXT|GetDisplayColorSpaceEXT|SetDisplayColorSpaceEXT|SupportsDisplayColorSpaceEXT)$",
       "kinds": [
         "method"
       ],
-      "mapping": "The ten retained `cna_graphics_device_*_ext` core-device queries and notifications live in `graphics_device.h` and work independently of CNA_CNAEXT. Compute-axis queries return zero for an out-of-range axis; display-color-space calls report capability or whether a requested change succeeded.",
+      "mapping": "The seven retained `cna_graphics_device_*_ext` core-device queries and notifications live in `graphics_device.h` and work independently of CNA_CNAEXT. Display-color-space calls report capability or whether a requested change succeeded.",
       "tests": "Retained C routes are exercised by GraphicsExtSmoke.c and other pure-C smoke tests; core behavior is covered by the focused graphics tests.",
       "status": "implemented",
       "task": "CBIND-093",
       "approved_symbols": [
-        "CPP-01EDFEC5A390",
         "CPP-180B6CE5EBD6",
-        "CPP-2A710E82F069",
         "CPP-4470A1B69F2B",
         "CPP-7400AD54389F",
-        "CPP-7F7FA5BD2AD9",
         "CPP-9CA75AC34505",
         "CPP-A4567FAB599F",
-        "CPP-A70BE72C8207",
         "CPP-BF64D81BEFEB",
-        "CPP-E8920C6A0386",
         "CPP-F52AE4C696B4"
       ]
     },

@@ -209,8 +209,13 @@ protected:
                       unavailableEffect->GetCompileError().find("target-native") != std::string::npos,
                   "unavailable ShaderEffect construction returns a precise diagnostic");
 #endif
-            check(dev.SupportsCapability(CNA::GraphicsCapability::Texture3D),
-                  "Texture3D is reported because storage and transfer are real");
+            // BINDFIX-037 made the public Texture3D answer a profile fact too: XNA's Reach profile
+            // has no volume textures. The renderer's promise and the public answer stay two checks.
+            check(renderer.SupportsCapability(CNA::GraphicsCapability::Texture3D),
+                  "Texture3D storage and transfer are implemented by the renderer");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::Texture3D) ==
+                      (dev.getGraphicsProfileProperty() == GraphicsProfile::HiDef),
+                  "the public Texture3D answer follows the XNA profile (false under Reach)");
             check(dev.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending),
                   "AdditiveBlending is reported because the pixel contract passes");
             check(dev.SupportsCapability(CNA::GraphicsCapability::CompiledEffects) ==
@@ -261,15 +266,6 @@ protected:
                            static_cast<int>(SurfaceFormat::HalfVector4)) ==
                        CNA::Internal::Renderers::RendererFormatVerdict::Supported),
                   "half-float filtering is reported exactly where RGBA16F render targets exist");
-            // STREETS-0007: compute (SMG-0012) and indirect drawing (SMG-0023) are implemented now.
-            // What this still guards is that the public answer is DERIVED from the renderer's own
-            // implemented query rather than inherited from a capability-switch default.
-            check(dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) ==
-                      renderer.SupportsComputeShadersEXT() &&
-                      dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw) ==
-                      renderer.SupportsIndirectDrawEXT() &&
-                      renderer.SupportsComputeShadersEXT() && renderer.SupportsIndirectDrawEXT(),
-                  "compute and indirect drawing are reported from the renderer's implemented paths");
 
             check(renderer.GetMaxVertexStreams() == 16,
                   "numeric vertex-stream limit agrees with the XNA public ceiling");

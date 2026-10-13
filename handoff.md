@@ -36,6 +36,16 @@ configure time by name; their reserved ABI values are in
 [`docs/removed-renderers.md`](docs/removed-renderers.md). Do not add or restore a renderer without an
 explicit owner decision.
 
+**Graphics layer.** Every renderer implements one contract, `IGraphicsRenderer`, for XNA graphics
+plus CNA's graphics extensions (SPIR-V/GLSL/HLSL/MSL/WGSL `ShaderEffect` with vertex/fragment
+`ShaderPackageEXT`, PBR and skinned PBR, image-based lighting, shadow reception, float render
+targets, instancing with base instance, compiled effects, `Texture3D`/`TextureCube`). There is no
+second, general-purpose GPU layer underneath: the compute-shader, storage-buffer/image,
+texture-array, memory-barrier, indirect-draw and GPU-timer abstractions were retired end to end on
+2026-10-13 (`plans/plan_modern_retirement.md`), including their common interfaces, backend
+implementations, capability/limit identities, C API routes and tests. `modules/graphics-ext/`
+remains (`docs/cnaext-engine-layer.md`).
+
 **Platforms.** `CNA_PLATFORM` is `SDL3` (default; Windows, X11, Wayland, macOS, iOS, Android and the
 browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERMINAL`. CNA's own
 `WIN32`/`X11`/`WAYLAND` backends were retired on 2026-10-06 and are refused by name.
@@ -134,6 +144,34 @@ The single authoritative list. Every entry below was checked against the code on
    the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
    1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
    combined value 5-7 falls through to the same default.
+8. **Shared-test failures with `VULKAN` and `WEBGPU` as the default renderer** (measured
+   2026-10-13 on RADV through the private runner, full `cmake-build-vulkan` and
+   `cmake-build-webgpu` runs; every one fails identically on `9edbf314e`, the commit before the
+   `MRT` campaign, built in a throwaway worktree with the same options):
+   - `VULKAN`'s `PackVulkanStreamsEXT` builds the combined multi-stream `VertexDeclaration` without
+     XNA's usage-index remap, so two streams with the same usage throw "duplicate usage and usage
+     index": `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices`,
+     `OrdinaryDrawBindingOffsetTest.MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset`. A semantic
+     supplied only from binding slot 15 is refused as "does not supply every input"
+     (`OrdinaryDrawMultiStreamTest.SixteenBindingsCanSupplyAConsumedSemanticFromSlot15`).
+   - `VULKAN`'s `OcclusionQuery::IsComplete` does not flush, so the two `AM4-108` lifecycle tests
+     that poll before `Present` fail (`PollingIsCompleteAloneReachesTheResult`,
+     `ACountSpansAClearBetweenItsDraws`).
+   - `Vulkan_DrawRangeValidation` runs EasyGL's draw-range test, which expects EasyGL's native
+     range forwarding; Vulkan keeps managed range validation, so six forwarding checks fail.
+   - `WEBGPU` counts only the draws after a `Clear` inside one occlusion run
+     (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`: 192000 of 384000), although
+     `AM4-108` recorded it passing on 2026-10-08.
+9. **Shared-test failures with `SDL_GPU` as the default renderer** (full `cmake-build-sdlgpu` run,
+   2026-10-13; each also fails or passes identically on `9edbf314e`):
+   - A game on a non-video platform asks `SDL_GPU` for its device and gets "no installed SDL_gpu
+     driver accepts SPIR-V": `GameEventSemanticsGoldenTest` `/Headless` and `/Terminal`, and
+     `GameWindowPlatformTest.DelegatesStateAndGeometryToTheSelectedPlatformWindow` inside
+     `CnaPlatformWindowTests`.
+   - `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails only under the
+     full parallel run (3 buffers requested instead of 2); alone it passed 40 of 40 on both commits.
+     `XnaModelSourceContentPipelineTest.AMaterialsTextureIsBuiltAsItsOwnAsset` also failed once in
+     that run and passes alone on both commits.
 
 ### 5.2 Limitations
 

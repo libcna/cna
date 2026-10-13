@@ -18,8 +18,6 @@ cna_ascii_post_process_effect_get_quantize_mode = { get = "NativeOrdinal(object-
 raw = true
 
 [helpers.routes]
-cna_indirect_draw_arguments_init = { result = "IndirectDrawArgumentsInit(out_arguments)" }
-cna_indirect_draw_indexed_arguments_init = { result = "IndirectDrawIndexedArgumentsInit(out_arguments)" }
 cna_image_based_light_ext_init = { result = "ImageBasedLightExtInit(out_light)" }
 cna_image_based_light_ext_is_valid = { result = "ImageBasedLightExtIsValid(light, out_valid)", optional = ["out_valid"] }
 

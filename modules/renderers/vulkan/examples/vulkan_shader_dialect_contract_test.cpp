@@ -92,13 +92,6 @@ protected:
                       CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment),
               "A2 the live renderer accepts explicit SPIR-V graphics-stage payloads",
               "vertex and fragment queried independently");
-        check(dev.SupportsShaderLanguageEXT(
-                  CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute)
-                  == dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders),
-              "A3 SPIR-V compute language support follows the implemented compute path",
-              dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders)
-                  ? "compute is available and SPIR-V is accepted"
-                  : "compute is unavailable and the pair is refused");
         check(!dev.SupportsShaderLanguageEXT(
                   CNA::ShaderLanguageEXT::GlslVulkan, CNA::ShaderStageEXT::Vertex)
                   && !dev.SupportsShaderLanguageEXT(
@@ -137,7 +130,6 @@ protected:
                       && selection.getCode().size() == 2
                       && selection.getCode()[0].getStage() == CNA::ShaderStageEXT::Fragment
                       && vertex != nullptr && vertex->isBinary()
-                      && selection.findStage(CNA::ShaderStageEXT::Compute) == nullptr
                       && selection.getDiagnostic().find("SpirV") != std::string::npos,
                   "A5 package selection chooses owned SPIR-V regardless of declaration order",
                   selection.getDiagnostic());
@@ -184,24 +176,6 @@ protected:
                       && selection.getDiagnostic().find("renderer rejects Hlsl/Vertex")
                           != std::string::npos,
                   "A7 refusal lists every considered variant in stable preference order",
-                  selection.getDiagnostic());
-        }
-
-        {
-            using namespace CNA::Graphics;
-            const auto selection = ShaderPackageEXT(
-                {ShaderCodeEXT(
-                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
-                    "main", "storage.comp.spv", std::vector<std::uint8_t>{1, 2, 3, 4})},
-                {CNA::ShaderStageEXT::Compute},
-                {ShaderBindingRequirementEXT(
-                    "output", 0, ShaderBindingTypeEXT::StorageTexture2D,
-                    CNA::ShaderStageEXT::Compute)}).selectFor(dev);
-            const bool expected = dev.SupportsCapability(
-                CNA::GraphicsCapability::ComputeShaders)
-                && dev.SupportsRendererFeatureEXT(CNA::RendererFeature::ComputeImageBinding);
-            check(selection.isUsable() == expected,
-                  "A8 package selection follows the live compute-image capability",
                   selection.getDiagnostic());
         }
 

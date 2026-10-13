@@ -76,7 +76,6 @@
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
-#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -382,8 +381,6 @@ class SdlGpuMrtTest : public Game
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
     void RunCompiledEffectMrtCheck(GraphicsDevice& dev)
     {
-        using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
-
         Check(dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
               "MRT capability is true now that one ordinary Effect writes independent outputs");
 
@@ -402,10 +399,20 @@ class SdlGpuMrtTest : public Game
         };
         const Rectangle centre(kRTSize / 2, kRTSize / 2, 1, 1);
 
+        // The fixture's pixel shader writes oC0..oC3. Slots 2 and 3 are bound to spare Color
+        // targets so every output has an attachment: Vulkan validation warns about a fragment
+        // output with no colour attachment, and this suite treats that warning as a failure.
+        RenderTarget2D spare2(dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None);
+        RenderTarget2D spare3(dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None);
         const auto draw = [&](RenderTarget2D& a, RenderTarget2D* b, const Vector4& tint,
                               const BlendState& blend, const Color& clear) {
             std::vector<RenderTargetBinding> bindings{RenderTargetBinding(&a)};
-            if (b != nullptr) bindings.emplace_back(b);
+            if (b != nullptr)
+            {
+                bindings.emplace_back(b);
+                bindings.emplace_back(&spare2);
+                bindings.emplace_back(&spare3);
+            }
             dev.SetRenderTargets(bindings);
             dev.Clear(clear);
             dev.setBlendStateProperty(blend);
@@ -431,31 +438,30 @@ class SdlGpuMrtTest : public Game
         a1.GetData(0, &centre, &a1Pixel, 0, 1);
         Check(colorNear(a0Pixel, Color(51, 102, 204, 255)),
               "ordinary compiled Effect writes Tint to MRT slot 0");
-        Check(colorNear(a1Pixel, Color(102, 204, 51, 255)),
-              "ordinary compiled Effect writes Tint.yzxw independently to MRT slot 1");
+        // AM4-146: the shared fixture writes oC1 = Tint.yxzw (CompiledEffectFixtures.hpp
+        // `writesMrt`), as the Metal copy of this test measures.
+        Check(colorNear(a1Pixel, Color(102, 51, 204, 255)),
+              "ordinary compiled Effect writes Tint.yxzw independently to MRT slot 1");
 
-        // Format B differs from A while preserving the same ordinary shader pair. Count changes
-        // use the count-specific ShaderEffect fixtures above: binding this oC0/oC1 shader to one
-        // attachment would itself be invalid Vulkan usage and hide validation noise in the test.
-        Check(dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable),
-              "mixed-format MRT discriminator has an RGBA16F attachment");
+        // Format B differs from A while preserving the same ordinary shader pair. XNA refuses an
+        // MRT set whose targets differ in bit depth, so the discriminator is a 32-bit float slot
+        // beside 32-bit Color. Count changes use the count-specific ShaderEffect fixtures above:
+        // binding this oC0/oC1 shader to one attachment would itself be invalid usage.
+        Check(dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single),
+              "mixed-format MRT discriminator has an R32F attachment");
         RenderTarget2D mixed0(dev, kRTSize, kRTSize, false, SurfaceFormat::Color, DepthFormat::None);
-        RenderTarget2D mixed1(dev, kRTSize, kRTSize, false, SurfaceFormat::HdrBlendable,
+        RenderTarget2D mixed1(dev, kRTSize, kRTSize, false, SurfaceFormat::Single,
                               DepthFormat::None);
         draw(mixed0, &mixed1, Vector4(0.25f, 0.5f, 0.75f, 1.0f),
              BlendState::Opaque, Color::Black);
         Color mixed0Pixel;
-        HalfVector4 mixed1Pixel;
+        float mixed1Pixel = -1.0f;
         mixed0.GetData(0, &centre, &mixed0Pixel, 0, 1);
         mixed1.GetData(0, &centre, &mixed1Pixel, 0, 1);
-        const Vector4 mixed = mixed1Pixel.ToVector4();
         Check(colorNear(mixed0Pixel, Color(64, 128, 191, 255)),
-              "mixed {Color,RGBA16F} MRT keeps slot 0's Color output");
-        Check(std::abs(mixed.X - 0.5f) <= 0.001f
-                  && std::abs(mixed.Y - 0.75f) <= 0.001f
-                  && std::abs(mixed.Z - 0.25f) <= 0.001f
-                  && std::abs(mixed.W - 1.0f) <= 0.001f,
-              "mixed {Color,RGBA16F} MRT writes the exact slot 1 float output");
+              "mixed {Color,R32F} MRT keeps slot 0's Color output");
+        Check(std::abs(mixed1Pixel - 0.5f) <= 0.001f,
+              "mixed {Color,R32F} MRT writes slot 1's oC1.x = Tint.y exactly");
 
         // Per-slot masks and nontrivial global blending share one immutable pipeline tuple.
         BlendState maskedAdditive = BlendState::Additive;
@@ -467,7 +473,8 @@ class SdlGpuMrtTest : public Game
         a1.GetData(0, &centre, &a1Pixel, 0, 1);
         Check(colorNear(a0Pixel, Color(36, 20, 30, 40)),
               "MRT slot 0 Red mask combines with Additive blending");
-        Check(colorNear(a1Pixel, Color(10, 122, 30, 40)),
+        // Additive is SourceAlpha/One: green gets oC1.y = Tint.x = 0.2 times alpha 0.5, over 20.
+        Check(colorNear(a1Pixel, Color(10, 46, 30, 40)),
               "MRT slot 1 Green mask combines with Additive blending");
 
         // A again: count/format/write-state variants must not poison the original cache entry.
@@ -476,7 +483,7 @@ class SdlGpuMrtTest : public Game
         a1.GetData(0, &centre, &a1Pixel, 0, 1);
         Check(colorNear(a0Pixel, Color(153, 77, 26, 255)),
               "A->format->state->A restores the compiled oC0 pipeline");
-        Check(colorNear(a1Pixel, Color(77, 26, 153, 255)),
+        Check(colorNear(a1Pixel, Color(77, 153, 26, 255)),
               "A->format->state->A restores the compiled oC1 pipeline");
     }
 #endif

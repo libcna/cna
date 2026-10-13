@@ -31,9 +31,6 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuRenderer;
     class SdlGpuRenderTargetRenderer;
     class SdlGpuRenderTargetCubeRenderer;
-    class SdlGpuStorageBufferRenderer;
-    class SdlGpuStorageTexture2DRenderer;
-    class SdlGpuComputeShaderRenderer;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
     class SdlGpuCompiledEffect;
 #endif
@@ -302,9 +299,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         Sampler,
         DefaultTexture,
         /** @brief Process-wide SDL_shadercross compiler session. */
-        ShaderCross,
-        /** @brief One CNAEXT storage buffer's native `SDL_GPUBuffer` (SMG-0040). */
-        StorageBuffer
+        ShaderCross
     };
 
     /** @brief Acquisition/release edge reported by SdlGpuTestHooksEXT. CNAEXT. */
@@ -1387,16 +1382,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] std::shared_ptr<const SdlGpuUniformArrayBlockEXT>
         SnapshotUniformArraysEXT() const;
 
-        /** @brief The fragment stage's reflected STORAGE-BUFFER resources, in slot order. CNAEXT.
-         *  @return Null when this effect took the GLSL route. */
-        CNAEXT [[nodiscard]] std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
-        SnapshotFragmentStorageBuffersEXT() const;
-
-        /** @brief The vertex stage's reflected STORAGE-BUFFER resources, in slot order. CNAEXT.
-         *  @return Null when this effect took the GLSL route. */
-        CNAEXT [[nodiscard]] std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
-        SnapshotVertexStorageBuffersEXT() const;
-
         /**
          * @brief The fragment stage's reflected SAMPLER resources, shared by queued draws. CNAEXT.
          * @return Null when this effect took the GLSL route.
@@ -1514,8 +1499,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> vertexUniformSnapshotEXT_;
         mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> fragmentUniformSnapshotEXT_;
         mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> fragmentSamplerSnapshotEXT_;
-        mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> fragmentStorageSnapshotEXT_;
-        mutable std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> vertexStorageSnapshotEXT_;
     };
 
     /** @brief `SDL_gpu`-backed `SpriteBatch`. Queues quads; actual draws happen at Present() time. */
@@ -1668,10 +1651,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         // QueueTextureRelease path render targets already used.
         friend struct SdlGpuSampledTextureState;
         friend class SdlGpuEffectRenderer;
-        // SMG-0012: the modern resources need the deferred-release queues and the device.
-        friend class SdlGpuStorageBufferRenderer;
-        friend class SdlGpuStorageTexture2DRenderer;
-        friend class SdlGpuComputeShaderRenderer;
     public:
         /** @brief Vertex layout for the `sprite2d` pipeline: 3D position, UV, RGBA color (36 bytes). */
         struct SpriteVertex
@@ -2199,20 +2178,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 stride = 0;
             /** @brief Native topology. */
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             /** @brief The vertex attributes this effect's own shader consumes. */
             std::vector<SDL_GPUVertexAttribute> attributes;
             /** @brief The effect's fixed 128-byte per-draw block, world-view-projection included. */
@@ -2229,14 +2194,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::shared_ptr<const SdlGpuEffectTexturesEXT> textures;
             /** @brief STREETS-0004: SamplerStates[0..3] for those texture units. */
             std::shared_ptr<const EffectUnitSamplersEXT> unitSamplers;
-            /** @brief SMG-0020: storage buffers published for this draw, by declared binding. */
-            std::vector<std::pair<int, SDL_GPUBuffer*>> storageBuffers;
-            /** @brief Keeps those buffers alive until the frame that reads them is submitted. */
-            std::vector<std::shared_ptr<const void>> storageBufferKeepAlive;
-            /** @brief The fragment module's storage-buffer resources, in SDL slot order. */
-            std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> fragmentStorageBuffers;
-            /** @brief The vertex module's storage-buffer resources, in SDL slot order. */
-            std::shared_ptr<const std::vector<SpirvResourceBindingEXT>> vertexStorageBuffers;
             /** @brief SMG-0022: instances to draw; one for an ordinary draw. */
             Uint32 instanceCount = 1;
             /** @brief The pipeline selected for this draw's target and vertex layout. */
@@ -2275,20 +2232,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};  ///< mirrors VulkanRenderer::FillExtPushConst()'s 128-byte layout
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2323,20 +2266,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2381,20 +2310,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};
             std::array<float, 56> lightUniforms{};  ///< LitLightParams: 10 vec4 + 1 mat4 = 224 bytes
             ShadowReceptionEXT shadow;  ///< SMG-0032
@@ -2440,20 +2355,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};  ///< [20..23]=alphaTest params, [24]=vertexColorEnabled (no lighting/ambient slots needed)
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2500,20 +2401,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -2569,20 +2456,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 24> uniforms{};       ///< PC: mvp(16) + diffuseColor(4) + emissiveAmount(4)
             std::array<float, 48> envMapUniforms{}; ///< EnvMapParams: world(16) + 8 vec4 (32) = 48 floats
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -2655,20 +2528,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 instanceCount = 1;
             /** @brief STREETS-0001: the per-instance world matrices, when instanced. */
             InstanceTransformStreamEXT instanceStream;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
             std::array<float, 72 * 16> boneUniforms{}; ///< 72 column-major mat4 values uploaded as a 288x1 RGBA32F vertex texture
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
@@ -2722,20 +2581,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 instanceCount = 1;
             /** @brief STREETS-0001: the per-instance world matrices, when instanced. */
             InstanceTransformStreamEXT instanceStream;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
             std::array<float, 72> pbrParams{};          ///< factors plus 14 affine transform rows
@@ -2815,20 +2660,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-            /** @brief SMG-0023: arguments buffer for an indirect draw, or null for a direct one. */
-            SDL_GPUBuffer* indirectArguments = nullptr;
-            /** @brief SMG-0023: byte offset of those arguments. */
-            Uint32 indirectOffset = 0;
-            /**
-             * @brief SMG-0025: keeps the argument buffer alive until this draw has been submitted.
-             *
-             * This renderer replays draws at `Present()`, so a buffer the game created inside the
-             * frame and destroyed again is gone by the time the draw reads it -- the same rule
-             * every sampled texture here already follows (REMED-GFX-152). Without it the handle
-             * still addresses memory nothing has reused yet, which is why the failure is a crash
-             * deep inside the driver rather than a diagnostic.
-             */
-            std::shared_ptr<const void> indirectKeepAlive;
             Uint32 vertexStride = 0;
             Uint32 instanceCount = 1;
             /// Everything BuildCompiledEffectBindingEXT captured from the applied pass -- shaders,
@@ -3081,24 +2912,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return lastSceneUploadBytesEXT_;
         }
 
-        // ---- modern (CNAEXT) compute and storage. SMG-0012 ----
-
-        /**
-         * @brief Submits everything this renderer has queued but not yet handed to the GPU. CNAEXT.
-         *
-         * This renderer defers every draw to `Present()`, so "already issued" and "already
-         * submitted" are different states here in a way they are not on the reference renderers.
-         * Compute and readback both need the second one: a dispatch that reads a render target, or
-         * a `GetData` on a buffer a dispatch wrote, must not observe the state before that work.
-         * Submission order is execution order, so with this there is no barrier left to reason
-         * about.
-         */
-        CNAEXT void FlushPendingGpuWorkEXT();
-
-        /**
-         * @brief Whether this device can run compute. @return True when compute pipelines work here.
-         */
-        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        // ---- capability answers and limits ----
 
         /**
          * @brief plans/plan_street_sdlgpu.md STREETS-0003: whether a half-float colour texture can
@@ -3132,113 +2946,13 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return True while a device exists.
          */
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return device_ != nullptr; }
-        /** @brief Creates a compute shader from a SPIR-V payload. @param computeSrc Module bytes.
-         *  @return The shader, or null where compute is unavailable. */
-        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
-            const std::string& computeSrc) override;
-        /** @brief Creates a storage buffer with the default descriptor. @param byteSize Size.
-         *  @return The buffer, or null. */
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
-        /** @brief Creates a storage texture. @param width Width. @param height Height.
-         *  @param mipLevelCount Levels. @param surfaceFormat Format ordinal. @param usage Usage mask.
-         *  @return The texture, or null when the format or usage is refused. */
-        std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
-            int width, int height, int mipLevelCount, int surfaceFormat,
-            std::uint32_t usage) override;
-        /** @brief Whether a compute shader may bind a storage image here. @return True with a device. */
-        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override
-        {
-            return SupportsComputeShadersEXT();
-        }
-        /** @brief Per-format usage support, asked of the device. @param surfaceFormat Ordinal.
-         *  @return Known and supported usage masks. */
-        [[nodiscard]] CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
-            int surfaceFormat) const override;
-        /**
-         * @brief Binds a storage buffer for the draws that follow. SMG-0020.
-         *
-         * The engine layer's clustered-lighting path publishes its light list, cluster table and
-         * index list this way, at the bindings its portable shader declares (6, 7 and 8).
-         *
-         * @param binding Binding the shader declares.
-         * @param buffer The buffer to bind.
-         */
-        void BindStorageBufferForDrawEXT(int binding,
-                                         const IStorageBufferRenderer& buffer) override;
-        /**
-         * @brief True: `SDL_gpu` draws indirectly, including a non-zero first instance. SMG-0023.
-         * @return True whenever this renderer has a device.
-         */
-        [[nodiscard]] bool SupportsIndirectDrawEXT() const override { return device_ != nullptr; }
-        /** @brief True: `first_instance` is part of SDL's own indirect command. @return As above. */
-        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override
-        {
-            return device_ != nullptr;
-        }
-        /** @brief Draws with arguments read from a buffer. @param vb Vertex buffer.
-         *  @param world World. @param view View. @param projection Projection. @param primitive Topology.
-         *  @param argumentBuffer Arguments. @param argumentByteOffset Offset. @param params Draw description. */
-        void DrawPrimitivesIndirectEXT(
-            const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
-            const Matrix& projection, PrimitiveType primitive,
-            const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
-            const GpuDrawParams& params) override;
-        /** @brief Indexed counterpart. @param vb Vertex buffer. @param ib Index buffer.
-         *  @param world World. @param view View. @param projection Projection. @param primitive Topology.
-         *  @param argumentBuffer Arguments. @param argumentByteOffset Offset. @param params Draw description. */
-        void DrawIndexedPrimitivesIndirectEXT(
-            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib, const Matrix& world,
-            const Matrix& view, const Matrix& projection, PrimitiveType primitive,
-            const IStorageBufferRenderer& argumentBuffer, int argumentByteOffset,
-            const GpuDrawParams& params) override;
 
-        /** @brief Storage blocks a vertex shader may read. @return Non-zero where storage works. */
-        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override
-        {
-            return device_ != nullptr ? 8 : 0;
-        }
-        /** @brief Storage images per stage. @return SDL_gpu's own eight read-write slots. */
-        [[nodiscard]] int GetMaxStorageImagesPerShaderStageEXT() const override
-        {
-            return device_ != nullptr ? 8 : 0;
-        }
-
-        /** @brief Creates a storage buffer. @param byteSize Size. @param usage Usage mask.
-         *  @param cpuAccess CPU-access mask. @return The buffer, or null when refused. */
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
-            std::size_t byteSize, std::uint32_t usage, std::uint32_t cpuAccess) override;
-        /** @brief Runs one dispatch. @param shader The compute shader. @param groupsX X workgroups.
-         *  @param groupsY Y. @param groupsZ Z. */
-        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
-                             int groupsZ) override;
-        /**
-         * @brief No-op, and deliberately so. @param barrierBits Ignored.
-         *
-         * `SDL_gpu` owns its own synchronisation: within a command buffer it inserts the barriers
-         * its resource-state tracking implies, and between command buffers submission order is
-         * execution order. There is no API to express a barrier through, and nothing for one to
-         * fix -- @ref FlushPendingGpuWorkEXT is where this renderer's ordering is actually made.
-         */
-        void MemoryBarrierEXT(int barrierBits) override { (void) barrierBits; }
-
-        /** @brief Largest workgroup count per axis. @param axis 0, 1 or 2. @return The limit. */
-        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
-        /** @brief Largest workgroup size per axis. @param axis 0, 1 or 2. @return The limit. */
-        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
-        /** @brief Largest total invocations per workgroup. @return The limit. */
-        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
-        /** @brief Largest storage buffer. @return The limit in bytes. */
-        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
         /** @brief Largest uniform buffer. @return The limit in bytes. */
         [[nodiscard]] std::uint64_t GetMaxUniformBufferBytesEXT() const override;
-        /** @brief Compute storage-buffer binding slots. @return The limit. */
-        [[nodiscard]] int GetMaxComputeStorageBufferBindingsEXT() const override;
         /** @brief Sampled textures per stage. @return The limit. */
         [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
         /** @brief Colour attachments. @return Four, the XNA MRT ceiling this renderer implements. */
         [[nodiscard]] int GetMaxColorAttachmentsEXT() const override { return 4; }
-        /** @brief Storage-buffer offset alignment. @return The alignment in bytes. */
-        [[nodiscard]] std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const override;
         /** @brief Uniform-buffer offset alignment. @return The alignment in bytes. */
         [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
 
@@ -4132,14 +3846,14 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param primitiveCount Primitives to draw.
          * @param params Draw parameters carrying the custom effect.
          * @param effect The effect's renderer, already validated.
+         * @param instanceCount Instances to draw; one for an ordinary draw.
          * @throws System::NotSupportedException If the declaration cannot feed the shader's inputs.
          */
         CNAEXT void QueueCustomEffect3DDrawEXT(
             const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
             const Matrix& world, const Matrix& view, const Matrix& projection,
             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
-            SdlGpuEffectRenderer& effect, int instanceCount = 1,
-            SDL_GPUBuffer* indirectArguments = nullptr, Uint32 indirectOffset = 0);
+            SdlGpuEffectRenderer& effect, int instanceCount = 1);
 
         /** @brief Replays one queued custom 3D draw. CNAEXT. @param pass Render pass.
          *  @param cmd Command buffer. @param command The queued draw. @param boundPipeline Cache. */
@@ -4317,16 +4031,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] SDL_GPUTexture* AcquireDefaultWhiteTextureEXT();
 
         /**
-         * @brief A plain point/clamp sampler for compute's sampled-texture bindings. CNAEXT.
+         * @brief A plain point/clamp sampler for a custom effect's unreached sampler slot. CNAEXT.
          *
-         * `SDL_BindGPUComputeSamplers` needs a sampler per binding, and the CNAEXT compute contract
-         * exposes no sampler state of its own -- `ComputeShader::bindTexture` names a unit and
-         * nothing else. Point and clamp is the one choice that reads exactly the texels a compute
-         * shader addressed, which is what every conformance case here checks.
+         * `SDL_BindGPUFragmentSamplers` needs a sampler for every slot a module declares, including
+         * one no `SamplerState` reaches -- a 3D draw's set-0 sampler, which has no SpriteBatch
+         * sampler behind it. Point and clamp reads exactly the texel addressed.
          *
          * @return The cached sampler, created on first use, or null if it could not be created.
          */
-        CNAEXT [[nodiscard]] SDL_GPUSampler* AcquireComputeSamplerEXT();
+        CNAEXT [[nodiscard]] SDL_GPUSampler* AcquireFallbackSamplerEXT();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
             bool skinned, bool colored, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
@@ -4720,15 +4433,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
         /// SMG-0019: 3D draws shaded by a custom ShaderEffect.
         std::vector<CustomEffect3DDrawCommand> customEffect3DDrawCommands_;
-        /// SMG-0023: the indirect arguments the draw being queued right now must use, or null.
-        /// Set for exactly the duration of one DrawPrimitivesIndirectEXT call, because the stock
-        /// families' Queue* functions are reached through DispatchStockDrawEXT's shape selection
-        /// and cannot be handed an extra parameter without threading it through all eleven.
-        SDL_GPUBuffer* pendingIndirectArgumentsEXT_ = nullptr;
-        Uint32 pendingIndirectOffsetEXT_ = 0;
-        std::shared_ptr<const void> pendingIndirectKeepAliveEXT_;
         /// STREETS-0001: the instance count of the instanced stock draw being queued right now, or
-        /// 0 for an ordinary one -- the pendingIndirectArgumentsEXT_ pattern, for the same reason.
+        /// 0 for an ordinary one. Set for exactly the duration of one DrawInstancedPrimitivesEx
+        /// call, because the stock families' Queue* functions are reached through
+        /// DispatchStockDrawEXT's shape selection and cannot be handed an extra parameter without
+        /// threading it through all eleven.
         int pendingInstanceCountEXT_ = 0;
         /// STREETS-0001: the instanced vertex modules, created on first use.
         std::array<SDL_GPUShader*, static_cast<std::size_t>(InstancedStockVertexShaderEXT::Count)>
@@ -4736,16 +4445,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// SMG-0027: debug labels queued this frame, and how many have ever been recorded.
         std::vector<std::string> pendingDebugMarkersEXT_;
         std::size_t recordedDebugMarkersEXT_ = 0;
-        /// SMG-0020: storage buffers published for the draws that follow, by declared binding.
-        std::vector<std::pair<int, SDL_GPUBuffer*>> drawStorageNativeEXT_;
-        /// SMG-0025: one keep-alive per published buffer, in the same order.
-        std::vector<std::shared_ptr<const void>> drawStorageKeepAliveEXT_;
-        /// SMG-0040: every live storage-buffer record made on this renderer. Whatever is still
-        /// here when the device goes is released and detached first (the compiledEffects_ rule).
-        std::vector<SdlGpuStorageBufferRenderer*> storageBuffersEXT_;
-        void RegisterStorageBufferEXT(SdlGpuStorageBufferRenderer* buffer);
-        void UnregisterStorageBufferEXT(SdlGpuStorageBufferRenderer* buffer);
-        void ReleaseStorageBuffersForRendererTeardownEXT();
 
         SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< POSITION0/TEXCOORD0 variant.
         SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< POSITION0/COLOR0/TEXCOORD0 variant.
@@ -4816,8 +4515,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // map decode (via the shader's rgb*2-1) to the unperturbed geometric normal (0,0,1).
         // Mirrors EasyGLRenderer::default_white_texture_/default_flat_normal_texture_.
         std::unique_ptr<SdlGpuTextureRenderer> defaultWhiteTexture_;
-        /// SMG-0012: the one sampler compute's sampled-texture bindings use.
-        SDL_GPUSampler* computeSamplerEXT_ = nullptr;
+        /// The point/clamp sampler AcquireFallbackSamplerEXT hands out.
+        SDL_GPUSampler* fallbackSamplerEXT_ = nullptr;
         std::unique_ptr<SdlGpuTextureRenderer> defaultFlatNormalTexture_;
         /// SMG-0032: the 1x1 white cube bound where a draw has no point-light shadow cube.
         std::unique_ptr<SdlGpuTextureCubeRenderer> defaultWhiteCubeTexture_;

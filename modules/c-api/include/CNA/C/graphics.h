@@ -135,12 +135,6 @@ typedef uint32_t CNA_GraphicsCapability;
 /** @brief Indicates support for linearly filtering half-float textures. */
 #define CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING UINT32_C(16)
 
-/** @brief Indicates support for compute shaders and storage buffers. */
-#define CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS UINT32_C(17)
-
-/** @brief Indicates support for GPU-buffer-driven indirect draws. */
-#define CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW UINT32_C(18)
-
 /**
  * @brief Largest defined graphics capability identity.
  *
@@ -148,7 +142,7 @@ typedef uint32_t CNA_GraphicsCapability;
  * @ref CNA_GRAPHICS_CAPABILITY_THREE_D through this value with no gaps, so a caller can query
  * every capability without naming each one. Every value above it is refused.
  */
-#define CNA_GRAPHICS_CAPABILITY_MAXIMUM CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW
+#define CNA_GRAPHICS_CAPABILITY_MAXIMUM CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING
 
 /** @brief Fixed-width identity of the shader payload a custom effect must supply. */
 typedef uint32_t CNA_ShaderDialect;
@@ -231,18 +225,14 @@ typedef uint64_t CNA_GraphicsCapabilityFlags;
 /** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING. */
 #define CNA_GRAPHICS_CAPABILITY_FLAG_HALF_FLOAT_TEXTURE_LINEAR_FILTERING (UINT64_C(1) << 16)
 
-/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS. */
-#define CNA_GRAPHICS_CAPABILITY_FLAG_COMPUTE_SHADERS (UINT64_C(1) << 17)
-
-/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW. */
-#define CNA_GRAPHICS_CAPABILITY_FLAG_INDIRECT_DRAW (UINT64_C(1) << 18)
-
 /**
  * @brief Fixed-width identity of one atomic renderer feature.
  *
  * This append-only identity space is intentionally separate from the legacy 64-bit
- * @ref CNA_GraphicsCapabilityFlags summary. Callers can enumerate the closed range through
- * @ref CNA_RENDERER_FEATURE_MAXIMUM and receive a four-state answer for each entry.
+ * @ref CNA_GraphicsCapabilityFlags summary. Callers can enumerate the bounded range through
+ * @ref CNA_RENDERER_FEATURE_MAXIMUM and receive a four-state answer for each defined entry. The
+ * range has gaps: 18, 19, 20 and 23 named features of the retired modern GPU layer, stay reserved
+ * and are refused with `CNA_RESULT_INVALID_ARGUMENT`.
  */
 typedef uint32_t CNA_RendererFeature;
 
@@ -282,18 +272,10 @@ typedef uint32_t CNA_RendererFeature;
 #define CNA_RENDERER_FEATURE_FLOAT16_RENDER_TARGETS UINT32_C(16)
 /** @brief Linear or mip filtering of half-float colour textures. */
 #define CNA_RENDERER_FEATURE_FLOAT16_TEXTURE_LINEAR_FILTERING UINT32_C(17)
-/** @brief Compute shaders together with the storage-buffer path. */
-#define CNA_RENDERER_FEATURE_COMPUTE_SHADERS UINT32_C(18)
-/** @brief Binding a two-dimensional texture as a compute image. */
-#define CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING UINT32_C(19)
-/** @brief GPU-buffer-driven indirect graphics drawing. */
-#define CNA_RENDERER_FEATURE_INDIRECT_DRAWING UINT32_C(20)
 /** @brief Lit stock/PBR shaders sample configured shadow state. */
 #define CNA_RENDERER_FEATURE_SHADOW_SAMPLING UINT32_C(21)
 /** @brief PBR shaders consume configured image-based-lighting resources. */
 #define CNA_RENDERER_FEATURE_IMAGE_BASED_LIGHTING UINT32_C(22)
-/** @brief GPU timestamp queries measure a submitted command range. */
-#define CNA_RENDERER_FEATURE_GPU_TIMERS UINT32_C(23)
 /** @brief Source-based effects consume desktop OpenGL GLSL. */
 #define CNA_RENDERER_FEATURE_SHADER_DIALECT_GLSL_DESKTOP UINT32_C(24)
 /** @brief Source-based effects consume OpenGL ES/WebGL GLSL. */
@@ -337,55 +319,33 @@ typedef uint32_t CNA_RendererFeatureSupport;
 /** @brief Largest defined detailed renderer-feature support identity. */
 #define CNA_RENDERER_FEATURE_SUPPORT_MAXIMUM CNA_RENDERER_FEATURE_SUPPORT_RESTRICTED
 
-/** @brief Fixed-width identity of one numeric renderer/device limit. */
+/**
+ * @brief Fixed-width identity of one numeric renderer/device limit.
+ *
+ * The range through @ref CNA_RENDERER_LIMIT_MAXIMUM has gaps: 2-10, 12, 13, 15, 19 and 21 named
+ * limits of the retired modern GPU layer, stay reserved and are refused with
+ * `CNA_RESULT_INVALID_ARGUMENT`.
+ */
 typedef uint32_t CNA_RendererLimit;
 
 /** @brief Maximum width or height of a two-dimensional texture. */
 #define CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION UINT32_C(0)
 /** @brief Maximum same-rate vertex streams in one draw. */
 #define CNA_RENDERER_LIMIT_MAX_VERTEX_STREAMS UINT32_C(1)
-/** @brief Maximum compute work-group count on the X axis. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_COUNT_X UINT32_C(2)
-/** @brief Maximum compute work-group count on the Y axis. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_COUNT_Y UINT32_C(3)
-/** @brief Maximum compute work-group count on the Z axis. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_COUNT_Z UINT32_C(4)
-/** @brief Maximum compute local size on the X axis. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_SIZE_X UINT32_C(5)
-/** @brief Maximum compute local size on the Y axis. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_SIZE_Y UINT32_C(6)
-/** @brief Maximum compute local size on the Z axis. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_SIZE_Z UINT32_C(7)
-/** @brief Maximum product of all compute local sizes. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_INVOCATIONS UINT32_C(8)
-/** @brief Maximum storage-buffer bindings readable by a vertex shader. */
-#define CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS UINT32_C(9)
-/** @brief Maximum byte range addressable through one storage-buffer binding. */
-#define CNA_RENDERER_LIMIT_MAX_STORAGE_BUFFER_BYTES UINT32_C(10)
 /** @brief Maximum byte range addressable through one uniform-buffer binding. */
 #define CNA_RENDERER_LIMIT_MAX_UNIFORM_BUFFER_BYTES UINT32_C(11)
-/** @brief Maximum storage-buffer bindings visible to one compute shader. */
-#define CNA_RENDERER_LIMIT_MAX_COMPUTE_STORAGE_BUFFER_BINDINGS UINT32_C(12)
-/** @brief Maximum sampled two-dimensional texture-array layer count. */
-#define CNA_RENDERER_LIMIT_MAX_TEXTURE_ARRAY_LAYERS UINT32_C(13)
 /** @brief Maximum sampled textures visible to one shader stage. */
 #define CNA_RENDERER_LIMIT_MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE UINT32_C(14)
-/** @brief Maximum storage images visible to one shader stage. */
-#define CNA_RENDERER_LIMIT_MAX_STORAGE_IMAGES_PER_SHADER_STAGE UINT32_C(15)
 /** @brief Maximum native vertex-buffer bindings consumed by one draw. */
 #define CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_BINDINGS UINT32_C(16)
 /** @brief Maximum vertex attributes consumed by one draw. */
 #define CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_ATTRIBUTES UINT32_C(17)
 /** @brief Maximum colour attachments written by one graphics draw. */
 #define CNA_RENDERER_LIMIT_MAX_COLOR_ATTACHMENTS UINT32_C(18)
-/** @brief Required storage-buffer binding-offset alignment in bytes. */
-#define CNA_RENDERER_LIMIT_MIN_STORAGE_BUFFER_OFFSET_ALIGNMENT UINT32_C(19)
 /** @brief Required uniform-buffer binding-offset alignment in bytes. */
 #define CNA_RENDERER_LIMIT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT UINT32_C(20)
-/** @brief GPU timestamp tick duration in picoseconds; zero when unavailable. */
-#define CNA_RENDERER_LIMIT_TIMESTAMP_PERIOD_PICOSECONDS UINT32_C(21)
 /** @brief Largest currently defined numeric renderer-limit identity. */
-#define CNA_RENDERER_LIMIT_MAXIMUM CNA_RENDERER_LIMIT_TIMESTAMP_PERIOD_PICOSECONDS
+#define CNA_RENDERER_LIMIT_MAXIMUM CNA_RENDERER_LIMIT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT
 
 /** @brief Fixed-width usage masks for per-surface-format support. */
 typedef uint32_t CNA_RendererFormatUsageFlags;
@@ -400,12 +360,6 @@ typedef uint32_t CNA_RendererFormatUsageFlags;
 #define CNA_RENDERER_FORMAT_USAGE_RENDER_TARGET (UINT32_C(1) << 3)
 /** @brief Blending graphics output into the format. */
 #define CNA_RENDERER_FORMAT_USAGE_BLENDABLE (UINT32_C(1) << 4)
-/** @brief Reading through a compute/storage-image binding. */
-#define CNA_RENDERER_FORMAT_USAGE_STORAGE_READ (UINT32_C(1) << 5)
-/** @brief Writing through a compute/storage-image binding. */
-#define CNA_RENDERER_FORMAT_USAGE_STORAGE_WRITE (UINT32_C(1) << 6)
-/** @brief Storage-image atomic operations. */
-#define CNA_RENDERER_FORMAT_USAGE_STORAGE_ATOMIC (UINT32_C(1) << 7)
 /** @brief Copying the format out of a resource. */
 #define CNA_RENDERER_FORMAT_USAGE_TRANSFER_SOURCE (UINT32_C(1) << 8)
 /** @brief Copying data into a resource of the format. */
@@ -416,8 +370,17 @@ typedef uint32_t CNA_RendererFormatUsageFlags;
 #define CNA_RENDERER_FORMAT_USAGE_MULTISAMPLE (UINT32_C(1) << 11)
 /** @brief Transferring through a colour-shaped element. */
 #define CNA_RENDERER_FORMAT_USAGE_COLOR_TRANSFER (UINT32_C(1) << 12)
-/** @brief Mask containing every currently defined renderer-format usage bit. */
-#define CNA_RENDERER_FORMAT_USAGE_ALL ((UINT32_C(1) << 13) - UINT32_C(1))
+/**
+ * @brief Mask containing every currently defined renderer-format usage bit.
+ *
+ * Bits 5-7 named the retired storage-image usages and stay reserved; no route reports them.
+ */
+#define CNA_RENDERER_FORMAT_USAGE_ALL                                                   \
+    (CNA_RENDERER_FORMAT_USAGE_TEXTURE_STORAGE | CNA_RENDERER_FORMAT_USAGE_SAMPLED |    \
+     CNA_RENDERER_FORMAT_USAGE_FILTERABLE | CNA_RENDERER_FORMAT_USAGE_RENDER_TARGET |   \
+     CNA_RENDERER_FORMAT_USAGE_BLENDABLE | CNA_RENDERER_FORMAT_USAGE_TRANSFER_SOURCE |  \
+     CNA_RENDERER_FORMAT_USAGE_TRANSFER_DESTINATION | CNA_RENDERER_FORMAT_USAGE_MIPMAPPED | \
+     CNA_RENDERER_FORMAT_USAGE_MULTISAMPLE | CNA_RENDERER_FORMAT_USAGE_COLOR_TRANSFER)
 
 /** @brief Fixed-width surface-format identity used by texture APIs. */
 typedef uint32_t CNA_SurfaceFormat;

@@ -58,10 +58,10 @@ The normal glTF runtime path in `ContentManager` constructs `PbrEffect` or
 include the removed `GltfMaterialBridge`. CNB maintains its own `CnbMaterial` data and the
 `PbrEffect`/`SkinnedPbrEffect` effect kinds; CNJ-to-CNB maps those names independently.
 
-Renderer production implementations were left intact. Their compute/storage, texture-array,
-render-target, cube-map, shader-dialect, indirect-draw, PBR and timestamp operations are
-renderer capabilities below the removed engine policy. Removing the backend implementations
-would alter core renderer contracts and custom-shader/PBR behavior. Two core graphics
+Renderer production implementations were left intact at the time. Their compute/storage,
+texture-array, indirect-draw and timestamp operations were removed afterwards, end to end, by
+`plans/plan_modern_retirement.md` (2026-10-13); render-target, cube-map, shader-dialect and PBR
+operations remain renderer capabilities. Two core graphics
 exemptions used only by the old engine were also removed: the float-filtering bypass and the
 oversized render-target scope. XNA profile rules now apply uniformly. Engine-only renderer
 examples and tests that instantiated deleted graphics-extension resources were removed.

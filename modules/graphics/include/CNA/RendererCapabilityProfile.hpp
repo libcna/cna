@@ -20,7 +20,10 @@ namespace CNA
      *
      * Unlike the legacy `GraphicsCapability` summary, these entries deliberately separate
      * contracts that real renderers can answer differently. Numeric values are public and
-     * append-only so the same identities can be exposed through CNA's C ABI.
+     * append-only so the same identities can be exposed through CNA's C ABI. Ordinals 18, 19, 20
+     * and 23 belonged to the retired modern GPU layer (compute shaders, compute image binding,
+     * indirect drawing, GPU timers) and stay reserved; @ref AllRendererFeatures lists the
+     * defined identities.
      */
     enum class RendererFeature : std::uint32_t
     {
@@ -60,18 +63,10 @@ namespace CNA
         Float16RenderTargets = 16,
         /** @brief Linear or mip filtering of half-float colour textures. */
         Float16TextureLinearFiltering = 17,
-        /** @brief Compute shaders together with their storage-buffer path. */
-        ComputeShaders = 18,
-        /** @brief Binding a two-dimensional texture as a compute image. */
-        ComputeImageBinding = 19,
-        /** @brief GPU-buffer-driven indirect graphics draws. */
-        IndirectDrawing = 20,
         /** @brief Lit stock/PBR shaders sample configured shadow state. */
         ShadowSampling = 21,
         /** @brief PBR shaders consume configured image-based lighting resources. */
         ImageBasedLighting = 22,
-        /** @brief GPU timestamp queries can measure a command range. */
-        GpuTimers = 23,
         /** @brief Source-based effects consume desktop OpenGL GLSL. */
         ShaderDialectGlslDesktop = 24,
         /** @brief Source-based effects consume OpenGL ES/WebGL GLSL. */
@@ -88,7 +83,7 @@ namespace CNA
         Texture3DSampling = 30,
         /** @brief Instanced indexed drawing can start at a caller-selected instance. */
         BaseInstanceDrawing = 31,
-        /** @brief Number of declared feature identities; not itself a queryable feature. */
+        /** @brief One past the highest feature ordinal; not itself a queryable feature. */
         Count = 32
     };
 
@@ -105,55 +100,33 @@ namespace CNA
         Restricted = 3
     };
 
-    /** @brief Identifies one numeric renderer/device limit. */
+    /**
+     * @brief Identifies one numeric renderer/device limit.
+     *
+     * Numeric values are public and append-only. Ordinals 2-10, 12, 13, 15, 19 and 21 belonged to
+     * the retired modern GPU layer (compute work groups, storage buffers and images, texture
+     * arrays, timestamps) and stay reserved; @ref AllRendererLimits lists the defined identities.
+     */
     enum class RendererLimit : std::uint32_t
     {
         /** @brief Maximum width or height of a two-dimensional texture. */
         MaxTextureDimension = 0,
         /** @brief Maximum number of same-rate vertex streams in one draw. */
         MaxVertexStreams = 1,
-        /** @brief Maximum compute work-group count on the X axis. */
-        MaxComputeWorkGroupCountX = 2,
-        /** @brief Maximum compute work-group count on the Y axis. */
-        MaxComputeWorkGroupCountY = 3,
-        /** @brief Maximum compute work-group count on the Z axis. */
-        MaxComputeWorkGroupCountZ = 4,
-        /** @brief Maximum compute local size on the X axis. */
-        MaxComputeWorkGroupSizeX = 5,
-        /** @brief Maximum compute local size on the Y axis. */
-        MaxComputeWorkGroupSizeY = 6,
-        /** @brief Maximum compute local size on the Z axis. */
-        MaxComputeWorkGroupSizeZ = 7,
-        /** @brief Maximum product of all compute local sizes. */
-        MaxComputeWorkGroupInvocations = 8,
-        /** @brief Maximum storage-buffer bindings readable by a vertex shader. */
-        MaxVertexShaderStorageBlocks = 9,
-        /** @brief Maximum byte range addressable through one storage-buffer binding. */
-        MaxStorageBufferBytes = 10,
         /** @brief Maximum byte range addressable through one uniform/constant-buffer binding. */
         MaxUniformBufferBytes = 11,
-        /** @brief Maximum storage-buffer bindings visible to one compute shader. */
-        MaxComputeStorageBufferBindings = 12,
-        /** @brief Maximum layer count of a sampled two-dimensional texture array. */
-        MaxTextureArrayLayers = 13,
         /** @brief Maximum sampled textures visible to one shader stage. */
         MaxSampledTexturesPerShaderStage = 14,
-        /** @brief Maximum storage images visible to one shader stage. */
-        MaxStorageImagesPerShaderStage = 15,
         /** @brief Maximum native vertex-buffer bindings consumed by one draw. */
         MaxVertexInputBindings = 16,
         /** @brief Maximum vertex attributes consumed by one draw. */
         MaxVertexInputAttributes = 17,
         /** @brief Maximum colour attachments written by one graphics draw. */
         MaxColorAttachments = 18,
-        /** @brief Required byte alignment of a storage-buffer binding offset. */
-        MinStorageBufferOffsetAlignment = 19,
         /** @brief Required byte alignment of a uniform/constant-buffer binding offset. */
         MinUniformBufferOffsetAlignment = 20,
-        /** @brief GPU timestamp tick duration in picoseconds; zero when unavailable. */
-        TimestampPeriodPicoseconds = 21,
-        /** @brief Number of declared limit identities; not itself a queryable limit. */
-        Count = 22
+        /** @brief One past the highest limit ordinal; not itself a queryable limit. */
+        Count = 21
     };
 
     /**
@@ -161,6 +134,7 @@ namespace CNA
      *
      * A format result carries separate known and supported masks. A missing known bit means that
      * the active renderer has not classified that use; it must not be interpreted as unsupported.
+     * Bits 5-7 belonged to the retired storage-image usages and stay reserved.
      */
     enum class RendererFormatUsage : std::uint32_t
     {
@@ -174,12 +148,6 @@ namespace CNA
         RenderTarget = UINT32_C(1) << 3,
         /** @brief Blending graphics output into this format. */
         Blendable = UINT32_C(1) << 4,
-        /** @brief Reading this format through a compute/storage-image binding. */
-        StorageRead = UINT32_C(1) << 5,
-        /** @brief Writing this format through a compute/storage-image binding. */
-        StorageWrite = UINT32_C(1) << 6,
-        /** @brief Performing storage-image atomic operations in this format. */
-        StorageAtomic = UINT32_C(1) << 7,
         /** @brief Copying this format from a resource into another destination. */
         TransferSource = UINT32_C(1) << 8,
         /** @brief Copying data into a resource of this format. */

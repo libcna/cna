@@ -198,18 +198,17 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_diag_compare cross_renderer_diagnostic_compare.cpp)
 endif()
 
-# plans/plan_modern.md MOD-2201: keep the EasyGL/Vulkan baseline measurable from one
-# renderer-neutral source. This deliberately builds only for the Phase-22 comparison identities
-# and prints both the legacy capability ordinals and the complete detailed profile.
+# One renderer-neutral inventory of the legacy capability ordinals and the complete detailed
+# profile, built for the EasyGL and Vulkan comparison identities so the two can be diffed.
 if(CNA_BUILD_TESTS AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
         OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
-    add_executable(cna_probe_modern_gpu_capabilities modern_gpu_capability_probe.cpp)
-    target_link_libraries(cna_probe_modern_gpu_capabilities PRIVATE cna_graphics_core)
+    add_executable(cna_probe_renderer_capabilities renderer_capability_probe.cpp)
+    target_link_libraries(cna_probe_renderer_capabilities PRIVATE cna_graphics_core)
     if(TARGET SDL3::SDL3main)
-        target_link_libraries(cna_probe_modern_gpu_capabilities PRIVATE SDL3::SDL3main)
+        target_link_libraries(cna_probe_renderer_capabilities PRIVATE SDL3::SDL3main)
     endif()
-    add_test(NAME ModernGpuCapabilityProbe COMMAND cna_probe_modern_gpu_capabilities)
-    set_tests_properties(ModernGpuCapabilityProbe PROPERTIES
+    add_test(NAME RendererCapabilityProbe COMMAND cna_probe_renderer_capabilities)
+    set_tests_properties(RendererCapabilityProbe PROPERTIES
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 

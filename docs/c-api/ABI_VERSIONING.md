@@ -2,7 +2,32 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.46.0** (`plans/plan_apple_m4.md` `AM4-037`). It appends one
+The current experimental ABI is **0.47.0** (`plans/plan_modern_retirement.md` `MRT-008`). It
+**removes the C surface of the retired modern GPU layer**: the capability identities
+`CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS` (`17`) and `CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW`
+(`18`) with their `_FLAG_` bits, so `CNA_GRAPHICS_CAPABILITY_MAXIMUM` moves from `18` to `16`
+(`HALF_FLOAT_TEXTURE_LINEAR_FILTERING`); the renderer features `COMPUTE_SHADERS` (`18`),
+`COMPUTE_IMAGE_BINDING` (`19`), `INDIRECT_DRAWING` (`20`) and `GPU_TIMERS` (`23`); the thirteen
+compute/storage/timer limits (`MAX_COMPUTE_WORK_GROUP_COUNT_X` `2` through
+`MAX_VERTEX_SHADER_STORAGE_BLOCKS` `9`, `MAX_STORAGE_BUFFER_BYTES` `10`,
+`MAX_COMPUTE_STORAGE_BUFFER_BINDINGS` `12`, `MAX_TEXTURE_ARRAY_LAYERS` `13`,
+`MAX_STORAGE_IMAGES_PER_SHADER_STAGE` `15`, `MIN_STORAGE_BUFFER_OFFSET_ALIGNMENT` `19` and
+`TIMESTAMP_PERIOD_PICOSECONDS` `21`), so `CNA_RENDERER_LIMIT_MAXIMUM` moves from `21` to `20`
+(`MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT`); the format-usage bits `STORAGE_READ`, `STORAGE_WRITE` and
+`STORAGE_ATOMIC` (bits 5–7); the structures `CNA_IndirectDrawArguments` and
+`CNA_IndirectDrawIndexedArguments` with `cna_indirect_draw_arguments_init` and
+`cna_indirect_draw_indexed_arguments_init`; and the routes
+`cna_graphics_device_get_max_compute_work_group_count_ext`, `..._size_ext` and
+`..._invocations_ext`. Every surviving constant keeps its number: `CNA_RENDERER_FEATURE_MAXIMUM`
+stays `31`, the retired feature, limit ordinals and usage bits are permanently reserved and the
+feature/limit query routes refuse them with `CNA_RESULT_INVALID_ARGUMENT`. What breaks is a
+binding that names one of the removed constants, structures or routes (it no longer compiles or
+links); no other route, structure, field or exported symbol changes, and 3,205 exports remain. The
+`0.x` rule below takes this minor increment, these release notes and an updated baseline.
+
+### Previous ABI 0.46.0
+
+The ABI was **0.46.0** (`plans/plan_apple_m4.md` `AM4-037`). It appends one
 native windowing-system identity, `CNA_NATIVE_WINDOW_SYSTEM_UIKIT` (`9`): on iOS/iPadOS
 `cna_game_window_get_native_window_ext` reports SDL's `uikit` window with
 `CNA_NativeWindowHandle::window` set to its `UIWindow*`, where it used to report
@@ -64,7 +89,7 @@ The ABI was **0.41.0** (`CBIND-152`). It adds one route,
 XNA's loading screens start a thread that draws the loading animation and join it from `Update`
 (Microsoft's Network Game State Management sample); with the queue served only between updates,
 that thread waited for the game thread and the game thread for it. A binding calls the route while
-its game thread waits. Additive: nothing existing changes. 3,210 exports.
+its game thread waits. Additive: nothing existing changes.
 
 ### Previous ABI 0.40.0
 
@@ -652,7 +677,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,210 exports; build configurations must export the same surface.
+The current baseline records 3,205 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than

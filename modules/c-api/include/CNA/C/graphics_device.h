@@ -1483,50 +1483,6 @@ CNA_C_API CNA_Result cna_graphics_device_set_display_color_space_ext(
 CNA_C_API CNA_Result cna_graphics_device_supports_display_color_space_ext(
     CNA_Handle graphics_device, uint32_t space, CNA_Bool* out_supported);
 
-/**
- * @brief Returns the largest compute work-group count along one axis.
- *
- * **An axis outside zero to two answers zero rather than being refused**, which is the canonical
- * behaviour: the answer to "how many groups along axis 7" is none, and a caller looping over axes
- * gets a usable number instead of an error to special-case.
- *
- * @param graphics_device The device.
- * @param axis The axis, zero through two.
- * @param out_count Receives the count, or zero for an axis outside the range.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
- * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
- */
-CNA_C_API CNA_Result cna_graphics_device_get_max_compute_work_group_count_ext(
-    CNA_Handle graphics_device, int32_t axis, int32_t* out_count);
-
-/**
- * @brief Returns the largest compute work-group size along one axis.
- *
- * An axis outside zero to two answers zero, as above.
- *
- * @param graphics_device The device.
- * @param axis The axis, zero through two.
- * @param out_size Receives the size, or zero for an axis outside the range.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
- * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
- */
-CNA_C_API CNA_Result cna_graphics_device_get_max_compute_work_group_size_ext(
-    CNA_Handle graphics_device, int32_t axis, int32_t* out_size);
-
-/**
- * @brief Returns the largest total number of invocations one work group may have.
- *
- * Not the product of the three per-axis sizes: a group may be within every axis limit and still
- * exceed this one.
- *
- * @param graphics_device The device.
- * @param out_invocations Receives the count.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
- * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
- */
-CNA_C_API CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
-    CNA_Handle graphics_device, int32_t* out_invocations);
-
 #ifdef __cplusplus
 }
 #endif

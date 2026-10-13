@@ -121,19 +121,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Parity_backbuffer_msaa_Reset PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # plans/plan_sdlgpu_modern_graphics.md SMG-0024: a three-thousand-cycle soak over the modern
-    # resources, looking for the lifetime failures that only appear after thousands of cycles. Not
-    # registered with ctest: it takes minutes rather than seconds and is run deliberately, the way
-    # the other renderers' stress programs are.
-
-
-    # SMG-0040: no storage buffer's native SDL_GPUBuffer survives SDL_DestroyGPUDevice, in any
-    # destruction order -- counted through the renderer's resource hook, and in a Debug build also
-    # through the validation layer, whose live-object report fails the entry.
-
-
-
-
     # SMG-0038: forces SDL_gpu's Vulkan defragmenter over a texture allocation, three times, and
     # reads the surviving textures back. The vendored SDL crashed here before its upstream fix.
     cna_sdlgpu_test(cna_test_sdlgpu_texture_defragment sdlgpu_texture_defragment_test.cpp)

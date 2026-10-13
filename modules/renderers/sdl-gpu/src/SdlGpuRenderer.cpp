@@ -17,7 +17,6 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
-#include "CNA/Internal/Renderers/SdlGpu/SdlGpuModern.hpp"
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 #include "Fna3dStockEffectBlobs.hpp"
@@ -2695,11 +2694,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuRenderer::~SdlGpuRenderer()
     {
-        // SMG-0012: released before the device goes, like every other cached native object here.
-        if (computeSamplerEXT_ != nullptr && device_ != nullptr)
+        // Released before the device goes, like every other cached native object here.
+        if (fallbackSamplerEXT_ != nullptr && device_ != nullptr)
         {
-            SDL_ReleaseGPUSampler(device_, computeSamplerEXT_);
-            computeSamplerEXT_ = nullptr;
+            SDL_ReleaseGPUSampler(device_, fallbackSamplerEXT_);
+            fallbackSamplerEXT_ = nullptr;
         }
         if (registeredForWindow_)
         {
@@ -2717,14 +2716,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         spriteCommands_.clear();
         passSegments_.clear();
         drawOrder_.clear();
-        // SMG-0040: the draw-binding state holds storage-buffer records too, and as members they
-        // would otherwise be destroyed after SDL_DestroyGPUDevice below -- when a record can no
-        // longer release its VkBuffer (VUID-vkDestroyDevice-device-05137). Dropped here, a record
-        // whose last owner was this binding releases normally while the device is alive.
-        drawStorageNativeEXT_.clear();
-        drawStorageKeepAliveEXT_.clear();
-        pendingIndirectArgumentsEXT_ = nullptr;
-        pendingIndirectKeepAliveEXT_.reset();
         DestroyPbrResources();
         DestroySkinnedResources();
         DestroyInstancedResources();
@@ -2771,10 +2762,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
         if (backbufferProxy_ != nullptr)
             SDL_ReleaseGPUTexture(device_, backbufferProxy_);   // REMED-GFX-165 readback proxy
-        // SMG-0040: any storage-buffer record still alive -- held by a caller past its
-        // GraphicsDevice, or by anything else -- gives up its native buffer now and is detached,
-        // so it neither outlives the device nor addresses this renderer after it is gone.
-        ReleaseStorageBuffersForRendererTeardownEXT();
         if (device_ != nullptr)
         {
             if (windowClaimed_)
@@ -2843,8 +2830,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::FloatRenderTargets:
             case CNA::GraphicsCapability::HalfFloatRenderTargets:
-            case CNA::GraphicsCapability::ComputeShaders:
-            case CNA::GraphicsCapability::IndirectDraw:
                 return false;
         }
         return false;
@@ -2855,69 +2840,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (device_ == nullptr || marker == nullptr || *marker == '\0') return;
         pendingDebugMarkersEXT_.emplace_back(marker);
         ++recordedDebugMarkersEXT_;
-    }
-
-    void SdlGpuRenderer::FlushPendingGpuWorkEXT()
-    {
-        if (device_ == nullptr) return;
-        (void) EnsureFrameRendered();
-    }
-
-    bool SdlGpuRenderer::SupportsComputeShadersEXT() const
-    {
-        // SDL_gpu's compute surface is core rather than optional -- every driver it will hand back
-        // implements SDL_CreateGPUComputePipeline and the compute pass. The device is the only
-        // real condition, and the SPIR-V intake the pipelines need is the same one the graphics
-        // stages already use.
-        return device_ != nullptr;
-    }
-
-    std::unique_ptr<IComputeShaderRenderer> SdlGpuRenderer::CreateComputeShader(
-        const std::string& computeSrc)
-    {
-        if (device_ == nullptr) return nullptr;
-        auto shader = std::make_unique<SdlGpuComputeShaderRenderer>(*this);
-        if (!computeSrc.empty()) shader->CompileProgram(computeSrc);
-        return shader;
-    }
-
-    std::unique_ptr<IStorageBufferRenderer> SdlGpuRenderer::CreateStorageBuffer(
-        const std::size_t byteSize)
-    {
-        // The legacy entry point's descriptor: storage plus both transfer directions and both CPU
-        // directions, which is what IStorageBufferRenderer's own defaults document.
-        return CreateStorageBufferEXT(byteSize, 0x0Fu, 0x03u);
-    }
-
-    std::unique_ptr<IStorageBufferRenderer> SdlGpuRenderer::CreateStorageBufferEXT(
-        const std::size_t byteSize, const std::uint32_t usage, const std::uint32_t cpuAccess)
-    {
-        if (device_ == nullptr || byteSize == 0) return nullptr;
-        try
-        {
-            return std::make_unique<SdlGpuStorageBufferRenderer>(
-                *this, byteSize, usage, cpuAccess);
-        }
-        catch (const std::exception&)
-        {
-            return nullptr;
-        }
-    }
-
-    std::unique_ptr<IStorageTexture2DRenderer> SdlGpuRenderer::CreateStorageTexture2DEXT(
-        const int width, const int height, const int mipLevelCount, const int surfaceFormat,
-        const std::uint32_t usage)
-    {
-        if (device_ == nullptr) return nullptr;
-        try
-        {
-            return std::make_unique<SdlGpuStorageTexture2DRenderer>(
-                *this, width, height, mipLevelCount, surfaceFormat, usage);
-        }
-        catch (const std::exception&)
-        {
-            return nullptr;
-        }
     }
 
     bool SdlGpuRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
@@ -2931,57 +2853,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                    RendererFormatVerdict::Supported;
     }
 
-    CNA::RendererFormatSupport SdlGpuRenderer::GetSurfaceFormatUsageSupportEXT(
-        const int surfaceFormat) const
-    {
-        CNA::RendererFormatSupport support;
-        if (device_ == nullptr) return support;
-
-        SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_INVALID;
-        int bytesPerTexel = 0;
-        if (!TranslateStorageImageFormatEXT(surfaceFormat, format, bytesPerTexel))
-        {
-            // Classified, and classified as unsupported: this format has no SDL_gpu storage-image
-            // equivalent at all, which is a different answer from "not asked".
-            support.knownUsages =
-                static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageRead)
-                | static_cast<std::uint32_t>(CNA::RendererFormatUsage::StorageWrite);
-            return support;
-        }
-
-        // Asked of the device rather than assumed. SDL answers per (format, type, usage), so each
-        // usage is its own query and a driver that supports reading but not writing a format is
-        // reported as exactly that.
-        const auto classify = [&](const CNA::RendererFormatUsage usage,
-                                  const SDL_GPUTextureUsageFlags flags) {
-            support.knownUsages |= static_cast<std::uint32_t>(usage);
-            if (SDL_GPUTextureSupportsFormat(device_, format, SDL_GPU_TEXTURETYPE_2D, flags))
-                support.supportedUsages |= static_cast<std::uint32_t>(usage);
-        };
-        classify(CNA::RendererFormatUsage::StorageRead,
-                 SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ);
-        classify(CNA::RendererFormatUsage::StorageWrite,
-                 SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE);
-        classify(CNA::RendererFormatUsage::Sampled, SDL_GPU_TEXTUREUSAGE_SAMPLER);
-        classify(CNA::RendererFormatUsage::TextureStorage, SDL_GPU_TEXTUREUSAGE_SAMPLER);
-        classify(CNA::RendererFormatUsage::RenderTarget, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
-
-        // Transfer and mip ownership are properties of the resource rather than of a usage flag
-        // SDL exposes: any texture this renderer creates can be uploaded to, downloaded from and
-        // allocated with levels.
-        const std::uint32_t resourceUsages =
-            static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferSource)
-            | static_cast<std::uint32_t>(CNA::RendererFormatUsage::TransferDestination)
-            | static_cast<std::uint32_t>(CNA::RendererFormatUsage::Mipmapped);
-        support.knownUsages |= resourceUsages;
-        support.supportedUsages |= resourceUsages;
-        return support;
-    }
-
-    SDL_GPUSampler* SdlGpuRenderer::AcquireComputeSamplerEXT()
+    SDL_GPUSampler* SdlGpuRenderer::AcquireFallbackSamplerEXT()
     {
         if (device_ == nullptr) return nullptr;
-        if (computeSamplerEXT_ != nullptr) return computeSamplerEXT_;
+        if (fallbackSamplerEXT_ != nullptr) return fallbackSamplerEXT_;
         SDL_GPUSamplerCreateInfo info{};
         info.min_filter = SDL_GPU_FILTER_NEAREST;
         info.mag_filter = SDL_GPU_FILTER_NEAREST;
@@ -2989,57 +2864,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
         info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
         info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-        computeSamplerEXT_ = SDL_CreateGPUSampler(device_, &info);
-        return computeSamplerEXT_;
-    }
-
-    void SdlGpuRenderer::BindStorageBufferForDrawEXT(
-        const int binding, const IStorageBufferRenderer& buffer)
-    {
-        const auto* native = dynamic_cast<const SdlGpuStorageBufferRenderer*>(&buffer);
-        if (native == nullptr) return;
-        for (std::size_t i = 0; i < drawStorageNativeEXT_.size(); ++i)
-        {
-            if (drawStorageNativeEXT_[i].first != binding) continue;
-            drawStorageNativeEXT_[i].second = native->Buffer();
-            drawStorageKeepAliveEXT_[i] = buffer.shared_from_this();
-            return;
-        }
-        drawStorageNativeEXT_.emplace_back(binding, native->Buffer());
-        drawStorageKeepAliveEXT_.push_back(buffer.shared_from_this());
-    }
-
-    void SdlGpuRenderer::DispatchCompute(
-        IComputeShaderRenderer* shader, const int groupsX, const int groupsY, const int groupsZ)
-    {
-        auto* native = dynamic_cast<SdlGpuComputeShaderRenderer*>(shader);
-        if (native == nullptr) return;
-        native->DispatchEXT(groupsX, groupsY, groupsZ);
-    }
-
-    int SdlGpuRenderer::GetMaxComputeWorkGroupCountEXT(const int axis) const
-    {
-        if (device_ == nullptr || axis < 0 || axis > 2) return 0;
-        // SDL_gpu publishes no device limits of its own. These are the floors every Vulkan 1.0
-        // implementation guarantees (VkPhysicalDeviceLimits minimums), which is the largest number
-        // that is true without asking a driver SDL_gpu will not let us ask.
-        return axis == 2 ? 65535 : 65535;
-    }
-
-    int SdlGpuRenderer::GetMaxComputeWorkGroupSizeEXT(const int axis) const
-    {
-        if (device_ == nullptr || axis < 0 || axis > 2) return 0;
-        return axis == 2 ? 64 : 128;
-    }
-
-    int SdlGpuRenderer::GetMaxComputeWorkGroupInvocationsEXT() const
-    {
-        return device_ != nullptr ? 128 : 0;
-    }
-
-    std::uint64_t SdlGpuRenderer::GetMaxStorageBufferBytesEXT() const
-    {
-        return device_ != nullptr ? UINT64_C(134217728) : 0;
+        fallbackSamplerEXT_ = SDL_CreateGPUSampler(device_, &info);
+        return fallbackSamplerEXT_;
     }
 
     std::uint64_t SdlGpuRenderer::GetMaxUniformBufferBytesEXT() const
@@ -3047,20 +2873,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         return device_ != nullptr ? UINT64_C(16384) : 0;
     }
 
-    int SdlGpuRenderer::GetMaxComputeStorageBufferBindingsEXT() const
-    {
-        // SDL_gpu's own compute-pass surface: eight read-only plus eight read-write slots.
-        return device_ != nullptr ? 8 : 0;
-    }
-
     int SdlGpuRenderer::GetMaxSampledTexturesPerShaderStageEXT() const
     {
         return device_ != nullptr ? 16 : 0;
-    }
-
-    std::uint64_t SdlGpuRenderer::GetMinStorageBufferOffsetAlignmentEXT() const
-    {
-        return device_ != nullptr ? UINT64_C(256) : 0;
     }
 
     std::uint64_t SdlGpuRenderer::GetMinUniformBufferOffsetAlignmentEXT() const
@@ -3077,9 +2892,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             case CNA::ShaderStageEXT::Vertex:
             case CNA::ShaderStageEXT::Fragment: return true;
-            // SMG-0009 fills this in; until the compute intake exists, claiming it would make a
-            // package select a variant this renderer would then refuse.
-            case CNA::ShaderStageEXT::Compute: return SupportsComputeShadersEXT();
             case CNA::ShaderStageEXT::Unknown:
             case CNA::ShaderStageEXT::Count: return false;
         }
@@ -5801,7 +5613,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 }
             }
             if (texture == nullptr) texture = AcquireDefaultWhiteTextureEXT();
-            if (sampler == nullptr) sampler = AcquireComputeSamplerEXT();
+            if (sampler == nullptr) sampler = AcquireFallbackSamplerEXT();
             SDL_GPUTextureSamplerBinding binding{};
             binding.texture = texture;
             binding.sampler = sampler;
@@ -5859,13 +5671,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     namespace
     {
-        /// SMG-0023: the one place a queued stock draw turns into a native draw call.
-        ///
-        /// An indirect draw reads its counts from a buffer the GPU wrote, so they are simply not
-        /// known here -- which is why this takes the command's own arguments handle rather than
-        /// letting each family decide. CNA's IndirectDrawArguments and IndirectDrawIndexedArguments
-        /// are field-for-field SDL_GPUIndirectDrawCommand and SDL_GPUIndexedIndirectDrawCommand,
-        /// so the bytes are handed over unchanged.
+        /// The one place a queued stock draw turns into a native draw call.
         ///
         /// STREETS-0001: an instance count of 0 means the command's own, so every stock family's
         /// replay picks up an instanced draw without each call site having to pass it.
@@ -5879,16 +5685,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                     instanceCount = command.instanceCount;
                 else
                     instanceCount = 1;
-            }
-            if (command.indirectArguments != nullptr)
-            {
-                if (indexed)
-                    SDL_DrawGPUIndexedPrimitivesIndirect(
-                        pass, command.indirectArguments, command.indirectOffset, 1);
-                else
-                    SDL_DrawGPUPrimitivesIndirect(
-                        pass, command.indirectArguments, command.indirectOffset, 1);
-                return;
             }
             if (indexed)
             {
@@ -6769,9 +6565,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         coloredDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Colored, coloredDrawCommands_.size() - 1);
         framePending_ = true;
@@ -6837,9 +6630,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         texturedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Textured, texturedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -6904,9 +6694,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         litTexturedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::LitTextured, litTexturedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7849,9 +7636,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         alphaTestDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::AlphaTest, alphaTestDrawCommands_.size() - 1);
         framePending_ = true;
@@ -7926,9 +7710,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         dualTextureDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::DualTexture, dualTextureDrawCommands_.size() - 1);
         framePending_ = true;
@@ -8027,9 +7808,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                          command.envMapMaxAnisotropy,
                          command.indexed ? 1 : 0);
         }
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         envMapDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::EnvMap, envMapDrawCommands_.size() - 1);
         framePending_ = true;
@@ -8233,9 +8011,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         skinnedDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Skinned, skinnedDrawCommands_.size() - 1);
         framePending_ = true;
@@ -8357,9 +8132,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         pbrDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::Pbr, pbrDrawCommands_.size() - 1);
         framePending_ = true;
@@ -8836,9 +8608,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
         compiledEffectDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::CompiledEffect, compiledEffectDrawCommands_.size() - 1);
         framePending_ = true;
@@ -9556,7 +9325,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         // family's, and carries no extra or neutral streams of its own.
         for (CustomEffect3DDrawCommand& command : customEffect3DDrawCommands_)
         {
-            // An indirect draw's counts live on the GPU, so vertexCount is legitimately zero here.
             if (!uploadVertices(command)) continue;
             uploadIndices(command);
         }
@@ -10811,8 +10579,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         const PrimitiveType primitive, const int primitiveCount, const GpuDrawParams& params,
-        SdlGpuEffectRenderer& effect, const int instanceCount,
-        SDL_GPUBuffer* const indirectArguments, const Uint32 indirectOffset)
+        SdlGpuEffectRenderer& effect, const int instanceCount)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const auto& elements = sdlGpuVb.Declaration().GetElements();
@@ -10913,10 +10680,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.fragmentSamplers = effect.SnapshotFragmentSamplersEXT();
         command.textures = effect.SnapshotBoundTexturesEXT();
         command.unitSamplers = SnapshotEffectUnitSamplersEXT();
-        command.fragmentStorageBuffers = effect.SnapshotFragmentStorageBuffersEXT();
-        command.vertexStorageBuffers = effect.SnapshotVertexStorageBuffersEXT();
-        command.storageBuffers = drawStorageNativeEXT_;
-        command.storageBufferKeepAlive = drawStorageKeepAliveEXT_;
         command.instanceCount = static_cast<Uint32>(std::max(1, instanceCount));
 
         SdlGpuColorTargetFormatsEXT colorFormats{};
@@ -10954,11 +10717,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             depthStencilFormat, colorTargetCount, rasterizer, depthStencil, key);
         if (command.pipeline == nullptr) return;
 
-        command.indirectArguments = pendingIndirectArgumentsEXT_;
-
-        command.indirectOffset = pendingIndirectOffsetEXT_;
-        command.indirectKeepAlive = pendingIndirectKeepAliveEXT_;
-
         customEffect3DDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::CustomEffect3D, customEffect3DDrawCommands_.size() - 1);
     }
@@ -10983,43 +10741,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                                     /*spriteTexture=*/nullptr, /*spriteSampler=*/nullptr,
                                     command.unitSamplers.get());
 
-        // SMG-0020: the clustered-lighting path publishes its light list, cluster table and index
-        // list through BindStorageBufferForDrawEXT at the bindings its shader declares. Indexed by
-        // the reflected SLOT for the same reason the compute path is (SMG-0013): SDL takes a
-        // contiguous array, so a gap must stay a gap rather than shift its neighbours.
-        if (command.vertexStorageBuffers != nullptr && !command.vertexStorageBuffers->empty())
-        {
-            std::vector<SDL_GPUBuffer*> storage(command.vertexStorageBuffers->size(), nullptr);
-            for (const SpirvResourceBindingEXT& declared : *command.vertexStorageBuffers)
-            {
-                if (declared.slot >= storage.size()) continue;
-                for (const auto& [binding, handle] : command.storageBuffers)
-                {
-                    if (static_cast<std::uint32_t>(binding) != declared.originalBinding) continue;
-                    storage[declared.slot] = handle;
-                    break;
-                }
-            }
-            SDL_BindGPUVertexStorageBuffers(
-                pass, 0, storage.data(), static_cast<Uint32>(storage.size()));
-        }
-        if (command.fragmentStorageBuffers != nullptr && !command.fragmentStorageBuffers->empty())
-        {
-            std::vector<SDL_GPUBuffer*> storage(command.fragmentStorageBuffers->size(), nullptr);
-            for (const SpirvResourceBindingEXT& declared : *command.fragmentStorageBuffers)
-            {
-                if (declared.slot >= storage.size()) continue;
-                for (const auto& [binding, handle] : command.storageBuffers)
-                {
-                    if (static_cast<std::uint32_t>(binding) != declared.originalBinding) continue;
-                    storage[declared.slot] = handle;
-                    break;
-                }
-            }
-            SDL_BindGPUFragmentStorageBuffers(
-                pass, 0, storage.data(), static_cast<Uint32>(storage.size()));
-        }
-
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
         vbBinding.offset = command.uploadedVertexOffset;
@@ -11032,94 +10753,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_BindGPUIndexBuffer(
                 pass, &ibBinding,
                 command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            // SMG-0023: the arguments stay on the GPU. CNA's IndirectDrawIndexedArguments is
-            // field-for-field SDL_GPUIndexedIndirectDrawCommand, so whatever a compute shader
-            // wrote is what SDL reads -- nothing is read back and repacked, which would defeat
-            // the point of drawing indirectly.
-            if (command.indirectArguments != nullptr)
-                SDL_DrawGPUIndexedPrimitivesIndirect(
-                    pass, command.indirectArguments, command.indirectOffset, 1);
-            else
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, command.instanceCount,
-                                             command.firstIndex, command.vertexOffset, 0);
-        }
-        else if (command.indirectArguments != nullptr)
-        {
-            SDL_DrawGPUPrimitivesIndirect(
-                pass, command.indirectArguments, command.indirectOffset, 1);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, command.instanceCount,
+                                         command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
             SDL_DrawGPUPrimitives(pass, command.vertexCount, command.instanceCount, 0, 0);
         }
-    }
-
-    void SdlGpuRenderer::DrawPrimitivesIndirectEXT(
-        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
-        const Matrix& projection, const PrimitiveType primitive,
-        const IStorageBufferRenderer& argumentBuffer, const int argumentByteOffset,
-        const GpuDrawParams& params)
-    {
-        const auto* arguments = dynamic_cast<const SdlGpuStorageBufferRenderer*>(&argumentBuffer);
-        if (arguments == nullptr)
-            throw System::NotSupportedException(
-                "CNA SDL_GPU: an indirect draw needs this renderer's own storage buffer");
-        // The same shape selection every direct draw takes -- a stock effect indirects exactly as
-        // a custom one does, because the arguments ride the queued command rather than the route.
-        pendingIndirectArgumentsEXT_ = arguments->Buffer();
-        pendingIndirectOffsetEXT_ = static_cast<Uint32>(argumentByteOffset);
-        // SMG-0025: the queued draw outlives this call, so it must own a reference to the buffer
-        // it will read. Without one a game that creates its arguments inside the frame -- which is
-        // the normal shape, and what the stress program does -- hands the replay a released handle.
-        pendingIndirectKeepAliveEXT_ = argumentBuffer.shared_from_this();
-        try
-        {
-            DispatchStockDrawEXT(vb, nullptr, world, view, projection, primitive,
-                                 /*primitiveCount=*/1, params);
-        }
-        catch (...)
-        {
-            pendingIndirectArgumentsEXT_ = nullptr;
-            pendingIndirectOffsetEXT_ = 0;
-            pendingIndirectKeepAliveEXT_.reset();
-            throw;
-        }
-        pendingIndirectArgumentsEXT_ = nullptr;
-        pendingIndirectOffsetEXT_ = 0;
-        pendingIndirectKeepAliveEXT_.reset();
-    }
-
-    void SdlGpuRenderer::DrawIndexedPrimitivesIndirectEXT(
-        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib, const Matrix& world,
-        const Matrix& view, const Matrix& projection, const PrimitiveType primitive,
-        const IStorageBufferRenderer& argumentBuffer, const int argumentByteOffset,
-        const GpuDrawParams& params)
-    {
-        const auto* arguments = dynamic_cast<const SdlGpuStorageBufferRenderer*>(&argumentBuffer);
-        if (arguments == nullptr)
-            throw System::NotSupportedException(
-                "CNA SDL_GPU: an indirect draw needs this renderer's own storage buffer");
-        pendingIndirectArgumentsEXT_ = arguments->Buffer();
-        pendingIndirectOffsetEXT_ = static_cast<Uint32>(argumentByteOffset);
-        // SMG-0025: the queued draw outlives this call, so it must own a reference to the buffer
-        // it will read. Without one a game that creates its arguments inside the frame -- which is
-        // the normal shape, and what the stress program does -- hands the replay a released handle.
-        pendingIndirectKeepAliveEXT_ = argumentBuffer.shared_from_this();
-        try
-        {
-            DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive,
-                                 /*primitiveCount=*/1, params);
-        }
-        catch (...)
-        {
-            pendingIndirectArgumentsEXT_ = nullptr;
-            pendingIndirectOffsetEXT_ = 0;
-            pendingIndirectKeepAliveEXT_.reset();
-            throw;
-        }
-        pendingIndirectArgumentsEXT_ = nullptr;
-        pendingIndirectOffsetEXT_ = 0;
-        pendingIndirectKeepAliveEXT_.reset();
     }
 
     void SdlGpuRenderer::DispatchStockDrawEXT(
@@ -11129,8 +10769,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         // SMG-0019: a custom ShaderEffect shades the draw itself. This used to fall straight
         // through to the stock-shape selection below, which drew the geometry with whatever stock
-        // effect its VertexDeclaration happened to match -- so a sky, a decal or a clustered-lit
-        // surface rendered, and rendered wrongly, with nothing having failed.
+        // effect its VertexDeclaration happened to match -- so a sky or a decal rendered, and
+        // rendered wrongly, with nothing having failed.
         if (params.customEffectRenderer != nullptr)
         {
             if (auto* effect = dynamic_cast<SdlGpuEffectRenderer*>(params.customEffectRenderer);
@@ -11309,9 +10949,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 #endif
         // SMG-0022: an instanced draw shaded by a custom effect goes down the same 3D route, with
-        // its instance count. The engine layer's particle system draws this way: per-vertex data is
-        // the quad, and the per-instance data is read out of a storage buffer by gl_InstanceIndex
-        // rather than supplied as a second vertex stream.
+        // its instance count.
         if (params.customEffectRenderer != nullptr)
         {
             auto* effect = dynamic_cast<SdlGpuEffectRenderer*>(params.customEffectRenderer);
@@ -13183,8 +12821,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             info.format = SDL_GPU_SHADERFORMAT_SPIRV;
             info.stage = stage;
             info.num_samplers = remapped.samplerCount;
-            info.num_storage_textures = remapped.readOnlyStorageTextureCount;
-            info.num_storage_buffers = remapped.readOnlyStorageBufferCount;
             info.num_uniform_buffers = remapped.uniformBufferCount;
             return info;
         }
@@ -13284,44 +12920,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             textureSnapshotEXT_ =
                 std::make_shared<const SdlGpuEffectTexturesEXT>(boundTexturesEXT_);
         return textureSnapshotEXT_;
-    }
-
-    std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
-    SdlGpuEffectRenderer::SnapshotVertexStorageBuffersEXT() const
-    {
-        if (vertexResourcesEXT_.empty()) return nullptr;
-        if (vertexStorageSnapshotEXT_ == nullptr)
-        {
-            auto buffers = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
-            for (const SpirvResourceBindingEXT& resource : vertexResourcesEXT_)
-                if (resource.kind == SpirvResourceKindEXT::StorageBuffer)
-                    buffers->push_back(resource);
-            std::sort(buffers->begin(), buffers->end(),
-                      [](const SpirvResourceBindingEXT& a, const SpirvResourceBindingEXT& b) {
-                          return a.slot < b.slot;
-                      });
-            vertexStorageSnapshotEXT_ = std::move(buffers);
-        }
-        return vertexStorageSnapshotEXT_;
-    }
-
-    std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
-    SdlGpuEffectRenderer::SnapshotFragmentStorageBuffersEXT() const
-    {
-        if (fragmentResourcesEXT_.empty()) return nullptr;
-        if (fragmentStorageSnapshotEXT_ == nullptr)
-        {
-            auto buffers = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
-            for (const SpirvResourceBindingEXT& resource : fragmentResourcesEXT_)
-                if (resource.kind == SpirvResourceKindEXT::StorageBuffer)
-                    buffers->push_back(resource);
-            std::sort(buffers->begin(), buffers->end(),
-                      [](const SpirvResourceBindingEXT& a, const SpirvResourceBindingEXT& b) {
-                          return a.slot < b.slot;
-                      });
-            fragmentStorageSnapshotEXT_ = std::move(buffers);
-        }
-        return fragmentStorageSnapshotEXT_;
     }
 
     std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>

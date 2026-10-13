@@ -8,14 +8,20 @@ summary used by existing code. `RendererCapabilityProfile` is the detailed, immu
 tools, diagnostics, renderer selection and code that must distinguish closely related promises.
 It is a CNA extension, not part of XNA 4.0.
 
-## Why the catalog starts at 30 rather than an arbitrary large number
+## Why the catalog is small rather than an arbitrary large number
 
 The detailed enum is append-only, but an entry is added only when CNA can define an observable
-contract and classify it from an audited renderer query. The initial catalog contains 30 atomic
-features: the 19 legacy capabilities, separated source acceptance/execution, compute-image
-binding, shadows, image-based lighting, GPU timers and six shader dialects. Reserving or publishing
+contract and classify it from an audited renderer query. The catalog holds 28 atomic features:
+the 17 legacy capabilities, separated source acceptance/execution, shadows, image-based lighting,
+six shader dialects, `Texture3D` sampling and base-instance drawing. Reserving or publishing
 hundreds of guessed identities would turn "unsupported" into a mixture of absent, unaudited and
 not-yet-defined behavior.
+
+Ordinals are never reused. The four identities that described the retired modern GPU layer
+(`ComputeShaders` 18, `ComputeImageBinding` 19, `IndirectDrawing` 20, `GpuTimers` 23) were removed
+with that layer (`plans/plan_modern_retirement.md`); their numbers are permanently reserved, so
+every surviving feature keeps the value it had and the C ABI constants did not move. The same holds
+for the retired limit ordinals and the three retired storage format-usage bits below.
 
 Every current feature is classified as one of:
 
@@ -39,17 +45,15 @@ The two format masks are intentional. For example, a missing `Sampled` bit in `k
 that this support path has not been classified; it does not mean the format cannot be sampled.
 `supportedUsages` is always a subset of `knownUsages`.
 
-The limit section consolidates the existing texture, vertex-stream and compute-group queries and
-also has append-only identities for storage/uniform-buffer byte ranges, compute SSBO bindings,
-texture-array layers, per-stage sampled/storage images, vertex bindings/attributes, colour
-attachments, buffer-offset alignments and timestamp period. Timestamp period is represented as an
-integer number of **picoseconds** so the public/C ABI snapshot stays fixed-width without discarding
-Vulkan's fractional nanosecond values. A zero is the explicit unsupported/unimplemented result;
-the separate `known` bit remains available for a renderer that cannot classify a value.
+The limit section consolidates the existing texture and vertex-stream queries and has
+append-only identities for the uniform-buffer byte range, per-stage sampled textures, vertex
+bindings/attributes, colour attachments and the uniform-buffer offset alignment. A zero is the
+explicit unsupported/unimplemented result; the separate `known` bit remains available for a
+renderer that cannot classify a value.
 
 The common format boundary covers texture storage, sampling, linear filtering, render-target and
-blend attachment use, storage read/write/atomic use, transfer source/destination, mipmapping,
-multisampling and `Color`-shaped transfer. A renderer returns separate known and supported masks
+blend attachment use, transfer source/destination, mipmapping, multisampling and `Color`-shaped
+transfer. A renderer returns separate known and supported masks
 for one `SurfaceFormat`; its audited facts override the three older framework classifications for
 the same bits, while every omitted bit remains unknown. The false-by-default renderer hook therefore
 cannot turn native availability into an accidental CNA promise. Renderer-specific values and format

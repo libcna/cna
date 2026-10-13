@@ -685,8 +685,9 @@ is necessary because the enum cannot truthfully change when an application switc
 | `FloatRenderTargets` | true (derived) | Single/Vector2/Vector4 targets retain values above one through raster, blend, resolve, mip and typed readback | truthful |
 | `HalfFloatRenderTargets` | true (derived) | HalfSingle/HalfVector2/HalfVector4/HdrBlendable run the same target-domain contracts | truthful |
 | `HalfFloatTextureLinearFiltering` | true (derived) | `HalfVector4LinearFilteringMatchesTheAdvertisedCapability` produces the midpoint purple result | truthful after SOFTWARE-190 |
-| `ComputeShaders` | false (derived) | no CPU compute executor or storage-buffer contract is advertised; EasyGL support is CNAEXT-modern | honest false, out of scope |
-| `IndirectDraw` | false (derived) | no GPU command-buffer execution is advertised; Software's guarded extension routes do not pretend to be indirect hardware draws | honest false, out of scope |
+
+The `ComputeShaders` and `IndirectDraw` capabilities this table once listed as "honest false" no
+longer exist: the modern GPU layer they described was retired (`plans/plan_modern_retirement.md`).
 
 ### Inherited/default renderer-method audit
 
@@ -704,7 +705,7 @@ occlusion query factory. The inherited/default cases that remain are classified 
 | `SupportsDepthStencil` / `SupportsDepthBuffer` / `SupportsStencilBuffer` | The inherited true answer describes renderer ability. Active `DepthFormat::None`, Depth16/24 and Depth24Stencil8 behavior is selected by the Software framebuffer and tested separately | correct default |
 | Window/logical-coordinate/surface callbacks | Software intentionally owns no platform window or swapchain. GraphicsDevice's renderer-neutral logical state and resize/reset behavior still execute | not applicable to headless CPU presentation |
 | Display color space | The default sRGB answer is the only presentation space Software exposes | correct default; HDR swapchains are CNAEXT/platform behavior |
-| Shader-source, shadow/IBL, compute/storage/indirect/timer methods | These are CNAEXT-modern facilities and their false/null/no-op defaults match the capability answers | out of campaign scope, truthful |
+| Shader-source and shadow/IBL methods | These are CNAEXT facilities and their false/null/no-op defaults match the capability answers | out of campaign scope, truthful |
 
 No other inherited no-op, null factory or optimistic classic capability remains unexplained.
 
@@ -738,7 +739,7 @@ facilities. No skip conceals an additional Software stock-effect/state/resource 
 The following EasyGL families were explicitly classified rather than silently treated as parity
 requirements: bloom, blur, distortion, cartoon, clouds, particle, normal mapping, shadow mapping,
 post-processing, custom shader-effect uniforms/layouts/cube/volume sampling, PBR/SkinnedPBR,
-modern glTF material/transmission/tangent extensions, storage/compute/indirect draw and HDR engine
+modern glTF material/transmission/tangent extensions and HDR engine
 facilities are `DEFERRED-CNAEXT`. Existing Software behavior on shared paths must remain stable, but
 extending those facilities is not a campaign completion requirement.
 

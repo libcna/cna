@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu_modern_graphics.md WMG-0006: the descriptor binding contract for a WGSL
-// `ShaderEffect` -- the one CNA's generated WGSL (tools/shader_package) and its Vulkan SPIR-V share,
-// so one portable package drives both renderers.
+// The descriptor binding contract for a WGSL `ShaderEffect` -- the one CNA's generated WGSL
+// (tools/shader_package) and its Vulkan SPIR-V share, so one portable package drives both renderers
+// -- and the explicit layouts built from a program's own WGSL.
 //
 // THE CONTRACT (also in docs/webgpu-renderer.md)
 //
@@ -12,16 +12,28 @@
 //   @group(1) @binding(4..7)    cube units 0..3
 //   @group(1) @binding(8..11)   volume units 0..3
 //   @group(1) @binding(12..15)  the float/vec2/vec3/mat4 uniform arrays
-//   @group(1) @binding(16..18)  sampled 2D-array units 0..2
+//   @group(1) @binding(16..18)  RESERVED -- formerly sampled 2D-array units; never reassigned
 //   @group(1) @binding(19)      the six engine-owned named matrices
 //   @group(1) @binding(32 + b)  the sampler for the texture at binding b
-//   @group(2) @binding(n)       storage buffers bound for the draw
+//   @group(2)                   RESERVED -- formerly draw storage buffers; a ShaderEffect binds
+//                               nothing here (the stock lit families use it for shadow reception)
 //   @group(3) @binding(0)       the 128-byte scalar block (viewport size, matrix, vector, scalar)
+//
+// These numbers are a public contract: shipped packages declare them (for example the engine
+// matrices at @group(1) @binding(19)), so a retired slot stays a gap and nothing is renumbered.
 //
 // A sampler's state is the XNA SamplerState of the unit its texture belongs to, captured at the
 // draw call. Every resource is resolved and retained at the draw call too: this renderer records a
 // frame and issues it later, so a binding read at replay would be whatever the game bound last.
+//
+// WHY THE LAYOUTS ARE EXPLICIT
+//
+// WebGPU's `layout: auto` derives a bind-group layout that belongs to the ONE pipeline it came
+// from, and a `ShaderEffect` owns many pipelines (one per render-target shape, blend state, vertex
+// layout ...) that must all accept the same bind groups. So the layout is built here from the
+// program's reflected declarations (WebGPUWgslReflection.hpp) and shared by every pipeline.
 
+#include "CNA/Internal/Renderers/WebGPU/WebGPUDescriptorEffect.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 
 #include "System/NotSupportedException.hpp"
@@ -67,10 +79,162 @@ namespace CNA::Internal::Renderers::WebGPU
             if (binding < 4) return static_cast<int>(binding);              // 2D units 0..3
             if (binding < 8) return static_cast<int>(binding - 4);          // cube units 0..3
             if (binding < 12) return static_cast<int>(binding - 8);         // volume units 0..3
-            if (binding >= 16 && binding <= 18) return static_cast<int>(binding - 16);
             return 0;
         }
     }
+
+    // ---- WebGPUProgramLayoutEXT ----------------------------------------------------------------
+
+    std::shared_ptr<WebGPUProgramLayoutEXT> WebGPUProgramLayoutEXT::Create(
+        WGPUDevice device,
+        const std::vector<std::pair<const WgslModuleReflection*, WGPUShaderStage>>& stages,
+        std::string& error, const std::uint32_t maxDynamicUniformBlocks)
+    {
+        std::shared_ptr<WebGPUProgramLayoutEXT> layout(new WebGPUProgramLayoutEXT());
+        for (const auto& [reflection, stage] : stages)
+        {
+            for (const WgslResourceBinding& r : reflection->resources)
+            {
+                if (r.group >= kMaxGroups)
+                {
+                    error = "'" + r.name + "' is in @group(" + std::to_string(r.group) +
+                            "); WebGPU guarantees groups 0.." + std::to_string(kMaxGroups - 1);
+                    return nullptr;
+                }
+                auto& group = layout->groups_[r.group];
+                auto existing = std::find_if(group.begin(), group.end(),
+                                             [&](const WebGPUBindingSlotEXT& s) {
+                                                 return s.binding == r.binding;
+                                             });
+                if (existing != group.end())
+                {
+                    if (existing->kind != r.kind || existing->type != r.type)
+                    {
+                        error = "@group(" + std::to_string(r.group) + ") @binding(" +
+                                std::to_string(r.binding) + ") is '" + existing->type +
+                                "' in one stage and '" + r.type + "' in another";
+                        return nullptr;
+                    }
+                    existing->visibility = static_cast<WGPUShaderStage>(existing->visibility | stage);
+                    existing->minBindingSize = std::max(existing->minBindingSize, r.minBindingSize);
+                    continue;
+                }
+                WebGPUBindingSlotEXT slot;
+                slot.group = r.group;
+                slot.binding = r.binding;
+                slot.kind = r.kind;
+                slot.visibility = stage;
+                slot.viewDimension = r.viewDimension;
+                slot.sampleType = r.sampleType;
+                slot.multisampled = r.multisampled;
+                slot.minBindingSize = r.minBindingSize;
+                slot.name = r.name;
+                slot.type = r.type;
+                group.push_back(std::move(slot));
+            }
+        }
+
+        std::uint32_t used = 0;
+        for (std::uint32_t g = 0; g < kMaxGroups; ++g)
+        {
+            auto& group = layout->groups_[g];
+            std::sort(group.begin(), group.end(),
+                      [](const WebGPUBindingSlotEXT& a, const WebGPUBindingSlotEXT& b) {
+                          return a.binding < b.binding;
+                      });
+            if (!group.empty()) used = g + 1;
+        }
+        layout->groupCount_ = used;
+
+        // plans/plan_webgpu_perf.md WEBGPUPERF-0005: all of a program's uniform blocks become
+        // dynamic-offset bindings, or none do -- a pipeline layout may hold only so many, and a
+        // program past that keeps the per-draw buffers it always had.
+        std::uint32_t uniformBlocks = 0;
+        for (std::uint32_t g = 0; g < layout->groupCount_; ++g)
+            for (const WebGPUBindingSlotEXT& s : layout->groups_[g])
+                if (s.kind == WgslResourceKind::UniformBuffer) ++uniformBlocks;
+        if (uniformBlocks > 0 && uniformBlocks <= maxDynamicUniformBlocks)
+            for (std::uint32_t g = 0; g < layout->groupCount_; ++g)
+                for (WebGPUBindingSlotEXT& s : layout->groups_[g])
+                    if (s.kind == WgslResourceKind::UniformBuffer) s.dynamicOffset = true;
+
+        for (std::uint32_t g = 0; g < layout->groupCount_; ++g)
+        {
+            std::vector<WGPUBindGroupLayoutEntry> entries;
+            entries.reserve(layout->groups_[g].size());
+            for (const WebGPUBindingSlotEXT& s : layout->groups_[g])
+            {
+                WGPUBindGroupLayoutEntry e = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+                e.binding = s.binding;
+                e.visibility = s.visibility;
+                switch (s.kind)
+                {
+                case WgslResourceKind::UniformBuffer:
+                    e.buffer.type = WGPUBufferBindingType_Uniform;
+                    e.buffer.minBindingSize = s.minBindingSize;
+                    e.buffer.hasDynamicOffset = s.dynamicOffset;
+                    break;
+                case WgslResourceKind::ReadOnlyStorageBuffer:
+                    e.buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+                    e.buffer.minBindingSize = s.minBindingSize;
+                    break;
+                case WgslResourceKind::Sampler:
+                    e.sampler.type = WGPUSamplerBindingType_Filtering;
+                    break;
+                case WgslResourceKind::ComparisonSampler:
+                    e.sampler.type = WGPUSamplerBindingType_Comparison;
+                    break;
+                case WgslResourceKind::SampledTexture:
+                    e.texture.sampleType = s.sampleType;
+                    e.texture.viewDimension = s.viewDimension;
+                    e.texture.multisampled = s.multisampled ? 1u : 0u;
+                    break;
+                }
+                entries.push_back(e);
+            }
+            WGPUBindGroupLayoutDescriptor descriptor{};
+            descriptor.label = Label("CNA WebGPU ShaderEffect BindGroupLayout");
+            descriptor.entryCount = entries.size();
+            descriptor.entries = entries.empty() ? nullptr : entries.data();
+            layout->layouts_[g] = wgpuDeviceCreateBindGroupLayout(device, &descriptor);
+            if (layout->layouts_[g] == nullptr)
+            {
+                error = "wgpuDeviceCreateBindGroupLayout failed for @group(" + std::to_string(g) + ")";
+                return nullptr;
+            }
+        }
+
+        WGPUPipelineLayoutDescriptor pipelineDescriptor{};
+        pipelineDescriptor.label = Label("CNA WebGPU ShaderEffect PipelineLayout");
+        pipelineDescriptor.bindGroupLayoutCount = layout->groupCount_;
+        pipelineDescriptor.bindGroupLayouts =
+            layout->groupCount_ > 0 ? layout->layouts_.data() : nullptr;
+        layout->pipelineLayout_ = wgpuDeviceCreatePipelineLayout(device, &pipelineDescriptor);
+        if (layout->pipelineLayout_ == nullptr)
+        {
+            error = "wgpuDeviceCreatePipelineLayout failed";
+            return nullptr;
+        }
+        return layout;
+    }
+
+    WebGPUProgramLayoutEXT::~WebGPUProgramLayoutEXT()
+    {
+        if (pipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(pipelineLayout_);
+        for (WGPUBindGroupLayout l : layouts_)
+            if (l != nullptr) wgpuBindGroupLayoutRelease(l);
+    }
+
+    const WebGPUBindingSlotEXT* WebGPUProgramLayoutEXT::Find(std::uint32_t group,
+                                                             std::uint32_t binding) const noexcept
+    {
+        if (group >= kMaxGroups) return nullptr;
+        for (const WebGPUBindingSlotEXT& s : groups_[group])
+            if (s.binding == binding) return &s;
+        return nullptr;
+    }
+
+    // ---- the effect's half ----------------------------------------------------------------------
 
     bool WebGPUEffectRenderer::IsDescriptorContractEXT(const WgslModuleReflection& vertex,
                                                        const WgslModuleReflection& fragment)
@@ -105,6 +269,32 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             compileError_ = "WebGPU ShaderEffect: the WGSL declares no @vertex/@fragment entry point";
             return false;
+        }
+
+        // A pipeline statically uses every binding its layout declares, so a declaration that no
+        // CNA call can fill is refused here, by name, rather than drawn with whatever happens to
+        // satisfy the validator. Group 2 carries no ShaderEffect binding on this renderer, and CNA
+        // has no texture-array type to put behind a `texture_2d_array`.
+        for (const WgslModuleReflection* stage : {&vertexReflection, &fragmentReflection})
+        {
+            for (const WgslResourceBinding& r : stage->resources)
+            {
+                if (r.group == 2)
+                {
+                    compileError_ = "WebGPU ShaderEffect: '" + r.name + "' is at @group(2) @binding(" +
+                                    std::to_string(r.binding) +
+                                    "); a ShaderEffect binds nothing in @group(2) on this renderer";
+                    return false;
+                }
+                if (r.kind == WgslResourceKind::SampledTexture &&
+                    (r.viewDimension == WGPUTextureViewDimension_2DArray ||
+                     r.viewDimension == WGPUTextureViewDimension_CubeArray))
+                {
+                    compileError_ = "WebGPU ShaderEffect: '" + r.name + "' is a " + r.type +
+                                    "; CNA has no texture-array type to bind there";
+                    return false;
+                }
+            }
         }
 
         std::string error;
@@ -224,40 +414,6 @@ namespace CNA::Internal::Renderers::WebGPU
         descriptorVolumes_[static_cast<std::size_t>(unit)] = ResolveVolumeSamplable(texture);
     }
 
-    bool WebGPUEffectRenderer::BindTexture2DArrayEXT(
-        int unit, std::shared_ptr<ITexture2DArrayRenderer> texture)
-    {
-        if (contract_ != ContractEXT::Descriptor) return false;
-        if (unit < 0 || unit >= static_cast<int>(descriptorTextureArrays_.size())) return false;
-        if (texture == nullptr)
-        {
-            descriptorTextureArrays_[static_cast<std::size_t>(unit)] = WebGPUSampledTextureEXT{};
-            return true;
-        }
-        auto native = std::dynamic_pointer_cast<WebGPUTexture2DArrayRenderer>(texture);
-        if (native == nullptr || !native->IsOwnedByEXT(owner_)) return false;
-        descriptorTextureArrays_[static_cast<std::size_t>(unit)] = native->SampledEXT();
-        return true;
-    }
-
-    bool WebGPUEffectRenderer::BindStorageTexture2DEXT(
-        int unit, std::shared_ptr<IStorageTexture2DRenderer> texture)
-    {
-        if (contract_ != ContractEXT::Descriptor) return false;
-        if (unit < 0 || unit >= kDescriptorMaxTextures) return false;
-        if (texture == nullptr)
-        {
-            descriptorTextures_[static_cast<std::size_t>(unit)] = WebGPUSampledTextureEXT{};
-            return true;
-        }
-        auto native = std::dynamic_pointer_cast<WebGPUStorageTexture2DRenderer>(texture);
-        if (native == nullptr || !native->IsOwnedByEXT(owner_)) return false;
-        const WebGPUSampledTextureEXT sampled = native->SampledEXT();
-        if (!sampled) return false;   // the texture declared no Sampled usage
-        descriptorTextures_[static_cast<std::size_t>(unit)] = sampled;
-        return true;
-    }
-
     std::shared_ptr<WebGPUDescriptorEffectSnapshotEXT>
         WebGPUEffectRenderer::CaptureDescriptorStateEXT(const WebGPURenderer& owner) const
     {
@@ -267,9 +423,7 @@ namespace CNA::Internal::Renderers::WebGPU
         snapshot->textures2D = descriptorTextures_;
         snapshot->cubes = descriptorCubes_;
         snapshot->volumes = descriptorVolumes_;
-        snapshot->textureArrays = descriptorTextureArrays_;
         snapshot->samplers = owner.SamplerStatesEXT();
-        snapshot->storageBuffers = owner.DrawStorageBuffersEXT();
         return snapshot;
     }
 
@@ -297,34 +451,6 @@ namespace CNA::Internal::Renderers::WebGPU
             states[i].maxAnisotropy = slotSamplers_[i].maxAnisotropy;
         }
         return states;
-    }
-
-    std::vector<std::pair<std::uint32_t, std::shared_ptr<WebGPUStorageBufferRenderer>>>
-        WebGPURenderer::DrawStorageBuffersEXT() const
-    {
-        return drawStorageBuffers_;
-    }
-
-    void WebGPURenderer::BindStorageBufferForDrawEXT(int binding, const IStorageBufferRenderer& buffer)
-    {
-        if (binding < 0)
-            throw std::out_of_range("CNA WebGPU: a draw storage binding must not be negative");
-        auto* native = dynamic_cast<WebGPUStorageBufferRenderer*>(
-            const_cast<IStorageBufferRenderer*>(&buffer));
-        if (native == nullptr || !native->IsOwnedByEXT(this))
-            throw std::invalid_argument(
-                "CNA WebGPU: the storage buffer bound for a draw belongs to another renderer");
-        auto shared = std::dynamic_pointer_cast<WebGPUStorageBufferRenderer>(native->shared_from_this());
-        const auto slot = static_cast<std::uint32_t>(binding);
-        for (auto& entry : drawStorageBuffers_)
-        {
-            if (entry.first == slot)
-            {
-                entry.second = std::move(shared);
-                return;
-            }
-        }
-        drawStorageBuffers_.emplace_back(slot, std::move(shared));
     }
 
     WGPUSampler WebGPURenderer::SamplerForStateEXT(const WebGPUSamplerStateEXT& state)
@@ -382,7 +508,6 @@ namespace CNA::Internal::Renderers::WebGPU
         switch (dimension)
         {
         case WGPUTextureViewDimension_Cube:
-        case WGPUTextureViewDimension_CubeArray:
             return makeWhite(WGPUTextureDimension_2D, WGPUTextureViewDimension_Cube, 6, 1,
                              neutralCubeTexture_, neutralCubeView_, neutralCubeKeepAliveEXT_,
                              "CNA WebGPU neutral cube");
@@ -390,14 +515,24 @@ namespace CNA::Internal::Renderers::WebGPU
             return makeWhite(WGPUTextureDimension_3D, WGPUTextureViewDimension_3D, 1, 1,
                              neutralVolumeTexture_, neutralVolumeView_, neutralVolumeKeepAliveEXT_,
                              "CNA WebGPU neutral volume");
-        case WGPUTextureViewDimension_2DArray:
-            return makeWhite(WGPUTextureDimension_2D, WGPUTextureViewDimension_2DArray, 1, 1,
-                             neutralArrayTexture_, neutralArrayView_, neutralArrayKeepAliveEXT_,
-                             "CNA WebGPU neutral array");
         default:
             EnsurePbrDefaultTextures();
             return ResolveSamplable(pbrDefaultWhiteTexture_.get());
         }
+    }
+
+    void WebGPURenderer::ReleaseNeutralTexturesEXT()
+    {
+        neutralCubeKeepAliveEXT_.reset();
+        neutralVolumeKeepAliveEXT_.reset();
+        const auto release = [](WGPUTexture& texture, WGPUTextureView& view) {
+            if (view != nullptr) wgpuTextureViewRelease(view);
+            if (texture != nullptr) wgpuTextureRelease(texture);
+            view = nullptr;
+            texture = nullptr;
+        };
+        release(neutralCubeTexture_, neutralCubeView_);
+        release(neutralVolumeTexture_, neutralVolumeView_);
     }
 
     void WebGPURenderer::SetDescriptorEffectBindGroupsEXT(WGPURenderPassEncoder pass,
@@ -527,7 +662,6 @@ namespace CNA::Internal::Renderers::WebGPU
                         if (b < 4) texture = snapshot.textures2D[b];
                         else if (b < 8) texture = snapshot.cubes[b - 4];
                         else if (b < 12) texture = snapshot.volumes[b - 8];
-                        else if (b >= 16 && b <= 18) texture = snapshot.textureArrays[b - 16];
                     }
                     if (!texture)
                     {
@@ -543,7 +677,6 @@ namespace CNA::Internal::Renderers::WebGPU
                     break;
                 }
                 case WgslResourceKind::UniformBuffer:
-                case WgslResourceKind::StorageBuffer:
                 case WgslResourceKind::ReadOnlyStorageBuffer:
                 {
                     const bool storage = slot.kind != WgslResourceKind::UniformBuffer;
@@ -552,21 +685,6 @@ namespace CNA::Internal::Renderers::WebGPU
                         handle = bindBlock(slot, snapshot.scalars.data(),
                                            snapshot.scalars.size() * sizeof(float), storage, entry,
                                            g, cacheable);
-                    }
-                    else if (g == 2)
-                    {
-                        std::shared_ptr<WebGPUStorageBufferRenderer> bound;
-                        for (const auto& [binding, buffer] : snapshot.storageBuffers)
-                            if (binding == slot.binding) bound = buffer;
-                        if (bound == nullptr)
-                            throw System::NotSupportedException(
-                                "CNA WebGPU: this ShaderEffect reads a storage buffer at @group(2) "
-                                "@binding(" + std::to_string(slot.binding) +
-                                ") and none was bound for the draw");
-                        entry.buffer = bound->Buffer();
-                        entry.size = bound->NativeSize();
-                        // The application's own buffer: its lifetime is not the cache's to extend.
-                        cacheable = false;
                     }
                     else if (slot.binding == static_cast<std::uint32_t>(WebGPUEffectRenderer::kDescriptorEngineMatrixBinding))
                     {
@@ -589,11 +707,6 @@ namespace CNA::Internal::Renderers::WebGPU
                     }
                     break;
                 }
-                case WgslResourceKind::StorageTexture:
-                    throw System::NotSupportedException(
-                        "CNA WebGPU: a ShaderEffect declares a storage image at @group(" +
-                        std::to_string(g) + ") @binding(" + std::to_string(slot.binding) +
-                        "); a graphics stage on this renderer samples storage textures instead");
                 }
                 if (cacheable) key.handles[entries.size()] = handle;
                 entries.push_back(entry);

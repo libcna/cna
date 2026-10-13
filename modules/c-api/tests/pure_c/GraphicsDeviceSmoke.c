@@ -348,6 +348,21 @@ static void on_resource_destroyed(
     }
 }
 
+/* Feature ordinals 18, 19, 20 and 23 and limit ordinals 2-10, 12, 13, 15, 19 and 21 belonged to
+ * the retired modern GPU layer; they stay reserved and every route refuses them. */
+static int is_reserved_renderer_feature(const CNA_RendererFeature feature)
+{
+    return feature == UINT32_C(18) || feature == UINT32_C(19) || feature == UINT32_C(20) ||
+           feature == UINT32_C(23);
+}
+
+static int is_reserved_renderer_limit(const CNA_RendererLimit limit)
+{
+    return (limit >= UINT32_C(2) && limit <= UINT32_C(10)) || limit == UINT32_C(12) ||
+           limit == UINT32_C(13) || limit == UINT32_C(15) || limit == UINT32_C(19) ||
+           limit == UINT32_C(21);
+}
+
 static int validate_capability_profile(CNA_Handle graphics_device)
 {
     CNA_Bool legacy_3d = CNA_FALSE;
@@ -368,8 +383,15 @@ static int validate_capability_profile(CNA_Handle graphics_device)
          feature <= CNA_RENDERER_FEATURE_MAXIMUM;
          ++feature) {
         CNA_RendererFeatureSupport support = UINT32_MAX;
-        if (cna_graphics_device_get_renderer_feature_support_ext(
-                graphics_device, feature, &support) != CNA_RESULT_SUCCESS ||
+        const CNA_Result result = cna_graphics_device_get_renderer_feature_support_ext(
+            graphics_device, feature, &support);
+        if (is_reserved_renderer_feature(feature)) {
+            if (result != CNA_RESULT_INVALID_ARGUMENT) {
+                return 0;
+            }
+            continue;
+        }
+        if (result != CNA_RESULT_SUCCESS ||
             support == CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN ||
             support > CNA_RENDERER_FEATURE_SUPPORT_MAXIMUM) {
             return 0;
@@ -406,9 +428,15 @@ static int validate_capability_profile(CNA_Handle graphics_device)
          ++limit) {
         known = CNA_FALSE;
         value = UINT64_MAX;
-        if (cna_graphics_device_get_renderer_limit_ext(
-                graphics_device, limit, &known, &value) != CNA_RESULT_SUCCESS ||
-            known != CNA_TRUE) {
+        const CNA_Result result = cna_graphics_device_get_renderer_limit_ext(
+            graphics_device, limit, &known, &value);
+        if (is_reserved_renderer_limit(limit)) {
+            if (result != CNA_RESULT_INVALID_ARGUMENT) {
+                return 0;
+            }
+            continue;
+        }
+        if (result != CNA_RESULT_SUCCESS || known != CNA_TRUE) {
             return 0;
         }
     }

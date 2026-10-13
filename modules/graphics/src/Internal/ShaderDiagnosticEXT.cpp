@@ -20,7 +20,7 @@ namespace CNA
         [[nodiscard]] bool IsValidStage(const ShaderStageEXT stage) noexcept
         {
             return stage == ShaderStageEXT::Unknown || stage == ShaderStageEXT::Vertex
-                || stage == ShaderStageEXT::Fragment || stage == ShaderStageEXT::Compute;
+                || stage == ShaderStageEXT::Fragment;
         }
 
         [[nodiscard]] std::string Lower(std::string_view value)
@@ -156,7 +156,6 @@ namespace CNA
                 case ShaderStageEXT::Unknown: return "Unknown";
                 case ShaderStageEXT::Vertex: return "Vertex";
                 case ShaderStageEXT::Fragment: return "Fragment";
-                case ShaderStageEXT::Compute: return "Compute";
                 case ShaderStageEXT::Count: return "Count";
             }
             return "InvalidStage";
@@ -237,8 +236,6 @@ namespace CNA
                     stage = ShaderStageEXT::Vertex;
                 else if (lower.starts_with("fs:") || lower.find("fragment") != std::string::npos)
                     stage = ShaderStageEXT::Fragment;
-                else if (lower.starts_with("cs:") || lower.find("compute") != std::string::npos)
-                    stage = ShaderStageEXT::Compute;
                 currentStage = stage;
 
                 int parsedLine = 0;

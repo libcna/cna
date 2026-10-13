@@ -55,8 +55,6 @@ cna_graphics_device_supports_surface_format_as_render_target_ext = { get = "obje
 cna_graphics_device_executes_shader_effect_source_ext = { get = "object->value->ExecutesShaderEffectSourceEXT()" }
 cna_graphics_device_supports_image_based_lighting_ext = { get = "object->value->SupportsImageBasedLightingEXT()" }
 cna_graphics_device_get_display_color_space_ext = { get = "static_cast<uint32_t>(object->value->GetDisplayColorSpaceEXT())" }
-cna_graphics_device_get_max_compute_work_group_size_ext = { get = "static_cast<int32_t>(object->value->GetMaxComputeWorkGroupSizeEXT(static_cast<int>(axis)))" }
-cna_graphics_device_get_max_compute_work_group_invocations_ext = { get = "static_cast<int32_t>(object->value->GetMaxComputeWorkGroupInvocationsEXT())" }
 cna_graphics_device_copy_type_name = { result = "CopyFormattedText(destination, capacity, out_bytes, [&] { return object->value->GetTypeName(); })" }
 cna_graphics_device_dispose = { result = "NotSupported(\"The active game owns this graphics device; destroy the game to dispose it.\")" }
 cna_graphics_device_draw_primitives = { call = "object->value->DrawPrimitives(static_cast<PrimitiveType>(primitive_type), vertex_start, primitive_count)", validate = "ValidatePrimitiveType(primitive_type)", require = "EnsureThreeDSupported(*object->value)" }
@@ -68,7 +66,6 @@ cna_graphics_device_set_depth_write_enabled = { call = "object->value->SetDepthW
 cna_graphics_device_set_string_marker_ext = { call = "object->value->SetStringMarkerEXT(marker)", refuse_nul = ["marker"] }
 cna_graphics_device_set_display_color_space_ext = { get = "object->value->SetDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space))", validate = "ValidateDisplayColorSpaceOrdinal(space)" }
 cna_graphics_device_supports_display_color_space_ext = { get = "object->value->SupportsDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space))", validate = "ValidateDisplayColorSpaceOrdinal(space)" }
-cna_graphics_device_get_max_compute_work_group_count_ext = { get = "object->value->GetMaxComputeWorkGroupCountEXT(static_cast<int>(axis))" }
 
 [occlusion_query]
 lookup = "GetOcclusionQuery"

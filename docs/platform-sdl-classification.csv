@@ -30,8 +30,8 @@ SDL_PauseAudioStreamDevice,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,
 SDL_SetAudioStreamGain,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
 SDL_UnlockAudioStream,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,audio device/stream
 SDL_audiocvt,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,1,1,SDL header include
+SDL_GetCurrentVideoDriver,display,IPlatformDisplays,PLAT-43,10,6,display/video
 SDL_DisplayID,display,IPlatformDisplays,PLAT-43,8,3,display/video
-SDL_GetCurrentVideoDriver,display,IPlatformDisplays,PLAT-43,8,6,display/video
 SDL_DisplayMode,display,IPlatformDisplays,PLAT-43,4,2,display/video
 SDL_GetDisplayForWindow,display,IPlatformDisplays,PLAT-43,3,2,display/video
 SDL_GetClosestFullscreenDisplayMode,display,IPlatformDisplays,PLAT-43,2,1,display/video
@@ -54,7 +54,7 @@ SDL_ORIENTATION_LANDSCAPE_FLIPPED,display,IPlatformDisplays,PLAT-43,1,1,display/
 SDL_ORIENTATION_PORTRAIT,display,IPlatformDisplays,PLAT-43,1,1,display/video
 SDL_ORIENTATION_PORTRAIT_FLIPPED,display,IPlatformDisplays,PLAT-43,1,1,display/video
 SDL_ScreenSaverEnabled,display,IPlatformDisplays,PLAT-43,1,1,display/video
-SDL_GetError,error,PlatformException,PLAT-21,196,26,error reporting
+SDL_GetError,error,PlatformException,PLAT-21,188,24,error reporting
 SDL_ClearError,error,PlatformException,PLAT-21,3,2,error reporting
 SDL_SetError,error,PlatformException,PLAT-21,1,1,error reporting
 SDL_Event,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,54,7,event payload type
@@ -113,7 +113,6 @@ SDL_RemoveEventWatch,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33
 SDL_EVENT_GAMEPAD_BUTTON_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
 SDL_EVENT_MOUSE_BUTTON_UP,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event type constant
 SDL_FlushEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
-SDL_PumpEvents,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
 SDL_SendAppEvent,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,1,1,event pump
 SDL_IOFromConstMem,filesystem,IPlatformFileSystem,PLAT-44,3,2,IO stream
 SDL_IOStream,filesystem,IPlatformFileSystem,PLAT-44,3,2,IO stream
@@ -190,6 +189,7 @@ SDL_OpenHaptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,2,haptics
 SDL_TOUCH_MOUSEID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,5,2,touch
 SDL_GAMEPAD_AXIS_COUNT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,gamepad
 SDL_GAMEPAD_BUTTON_COUNT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,3,gamepad
+SDL_GetHaptics,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,haptics
 SDL_GetJoysticks,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,joystick
 SDL_GetKeyFromScancode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,2,keyboard/text input
 SDL_GetNumGamepadTouchpads,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,4,1,gamepad
@@ -232,7 +232,7 @@ SDL_GAMEPAD_BUTTON_TOUCHPAD,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,g
 SDL_GAMEPAD_BUTTON_WEST,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,gamepad
 SDL_GamepadHasSensor,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,gamepad
 SDL_GetGamepads,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,gamepad
-SDL_GetHaptics,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,haptics
+SDL_GetGlobalMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,mouse/cursor
 SDL_GetMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,mouse/cursor
 SDL_HAPTIC_LEFTRIGHT,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,1,haptics
 SDL_HAT_RIGHTDOWN,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,3,2,joystick hat
@@ -262,7 +262,6 @@ SDL_GAMEPAD_TYPE_PS4,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_TYPE_PS5,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_TYPE_XBOX360,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
 SDL_GAMEPAD_TYPE_XBOXONE,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,gamepad
-SDL_GetGlobalMouseState,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,mouse/cursor
 SDL_GetHapticFeatures,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
 SDL_GetHapticName,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,1,haptics
 SDL_GetHapticNameForID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,2,2,haptics
@@ -479,15 +478,16 @@ SDL_UpdateHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptic
 SDL_WarpMouseGlobal,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_WarpMouseInWindow,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_gamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,SDL header include
-SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,26,13,init flag
+SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,25,11,init flag
 SDL_INIT_AUDIO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,24,8,init flag
 SDL_InitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,8,subsystem lifecycle
-SDL_Quit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,11,subsystem lifecycle
 SDL_QuitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,7,subsystem lifecycle
-SDL_Init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,13,10,subsystem lifecycle
-SDL_WasInit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,11,8,subsystem lifecycle
+SDL_Quit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,14,10,subsystem lifecycle
+SDL_WasInit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,14,9,subsystem lifecycle
+SDL_Init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,10,8,subsystem lifecycle
+SDL_INIT_CAMERA,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,5,1,init flag
+SDL_INIT_HAPTIC,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,5,2,init flag
 SDL_VIDEODRIVER,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,5,3,video driver selection env var; becomes platform configuration
-SDL_INIT_CAMERA,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,4,1,init flag
 SDL_init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,4,4,SDL header include
 SDL_INIT_GAMEPAD,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,3,1,init flag
 SDL_InitFlags,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,3,2,subsystem lifecycle
@@ -495,15 +495,9 @@ SDL_INIT_EVENTS,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,1,init flag
 SDL_INIT_INTERFACE,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,1,init flag
 SDL_InitHapticRumble,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,1,subsystem lifecycle
 SDL_main,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,2,1,entrypoint
-SDL_INIT_HAPTIC,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,init flag
 SDL_INIT_SENSOR,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,1,1,init flag
-SDL_Log,logging,CNA Logger,PLAT-53,16,2,logging
-SDL_LogPriority,logging,CNA Logger,PLAT-53,2,1,logging
-SDL_SetLogOutputFunction,logging,CNA Logger,PLAT-53,2,1,logging
-SDL_GetLogOutputFunction,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LOG_PRIORITY_WARN,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_LogOutputFunction,logging,CNA Logger,PLAT-53,1,1,logging
-SDL_GetPointerProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,14,4,property access
+SDL_Log,logging,CNA Logger,PLAT-53,17,2,logging
+SDL_GetPointerProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,15,4,property access
 SDL_PropertiesID,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,12,8,property set handle
 SDL_SetNumberProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,8,4,property access
 SDL_GetWindowProperties,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,5,4,property access
@@ -513,6 +507,7 @@ SDL_GetBooleanProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,
 SDL_GetNumberProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,3,3,property access
 SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
 SDL_PROP_WINDOW_COCOA_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
+SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
 SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
 SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
 SDL_PROP_WINDOW_WIN32_HWND_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,2,2,native window property
@@ -525,7 +520,6 @@ SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLA
 SDL_PROP_GAMEPAD_CAP_TRIGGER_RUMBLE_BOOLEAN,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,SDL property key
 SDL_PROP_TEXTINPUT_TYPE_NUMBER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,SDL property key
 SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,native window property
-SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,native window property
 SDL_SetBooleanProperty,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,property access
 SDL_SetPointerPropertyWithCleanup,native-handle,NativeWindowHandle,PLAT-13/PLAT-14/PLAT-32,1,1,property access
 SDL_free,none,-,-,23,8,allocator/string/math shim
@@ -590,147 +584,144 @@ SDL_BLENDOPERATION_REV_SUBTRACT,pixel-format,CNA graphics types,PLAT-64/PLAT-65,
 SDL_BLENDOPERATION_SUBTRACT,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,blend mode
 SDL_CreateSurfaceFrom,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
 SDL_FLIP_NONE,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
-SDL_Renderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,270,92,SDL_Renderer object/API
-SDL_gpu,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,156,21,SDL header include
-SDL_GPUTextureFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,141,4,SDL_GPU renderer API
+SDL_Renderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,270,91,SDL_Renderer object/API
+SDL_gpu,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,139,19,SDL header include
+SDL_GPUTextureFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,137,2,SDL_GPU renderer API
 SDL_GPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,112,2,SDL_GPU renderer API
-SDL_GPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,83,6,SDL_GPU renderer API
-SDL_GPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,81,4,SDL_GPU renderer API
+SDL_GPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,76,4,SDL_GPU renderer API
 SDL_GPUSampleCount,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,69,3,SDL_GPU renderer API
-SDL_GPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,66,3,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_INVALID,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,63,3,SDL_GPU renderer API
-SDL_ReleaseGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,63,2,SDL_GPU resource API
-SDL_GPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,59,5,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_INVALID,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,61,2,SDL_GPU renderer API
+SDL_GPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,60,2,SDL_GPU renderer API
+SDL_GPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,58,5,SDL_GPU renderer API
+SDL_GPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,55,2,SDL_GPU renderer API
 SDL_RenderReadPixels,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,55,50,SDL_Renderer draw call
 SDL_GPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,49,2,SDL_GPU renderer API
+SDL_ReleaseGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,49,1,SDL_GPU resource API
 SDL_GPUPrimitiveType,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,42,2,SDL_GPU renderer API
-SDL_GPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,41,8,SDL_GPU renderer API
-SDL_GPU_SHADERFORMAT_SPIRV,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,40,3,SDL_GPU renderer API
-SDL_GPU_SAMPLECOUNT_1,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,33,4,SDL_GPU renderer API
-SDL_GPUShaderCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,32,2,SDL_GPU renderer API
+SDL_GPU_SHADERFORMAT_SPIRV,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,39,2,SDL_GPU renderer API
+SDL_GPUShaderCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,35,3,SDL_GPU renderer API
+SDL_GPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,33,6,SDL_GPU renderer API
+SDL_GPU_SAMPLECOUNT_1,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,32,3,SDL_GPU renderer API
 SDL_GPUVertexAttribute,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,30,6,SDL_GPU renderer API
 SDL_PushGPUVertexUniformData,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,29,3,SDL_GPU command/pass API
-SDL_AcquireGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,28,2,SDL_GPU command/pass API
-SDL_GPU_TEXTURETYPE_2D,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,28,4,SDL_GPU renderer API
+SDL_GPU_TEXTURETYPE_2D,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,26,3,SDL_GPU renderer API
 SDL_PushGPUFragmentUniformData,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,26,1,SDL_GPU command/pass API
-SDL_GPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,24,2,SDL_GPU renderer API
-SDL_MapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,24,2,SDL_GPU command/pass API
 SDL_GPUShaderFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,23,4,SDL_GPU renderer API
-SDL_GPU_TEXTUREUSAGE_SAMPLER,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,23,2,SDL_GPU renderer API
 SDL_Texture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,23,9,SDL_Renderer texture
-SDL_GPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,22,3,SDL_GPU renderer API
-SDL_BeginGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,21,2,SDL_GPU command/pass API
+SDL_AcquireGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,22,1,SDL_GPU command/pass API
 SDL_GPUColorTargetDescription,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,20,2,SDL_GPU renderer API
-SDL_GPUTextureSamplerBinding,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,20,2,SDL_GPU renderer API
-SDL_CreateGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,2,SDL_GPU resource API
+SDL_GPU_TEXTUREUSAGE_SAMPLER,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,20,1,SDL_GPU renderer API
+SDL_MapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,20,1,SDL_GPU command/pass API
 SDL_GPUBufferBinding,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
+SDL_GPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
 SDL_GPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,2,SDL_GPU renderer API
-SDL_GPUTransferBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,2,SDL_GPU renderer API
+SDL_GPUTextureSamplerBinding,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
 SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,2,SDL_GPU renderer API
 SDL_ReleaseGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,3,SDL_GPU resource API
-SDL_UnmapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,19,2,SDL_GPU command/pass API
-SDL_CreateGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,18,3,SDL_GPU resource API
 SDL_GPUGraphicsPipelineCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,18,3,SDL_GPU renderer API
+SDL_GPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,18,2,SDL_GPU renderer API
 SDL_GPU_SHADERSTAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,18,1,SDL_GPU renderer API
-SDL_SubmitGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,18,3,SDL_GPU command/pass API
+SDL_CreateGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,2,SDL_GPU resource API
 SDL_GPUColorTargetInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,7,SDL_GPU renderer API
-SDL_GPUTextureCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,2,SDL_GPU renderer API
-SDL_GPUTextureRegion,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,3,SDL_GPU renderer API
 SDL_GPU_LOADOP_CLEAR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,17,2,SDL_GPU renderer API
-SDL_EndGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,16,2,SDL_GPU command/pass API
-SDL_GPUTextureSupportsFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,16,3,SDL_GPU renderer API
-SDL_BindGPUFragmentSamplers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,3,SDL_GPU command/pass API
-SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,3,SDL_GPU renderer API
+SDL_BeginGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,16,1,SDL_GPU command/pass API
+SDL_BindGPUFragmentSamplers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,16,4,SDL_GPU command/pass API
+SDL_GPUTextureCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,16,1,SDL_GPU renderer API
+SDL_CreateGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,1,SDL_GPU resource API
+SDL_GPUTextureRegion,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
+SDL_GPUTextureSupportsFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
+SDL_GPUTransferBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
+SDL_UnmapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,15,1,SDL_GPU command/pass API
 SDL_BindGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,1,SDL_GPU command/pass API
-SDL_GPUTextureTransferInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,2,SDL_GPU renderer API
 SDL_GPUVertexBufferDescription,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,4,SDL_GPU renderer API
-SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,1,SDL_GPU renderer API
 SDL_SetGPUStencilReference,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,14,2,SDL_GPU resource API
 SDL_GPU_FILTER_LINEAR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,13,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,13,1,SDL_GPU renderer API
+SDL_SubmitGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,13,2,SDL_GPU command/pass API
 SDL_shadercross,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,13,3,SDL_shadercross shader compilation
+SDL_GPUTextureTransferInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,1,SDL_GPU renderer API
 SDL_GPU_LOADOP_LOAD,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,2,SDL_GPU renderer API
 SDL_GPU_TEXTURETYPE_CUBE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,4,SDL_GPU renderer API
 SDL_RenderTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,7,SDL_Renderer draw call
-SDL_SubmitGPUCommandBufferAndAcquireFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,12,2,SDL_GPU command/pass API
-SDL_CreateGPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,4,SDL_GPU resource API
-SDL_DownloadFromGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,3,SDL_GPU API
+SDL_EndGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,1,SDL_GPU command/pass API
 SDL_GPU_FILTER_NEAREST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
 SDL_GPU_SHADERSTAGE_FRAGMENT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
 SDL_GPU_STOREOP_STORE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
-SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,2,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,3,SDL_GPU renderer API
 SDL_GPU_VERTEXINPUTRATE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,3,SDL_GPU renderer API
 SDL_SetGPUScissor,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,4,SDL_GPU resource API
 SDL_SetRenderVSync,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,4,SDL_Renderer state
-SDL_UploadToGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,11,4,SDL_GPU API
 SDL_BindGPUIndexBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
+SDL_DownloadFromGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,2,SDL_GPU API
 SDL_GPURasterizerState,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,2,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,2,SDL_GPU renderer API
 SDL_GPU_INDEXELEMENTSIZE_16BIT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
 SDL_GPU_INDEXELEMENTSIZE_32BIT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
-SDL_ReleaseGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,2,SDL_GPU resource API
+SDL_SubmitGPUCommandBufferAndAcquireFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
 SDL_UpdateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,7,SDL_Renderer texture
+SDL_UploadToGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,10,3,SDL_GPU API
 SDL_BeginGPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,4,SDL_GPU command/pass API
 SDL_BindGPUVertexBuffers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU command/pass API
 SDL_DestroyTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,4,SDL_Renderer texture
+SDL_GPU_BUFFERUSAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
+SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,3,SDL_GPU renderer API
 SDL_SetGPUViewport,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,3,SDL_GPU resource API
 SDL_SetTextureScaleMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,9,5,SDL_Renderer texture
 SDL_CreateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,6,SDL_Renderer texture
-SDL_GPUBufferUsageFlags,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,3,SDL_GPU renderer API
 SDL_GPU_STOREOP_RESOLVE_AND_STORE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,3,SDL_GPU renderer API
-SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,2,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,3,SDL_GPU renderer API
+SDL_ReleaseGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,1,SDL_GPU resource API
 SDL_ReleaseGPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,1,SDL_GPU resource API
 SDL_RenderTextureRotated,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,4,SDL_Renderer draw call
 SDL_SetRenderTarget,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,8,3,SDL_Renderer state
 SDL_ClaimWindowForGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,3,SDL_GPU API
-SDL_CreateGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,3,SDL_GPU resource API
 SDL_DrawGPUIndexedPrimitives,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,2,SDL_GPU command/pass API
-SDL_GPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,2,SDL_GPU renderer API
 SDL_GPUSamplerCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,2,SDL_GPU renderer API
-SDL_GetRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,3,SDL_Renderer object/API
-SDL_ReleaseGPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,2,SDL_GPU resource API
 SDL_RenderTextureAffine,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,4,SDL_Renderer draw call
-SDL_UploadToGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,4,SDL_GPU API
-SDL_WaitForGPUFences,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,7,2,SDL_GPU API
 SDL_CreateGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,2,SDL_GPU resource API
 SDL_CreateGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,1,SDL_GPU resource API
 SDL_DrawGPUPrimitives,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,1,SDL_GPU command/pass API
-SDL_GPUBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
-SDL_GPUBufferRegion,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
-SDL_GPUTransferBufferLocation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
+SDL_GPUBufferUsageFlags,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
 SDL_GPU_LOADOP_DONT_CARE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
 SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
+SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_GPU renderer API
 SDL_GetRenderOutputSize,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_Renderer state
 SDL_SetGPUBlendConstants,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_GPU resource API
 SDL_SetRenderLogicalPresentation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_Renderer state
 SDL_TEXTUREACCESS_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,4,SDL_Renderer constant
-SDL_CreateGPUComputePipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,4,SDL_GPU resource API
+SDL_UploadToGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,6,3,SDL_GPU API
+SDL_CreateGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
+SDL_CreateGPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,4,SDL_GPU resource API
+SDL_GPUBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
+SDL_GPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
 SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
 SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
 SDL_GPU_SHADERFORMAT_MSL,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
 SDL_GPU_STOREOP_RESOLVE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,2,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_D32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_GPU renderer API
+SDL_GetRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,2,SDL_Renderer object/API
 SDL_LOGICAL_PRESENTATION_LETTERBOX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_Renderer constant
+SDL_ReleaseGPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
 SDL_ReleaseGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,2,SDL_GPU resource API
 SDL_WaitAndAcquireGPUSwapchainTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_GPU API
+SDL_WaitForGPUFences,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU API
 SDL_BlitGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU command/pass API
 SDL_CreateRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,3,SDL_Renderer object/API
-SDL_DestroyGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU resource API
+SDL_GPUBufferRegion,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GPUDepthStencilState,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
 SDL_GPUTextureLocation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPUTransferBufferLocation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GPUViewport,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_INDEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
 SDL_GPU_CULLMODE_NONE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
 SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GPU_SAMPLECOUNT_4,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GPU_VERTEXINPUTRATE_INSTANCE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
 SDL_GetGPUDeviceDriver,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,3,SDL_GPU resource API
 SDL_GetRenderTarget,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,2,SDL_Renderer state
@@ -744,6 +735,7 @@ SDL_SetTextureBlendMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDER
 SDL_SetTextureColorMod,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,4,1,SDL_Renderer texture
 SDL_BindGPUVertexSamplers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU command/pass API
 SDL_CalculateGPUTextureFormatSize,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU API
+SDL_DestroyGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU resource API
 SDL_DestroyRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer object/API
 SDL_GPUBlitInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
 SDL_GPUColorTargetBlendState,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_GPU renderer API
@@ -751,6 +743,7 @@ SDL_GPUDepthStencilTargetInfo,sdl-renderer-specific,"allowlisted renderers (SDL_
 SDL_GPUFilter,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
 SDL_GPUVertexElementFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
 SDL_GPU_BLENDFACTOR_CONSTANT_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_GPU renderer API
+SDL_GPU_BUFFERUSAGE_INDEX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
 SDL_GPU_FILLMODE_FILL,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
 SDL_GPU_SAMPLECOUNT_2,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
 SDL_GPU_SAMPLECOUNT_8,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
@@ -768,31 +761,23 @@ SDL_GPU_VERTEXELEMENTFORMAT_SHORT4,sdl-renderer-specific,"allowlisted renderers 
 SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
 SDL_GenerateMipmapsForGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_GPU API
 SDL_GetRenderLogicalPresentationRect,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_Renderer state
+SDL_GetRendererName,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_Renderer object/API
 SDL_LOGICAL_PRESENTATION_OVERSCAN,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer constant
 SDL_LOGICAL_PRESENTATION_STRETCH,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer constant
-SDL_SetRenderDrawBlendMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_Renderer state
 SDL_SetRenderDrawColor,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_Renderer state
 SDL_ShaderCross_GetSPIRVShaderFormats,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_shadercross shader compilation
-SDL_BindGPUComputeSamplers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
-SDL_BindGPUComputeStorageBuffers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU command/pass API
 SDL_CancelGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU command/pass API
 SDL_CopyGPUTextureToTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
 SDL_CreateGPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
-SDL_DrawGPUIndexedPrimitivesIndirect,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU command/pass API
-SDL_DrawGPUPrimitivesIndirect,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU command/pass API
 SDL_EndGPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
 SDL_GPUBlendFactor,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPUBlendOp,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUBufferLocation,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPUCullMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUIndexedIndirectDrawCommand,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPUSamplerAddressMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPUSamplerMipmapMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPUStencilOp,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPUTextureSupportsSampleCount,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUTextureUsageFlags,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_PRESENTMODE_IMMEDIATE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_PRESENTMODE_MAILBOX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
@@ -803,44 +788,27 @@ SDL_GPU_STOREOP_DONT_CARE,sdl-renderer-specific,"allowlisted renderers (SDL_REND
 SDL_GPU_TEXTUREFORMAT_BC1_RGBA_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_BC2_RGBA_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU renderer API
-SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU renderer API
 SDL_GenerateMipmapsForGPU,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU API
 SDL_GetGPUShaderFormats,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU resource API
 SDL_GetRenderDrawBlendMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_Renderer state
-SDL_GetRendererName,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_Renderer object/API
 SDL_InsertGPUDebugLabel,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
-SDL_PushGPUComputeUniformData,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU command/pass API
 SDL_RENDERER_VSYNC_DISABLED,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
-SDL_ReleaseGPUComputePipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
 SDL_ReleaseGPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
 SDL_SetGPUSwapchainParameters,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
 SDL_SetRenderClipRect,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_Renderer state
+SDL_SetRenderDrawBlendMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_Renderer state
 SDL_TEXTUREACCESS_STREAMING,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
 SDL_WindowSupportsGPUPresentMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,2,1,SDL_GPU API
-SDL_BeginGPUComputePass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
-SDL_BindGPUComputePipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
-SDL_BindGPUComputeStorageTextures,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
-SDL_BindGPUFragmentStorageBuffers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
-SDL_BindGPUVertexStorageBuffers,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
-SDL_CopyGPUBufferToBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU resource API
-SDL_DispatchGPUCompute,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
-SDL_DownloadFromGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU API
-SDL_EndGPUComputePass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
 SDL_GPUCompareOp,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUComputePass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUComputePipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUComputePipelineCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUIndirectDrawCommand,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPUMultisampleState,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPUPresentMode,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPUShaderStage,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPUStencilOpState,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUStorageBufferReadWriteBinding,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUStorageTextureReadWriteBinding,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPUSupportsShaderFormats,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUTextureUsageFlags,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPUVertexInputRate,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_BLENDFACTOR_DST_ALPHA,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_BLENDFACTOR_DST_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
@@ -858,10 +826,6 @@ SDL_GPU_BLENDOP_MAX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, 
 SDL_GPU_BLENDOP_MIN,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_BLENDOP_REVERSE_SUBTRACT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_BLENDOP_SUBTRACT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_INDIRECT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_COLORCOMPONENT_,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_COMPAREOP_ALWAYS,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_COMPAREOP_EQUAL,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
@@ -891,7 +855,7 @@ SDL_GPU_TEXTUREFORMAT_B4G4R4A4_UNORM,sdl-renderer-specific,"allowlisted renderer
 SDL_GPU_TEXTUREFORMAT_B5G5R5A1_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_B5G6R5_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_R16G16_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_R16_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_R32G32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
@@ -899,7 +863,6 @@ SDL_GPU_TEXTUREFORMAT_R32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SD
 SDL_GetGPURendererDevice,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU resource API
 SDL_GetGPUSwapchainTextureFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU resource API
 SDL_LockTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer texture
-SDL_PushGPU,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU command/pass API
 SDL_RenderCoordinatesFromWindow,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer draw call
 SDL_RenderCoordinatesToWindow,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer draw call
 SDL_RenderGeometry,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_Renderer draw call
@@ -917,18 +880,19 @@ SDL_TEXTUREACCESS_STATIC,sdl-renderer-specific,"allowlisted renderers (SDL_RENDE
 SDL_WaitForGPUIdle,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL_GPU API
 SDL_render,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,1,1,SDL header include
 SDL_HINT_JOYSTICK_LINUX_CLASSIC,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,9,2,SDL hint (becomes CNA configuration)
-SDL_SetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,8,4,SDL hint (becomes CNA configuration)
+SDL_SetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,9,5,SDL hint (becomes CNA configuration)
+SDL_GetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,8,4,SDL hint (becomes CNA configuration)
 SDL_ResetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,7,3,SDL hint (becomes CNA configuration)
 SDL_HINT_VIDEO_DRIVER,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,6,1,SDL hint (becomes CNA configuration)
-SDL_CameraID,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,1,camera
+SDL_CameraID,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,2,camera
 SDL_CameraSpec,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,1,camera
-SDL_GetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,2,SDL hint (becomes CNA configuration)
 SDL_POWERSTATE_CHARGED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_CHARGING,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_NO_BATTERY,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_ON_BATTERY,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_POWERSTATE_UNKNOWN,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,5,5,power state
 SDL_Camera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,1,camera
+SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,2,SDL hint (becomes CNA configuration)
 SDL_HINT_ORIENTATIONS,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,2,SDL hint (becomes CNA configuration)
 SDL_POWERSTATE_ERROR,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,4,4,power state
 SDL_DialogFileFilter,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,file dialog
@@ -937,9 +901,9 @@ SDL_PowerState,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Local
 SDL_SetClipboardData,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,2,clipboard
 SDL_TrayEntry,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,3,1,tray
 SDL_DestroyTray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,tray
-SDL_GetCameras,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,camera
+SDL_GetCameras,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,camera
 SDL_MESSAGEBOX_INFORMATION,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,message box
-SDL_OpenCamera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,1,camera
+SDL_OpenCamera,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,2,2,camera
 SDL_AcquireCameraFrame,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_PERMISSION_STATE_APPROVED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
 SDL_CAMERA_PERMISSION_STATE_DENIED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,camera
@@ -1002,34 +966,34 @@ SDL_TRAYENTRY_DISABLED,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Pow
 SDL_Tray,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_TrayEntryFlags,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
 SDL_TrayMenu,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,1,1,tray
-SDL_Delay,timing,IPlatform timing,PLAT-39,3,3,timing
+SDL_Delay,timing,IPlatform timing,PLAT-39,2,2,timing
 SDL_GetTicksNS,timing,IPlatform timing,PLAT-39,2,1,timing
 SDL_GetPerformanceCounter,timing,IPlatform timing,PLAT-39,1,1,timing
 SDL_GetPerformanceFrequency,timing,IPlatform timing,PLAT-39,1,1,timing
 SDL_GetTicks,timing,IPlatform timing,PLAT-39,1,1,timing
-SDL_Window,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,91,29,window management
+SDL_Window,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,87,27,window management
 SDL_GetWindowID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,30,11,window management
-SDL_CreateWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,21,10,window management
-SDL_DestroyWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,13,7,window management
-SDL_SetWindowSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,13,8,window management
+SDL_CreateWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,19,9,window management
+SDL_DestroyWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,11,6,window management
 SDL_GetWindowFromID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,11,5,window management
+SDL_SetWindowSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,11,7,window management
 SDL_GetWindowFlags,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,9,1,window management
 SDL_GetWindowSize,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,9,6,window management
-SDL_GetWindowSizeInPixels,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,9,5,window management
+SDL_GetWindowSizeInPixels,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,8,4,window management
 SDL_SetWindowFullscreen,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,7,3,window management
+SDL_WINDOW_OPENGL,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,6,4,window flag
 SDL_SetWindowFullscreenMode,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,5,1,window management
 SDL_WINDOW_HIDDEN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,3,window flag
-SDL_WINDOW_OPENGL,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,4,window flag
 SDL_WindowFlags,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,3,window management
 SDL_WindowID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,4,3,window management
 SDL_GetWindowPosition,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,2,window management
 SDL_SetWindowResizable,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,1,window management
-SDL_SyncWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,2,window management
 SDL_WINDOW_FULLSCREEN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,1,window flag
 SDL_WINDOW_RESIZABLE,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,3,2,window flag
 SDL_GetWindowFullscreenMode,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
 SDL_GetWindowPixelDensity,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window management
 SDL_ShowWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window management
+SDL_SyncWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,1,window management
 SDL_WINDOW_BORDERLESS,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window flag
 SDL_WINDOW_HIGH_PIXEL_DENSITY,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,2,2,window flag
 SDL_GetWindowDisplayScale,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management

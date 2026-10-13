@@ -9,10 +9,9 @@ namespace CNA
 {
     namespace
     {
-        constexpr std::size_t FeatureCount = static_cast<std::size_t>(RendererFeature::Count);
-        constexpr std::size_t LimitCount = static_cast<std::size_t>(RendererLimit::Count);
-
-        constexpr std::array<RendererFeature, FeatureCount> Features = {
+        // The defined identities. Retired ordinals are absent, so these lists rather than
+        // `Count` decide what is queryable.
+        constexpr std::array Features = {
             RendererFeature::ThreeDimensionalPipeline,
             RendererFeature::DepthStencilBuffer,
             RendererFeature::MultiSampleAntiAliasing,
@@ -31,12 +30,8 @@ namespace CNA
             RendererFeature::Float32RenderTargets,
             RendererFeature::Float16RenderTargets,
             RendererFeature::Float16TextureLinearFiltering,
-            RendererFeature::ComputeShaders,
-            RendererFeature::ComputeImageBinding,
-            RendererFeature::IndirectDrawing,
             RendererFeature::ShadowSampling,
             RendererFeature::ImageBasedLighting,
-            RendererFeature::GpuTimers,
             RendererFeature::ShaderDialectGlslDesktop,
             RendererFeature::ShaderDialectGlslEs,
             RendererFeature::ShaderDialectGlslVulkan,
@@ -47,41 +42,25 @@ namespace CNA
             RendererFeature::BaseInstanceDrawing
         };
 
-        constexpr std::array<RendererLimit, LimitCount> Limits = {
+        constexpr std::array Limits = {
             RendererLimit::MaxTextureDimension,
             RendererLimit::MaxVertexStreams,
-            RendererLimit::MaxComputeWorkGroupCountX,
-            RendererLimit::MaxComputeWorkGroupCountY,
-            RendererLimit::MaxComputeWorkGroupCountZ,
-            RendererLimit::MaxComputeWorkGroupSizeX,
-            RendererLimit::MaxComputeWorkGroupSizeY,
-            RendererLimit::MaxComputeWorkGroupSizeZ,
-            RendererLimit::MaxComputeWorkGroupInvocations,
-            RendererLimit::MaxVertexShaderStorageBlocks,
-            RendererLimit::MaxStorageBufferBytes,
             RendererLimit::MaxUniformBufferBytes,
-            RendererLimit::MaxComputeStorageBufferBindings,
-            RendererLimit::MaxTextureArrayLayers,
             RendererLimit::MaxSampledTexturesPerShaderStage,
-            RendererLimit::MaxStorageImagesPerShaderStage,
             RendererLimit::MaxVertexInputBindings,
             RendererLimit::MaxVertexInputAttributes,
             RendererLimit::MaxColorAttachments,
-            RendererLimit::MinStorageBufferOffsetAlignment,
-            RendererLimit::MinUniformBufferOffsetAlignment,
-            RendererLimit::TimestampPeriodPicoseconds
+            RendererLimit::MinUniformBufferOffsetAlignment
         };
 
         [[nodiscard]] constexpr bool ValidFeature(const RendererFeature feature)
         {
-            return static_cast<std::uint32_t>(feature) <
-                   static_cast<std::uint32_t>(RendererFeature::Count);
+            return std::find(Features.begin(), Features.end(), feature) != Features.end();
         }
 
         [[nodiscard]] constexpr bool ValidLimit(const RendererLimit limit)
         {
-            return static_cast<std::uint32_t>(limit) <
-                   static_cast<std::uint32_t>(RendererLimit::Count);
+            return std::find(Limits.begin(), Limits.end(), limit) != Limits.end();
         }
 
         [[nodiscard]] std::string_view SupportName(const RendererFeatureSupport support)
@@ -192,7 +171,7 @@ namespace CNA
         std::ostringstream out;
         out << "Renderer capability report\n"
             << "Renderer: " << (rendererName_.empty() ? "UNKNOWN" : rendererName_) << "\n"
-            << "Profile schema: 2\n\n"
+            << "Profile schema: 3\n\n"
             << "Detailed features\n";
 
         for (const RendererFeature feature : Features)
@@ -229,12 +208,6 @@ namespace CNA
             AppendUsage(out, formats_[i], RendererFormatUsage::RenderTarget,
                         "render-target", first);
             AppendUsage(out, formats_[i], RendererFormatUsage::Blendable, "blendable", first);
-            AppendUsage(out, formats_[i], RendererFormatUsage::StorageRead,
-                        "storage-read", first);
-            AppendUsage(out, formats_[i], RendererFormatUsage::StorageWrite,
-                        "storage-write", first);
-            AppendUsage(out, formats_[i], RendererFormatUsage::StorageAtomic,
-                        "storage-atomic", first);
             AppendUsage(out, formats_[i], RendererFormatUsage::TransferSource,
                         "transfer-source", first);
             AppendUsage(out, formats_[i], RendererFormatUsage::TransferDestination,
@@ -280,12 +253,8 @@ namespace CNA
             case RendererFeature::Float16RenderTargets: return "Float16RenderTargets";
             case RendererFeature::Float16TextureLinearFiltering:
                 return "Float16TextureLinearFiltering";
-            case RendererFeature::ComputeShaders: return "ComputeShaders";
-            case RendererFeature::ComputeImageBinding: return "ComputeImageBinding";
-            case RendererFeature::IndirectDrawing: return "IndirectDrawing";
             case RendererFeature::ShadowSampling: return "ShadowSampling";
             case RendererFeature::ImageBasedLighting: return "ImageBasedLighting";
-            case RendererFeature::GpuTimers: return "GpuTimers";
             case RendererFeature::ShaderDialectGlslDesktop: return "ShaderDialectGlslDesktop";
             case RendererFeature::ShaderDialectGlslEs: return "ShaderDialectGlslEs";
             case RendererFeature::ShaderDialectGlslVulkan: return "ShaderDialectGlslVulkan";
@@ -339,18 +308,10 @@ namespace CNA
                 return "16-bit floating-point colour values survive render-target storage.";
             case RendererFeature::Float16TextureLinearFiltering:
                 return "Half-float colour textures support linear and mip filtering.";
-            case RendererFeature::ComputeShaders:
-                return "Compute programs and their storage-buffer dispatch path are implemented.";
-            case RendererFeature::ComputeImageBinding:
-                return "A Texture2D can be bound as an image for compute access.";
-            case RendererFeature::IndirectDrawing:
-                return "Graphics draw arguments can be read from a GPU buffer.";
             case RendererFeature::ShadowSampling:
                 return "Lit renderer shaders consume configured shadow resources and parameters.";
             case RendererFeature::ImageBasedLighting:
                 return "PBR renderer shaders consume irradiance, prefiltered specular and BRDF resources.";
-            case RendererFeature::GpuTimers:
-                return "GPU timestamp queries measure a submitted command range.";
             case RendererFeature::ShaderDialectGlslDesktop:
                 return "ShaderEffect consumes desktop OpenGL GLSL source.";
             case RendererFeature::ShaderDialectGlslEs:
@@ -384,34 +345,14 @@ namespace CNA
         {
             case RendererLimit::MaxTextureDimension: return "MaxTextureDimension";
             case RendererLimit::MaxVertexStreams: return "MaxVertexStreams";
-            case RendererLimit::MaxComputeWorkGroupCountX: return "MaxComputeWorkGroupCountX";
-            case RendererLimit::MaxComputeWorkGroupCountY: return "MaxComputeWorkGroupCountY";
-            case RendererLimit::MaxComputeWorkGroupCountZ: return "MaxComputeWorkGroupCountZ";
-            case RendererLimit::MaxComputeWorkGroupSizeX: return "MaxComputeWorkGroupSizeX";
-            case RendererLimit::MaxComputeWorkGroupSizeY: return "MaxComputeWorkGroupSizeY";
-            case RendererLimit::MaxComputeWorkGroupSizeZ: return "MaxComputeWorkGroupSizeZ";
-            case RendererLimit::MaxComputeWorkGroupInvocations:
-                return "MaxComputeWorkGroupInvocations";
-            case RendererLimit::MaxVertexShaderStorageBlocks:
-                return "MaxVertexShaderStorageBlocks";
-            case RendererLimit::MaxStorageBufferBytes: return "MaxStorageBufferBytes";
             case RendererLimit::MaxUniformBufferBytes: return "MaxUniformBufferBytes";
-            case RendererLimit::MaxComputeStorageBufferBindings:
-                return "MaxComputeStorageBufferBindings";
-            case RendererLimit::MaxTextureArrayLayers: return "MaxTextureArrayLayers";
             case RendererLimit::MaxSampledTexturesPerShaderStage:
                 return "MaxSampledTexturesPerShaderStage";
-            case RendererLimit::MaxStorageImagesPerShaderStage:
-                return "MaxStorageImagesPerShaderStage";
             case RendererLimit::MaxVertexInputBindings: return "MaxVertexInputBindings";
             case RendererLimit::MaxVertexInputAttributes: return "MaxVertexInputAttributes";
             case RendererLimit::MaxColorAttachments: return "MaxColorAttachments";
-            case RendererLimit::MinStorageBufferOffsetAlignment:
-                return "MinStorageBufferOffsetAlignment";
             case RendererLimit::MinUniformBufferOffsetAlignment:
                 return "MinUniformBufferOffsetAlignment";
-            case RendererLimit::TimestampPeriodPicoseconds:
-                return "TimestampPeriodPicoseconds";
             case RendererLimit::Count: break;
         }
         return "UnknownRendererLimit";

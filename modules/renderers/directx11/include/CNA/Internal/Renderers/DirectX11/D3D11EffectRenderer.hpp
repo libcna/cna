@@ -53,22 +53,6 @@ namespace CNA::Internal::Renderers::DirectX11
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
-        /**
-         * @brief Binds a sampled array while retaining its renderer-owned storage.
-         * @param unit Pixel-shader texture register.
-         * @param texture Array record, or null to clear the register.
-         * @return True when the slot and native device match.
-         */
-        [[nodiscard]] bool BindTexture2DArrayEXT(
-            int unit, std::shared_ptr<ITexture2DArrayRenderer> texture) override;
-        /**
-         * @brief Binds a storage texture through a sampled pixel-shader slot.
-         * @param unit Pixel-shader texture register.
-         * @param texture Storage record, or null to clear the register.
-         * @return True when the texture has a native sampled view on this device.
-         */
-        [[nodiscard]] bool BindStorageTexture2DEXT(
-            int unit, std::shared_ptr<IStorageTexture2DRenderer> texture) override;
 
         /** @brief Writes the reflected viewport-size aliases used by SpriteBatch shaders. */
         void SetViewportSizeEXT(float width, float height);
@@ -99,23 +83,6 @@ namespace CNA::Internal::Renderers::DirectX11
             const std::vector<D3DCommon::D3DVertexInputElement>& inputElements,
             bool& usesLogicalIdStream);
 
-        /**
-         * @brief Returns the native t-registers that the vertex stage reads as byte buffers.
-         * @return Bit mask of storage input slots zero through fifteen.
-         */
-        [[nodiscard]] std::uint32_t GetVertexStorageSlotsEXT() const
-        {
-            return vertexStorageSlots_;
-        }
-        /**
-         * @brief Returns the native t-registers that the pixel stage reads as byte buffers.
-         * @return Bit mask of storage input slots zero through fifteen.
-         */
-        [[nodiscard]] std::uint32_t GetPixelStorageSlotsEXT() const
-        {
-            return pixelStorageSlots_;
-        }
-
     private:
         enum class TextureKind
         {
@@ -123,8 +90,6 @@ namespace CNA::Internal::Renderers::DirectX11
             Texture2D,
             TextureCube,
             Texture3D,
-            Texture2DArray,
-            StorageTexture2D,
         };
 
         struct TextureBinding
@@ -133,8 +98,6 @@ namespace CNA::Internal::Renderers::DirectX11
             void* texture = nullptr;
             bool explicitlySet = false;
             std::shared_ptr<void> retainedClassic;
-            std::shared_ptr<ITexture2DArrayRenderer> retainedArray;
-            std::shared_ptr<IStorageTexture2DRenderer> retainedStorage;
         };
 
         using InputLayoutKey = std::tuple<
@@ -162,8 +125,6 @@ namespace CNA::Internal::Renderers::DirectX11
         std::string vertexSource_;
         bool hasInstanceIdInput_ = false;
         std::uint32_t vertexTextureSlots_ = 0;
-        std::uint32_t vertexStorageSlots_ = 0;
-        std::uint32_t pixelStorageSlots_ = 0;
         D3DCommon::D3DProgramReflection reflection_;
         std::array<ComPtr<ID3D11Buffer>,
                    D3DCommon::D3DProgramReflection::kMaxConstantBuffers> constantBuffers_{};

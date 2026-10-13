@@ -68,33 +68,30 @@ fn main(@location(0) aPos: vec2<f32>, @location(1) aTexCoord: vec2<f32>, @locati
 }
 )WGSL";
 
-    constexpr const char* kGeneratedCompute = R"WGSL(
-struct Output {
-    uValues: array<u32>,
+    // What naga emits for a std140 block of narrow arrays after the generator's std430 rewrite
+    // (tools/shader_package, `cna-webgpu-glsl/1`): a read-only storage block, tightly packed.
+    constexpr const char* kGeneratedStorageArrays = R"WGSL(
+struct Floats {
+    uFloats: array<f32, 72>,
 }
-struct CnaCommand {
-    cnaCommand: array<atomic<u32>>,
+struct Weights {
+    uWeights: array<f32>,
 }
 struct Params {
     uCount: i32,
     uScale: f32,
 }
 
-@group(0) @binding(0)
-var<storage, read_write> unnamed: Output;
-@group(0) @binding(1)
-var<storage> unnamed_1: Output;
-@group(0) @binding(2)
-var<storage, read_write> counts: CnaCommand;
-@group(0) @binding(3)
-var uImage: texture_storage_2d<rgba8unorm,write>;
+@group(1) @binding(12)
+var<storage> unnamed: Floats;
+@group(1) @binding(13)
+var<storage, read> unnamed_1: Weights;
 @group(3) @binding(0)
 var<uniform> params: Params;
-var<workgroup> sharedSums: array<f32, 64>;
 
-@compute @workgroup_size(4, 2, 2)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    unnamed.uValues[id.x] = unnamed_1.uValues[id.x];
+@fragment
+fn main(@location(0) TexCoord: vec2<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(unnamed.uFloats[0] * unnamed_1.uWeights[0] * params.uScale);
 }
 )WGSL";
 }
@@ -172,30 +169,20 @@ struct In {
     EXPECT_EQ(vertex->vertexInputs[1].location, 1u);
 }
 
-TEST(WebGPUWgslReflectionTest, ComputeResourcesAccessAndWorkgroupSize)
+TEST(WebGPUWgslReflectionTest, GeneratedStorageArraysReflectAsReadOnlyStorage)
 {
-    const WgslModuleReflection r = ReflectWgsl(kGeneratedCompute);
+    const WgslModuleReflection r = ReflectWgsl(kGeneratedStorageArrays);
     ASSERT_TRUE(r.ok) << r.error;
 
-    const WgslResourceBinding* output = r.FindResource(0, 0);
-    ASSERT_NE(output, nullptr);
-    EXPECT_EQ(output->kind, WgslResourceKind::StorageBuffer);
-    EXPECT_EQ(output->minBindingSize, 4u);   // a runtime-sized array needs one element
+    const WgslResourceBinding* floats = r.FindResource(1, 12);
+    ASSERT_NE(floats, nullptr);
+    EXPECT_EQ(floats->kind, WgslResourceKind::ReadOnlyStorageBuffer);
+    EXPECT_EQ(floats->minBindingSize, 72u * 4u);   // std430: a tightly packed array<f32, 72>
 
-    const WgslResourceBinding* input = r.FindResource(0, 1);
-    ASSERT_NE(input, nullptr);
-    EXPECT_EQ(input->kind, WgslResourceKind::ReadOnlyStorageBuffer);
-
-    const WgslResourceBinding* counts = r.FindResource(0, 2);
-    ASSERT_NE(counts, nullptr);
-    EXPECT_EQ(counts->kind, WgslResourceKind::StorageBuffer);
-
-    const WgslResourceBinding* image = r.FindResource(0, 3);
-    ASSERT_NE(image, nullptr);
-    EXPECT_EQ(image->kind, WgslResourceKind::StorageTexture);
-    EXPECT_EQ(image->storageFormat, WGPUTextureFormat_RGBA8Unorm);
-    EXPECT_EQ(image->storageAccess, WGPUStorageTextureAccess_WriteOnly);
-    EXPECT_EQ(image->viewDimension, WGPUTextureViewDimension_2D);
+    const WgslResourceBinding* weights = r.FindResource(1, 13);
+    ASSERT_NE(weights, nullptr);
+    EXPECT_EQ(weights->kind, WgslResourceKind::ReadOnlyStorageBuffer);
+    EXPECT_EQ(weights->minBindingSize, 4u);   // a runtime-sized array needs one element
 
     const auto& params = r.structs.at("Params");
     ASSERT_EQ(params.members.size(), 2u);
@@ -204,27 +191,36 @@ TEST(WebGPUWgslReflectionTest, ComputeResourcesAccessAndWorkgroupSize)
     EXPECT_EQ(params.members[1].name, "uScale");
     EXPECT_EQ(params.members[1].offset, 4u);
 
-    const WgslEntryPoint* compute = r.FindEntryPoint(WGPUShaderStage_Compute);
-    ASSERT_NE(compute, nullptr);
-    EXPECT_EQ(compute->workgroupSize[0], 4u);
-    EXPECT_EQ(compute->workgroupSize[1], 2u);
-    EXPECT_EQ(compute->workgroupSize[2], 2u);
+    ASSERT_NE(r.FindEntryPoint(WGPUShaderStage_Fragment), nullptr);
 }
 
-TEST(WebGPUWgslReflectionTest, WorkgroupSizeMayOmitAxesOrNameAConstant)
+TEST(WebGPUWgslReflectionTest, WritableStorageAndStorageImagesAreRefusedByName)
 {
-    const WgslModuleReflection one = ReflectWgsl(
-        "@compute @workgroup_size(64) fn main() {}");
-    ASSERT_TRUE(one.ok) << one.error;
-    EXPECT_EQ(one.entryPoints[0].workgroupSize[0], 64u);
-    EXPECT_EQ(one.entryPoints[0].workgroupSize[1], 1u);
-    EXPECT_EQ(one.entryPoints[0].workgroupSize[2], 1u);
+    // Nothing in CNA binds a writable block or a storage image to a graphics stage, so both are
+    // refused where the shader is read rather than failing later inside wgpu-native.
+    const WgslModuleReflection writable = ReflectWgsl(
+        "struct B { v: array<u32>, }\n@group(0) @binding(0) var<storage, read_write> b: B;");
+    EXPECT_FALSE(writable.ok);
+    EXPECT_NE(writable.error.find("read_write"), std::string::npos) << writable.error;
 
-    const WgslModuleReflection named = ReflectWgsl(
-        "const WIDTH: u32 = 8u;\n@compute @workgroup_size(WIDTH, WIDTH) fn main() {}");
-    ASSERT_TRUE(named.ok) << named.error;
-    EXPECT_EQ(named.entryPoints[0].workgroupSize[0], 8u);
-    EXPECT_EQ(named.entryPoints[0].workgroupSize[1], 8u);
+    const WgslModuleReflection image = ReflectWgsl(
+        "@group(0) @binding(0) var i: texture_storage_2d<rgba8unorm, write>;");
+    EXPECT_FALSE(image.ok);
+    EXPECT_NE(image.error.find("texture_storage_2d"), std::string::npos) << image.error;
+}
+
+TEST(WebGPUWgslReflectionTest, ComputeEntryPointsAreOrdinaryFunctions)
+{
+    // A module may carry one; this renderer builds no compute pipeline, so it is not reported as
+    // an entry point and its @workgroup_size is never evaluated.
+    const WgslModuleReflection r = ReflectWgsl(
+        "const WIDTH: u32 = 8u;\n"
+        "var<workgroup> shared: array<f32, 64>;\n"
+        "@compute @workgroup_size(WIDTH, WIDTH) fn main() {}\n"
+        "@fragment fn fs_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }");
+    ASSERT_TRUE(r.ok) << r.error;
+    ASSERT_EQ(r.entryPoints.size(), 1u);
+    EXPECT_EQ(r.entryPoints[0].stage, WGPUShaderStage_Fragment);
 }
 
 TEST(WebGPUWgslReflectionTest, LayoutFollowsTheWgslMemoryRules)
@@ -277,8 +273,6 @@ TEST(WebGPUWgslReflectionTest, EveryHandleTypeIsClassified)
 @group(1) @binding(4) var e: texture_2d<u32>;
 @group(1) @binding(5) var f: texture_multisampled_2d<f32>;
 @group(1) @binding(6) var g: sampler_comparison;
-@group(1) @binding(7) var h: texture_storage_2d<r32float, read_write>;
-@group(1) @binding(8) var i: texture_storage_2d<rgba16float, read>;
 )WGSL");
     ASSERT_TRUE(r.ok) << r.error;
     EXPECT_EQ(r.FindResource(1, 0)->viewDimension, WGPUTextureViewDimension_2DArray);
@@ -288,9 +282,6 @@ TEST(WebGPUWgslReflectionTest, EveryHandleTypeIsClassified)
     EXPECT_EQ(r.FindResource(1, 4)->sampleType, WGPUTextureSampleType_Uint);
     EXPECT_TRUE(r.FindResource(1, 5)->multisampled);
     EXPECT_EQ(r.FindResource(1, 6)->kind, WgslResourceKind::ComparisonSampler);
-    EXPECT_EQ(r.FindResource(1, 7)->storageAccess, WGPUStorageTextureAccess_ReadWrite);
-    EXPECT_EQ(r.FindResource(1, 7)->storageFormat, WGPUTextureFormat_R32Float);
-    EXPECT_EQ(r.FindResource(1, 8)->storageAccess, WGPUStorageTextureAccess_ReadOnly);
 }
 
 TEST(WebGPUWgslReflectionTest, LegacyShaderEffectConventionStillReflects)
