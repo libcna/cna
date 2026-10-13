@@ -1,35 +1,19 @@
 // SPDX-License-Identifier: MS-PL
-// Task 899: SkinnedEffect linear fog pixel integration test — Vulkan renderer.
+// SkinnedEffect linear fog pixel test.
 //
-// skinned3d was one of 5 Vulkan pipelines sharing FillExtPushConst()'s fully-packed 128-byte
-// push constant (zero spare bytes for fog). skinned3d's existing BoneBlock UBO (set=0,
-// binding=1) also has zero spare capacity (exactly 72x64 bytes), so fog is forwarded via a
-// SEPARATE new dynamic UBO at binding=2, extending descriptorSetLayoutSkinned_ from 2 bindings
-// to 3.
-//
-// Formula (matches EasyGL/Bgfx's already-tested formula exactly, Task 900/899 bonus scope):
-//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z, computed
-//               from the PRE-SKIN vertex position, before the bone-skinning matrix multiply)
+// Formula (Task 899/900, the same as every stock effect's fog test):
+//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (Z of the PRE-SKIN position)
 //   finalRGB  = mix(FogColor, geomRGB, fogFactor)
 //
-// Unlike examples/bgfx_skinnedeffect_fog_test.cpp (which isolates material color via
-// EmissiveColor), Vulkan's skinned3d.frag.glsl has never read an emissive uniform at all (a
-// separate, unreported gap outside this task's scope, analogous to the one Task 899's Bgfx bonus
-// scope found and fixed for Bgfx) -- so this test isolates the pre-fog material color via
-// DirectionalLight0 instead: an identity bone palette (weight=1 on bone 0, Identity, so the mesh
-// is not deformed), a light pointing straight at the quad's +Z-facing normal (NdotL=1), a blue
-// DirectionalLight0.DiffuseColor, AmbientLightColor left at its SkinnedEffect default (always 0 on
-// Vulkan -- EmissiveColor/AmbientLightColor are never forwarded to the GPU here), and a white 1x1
-// texture (identity factor) -- reducing skinned3d.frag's `(ambientColor + light0Diffuse*NdotL) *
-// diffuseColor.rgb * tex.rgb` formula to exactly `light0Diffuse` when DiffuseColor is left at its
-// default white and NdotL=1.
+// The pre-fog colour is isolated through DirectionalLight0 rather than EmissiveColor: an identity
+// bone palette (weight 1 on bone 0, so the mesh is not deformed), a light pointing straight at the
+// quad's +Z normal (NdotL = 1), a blue DirectionalLight0.DiffuseColor, the default ambient and a
+// white 1x1 texture reduce the lit colour to exactly the light's diffuse colour. The quad sets
+// RasterizerState::CullNone: under XNA's default CullCounterClockwiseFace it is back-facing
+// (REMED-GFX-052).
 //
-// REMED-GFX-052: this test DOES need RasterizerState::CullNone (like its siblings
-// vulkan_skinnedeffect_multilight/_specular and every vulkan_basiceffect_*_fog test). The prior
-// comment here claimed it was unnecessary; empirically the quad's post-Y-flip winding is culled by
-// the real default RasterizerState and the center pixel read back as the black clear color, which
-// is what made this test fail (formerly recorded as a hang). With CullNone the skinned fog quad
-// renders and all three cases pass.
+// First written for the retired VULKAN renderer (Task 899); kept as a shared source because
+// DIRECTX9 runs it too.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -74,7 +58,7 @@ static const Color kBlack(0, 0, 0, 255);
 static const Color kBlue(0, 0, 255, 255);
 static const Color kRed(255, 0, 0, 255);
 
-class SkinnedEffectFogVulkanTest : public Game
+class SkinnedEffectFogTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int  pass_ = 0;
@@ -183,10 +167,11 @@ protected:
     }
 
 public:
-    SkinnedEffectFogVulkanTest()
+    SkinnedEffectFogTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_vulkan_parity.md VKPAR-0006: GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule). Without this the test aborts before its first check.
+        // GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule, VKPAR-0006). Without
+        // this the test aborts before its first check.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
@@ -197,7 +182,7 @@ public:
 
 int main()
 {
-    SkinnedEffectFogVulkanTest game;
+    SkinnedEffectFogTest game;
     game.Run();
     return game.getResult();
 }

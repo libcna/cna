@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_vulkan.md VULKAN-166 -- a `ShaderEffect`'s texture unit `u` is governed by
+// VULKAN-166 -- a `ShaderEffect`'s texture unit `u` is governed by
 // `GraphicsDevice.SamplerStates[u]`, not by the sprite batch's slot-0 state.
 //
 // `VULKAN-164` had to get ONE sampler to a bound volume and gave it the one it could reach: every
@@ -40,11 +40,9 @@
 //   C  A repeated through the SAME effect after B, because a set cached for one unit's sampler and
 //      reused under another is exactly the shape VULKAN-164 had to fix for a single unit.
 //   D  the two SamplerStates differ in the W axis and in nothing else.
-//   E  no validation message.
 //
-// plans/plan_street_sdlgpu.md STREETS-0004: compiled for the SDL GPU renderer too, with
-// CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION defined -- that renderer had the same defect, and legs
-// A-D use nothing but the XNA API. Only leg E, which reads the Vulkan validation layer, is left out.
+// First written for the retired VULKAN renderer; SDL_GPU had the same defect (STREETS-0004) and
+// runs it. The payload is SPIR-V, so it runs only where ShaderEffect consumes SPIR-V.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -68,9 +66,6 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
-#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
-#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
-#endif
 
 #include <array>
 #include <cstddef>
@@ -82,13 +77,10 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
-using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
-#endif
 
 // ---------------------------------------------------------------------------
-// Pre-compiled SPIR-V, from GLSL, through modules/renderers/vulkan/src/shaders/compile_shaders.py.
-//   vert: modules/renderers/vulkan/src/shaders/sprite2d.vert.glsl, unchanged
+// Pre-compiled SPIR-V (glslang, Vulkan GLSL). The vertex shader is the retired VULKAN renderer's
+// sprite2d.vert.glsl, unchanged (git history: modules/renderers/vulkan/src/shaders).
 //   frag: layout(set = 1, binding = 8) uniform sampler3D volume0;
 //         layout(set = 1, binding = 9) uniform sampler3D volume1;
 //         vec3 w = vec3(fragUV, 1.25);
@@ -177,7 +169,7 @@ const std::array<Color, 2> kVolume1{ Color(0, 0, 0, 255), Color(0, 0, 255, 255) 
 
 } // namespace
 
-class VulkanShaderEffectPerUnitSamplerTest final : public Game
+class ShaderEffectPerUnitSamplerTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0;
@@ -190,12 +182,6 @@ class VulkanShaderEffectPerUnitSamplerTest final : public Game
         ok ? ++pass_ : ++fail_;
     }
 
-#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
-    VulkanRenderer& Renderer()
-    {
-        return *dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
-    }
-#endif
 
     static std::string Text(const Color& c)
     {
@@ -257,9 +243,6 @@ protected:
         done = true;
 
         auto& dev = getGraphicsDeviceProperty();
-#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
-        const std::size_t messagesBefore = Renderer().GetValidationMessagesEXT().size();
-#endif
 
         const std::string vert(reinterpret_cast<const char*>(kTwoUnitsVertSpv),
                                sizeof(kTwoUnitsVertSpv));
@@ -307,14 +290,6 @@ protected:
                   " (want " + Text(a) + "; anything else means the descriptor set outlived a "
                   "per-unit sampler change)");
 
-#if !defined(CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
-        {
-            const std::size_t after = Renderer().GetValidationMessagesEXT().size();
-            check(!VulkanRenderer::IsValidationActiveEXT() || after == messagesBefore,
-                  "E no validation message: " + std::to_string(messagesBefore) + " -> " +
-                      std::to_string(after));
-        }
-#endif
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         std::fflush(stdout);
@@ -322,7 +297,7 @@ protected:
     }
 
 public:
-    VulkanShaderEffectPerUnitSamplerTest()
+    ShaderEffectPerUnitSamplerTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         // plans/plan_vulkan_parity.md VKPAR-0018: this test uses a HiDef-only feature
@@ -340,7 +315,7 @@ public:
 
 int main()
 {
-    VulkanShaderEffectPerUnitSamplerTest game;
+    ShaderEffectPerUnitSamplerTest game;
     game.Run();
     return game.getResult();
 }

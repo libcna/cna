@@ -1,30 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// Task 899: EnvironmentMapEffect linear fog pixel integration test — Vulkan renderer.
+// EnvironmentMapEffect linear fog pixel test.
 //
-// env_map3d was Task 899's own noted cheap leftover, deliberately left out of the task's title
-// scope (5 pipelines sharing FillExtPushConst()'s fully-packed push constant) since its existing
-// EnvMapParams UBO (set=0, binding=2) already had ~160 spare bytes past the 96 originally used
-// (eyePos/diffuse/emissive+envMapAmount/light0Dir/light0Diffuse+fresnelEnabled/envMapSpecular+
-// fresnelFactor). Fog packed into those spare bytes at [24..31] (fogColorEnabled/fogStartEnd),
-// mirroring lit_textured3d.vert.glsl/.frag.glsl's identical "fog packed into an existing UBO's
-// spare tail" pattern.
-//
-// Formula (matches the established Task 888 formula exactly):
-//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
+// Formula (Task 888, the same as every stock effect's fog test):
+//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)
 //   finalRGB  = mix(FogColor, geomRGB, fogFactor)
 //
-// EnvironmentMapAmount=0 removes the cube map's contribution entirely, and
-// EnvironmentMapSpecular=0 removes its additive specular term, so the pre-fog color reduces to
-// exactly EmissiveColor -- isolating fog cleanly from the reflection math. Direct port of
-// examples/bgfx_environmentmapeffect_fog_test.cpp / examples/easygl_environmentmapeffect_fog_test.cpp
-// (Task 900).
+// EnvironmentMapAmount=0 removes the cube map's contribution and EnvironmentMapSpecular=0 its
+// additive specular term, so the pre-fog colour is exactly EmissiveColor and the fog term is
+// isolated from the reflection maths. The quad sets RasterizerState::CullNone: under XNA's default
+// CullCounterClockwiseFace it is back-facing and would be culled to the clear colour
+// (REMED-GFX-011/052).
 //
-// REMED-GFX-011: this test previously omitted RasterizerState::CullNone, justified by a comment
-// claiming Vulkan's default cull state is effectively no-culling and that no sibling test sets it.
-// Both claims were false -- all nine other Vulkan EnvironmentMapEffect pixel tests do set it. The
-// quad survived only because env_map3d.vert.glsl was missing the renderer-wide NDC Y-flip, and that
-// omission also inverted the effective winding. With the flip restored this quad is back-facing
-// under the real default state and is culled to black, exactly as in REMED-GFX-052.
+// First written for the retired VULKAN renderer (Task 899); kept as a shared source because
+// DIRECTX9 runs it too.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -62,7 +50,7 @@ static const Color kBlack(0, 0, 0, 255);
 static const Color kBlue(0, 0, 255, 255);
 static const Color kRed(255, 0, 0, 255);
 
-class VulkanEnvironmentMapEffectFogTest : public Game
+class EnvironmentMapEffectFogTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int  pass_ = 0;
@@ -184,10 +172,11 @@ protected:
     }
 
 public:
-    VulkanEnvironmentMapEffectFogTest()
+    EnvironmentMapEffectFogTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_vulkan_parity.md VKPAR-0006: GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule). Without this the test aborts before its first check.
+        // GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule, VKPAR-0006). Without
+        // this the test aborts before its first check.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
@@ -198,7 +187,7 @@ public:
 
 int main()
 {
-    VulkanEnvironmentMapEffectFogTest game;
+    EnvironmentMapEffectFogTest game;
     game.Run();
     return game.getResult();
 }

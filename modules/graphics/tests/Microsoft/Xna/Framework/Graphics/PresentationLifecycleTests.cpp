@@ -159,3 +159,89 @@ TEST(PresentationLifecycle, TwoResetsInOneRunBothApply)
     EXPECT_NO_THROW(device.Clear(Microsoft::Xna::Framework::Color(90, 30, 60, 255)));
     EXPECT_EQ(device.getViewportProperty().getWidthProperty(), original);
 }
+
+// DeviceResetting is raised while the device still describes the OLD back buffer, and DeviceReset
+// once it describes the NEW one -- each handler reads the device's own PresentationParameters.
+// Microsoft XNA 4.0 settles this: GraphicsDevice.Reset(PresentationParameters, GraphicsAdapter)
+// invokes DeviceResetting before anything else and only assigns pPublicCachedParams (what the
+// PresentationParameters property returns) after the native reset, immediately before invoking
+// DeviceReset. FNA assigns PresentationParameters before raising DeviceResetting; CNA follows XNA.
+// First written for the retired SDL_RENDERER renderer (Task 715).
+TEST(PresentationLifecycle, ResetEventsSeeTheOldThenTheNewPresentationParameters)
+{
+    GraphicsDevice device;
+    PresentationParameters parameters = device.getPresentationParametersProperty();
+    const int oldWidth = parameters.getBackBufferWidthProperty();
+    const int oldHeight = parameters.getBackBufferHeightProperty();
+    const int newWidth = oldWidth == 320 ? 256 : 320;
+    const int newHeight = oldHeight == 200 ? 176 : 200;
+
+    int resettingWidth = -1, resettingHeight = -1, resetWidth = -1, resetHeight = -1;
+    int resettingCount = 0, resetCount = 0;
+    device.DeviceResetting += [&](System::Object* sender, const System::EventArgs&) {
+        ++resettingCount;
+        const auto& seen = static_cast<GraphicsDevice*>(sender)->getPresentationParametersProperty();
+        resettingWidth = seen.getBackBufferWidthProperty();
+        resettingHeight = seen.getBackBufferHeightProperty();
+    };
+    device.DeviceReset += [&](System::Object* sender, const System::EventArgs&) {
+        ++resetCount;
+        const auto& seen = static_cast<GraphicsDevice*>(sender)->getPresentationParametersProperty();
+        resetWidth = seen.getBackBufferWidthProperty();
+        resetHeight = seen.getBackBufferHeightProperty();
+    };
+
+    parameters.setBackBufferWidthProperty(newWidth);
+    parameters.setBackBufferHeightProperty(newHeight);
+    device.Reset(parameters);
+
+    EXPECT_EQ(resettingCount, 1);
+    EXPECT_EQ(resetCount, 1);
+    EXPECT_EQ(resettingWidth, oldWidth) << "DeviceResetting sees the back buffer being replaced";
+    EXPECT_EQ(resettingHeight, oldHeight);
+    EXPECT_EQ(resetWidth, newWidth) << "DeviceReset sees the back buffer that replaced it";
+    EXPECT_EQ(resetHeight, newHeight);
+}
+
+// Every PresentInterval survives a real Reset, not only the parameters object, and the device stays
+// usable after cycling through all four. A renderer may map several values onto one native swap
+// mode, but the device reports what it was asked for. First written for the retired SDL_RENDERER
+// renderer (Task 713).
+TEST(PresentationLifecycle, EveryPresentIntervalRoundTripsThroughReset)
+{
+    GraphicsDevice device;
+    const PresentInterval kIntervals[] = {PresentInterval::Immediate, PresentInterval::One,
+                                          PresentInterval::Two, PresentInterval::Default};
+    for (PresentInterval interval : kIntervals)
+    {
+        PresentationParameters parameters = device.getPresentationParametersProperty();
+        parameters.setPresentationIntervalProperty(interval);
+        ASSERT_NO_THROW(device.Reset(parameters)) << "interval " << static_cast<int>(interval);
+        EXPECT_EQ(static_cast<int>(device.getPresentationParametersProperty().getPresentationIntervalProperty()),
+                  static_cast<int>(interval));
+    }
+    EXPECT_NO_THROW(device.Clear(Microsoft::Xna::Framework::Color(255, 128, 0, 255)));
+}
+
+// IsFullScreen survives a Reset there and back. Whether the platform can actually switch a window
+// to fullscreen is environment-dependent (a headless or nested display may decline), so what is
+// asserted is the device's own report and that it is still usable at its back-buffer size
+// afterwards. First written for the retired SDL_RENDERER renderer (Task 712).
+TEST(PresentationLifecycle, IsFullScreenRoundTripsThroughResetBothWays)
+{
+    GraphicsDevice device;
+    PresentationParameters parameters = device.getPresentationParametersProperty();
+    const int width = parameters.getBackBufferWidthProperty();
+    const int height = parameters.getBackBufferHeightProperty();
+
+    parameters.setIsFullScreenProperty(true);
+    ASSERT_NO_THROW(device.Reset(parameters));
+    EXPECT_TRUE(device.getPresentationParametersProperty().getIsFullScreenProperty());
+
+    parameters.setIsFullScreenProperty(false);
+    ASSERT_NO_THROW(device.Reset(parameters));
+    EXPECT_FALSE(device.getPresentationParametersProperty().getIsFullScreenProperty());
+    EXPECT_EQ(device.getPresentationParametersProperty().getBackBufferWidthProperty(), width);
+    EXPECT_EQ(device.getPresentationParametersProperty().getBackBufferHeightProperty(), height);
+    EXPECT_NO_THROW(device.Clear(Microsoft::Xna::Framework::Color(10, 200, 30, 255)));
+}

@@ -20,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -35,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
@@ -5682,6 +5684,544 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: a compiled draw covers Direct3D 9's pixel centres, not the host API's.
+     *
+     * A compiled vertex shader computes its own clip position, so a renderer cannot fold XNA's
+     * half-pixel convention into a matrix the way the stock route does; it has to move the viewport
+     * or patch the position (EasyGL's posFixup). Direct3D 9 puts pixel centres on whole coordinates,
+     * so a quad whose edges lie on half pixels -- x and y in [0.5, 2.5) -- covers pixels 1 and 2,
+     * where an uncorrected half-pixel-centred API would cover 0 and 1. First written for the retired
+     * METAL renderer (plans/plan_apple_m4.md AM4-144).
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectHalfPixelCoverageContract(GraphicsDevice& device)
+    {
+        constexpr int kSize = 8;
+        Effect effect(device, BuildSyntheticDrawableEffect());
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        // Pixel x in [0.5, 2.5) is NDC [-0.875, -0.375); rows likewise, y up.
+        const float l = -0.875f, r = -0.375f, t = 0.875f, b = 0.375f;
+        const ClipVertex quad[6] = {{l, t, 0}, {l, b, 0}, {r, b, 0}, {l, t, 0}, {r, b, 0}, {r, t, 0}};
+
+        RenderTarget2D target(device, kSize, kSize);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(0, 0, 0, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+                                  declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        std::vector<Color> pixels(static_cast<std::size_t>(kSize * kSize));
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        for (int y = 0; y < kSize; ++y)
+        {
+            for (int x = 0; x < kSize; ++x)
+            {
+                const bool covered = x >= 1 && x <= 2 && y >= 1 && y <= 2;
+                const Color pixel = pixels[static_cast<std::size_t>(y * kSize + x)];
+                EXPECT_EQ(pixel.getRProperty() > 128, covered) << "pixel " << x << "," << y;
+            }
+        }
+    }
+
+    /**
+     * @brief Contract: a device texture slot replaced after Apply() is the one a compiled draw samples.
+     *
+     * GraphicsDevice's texture and sampler slots are what a compiled draw samples. EffectPass.Apply()
+     * writes the pass's assignments there, and a game may replace a slot before drawing -- Direct3D 9
+     * device state, which XNA keeps. The pass assigns RED to slot 0 through its texture parameter;
+     * the caller then puts BLUE there; the draw must sample BLUE. First written for the retired
+     * METAL renderer (plans/plan_apple_m4.md AM4-144).
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectDeviceTextureSlotAfterApplyContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        Effect effect(device, BuildSyntheticSamplingEffect({
+            {Fx::SampMagFilter, Fx::FilterPoint}, {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint}, {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp}}));
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+        Texture2D red(device, 1, 1);
+        Texture2D blue(device, 1, 1);
+        const Color redTexel(255, 0, 0, 255), blueTexel(0, 0, 255, 255);
+        red.SetData(&redTexel, 1);
+        blue.SetData(&blueTexel, 1);
+        parameters["FxTexture"]->SetValue(&red);
+
+        SamplingQuadVertex quad[6];
+        FillSamplingQuad(quad, 0.5f, 0.5f);
+        RenderTarget2D target(device, 8, 8);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        ASSERT_EQ(device.getTexturesProperty()[0], &red) << "Apply publishes the pass's texture to the device";
+        device.getTexturesProperty()(0, &blue);
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+                                  SamplingQuadDeclaration());
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        device.getTexturesProperty()(0, nullptr);
+
+        Color pixel(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        target.GetData(0, &centre, &pixel, 0, 1);
+        EXPECT_NEAR(pixel.getRProperty(), 0, 3);
+        EXPECT_NEAR(pixel.getBProperty(), 255, 3) << "the device's slot, replaced after Apply, wins";
+    }
+
+    /**
+     * @brief Contract: an MRT compiled pass writes each slot under that slot's own write mask.
+     *
+     * An ordinary compiled Effect writing oC0 = Tint and oC1 = Tint.yxzw (the fixture's own
+     * swizzles, CompiledEffectFixtures.hpp `writesMrt`) into a two-target set. Each attachment the
+     * pixel shader writes takes XNA's ColorWriteChannels for its own slot (ColorWriteChannels1 for
+     * slot 1) under the one BlendState; a {Color, Single} set (XNA requires equal bit depths) keeps
+     * slot 1's float output exact; and returning to the first state draws the first picture again.
+     * First written for the retired METAL renderer (AM4-144/146), the shape of SDL_GPU's SDLGPU-75.
+     *
+     * @param device HiDef device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectMrtWriteMaskContract(GraphicsDevice& device)
+    {
+        using Microsoft::Xna::Framework::Graphics::ColorWriteChannels;
+        using Microsoft::Xna::Framework::Graphics::DepthFormat;
+        using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
+        if (!device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets))
+            GTEST_SKIP() << "the renderer reports no MultipleRenderTargets capability";
+
+        constexpr int kSize = 8;
+        Effect effect(device, BuildSyntheticMrtDrawableEffect());
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+        const auto draw = [&](RenderTarget2D& a, RenderTarget2D& b, const Vector4& tint,
+                              const BlendState& blend, const Color& clear) {
+            device.SetRenderTargets({RenderTargetBinding(&a), RenderTargetBinding(&b)});
+            device.Clear(clear);
+            device.setBlendStateProperty(blend);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            parameters["Tint"]->SetValue(tint);
+            pass.Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+                                      declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        };
+        const auto approximately = [](const Color& got, const Color& want) {
+            return std::abs(got.getRProperty() - want.getRProperty()) <= 3 &&
+                   std::abs(got.getGProperty() - want.getGProperty()) <= 3 &&
+                   std::abs(got.getBProperty() - want.getBProperty()) <= 3 &&
+                   std::abs(got.getAProperty() - want.getAProperty()) <= 3;
+        };
+        const auto text = [](const Color& c) {
+            return "(" + std::to_string(c.getRProperty()) + "," + std::to_string(c.getGProperty()) + "," +
+                   std::to_string(c.getBProperty()) + "," + std::to_string(c.getAProperty()) + ")";
+        };
+
+        RenderTarget2D a0(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+        RenderTarget2D a1(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+        Color first, second;
+        draw(a0, a1, Vector4(0.2f, 0.4f, 0.8f, 1.0f), BlendState::Opaque, Color::Black);
+        a0.GetData(0, &centre, &first, 0, 1);
+        a1.GetData(0, &centre, &second, 0, 1);
+        EXPECT_TRUE(approximately(first, Color(51, 102, 204, 255))) << "oC0 = Tint, got " << text(first);
+        EXPECT_TRUE(approximately(second, Color(102, 51, 204, 255))) << "oC1 = Tint.yxzw, got " << text(second);
+
+        if (device.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets))
+        {
+            RenderTarget2D mixed0(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+            RenderTarget2D mixed1(device, kSize, kSize, false, SurfaceFormat::Single, DepthFormat::None);
+            draw(mixed0, mixed1, Vector4(0.25f, 0.5f, 0.75f, 1.0f), BlendState::Opaque, Color::Black);
+            Color mixedFirst;
+            float mixedSecond = -1.0f;
+            mixed0.GetData(0, &centre, &mixedFirst, 0, 1);
+            mixed1.GetData(0, &centre, &mixedSecond, 0, 1);
+            EXPECT_TRUE(approximately(mixedFirst, Color(64, 128, 191, 255))) << text(mixedFirst);
+            EXPECT_FLOAT_EQ(mixedSecond, 0.5f) << "a Single slot 1 keeps oC1.x = Tint.y exactly";
+        }
+
+        BlendState maskedAdditive = BlendState::Additive;
+        maskedAdditive.setColorWriteChannelsProperty(ColorWriteChannels::Red);
+        maskedAdditive.setColorWriteChannels1Property(ColorWriteChannels::Green);
+        draw(a0, a1, Vector4(0.2f, 0.4f, 0.8f, 0.5f), maskedAdditive, Color(10, 20, 30, 40));
+        a0.GetData(0, &centre, &first, 0, 1);
+        a1.GetData(0, &centre, &second, 0, 1);
+        // Additive is SourceAlpha/One: red gets oC0.x = 0.2 times alpha 0.5 over 10, and green gets
+        // oC1.y = Tint.x = 0.2 times alpha 0.5 over 20; every other channel keeps its clear value.
+        EXPECT_TRUE(approximately(first, Color(36, 20, 30, 40))) << "slot 0 Red mask with Additive, got " << text(first);
+        EXPECT_TRUE(approximately(second, Color(10, 46, 30, 40))) << "slot 1 Green mask with Additive, got " << text(second);
+
+        draw(a0, a1, Vector4(0.6f, 0.3f, 0.1f, 1.0f), BlendState::Opaque, Color::Black);
+        a0.GetData(0, &centre, &first, 0, 1);
+        a1.GetData(0, &centre, &second, 0, 1);
+        EXPECT_TRUE(approximately(first, Color(153, 77, 26, 255))) << text(first);
+        EXPECT_TRUE(approximately(second, Color(77, 153, 26, 255))) << text(second);
+    }
+
+    /** @brief A mipped square Color texture whose every level is one flat colour (the 4th repeats). */
+    inline Texture2D MakeLevelColouredTexture(GraphicsDevice& device, int size,
+                                              const std::array<Color, 4>& levelColors)
+    {
+        Texture2D mipped(device, size, size, /*mipMap=*/true, SurfaceFormat::Color);
+        for (int level = 0; level < mipped.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, size >> level);
+            const Rectangle whole(0, 0, extent, extent);
+            std::vector<Color> texels(static_cast<std::size_t>(extent * extent),
+                                      levelColors[static_cast<std::size_t>(std::min(level, 3))]);
+            mipped.SetData(level, &whole, texels.data(), 0, static_cast<int>(texels.size()));
+        }
+        return mipped;
+    }
+
+    /**
+     * @brief Contract: a compiled sampler's LOD bias applies to that sampler's OWN register.
+     *
+     * RunCompiledEffectSamplerPixelContract proves a bias moves the level, but declares its sampler
+     * at `s0` -- so it passes just as well against an implementation that applies "the" bias
+     * globally, or always reads slot 0's. XNA's sampler state is per register: the SAME effect is
+     * built here with its sampler at `s2`, and an implementation keyed on slot 0 reads a bias of 0
+     * and stays on level 0. One texel per pixel across the target keeps the computed level at
+     * exactly 0, so a +1 bias must select level 1. plans/plan_webgpu.md WEBGPU-208; also carried by
+     * the retired METAL renderer.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     * @param options Which sampler properties this backend can represent.
+     */
+    inline void RunCompiledEffectLodBiasRegisterContract(
+        GraphicsDevice& device,
+        const CompiledEffectSamplerContractOptions& options = {})
+    {
+        namespace Fx = EffectFormat;
+        if (!options.supportsLodBias)
+            GTEST_SKIP() << "this backend documents SamplerState.MipMapLevelOfDetailBias as unrepresentable";
+
+        constexpr int kSize = 8;
+        constexpr std::uint32_t kRegister = 2;  // deliberately NOT s0
+        const std::array<Color, 4> levelColors = {Color(255, 0, 0, 255), Color(0, 255, 0, 255),
+                                                  Color(0, 0, 255, 255), Color(255, 255, 0, 255)};
+        Texture2D mipped = MakeLevelColouredTexture(device, kSize, levelColors);
+        ASSERT_GE(mipped.getLevelCountProperty(), 2);
+
+        const SamplingQuadVertex ramp[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f}, {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f}, {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f}, { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+        };
+        const auto sampleWithBias = [&](float bias) {
+            Effect effect(device, BuildSyntheticSamplingEffect(
+                {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterPoint},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                    {Fx::SampMipMapLodBias, FloatBits(bias), true},
+                },
+                kRegister));
+            auto& parameters = effect.getParametersProperty();
+            parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+            parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+            parameters["FxTexture"]->SetValue(&mipped);
+
+            RenderTarget2D target(device, kSize, kSize);
+            device.SetRenderTarget(&target);
+            device.Clear(Color(9, 19, 29, 255));
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(ramp), 0, 2,
+                                      SamplingQuadDeclaration());
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color pixel(0, 0, 0, 0);
+            const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+
+        const auto expectLevel = [](const Color& actual, const Color& expected, const char* label) {
+            SCOPED_TRACE(label);
+            EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+            EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+            EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+        };
+        expectLevel(sampleWithBias(0.0f), levelColors[0], "no bias on s2 keeps the computed level 0");
+        expectLevel(sampleWithBias(1.0f), levelColors[1],
+                    "a +1 bias on s2 selects level 1 -- reading slot 0 would have stayed on level 0");
+    }
+
+    /**
+     * @brief Contract: the LOD bias a compiled draw uses is the one in force when it was issued.
+     *
+     * TWO draws go into one target with no readback between them, the first under an effect whose
+     * sampler has no bias and the second under one with +1. Applying the second effect's pass is
+     * itself the mutation: it overwrites the sampler state a renderer that records draws and replays
+     * them later would read. An implementation that read the bias at replay gives BOTH halves the
+     * last bias, so the left half comes back on level 1 instead of level 0. Each half is its own
+     * 8x8 quad with the full 0..1 coordinate range, keeping the computed level at exactly 0.
+     * plans/plan_webgpu.md WEBGPU-208; also carried by the retired METAL renderer.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     * @param options Which sampler properties this backend can represent.
+     */
+    inline void RunCompiledEffectLodBiasPerDrawContract(
+        GraphicsDevice& device,
+        const CompiledEffectSamplerContractOptions& options = {})
+    {
+        namespace Fx = EffectFormat;
+        if (!options.supportsLodBias)
+            GTEST_SKIP() << "this backend documents SamplerState.MipMapLevelOfDetailBias as unrepresentable";
+
+        constexpr int kTexture = 8;
+        const std::array<Color, 4> levelColors = {Color(255, 0, 0, 255), Color(0, 255, 0, 255),
+                                                  Color(0, 0, 255, 255), Color(255, 255, 0, 255)};
+        Texture2D mipped = MakeLevelColouredTexture(device, kTexture, levelColors);
+        ASSERT_GE(mipped.getLevelCountProperty(), 2);
+
+        const auto makeEffect = [&](float bias) {
+            auto effect = std::make_unique<Effect>(device, BuildSyntheticSamplingEffect(
+                {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterPoint},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                    {Fx::SampMipMapLodBias, FloatBits(bias), true},
+                },
+                0));
+            auto& parameters = effect->getParametersProperty();
+            parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+            parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+            parameters["FxTexture"]->SetValue(&mipped);
+            return effect;
+        };
+        auto unbiasedEffect = makeEffect(0.0f);
+        auto biasedEffect = makeEffect(1.0f);
+
+        const auto halfQuad = [](float x0, float x1, SamplingQuadVertex* out) {
+            const SamplingQuadVertex quad[6] = {
+                {x0,  1.0f, 0.0f, 0.0f, 0.0f}, {x0, -1.0f, 0.0f, 0.0f, 1.0f},
+                {x1, -1.0f, 0.0f, 1.0f, 1.0f}, {x0,  1.0f, 0.0f, 0.0f, 0.0f},
+                {x1, -1.0f, 0.0f, 1.0f, 1.0f}, {x1,  1.0f, 0.0f, 1.0f, 0.0f},
+            };
+            for (int i = 0; i < 6; ++i) out[i] = quad[i];
+        };
+        SamplingQuadVertex left[6];
+        SamplingQuadVertex right[6];
+        halfQuad(-1.0f, 0.0f, left);
+        halfQuad(0.0f, 1.0f, right);
+
+        RenderTarget2D target(device, kTexture * 2, kTexture);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        unbiasedEffect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(left), 0, 2,
+                                  SamplingQuadDeclaration());
+        // The mutation: this Apply() overwrites the sampler state a replay-time read would find.
+        biasedEffect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(right), 0, 2,
+                                  SamplingQuadDeclaration());
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color leftPixel(0, 0, 0, 0);
+        Color rightPixel(0, 0, 0, 0);
+        const Rectangle leftCentre(kTexture / 2, kTexture / 2, 1, 1);
+        const Rectangle rightCentre(kTexture + kTexture / 2, kTexture / 2, 1, 1);
+        target.GetData(0, &leftCentre, &leftPixel, 0, 1);
+        target.GetData(0, &rightCentre, &rightPixel, 0, 1);
+
+        const auto expectLevel = [](const Color& actual, const Color& expected, const char* label) {
+            SCOPED_TRACE(label);
+            EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+            EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+            EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+        };
+        expectLevel(leftPixel, levelColors[0],
+                    "the FIRST draw keeps its own zero bias even though a +1 pass was applied after it");
+        expectLevel(rightPixel, levelColors[1], "the second draw carries its own +1 bias");
+    }
+
+    /**
+     * @brief Contract: a compiled `sampler3D`'s AddressW selects a different slice for each mode.
+     *
+     * AddressW is observable only where a volume texture is sampled, and a compiled effect declaring
+     * `sampler3D` is an ordinary XNA surface whose `sampler_state` carries it. The texture is four
+     * one-colour depth slices, so the texel centres sit at w = 0.125, 0.375, 0.625, 0.875, and a
+     * coordinate of w = 1.375 separates the three modes: Wrap -> 0.375 (slice 1, green), Clamp ->
+     * the last slice (white), Mirror -> 0.625 (slice 2, blue). A renderer that dropped W, or
+     * hard-coded one mode, returns one colour three times. plans/plan_webgpu.md WEBGPU-160; also
+     * carried by the retired METAL renderer.
+     *
+     * @param device HiDef device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectAddressWContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        if (device.getGraphicsProfileProperty() != GraphicsProfile::HiDef ||
+            !device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+            GTEST_SKIP() << "volume textures need a HiDef device whose renderer reports Texture3D";
+
+        constexpr int kSize = 8;
+        const Color slices[4] = {Color(255, 0, 0, 255), Color(0, 255, 0, 255),
+                                 Color(0, 0, 255, 255), Color(255, 255, 255, 255)};
+        Texture3D volume(device, 1, 1, 4, /*mipMap=*/false, SurfaceFormat::Color);
+        volume.SetData(slices, 4);
+
+        const auto sampleWithAddressW = [&](int addressW) {
+            Effect effect(device, BuildSyntheticSamplingEffect(
+                {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterPoint},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                    {Fx::SampAddressW, static_cast<std::uint32_t>(addressW)},
+                },
+                0, SyntheticSamplerKind::Sampler3D));
+            auto& parameters = effect.getParametersProperty();
+            parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+            parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+            parameters["FxTexture"]->SetValue(&volume);
+
+            SamplingQuadVertexXYZ quad[6];
+            FillSamplingQuadXYZ(quad, 0.5f, 0.5f, 1.375f);
+
+            RenderTarget2D target(device, kSize, kSize);
+            device.SetRenderTarget(&target);
+            device.Clear(Color(9, 19, 29, 255));
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+                                      SamplingQuadDeclarationXYZ());
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color pixel(0, 0, 0, 0);
+            const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+
+        const Color wrapped = sampleWithAddressW(Fx::AddressWrap);
+        const Color clamped = sampleWithAddressW(Fx::AddressClamp);
+        const Color mirrored = sampleWithAddressW(Fx::AddressMirror);
+
+        const auto expectSlice = [](const Color& actual, const Color& expected, const char* label) {
+            SCOPED_TRACE(label);
+            EXPECT_NEAR(actual.getRProperty(), expected.getRProperty(), 3);
+            EXPECT_NEAR(actual.getGProperty(), expected.getGProperty(), 3);
+            EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
+        };
+        expectSlice(wrapped, slices[1], "Wrap turns w = 1.375 into 0.375, the second slice");
+        expectSlice(clamped, slices[3], "Clamp turns w = 1.375 into the last slice");
+        expectSlice(mirrored, slices[2], "Mirror turns w = 1.375 into 0.625, the third slice");
+        EXPECT_FALSE(wrapped == clamped);
+        EXPECT_FALSE(clamped == mirrored);
+        EXPECT_FALSE(wrapped == mirrored);
+    }
+
+    /**
+     * @brief Contract: SpriteBatch alternates compiled and stock batches without leaking either.
+     *
+     * The compiled SpriteBatch route leaves the stock sprite pipeline entirely, so the sequence that
+     * can break is returning to a compiled batch after a stock one ran between them: a surviving
+     * pending-sprite run, batch state the compiled flush skipped, or -- on a renderer that records
+     * draws and replays them -- two command families interleaved out of public call order. The three
+     * batches draw into separate thirds of one target so all three are readable at once.
+     * plans/plan_fx.md FX-112 / plans/plan_webgpu.md WEBGPU-170; also carried by the retired METAL
+     * renderer.
+     *
+     * @param device Device whose renderer claims CompiledEffects.
+     */
+    inline void RunCompiledEffectSpriteBatchAlternationContract(GraphicsDevice& device)
+    {
+        constexpr int kSize = 12;
+        Effect effect(device, BuildSyntheticDrawableEffect());
+        auto& parameters = effect.getParametersProperty();
+        parameters["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
+
+        // A green sprite texture, so a stock batch is unmistakable against either compiled Tint.
+        Texture2D sprite(device, 1, 1);
+        const Color green[1] = {Color(0, 255, 0, 255)};
+        sprite.SetData(green, 1);
+
+        RenderTarget2D target(device, kSize, kSize);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+
+        const auto compiledBatch = [&](const Vector4& tint, const Rectangle& where) {
+            parameters["Tint"]->SetValue(tint);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr,
+                        &effect);
+            batch.Draw(sprite, where, Color::White);
+            batch.End();
+        };
+
+        compiledBatch(Vector4(1.0f, 0.0f, 0.0f, 1.0f), Rectangle(0, 0, kSize, 4));
+        {
+            SpriteBatch stock(device);
+            stock.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            stock.Draw(sprite, Rectangle(0, 4, kSize, 4), Color::White);
+            stock.End();
+        }
+        compiledBatch(Vector4(0.0f, 0.0f, 1.0f, 1.0f), Rectangle(0, 8, kSize, 4));
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        const auto readRow = [&](int y) {
+            Color pixel(0, 0, 0, 0);
+            const Rectangle probe(kSize / 2, y, 1, 1);
+            target.GetData(0, &probe, &pixel, 0, 1);
+            return pixel;
+        };
+        const Color first = readRow(2);
+        const Color middle = readRow(6);
+        const Color last = readRow(10);
+
+        EXPECT_NEAR(first.getRProperty(), 255, 3) << "the first compiled batch must write its Tint";
+        EXPECT_NEAR(first.getGProperty(), 0, 3);
+        EXPECT_NEAR(middle.getGProperty(), 255, 3)
+            << "the stock batch between them must sample its own texture, not run the Effect";
+        EXPECT_NEAR(middle.getRProperty(), 0, 3);
+        EXPECT_NEAR(last.getBProperty(), 255, 3)
+            << "a compiled batch after a stock one must run the Effect again, with its own Tint";
+        EXPECT_NEAR(last.getRProperty(), 0, 3);
+    }
+
+    /**
      * @brief Contract: the pass a caller applies is the pass that draws.
      *
      * plans/plan_fx.md FX-094. The drawable fixture's pass `P0` binds a pixel shader that writes
@@ -5812,6 +6352,13 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectSwitchingContract` -- effects, clones and stock draws interleave cleanly
      * - `RunCompiledEffectManyDrawsContract` -- 600 draws in one frame keep their own uniforms
      * - `RunCompiledEffectTruncationContract` -- every truncation refuses or parses whole
+     * - `RunCompiledEffectHalfPixelCoverageContract` -- Direct3D 9 pixel centres for compiled draws
+     * - `RunCompiledEffectDeviceTextureSlotAfterApplyContract` -- a slot replaced after Apply wins
+     * - `RunCompiledEffectMrtWriteMaskContract` -- each MRT slot under its own write mask (HiDef)
+     * - `RunCompiledEffectLodBiasRegisterContract` -- the bias belongs to its own sampler register
+     * - `RunCompiledEffectLodBiasPerDrawContract` -- the bias in force when the draw was issued
+     * - `RunCompiledEffectAddressWContract` -- AddressW picks the volume slice per mode (HiDef)
+     * - `RunCompiledEffectSpriteBatchAlternationContract` -- compiled and stock batches interleave
      *
      * This list is the single place the drawing sections are enumerated; anything that needs to
      * describe the suite's breadth should point here rather than repeat a count.

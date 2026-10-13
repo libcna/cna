@@ -1,23 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// Task 327: Vulkan FillMode::WireFrame integration test.
+// Task 327: RasterizerState.FillMode -- WireFrame leaves triangle interiors unrasterized, and
+// switching back to Solid fills them again.
 //
-// Verifies that setting RasterizerState.FillMode = FillMode::WireFrame causes the
-// Vulkan renderer to use VK_POLYGON_MODE_LINE, so triangle interiors are not
-// rasterized.
+// Triangle geometry, in clip space: top (0, 0.8), bottom-right (1, -0.8), bottom-left (-1, -0.8),
+// clockwise on screen and therefore a front face under XNA's default CullCounterClockwiseFace. At
+// the screen centre the left/right edges are at x = -0.5 and x = +0.5, so the centre pixel lies
+// well inside the triangle.
 //
-// Triangle geometry (input NDC, Y is flipped by the vertex shader):
-//   top (0, 0.8), BR (1,-0.8), BL (-1,-0.8).
-// After the shader's Y-flip these become CW in Vulkan NDC, making them a front
-// face under the default CullCounterClockwiseFace rasterizer state.
-// At y=0 (screen centre) the left/right edges cross at x=-0.5 and x=+0.5, so
-// the centre pixel at NDC (0,0) is well inside the triangle interior.
+// Sub-test 1 -- Solid baseline:  centre must be RED  (interior filled).
+// Sub-test 2 -- WireFrame:       centre must be BLACK (interior not rasterized).
+// Sub-test 3 -- Reset to Solid:  centre must be RED  again (FillMode reverts).
 //
-// Sub-test 1 — Solid baseline:  centre must be RED  (interior filled).
-// Sub-test 2 — WireFrame:       centre must be BLACK (interior not rasterized).
-// Sub-test 3 — Reset to Solid:  centre must be RED  again (FillMode reverts).
-//
-// Requires VkPhysicalDeviceFeatures.fillModeNonSolid (AMD Radeon 780M and all
-// modern desktop Vulkan GPUs support this).
+// First written for the retired VULKAN renderer; kept as a shared source because EasyGL runs it.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -49,7 +43,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 struct GpuVPC { float x, y, z; uint8_t r, g, b, a; };
 static_assert(sizeof(GpuVPC) == 16, "GpuVPC must be 16 bytes");
 
-class VulkanFillModeTest : public Game
+class FillModeTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0;
@@ -88,10 +82,8 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
 
-        // Triangle with CW winding in actual Vulkan NDC (after shader Y-flip):
-        //   input top (0, 0.8) → clip (0,-0.8); input BR (1,-0.8) → clip (1, 0.8);
-        //   input BL (-1,-0.8) → clip (-1, 0.8).
-        // CW in Vulkan NDC → front face under CullCounterClockwiseFace → visible.
+        // Clockwise on screen (XNA's +Y is up): a front face under CullCounterClockwiseFace,
+        // so it is visible.
         GpuVPC verts[3] = {
             {  0.0f,  0.8f, 0.f, 255, 0, 0, 255 },
             {  1.0f, -0.8f, 0.f, 255, 0, 0, 255 },
@@ -160,7 +152,7 @@ protected:
     }
 
 public:
-    VulkanFillModeTest()
+    FillModeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
@@ -173,7 +165,7 @@ public:
 
 int main()
 {
-    VulkanFillModeTest game;
+    FillModeTest game;
     game.Run();
     return game.getResult();
 }

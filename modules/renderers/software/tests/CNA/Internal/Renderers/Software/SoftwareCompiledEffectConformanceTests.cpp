@@ -136,6 +136,21 @@ TEST(SoftwareCompiledEffectConformanceTest, RunsEverySharedCompiledEffectContrac
         RunCompiledEffectManyDrawsContract(device);
         RunCompiledEffectTruncationContract(device);
     });
+    // First carried by the retired METAL renderer (AM4-144/146) and by WebGPU (WEBGPU-160/170/208).
+    RunOnFreshSoftwareDevice("pixel centres/device slots/MRT masks", [](GraphicsDevice& device)
+    {
+        RunCompiledEffectHalfPixelCoverageContract(device);
+        RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
+        RunCompiledEffectMrtWriteMaskContract(device);
+    });
+    RunOnFreshSoftwareDevice("per-register/per-draw LOD bias, AddressW, SpriteBatch alternation",
+                             [](GraphicsDevice& device)
+    {
+        RunCompiledEffectLodBiasRegisterContract(device);
+        RunCompiledEffectLodBiasPerDrawContract(device);
+        RunCompiledEffectAddressWContract(device);
+        RunCompiledEffectSpriteBatchAlternationContract(device);
+    });
 }
 
 #endif

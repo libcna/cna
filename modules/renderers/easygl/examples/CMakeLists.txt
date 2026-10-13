@@ -2038,10 +2038,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_RasterizerState_CullMode_IndexedBasicEffect COMMAND cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 326: FillMode::Solid baseline on EasyGL (reuses Task 327's renderer-agnostic Vulkan
-        # source — its Solid sub-tests 1/3 previously only ran on Vulkan).
+        # Task 326: FillMode::Solid baseline on EasyGL (Task 327's renderer-agnostic source).
         cna_easygl_test(cna_test_easygl_fill_mode
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_fill_mode_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/fill_mode_test.cpp)
         cna_register_renderer_test(NAME EasyGL_FillMode_Solid COMMAND cna_test_easygl_fill_mode
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

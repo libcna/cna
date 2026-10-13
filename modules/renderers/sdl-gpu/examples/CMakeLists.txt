@@ -233,17 +233,6 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
-    # SDLGPU-76: this older SDL_Renderer fixture is renderer-neutral despite its historical name.
-    # Reuse its precise XNA/FNA disposal policy, including the disposed Texture2D Draw rejection
-    # and the deliberately accepted disposed state/SpriteBatch cases, rather than cloning it.
-    cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_disposed_guards
-        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_disposed_guards_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_SpriteBatch_DisposedGuards
-        COMMAND cna_test_sdlgpu_spritebatch_disposed_guards
-        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    set_tests_properties(SdlGpu_SpriteBatch_DisposedGuards PROPERTIES
-        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
-
     # SDLGPU-77: three EasyGL corpus sources exercise distinctions the consolidated fixtures do
     # not duplicate: BasicEffect and SkinnedEffect must genuinely switch between XNA's default
     # per-vertex lighting and the requested per-pixel family, and WeightsPerVertex=2 must ignore
@@ -607,12 +596,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # plans/plan_street_sdlgpu.md STREETS-0004: a ShaderEffect's texture unit u samples through
-    # SamplerStates[u]. Vulkan's VULKAN-166 witness, compiled again: legs A-D are XNA-only, and the
-    # define leaves out leg E, which reads the Vulkan validation layer.
+    # SamplerStates[u] (VULKAN-166's witness, first written for the retired VULKAN renderer).
     cna_sdlgpu_test(cna_test_sdlgpu_shader_effect_per_unit_sampler
-        ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp)
-    target_compile_definitions(cna_test_sdlgpu_shader_effect_per_unit_sampler
-        PRIVATE CNA_PER_UNIT_SAMPLER_NO_VULKAN_VALIDATION)
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_per_unit_sampler_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_ShaderEffect_PerUnitSampler
         COMMAND cna_test_sdlgpu_shader_effect_per_unit_sampler
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")

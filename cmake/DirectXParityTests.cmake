@@ -251,7 +251,7 @@ function(cna_register_d3d_parity_tests)
         SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_lighting_conformance_test.cpp")
     cna_d3d_parity_fixture(
         NAME ViewSpaceFog TARGET viewspace_fog
-        SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_viewspace_fog_test.cpp")
+        SOURCE "${CNA_GRAPHICS_EXAMPLES_DIR}/viewspace_fog_test.cpp")
     cna_d3d_parity_fixture(
         NAME AlphaTest_Fog TARGET alphatest_fog
         SOURCE "${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_fog_test.cpp")

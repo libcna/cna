@@ -47,7 +47,10 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -260,6 +263,36 @@ TEST_F(TextureCubeTest, CopyAssignmentSharesTheUnderlyingRenderer)
     EXPECT_EQ(copy.getSizeProperty(), source.getSizeProperty());
     EXPECT_EQ(copy.getLevelCountProperty(), source.getLevelCountProperty());
     EXPECT_EQ(&copy.GetRenderer(), &source.GetRenderer());
+}
+
+// A RenderTargetCube IS a TextureCube, so moving one into its base keeps the same cube renderer --
+// and that renderer, held through the base, can outlive the device that created it (the resource-
+// lifetime contract the shared_ptr ownership exists for). A renderer with no RenderTargetCube storage
+// leaves the renderer null by design and has nothing to move. First written for the retired METAL
+// renderer (MetalResourceHealthTests).
+TEST(TextureCubeLifetimeTest, RenderTargetCubeRendererSurvivesATextureCubeBaseMove)
+{
+    std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> escapedRenderer;
+    CNA::Internal::Renderers::ITextureCubeRenderer* rendererIdentity = nullptr;
+
+    {
+        GraphicsDevice device;
+        Microsoft::Xna::Framework::Graphics::RenderTargetCube renderTarget(
+            device, 1, false, SurfaceFormat::Color, Microsoft::Xna::Framework::Graphics::DepthFormat::None, 0,
+            Microsoft::Xna::Framework::Graphics::RenderTargetUsage::DiscardContents);
+        rendererIdentity = renderTarget.GetRenderTargetCubeRenderer();
+        if (rendererIdentity == nullptr)
+            GTEST_SKIP() << "this renderer has no RenderTargetCube storage to move";
+
+        TextureCube escapedTexture(std::move(renderTarget));
+        ASSERT_EQ(&escapedTexture.GetRenderer(), rendererIdentity)
+            << "the base move keeps the render target's own cube renderer";
+        escapedRenderer = escapedTexture.GetRenderer().shared_from_this();
+    }
+
+    ASSERT_NE(escapedRenderer, nullptr);
+    EXPECT_EQ(escapedRenderer.get(), rendererIdentity)
+        << "the base-moved TextureCube published a renderer that outlives its device";
 }
 
 // -----------------------------------------------------------------------

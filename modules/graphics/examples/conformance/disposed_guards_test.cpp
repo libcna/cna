@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: MS-PL
-// Task 717: Verify disposed-resource guards throw ObjectDisposedException consistently on
-// SDL_Renderer (Texture2D, RenderTarget2D, BlendState, SamplerState, SpriteBatch).
+// Task 717: disposed-resource guards throw ObjectDisposedException consistently (Texture2D,
+// RenderTarget2D, BlendState, SamplerState, SpriteBatch).
 //
 // Microsoft XNA is authoritative for state/resource lifetime: disposed graphics states are
 // rejected when they are applied, and a disposed SpriteBatch rejects further public use. FNA's
 // missing state guards are a documented divergence rather than this test's expected contract.
 //
-// Real bug found and fixed while writing this test: SpriteBatch::Draw(Texture2D&, ...) had NO
-// guard at all -- worse than FNA's own leniency, since a disposed Texture2D's renderer_ (a
-// shared_ptr<ITextureRenderer>) becomes null on Dispose(), and SpriteBatch::pushSprite ultimately
-// dereferences it via Texture2D::GetRenderer() (`return *renderer_;`) with no null check --
-// a GUARANTEED crash (virtual call through a reference to address 0), not a graceful failure or
-// even FNA's own safer managed-exception failure mode. Fixed by adding an ObjectDisposedException
-// guard in pushSprite (the single funnel point for every Draw/DrawString overload).
+// Real bug found and fixed while writing this test: SpriteBatch::Draw(Texture2D&, ...) had no
+// guard at all, and a disposed Texture2D's renderer is null, so the draw dereferenced address 0.
+// pushSprite, the single funnel of every Draw/DrawString overload, now throws
+// ObjectDisposedException instead.
 //
-// Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels operates
-// in physical output coordinates, while this renderer's default presentation mode
-// (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
+// Task 718 adds the second Dispose(): it is a no-op for RenderTarget2D, BlendState, SamplerState
+// and SpriteBatch, and every guard above still refuses the resource afterwards.
+//
+// Runs with PresentationMode::NativeBackBuffer so logical and physical pixels map 1:1 for the
+// readback. First written for the retired SDL_RENDERER renderer (Tasks 717 and 718).
 //
 // Exit code 0 = all checks PASS, 1 = at least one FAIL.
 
@@ -41,7 +40,7 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
-class SdlDisposedGuardsTest : public Game
+class DisposedGuardsTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<SpriteBatch>           sb_;
@@ -146,6 +145,48 @@ protected:
             }), "A disposed SpriteBatch rejects Begin");
         }
 
+        // --- Task 718: a SECOND Dispose() is a no-op, and the guards above still hold after it. ---
+        {
+            RenderTarget2D rt(dev, 4, 4);
+            rt.Dispose();
+            rt.Dispose();
+            check(rt.getIsDisposedProperty(), "RenderTarget2D reports IsDisposed after a double Dispose");
+            check(ThrowsObjectDisposed([&]{ dev.SetRenderTarget(&rt); }),
+                  "a double-disposed RenderTarget2D is still refused by SetRenderTarget");
+        }
+        {
+            BlendState bs;
+            bs.Dispose();
+            bs.Dispose();
+            check(bs.getIsDisposedProperty(), "BlendState reports IsDisposed after a double Dispose");
+            check(ThrowsObjectDisposed([&]{ dev.setBlendStateProperty(bs); }),
+                  "a double-disposed BlendState is still refused by setBlendStateProperty");
+        }
+        {
+            SamplerState ss;
+            ss.Dispose();
+            ss.Dispose();
+            check(ss.getIsDisposedProperty(), "SamplerState reports IsDisposed after a double Dispose");
+            // A fresh batch: XNA's End applies the render state BEFORE it leaves the Begin/End pair,
+            // so a batch whose End threw is still inside it and would refuse the next Begin.
+            SpriteBatch batch(dev);
+            check(ThrowsObjectDisposed([&]{
+                batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &ss, nullptr, nullptr);
+                batch.Draw(*whiteTex_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+                batch.End();
+            }), "a double-disposed SamplerState is still refused when SpriteBatch::End applies it");
+        }
+        {
+            SpriteBatch localSb(dev);
+            localSb.Dispose();
+            localSb.Dispose();
+            check(ThrowsObjectDisposed([&]{
+                localSb.Begin();
+                localSb.Draw(*whiteTex_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+                localSb.End();
+            }), "a double-disposed SpriteBatch still rejects Begin");
+        }
+
         // --- The device must remain fully usable after all of the above. ---
         dev.Clear(Color(255, 0, 255, 255));
         Color pixel(0, 0, 0, 0);
@@ -159,12 +200,12 @@ protected:
     }
 
 public:
-    SdlDisposedGuardsTest()
+    DisposedGuardsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         // plans/plan_pre_sdlgpu_closeout.md PSG-0008: GetBackBufferData is HiDef-only
         // (SOFTWARE-213), so under the default Reach profile this aborted before its first
-        // check. GTI-0003 fixed three SDL_GPU tests this way and missed this shared one.
+        // check (GTI-0003).
         gdm_->setGraphicsProfileProperty(
             Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(32);
@@ -180,7 +221,7 @@ int main()
     // Unbuffered so a crash mid-test (this file exercises exactly the scenarios that used to
     // crash before Task 717's fixes) doesn't lose whichever PASS/FAIL lines already printed.
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-    SdlDisposedGuardsTest game;
+    DisposedGuardsTest game;
     game.Run();
     return game.getResult();
 }

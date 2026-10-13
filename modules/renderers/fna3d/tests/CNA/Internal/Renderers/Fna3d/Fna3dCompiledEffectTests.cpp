@@ -1800,3 +1800,74 @@ TEST(Fna3dCompiledEffectDrawTest, SharedTruncationContract)
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
+
+// Renderer-neutral draw contracts first carried by the retired METAL renderer (AM4-144/146) and by
+// WebGPU (WEBGPU-160/170/208); every compiled-effect family runs them from
+// CompiledEffectConformance.hpp.
+TEST(Fna3dCompiledEffectDrawTest, SharedHalfPixelCoverageContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectHalfPixelCoverageContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedMrtWriteMaskContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedLodBiasRegisterContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    // plans/plan_apple_m4.md AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
+    if (const auto* fna3d =
+            dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()))
+        options.supportsLodBias = fna3d->SamplerLodBiasReachesTheGpuEXT();
+    CNA::TestSupport::RunCompiledEffectLodBiasRegisterContract(device, options);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedLodBiasPerDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    // plans/plan_apple_m4.md AM4-191: SDL's Metal backend ignores a sampler's LOD bias.
+    if (const auto* fna3d =
+            dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(&device.GetRenderer()))
+        options.supportsLodBias = fna3d->SamplerLodBiasReachesTheGpuEXT();
+    CNA::TestSupport::RunCompiledEffectLodBiasPerDrawContract(device, options);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedAddressWContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectAddressWContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedSpriteBatchAlternationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
+}

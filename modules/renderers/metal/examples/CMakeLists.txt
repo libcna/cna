@@ -471,17 +471,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
         webgpu/webgpu_spritebatch_rendertarget
         webgpu/webgpu_instanced_stock_families
         webgpu/webgpu_instanced_pbr3d
-        vulkan/vulkan_viewspace_fog
-        vulkan/vulkan_skinnedeffect_fog
-        vulkan/vulkan_fill_mode
-        vulkan/vulkan_environmentmapeffect_fog
-        vulkan/vulkan_dualtextureeffect_fog
-        vulkan/vulkan_alphatest_fog
+        ../graphics/viewspace_fog
+        ../graphics/skinnedeffect_fog
+        ../graphics/fill_mode
+        ../graphics/environmentmapeffect_fog
+        ../graphics/dualtextureeffect_fog
+        ../graphics/alphatest_fog
         software/software_vertex_declaration
         software/software_presentation_reset_contract
-        sdl-renderer/sdlrenderer_texture2d_saveas_roundtrip
-        sdl-renderer/sdlrenderer_texture2d_fromstream
-        sdl-renderer/sdlrenderer_disposed_guards
     )
     foreach(_cna_metal_reused IN LISTS CNA_METAL_REUSED_FIXTURES)
         get_filename_component(_cna_metal_reused_name ${_cna_metal_reused} NAME)

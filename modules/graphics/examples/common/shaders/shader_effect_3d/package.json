@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Examples::ShaderEffect3D",
+  "package": "shader_effect_3d",
+  "payloads": [
+    {
+      "symbol": "kCustomLayoutVertexSpirV",
+      "source": "custom_layout.vert.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kCustomLayoutVertexWgsl",
+      "source": "custom_layout.vert.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kInstancedVertexSpirV",
+      "source": "instanced.vert.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kInstancedVertexWgsl",
+      "source": "instanced.vert.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "vertex",
+      "format": "wgsl",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kProbeFragmentSpirV",
+      "source": "probe.frag.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "spirv",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kProbeFragmentWgsl",
+      "source": "probe.frag.glsl",
+      "language": "wgsl",
+      "source_language": "vulkan-glsl",
+      "stage": "fragment",
+      "format": "wgsl",
+      "entry_point": "main"
+    }
+  ]
+}

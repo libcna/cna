@@ -196,6 +196,71 @@ TEST(ViewportTest, ProjectUnprojectRoundTrip)
     EXPECT_NEAR(back.Z, original.Z, kEps);
 }
 
+// --- Project / Unproject with a non-zero Viewport X/Y offset ---
+//
+// XNA's Project adds the viewport's own X/Y after the [-1,1] -> [0,Width/Height] remap, and
+// Unproject subtracts it first. Every case above uses Viewport(0, 0, w, h), where an implementation
+// that dropped the offset (or applied it twice) still passes. First written for the retired
+// SDL_RENDERER renderer (Task 710), as a 2D orthographic world <-> screen transform.
+
+TEST(ViewportTest, ProjectAddsTheViewportOffsetWithIdentityMatrices)
+{
+    Viewport vp(8, 4, 32, 16);
+    Matrix id = Matrix::getIdentityProperty();
+    Vector3 centre = vp.Project(Vector3(0.0f, 0.0f, 0.0f), id, id, id);
+    EXPECT_NEAR(centre.X, 8.0f + 16.0f, kEps);
+    EXPECT_NEAR(centre.Y, 4.0f + 8.0f, kEps);
+    Vector3 topLeft = vp.Project(Vector3(-1.0f, 1.0f, 0.0f), id, id, id);
+    EXPECT_NEAR(topLeft.X, 8.0f, kEps);
+    EXPECT_NEAR(topLeft.Y, 4.0f, kEps);
+}
+
+TEST(ViewportTest, UnprojectSubtractsTheViewportOffsetWithIdentityMatrices)
+{
+    Viewport vp(8, 4, 32, 16);
+    Matrix id = Matrix::getIdentityProperty();
+    Vector3 result = vp.Unproject(Vector3(8.0f, 4.0f, 0.0f), id, id, id);
+    EXPECT_NEAR(result.X, -1.0f, kEps);
+    EXPECT_NEAR(result.Y, 1.0f, kEps);
+    result = vp.Unproject(Vector3(8.0f + 32.0f, 4.0f + 16.0f, 1.0f), id, id, id);
+    EXPECT_NEAR(result.X, 1.0f, kEps);
+    EXPECT_NEAR(result.Y, -1.0f, kEps);
+    EXPECT_NEAR(result.Z, 1.0f, kEps);
+}
+
+TEST(ViewportTest, OrthographicProjectMapsWorldCornersOntoTheOffsetViewport)
+{
+    Viewport vp(8, 4, 32, 16);
+    const Matrix projection = Matrix::CreateOrthographicOffCenter(0.0f, 32.0f, 16.0f, 0.0f, 0.0f, 1.0f);
+    const Matrix id = Matrix::getIdentityProperty();
+
+    Vector3 topLeft = vp.Project(Vector3(0.0f, 0.0f, 0.0f), projection, id, id);
+    EXPECT_NEAR(topLeft.X, 8.0f, kEps);
+    EXPECT_NEAR(topLeft.Y, 4.0f, kEps);
+
+    Vector3 bottomRight = vp.Project(Vector3(32.0f, 16.0f, 0.0f), projection, id, id);
+    EXPECT_NEAR(bottomRight.X, 8.0f + 32.0f, kEps);
+    EXPECT_NEAR(bottomRight.Y, 4.0f + 16.0f, kEps);
+
+    Vector3 centre = vp.Project(Vector3(16.0f, 8.0f, 0.0f), projection, id, id);
+    EXPECT_NEAR(centre.X, 8.0f + 16.0f, kEps);
+    EXPECT_NEAR(centre.Y, 4.0f + 8.0f, kEps);
+}
+
+TEST(ViewportTest, OrthographicProjectUnprojectRoundTripsThroughTheOffsetViewport)
+{
+    Viewport vp(8, 4, 32, 16);
+    const Matrix projection = Matrix::CreateOrthographicOffCenter(0.0f, 32.0f, 16.0f, 0.0f, 0.0f, 1.0f);
+    const Matrix id = Matrix::getIdentityProperty();
+    for (const Vector3& world : {Vector3(0.0f, 0.0f, 0.0f), Vector3(32.0f, 16.0f, 0.0f),
+                                 Vector3(5.0f, 11.0f, 0.0f)})
+    {
+        const Vector3 back = vp.Unproject(vp.Project(world, projection, id, id), projection, id, id);
+        EXPECT_NEAR(back.X, world.X, kEps);
+        EXPECT_NEAR(back.Y, world.Y, kEps);
+    }
+}
+
 // --- Project / Unproject with non-identity (perspective + look-at) matrices ---
 //
 // The tests above only ever pass identity world/view/projection matrices, so the

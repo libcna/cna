@@ -269,4 +269,53 @@ TEST(DirectX9CompiledEffectDrawTest, SharedTruncationContract)
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
+// Renderer-neutral draw contracts first carried by the retired METAL renderer (AM4-144/146) and by
+// WebGPU (WEBGPU-160/170/208); every compiled-effect family runs them from
+// CompiledEffectConformance.hpp.
+TEST(DirectX9CompiledEffectDrawTest, SharedHalfPixelCoverageContract)
+{
+    GraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectHalfPixelCoverageContract(device);
+}
+
+TEST(DirectX9CompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
+{
+    GraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
+}
+
+TEST(DirectX9CompiledEffectDrawTest, SharedMrtWriteMaskContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
+}
+
+TEST(DirectX9CompiledEffectDrawTest, SharedLodBiasRegisterContract)
+{
+    GraphicsDevice device;
+    const CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    CNA::TestSupport::RunCompiledEffectLodBiasRegisterContract(device, options);
+}
+
+TEST(DirectX9CompiledEffectDrawTest, SharedLodBiasPerDrawContract)
+{
+    GraphicsDevice device;
+    const CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    CNA::TestSupport::RunCompiledEffectLodBiasPerDrawContract(device, options);
+}
+
+TEST(DirectX9CompiledEffectDrawTest, SharedAddressWContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    CNA::TestSupport::RunCompiledEffectAddressWContract(device);
+}
+
+TEST(DirectX9CompiledEffectDrawTest, SharedSpriteBatchAlternationContract)
+{
+    GraphicsDevice device;
+    CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
+}
+
 #endif  // CNA_DIRECTX9_COMPILED_EFFECTS

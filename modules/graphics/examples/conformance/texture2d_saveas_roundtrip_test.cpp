@@ -1,32 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// Task 682: Verify a Texture2D::FromStream PNG round-trip renders correctly
-// when drawn via SDL_Renderer.
+// Task 683: SaveAsPng/SaveAsJpeg of a texture filled through SetData round-trips to the screen.
 //
-// The existing renderer-agnostic Texture2DTests.cpp (Task 262) already thoroughly verifies
-// FromStream's DECODE correctness (PNG/JPEG/GIF, resize/crop overload) via
-// SetData/SaveAsPng/SaveAsJpeg round trips read back through Texture2D::GetData -- a pure
-// CPU-side cache read (Task 678's finding), guaranteed correct on every renderer by
-// construction and already exercised on SDL_Renderer whenever CnaTests runs there.
+// SaveAsPng/SaveAsJpeg work on the CPU-side copy SetData fills, not on the GPU texture. This
+// program checks the chain end to end: SetData -> SaveAsPng/SaveAsJpeg -> a fresh FromStream
+// decode -> a SpriteBatch draw -> a framebuffer readback (Task 682's method). Runs with
+// PresentationMode::NativeBackBuffer so logical and physical pixels map 1:1.
 //
-// The genuinely renderer-specific question here: does the REAL GPU texture SDL_Renderer
-// creates from a FromStream-decoded image actually render the right pixels. Tracing the
-// code: Texture2D::FromStream -> DecodeStreamToImageData -> the shared, renderer-agnostic
-// ImageLoader::LoadFromMemory, built on vendored stb --
-// independent of which CNA_GRAPHICS_RENDERER is active) -> MakeTextureFromPixels, which calls
-// `device.GetRenderer().CreateTexture(img)` -- the EXACT SAME call site already used by
-// Texture2D::SetData's full-array overload, which Task 678 already proved renders correctly
-// on SDL_Renderer via a real SpriteBatch draw + framebuffer readback. FromStream should
-// therefore be correct by construction, sharing that already-verified code path; this test
-// confirms that holds for a real encoded-file round trip too, not just raw pixel arrays.
-//
-// Design: a 2x2 source texture with 4 distinct solid colours, encoded to PNG via the
-// existing SaveAsPng (lossless, so exact colour match is expected), decoded back via
-// FromStream, then drawn scaled up (16x16, PointClamp) via SpriteBatch and read back from
-// the real framebuffer for all 4 quadrants.
-//
-// Requires PresentationMode::NativeBackBuffer (Task 915 finding): SDL_RenderReadPixels
-// operates in physical output coordinates, while this renderer's default presentation mode
-// (FixedHeightDynamicWidth) does not map logical pixels 1:1 to physical ones.
+// First written for the retired SDL_RENDERER renderer.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.
 
@@ -51,7 +31,7 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
-static bool colourMatch(Color got, Color want, int tol = 40)
+static bool colourMatch(Color got, Color want, int tol)
 {
     return std::abs((int)got.getRProperty() - (int)want.getRProperty()) <= tol
         && std::abs((int)got.getGProperty() - (int)want.getGProperty()) <= tol
@@ -63,14 +43,21 @@ static const Color kGreen (  0, 255,   0, 255);
 static const Color kBlue  (  0,   0, 255, 255);
 static const Color kYellow(255, 255,   0, 255);
 
-class SdlTexture2DFromStreamTest : public Game
+class Texture2DSaveAsRoundTripTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<SpriteBatch>           sb_;
-    std::unique_ptr<Texture2D>             tex_;
+    std::unique_ptr<Texture2D>             pngTex_;
+    std::unique_ptr<Texture2D>             jpegTex_;
 
     bool done_   = false;
     int  result_ = 0;
+
+    void check(bool ok, const char* label)
+    {
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+        if (!ok) result_ = 1;
+    }
 
 protected:
     void Initialize() override
@@ -79,17 +66,26 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         sb_ = std::make_unique<SpriteBatch>(dev);
 
-        // 2x2 source: Red, Green, Blue, Yellow (row-major).
+        // 2x2 source, filled with the full-array SetData overload.
         Texture2D src(dev, 2, 2);
         const Color pixels[4] = { kRed, kGreen, kBlue, kYellow };
         src.SetData(pixels, 4);
 
-        System::IO::MemoryStream writeStream;
-        src.SaveAsPng(&writeStream, 2, 2);
-        auto bytes = writeStream.GetBuffer();
+        System::IO::MemoryStream pngStream;
+        src.SaveAsPng(&pngStream, 2, 2);
+        auto pngBytes = pngStream.GetBuffer();
+        check(!pngBytes.empty(), "SaveAsPng produced non-empty output");
 
-        System::IO::MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
-        tex_ = std::make_unique<Texture2D>(Texture2D::FromStream(dev, readStream));
+        System::IO::MemoryStream jpegStream;
+        src.SaveAsJpeg(&jpegStream, 2, 2);
+        auto jpegBytes = jpegStream.GetBuffer();
+        check(!jpegBytes.empty(), "SaveAsJpeg produced non-empty output");
+
+        System::IO::MemoryStream pngRead(pngBytes.data(), static_cast<System::IO::intcs>(pngBytes.size()));
+        pngTex_ = std::make_unique<Texture2D>(Texture2D::FromStream(dev, pngRead));
+
+        System::IO::MemoryStream jpegRead(jpegBytes.data(), static_cast<System::IO::intcs>(jpegBytes.size()));
+        jpegTex_ = std::make_unique<Texture2D>(Texture2D::FromStream(dev, jpegRead));
     }
 
     void Draw(const GameTime&) override
@@ -101,31 +97,33 @@ protected:
         dev.Clear(Color(0, 0, 0, 255));
         dev.setBlendStateProperty(BlendState::Opaque);
 
-        if (tex_->getWidthProperty() != 2 || tex_->getHeightProperty() != 2)
-        {
-            std::printf("[FAIL] FromStream decoded dimensions: got=%dx%d want=2x2\n",
-                tex_->getWidthProperty(), tex_->getHeightProperty());
-            result_ = 1;
-        }
-        else
-        {
-            std::printf("[PASS] FromStream decoded dimensions == 2x2\n");
-        }
+        check(pngTex_->getWidthProperty() == 2 && pngTex_->getHeightProperty() == 2,
+              "PNG-decoded texture dimensions == 2x2");
+        check(jpegTex_->getWidthProperty() == 2 && jpegTex_->getHeightProperty() == 2,
+              "JPEG-decoded texture dimensions == 2x2");
 
-        // 2x2 source scaled 8x per texel -> 16x16 destination.
         sb_->Begin(SpriteSortMode::Deferred,
                    BlendState::Opaque,
                    const_cast<SamplerState*>(&SamplerState::PointClamp),
                    nullptr, nullptr, nullptr, Matrix::getIdentityProperty());
-        sb_->Draw(*tex_, Rectangle(0, 0, 16, 16), Rectangle(0, 0, 2, 2), Color::White);
+        // PNG round trip drawn scaled up into (0,0)-(16,16).
+        sb_->Draw(*pngTex_, Rectangle(0, 0, 16, 16), Rectangle(0, 0, 2, 2), Color::White);
+        // JPEG round trip drawn scaled up into (16,0)-(32,16).
+        sb_->Draw(*jpegTex_, Rectangle(16, 0, 16, 16), Rectangle(0, 0, 2, 2), Color::White);
         sb_->End();
 
-        struct Check { int x; int y; Color want; const char* label; };
+        struct Check { int x; int y; Color want; const char* label; int tol; };
         const Check checks[] = {
-            {  4,  4, kRed,    "(0,0) texel -> Red"    },
-            { 12,  4, kGreen,  "(1,0) texel -> Green"  },
-            {  4, 12, kBlue,   "(0,1) texel -> Blue"   },
-            { 12, 12, kYellow, "(1,1) texel -> Yellow" },
+            // PNG is lossless -- tight tolerance.
+            {  4,  4, kRed,    "PNG (0,0) -> Red",     10 },
+            { 12,  4, kGreen,  "PNG (1,0) -> Green",   10 },
+            {  4, 12, kBlue,   "PNG (0,1) -> Blue",    10 },
+            { 12, 12, kYellow, "PNG (1,1) -> Yellow",  10 },
+            // JPEG is lossy -- wider tolerance, matching Texture2DTests.cpp's own convention.
+            { 20,  4, kRed,    "JPEG (0,0) -> Red",    40 },
+            { 28,  4, kGreen,  "JPEG (1,0) -> Green",  40 },
+            { 20, 12, kBlue,   "JPEG (0,1) -> Blue",   40 },
+            { 28, 12, kYellow, "JPEG (1,1) -> Yellow", 40 },
         };
 
         for (const auto& c : checks)
@@ -133,7 +131,7 @@ protected:
             Color px(0, 0, 0, 0);
             Rectangle reg(c.x, c.y, 1, 1);
             dev.GetBackBufferData(&reg, &px, 0, 1);
-            const bool ok = colourMatch(px, c.want);
+            const bool ok = colourMatch(px, c.want, c.tol);
             std::printf("[%s] %s: got=(%d,%d,%d)\n",
                 ok ? "PASS" : "FAIL", c.label,
                 px.getRProperty(), px.getGProperty(), px.getBProperty());
@@ -144,7 +142,7 @@ protected:
     }
 
 public:
-    SdlTexture2DFromStreamTest()
+    Texture2DSaveAsRoundTripTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         // plans/plan_vulkan_parity.md VKPAR-0018: this test uses a HiDef-only feature
@@ -153,7 +151,7 @@ public:
         // enforces XNA's Reach profile, which GraphicsDeviceManager defaults to -- so under Reach
         // it failed before reaching its subject.
         gdm_->setGraphicsProfileProperty(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
-        gdm_->setPreferredBackBufferWidthProperty(16);
+        gdm_->setPreferredBackBufferWidthProperty(32);
         gdm_->setPreferredBackBufferHeightProperty(16);
         gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);
     }
@@ -163,7 +161,7 @@ public:
 
 int main()
 {
-    SdlTexture2DFromStreamTest game;
+    Texture2DSaveAsRoundTripTest game;
     game.Run();
     return game.getResult();
 }

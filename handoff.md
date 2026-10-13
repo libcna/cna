@@ -179,6 +179,37 @@ The single authoritative list. Every entry below was checked against the code on
      `XnaModelSourceContentPipelineTest.AMaterialsTextureIsBuiltAsItsOwnAsset` also failed once in
      that run and passes alone on both commits.
 
+10. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
+    The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
+    of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites; measured 2026-10-13 on
+    Linux through the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan) and `WEBGPU`:
+    - `SkinnedEffect.VertexColorEnabled` folds the vertex colour after the specular term and after
+      the saturate on all three (`*_Conformance_skinned_effect_vertex_color` F/G: 44 instead of
+      218, 128 instead of 230); XNA folds it in first (`VULKAN-200`/`205`).
+    - A textured `BasicEffect` over a declaration without `TextureCoordinate0` is accepted by
+      EasyGL, SDL_GPU, WebGPU and SOFTWARE; XNA throws `InvalidOperationException`
+      (`*_Conformance_basic_effect_declaration_inputs` C). FNA3D refuses with `std::runtime_error`.
+    - `GraphicsAdapter`'s format queries answer a different multisample count (0) from what `Reset`
+      and `RenderTarget2D` apply (EasyGL 8, SDL_GPU 8, WebGPU 4), WebGPU's `Reset` applies back-buffer
+      format 9 where the query says `Color`, and `GraphicsDevice::Reset` does not clamp
+      `MultiSampleCount` through the query (`*_Conformance_graphics_adapter_query`).
+    - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered
+      edge texel (`render_target_own_msaa` D); a `SkinnedEffect` over a declaration without normal,
+      weights or bone indices draws nothing and reports success (`stock_effect_unsupplied_input` C).
+    - SDL_GPU: cube faces in a multi-render-target set throw `std::runtime_error` while
+      `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4; DIRECTX9 has the same refusal); a
+      `ShaderEffect` uniform array beyond its declared capacity is truncated silently
+      (`shader_effect_refusal` E); the portable 3D `ShaderEffect` probe draws nothing on the
+      one-stream routes (`shader_effect_3d_layout` A-C, G) and two vertex streams are refused (D/E).
+    - WebGPU: a `ShaderEffect` disposed after `End()` and before the flush drops its draw
+      (`deferred_effect_query_lifetime` E2-E4; `webgpu_effect_outlived_by_draw_test` Check B asserts
+      the drop, contrary to XNA); two vertex streams into a `ShaderEffect` are refused, and a missing
+      input is refused only at replay, after which the queued draw throws again from a destructor and
+      terminates the process (`shader_effect_3d_layout` D/E, F/H, run last for that reason).
+    - SDL_GPU and WebGPU ignore `SpecularTextureCoordinateSetEXT` (81 instead of 66, measured by
+      selecting them at run time against `pbr_texture_slot_mapping_test.cpp` in the EasyGL-default
+      multi-renderer tree).
+
 ### 5.2 Limitations
 
 - `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does

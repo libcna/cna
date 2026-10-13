@@ -1,23 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// Task 888: AlphaTestEffect linear fog pixel integration test — Vulkan renderer.
+// AlphaTestEffect linear fog: the fog blend runs after the alpha test and is a real interpolation.
 //
-// Fog was a total GPU no-op on Vulkan for AlphaTestEffect (Task 378's finding). Fixed by packing
-// fog data into alpha_test3d's push constant's previously-unused trailing bytes (28 spare bytes
-// were left after Task 887's vertexColorEnabled field) and computing the standard fog blend
-// after the existing alpha-discard test in the fragment shader.
-//
-// Formula (matches EasyGL's already-tested formula exactly, Task 378):
-//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
+// Formula (Task 378, the same as every stock effect's fog test):
+//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)
 //   finalRGB  = mix(FogColor, geomRGB, fogFactor)
 //
-// Uses a stride-20 VertexPositionTexture quad (routes through alpha_test3d, the non-colored
-// variant) with a white 1x1 texture (identity factor) and AlphaTestEffect's own default
-// AlphaFunction=Greater/ReferenceAlpha=0 (always passes here since combined alpha is always 1.0),
-// isolating the fog blend from the alpha-test discard logic entirely.
+// A stride-20 VertexPositionTexture quad with a white 1x1 texture (identity factor) and
+// AlphaTestEffect's default AlphaFunction=Greater/ReferenceAlpha=0 (always passes, combined alpha
+// is 1.0) isolates the fog blend from the discard logic. A three-point Z sweep -- no fog, full fog
+// and half fog -- proves the blend interpolates rather than switching on and off.
 //
-// A 3-point Z-sweep (z=-0.9 no fog, z=0.9 full fog, z=0 half fog) proves the blend is a genuine
-// interpolation, not just an on/off switch — same methodology and exact expected values as
-// examples/easygl_alphatest_fog_test.cpp.
+// First written for the retired VULKAN renderer (Task 888, where this fog was a no-op); kept as a
+// shared source because DIRECTX9 runs it too.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -49,9 +43,9 @@ static constexpr int kSize = 64;
 static const Color kWhite(255, 255, 255, 255);
 static const Vector3 kDiffuse(0.8f, 0.2f, 0.4f);
 static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
-// Kept inside Vulkan's valid clip-space Z range [0,1] (NOT OpenGL's [-1,1] -- World/View/
-// Projection are all Identity here, so raw vertex z IS gl_Position.z/w before the y-flip, and a
-// negative z would be near-plane clipped away before the fragment shader ever runs).
+// Kept inside XNA's clip-space Z range [0,1] (NOT OpenGL's [-1,1] -- World/View/Projection are
+// all Identity here, so raw vertex z IS the clip-space z/w, and a negative z would be near-plane
+// clipped away before the pixel shader ever runs).
 // REMED-GFX-005: FogStart=0, FogEnd=-0.9 is the [0,1]-depth analog of EasyGL's [-1,1]
 // FogStart=-0.9/FogEnd=0.9 choice. With identity View the corrected FNA formula
 // clamp((z+FogEnd)/(FogEnd-FogStart),0,1) only produces a genuine gradient over the *positive*
@@ -65,7 +59,7 @@ static const Color kExpectedNoFog(204, 51, 102, 255);
 static const Color kExpectedFullFog(26, 153, 230, 255);
 static const Color kExpectedHalfFog(115, 102, 166, 255);
 
-class AlphaTestFogVulkanTest : public Game
+class AlphaTestFogTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int  pass_ = 0;
@@ -170,10 +164,11 @@ protected:
     }
 
 public:
-    AlphaTestFogVulkanTest()
+    AlphaTestFogTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_vulkan_parity.md VKPAR-0006: GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule). Without this the test aborts before its first check.
+        // GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule, VKPAR-0006). Without
+        // this the test aborts before its first check.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
@@ -184,7 +179,7 @@ public:
 
 int main()
 {
-    AlphaTestFogVulkanTest game;
+    AlphaTestFogTest game;
     game.Run();
     return game.getResult();
 }

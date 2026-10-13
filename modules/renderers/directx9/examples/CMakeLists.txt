@@ -129,27 +129,27 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # discriminates FNA's CPU-prepared view-space FogVector from the obsolete scalar/object-space
     # model, including post-skin position handling. The focused family fixtures cover the other
     # XNA fog-capable stock effects through reachable public effect state.
-    cna_directx9_test(cna_test_directx9_viewspace_fog ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_viewspace_fog_test.cpp)
+    cna_directx9_test(cna_test_directx9_viewspace_fog ${CNA_GRAPHICS_EXAMPLES_DIR}/viewspace_fog_test.cpp)
     cna_directx9_ctest_command(_directx9_viewspace_fog_cmd cna_test_directx9_viewspace_fog)
     cna_register_renderer_test(NAME DirectX9_ViewSpaceFog COMMAND ${_directx9_viewspace_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    cna_directx9_test(cna_test_directx9_alphatest_fog ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_alphatest_fog_test.cpp)
+    cna_directx9_test(cna_test_directx9_alphatest_fog ${CNA_GRAPHICS_EXAMPLES_DIR}/alphatest_fog_test.cpp)
     cna_directx9_ctest_command(_directx9_alphatest_fog_cmd cna_test_directx9_alphatest_fog)
     cna_register_renderer_test(NAME DirectX9_AlphaTest_Fog COMMAND ${_directx9_alphatest_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    cna_directx9_test(cna_test_directx9_dualtexture_fog ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_dualtextureeffect_fog_test.cpp)
+    cna_directx9_test(cna_test_directx9_dualtexture_fog ${CNA_GRAPHICS_EXAMPLES_DIR}/dualtextureeffect_fog_test.cpp)
     cna_directx9_ctest_command(_directx9_dualtexture_fog_cmd cna_test_directx9_dualtexture_fog)
     cna_register_renderer_test(NAME DirectX9_DualTextureEffect_Fog COMMAND ${_directx9_dualtexture_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    cna_directx9_test(cna_test_directx9_environmentmap_fog ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_environmentmapeffect_fog_test.cpp)
+    cna_directx9_test(cna_test_directx9_environmentmap_fog ${CNA_GRAPHICS_EXAMPLES_DIR}/environmentmapeffect_fog_test.cpp)
     cna_directx9_ctest_command(_directx9_environmentmap_fog_cmd cna_test_directx9_environmentmap_fog)
     cna_register_renderer_test(NAME DirectX9_EnvironmentMapEffect_Fog COMMAND ${_directx9_environmentmap_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    cna_directx9_test(cna_test_directx9_skinnedeffect_fog ${CMAKE_SOURCE_DIR}/modules/renderers/vulkan/examples/vulkan_skinnedeffect_fog_test.cpp)
+    cna_directx9_test(cna_test_directx9_skinnedeffect_fog ${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_fog_test.cpp)
     cna_directx9_ctest_command(_directx9_skinnedeffect_fog_cmd cna_test_directx9_skinnedeffect_fog)
     cna_register_renderer_test(NAME DirectX9_SkinnedEffect_Fog COMMAND ${_directx9_skinnedeffect_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")

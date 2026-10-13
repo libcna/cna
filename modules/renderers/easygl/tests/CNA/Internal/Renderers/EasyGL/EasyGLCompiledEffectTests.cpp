@@ -5103,6 +5103,75 @@ TEST(EasyGLCompiledEffectDrawTest, SharedTruncationContract)
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
+// Renderer-neutral draw contracts first carried by the retired METAL renderer (AM4-144/146) and by
+// WebGPU (WEBGPU-160/170/208); every compiled-effect family runs them from
+// CompiledEffectConformance.hpp.
+TEST(EasyGLCompiledEffectDrawTest, SharedHalfPixelCoverageContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectHalfPixelCoverageContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedMrtWriteMaskContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedLodBiasRegisterContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    // OpenGL ES has no GL_TEXTURE_LOD_BIAS (docs/sampler-state-support.md).
+    options.supportsLodBias = CNA::Internal::Renderers::EasyGL::IsDesktopCoreProfile(
+        CNA::Internal::Renderers::EasyGL::ActiveGlProfile());
+    CNA::TestSupport::RunCompiledEffectLodBiasRegisterContract(device, options);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedLodBiasPerDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    // OpenGL ES has no GL_TEXTURE_LOD_BIAS (docs/sampler-state-support.md).
+    options.supportsLodBias = CNA::Internal::Renderers::EasyGL::IsDesktopCoreProfile(
+        CNA::Internal::Renderers::EasyGL::ActiveGlProfile());
+    CNA::TestSupport::RunCompiledEffectLodBiasPerDrawContract(device, options);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedAddressWContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectAddressWContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchAlternationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
+}
+
 
 // SAMPLE-028/SOFTWARE-336: MojoShader ends every generated vertex shader with Direct3D 9's
 // clip-space depth conversion (`gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`), because

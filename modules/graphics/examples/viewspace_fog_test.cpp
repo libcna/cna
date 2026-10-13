@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-010 (Vulkan slice): transformed-camera stock-effect fog conformance.
+// REMED-GFX-010: transformed-camera stock-effect fog conformance.
 //
 // Proves CNA fog is driven by VIEW-SPACE Z (FNA EffectHelpers.SetFogVector), not raw object-space Z.
 // Every scene here keeps the object-space Z of the sampled vertex FIXED while moving the camera /
-// world so the VIEW-SPACE Z changes; the old object-space shader collapses them all to "no fog"
+// world so the VIEW-SPACE Z changes; an object-space shader collapses them all to "no fog"
 // (blue), the correct view-space shader tracks the camera (blue->purple->red). Each discriminating
 // scene asserts ViewKeep != ObjectKeep before checking the pixel, so the test can never silently
 // pass on a non-discriminating scene.
 //
 // Families covered: BasicEffect colored3d (full battery) and SkinnedEffect (pre-skin discriminator:
 // a Z-translating bone + a Z-translating view, so the sampled fog must use the POST-skin,
-// view-transformed Z). See vulkan_viewspace_fog_effects_test.cpp for the remaining families.
+// view-transformed Z).
 //
-// Pre-fix: every discriminating scene FAILS (renders blue instead of purple/red). Post-fix: all pass.
+// First written for the retired VULKAN renderer; kept as a shared source because DIRECTX9 runs it.
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = SKIP (no GPU/display).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -50,7 +50,7 @@ namespace
 {
     constexpr int kSize = 64;
 
-    // GPU-compact skinned vertex (Vulkan stride-52 convention, matches vulkan_skinnedeffect_fog_test).
+    // GPU-compact skinned vertex (stride 52, the same layout skinnedeffect_fog_test.cpp uses).
     struct SkinnedGpuVertex
     {
         float px, py, pz;
@@ -70,7 +70,7 @@ namespace
     }
 }
 
-class VulkanViewSpaceFogTest : public Game
+class ViewSpaceFogTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0, fail_ = 0;
@@ -154,7 +154,7 @@ class VulkanViewSpaceFogTest : public Game
     // bug uses only objZ.
     Color RenderSkinned(GraphicsDevice& dev, float boneZ, float viewZ, bool fog)
     {
-        // The Vulkan SkinnedEffect fragment produces color from LIGHTING (litRGB =
+        // The SkinnedEffect pixel shader produces color from LIGHTING (litRGB =
         // (ambient+lightSum)*diffuse), not emissive, so drive the blue base with a directional light
         // hitting the +Z-facing normal at NdotL=1, plus a white texture (identity factor). The fog
         // keep value is independent of how the base blue is produced.
@@ -295,16 +295,17 @@ protected:
             Check("skinned fog-disabled (blue)", RenderSkinned(dev, boneZ, viewZ, false), Ref::ColorFor(1.0f));
         }
 
-        std::printf("=== VulkanViewSpaceFog: %d passed, %d failed ===\n", pass_, fail_);
+        std::printf("=== ViewSpaceFog: %d passed, %d failed ===\n", pass_, fail_);
         std::fflush(stdout);
         Exit();
     }
 
 public:
-    VulkanViewSpaceFogTest()
+    ViewSpaceFogTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_vulkan_parity.md VKPAR-0006: GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule). Without this the test aborts before its first check.
+        // GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule, VKPAR-0006). Without
+        // this the test aborts before its first check.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
@@ -319,7 +320,7 @@ int main()
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
 
-    VulkanViewSpaceFogTest game;
+    ViewSpaceFogTest game;
     game.Run();
     return game.getResult();
 }

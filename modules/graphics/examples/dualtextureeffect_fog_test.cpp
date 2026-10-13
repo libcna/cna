@@ -1,26 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// Task 899: DualTextureEffect linear fog pixel integration test — Vulkan renderer.
+// DualTextureEffect linear fog pixel test.
 //
-// dual_texture3d was one of 5 Vulkan pipelines sharing FillExtPushConst()'s fully-packed
-// 128-byte push constant (zero spare bytes for fog). Fixed here by extending
-// descriptorSetLayout2Tex_ from 2 bindings (sampler0@0, sampler1@1) to 3 (adding a dynamic fog
-// UBO @2), and by splitting a dedicated dual_texture3d.vert.glsl off of textured3d.vert.glsl
-// (which now has its OWN fog UBO at binding=1, conflicting with dual_texture3d's own layout).
-//
-// Formula (matches EasyGL's already-tested formula exactly, Task 195):
-//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
+// Formula (Task 195, the same as every stock effect's fog test):
+//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)
 //   finalRGB  = mix(FogColor, geomRGB, fogFactor)
 //
-// `Texture2=gray(128,128,128)` deliberately cancels the DualTextureEffect frag shader's `*2`
-// doubling factor (`1(white)*2*0.502(gray)≈1.004`, clamped to 1.0 on write) so the pre-fog
-// material color reduces to exactly DiffuseColor, isolating fog cleanly (same technique as
-// examples/bgfx_dualtextureeffect_fog_test.cpp / easygl_dualtextureeffect_fog_test.cpp).
+// `Texture2=gray(128,128,128)` cancels DualTextureEffect's `*2` doubling (`1(white)*2*0.502(gray)
+// ~= 1.004`, clamped to 1.0 on write), so the pre-fog colour is exactly DiffuseColor and the fog
+// term is isolated. Z stays in [0, 1] with an identity Projection: XNA's clip volume is the
+// Direct3D one, which clips a primitive with pre-divide Z < 0.
 //
-// Unlike the Bgfx/EasyGL siblings (which sweep Z across [-0.9, 0.9], relying on their
-// OpenGL-convention [-1,1] clip-space Z range), this test uses Z in [0, 1] with an Identity
-// Projection matrix -- Vulkan's DirectX-convention clip volume clips any primitive with
-// (pre-divide) Z < 0, so negative Z values are not usable here (matches this project's other
-// Vulkan fog tests, e.g. vulkan_basiceffect_fog_test.cpp/vulkan_alphatest_fog_test.cpp).
+// First written for the retired VULKAN renderer (Task 899); kept as a shared source because
+// DIRECTX9 runs it too.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -67,7 +58,7 @@ struct DualTextureGpuVertex
 static_assert(sizeof(DualTextureGpuVertex) == 28, "dual-texture vertex must be 28 bytes");
 #endif
 
-class DualTextureFogVulkanTest : public Game
+class DualTextureFogTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int  pass_ = 0;
@@ -193,10 +184,11 @@ protected:
     }
 
 public:
-    DualTextureFogVulkanTest()
+    DualTextureFogTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_vulkan_parity.md VKPAR-0006: GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule). Without this the test aborts before its first check.
+        // GetBackBufferData is HiDef-only (SOFTWARE-213 enforces XNA's rule, VKPAR-0006). Without
+        // this the test aborts before its first check.
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
@@ -207,7 +199,7 @@ public:
 
 int main()
 {
-    DualTextureFogVulkanTest game;
+    DualTextureFogTest game;
     game.Run();
     return game.getResult();
 }

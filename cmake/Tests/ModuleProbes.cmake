@@ -260,6 +260,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(ShaderPackageReproducibility PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
 
+        # The two-stream/instanced probe package of the shader_effect_3d_layout conformance program.
+        add_test(NAME ShaderEffect3DShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/examples/common/shaders/shader_effect_3d/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/examples/common/ShaderEffect3DShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ShaderEffect3DShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
         add_test(NAME PostProcessShaderPackageReproducibility
             COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
                 "${Python3_EXECUTABLE}"

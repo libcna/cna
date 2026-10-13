@@ -370,7 +370,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plan_vulkan.md VULKAN-166: a ShaderEffect's texture unit u takes SamplerStates[u], so
         # two bound volumes in one batch can be addressed differently.
         cna_vulkan_test(cna_test_vulkan_shader_effect_per_unit_sampler
-                        vulkan_shader_effect_per_unit_sampler_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_per_unit_sampler_test.cpp)
         cna_register_renderer_test(NAME Vulkan_ShaderEffect_PerUnitSampler
             COMMAND cna_test_vulkan_shader_effect_per_unit_sampler
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -857,7 +857,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_fill_mode
-                        vulkan_fill_mode_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/fill_mode_test.cpp)
         cna_register_renderer_test(NAME Vulkan_FillMode_WireFrame COMMAND cna_test_vulkan_fill_mode
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -1037,7 +1037,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         # Task 888: AlphaTestEffect fog on the alpha_test3d pipeline
         cna_vulkan_test(cna_test_vulkan_alphatest_fog
-                        vulkan_alphatest_fog_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/alphatest_fog_test.cpp)
         cna_register_renderer_test(NAME Vulkan_AlphaTest_Fog COMMAND cna_test_vulkan_alphatest_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -1119,18 +1119,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_fog
-                        vulkan_dualtextureeffect_fog_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dualtextureeffect_fog_test.cpp)
         cna_register_renderer_test(NAME Vulkan_DualTextureEffect_Fog COMMAND cna_test_vulkan_dualtextureeffect_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_fog
-                        vulkan_skinnedeffect_fog_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_fog_test.cpp)
         cna_register_renderer_test(NAME Vulkan_SkinnedEffect_Fog COMMAND cna_test_vulkan_skinnedeffect_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-010: transformed-camera view-space fog conformance (fails pre-fix).
         cna_vulkan_test(cna_test_vulkan_viewspace_fog
-                        vulkan_viewspace_fog_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/viewspace_fog_test.cpp)
         cna_register_renderer_test(NAME Vulkan_ViewSpace_Fog COMMAND cna_test_vulkan_viewspace_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -1167,7 +1167,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         # Task 899's own noted cheap leftover: env_map3d fog packed into EnvMapParams' spare bytes
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fog
-                        vulkan_environmentmapeffect_fog_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/environmentmapeffect_fog_test.cpp)
         cna_register_renderer_test(NAME Vulkan_EnvironmentMapEffect_Fog COMMAND cna_test_vulkan_environmentmapeffect_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -2623,13 +2623,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # (Tasks 682/683) and contain nothing renderer-specific but the presentation mode they
         # request, which this renderer implements too.
         cna_vulkan_test(cna_test_vulkan_texture2d_fromstream
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_fromstream_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/conformance/texture2d_fromstream_test.cpp)
         cna_register_renderer_test(NAME Vulkan_Texture2D_FromStream
             COMMAND cna_test_vulkan_texture2d_fromstream
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_texture2d_saveas_roundtrip
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/conformance/texture2d_saveas_roundtrip_test.cpp)
         cna_register_renderer_test(NAME Vulkan_Texture2D_SaveAsRoundTrip
             COMMAND cna_test_vulkan_texture2d_saveas_roundtrip
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

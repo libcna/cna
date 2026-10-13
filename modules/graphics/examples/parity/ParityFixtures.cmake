@@ -101,6 +101,93 @@ set(CNA_PARITY_FIXTURES
     instanced_draw
 )
 
+# Renderer-neutral conformance programs, kept as complete public-API programs (PixelTestGame and
+# their own main) instead of ParityFixture subclasses. They hold XNA behaviour first measured on
+# renderers CNA has since retired (docs/removed-renderers.md), moved here so the knowledge keeps
+# running on the surviving ones. Each <name> is conformance/<name>_test.cpp and registers as
+# <TEST_PREFIX>_Conformance_<name>, exactly like a parity fixture. A program that needs a
+# capability the renderer lacks exits 77 (CTest SKIP) and says which.
+set(CNA_CONFORMANCE_FIXTURES
+    # from sdlrenderer_disposed_guards_test.cpp (Task 717): disposed resources and states are
+    # refused with ObjectDisposedException, never dereferenced; and sdlrenderer_double_dispose_test.cpp
+    # (Task 718): a second Dispose() is a no-op and the refusals still hold.
+    disposed_guards
+    # from sdlrenderer_texture2d_fromstream_test.cpp (Task 682): a FromStream-decoded PNG draws
+    # its exact pixels through the GPU texture.
+    texture2d_fromstream
+    # from sdlrenderer_texture2d_saveas_roundtrip_test.cpp (Task 683): SetData -> SaveAsPng/Jpeg ->
+    # FromStream -> draw reaches the framebuffer unchanged.
+    texture2d_saveas_roundtrip
+    # from vulkan_pbreffect_handderived_test.cpp (GLTF-176): PbrEffect's roughness-0.5 analytic
+    # BRDF at N=V=L, and SkinnedPbrEffect's TBN handedness under a mirrored joint.
+    pbr_effect_hand_derived
+    # from vulkan_basiceffect_textured_msaa_test.cpp (Task 904): textured BasicEffect on an MSAA backbuffer.
+    basiceffect_textured_msaa
+    # from vulkan_declared_effect_layout_test.cpp (VULKAN-147/148/151): stock effects read UVs from the declaration.
+    declared_effect_layout
+    # from vulkan_record_stride_binding_test.cpp (VULKAN-158): EnvironmentMapEffect and
+    # PbrEffect fetch padded-stride records at the declaration's stride, two strides with one
+    # set of offsets included.
+    stock_effect_padded_stride
+    # from vulkan_rendertarget_own_msaa_test.cpp (VULKAN-216): 4x/0x/4x render targets
+    # interleaved in one frame; an edge is anti-aliased exactly when the applied count is > 1.
+    render_target_own_msaa
+    # from vulkan_shader_effect_test.cpp (MOD-2217, VULKAN-252): a package with no accepted
+    # variant throws ShaderCompilationExceptionEXT with one labelled diagnostic per stage, and
+    # an over-capacity uniform array is refused by name.
+    shader_effect_refusal
+    # from vulkan_shader_effect_3d_test.cpp (VULKAN-255, VULKAN-168): a ShaderEffect's 3D
+    # inputs follow its declarations across one or two streams on both draw routes and per
+    # instance; a missing declaration is refused by name, a missing input by location, a
+    # negative first instance rejected.
+    shader_effect_3d_layout
+    # from vulkan_deferred_resource_lifetime_test.cpp (REMED-GFX-075): a custom effect or query disposed before the flush keeps its draw.
+    deferred_effect_query_lifetime
+    # from vulkan_depth_range_contract_test.cpp (VULKAN-098): clip depth is [0,1], near and far planes clip.
+    clip_depth_range
+    # from vulkan_graphicsdevice_clearoptions_test.cpp (REMED-GFX-018/129): all eight ClearOptions masks on every target type.
+    clear_options_matrix
+    # from vulkan_msaa_runtime_change_test.cpp (VULKAN-095): resources survive live MSAA toggles; edges follow the applied count.
+    msaa_runtime_change
+    # from vulkan_occlusionquery_precision_test.cpp (VULKAN-370): a precise PixelCount is the exact half-occluded tally.
+    occlusion_query_precision
+    # from vulkan_occlusionquery_reuse_generation_test.cpp (MSR-026): one query reused for 32 frames reports each generation.
+    occlusion_query_reuse
+    # from vulkan_orientation_{calibration,effects,rendertarget}_test.cpp (REMED-GFX-011): +X/+Y lands top-right, backbuffer and RT.
+    effect_orientation
+    # from vulkan_cube_mrt_binding_test.cpp (REMED-GFX-096): cube faces as MRT slots get their own outputs; XNA's refusals.
+    cube_mrt_binding
+    # from metal_pbr_vertex_colour_test.cpp (AM4-084): glTF COLOR_0 multiplies PBR base colour (rgb
+    # and alpha) only when VertexColorEnabledEXT is on; a renderer without it refuses by name (skip).
+    pbr_vertex_colour
+    # from metal_untextured_declaration_test.cpp (AM4-080): an unlit BasicEffect draws over a
+    # Position-only declaration; a textured one without TEXCOORD0 throws InvalidOperationException.
+    basic_effect_declaration_inputs
+    # from sdlrenderer_texture2d_partial_rect/startindex_test.cpp (Tasks 679/680): partial SetData
+    # (rectangle, startIndex/elementCount, after first use) reaches the sampled GPU texture.
+    texture2d_partial_setdata
+    # from sdlrenderer_presentationparameters_resize_test.cpp (Task 711): Reset to a larger back
+    # buffer grows the real surface -- a clear and a sprite beyond the old bounds read back.
+    backbuffer_reset_resize
+    # from sdlrenderer_spritebatch_overloads_test.cpp (Task 666): each of XNA's seven
+    # SpriteBatch.Draw overloads draws, honouring its own source/tint/scale/flip/rotation.
+    spritebatch_draw_overloads
+    # from graphics_adapter_query_contract_test.cpp (DX-245): GraphicsAdapter's format queries
+    # answer before a device exists, and RenderTarget2D and Reset apply exactly that answer.
+    graphics_adapter_query
+    # from vulkan_skinnedeffect_vertexcolor_test.cpp (CNB-67, VULKAN-205, VULKAN-200):
+    # SkinnedEffect.VertexColorEnabled's analytic on/off values; the vertex colour scales the
+    # diffuse, not the specular, and the saturate follows the fold.
+    skinned_effect_vertex_color
+    # from vulkan_uniform_ring_growth_test.cpp (STREET-0004): 1500 PbrEffect and 100
+    # SkinnedPbrEffect draws in one frame each keep their own parameters.
+    stock_effect_uniform_ring
+    # from vulkan_unsupplied_input_contract_test.cpp (VULKAN-156): stock effects fed a stream
+    # missing their shader inputs render or refuse at the draw, never draw nothing and report
+    # success.
+    stock_effect_unsupplied_input
+)
+
 # Builds and registers every fixture for one renderer.
 #
 #   BUILDER        name of the renderer's own "add an example executable" macro, called as
@@ -146,6 +233,24 @@ function(cna_register_parity_fixtures)
             TIMEOUT ${P_TIMEOUT} LABELS ${P_LABELS} ENVIRONMENT ${P_ENVIRONMENT})
         if(P_FAIL_REGULAR_EXPRESSION)
             set_tests_properties("${P_TEST_PREFIX}_Parity_${_fixture}" PROPERTIES
+                FAIL_REGULAR_EXPRESSION "${P_FAIL_REGULAR_EXPRESSION}")
+        endif()
+    endforeach()
+    string(TOLOWER "${P_TEST_PREFIX}" _cna_conformance_suffix)
+    foreach(_fixture IN LISTS CNA_CONFORMANCE_FIXTURES)
+        set(_target "cna_conformance_${_fixture}_${_cna_conformance_suffix}")
+        set(_source "${CNA_PARITY_FIXTURE_DIR}/../conformance/${_fixture}_test.cpp")
+        if(NOT EXISTS "${_source}")
+            message(FATAL_ERROR "cna_register_parity_fixtures: no source for conformance program '${_fixture}' at ${_source}")
+        endif()
+        cmake_language(CALL ${P_BUILDER} ${_target} "${_source}")
+        # The shared header-only test fixtures (CNA/TestSupport/...), e.g. the synthetic
+        # compiled-effect builders a multi-output pixel shader comes from.
+        target_include_directories(${_target} PRIVATE "${CMAKE_SOURCE_DIR}/tests/support")
+        cna_register_renderer_test(NAME "${P_TEST_PREFIX}_Conformance_${_fixture}" COMMAND ${_target}
+            TIMEOUT ${P_TIMEOUT} LABELS ${P_LABELS} Conformance ENVIRONMENT ${P_ENVIRONMENT})
+        if(P_FAIL_REGULAR_EXPRESSION)
+            set_tests_properties("${P_TEST_PREFIX}_Conformance_${_fixture}" PROPERTIES
                 FAIL_REGULAR_EXPRESSION "${P_FAIL_REGULAR_EXPRESSION}")
         endif()
     endforeach()

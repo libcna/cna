@@ -1271,4 +1271,67 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedTruncationContract)
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
+// Renderer-neutral draw contracts first carried by the retired METAL renderer (AM4-144/146) and by
+// WebGPU (WEBGPU-160/170/208); every compiled-effect family runs them from
+// CompiledEffectConformance.hpp.
+TEST(SdlGpuCompiledEffectDrawTest, SharedHalfPixelCoverageContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectHalfPixelCoverageContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedDeviceTextureSlotAfterApplyContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDeviceTextureSlotAfterApplyContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedMrtWriteMaskContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectMrtWriteMaskContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedLodBiasRegisterContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    const CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    CNA::TestSupport::RunCompiledEffectLodBiasRegisterContract(device, options);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedLodBiasPerDrawContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    const CNA::TestSupport::CompiledEffectSamplerContractOptions options;
+    CNA::TestSupport::RunCompiledEffectLodBiasPerDrawContract(device, options);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedAddressWContract)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectAddressWContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchAlternationContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
+}
+
 #endif  // CNA_SDL_GPU_COMPILED_EFFECTS

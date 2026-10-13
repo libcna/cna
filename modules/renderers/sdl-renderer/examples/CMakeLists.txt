@@ -152,13 +152,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # Task 682: Texture2D::FromStream round-trip real-render pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_fromstream
-                 sdlrenderer_texture2d_fromstream_test.cpp)
+                 ${CNA_GRAPHICS_EXAMPLES_DIR}/conformance/texture2d_fromstream_test.cpp)
     cna_register_renderer_test(NAME SDL_Renderer_Texture2D_FromStream COMMAND cna_test_sdl_texture2d_fromstream
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 683: SaveAsPng/SaveAsJpeg round-trip real-render pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_saveas_roundtrip
-                 sdlrenderer_texture2d_saveas_roundtrip_test.cpp)
+                 ${CNA_GRAPHICS_EXAMPLES_DIR}/conformance/texture2d_saveas_roundtrip_test.cpp)
     cna_register_renderer_test(NAME SDL_Renderer_Texture2D_SaveAsRoundTrip COMMAND cna_test_sdl_texture2d_saveas_roundtrip
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -354,7 +354,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # Task 717: disposed-resource guards throw ObjectDisposedException consistently on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_disposed_guards
-                 sdlrenderer_disposed_guards_test.cpp)
+                 ${CNA_GRAPHICS_EXAMPLES_DIR}/conformance/disposed_guards_test.cpp)
     cna_register_renderer_test(NAME SDL_Renderer_DisposedGuards COMMAND cna_test_sdl_disposed_guards
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
