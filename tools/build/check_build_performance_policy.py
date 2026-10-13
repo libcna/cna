@@ -168,8 +168,26 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
             "add_compile_options(-pthread)",
             "add_link_options(-pthread)",
         },
+        # The runtime-first link option (LINK-043) must know whether a program's directory already
+        # links a static C++ runtime, so it reads -- never sets -- that directory's flags.
+        "cmake/BuildPerformance.cmake": {
+            "foreach(_cna_variable IN ITEMS CMAKE_CXX_FLAGS CMAKE_${_cna_kind}_LINKER_FLAGS)",
+        },
+        # The CnaCxxRuntimeLinkage fixture (cmake/Tests/ModuleProbes.cmake) configures separate
+        # probe projects whose programs choose their C++ runtime in each way a game can, a toolchain
+        # file and directory-wide options included; the probe picks its linker the same way.
+        "cmake/Tests/CxxRuntimeLinkageCase.cmake": {
+            'file(WRITE "${_toolchain}" "set(CMAKE_EXE_LINKER_FLAGS_INIT -static-libstdc++)\\n")',
+        },
+        "cmake/Tests/CxxRuntimeLinkageProbe/CMakeLists.txt": {
+            "add_link_options(-fuse-ld=${PROBE_LINKER})",
+        },
+        "cmake/Tests/CxxRuntimeLinkageProbe/consumer/CMakeLists.txt": {
+            "add_link_options(-static-libstdc++)",
+        },
     }
 
+    seen_allowed: set[tuple[str, str]] = set()
     for path in cmake_policy_files():
         relative = path.relative_to(SOURCE_DIR).as_posix()
         for line_number, original_line in enumerate(
@@ -179,11 +197,19 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
             if not line:
                 continue
             if line in allowed_lines.get(relative, ()):
+                seen_allowed.add((relative, line))
                 continue
             if raw_flag.search(line):
                 errors.append(f"{relative}:{line_number}: raw global flag policy: {line}")
             if global_option.search(line):
                 errors.append(f"{relative}:{line_number}: global build option policy: {line}")
+
+    # An exception names one exact line; once that line is gone the exception must go too, or it
+    # would silently cover whatever is written there next.
+    for relative, lines in sorted(allowed_lines.items()):
+        for line in sorted(lines):
+            if (relative, line) not in seen_allowed:
+                errors.append(f"{relative}: stale policy exception, the line is gone: {line}")
 
 
 def main() -> None:
