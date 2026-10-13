@@ -2046,6 +2046,14 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return Positive alignment, or zero when uniform buffers are unavailable.
          */
         [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
+        /// The live context's fragment-stage sampled-texture limit (GL_MAX_TEXTURE_IMAGE_UNITS).
+        [[nodiscard]] int GetMaxSampledTexturesPerShaderStageEXT() const override;
+        /// GL feeds every attribute from its own buffer binding, so bindings and attributes share one limit
+        /// (GL_MAX_VERTEX_ATTRIBS).
+        [[nodiscard]] int GetMaxVertexInputBindingsEXT() const override;
+        [[nodiscard]] int GetMaxVertexInputAttributesEXT() const override;
+        /// Colour attachments one draw can write: the smaller of GL_MAX_COLOR_ATTACHMENTS and GL_MAX_DRAW_BUFFERS.
+        [[nodiscard]] int GetMaxColorAttachmentsEXT() const override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         /// plans/plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
         /// storage for the formats this context can render to, and a refusal for the rest.

@@ -6098,6 +6098,35 @@ namespace CNA::Internal::Renderers::EasyGL
         return value > 0 ? static_cast<std::uint64_t>(value) : 0;
     }
 
+    int EasyGLRenderer::GetMaxSampledTexturesPerShaderStageEXT() const
+    {
+        GLint value = 0;
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxTextureImageUnits, &value);
+        return value > 0 ? static_cast<int>(value) : 0;
+    }
+
+    int EasyGLRenderer::GetMaxVertexInputAttributesEXT() const
+    {
+        GLint value = 0;
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxVertexAttribs, &value);
+        return value > 0 ? static_cast<int>(value) : 0;
+    }
+
+    int EasyGLRenderer::GetMaxVertexInputBindingsEXT() const
+    {
+        return GetMaxVertexInputAttributesEXT();
+    }
+
+    int EasyGLRenderer::GetMaxColorAttachmentsEXT() const
+    {
+        GLint attachments = 0;
+        GLint drawBuffers = 0;
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxColorAttachments, &attachments);
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxDrawBuffers, &drawBuffers);
+        const GLint value = std::min(attachments, drawBuffers);
+        return value > 0 ? static_cast<int>(value) : 0;
+    }
+
     bool EasyGLRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
     {
         // Half-float texture filtering is core in the ES 3.0 API generation and in desktop GL 3.0+,
