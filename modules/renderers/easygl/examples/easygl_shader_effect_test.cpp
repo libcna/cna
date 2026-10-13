@@ -86,9 +86,6 @@ protected:
             language, CNA::ShaderStageEXT::Vertex)
             && device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Fragment)
             && !device.SupportsShaderLanguageEXT(otherLanguage, CNA::ShaderStageEXT::Fragment);
-        const bool computeLanguageOk = device.SupportsShaderLanguageEXT(
-            language, CNA::ShaderStageEXT::Compute)
-            == device.SupportsCapability(CNA::GraphicsCapability::ComputeShaders);
         const bool refusalOk = !device.SupportsShaderLanguageEXT(
             CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment)
             && !device.SupportsShaderLanguageEXT(
@@ -97,12 +94,11 @@ protected:
                 static_cast<CNA::ShaderLanguageEXT>(999), CNA::ShaderStageEXT::Fragment)
             && !device.SupportsShaderLanguageEXT(
                 language, static_cast<CNA::ShaderStageEXT>(999));
-        if (!dialectOk || !graphicsLanguageOk || !computeLanguageOk || !refusalOk)
+        if (!dialectOk || !graphicsLanguageOk || !refusalOk)
         {
             std::printf("[FAIL] EasyGLShaderEffect: shader language contract mismatch "
-                        "(dialect=%d, graphics=%d, compute=%d, refusal=%d)\n",
-                        static_cast<int>(dialect), graphicsLanguageOk, computeLanguageOk,
-                        refusalOk);
+                        "(dialect=%d, graphics=%d, refusal=%d)\n",
+                        static_cast<int>(dialect), graphicsLanguageOk, refusalOk);
             done_ = true;
             Exit();
             return;

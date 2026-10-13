@@ -733,140 +733,6 @@ namespace CNA::Internal::Renderers::EasyGL
         bool  rtFlipVUploaded_ = false;
     };
 
-    /**
-     * @brief plans/plan_modern.md MOD-1512: a shader storage buffer.
-     *
-     * Read-back goes through `glMapBufferRange` rather than `glGetBufferSubData`, which is desktop
-     * GL only -- the same code then works on the GL ES 3.1 contexts this renderer mostly runs on.
-     */
-    class EasyGLStorageBufferRenderer : public IStorageBufferRenderer
-    {
-    public:
-        /**
-         * @brief Allocates a GL buffer with exact portable roles and CPU-access intent.
-         * @param byteSize Positive allocation size in bytes.
-         * @param usage Raw `storage-buffer usage` bits.
-         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
-         */
-        EasyGLStorageBufferRenderer(
-            std::size_t byteSize, std::uint32_t usage = UINT32_C(0x0F),
-            std::uint32_t cpuAccess = UINT32_C(0x03));
-        /** @brief Releases the GL buffer. */
-        ~EasyGLStorageBufferRenderer() override;
-
-        /**
-         * @brief Uploads a prefix of the buffer.
-         * @param data Source bytes.
-         * @param byteSize Number of bytes to upload.
-         */
-        void SetData(const void* data, std::size_t byteSize) override;
-        /**
-         * @brief Reads a prefix of the buffer.
-         * @param out Destination bytes.
-         * @param byteSize Number of bytes to read.
-         */
-        void GetData(void* out, std::size_t byteSize) const override;
-        /**
-         * @brief Uploads bytes into an exact storage-buffer range.
-         * @param byteOffset First destination byte.
-         * @param data Source bytes.
-         * @param byteSize Number of bytes to upload.
-         * @return True when the complete range was uploaded.
-         */
-        bool SetDataRangeEXT(
-            std::size_t byteOffset, const void* data, std::size_t byteSize) override;
-        /**
-         * @brief Reads bytes from an exact storage-buffer range.
-         * @param byteOffset First source byte.
-         * @param out Destination bytes.
-         * @param byteSize Number of bytes to read.
-         * @return True when the complete range was read.
-         */
-        bool GetDataRangeEXT(
-            std::size_t byteOffset, void* out, std::size_t byteSize) const override;
-        /**
-         * @brief Copies bytes to another EasyGL storage buffer.
-         * @param destination Destination record.
-         * @param sourceByteOffset First source byte.
-         * @param destinationByteOffset First destination byte.
-         * @param byteSize Number of bytes to copy.
-         * @return True when the destination is compatible and the copy was issued.
-         */
-        bool CopyToEXT(
-            IStorageBufferRenderer& destination, std::size_t sourceByteOffset,
-            std::size_t destinationByteOffset, std::size_t byteSize) override;
-        /**
-         * @brief Returns the allocation size.
-         * @return Buffer size in bytes.
-         */
-        [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
-        /**
-         * @brief Returns the immutable portable usage mask.
-         * @return Raw `storage-buffer usage` bits.
-         */
-        [[nodiscard]] std::uint32_t GetUsageEXT() const override { return usage_; }
-        /**
-         * @brief Returns the immutable direct CPU-access mask.
-         * @return Raw `storage-buffer CPU-access` bits.
-         */
-        [[nodiscard]] std::uint32_t GetCpuAccessEXT() const override { return cpuAccess_; }
-
-        /**
-         * @brief Binds this buffer to a shader-storage binding point.
-         * @param binding Binding-point index.
-         */
-        void BindBase(int binding) const;
-
-        /**
-         * @brief Binds this buffer to a uniform/constant-buffer binding point.
-         * @param binding Binding-point index.
-         */
-        void BindUniformBase(int binding) const;
-
-        /**
-         * @brief Binds this buffer as the source of indirect-draw arguments.
-         *
-         * A buffer with both Storage and IndirectArguments roles can be written by compute and
-         * consumed by a draw without a CPU readback. An indirect-only buffer needs no SSBO role.
-         */
-        void BindAsDrawIndirect() const;
-
-    private:
-        [[nodiscard]] ::easygl::BufferTarget TransferTarget() const;
-
-        mutable ::easygl::Buffer buffer_;
-        std::size_t byteSize_ = 0;
-        std::uint32_t usage_ = 0;
-        std::uint32_t cpuAccess_ = 0;
-    };
-
-    /**
-     * @brief plans/plan_modern.md MOD-1511: one compiled compute program.
-     */
-    class EasyGLComputeShaderRenderer : public IComputeShaderRenderer
-    {
-    public:
-        EasyGLComputeShaderRenderer() = default;
-        ~EasyGLComputeShaderRenderer() override = default;
-
-        bool CompileProgram(const std::string& computeSrc) override;
-        void Bind() override;
-        void SetUniformInt(const char* name, int value) override;
-        void SetUniformFloat(const char* name, float value) override;
-        void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
-        [[nodiscard]] bool BindConstantBufferEXT(
-            int binding, IStorageBufferRenderer* buffer) override;
-        void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
-        void BindTexture(int unit, ITextureRenderer* texture) override;
-        [[nodiscard]] bool IsValid() const override { return valid_; }
-        [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
-
-    private:
-        ::easygl::Program program_;
-        std::string compileError_;
-        bool valid_ = false;
-    };
-
     class EasyGLOcclusionQueryRenderer : public IOcclusionQueryRenderer, public ::easygl::RecoverableResource
     {
     public:
@@ -895,33 +761,6 @@ namespace CNA::Internal::Renderers::EasyGL
         /// plans/plan_apple_m4.md AM4-271: whether this query has begun a run, so a Begin can tell
         /// a run it abandons -- whose result is still pending -- from a query that never ran.
         bool hasRun_ = false;
-    };
-
-    /// plans/plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
-    /// because that enum is written to the ES 3.0 core set and the timer query is an extension
-    /// there. The target is therefore cast in one place, here, rather than the whole query object
-    /// being written against raw GL.
-    class EasyGLGpuTimerRenderer : public IGpuTimerRenderer, public ::easygl::RecoverableResource
-    {
-    public:
-        explicit EasyGLGpuTimerRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry);
-        ~EasyGLGpuTimerRenderer() override;
-
-        void Begin() override;
-        void End()   override;
-        [[nodiscard]] bool IsResultAvailable() const override;
-        [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
-
-        void release_gl_handle_only() override;
-        void recreate_gl_resource()   override;
-
-    private:
-        void create();
-
-        ::metagl::QueryId id_{};
-        bool created_ = false;
-        bool open_    = false;
-        std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };
 
     class EasyGLSpriteBatchRenderer : public ISpriteBatchRenderer, public ::easygl::RecoverableResource
@@ -2180,15 +2019,11 @@ namespace CNA::Internal::Renderers::EasyGL
          *
          * @param language Raw `CNA::ShaderLanguageEXT` ordinal.
          * @param stage Raw `CNA::ShaderStageEXT` ordinal.
-         * @return True for the active profile's exact GLSL dialect at vertex/fragment stages and
-         *         at compute when compute is supported; false for every other pair.
+         * @return True for the active profile's exact GLSL dialect at the vertex and fragment
+         *         stages; false for every other pair.
          */
         [[nodiscard]] bool SupportsShaderLanguageEXT(int language, int stage) const override;
 
-        /// plans/plan_modern.md MOD-1510: compute shaders, which need GL ES 3.1 or desktop GL 4.3. The
-        /// answer is the *runtime* context's version, not the compile-time profile: this renderer
-        /// asks for ES 3.0 and routinely receives 3.2, and refusing compute on a context that has
-        /// it would be as wrong as claiming it on one that does not.
         /// plans/plan_modern.md MOD-1699: this renderer's four lit programs really do sample the shadow
         /// state, and its two PBR programs really do shade from an image-based light -- Phases 8-12
         /// implemented both here first.
@@ -2201,23 +2036,6 @@ namespace CNA::Internal::Renderers::EasyGL
         /// `BindTexture3D`, and `EasyGL_ShaderEffect_Texture3D` reads two different slices of one
         /// bound volume through a `sampler3D`.
         [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
-        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
-        /// plans/plan_modern.md MOD-2090: glDrawArraysIndirect/glDrawElementsIndirect, which arrive in
-        /// the same API generation as compute (GL ES 3.1, desktop GL 4.0) -- so the probe is the
-        /// same runtime version question, asked separately because the two are separate promises.
-        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
-        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
-        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
-        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
-        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
-        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
-        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
-        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
-        /**
-         * @brief Returns the live context's maximum shader-storage block size.
-         * @return Maximum bytes, or zero when shader storage is unavailable.
-         */
-        [[nodiscard]] std::uint64_t GetMaxStorageBufferBytesEXT() const override;
         /**
          * @brief Returns the live context's maximum uniform-block size.
          * @return Maximum bytes, or zero when uniform buffers are unavailable.
@@ -2228,24 +2046,6 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return Positive alignment, or zero when uniform buffers are unavailable.
          */
         [[nodiscard]] std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const override;
-        void BindStorageBufferForDrawEXT(int binding,
-                                         const IStorageBufferRenderer& buffer) override;
-        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
-            const std::string& computeSrc) override;
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
-        /**
-         * @brief Creates a GL buffer for the exact declared portable roles.
-         * @param byteSize Positive allocation size in bytes.
-         * @param usage Raw `storage-buffer usage` bits.
-         * @param cpuAccess Raw `storage-buffer CPU-access` bits.
-         * @return The buffer, or null if a requested role is unsupported by the live context.
-         */
-        std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
-            std::size_t byteSize, std::uint32_t usage,
-            std::uint32_t cpuAccess) override;
-        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
-                             int groupsZ) override;
-        void MemoryBarrierEXT(int barrierBits) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         /// plans/plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
         /// storage for the formats this context can render to, and a refusal for the rest.
@@ -2376,32 +2176,6 @@ namespace CNA::Internal::Renderers::EasyGL
                                        PrimitiveType primitive, int primitiveCount,
                                        int instanceCount,
                                        const GpuDrawParams& params) override;
-        void DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
-                                       const Matrix& world, const Matrix& view,
-                                       const Matrix& projection, PrimitiveType primitive,
-                                       const IStorageBufferRenderer& argumentBuffer,
-                                       int argumentByteOffset,
-                                       const GpuDrawParams& params) override;
-        void DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
-                                              const IIndexBufferRenderer& ib,
-                                              const Matrix& world, const Matrix& view,
-                                              const Matrix& projection, PrimitiveType primitive,
-                                              const IStorageBufferRenderer& argumentBuffer,
-                                              int argumentByteOffset,
-                                              const GpuDrawParams& params) override;
-
-    private:
-        /// MOD-2090: both indirect routes, which differ only in whether an index buffer is bound
-        /// and therefore in which GL entry point issues the command. Everything around that -- the
-        /// declaration guard, the per-vertex and per-instance stream configuration, the program and
-        /// its uniforms, and the teardown that stops a later draw inheriting a stale divisor -- is
-        /// identical to the ordinary routes' and is written once here.
-        /// @param ib The bound index buffer, or null for the non-indexed route.
-        void IssueIndirectDrawEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
-                                  const Matrix& world, const Matrix& view,
-                                  const Matrix& projection, PrimitiveType primitive,
-                                  const IStorageBufferRenderer& argumentBuffer,
-                                  int argumentByteOffset, const GpuDrawParams& params);
     };
 
     /**
