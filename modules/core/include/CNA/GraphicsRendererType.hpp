@@ -27,9 +27,6 @@ namespace CNA
         /** @brief WebGL 2 (Emscripten only, GLES 3.0), internally implemented by EasyGL. */
         WebGL2,
 
-        /** @brief Vulkan. */
-        Vulkan,
-
         /** @brief WebGPU (experimental). */
         WebGPU,
 
@@ -84,8 +81,6 @@ namespace CNA
 #else // CNA_GL_PROFILE_OPENGLES3 (default within CNA_RENDERER_EASYGL)
         return GraphicsRendererType::OpenGLES3;
 #endif
-#elif defined(CNA_RENDERER_VULKAN)
-        return GraphicsRendererType::Vulkan;
 #elif defined(CNA_RENDERER_WEBGPU)
         return GraphicsRendererType::WebGPU;
 #elif defined(CNA_RENDERER_HEADLESS)
@@ -132,7 +127,6 @@ namespace CNA
             case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
             case GraphicsRendererType::WebGL2:       return "WEBGL2";
-            case GraphicsRendererType::Vulkan:       return "VULKAN";
             case GraphicsRendererType::WebGPU:       return "WEBGPU";
             case GraphicsRendererType::Headless:     return "HEADLESS";
             case GraphicsRendererType::Software:     return "SOFTWARE";

@@ -56,18 +56,7 @@ function(cna_add_renderer_descriptor_gate)
 
     set(_renderers_dir "${CNA_SOURCE_DIR}/modules/renderers")
 
-    # plans/plan_win32_native_validation.md WINNATIVE-0009: Vulkan belongs to the same class as the
-    # families above, but conditionally rather than always. VulkanRendererDescriptor.cpp reaches
-    # <vulkan/vulkan.h> through VulkanVertexInputLayout.hpp, and that header exists only where a
-    # Vulkan SDK is installed -- which is true of this Linux host natively and false of both its
-    # mingw-w64 cross-target and a Windows machine without the Vulkan SDK. So: compile the
-    # descriptor where the headers are, defer it where they are not, and never fail a build that
-    # did not ask for Vulkan over a header it was never going to use.
     set(_sdk_bound_families ${CNA_DESCRIPTOR_GATE_SDK_BOUND_FAMILIES})
-    find_package(Vulkan QUIET)
-    if(NOT Vulkan_INCLUDE_DIRS)
-        list(APPEND _sdk_bound_families vulkan)
-    endif()
     file(GLOB _descriptor_sources CONFIGURE_DEPENDS
         "${_renderers_dir}/*/src/*RendererDescriptor.cpp")
 
@@ -141,10 +130,6 @@ function(cna_add_renderer_descriptor_gate)
             target_include_directories(cna_renderer_descriptor_gate PRIVATE "${_root}")
         endif()
     endforeach()
-
-    if(Vulkan_INCLUDE_DIRS)
-        target_include_directories(cna_renderer_descriptor_gate PRIVATE ${Vulkan_INCLUDE_DIRS})
-    endif()
 
     list(LENGTH _gate_sources _gate_count)
     list(LENGTH _deferred_families _deferred_count)

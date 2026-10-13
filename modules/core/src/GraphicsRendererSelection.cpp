@@ -15,6 +15,7 @@
 #include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdlib>
 #include <optional>
@@ -113,6 +114,46 @@ namespace CNA
                 ", or configure a fallback chain with SetFallbackChain().";
         }
 
+        /// The renderer identities CNA has retired, in their CNA_GRAPHICS_RENDERER spelling. A
+        /// retired name is no identity and nothing aliases it to a surviving renderer; it is kept
+        /// only so that a configuration still naming one is told the renderer was retired rather
+        /// than that the name is unknown. The same list, with each name's permanently reserved C
+        /// ABI value, is cmake/RendererIdentities.cmake's CNA_RENDERER_RETIRED_IDENTITIES;
+        /// scripts/check_renderer_identities.py holds the two equal (docs/removed-renderers.md).
+        constexpr std::array<std::string_view, 38> RetiredRendererNames{
+            "OPENGLES2", "WEBGL1", "BGFX", "VULKAN", "MAGNUM", "DIRECTX12", "DIRECT2D", "CANVAS",
+            "HTML_DOM", "SKIA", "BLEND2D", "FREEDIRECT", "DIRECTX1", "DIRECTX2", "DIRECTX3",
+            "DIRECTX5", "DIRECTX6", "DIRECTX7", "DIRECTX8", "DIRECTX10", "OPENGLES1", "OPENGL4",
+            "OPENGL1", "OPENGL2", "WICKED", "SOKOL", "DILIGENT", "GLIDE", "GDI", "LLGL", "SVG_DOM",
+            "OPENVG", "PORTABLEGL", "TINYGL", "IGL", "PIXIJS", "NANOVG", "RLGL"};
+
+        [[nodiscard]] bool IsRetiredName(std::string_view name)
+        {
+            const auto upper = [](char c) {
+                return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+            };
+            return std::any_of(RetiredRendererNames.begin(), RetiredRendererNames.end(),
+                [&](std::string_view retired) {
+                    return retired.size() == name.size()
+                        && std::equal(retired.begin(), retired.end(), name.begin(),
+                                      [&](char a, char b) { return a == upper(b); });
+                });
+        }
+
+        /// A name that names no identity. A retired renderer is said to be retired -- and not
+        /// replaced -- rather than unknown, so an old configuration learns what happened to it.
+        [[nodiscard]] std::string UnrecognizedNameMessage(std::string_view name)
+        {
+            if (IsRetiredName(name))
+            {
+                return "\"" + std::string(name) + "\" names a graphics renderer CNA has retired "
+                    "(docs/removed-renderers.md); no other renderer stands in for it. Available in "
+                    "this build: " + AvailableList() + ".";
+            }
+            return "\"" + std::string(name) + "\" does not name any CNA graphics renderer. "
+                "Available in this build: " + AvailableList() + ".";
+        }
+
         void RejectIfNotCompiledIn(GraphicsRendererType type)
         {
             if (std::optional<std::string> message = NotCompiledInMessage(type))
@@ -140,8 +181,7 @@ namespace CNA
             GraphicsRendererType parsed{};
             if (!tryParseGraphicsRendererName(raw, parsed))
             {
-                state.environmentError = std::string("CNA_GRAPHICS_RENDERER=\"") + raw +
-                    "\" does not name any CNA graphics renderer.";
+                state.environmentError = "CNA_GRAPHICS_RENDERER=" + UnrecognizedNameMessage(raw);
                 return;
             }
 
@@ -224,10 +264,7 @@ namespace CNA
         GraphicsRendererType parsed{};
         if (!tryParseGraphicsRendererName(name, parsed))
         {
-            throw System::ArgumentException(
-                std::string("\"") + std::string(name) +
-                "\" does not name any CNA graphics renderer.",
-                "name");
+            throw System::ArgumentException(UnrecognizedNameMessage(name), "name");
         }
         SetPreferred(parsed);
     }

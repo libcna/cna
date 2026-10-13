@@ -130,8 +130,6 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
         /** @brief Gets the OpenGL context service. @return The SDL3 GL service; never null. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
-        /** @brief Gets the Vulkan surface service. @return The service when the host probe succeeds. */
-        [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
 
         /**
          * @brief Creates a surface presenter for a window.
@@ -161,7 +159,6 @@ namespace CNA::Platform::Sdl3 {
     private:
         /// Every capability but `camera`, whose probe starts SDL's camera subsystem.
         [[nodiscard]] PlatformCapabilities CapabilitiesExceptCamera() const;
-        [[nodiscard]] bool HasVulkanSupport() const;
 
         /// SDL3 hands the application lifecycle events -- entering the background or the
         /// foreground, low memory, termination -- only to event watchers and never queues them
@@ -191,9 +188,6 @@ namespace CNA::Platform::Sdl3 {
         /// the enumeration cost again on every query.
         bool controllerSubsystemEnsured_ = false;
 
-        /// One stable host probe. Empty until capabilities or the accessor are first queried.
-        mutable std::optional<bool> vulkanAvailable_;
-
         /// Services are owned by the platform and outlive every caller's use of them, which is
         /// what makes returning a raw pointer safe: a caller never owns what it is handed.
         Sdl3Clipboard clipboard_;
@@ -202,7 +196,6 @@ namespace CNA::Platform::Sdl3 {
         Sdl3FileSystem fileSystem_;
         Sdl3SystemInfo systemInfo_;
         Sdl3GlContext glContext_;
-        Sdl3VulkanSurface vulkanSurface_;
         Sdl3Keyboard keyboard_;
         Sdl3Mouse mouse_;
         Sdl3Gamepad gamepad_;

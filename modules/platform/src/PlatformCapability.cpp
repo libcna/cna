@@ -13,7 +13,6 @@ namespace CNA::Platform {
         static const std::string nativeWindowHandle = "NativeWindowHandle";
         static const std::string surfacePresentation = "SurfacePresentation";
         static const std::string openGlContext = "OpenGlContext";
-        static const std::string vulkanSurface = "VulkanSurface";
         static const std::string clipboard = "Clipboard";
         static const std::string textInput = "TextInput";
         static const std::string ime = "Ime";
@@ -50,7 +49,6 @@ namespace CNA::Platform {
             case PlatformCapability::NativeWindowHandle: return nativeWindowHandle;
             case PlatformCapability::SurfacePresentation: return surfacePresentation;
             case PlatformCapability::OpenGlContext: return openGlContext;
-            case PlatformCapability::VulkanSurface: return vulkanSurface;
             case PlatformCapability::Clipboard: return clipboard;
             case PlatformCapability::TextInput: return textInput;
             case PlatformCapability::Ime: return ime;

@@ -60,7 +60,7 @@ runtime-literal paths) and the cross-module minimal-link probes (`tests/modules`
 
 ## Renderer modules — modules/renderers/
 
-12 implementation families carry the 14 public renderer identities (the easygl family
+11 implementation families carry the 13 public renderer identities (the easygl family
 implements the three GL-profile identities OPENGLES3/OPENGL33/WEBGL2).
 Identities are
 pinned by `scripts/check_renderer_identities.py` over `CNA/GraphicsRendererType.hpp` (core
@@ -155,4 +155,4 @@ miscellaneous dumping ground again.
   composition umbrella and net, with per-probe link-closure gates
   (`scripts/check_module_link_closure.py`) and the HEADLESS native-SDK-free /
   VULKAN closure configuration gates.
-- `scripts/check_renderer_identities.py` — pins the 14 public renderer identities.
+- `scripts/check_renderer_identities.py` — pins the 13 public renderer identities.

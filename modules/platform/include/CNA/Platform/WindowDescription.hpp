@@ -10,7 +10,7 @@ namespace CNA::Platform {
      *
      * This is creation-time information, not a setting that can be changed afterwards: a window
      * intended for OpenGL must be created with the corresponding native attribute already set,
-     * and the same is true for a Vulkan-capable surface. Making it a post-creation setter would
+     * and the same is true for a Metal-capable view. Making it a post-creation setter would
      * be an API that cannot work.
      */
     enum class WindowRenderIntent
@@ -19,8 +19,6 @@ namespace CNA::Platform {
         None,
         /** @brief The window will host an OpenGL or OpenGL ES context. */
         OpenGl,
-        /** @brief The window will host a Vulkan surface. */
-        Vulkan,
         /** @brief The window will host a Metal layer. */
         Metal
     };

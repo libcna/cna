@@ -129,7 +129,6 @@ public:
     [[nodiscard]] IPlatformFileSystem* GetFileSystem() override { return nullptr; }
     [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override { return nullptr; }
     [[nodiscard]] IPlatformGlContext* GetGlContext() override { return nullptr; }
-    [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override { return nullptr; }
 
     [[nodiscard]] std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(
         IPlatformWindow&) override

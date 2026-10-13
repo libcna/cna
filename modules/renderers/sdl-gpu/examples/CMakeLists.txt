@@ -5,7 +5,7 @@
 # From the root CMakeLists.txt include site:
 # plans/plan_sdlgpu.md SDLGPU-12: first end-to-end proof for the SDL_GPU graphics renderer -- a real
 # window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
-# display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
+# display/GPU -- run through tools/platform/run_gpu_tests_private.sh.
 
 # Example/test executables historically live at the build root (scripts, docs and
 # the golden-image working-directory conventions rely on it); keep them there.
@@ -92,6 +92,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
                 "${CMAKE_COMMAND};-E;env;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d-headless.sh")
         endif()
     endmacro()
+
+    # The 2D demo's three-frame smoke run: SDL_GPU's entry in the cross-renderer GraphicsSmoke set
+    # (scripts/run-all-renderer-smoke-tests.sh), which the retired VULKAN suite used to provide.
+    if(CNA_BUILD_EXAMPLES)
+        cna_register_renderer_test(NAME SdlGpu_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
+            TIMEOUT 30 LABELS "GraphicsSmoke;SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    endif()
 
     # SDLGPU-81: build the complete renderer-neutral EasyGL parity corpus from its one canonical
     # inventory. TARGET_PREFIX preserves the established SDL_GPU executable names, so adopting the

@@ -370,7 +370,6 @@ namespace CNA::Platform::Terminal {
     IPlatformFileSystem* TerminalPlatform::GetFileSystem() { return fileSystem_.get(); }
     IPlatformSystemInfo* TerminalPlatform::GetSystemInfo() { return systemInfo_.get(); }
     IPlatformGlContext* TerminalPlatform::GetGlContext() { return nullptr; }
-    IPlatformVulkanSurface* TerminalPlatform::GetVulkanSurface() { return nullptr; }
 
     std::unique_ptr<IPlatformSurfacePresenter> TerminalPlatform::CreateSurfacePresenter(
         IPlatformWindow& window)

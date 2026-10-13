@@ -100,9 +100,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "WEBGPU";

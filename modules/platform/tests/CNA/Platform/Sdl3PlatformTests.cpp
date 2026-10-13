@@ -175,14 +175,6 @@ TEST_F(Sdl3PlatformTest, CapabilitiesReflectWhatIsActuallyWiredUp)
     EXPECT_TRUE(capabilities.gamepadSensors);
 }
 
-TEST_F(Sdl3PlatformTest, HostDependentCapabilitiesAgreeWithTheirServices)
-{
-    // The contract's rule: a service is null exactly when its capability is false. Advertising
-    // Vulkan on a machine with no loader would hand a caller a service that refuses every call.
-    const PlatformCapabilities capabilities = platform_->GetCapabilities();
-    EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
-}
-
 TEST_F(Sdl3PlatformTest, ASupportedCameraAndTrayAreThereWhenAskedFor)
 {
     // As when the platform owned both services: the capability is what the platform supports, and
@@ -220,14 +212,6 @@ TEST_F(Sdl3PlatformTest, AskingAboutAnythingButTheCameraDoesNotStartTheCameraSub
         }
     }
     EXPECT_FALSE(Sdl3::CameraSubsystemRunning());
-}
-
-TEST_F(Sdl3PlatformTest, VulkanCapabilityProbePreservesTheHostsVideoSubsystemState)
-{
-    const bool initiallyUp = platform_->IsSubsystemInitialized(PlatformSubsystem::Video);
-    (void)platform_->GetCapabilities();
-    EXPECT_EQ(platform_->IsSubsystemInitialized(PlatformSubsystem::Video), initiallyUp)
-        << "the loader probe must balance its temporary Video and Vulkan references";
 }
 
 // --- subsystem lifecycle (PLAT-29) --------------------------------------------------------------

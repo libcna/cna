@@ -8,14 +8,12 @@ namespace CNA::Platform {
     {
         static const std::string none = "None";
         static const std::string openGl = "OpenGl";
-        static const std::string vulkan = "Vulkan";
         static const std::string metal = "Metal";
 
         switch (intent)
         {
             case WindowRenderIntent::None:   return none;
             case WindowRenderIntent::OpenGl: return openGl;
-            case WindowRenderIntent::Vulkan: return vulkan;
             case WindowRenderIntent::Metal:  return metal;
         }
         return none;

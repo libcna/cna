@@ -80,10 +80,6 @@ using namespace CNA::Testing::Renderers;
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
 // checks at runtime that bgfx is the ACTIVE renderer.
 
-#ifdef CNA_RENDERER_VULKAN
-#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
-#endif
-
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -362,16 +358,6 @@ namespace
 
         void TearDown() override
         {
-#ifdef CNA_RENDERER_VULKAN
-            auto* renderer =
-                dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
-                    &device.GetRenderer());
-            ASSERT_NE(nullptr, renderer);
-            const auto& messages = renderer->GetValidationMessagesEXT();
-            EXPECT_TRUE(messages.empty())
-                << "Vulkan point topology emitted a validation warning/error: "
-                << (messages.empty() ? std::string{} : messages.front());
-#endif
         }
 
         void RequirePointRendering()
@@ -405,12 +391,7 @@ namespace
     };
 }
 
-#if defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_SOFTWARE)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
 // colours, one framebuffer snapshot. A triangle-list approximation of this draw fills the whole
@@ -449,50 +430,6 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListRendersEveryRequestedPoint)
     ExpectPointRendered(pixels, plan[3], "non-indexed point 3");
     ExpectPointCoverageBudget(pixels, Color::Black, 4, "non-indexed point list");
 }
-
-#ifdef CNA_RENDERER_VULKAN
-// glTF's generated POINTS witness uses the stride-48 PBR layout. The generic point tests above
-// exercise BasicEffect; this companion makes Vulkan create the actual PBR point pipeline too, so
-// the validation-message assertion in TearDown guards pbr3d.vert.glsl's required PointSize write.
-TEST_F(PointListPrimitiveTest, VulkanPbrPointUsesTheNativePointPipeline)
-{
-    RequirePointRendering();
-
-    const int width = BackbufferWidth();
-    const int height = BackbufferHeight();
-    const PointSpec point{width / 2, height / 2, Color::Red, 0.5f};
-    const VertexPositionColor positioned = MakePoint(width, height, point);
-    const VertexPositionNormalTangentTexture vertex(
-        positioned.Position,
-        Vector3(0.0f, 0.0f, 1.0f),
-        Vector4(1.0f, 0.0f, 0.0f, 1.0f),
-        Vector2::Zero);
-
-    VertexBuffer vertexBuffer(
-        device,
-        VertexPositionNormalTangentTexture::getVertexDeclarationStatic(),
-        1,
-        BufferUsage::None);
-    vertexBuffer.SetData(&vertex, 1);
-
-    PbrEffect effect(device);
-    effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
-    effect.setAmbientLightColorProperty(Vector3::One);
-    effect.setEncodeOutputToSrgbEXTProperty(false);
-    effect.getDirectionalLight0Property().setEnabledProperty(false);
-    effect.getDirectionalLight1Property().setEnabledProperty(false);
-    effect.getDirectionalLight2Property().setEnabledProperty(false);
-
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-    effect.Apply();
-    device.DrawPrimitives(PrimitiveType::PointListEXT, 0, 1);
-
-    const FrameSnapshot pixels = CaptureBackbuffer(device);
-    ExpectPointRendered(pixels, point, "Vulkan PBR point");
-    ExpectPointCoverageBudget(pixels, Color::Black, 1, "Vulkan PBR point");
-}
-#endif
 
 // The exact case REMED-GFX-106 discovered: one indexed point must produce one point.
 TEST_F(PointListPrimitiveTest, IndexedPointListRendersEveryRequestedPoint)

@@ -172,7 +172,6 @@ static const CNA_GraphicsRendererType live_renderer_identities[] = {
         CNA_GRAPHICS_RENDERER_OPENGLES3,
         CNA_GRAPHICS_RENDERER_OPENGL33,
         CNA_GRAPHICS_RENDERER_WEBGL2,
-        CNA_GRAPHICS_RENDERER_VULKAN,
         CNA_GRAPHICS_RENDERER_WEBGPU,
         CNA_GRAPHICS_RENDERER_HEADLESS,
         CNA_GRAPHICS_RENDERER_SOFTWARE,
@@ -188,7 +187,7 @@ static const CNA_GraphicsRendererType live_renderer_identities[] = {
  * no route may accept one, and no surviving constant may take one over. Several sit above
  * CNA_GRAPHICS_RENDERER_MAXIMUM, so the gap sweep below does not reach them on its own. */
 static const CNA_GraphicsRendererType retired_renderer_identities[] = {
-        UINT32_C(2), UINT32_C(5), UINT32_C(7), UINT32_C(10), UINT32_C(15), UINT32_C(16),
+        UINT32_C(2), UINT32_C(5), UINT32_C(7), UINT32_C(8), UINT32_C(10), UINT32_C(15), UINT32_C(16),
         UINT32_C(17), UINT32_C(18), UINT32_C(19), UINT32_C(20), UINT32_C(21), UINT32_C(23),
         UINT32_C(24), UINT32_C(25), UINT32_C(26), UINT32_C(27), UINT32_C(28), UINT32_C(29),
         UINT32_C(30), UINT32_C(32), UINT32_C(33), UINT32_C(34), UINT32_C(35), UINT32_C(36),
@@ -248,7 +247,7 @@ static int validate_backend_classification(void)
         cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_SOFTWARE, &category) !=
             CNA_RESULT_SUCCESS ||
         category != CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE ||
-        cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_VULKAN, &category) !=
+        cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_OPENGL33, &category) !=
             CNA_RESULT_SUCCESS ||
         category != CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE) {
         return 0;

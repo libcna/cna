@@ -18,8 +18,7 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
+        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"))
     # Task 15.1: cna_demo_net_client_server_arena - real two-process NetworkSession::Create/
     # Find/Join, LocalNetworkGamer::SendData/ReceiveData via PacketWriter/PacketReader, and
     # GamerJoined/SessionEnded events over real ENet, rendered as a small 2D arena. Needs

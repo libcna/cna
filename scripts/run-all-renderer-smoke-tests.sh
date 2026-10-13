@@ -5,10 +5,10 @@
 # smoke test (Tasks 85/88/89/730, CTest label "GraphicsSmoke") sequentially --
 # never concurrently, matching this project's own testing discipline -- using
 # the persistent per-renderer build directories this project already uses
-# locally (cmake-build-debug=OPENGLES3, cmake-build-vulkan, cmake-build-sdl).
+# locally (cmake-build-debug=OPENGLES3, cmake-build-sdlgpu, cmake-build-sdl).
 #
 # A renderer whose build directory does not exist and cannot be freshly
-# configured (e.g. missing system dependencies such as the Vulkan SDK) is
+# configured (e.g. missing system dependencies such as wgpu-native) is
 # reported as "not available on this machine" and skipped rather than failing
 # the whole run -- matching this task's own "every renderer available on the
 # machine" framing. A renderer that DOES configure/build but whose smoke test
@@ -51,11 +51,11 @@ fi
 # A family whose dependency is missing is REPORTED as unavailable, never silently counted as a
 # pass. That distinction is the point of the gate: "7 of 9 ran, 2 could not be built here" is a
 # result, "all green" over a set that quietly shrank is not.
-RENDERERS=(OPENGLES3 VULKAN SDL_RENDERER)
+RENDERERS=(OPENGLES3 SDL_GPU SDL_RENDERER)
 if [ "${1:-}" = "--tier" ]; then
     case "${2:-}" in
         routine) RENDERERS=(OPENGLES3 SDL_RENDERER) ;;
-        full)    RENDERERS=(OPENGLES3 SDL_RENDERER VULKAN WEBGPU) ;;
+        full)    RENDERERS=(OPENGLES3 SDL_RENDERER SDL_GPU WEBGPU) ;;
         *) echo "usage: $0 [--tier routine|full] | [--multi \"R;R;...\"]" >&2; exit 2 ;;
     esac
     shift 2
@@ -63,7 +63,7 @@ fi
 
 declare -A RENDERER_DIRS=(
     [OPENGLES3]="cmake-build-debug"
-    [VULKAN]="cmake-build-vulkan"
+    [SDL_GPU]="cmake-build-sdlgpu"
     [SDL_RENDERER]="cmake-build-sdl"
     [WEBGPU]="cmake-build-webgpu"
 )
@@ -88,7 +88,7 @@ if [ -n "${MULTI_LIST}" ]; then
     for renderer in "${MULTI_RENDERERS[@]}"; do
         echo "=== ${renderer} (selected at runtime from the ${dir} build) ==="
 
-        # Which label carries this renderer's smoke test. The GL/Vulkan family registers
+        # Which label carries this renderer's smoke test. The GPU families register
         # "GraphicsSmoke"; the CPU renderers register under their own name (Stub_Smoke is labelled
         # "Stub"). Try both rather than assuming, because `ctest -L <nothing matched>` exits 0 --
         # so a wrong label would report PASS for a renderer that ran no test at all.

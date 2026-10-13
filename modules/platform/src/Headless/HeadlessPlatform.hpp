@@ -125,8 +125,6 @@ namespace CNA::Platform::Headless {
         [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
         /** @brief Gets the OpenGL context service. @return Null; there is no context to create. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
-        /** @brief Gets the Vulkan surface service. @return Null; there is no surface to create. */
-        [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
 
         /**
          * @brief Refuses to create a surface presenter.

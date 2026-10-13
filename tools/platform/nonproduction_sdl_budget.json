@@ -145,10 +145,6 @@
       "category": "renderer-integration-executable",
       "max_references": 1
     },
-    "modules/graphics/examples/unsupported_3d_call_behavior_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 8
-    },
     "modules/graphics/examples/viewport_reset_after_resize_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 5
@@ -411,7 +407,7 @@
     },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_clearoptions_audit_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 3
+      "max_references": 2
     },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_custom_effect_throws_test.cpp": {
       "category": "renderer-integration-executable",
@@ -420,10 +416,6 @@
     "modules/renderers/sdl-renderer/examples/sdlrenderer_devicereset_events_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 3
-    },
-    "modules/renderers/sdl-renderer/examples/sdlrenderer_disposed_guards_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 2
     },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_double_dispose_test.cpp": {
       "category": "renderer-integration-executable",
@@ -605,10 +597,6 @@
       "category": "renderer-integration-executable",
       "max_references": 10
     },
-    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_fromstream_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_miplevel_throws_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6
@@ -616,10 +604,6 @@
     "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_partial_rect_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 4
-    },
-    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
     },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_setdata_getdata_test.cpp": {
       "category": "renderer-integration-executable",

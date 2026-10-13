@@ -165,8 +165,6 @@ namespace CNA::Platform::Terminal {
         [[nodiscard]] IPlatformSystemInfo* GetSystemInfo() override;
         /** @brief Gets the OpenGL context service. @return Null; a terminal has no GL context. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override;
-        /** @brief Gets the Vulkan surface service. @return Null; a terminal has no Vulkan surface. */
-        [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override;
 
         /**
          * @brief Creates a presenter that draws frames as characters.

@@ -196,12 +196,16 @@ _Static_assert(sizeof(CNA_SkinningDataDescriptor) == 64U,
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
-                   CNA_GRAPHICS_RENDERER_VULKAN == UINT32_C(8) &&
                    CNA_GRAPHICS_RENDERER_SDL_GPU == UINT32_C(31) &&
                    CNA_GRAPHICS_RENDERER_METAL == UINT32_C(42) &&
                    CNA_GRAPHICS_RENDERER_FNA3D == UINT32_C(43) &&
                    CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_FNA3D,
                "CNA renderer identities must remain stable");
+/* A retired renderer has no constant at all: a consumer still naming one fails to compile instead
+ * of passing a value every route refuses (docs/removed-renderers.md). */
+#if defined(CNA_GRAPHICS_RENDERER_VULKAN)
+#error "CNA_GRAPHICS_RENDERER_VULKAN names a retired renderer and must not be defined"
+#endif
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
                    CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12) &&
                    CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS == UINT32_C(13) &&

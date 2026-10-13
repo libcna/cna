@@ -17,8 +17,8 @@ static_assert(getCurrentGraphicsBackendMaturity() == getCurrentGraphicsBackendMa
 static_assert(!toStringView(getCurrentGraphicsBackendMaturity()).empty());
 constexpr GraphicsBackendMaturity kCompileTimeMaturity = getCurrentGraphicsBackendMaturity();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
-static_assert(kPublicRendererCount == 14,
-              "GraphicsRendererType must expose all 14 public renderer identities");
+static_assert(kPublicRendererCount == 13,
+              "GraphicsRendererType must expose all 13 public renderer identities");
 
 TEST(GraphicsBackendMaturityTest, GetCurrentGraphicsBackendMaturityDoesNotThrow)
 {
@@ -50,7 +50,6 @@ namespace
             case GraphicsRendererType::SdlRenderer:
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
-            case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::DirectX11:
                 return GraphicsBackendMaturity::Production;

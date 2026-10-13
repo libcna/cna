@@ -137,8 +137,6 @@ namespace
     constexpr const char* kRendererName = "SOFTWARE";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
@@ -214,7 +212,7 @@ namespace
      * this file measures and prints what the extra attachment holds rather than inventing a value.
      */
     constexpr bool kMrtExtraAttachmentContentClaimable =
-#if defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_METAL)
+#if defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_METAL)
         // plans/plan_apple_m4.md AM4-097: Metal masks attachments past 0 out of its stock pipelines.
         true;
 #else

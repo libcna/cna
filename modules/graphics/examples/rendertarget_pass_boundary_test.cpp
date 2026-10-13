@@ -185,15 +185,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
-#elif defined(CNA_RENDERER_VULKAN)
-    // `clearOnPreserveTarget` / `clearAfterDrawWins` were BOTH false here while REMED-GFX-129 was
-    // open: `GetOrCreateRTRenderPass` delivered the clear colour through VK_ATTACHMENT_LOAD_OP_CLEAR
-    // only, and a PreserveContents target's pass uses LOAD_OP_LOAD. REMED-GFX-129 replaced that with
-    // real ordered `vkCmdClearAttachments` commands, so both are true and checks X1/X2/X3 now assert
-    // the correct behaviour. They are kept here, unchanged in shape, because they are the exact
-    // reproduction the finding was narrowed with.
-    constexpr Contract kContract{"VULKAN", true, Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `clearAfterDrawWins` was false while REMED-GFX-156 was open: wgpu delivers a clear colour
     // only through the render-pass load op, so a Clear() issued after a draw inside ONE cycle could

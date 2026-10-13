@@ -103,11 +103,11 @@ TEST(PlatformCapabilitiesTests, SupportsReadsTheMatchingFieldForRepresentativeCa
     // test above while silently renaming what a capability means.
     PlatformCapabilities capabilities;
     capabilities.highDpi = true;
-    capabilities.vulkanSurface = true;
+    capabilities.openGlContext = true;
     capabilities.exactKeyboardState = true;
 
     EXPECT_TRUE(Supports(capabilities, PlatformCapability::HighDpi));
-    EXPECT_TRUE(Supports(capabilities, PlatformCapability::VulkanSurface));
+    EXPECT_TRUE(Supports(capabilities, PlatformCapability::OpenGlContext));
     EXPECT_TRUE(Supports(capabilities, PlatformCapability::ExactKeyboardState));
     EXPECT_FALSE(Supports(capabilities, PlatformCapability::Clipboard));
     EXPECT_FALSE(Supports(capabilities, PlatformCapability::Gamepad));
@@ -140,9 +140,10 @@ TEST(PlatformCapabilitiesTests, CapabilitySetCoversTheDocumentedContract)
     // cnaplatform.md sketched ten capabilities; PLAT-2's classification, PLAT-3's renderer audit
     // and the terminal analysis each added more -- the thirtieth, DragAndDrop, with
     // plans/plan_x11.md X11-0154, the thirty-first, PrimarySelection, with X11-0157, and the
-    // thirty-second, ClipboardData, with X11-0158. Pinning the count makes growing the set a
-    // deliberate act that updates this expectation too.
-    EXPECT_EQ(AllCapabilities().size(), 32u);
+    // thirty-second, ClipboardData, with X11-0158. VulkanSurface left with the retired VULKAN
+    // renderer, its only consumer. Pinning the count makes changing the set a deliberate act that
+    // updates this expectation too.
+    EXPECT_EQ(AllCapabilities().size(), 31u);
 }
 
 } // namespace

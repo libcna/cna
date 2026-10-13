@@ -97,14 +97,6 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "System/NotSupportedException.hpp"
 
-#if defined(CNA_RENDERER_VULKAN)
-// REMED-GFX-151 is a Vulkan finding, so the Vulkan build of this fixture additionally judges the
-// Khronos validation layer -- standard AND synchronization checks -- over the whole matrix above.
-// The fix reorders when render passes are recorded, which is exactly the kind of change that can
-// introduce a read-after-write hazard without changing a single pixel on a permissive driver.
-#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
-#endif
-
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -133,9 +125,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "WEBGPU";
@@ -1224,60 +1213,6 @@ class RenderTargetProducerConsumerTest : public Game
                     PatternColor);
     }
 
-#if defined(CNA_RENDERER_VULKAN)
-    /**
-     * @brief Leg V -- Khronos validation over everything the legs above just did.
-     *
-     * Classification is by the stable `SYNC-HAZARD` message-id prefix rather than by matching a
-     * complete diagnostic sentence, so a layer rewording cannot turn a real hazard green. The
-     * layer's own liveness is asserted separately: a zero hazard count from a layer that never
-     * loaded is not evidence of anything, and REMED-GFX-144's acquire hazards are called out by
-     * name so a regression there is named rather than merely counted.
-     */
-    void LegValidation()
-    {
-        auto* vk = dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
-            &getGraphicsDeviceProperty().GetRenderer());
-        check(CNA::Internal::Renderers::Vulkan::VulkanRenderer::IsValidationActiveEXT(),
-              "V1 VK_LAYER_KHRONOS_validation is loaded, so the counts below mean something");
-        if (!vk) { check(false, "V1 Vulkan renderer not reachable"); return; }
-
-        const auto& msgs = vk->GetValidationMessagesEXT();
-        const auto& ids  = vk->GetValidationMessageIdNamesEXT();
-        int sync = 0, acquire = 0, other = 0;
-        std::string firstSync, firstOther;
-        for (std::size_t i = 0; i < msgs.size(); ++i)
-        {
-            const std::string& m  = msgs[i];
-            const std::string& id = (i < ids.size()) ? ids[i] : std::string();
-            if (id.find("SYNC-HAZARD") != std::string::npos ||
-                m.find("hazard detected") != std::string::npos)
-            {
-                ++sync;
-                if (m.find("vkAcquireNextImageKHR") != std::string::npos) ++acquire;
-                if (firstSync.empty()) firstSync = id + " -- " + m.substr(0, 220);
-            }
-            else
-            {
-                ++other;
-                if (firstOther.empty()) firstOther = id + " -- " + m.substr(0, 220);
-            }
-        }
-        std::printf("[INFO] V0 sync validation %s; %d validation messages total\n",
-                    syncValidation_ ? "REQUESTED" : "not requested",
-                    static_cast<int>(msgs.size()));
-        std::fflush(stdout);
-        check(sync == 0, "V2 zero synchronization hazards across the whole producer/consumer "
-                         "matrix" + (sync == 0 ? std::string()
-                                               : " -- got " + std::to_string(sync) + " (" +
-                                                 std::to_string(acquire) +
-                                                 " naming vkAcquireNextImageKHR): " + firstSync));
-        check(other == 0, "V3 zero other validation messages" +
-                          (other == 0 ? std::string()
-                                      : " -- got " + std::to_string(other) + ": " + firstOther));
-    }
-#endif
-
 protected:
     void Initialize() override
     {
@@ -1326,9 +1261,6 @@ protected:
         LegUsageAndClear(dev);
         LegSpriteBatchKnobs(dev);
         LegBackbufferBoundary(dev);
-#if defined(CNA_RENDERER_VULKAN)
-        LegValidation();
-#endif
 
         std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
@@ -1376,15 +1308,6 @@ int main(int argc, char** argv)
         if (std::string(argv[i]) == "--msaa")    msaa = true;
         if (std::string(argv[i]) == "--syncval") syncval = true;
     }
-
-#if defined(CNA_RENDERER_VULKAN)
-    // BEFORE the Game is constructed: the renderer creates its VkInstance during construction, and
-    // VkValidationFeaturesEXT can only be supplied there. Asking later silently produces an
-    // instance WITHOUT synchronization validation, which would make leg V pass for the wrong
-    // reason -- which is why V1 asserts the layer's liveness separately from the counts.
-    if (syncval)
-        CNA::Internal::Renderers::Vulkan::VulkanRenderer::SetSyncValidationEnabledEXT(true);
-#endif
 
     RenderTargetProducerConsumerTest test(msaa, syncval);
     test.Run();

@@ -34,8 +34,6 @@ namespace CNA::Platform {
         SurfacePresentation,
         /** @brief An OpenGL context can be created for a window. */
         OpenGlContext,
-        /** @brief A Vulkan surface can be created for a window. */
-        VulkanSurface,
         /** @brief The system clipboard can be read and written. */
         Clipboard,
         /** @brief Text input events, as distinct from raw key events, are delivered. */

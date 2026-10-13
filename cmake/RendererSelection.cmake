@@ -18,7 +18,6 @@ option(CNA_RENDERER_SDL_RENDERER "Enable SDL_Renderer graphics renderer" OFF)
 option(CNA_RENDERER_OPENGLES3 "Enable OpenGL ES graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_OPENGL33 "Enable desktop OpenGL 3.3 core graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_WEBGL2 "Enable WebGL 2 graphics renderer, Emscripten only (internally: EasyGL)" OFF)
-option(CNA_RENDERER_VULKAN "Enable Vulkan graphics renderer" OFF)
 option(CNA_RENDERER_WEBGPU "Enable WebGPU graphics renderer (wgpu-native)" OFF)
 option(CNA_RENDERER_HEADLESS "Enable Headless (no GPU/window) graphics renderer" OFF)
 option(CNA_RENDERER_SOFTWARE "Enable Software (CPU rasterizer) graphics renderer" OFF)
@@ -105,7 +104,7 @@ macro(cna_configure_renderer_identity)
 # PLAT-140: a terminal consumes finished CPU frames through IPlatformSurfacePresenter; it has no
 # graphical native window that a GPU API could bind. This check deliberately precedes every
 # renderer dependency probe below, so an incompatible pair always fails with this explanation
-# instead of, for example, first asking a TERMINAL+VULKAN build to install a Vulkan SDK.
+# instead of, for example, first asking a TERMINAL+WEBGPU build to fetch wgpu-native.
 set(_cna_terminal_renderers SOFTWARE HEADLESS STUB)
 if(CNA_PLATFORM STREQUAL "TERMINAL" AND NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_terminal_renderers)
     list(JOIN _cna_terminal_renderers ", " _cna_terminal_renderers_text)
@@ -234,27 +233,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQ
         cna_configure_mojoshader()
         add_compile_definitions(CNA_EASYGL_COMPILED_EFFECTS)
     endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN")
-    message(STATUS "CNA: Using VULKAN graphics renderer")
-    set(RENDERER_DIR "modules/renderers/vulkan")
-    set(RENDERER_TARGET "cna_renderer_vulkan")
-    list(APPEND _cna_identity_defines CNA_RENDERER_VULKAN)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_VULKAN")
-    find_package(Vulkan REQUIRED)
-    # plans/plan_fx.md FX-065: compiled XNA Effect bytecode through MojoShader's portable SPIR-V profile.
-    # Off by default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS and
-    # CNA_SDL_GPU_COMPILED_EFFECTS options above, for the same reason: MojoShader is a fetched
-    # dependency this renderer does not otherwise need. Unlike those two there is no
-    # MojoShader-provided adapter to link against (there is no `mojoshader_vulkan.c`) -- the
-    # nine-function effect backend is CNA's own, written directly against MOJOSHADER_parse with
-    # the SPIR-V profile, which FX-064's existence gate proved against a real device.
-    option(CNA_VULKAN_COMPILED_EFFECTS
-           "Build Vulkan support for compiled XNA Effect bytecode (plans/plan_fx.md FX-065)" OFF)
-    if(CNA_VULKAN_COMPILED_EFFECTS)
-        include(cmake/ThirdPartyFNA3D.cmake)
-        cna_configure_mojoshader()
-        add_compile_definitions(CNA_VULKAN_COMPILED_EFFECTS)
-    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     message(STATUS "CNA: Using WEBGPU graphics renderer")
     set(RENDERER_DIR "modules/renderers/webgpu")
@@ -265,10 +243,10 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     cna_configure_webgpu()
     # plans/plan_webgpu.md WEBGPU-167: compiled XNA Effect bytecode through MojoShader's portable
     # SPIR-V profile plus the combined-image-sampler split WebGPU's shading model needs. Off by
-    # default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS, CNA_SDL_GPU_COMPILED_EFFECTS
-    # and CNA_VULKAN_COMPILED_EFFECTS options, for the same reason: MojoShader is a fetched
-    # dependency this renderer does not otherwise need. Like Vulkan there is no MojoShader-provided
-    # adapter -- the nine-function effect backend is CNA's own.
+    # default and shaped exactly like the CNA_EASYGL_COMPILED_EFFECTS and
+    # CNA_SDL_GPU_COMPILED_EFFECTS options, for the same reason: MojoShader is a fetched dependency
+    # this renderer does not otherwise need. There is no MojoShader-provided WebGPU adapter -- the
+    # nine-function effect backend is CNA's own.
     option(CNA_WEBGPU_COMPILED_EFFECTS
            "Build WebGPU support for compiled XNA Effect bytecode (plans/plan_webgpu.md WEBGPU-167)" OFF)
     if(CNA_WEBGPU_COMPILED_EFFECTS)
@@ -294,8 +272,8 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     set(RENDERER_TARGET "cna_renderer_software")
     list(APPEND _cna_identity_defines CNA_RENDERER_SOFTWARE)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SOFTWARE")
-    # SOFTWARE-162/165: compiled Effects remain opt-in for the same dependency reason as EasyGL,
-    # SDL_GPU and Vulkan. When selected, however, the completed CPU executor advertises and runs
+    # SOFTWARE-162/165: compiled Effects remain opt-in for the same dependency reason as EasyGL
+    # and SDL_GPU. When selected, however, the completed CPU executor advertises and runs
     # the full shared public contract rather than exposing a private staging-only runtime.
     option(CNA_SOFTWARE_COMPILED_EFFECTS
            "Build Software support for compiled XNA Effect bytecode" OFF)
@@ -367,7 +345,7 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set(RENDERER_TARGET "cna_renderer_sdl_gpu")
     list(APPEND _cna_identity_defines CNA_RENDERER_SDL_GPU)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_GPU")
-    # plans/plan_sdlgpu.md SDLGPU-92: Vulkan consumes CNA's committed SPIR-V stock shaders
+    # plans/plan_sdlgpu.md SDLGPU-92: SDL_gpu's Vulkan driver consumes CNA's committed SPIR-V stock shaders
     # directly. D3D12 and Metal require SDL_shadercross to translate those same blobs to DXBC or
     # MSL. Keep Linux/Android's already-native route dependency-free by default, while making the
     # dependency the default on the platforms that cannot construct the renderer without it.

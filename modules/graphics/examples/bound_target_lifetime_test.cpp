@@ -163,8 +163,6 @@ namespace
     constexpr const char* kRendererName = "SOFTWARE";
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr const char* kRendererName = "VULKAN";
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
@@ -223,11 +221,7 @@ namespace
      * wraps real Vulkan and shares the same MRT/mip-regeneration path.
      */
     constexpr bool kMrtSlotMipReadable =
-#if defined(CNA_RENDERER_VULKAN)
-        false;
-#else
         true;
-#endif
 
     /**
      * @brief Whether an MSAA render target's RESOLVED colour is publicly readable after an unbind.

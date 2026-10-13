@@ -8,7 +8,6 @@
 #include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/html5_webgl.h>
@@ -48,39 +47,6 @@ namespace CNA::Platform::Sdl3 {
             return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name));
         }
 
-        /// Converts between VkSurfaceKHR and the contract's std::uint64_t handle.
-        ///
-        /// VkSurfaceKHR is always 64 bits wide, but its C *type* is not uniform: Vulkan defines
-        /// non-dispatchable handles as a pointer on 64-bit targets and as uint64_t on 32-bit
-        /// ones. So a single static_cast does not compile everywhere, and this is exactly why the
-        /// contract types the handle as std::uint64_t rather than void* -- void* would be too
-        /// narrow on 32-bit and silently truncate.
-        template <typename TSurface>
-        VulkanSurfaceHandle ToSurfaceHandle(const TSurface surface)
-        {
-            if constexpr (std::is_pointer_v<TSurface>)
-            {
-                return reinterpret_cast<VulkanSurfaceHandle>(surface);
-            }
-            else
-            {
-                return static_cast<VulkanSurfaceHandle>(surface);
-            }
-        }
-
-        template <typename TSurface>
-        TSurface FromSurfaceHandle(const VulkanSurfaceHandle handle)
-        {
-            if constexpr (std::is_pointer_v<TSurface>)
-            {
-                return reinterpret_cast<TSurface>(handle);
-            }
-            else
-            {
-                return static_cast<TSurface>(handle);
-            }
-        }
-
         void SetGlAttributeOrThrow(const SDL_GLAttr attribute, const int value,
                                    const char* operation)
         {
@@ -89,26 +55,6 @@ namespace CNA::Platform::Sdl3 {
                 throw PlatformException(operation, SDL_GetError());
             }
         }
-
-        /// A balanced temporary reference. SDL counts every successful load call and explicitly
-        /// requires the same number of unloads; the old process-static probe leaked two such
-        /// references and could cache a pre-video failure forever.
-        class VulkanLoaderLease
-        {
-        public:
-            explicit VulkanLoaderLease(const char* operation)
-            {
-                if (!SDL_Vulkan_LoadLibrary(nullptr))
-                {
-                    throw PlatformException(operation, SDL_GetError());
-                }
-            }
-
-            ~VulkanLoaderLease() { SDL_Vulkan_UnloadLibrary(); }
-
-            VulkanLoaderLease(const VulkanLoaderLease&) = delete;
-            VulkanLoaderLease& operator=(const VulkanLoaderLease&) = delete;
-        };
 
         int ToSdlGlProfile(const GlProfile profile)
         {
@@ -296,58 +242,6 @@ namespace CNA::Platform::Sdl3 {
         }
 
         return granted;
-    }
-
-    // --- Vulkan surface (PLAT-42) -----------------------------------------------------------------
-
-    std::vector<std::string> Sdl3VulkanSurface::GetInstanceExtensions() const
-    {
-        SdlGlobalStateLock lock;
-        const VulkanLoaderLease loader("VulkanSurface::GetInstanceExtensions");
-
-        Uint32 count = 0;
-        const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
-        if (extensions == nullptr)
-        {
-            throw PlatformException("VulkanSurface::GetInstanceExtensions", SDL_GetError());
-        }
-
-        std::vector<std::string> names;
-        names.reserve(count);
-        for (Uint32 i = 0; i < count; ++i)
-        {
-            names.emplace_back(extensions[i]);
-        }
-        return names;
-    }
-
-    VulkanSurfaceHandle Sdl3VulkanSurface::CreateSurface(const VulkanInstanceHandle instance,
-                                                         const WindowId window)
-    {
-        SdlGlobalStateLock lock;
-        SDL_Window* nativeWindow = RequireSdl3Window(window, "VulkanSurface::CreateSurface");
-
-        // Value-initialised rather than VK_NULL_HANDLE: that macro needs a real Vulkan header,
-        // and {} is the null handle for both the pointer and the integer form.
-        VkSurfaceKHR surface{};
-        if (!SDL_Vulkan_CreateSurface(nativeWindow, static_cast<VkInstance>(instance), nullptr,
-                                      &surface))
-        {
-            throw PlatformException("VulkanSurface::CreateSurface", SDL_GetError());
-        }
-        return ToSurfaceHandle(surface);
-    }
-
-    void Sdl3VulkanSurface::DestroySurface(const VulkanInstanceHandle instance,
-                                           const VulkanSurfaceHandle surface)
-    {
-        if (surface == 0)
-        {
-            return;
-        }
-        SdlGlobalStateLock lock;
-        SDL_Vulkan_DestroySurface(static_cast<VkInstance>(instance),
-                                  FromSurfaceHandle<VkSurfaceKHR>(surface), nullptr);
     }
 
     // --- surface presenter (PLAT-128) --------------------------------------------------------------

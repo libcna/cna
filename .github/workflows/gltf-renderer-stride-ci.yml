@@ -35,7 +35,9 @@ jobs:
         # SOFTWARE joined on 2026-08-18 (plan_gltf.md GLTF-473): it is a CPU rasteriser, so it
         # needs no driver on the runner, and it is one of the four L7 golden policies -- which
         # makes it the cheapest way to widen the live draw-boundary gate below.
-        renderer: [STUB, HEADLESS, OPENGLES3, VULKAN, SOFTWARE]
+        # SDL_GPU replaced the retired VULKAN leg on 2026-10-13; on the runner its Vulkan backend
+        # runs on lavapipe, exactly as the VULKAN leg did.
+        renderer: [STUB, HEADLESS, OPENGLES3, SDL_GPU, SOFTWARE]
     env:
       CC: gcc-14
       CXX: g++-14
@@ -97,7 +99,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: 1
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.renderer }}" == "VULKAN" ]]; then
+          if [[ "${{ matrix.renderer }}" == "SDL_GPU" ]]; then
             lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
             test -n "${lvp_icd}"
             export VK_ICD_FILENAMES="${lvp_icd}"
@@ -111,7 +113,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: 1
         run: |
           set -euo pipefail
-          if [[ "${{ matrix.renderer }}" == "VULKAN" ]]; then
+          if [[ "${{ matrix.renderer }}" == "SDL_GPU" ]]; then
             lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
             test -n "${lvp_icd}"
             export VK_ICD_FILENAMES="${lvp_icd}"

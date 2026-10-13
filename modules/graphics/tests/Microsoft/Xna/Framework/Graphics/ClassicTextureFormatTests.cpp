@@ -771,12 +771,10 @@ TEST(ClassicTextureFormat, FloatCubeFormatsPreserveHdrEnvironmentMapSampling)
 
 TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims)
 {
-    // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan joined once its cube stored every format
-    // natively and stopped claiming the two signed-normalized formats for a cube.
     // plans/plan_apple_m4.md AM4-147/AM4-148: Metal joined once its cube stored every
     // uncompressed format and DXT.
-    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, Vulkan, Metal))
-        GTEST_SKIP() << "the audited cube capability belongs to Software, EasyGL, Vulkan and Metal";
+    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, Metal))
+        GTEST_SKIP() << "the audited cube capability belongs to Software, EasyGL and Metal";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -839,11 +837,11 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
 TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract)
 {
     // WINCLOSE-0013: DirectX11's ClassifyTexture3DFormatEXT states this same contract.
-    // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan joined once its volume stored every
-    // uncompressed classic format natively. plans/plan_apple_m4.md AM4-147: so did Metal.
-    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, Metal))
-        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL, DirectX11, "
-                        "Vulkan and Metal";
+    // plans/plan_apple_m4.md AM4-147: Metal joined once its volume stored every uncompressed
+    // classic format natively.
+    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, DirectX11, Metal))
+        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL, DirectX11 "
+                        "and Metal";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());

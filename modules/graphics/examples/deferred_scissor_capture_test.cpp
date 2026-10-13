@@ -155,14 +155,6 @@ namespace
 #if defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, false};
-#elif defined(CNA_RENDERER_VULKAN)
-    // `emptyScissorDrawsNothing` false: measured here. `VulkanRenderer`'s `computeScissor`
-    // returns the WHOLE framebuffer for `sw == 0 || sh == 0`, so a degenerate rectangle does not
-    // clip the draw away. Every other check in this file passes on Vulkan, which isolates this to
-    // the degenerate case; it is recorded as its own finding rather than fixed here, and check E1
-    // asserts the IGNORED outcome exactly so the declaration is falsifiable in both directions.
-    constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // SOFTWARE-310: XNA permits a zero extent and FNA forwards it to glScissor, whose empty box
     // rejects every fragment. The previous renderer-specific declaration pinned EasyGL's early-

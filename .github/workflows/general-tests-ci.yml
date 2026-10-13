@@ -79,7 +79,6 @@ jobs:
             libfreetype-dev python3-pil \
             gcc-14 g++-14 cmake ninja-build ccache time pkg-config doxygen xvfb x11-utils \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-            libvulkan-dev \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \

@@ -36,9 +36,9 @@ jobs:
             renderer: OPENGLES3
             audio: SDL3
             display: true
-          - name: SDL3 + Vulkan
+          - name: SDL3 + SDL_GPU
             platform: SDL3
-            renderer: VULKAN
+            renderer: SDL_GPU
             audio: SDL3
             display: true
           - name: SDL3 + Software

@@ -18,8 +18,7 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
+        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"))
     # Every demo below links CNA ahead of CNA_GamerServices: in a shared CNA build, the static module
     # archives CNA_GamerServices pulls in must not supply a second copy of the runtime (and of the GL
     # loader state) ahead of libcna, which aborted every one of these demos at device creation.

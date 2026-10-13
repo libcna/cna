@@ -5,7 +5,7 @@
 # still has the real GPU -- the standard way to run GPU/window tests on a developer machine.
 #
 #   tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]
-#   e.g. tools/platform/run_gpu_tests_private.sh cmake-build-vulkan -R '^Vulkan_' -j6
+#   e.g. tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu -R '^SdlGpu_' -j6
 #
 #   tools/platform/run_gpu_tests_private.sh --exec <command> [arguments...]
 #   e.g. tools/platform/run_gpu_tests_private.sh --exec cmake-build-cnaext/CnaGraphicsExtTests \

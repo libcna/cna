@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: MS-PL
 """plans/plan_vulkan_modern_graphics.md VMG-0005: validate every checked-in SPIR-V payload.
 
-The Vulkan renderer's own shaders (modules/renderers/vulkan/src/shaders/spirv_shaders.hpp) and every
-generated shader package (`*ShaderPackage.generated.hpp`, tools/shader_package) embed SPIR-V as
-`uint32_t NAME[] = { ... };` word arrays. A driver may accept a malformed module and misbehave, or
-reject it only on another vendor, so each array whose first word is the SPIR-V magic number is
-extracted and run through `spirv-val` against the environment the renderer creates (Vulkan 1.1,
-VulkanRenderer.cpp's VkApplicationInfo::apiVersion), with the same layout rules it enables.
+SDL_GPU's stock shaders and every generated shader package (`*ShaderPackage.generated.hpp`,
+tools/shader_package) embed SPIR-V as `uint32_t NAME[] = { ... };` word arrays. A driver may accept
+a malformed module and misbehave, or reject it only on another vendor, so each array whose first
+word is the SPIR-V magic number is extracted and run through `spirv-val` against a Vulkan 1.1
+environment, a superset of the Vulkan 1.0 / SPIR-V 1.0 target the packages are compiled for.
 
     validate_spirv_payloads.py [--spirv-val PATH] [--target-env vulkan1.1] <header-or-dir>...
 

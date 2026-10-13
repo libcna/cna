@@ -63,15 +63,9 @@ using namespace CNA::Testing::Renderers;
 #if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_PRESENT_WEBGPU)
 #define CNA_TEST_WEBGPU_AVAILABLE 1
 #endif
-#if defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_PRESENT_VULKAN)
-#define CNA_TEST_VULKAN_AVAILABLE 1
-#endif
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
-#endif
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -444,37 +438,6 @@ namespace
     }
 #endif
 
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    void AssertNoNewVulkanValidationMessages(
-        const CNA::Internal::Renderers::Vulkan::VulkanRenderer& renderer,
-        std::size_t firstMessage)
-    {
-        // REMED-GFX-144: an empty message list means "no validation problem" ONLY if the layer is
-        // really there. When VK_LAYER_KHRONOS_validation is missing, CreateInstance() clears
-        // sEnableValidation, no debug messenger is installed and this vector stays empty forever --
-        // so every assertion below would pass vacuously. Fail loudly on that instead.
-        //
-        // This helper deliberately keeps STANDARD validation only. The Khronos synchronization
-        // checks are a separate opt-in (VulkanRenderer::SetSyncValidationEnabledEXT) whose
-        // hazards belong to whichever pass records them; REMED-GFX-144's acquire hazard was
-        // invisible here for exactly that reason, and modules/renderers/vulkan/examples/vulkan_swapchain_sync_test.cpp is
-        // the file that enforces it.
-        ASSERT_TRUE(CNA::Internal::Renderers::Vulkan::VulkanRenderer::IsValidationActiveEXT())
-            << "Vulkan validation layer is not active, so a zero message count proves nothing "
-               "(REMED-GFX-112 made these messages fatal; REMED-GFX-144 made their absence "
-               "meaningful)";
-        const auto& messages = renderer.GetValidationMessagesEXT();
-        std::string completeMessages;
-        for (std::size_t i = firstMessage; i < messages.size(); ++i)
-        {
-            completeMessages += "\n--- Vulkan validation message ---\n";
-            completeMessages += messages[i];
-        }
-        ASSERT_EQ(firstMessage, messages.size())
-            << "Vulkan validation warning/error made fatal by REMED-GFX-112:"
-            << completeMessages;
-    }
-#endif
 }
 
 // REMED-GFX-110 adds CNA_RENDERER_SOFTWARE: the CPU raster paths owe the same public addressing
@@ -484,7 +447,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto center = TriangleAt(0.0f, Color::Lime);
@@ -529,7 +492,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixtee
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -670,7 +633,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDynamicDrawCombinesStartBaseCountAndHi
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto ignoredWithoutBase = TriangleAt(-0.75f, Color::Lime);
@@ -727,7 +690,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto decoy = CenterTriangle(Color::Red);
@@ -781,7 +744,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -821,7 +784,7 @@ TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderE
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, SdlGpu, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, SdlGpu, Software, Metal);
     RequireIndexedRendering();
 
     constexpr std::uint32_t highVertex = 65536u;
@@ -895,17 +858,6 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
 
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
-    auto* vulkanRenderer =
-        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
-            &device.GetRenderer());
-    if (CNA_RENDERER_IS(Vulkan))
-        ASSERT_NE(nullptr, vulkanRenderer);
-    const std::size_t validationMessageStart =
-        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
-#endif
-
     std::vector<VertexPositionColor> vertices;
     AppendVertices(vertices, StripQuadAt(-0.5f, Color::Red));
     AppendVertices(vertices, StripQuadAt(0.5f, Color::Blue));
@@ -933,23 +885,19 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
         PrimitiveType::TriangleStrip, 0, 4, 4, 1, 2));
 
     // plans/plan_runtimerenderer.md RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
-    if (CNA_RENDERER_IS(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software))
+    if (CNA_RENDERER_IS(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software))
     {
         const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
         ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
         ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
     }
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    if (vulkanRenderer != nullptr)
-        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
-#endif
 }
 
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto left = TriangleAt(-0.65f, Color::Red);
@@ -1019,7 +967,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Red);
@@ -1084,7 +1032,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueued
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
     // them, and an unmeasured renderer must not be asserted either way.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, Software, Metal);
     RequireIndexedRendering();
 
     auto sourceA = CenterTriangle(Color::Blue);
@@ -1129,7 +1077,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainInde
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto identical = CenterTriangle(Color::Blue);
@@ -1174,7 +1122,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedV
     // so on every other renderer these tests did not exist and reported nothing.
     // D3D9/D3D11 are excluded here: this deferred-queue contract was never measured on
     // them, and an unmeasured renderer must not be asserted either way.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, Software, Metal);
     RequireIndexedRendering();
 
     const auto red = CenterTriangle(Color::Red);
@@ -1235,7 +1183,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     auto left = TriangleAt(-0.65f, Color::Red);
@@ -1306,19 +1254,8 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
-
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
-    auto* vulkanRenderer =
-        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
-            &device.GetRenderer());
-    if (CNA_RENDERER_IS(Vulkan))
-        ASSERT_NE(nullptr, vulkanRenderer);
-    const std::size_t validationMessageStart =
-        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
-#endif
 
     auto left = StripTriangleAt(-0.5f, Color::Red);
     const auto right = StripQuadAt(0.5f, Color::Blue);
@@ -1372,17 +1309,13 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "DrawUser Uint32 strip");
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Black, "DrawUser strip padding/background");
 
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    if (vulkanRenderer != nullptr)
-        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
-#endif
 }
 
 TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRangesAndPixels)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
@@ -1400,16 +1333,6 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
         wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
         wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
     }
-#endif
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
-    auto* vulkanRenderer =
-        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
-            &device.GetRenderer());
-    if (CNA_RENDERER_IS(Vulkan))
-        ASSERT_NE(nullptr, vulkanRenderer);
-    const std::size_t validationMessageStart =
-        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
 #endif
 
     std::vector<VertexPositionColor> vertices;
@@ -1484,29 +1407,14 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
         EXPECT_EQ(uncapturedBefore, renderer->GetUncapturedErrorCountEXT());
     }
 #endif
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    if (vulkanRenderer != nullptr)
-        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
-#endif
 }
 
 TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Vulkan, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, Metal);
     RequireIndexedRendering();
-
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
-    auto* vulkanRenderer =
-        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
-            &device.GetRenderer());
-    if (CNA_RENDERER_IS(Vulkan))
-        ASSERT_NE(nullptr, vulkanRenderer);
-    const std::size_t validationMessageStart =
-        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
-#endif
 
     std::vector<VertexPositionColor> vertices;
     AppendVertices(vertices, TriangleAt(-0.75f, Color::Red));
@@ -1566,29 +1474,14 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
     ExpectExactColorNear(
         pixels, 0.85f, 0.0f, Color::Yellow, "indexed line strip second segment");
 
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    if (vulkanRenderer != nullptr)
-        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
-#endif
 }
 
 TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctGeometry)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Vulkan, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, Metal);
     RequireIndexedRendering();
-
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    // RTR-P9-9: compiled wherever Vulkan is; its validation check applies where it is active.
-    auto* vulkanRenderer =
-        dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
-            &device.GetRenderer());
-    if (CNA_RENDERER_IS(Vulkan))
-        ASSERT_NE(nullptr, vulkanRenderer);
-    const std::size_t validationMessageStart =
-        vulkanRenderer != nullptr ? vulkanRenderer->GetValidationMessagesEXT().size() : 0;
-#endif
 
     std::vector<VertexPositionColor> vertices;
     AppendVertices(vertices, TriangleAt(-0.75f, Color::Red));
@@ -1651,10 +1544,6 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     ExpectExactColorNear(
         pixels, 0.85f, 0.0f, Color::Yellow, "Uint32 line strip second segment");
 
-#ifdef CNA_TEST_VULKAN_AVAILABLE
-    if (vulkanRenderer != nullptr)
-        AssertNoNewVulkanValidationMessages(*vulkanRenderer, validationMessageStart);
-#endif
 }
 
 
@@ -1898,7 +1787,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractSeparatesRequiredCountsFromNativeI
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);
@@ -1932,7 +1821,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedB
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex32)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, OpenGLES3, OpenGL33, WebGL2, DirectX9, DirectX11, Software, Metal);
     RequireIndexedRendering();
 
     const auto selected = CenterTriangle(Color::Lime);

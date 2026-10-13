@@ -155,7 +155,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool MultiStreamOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9, DirectX11,
                            SdlGpu, Software, Metal);
 }
 
@@ -175,7 +175,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, WebGPU, SdlGpu,
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, WebGPU, SdlGpu,
                            Software, Metal);
 }
 
@@ -2168,7 +2168,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
         EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
             << "this renderer implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
                "input layout on the step rate, EasyGL through glVertexAttribDivisor, REMED-GFX-213 by "
-               "expanding the grouping into Vulkan's and bgfx's own instance staging copies: six "
+               "expanding the grouping into a renderer's own instance staging copies: six "
                "instances at InstanceFrequency 2 must consume records 0,0,1,1,2,2";
     }
     else
@@ -2266,7 +2266,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
            "produce the stream's own colour on the ORDINARY route";
 
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, WebGPU, DirectX11))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX11))
     {
         // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
         // is why the measured-defect arm this leg used to carry for those two is gone. It carried one

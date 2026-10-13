@@ -134,7 +134,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, Vulkan, WebGPU, Software, Metal);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, DirectX11, WebGPU, Software, Metal);
 }
 
 namespace
@@ -904,12 +904,7 @@ namespace
 
 }
 
-#if defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_DIRECTX9) || \
-    defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_SOFTWARE)
 
 // Zero-offset control. Identical state, buffers and instance stream to every case below, with
 // startIndex = baseVertex = 0 and the geometry range covering the complete first three slots. It

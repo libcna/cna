@@ -10,7 +10,7 @@
 #     every public symbol a test or game may call has to be present;
 #   * `CNA` then gives consumers libcna.so, the COMPILE-only usage requirements of the archives
 #     (include directories, definitions, options -- $<COMPILE_ONLY>), and the libraries the archives
-#     depend on that are NOT inside libcna.so (Vulkan, SDL, X11, sharp-runtime, ...), which a consumer
+#     depend on that are NOT inside libcna.so (wgpu-native, SDL, X11, sharp-runtime, ...), which a consumer
 #     calling those APIs directly still needs on its own link line.
 #
 # Keeping the CNA archives themselves off consumers' link lines is what stops a one-line change in a

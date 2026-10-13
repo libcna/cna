@@ -73,14 +73,6 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-#if defined(CNA_RENDERER_VULKAN)
-// plan_vulkan.md VULKAN-406: reading a cube face is the one thing this file does that touches an
-// image ARRAY LAYER other than 0, and a layer nobody has written is exactly the case a renderer can
-// leave in an undefined image layout while still returning the right bytes. The Khronos layer is
-// the only observer of that, so the Vulkan build of this fixture judges it.
-#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
-#endif
-
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -158,13 +150,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     // EasyGL normalizes its GL cube row convention for both uploads and readback.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact,
-                                 Support::Exact, true};
-#elif defined(CNA_RENDERER_VULKAN)
-    // plans/plan_vulkan_parity.md VKPAR-0018: wantHiDefProfile is now true -- the Vulkan
-    // renderer supports HiDef, and under Reach this test never reached its subject.
-    // The RenderTargetCube entry is Exact since VKPAR-0027, which gave the target a face upload.
-    constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
 #elif defined(CNA_RENDERER_WEBGPU)
@@ -1025,17 +1010,6 @@ class CubeVolumeSetDataContractTest : public Game
      */
     void CheckValidationClean()
     {
-#if defined(CNA_RENDERER_VULKAN)
-        using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
-        check(VulkanRenderer::IsValidationActiveEXT(),
-              "V1 VK_LAYER_KHRONOS_validation is loaded, so the count below means something");
-        auto* vk = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
-        if (!vk) { check(false, "V2 Vulkan renderer not reachable"); return; }
-        const auto& msgs = vk->GetValidationMessagesEXT();
-        check(msgs.empty(),
-              "V2 no Vulkan validation message" +
-                  (msgs.empty() ? std::string{} : std::string(" -- first: ") + msgs.front()));
-#endif
     }
 
     // =====================================================================

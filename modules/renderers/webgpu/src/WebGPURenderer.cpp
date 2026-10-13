@@ -6220,8 +6220,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
      * @brief STREETW-0004: rewrites one stock family's WGSL into its instanced twin.
      *
      * Mechanical, and deliberately so: this is the WGSL counterpart of the `CNA_INSTANCED` define
-     * that `modules/renderers/vulkan/src/shaders/compile_shaders.py` compiles every Vulkan stock
-     * source a second time with, and it performs the same substitutions that define's macros do.
+     * the SPIR-V stock shaders are compiled with a second time (SDL_GPU's
+     * `modules/renderers/sdl-gpu/src/shaders/compile_shaders.py`), and it performs the same
+     * substitutions that define's macros do.
      * WGSL has no preprocessor, so the rewrite happens here rather than in the source -- which
      * also means the ordinary module stays the untouched original rather than becoming a variant
      * that has to be kept in step.

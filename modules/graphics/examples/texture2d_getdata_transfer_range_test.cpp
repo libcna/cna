@@ -149,10 +149,6 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "EASYGL";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "VULKAN";
-    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "WEBGPU";

@@ -320,7 +320,6 @@ namespace Microsoft::Xna::Framework::Graphics
             switch (kind)
             {
             case RendererWindowKind::OpenGL: return CNA::Platform::WindowRenderIntent::OpenGl;
-            case RendererWindowKind::Vulkan: return CNA::Platform::WindowRenderIntent::Vulkan;
             case RendererWindowKind::Metal:  return CNA::Platform::WindowRenderIntent::Metal;
             case RendererWindowKind::Plain:
             case RendererWindowKind::None:
@@ -4208,9 +4207,6 @@ namespace Microsoft::Xna::Framework::Graphics
         // snapshot. They never resolve a native window or reach through IPlatform.
         if (descriptor.needsGlContext)
             args.glContext = platform_->GetGlContext();
-
-        if (descriptor.needsVulkanSurface)
-            args.vulkanSurface = platform_->GetVulkanSurface();
 
         args.virtualWidth = virtualWidth_;
         args.virtualHeight = virtualHeight_;

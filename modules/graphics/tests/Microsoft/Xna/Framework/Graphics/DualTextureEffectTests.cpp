@@ -407,7 +407,7 @@ namespace
             // VKPAR-0004: Vulkan joins the list -- dual_texture3d.frag samples both units
             // unconditionally and both now fall back to XNA's opaque black.
             // plans/plan_apple_m4.md AM4-140 enrols Metal, which now binds the same opaque black.
-            if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Vulkan, Metal))
+            if (!CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, DirectX11, Metal))
                 GTEST_SKIP() << "requires a stock-effect raster path that samples a missing slot";
         }
 

@@ -67,7 +67,6 @@ namespace CNA
         {
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
-            case GraphicsRendererType::Vulkan:
             case GraphicsRendererType::DirectX11:
             case GraphicsRendererType::DirectX9:
             case GraphicsRendererType::Metal:

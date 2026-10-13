@@ -40,7 +40,7 @@ namespace
     /// scripts/check_renderer_identities.py is the registry gate for the public count; this
     /// restates it deliberately, as a tripwire rather than as a second list -- adding an identity
     /// fails here until the gate, the documentation and this number are updated together.
-    static_assert(RendererIdentityCount == 14,
+    static_assert(RendererIdentityCount == 13,
                   "the number of public renderer identities changed -- update "
                   "scripts/check_renderer_identities.py, cmake/RendererIdentities.cmake, "
                   "cmake/RendererRegistry.cmake and the documented count in the same change "
@@ -57,9 +57,9 @@ namespace
     constexpr std::array<GraphicsRendererType, RendererIdentityCount> AllRendererTypes =
         MakeAllRendererTypes();
 
-    constexpr std::array<RendererWindowKind, 5> AllWindowKinds{
-        RendererWindowKind::None,   RendererWindowKind::Plain, RendererWindowKind::OpenGL,
-        RendererWindowKind::Vulkan, RendererWindowKind::Metal,
+    constexpr std::array<RendererWindowKind, 4> AllWindowKinds{
+        RendererWindowKind::None, RendererWindowKind::Plain, RendererWindowKind::OpenGL,
+        RendererWindowKind::Metal,
     };
 }
 
@@ -96,7 +96,6 @@ TEST(GraphicsRendererDescriptorTest, DefaultsAreInertRatherThanPlausible)
     EXPECT_FALSE(descriptor.glFramebuffer.wantsMultiSample);
     EXPECT_FALSE(descriptor.needsSurfacePresenter);
     EXPECT_FALSE(descriptor.needsGlContext);
-    EXPECT_FALSE(descriptor.needsVulkanSurface);
     EXPECT_EQ(descriptor.isAvailable, nullptr);
     EXPECT_EQ(descriptor.create, nullptr);
 }
@@ -147,12 +146,12 @@ TEST(RendererWindowKindTest, CandidateNeedingAWindowCannotAdoptAWindowThatWasNev
     }
 }
 
-TEST(RendererWindowKindTest, OpenGLAndVulkanNeverShareAWindow)
+TEST(RendererWindowKindTest, OpenGLAndMetalNeverShareAWindow)
 {
-    // The concrete case design decision 8 exists for: SDL3 rejects a window created with both
-    // an OpenGL and a Vulkan intent, so this crossing always costs a window recreation.
-    EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::Vulkan));
-    EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::Vulkan, RendererWindowKind::OpenGL));
+    // The concrete case design decision 8 exists for: SDL3 rejects a window created with two
+    // graphics-API intents, so this crossing always costs a window recreation.
+    EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::Metal));
+    EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::Metal, RendererWindowKind::OpenGL));
 }
 
 TEST(RendererWindowKindTest, PlainWindowIsNotInterchangeableWithAnApiWindow)
@@ -165,7 +164,7 @@ TEST(RendererWindowKindTest, PlainWindowIsNotInterchangeableWithAnApiWindow)
 TEST(RendererWindowKindTest, CompatibilityIsUsableInAConstantExpression)
 {
     static_assert(AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::OpenGL));
-    static_assert(!AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::Vulkan));
+    static_assert(!AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::Plain));
     SUCCEED();
 }
 
@@ -176,13 +175,13 @@ TEST(RendererWindowKindTest, CompatibilityIsUsableInAConstantExpression)
 TEST(GraphicsRendererFallbackRecordTest, CarriesTypeReasonAndMessage)
 {
     const GraphicsRendererFallbackRecord record{
-        GraphicsRendererType::Vulkan,
+        GraphicsRendererType::SdlGpu,
         GraphicsRendererFallbackReason::InitializationFailed,
-        "vkCreateInstance failed"};
+        "device creation failed"};
 
-    EXPECT_EQ(record.type, GraphicsRendererType::Vulkan);
+    EXPECT_EQ(record.type, GraphicsRendererType::SdlGpu);
     EXPECT_EQ(record.reason, GraphicsRendererFallbackReason::InitializationFailed);
-    EXPECT_EQ(record.message, "vkCreateInstance failed");
+    EXPECT_EQ(record.message, "device creation failed");
 }
 
 TEST(GraphicsRendererFallbackRecordTest, EveryReasonHasItsOwnName)

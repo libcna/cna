@@ -11,7 +11,6 @@
 #include "Sdl3Window.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
 
 #include <atomic>
 #include <cstdio>
@@ -267,33 +266,6 @@ namespace CNA::Platform::Sdl3 {
         return name;
     }
 
-    bool Sdl3Platform::HasVulkanSupport() const
-    {
-        SdlGlobalStateLock lock;
-        if (vulkanAvailable_.has_value())
-        {
-            return *vulkanAvailable_;
-        }
-
-        // SDL requires the video driver to exist before probing the Vulkan loader. Take a
-        // temporary, balanced subsystem reference so an early GetCapabilities() neither caches
-        // the misleading "video not initialized" failure nor changes the host's final state.
-        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-        {
-            vulkanAvailable_ = false;
-            return false;
-        }
-
-        const bool available = SDL_Vulkan_LoadLibrary(nullptr);
-        if (available)
-        {
-            SDL_Vulkan_UnloadLibrary();
-        }
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        vulkanAvailable_ = available;
-        return available;
-    }
-
     PlatformCapabilities Sdl3Platform::GetCapabilities() const
     {
         PlatformCapabilities capabilities = CapabilitiesExceptCamera();
@@ -330,7 +302,6 @@ namespace CNA::Platform::Sdl3 {
         capabilities.nativeWindowHandle = true;
         capabilities.surfacePresentation = true;
         capabilities.openGlContext = true;
-        capabilities.vulkanSurface = HasVulkanSupport();
 
         // System services: implemented.
         capabilities.clipboard = true;
@@ -461,7 +432,6 @@ namespace CNA::Platform::Sdl3 {
         switch (description.renderIntent)
         {
             case WindowRenderIntent::OpenGl: flags |= SDL_WINDOW_OPENGL; break;
-            case WindowRenderIntent::Vulkan: flags |= SDL_WINDOW_VULKAN; break;
             case WindowRenderIntent::Metal:  flags |= SDL_WINDOW_METAL; break;
             case WindowRenderIntent::None:   break;
         }
@@ -772,13 +742,6 @@ namespace CNA::Platform::Sdl3 {
     IPlatformFileSystem* Sdl3Platform::GetFileSystem() { return &fileSystem_; }
     IPlatformSystemInfo* Sdl3Platform::GetSystemInfo() { return &systemInfo_; }
     IPlatformGlContext* Sdl3Platform::GetGlContext() { return &glContext_; }
-    IPlatformVulkanSurface* Sdl3Platform::GetVulkanSurface()
-    {
-        // Null exactly when the capability is false. Handing back a service that would refuse
-        // every call would break the rule a caller relies on to decide whether to ask at all.
-        return HasVulkanSupport() ? &vulkanSurface_ : nullptr;
-    }
-
     std::unique_ptr<IPlatformSurfacePresenter> Sdl3Platform::CreateSurfacePresenter(IPlatformWindow& window)
     {
         auto* sdlWindow = dynamic_cast<Sdl3Window*>(&window);

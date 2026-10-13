@@ -301,8 +301,8 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererOnIntegrationHead
                              std::istreambuf_iterator<char>());
 
     // Matrix ownership: omitting the non-rasterising controls or either real API turns a
-    // differential gate into a single-backend smoke test. Vulkan remains useful extra evidence;
-    // GLTF-398's minimum is the first three entries.
+    // differential gate into a single-backend smoke test. SDL_GPU (the modern native path, which
+    // replaced the retired VULKAN leg) is the second real API; GLTF-398's minimum is the first three.
     //
     // Stated as a REQUIRED SET rather than as an exact string (`GLTF-473`). The exact string forbade
     // widening the gate as well as narrowing it, which is the wrong half to forbid: `SOFTWARE` joined
@@ -312,7 +312,7 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererOnIntegrationHead
     const std::size_t matrixAt = source.find("renderer: [");
     ASSERT_NE(std::string::npos, matrixAt) << "the stride-conformance matrix is gone entirely";
     const std::string matrixLine = source.substr(matrixAt, source.find(']', matrixAt) - matrixAt + 1);
-    for (const char* required : {"STUB", "HEADLESS", "OPENGLES3", "VULKAN"})
+    for (const char* required : {"STUB", "HEADLESS", "OPENGLES3", "SDL_GPU"})
     {
         EXPECT_NE(std::string::npos, matrixLine.find(required))
             << required << " left the required-CI matrix, which turns the differential gate into a "

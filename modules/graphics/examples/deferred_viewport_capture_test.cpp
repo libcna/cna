@@ -139,8 +139,6 @@ namespace
 
 #if defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true, true, true, false};
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_SDL_GPU)

@@ -3,7 +3,6 @@
 
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
-#include "CNA/Platform/IPlatformVulkanSurface.hpp"
 
 struct SDL_Renderer;
 struct SDL_Texture;
@@ -56,28 +55,6 @@ namespace CNA::Platform::Sdl3 {
          * @return The granted attributes.
          */
         [[nodiscard]] GlContextDescription GetContextAttributes(GlContextHandle context) const override;
-    };
-
-    /** @brief SDL3-backed Vulkan surface creation. */
-    class Sdl3VulkanSurface final : public IPlatformVulkanSurface
-    {
-    public:
-        /** @brief Gets the required instance extensions. @return Extension names. */
-        [[nodiscard]] std::vector<std::string> GetInstanceExtensions() const override;
-        /**
-         * @brief Creates a surface for a window.
-         * @param instance The `VkInstance`.
-         * @param window The stable id of the window to present to.
-         * @return A non-zero surface handle.
-         */
-        [[nodiscard]] VulkanSurfaceHandle CreateSurface(VulkanInstanceHandle instance,
-                                                        WindowId window) override;
-        /**
-         * @brief Destroys a surface.
-         * @param instance The instance it was created against.
-         * @param surface The surface to destroy.
-         */
-        void DestroySurface(VulkanInstanceHandle instance, VulkanSurfaceHandle surface) override;
     };
 
     /**

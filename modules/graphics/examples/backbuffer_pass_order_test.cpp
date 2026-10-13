@@ -176,23 +176,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
-#elif defined(CNA_RENDERER_VULKAN)
-    // plans/plan_vulkan_parity.md VKPAR-0018: wantHiDefProfile is now true -- the Vulkan
-    // renderer supports HiDef, and under Reach this test never reached its subject.
-    // REMED-GFX-143's primary subject. `orderedBackbufferSegments` was false until this task:
-    // Phase 2 of RecordCommandBuffer was one trailing swapchain pass passed `kAllSegments`.
-    // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157: `activeBatches_` and
-    // `pending3D_` are two queues and every pass replayed all sprites and then all 3D draws, so
-    // within ONE segment a 3D draw issued before a sprite still landed on top of it. Each pass now
-    // splits its order range at every family change and replays the runs in order, and this
-    // declaration turned over; it was measured red the moment the fix landed. `clearAfterDrawWinsOnBackbuffer` / `backbufferDepthOnlyClear` were BOTH false while
-    // REMED-GFX-129 was open -- the clear colour reached the swapchain only through the render-pass
-    // load op, and `ClearDepth` was the one clear entry point that recorded no clear request at
-    // all. REMED-GFX-129 made Clear an ordered vkCmdClearAttachments command, so checks C4 and C6
-    // now assert the correct behaviour on this renderer; both were measured red the moment the fix
-    // landed, which is what turned these two declarations over.
-    constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `clearAfterDrawWinsOnBackbuffer` was false while REMED-GFX-156 was open: WebGPU delivered a
     // backbuffer clear colour only through the render-pass load op, the same mechanism

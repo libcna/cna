@@ -166,11 +166,6 @@ public:
         return inner_->GetGlContext();
     }
 
-    [[nodiscard]] CNA::Platform::IPlatformVulkanSurface* GetVulkanSurface() override
-    {
-        return inner_->GetVulkanSurface();
-    }
-
     [[nodiscard]] CNA::Platform::IPlatformKeyboard* GetKeyboard() override
     {
         return inner_->GetKeyboard();

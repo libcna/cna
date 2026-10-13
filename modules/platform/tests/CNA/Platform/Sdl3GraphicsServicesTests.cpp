@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// PLAT-41/42/128 against real SDL3.
+// PLAT-41/128 against real SDL3.
 //
-// The GL context needs a driver that can actually create one and the Vulkan surface needs a real
-// VkInstance, neither of which a headless container has. Those tests skip. The surface presenter,
+// The GL context needs a driver that can actually create one, which a headless container does not
+// have. Those tests skip. The surface presenter,
 // though, works over SDL's software renderer on a dummy-driver window, so the interface PLAT-3
 // found was missing is genuinely exercised here rather than merely compiled.
 
@@ -75,40 +75,10 @@ protected:
 
 // --- services exist because the capability set says so -----------------------------------------------
 
-TEST_F(Sdl3GraphicsServiceTest, GlAndVulkanServicesAreReturnedWhenAdvertised)
+TEST_F(Sdl3GraphicsServiceTest, GlServiceIsReturnedWhenAdvertised)
 {
     const PlatformCapabilities capabilities = platform_->GetCapabilities();
     EXPECT_EQ(platform_->GetGlContext() != nullptr, capabilities.openGlContext);
-    EXPECT_EQ(platform_->GetVulkanSurface() != nullptr, capabilities.vulkanSurface);
-}
-
-// --- Vulkan (PLAT-42) ----------------------------------------------------------------------------------
-
-TEST_F(Sdl3GraphicsServiceTest, VulkanInstanceExtensionsAreWellFormedWhenAvailable)
-{
-    // Callable before any VkInstance exists -- that is the whole point of the signature, and
-    // getting it backwards is an easy mistake.
-    if (platform_->GetVulkanSurface() == nullptr)
-    {
-        GTEST_SKIP() << "this host has no Vulkan loader";
-    }
-
-    for (const std::string& extension : platform_->GetVulkanSurface()->GetInstanceExtensions())
-    {
-        EXPECT_FALSE(extension.empty());
-        EXPECT_EQ(extension.find(' '), std::string::npos) << extension;
-    }
-}
-
-TEST_F(Sdl3GraphicsServiceTest, DestroyingANullVulkanSurfaceIsANoOp)
-{
-    if (platform_->GetVulkanSurface() == nullptr)
-    {
-        GTEST_SKIP() << "this host has no Vulkan loader";
-    }
-    // Zero is the documented "no surface" value; a caller unwinding from a failed initialisation
-    // will pass it, and that must not crash.
-    EXPECT_NO_THROW(platform_->GetVulkanSurface()->DestroySurface(nullptr, 0));
 }
 
 // --- OpenGL (PLAT-41) -----------------------------------------------------------------------------------

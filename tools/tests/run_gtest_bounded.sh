@@ -32,7 +32,7 @@
 #     --allow-live-display  permit DISPLAY=:0 / WAYLAND_DISPLAY=wayland-0
 #
 # It is renderer-agnostic: it reads nothing about the renderer and passes the environment through,
-# so `CNA_GRAPHICS_RENDERER=VULKAN tools/tests/run_gtest_bounded.sh ...` shards Vulkan.
+# so `CNA_GRAPHICS_RENDERER=SDL_GPU tools/tests/run_gtest_bounded.sh ...` shards SDL_GPU.
 #
 # It does NOT create a display. Compose it with the private compositor, so one compositor serves
 # every shard rather than one per shard:

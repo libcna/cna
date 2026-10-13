@@ -508,7 +508,7 @@ TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAccept
 // zero-initialized, depth-disabled native state until an application selected a different state.
 TEST(BackBufferDepthStencilContractTest, ConstructorAppliesDefaultDepthStateBeforeFirstDraw)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Vulkan, WebGPU, SdlGpu, Fna3d,
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, WebGPU, SdlGpu, Fna3d,
         DirectX11, Metal);
 
     EXPECT_EQ(RenderConstructorDefaultDepthWinner(), Color::Red);
@@ -519,7 +519,7 @@ TEST(BackBufferDepthStencilContractTest, ConstructorAppliesDefaultDepthStateBefo
 // across the common None-at-construction, Depth24-at-reset sequence without a sample assigning it.
 TEST(BackBufferDepthStencilContractTest, DepthlessConstructionThenResetRetainsDefaultDepthState)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Vulkan, WebGPU, SdlGpu, Fna3d,
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, WebGPU, SdlGpu, Fna3d,
         DirectX11, Metal);
 
     EXPECT_EQ(RenderDepthlessConstructionResetDefaultDepthWinner(), Color::Red);

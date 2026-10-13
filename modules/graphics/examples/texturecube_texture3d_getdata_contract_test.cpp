@@ -127,11 +127,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
-#elif defined(CNA_RENDERER_VULKAN)
-    // plans/plan_vulkan_parity.md VKPAR-0018: wantHiDefProfile is now true -- the Vulkan
-    // renderer supports HiDef, and under Reach this test never reached its subject.
-    constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_WEBGPU)
     // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
     // HiDef, and under Reach this test died on a profile refusal before its first check.

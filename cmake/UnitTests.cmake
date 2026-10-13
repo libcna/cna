@@ -710,7 +710,7 @@ if(CNA_BUILD_TESTS)
     # plans/plan_webgpu.md WEBGPU-167: the same is now true of WebGPU's compiled-effect headers,
     # which the renderer header includes unconditionally once the option is on -- so the condition
     # is the presence of the MojoShader target, not one family's option. Any family that configured
-    # it -- EasyGL, Vulkan, WebGPU or DirectX 9/11/12 -- has public headers a test TU can reach.
+    # it -- EasyGL, WebGPU, SDL_GPU, SOFTWARE or DirectX 9 -- has public headers a test TU can reach.
     if(TARGET cna_mojoshader)
         target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
     endif()
@@ -1114,15 +1114,7 @@ if(CNA_BUILD_TESTS)
     # CnaTests' own runtime output directory, not the repo root where tests/assets/** lives --
     # CTest runs then fail to find fixture files that the same binary finds fine when run
     # directly from the repo root. Mirrors the already-correct pattern in
-    # cmake/Tests/EasyGLTests.cmake / VulkanTests.cmake.
-    # plan_vulkan.md VULKAN-408: the Vulkan validation output gate, for the half of the suite the
-    # tree-wide sweep cannot reach. DISCOVERY_MODE PRE_TEST registers these cases at TEST time, so
-    # they are in no directory's TESTS property at configure time and
-    # cna_apply_vulkan_validation_gate() never sees them -- yet they are ~8 700 of this
-    # configuration's 9 117 CTests and every one of them runs the selected renderer. VULKAN-477's
-    # whole-suite inventory found all 20 of its messages here, in MetalResourceHealth's own
-    # device-outliving test. gtest_discover_tests(PROPERTIES ...) is the only hook that reaches
-    # them, and it is applied only where a VkDevice can exist at all.
+    # the module-local renderer example registrations.
     # plans/plan_x11.md X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
     # the machine's microphone. The test binary defaults to both on its own as well (see
@@ -1154,10 +1146,6 @@ if(CNA_BUILD_TESTS)
     if(_cna_unit_tests_audio_environment)
         set(_cna_unit_tests_audio_properties PROPERTIES ${_cna_unit_tests_audio_environment})
     endif()
-    set(_cna_unit_tests_output_gate "")
-    cna_append_vulkan_validation_gate_pattern(_cna_unit_tests_output_gate CnaTests)
-    # One alternation rather than a list: a semicolon inside PROPERTIES would split the pair.
-    string(JOIN "|" _cna_unit_tests_output_gate ${_cna_unit_tests_output_gate})
     # plans/plan_apple_m4.md AM4-179: SDL_RENDERER is a 2D renderer by design -- no vertex or index
     # buffers, no 3D, no mip chains, no cube or volume textures, no 32-bit indices -- and refuses
     # each of those by name. CnaTests is written for a 3D renderer (CI runs it on OPENGLES3), so on
@@ -1179,31 +1167,15 @@ if(CNA_BUILD_TESTS)
     # themselves and still in parallel with everything else.
     set(_cna_unit_tests_network_filter
         "ENetBackendTest.*:ENetHostHandleTest.*:ENetDiscoveryServiceTest.*:NetworkSessionTest.*:ServiceSearchTest.*:OnlineNetworkSessionTest.*:NetworkSessionTypePolicyTest.*:TwoProcessLoopbackTest.*:AvailableNetworkSession*.*:QualityOfServiceTest.*:OnlineLeaderboardTest.*:LocalNetworkGamerTest.*:GamerServicesDispatcherHangRegressionTest.*:RelayTransportTest.*")
-    if(_cna_unit_tests_output_gate)
-        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            TEST_FILTER "-${_cna_unit_tests_network_filter}"
-            PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
-                       ${_cna_unit_tests_2d_only_skip}
-                       ${_cna_unit_tests_audio_environment})
-        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            TEST_FILTER "${_cna_unit_tests_network_filter}"
-            PROPERTIES FAIL_REGULAR_EXPRESSION "${_cna_unit_tests_output_gate}"
-                       RESOURCE_LOCK cna-network
-                       ${_cna_unit_tests_2d_only_skip}
-                       ${_cna_unit_tests_audio_environment})
-    else()
-        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            TEST_FILTER "-${_cna_unit_tests_network_filter}"
-            PROPERTIES ${_cna_unit_tests_2d_only_skip} ${_cna_unit_tests_audio_environment})
-        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            TEST_FILTER "${_cna_unit_tests_network_filter}"
-            PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_2d_only_skip}
-                       ${_cna_unit_tests_audio_environment})
-    endif()
+    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        TEST_FILTER "-${_cna_unit_tests_network_filter}"
+        PROPERTIES ${_cna_unit_tests_2d_only_skip} ${_cna_unit_tests_audio_environment})
+    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        TEST_FILTER "${_cna_unit_tests_network_filter}"
+        PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_2d_only_skip}
+                   ${_cna_unit_tests_audio_environment})
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
     # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs
@@ -1484,7 +1456,7 @@ if(CNA_BUILD_TESTS)
     # subsystem refcount is process-global, and an acquire/release imbalance would show up as
     # order dependence rather than as a direct failure.
     cna_register_renderer_test(NAME CnaPlatformTests
-        COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
+        COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 

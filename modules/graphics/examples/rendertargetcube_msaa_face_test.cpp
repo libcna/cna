@@ -148,12 +148,6 @@ namespace
     // re-attached to the render FBO on every bind.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_RENDERER_VULKAN)
-    // Pre-fix: ONE single-layer TRANSIENT_ATTACHMENT image AND no LOAD variant of the MSAA render
-    // pass. Post-fix: a six-layer multisampled image with one per-layer view per face, plus a
-    // LOAD/STORE MSAA render pass for preserving targets.
-    constexpr Contract kContract{"VULKAN", true, Support::Exact, true,
-                                 Support::Exact, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `msaaEngages` TRUE as of WEBGPU-165: CreateRenderTargetCube used to ignore multiSampleCount
     // outright -- every pipeline baked one renderer-global sample count until WEBGPU-197, so a cube

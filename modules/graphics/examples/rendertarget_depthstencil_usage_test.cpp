@@ -275,12 +275,6 @@ namespace
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, true};
-#elif defined(CNA_RENDERER_VULKAN)
-    // `msaaRt2dPreserves` false: the multisampled RenderTarget2D leg hardcodes
-    // `discardContents=true`, discarding colour AND depth -- REMED-GFX-141's recorded finding.
-    constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true,
-                                 true, true, true, true, false, true, true, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `stencilInRT` true (WEBGPU-83): `WebGPURenderer::GetOrCreatePipelineColored3D` now bakes the
     // stencil state into the pipeline's `WGPUStencilFaceState` (masks folded into the cache key,

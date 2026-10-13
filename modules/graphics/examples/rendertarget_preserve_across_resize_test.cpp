@@ -52,10 +52,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
-#if defined(CNA_RENDERER_VULKAN)
-#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
-#endif
-
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -174,11 +170,6 @@ protected:
                       " and " + Text(kClear) + ")");
         }
 
-#if defined(CNA_RENDERER_VULKAN)
-        const uint64_t recreatesBefore =
-            dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer&>(dev.GetRenderer())
-                .GetSwapchainRecreateCountEXT();
-#endif
         // The resize itself: synchronous, through the public API, no window manager involved.
         gdm_->setPreferredBackBufferWidthProperty(160);
         gdm_->setPreferredBackBufferHeightProperty(96);
@@ -212,20 +203,6 @@ protected:
                       (threw ? what : std::string("no")) + " first=" + Text(texels[0]) + " last=" +
                       Text(texels[3]) + " (want " + Text(kTexel) + ")");
         }
-
-#if defined(CNA_RENDERER_VULKAN)
-        // D. Without this the three legs above could all pass on a build where ApplyChanges did
-        //    nothing at all, which is the one way this test could lie.
-        {
-            const uint64_t recreatesAfter =
-                dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer&>(dev.GetRenderer())
-                    .GetSwapchainRecreateCountEXT();
-            check(recreatesAfter > recreatesBefore,
-                  "D the swapchain really was recreated by the resize: count " +
-                      std::to_string(recreatesBefore) + " -> " + std::to_string(recreatesAfter) +
-                      " (equal means legs A-C measured nothing)");
-        }
-#endif
 
         Finish();
     }

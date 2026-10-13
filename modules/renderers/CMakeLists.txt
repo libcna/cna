@@ -74,7 +74,7 @@ function(cna_renderer_common_setup target)
     #
     # The header-inlined IGraphicsRenderer defaults (HandleUnsupported3DCall -> CNA::Logger::Warn,
     # the default instanced-draw guard, ...) give EVERY renderer the same structural reverse edge,
-    # and the module split surfaces it deterministically (first hit for real: VULKAN's
+    # and the module split surfaces it deterministically (first hit for real: a renderer's
     # cna_reference_dump link). Declared unconditionally: the reverse edges land on the specific
     # modules that define the symbols (Effect/VertexDeclaration/DxtUtil -> cna_graphics_core,
     # Logger -> cna_core, named math/colour values -> cna_math). These PRIVATE edges also carry
@@ -156,7 +156,7 @@ endif()
 
 # plans/plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
 # compiled XNA effects. Entered only where cna_mojoshader was configured, which today means the
-# FNA3D renderer, or an opt-in SDL_GPU, EasyGL, Vulkan, WebGPU, or DirectX 11
+# FNA3D renderer, or an opt-in SDL_GPU, EasyGL, WebGPU, SOFTWARE, DirectX 9 or DirectX 11
 # compiled-effect build with that family's CNA_*_COMPILED_EFFECTS option on.
 if(TARGET cna_mojoshader)
     add_subdirectory(common/mojoshader)
@@ -172,7 +172,7 @@ endif()
 # it, because those executables are compiled against the default's project-wide CNA_RENDERER_<X>
 # macro and run the default renderer (plans/plan_runtimerenderer.md RTR-P9-13). Re-pointing it
 # turned every one of those gates into list membership, so a multi-renderer build registered each
-# compiled-in family's suite against the default: two Vulkan sources stopped on their own #error
+# compiled-in family's suite against the default: two family sources stopped on their own #error
 # and the rest ran the default renderer under another family's name. A family that needs to know
 # it is selected asks list membership instead.
 set(_cna_entered_families)

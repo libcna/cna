@@ -5,7 +5,6 @@
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
-#include "CNA/Platform/IPlatformVulkanSurface.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
@@ -375,13 +374,6 @@ namespace CNA::Platform {
          * @return The service, or null when this platform reports no `OpenGlContext` capability.
          */
         [[nodiscard]] virtual IPlatformGlContext* GetGlContext() = 0;
-
-        /**
-         * @brief Gets the Vulkan surface service.
-         *
-         * @return The service, or null when this platform reports no `VulkanSurface` capability.
-         */
-        [[nodiscard]] virtual IPlatformVulkanSurface* GetVulkanSurface() = 0;
 
         /**
          * @brief Creates a surface presenter for a window.

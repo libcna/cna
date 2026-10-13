@@ -139,14 +139,13 @@ endif()
 
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
         OR CNA_GRAPHICS_RENDERER STREQUAL "FNA3D"))
     # ---- 3D house demo --------------------------------------------------------
     # The 3D house demo exercises the shared BasicEffect 3D path. The target is enabled
     # only with renderers that support every graphics operation used by the scene: a GL-family
     # public renderer (OPENGLES3/OPENGL33/WEBGL2, all implemented by EasyGL -- see
-    # plans/plan_glbackends.md), VULKAN, WEBGPU (its 3D BasicEffect path is verified both natively
+    # plans/plan_glbackends.md), WEBGPU (its 3D BasicEffect path is verified both natively
     # and, via this demo, in the browser -- plan_webgpu.md WEBGPU-121), or FNA3D.
     add_executable(cna_house3d_demo house3d_demo.cpp)
 
@@ -199,9 +198,9 @@ if(CNA_BUILD_TESTS)
 endif()
 
 # One renderer-neutral inventory of the legacy capability ordinals and the complete detailed
-# profile, built for the EasyGL and Vulkan comparison identities so the two can be diffed.
+# profile, built for the EasyGL and SDL_GPU comparison identities so the two can be diffed.
 if(CNA_BUILD_TESTS AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
+        OR CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU"))
     add_executable(cna_probe_renderer_capabilities renderer_capability_probe.cpp)
     target_link_libraries(cna_probe_renderer_capabilities PRIVATE cna_graphics_core)
     if(TARGET SDL3::SDL3main)

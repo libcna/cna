@@ -53,9 +53,9 @@ TEST(PlatformExceptionTests, IsCatchableAsStdRuntimeError)
 
 TEST(PlatformNotSupportedExceptionTests, NamesTheMissingCapabilityAndThePlatform)
 {
-    const PlatformNotSupportedException exception(PlatformCapability::VulkanSurface, "Terminal");
+    const PlatformNotSupportedException exception(PlatformCapability::OpenGlContext, "Terminal");
     const std::string what = exception.what();
-    EXPECT_NE(what.find("VulkanSurface"), std::string::npos);
+    EXPECT_NE(what.find("OpenGlContext"), std::string::npos);
     EXPECT_NE(what.find("Terminal"), std::string::npos);
 }
 
@@ -71,8 +71,8 @@ TEST(PlatformNotSupportedExceptionTests, MessageIsNotComposedTwice)
 {
     // A refusal reads as a complete sentence already. Routing it through the operation-plus-
     // detail constructor produced "CNA::Platform: CNA::Platform: SDL3 does not support
-    // VulkanSurface failed" -- found in a real test failure message, not by inspection.
-    const PlatformNotSupportedException exception(PlatformCapability::VulkanSurface, "SDL3");
+    // <capability> failed" -- found in a real test failure message, not by inspection.
+    const PlatformNotSupportedException exception(PlatformCapability::OpenGlContext, "SDL3");
     const std::string what = exception.what();
 
     EXPECT_EQ(what.find("CNA::Platform:"), what.rfind("CNA::Platform:")) << what;

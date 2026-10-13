@@ -191,11 +191,6 @@ namespace CNA::Platform::Testing {
         }
         /** @brief Gets the inner OpenGL context service. @return The service, or null. */
         [[nodiscard]] IPlatformGlContext* GetGlContext() override { return inner_->GetGlContext(); }
-        /** @brief Gets the inner Vulkan surface service. @return The service, or null. */
-        [[nodiscard]] IPlatformVulkanSurface* GetVulkanSurface() override
-        {
-            return inner_->GetVulkanSurface();
-        }
 
         /**
          * @brief Creates a surface presenter on the inner platform.

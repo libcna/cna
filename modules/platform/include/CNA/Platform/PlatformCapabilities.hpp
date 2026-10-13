@@ -39,8 +39,6 @@ namespace CNA::Platform {
         bool surfacePresentation = false;
         /** @brief An OpenGL context can be created for a window. */
         bool openGlContext = false;
-        /** @brief A Vulkan surface can be created for a window. */
-        bool vulkanSurface = false;
         /** @brief The system clipboard can be read and written. */
         bool clipboard = false;
         /** @brief Text input events, as distinct from raw key events, are delivered. */

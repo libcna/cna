@@ -40,15 +40,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/NotSupportedException.hpp"
 
-#if defined(CNA_RENDERER_VULKAN)
-// plan_vulkan.md VULKAN-404: this fixture is the only place that reads the backbuffer back across a
-// runtime resize, and that is the exact shape in which the Vulkan renderer mapped the NEW swapchain
-// extent's byte count out of the OLD extent's staging allocation. Every leg's pixel checks passed
-// while it did so, on this driver -- only the Khronos layer noticed. Judging the layer here is what
-// turns those passing pixel checks into a defence.
-#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
-#endif
-
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -82,9 +73,6 @@ namespace
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EASYGL";
-    constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr const char* kRendererName = "VULKAN";
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
@@ -574,17 +562,6 @@ class BackbufferReadbackDimensionTest : public Game
      */
     void CheckValidationClean()
     {
-#if defined(CNA_RENDERER_VULKAN)
-        using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
-        check(VulkanRenderer::IsValidationActiveEXT(),
-              "V1 VK_LAYER_KHRONOS_validation is loaded, so the count below means something");
-        auto* vk = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
-        if (!vk) { check(false, "V2 Vulkan renderer not reachable"); return; }
-        const auto& msgs = vk->GetValidationMessagesEXT();
-        check(msgs.empty(),
-              "V2 no Vulkan validation message" +
-                  (msgs.empty() ? std::string{} : std::string(" -- first: ") + msgs.front()));
-#endif
     }
 
     void Finish()

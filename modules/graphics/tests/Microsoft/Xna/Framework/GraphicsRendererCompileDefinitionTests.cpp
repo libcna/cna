@@ -15,9 +15,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_EASYGL
     ++enabled;
 #endif
-#ifdef CNA_RENDERER_VULKAN
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_WEBGPU
     ++enabled;
 #endif

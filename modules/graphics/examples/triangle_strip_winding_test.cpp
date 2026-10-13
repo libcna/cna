@@ -99,10 +99,6 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr const char* kRendererName = "VULKAN";
-    constexpr bool kRasterizes = true;
-    constexpr bool kKnownStripBoundary = false;
 #elif defined(CNA_RENDERER_WEBGPU)
     constexpr const char* kRendererName = "WEBGPU";
     constexpr bool kRasterizes = true;

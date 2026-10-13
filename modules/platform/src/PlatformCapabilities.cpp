@@ -17,7 +17,6 @@ namespace CNA::Platform {
             case PlatformCapability::NativeWindowHandle: return capabilities.nativeWindowHandle;
             case PlatformCapability::SurfacePresentation: return capabilities.surfacePresentation;
             case PlatformCapability::OpenGlContext: return capabilities.openGlContext;
-            case PlatformCapability::VulkanSurface: return capabilities.vulkanSurface;
             case PlatformCapability::Clipboard: return capabilities.clipboard;
             case PlatformCapability::TextInput: return capabilities.textInput;
             case PlatformCapability::Ime: return capabilities.ime;
@@ -58,7 +57,6 @@ namespace CNA::Platform {
             PlatformCapability::NativeWindowHandle,
             PlatformCapability::SurfacePresentation,
             PlatformCapability::OpenGlContext,
-            PlatformCapability::VulkanSurface,
             PlatformCapability::Clipboard,
             PlatformCapability::TextInput,
             PlatformCapability::Ime,

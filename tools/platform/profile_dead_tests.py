@@ -109,8 +109,8 @@ terminate called after throwing an instance of 'System::NotSupportedException'
 Test time =   0.40 sec
 ----------------------------------------------------------
 Test Failed.
-2/7 Testing: Vulkan_MrtMipFinalization
-2/7 Test: Vulkan_MrtMipFinalization
+2/7 Testing: SdlGpu_MrtMipFinalization
+2/7 Test: SdlGpu_MrtMipFinalization
 Output:
 ----------------------------------------------------------
 what(): SetRenderTargets: 2 render targets exceeds GraphicsProfile.Reach's own maximum of 1
@@ -118,8 +118,8 @@ what(): SetRenderTargets: 2 render targets exceeds GraphicsProfile.Reach's own m
 Test time =   0.40 sec
 ----------------------------------------------------------
 Test Failed.
-3/7 Testing: Vulkan_RefusesUnderReach
-3/7 Test: Vulkan_RefusesUnderReach
+3/7 Testing: SdlGpu_RefusesUnderReach
+3/7 Test: SdlGpu_RefusesUnderReach
 Output:
 ----------------------------------------------------------
 [ OK ] caught: GetBackBufferData is not supported by the Reach graphics profile.
@@ -127,8 +127,8 @@ Output:
 Test time =   0.10 sec
 ----------------------------------------------------------
 Test Passed.
-4/7 Testing: Vulkan_VolumeTooLarge
-4/7 Test: Vulkan_VolumeTooLarge
+4/7 Testing: SdlGpu_VolumeTooLarge
+4/7 Test: SdlGpu_VolumeTooLarge
 Output:
 ----------------------------------------------------------
 what(): Texture3D: 4096x4096x4096 exceeds GraphicsProfile.HiDef's own maximum volume extent of 2048
@@ -154,8 +154,8 @@ SKIP: this renderer has no readable back buffer (this renderer does not rasteriz
 Test time =   0.10 sec
 ----------------------------------------------------------
 Test Passed.
-7/7 Testing: Vulkan_BoundTargetLifetime
-7/7 Test: Vulkan_BoundTargetLifetime
+7/7 Testing: SdlGpu_BoundTargetLifetime
+7/7 Test: SdlGpu_BoundTargetLifetime
 Output:
 ----------------------------------------------------------
 [INFO] A1: oracle unavailable on VULKAN (NotSupportedException) -- boundary recorded
@@ -169,8 +169,8 @@ Test Passed.
 def self_test() -> int:
     found = dead_tests(SAMPLE)
     names = [f"{name}:{kind}" for name, kind, _ in found]
-    expected = ["WebGPU_ClearReadback:DEAD-ON-PROFILE", "Vulkan_MrtMipFinalization:DEAD-ON-PROFILE",
-                "CNAEXT_Bloom:SKIPPED-ON-PROFILE", "Vulkan_BoundTargetLifetime:WARN-LEG-UNAVAILABLE"]
+    expected = ["WebGPU_ClearReadback:DEAD-ON-PROFILE", "SdlGpu_MrtMipFinalization:DEAD-ON-PROFILE",
+                "CNAEXT_Bloom:SKIPPED-ON-PROFILE", "SdlGpu_BoundTargetLifetime:WARN-LEG-UNAVAILABLE"]
     if names != expected:
         print(f"profile_dead_tests self-test FAILED: found {names}, expected {expected}")
         return 1

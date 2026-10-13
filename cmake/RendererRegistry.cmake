@@ -31,7 +31,6 @@ function(_cna_renderer_identity_map out_var)
         OPENGLES3    EasyGL|GetDescriptorOpenGLES3
         OPENGL33     EasyGL|GetDescriptorOpenGL33
         WEBGL2       EasyGL|GetDescriptorWebGL2
-        VULKAN       Vulkan
         WEBGPU       WebGPU
         HEADLESS     Headless
         SOFTWARE     Software

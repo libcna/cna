@@ -14,8 +14,8 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
-static_assert(kPublicRendererCount == 14,
-              "GraphicsRendererType must expose all 14 public renderer identities");
+static_assert(kPublicRendererCount == 13,
+              "GraphicsRendererType must expose all 13 public renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -54,7 +54,6 @@ namespace
             case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
             case GraphicsRendererType::WebGL2:      return "WEBGL2";
-            case GraphicsRendererType::Vulkan:      return "VULKAN";
             case GraphicsRendererType::WebGPU:      return "WEBGPU";
             case GraphicsRendererType::Headless:    return "HEADLESS";
             case GraphicsRendererType::Software:    return "SOFTWARE";

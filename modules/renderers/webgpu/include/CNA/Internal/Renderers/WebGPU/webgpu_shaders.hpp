@@ -1049,10 +1049,10 @@ struct VSOut {
      * @brief plans/plan_webgpu_modern_graphics.md WMG-0022: image-based lighting for the two PBR
      * families, appended to their source exactly as @ref kShadowSampling is.
      *
-     * The split-sum equation is transliterated function for function from the Vulkan renderer's
-     * `CnaIblAmbient` (`modules/renderers/vulkan/src/shaders/pbr3d.frag.glsl`) and EasyGL's
-     * `cnaIblAmbient` (`EasyGLRenderer::CnaGlIblDecl`), so the three renderers answer an IBL query
-     * from one equation rather than from three readings of one description. The mip for a given
+     * The split-sum equation is transliterated function for function from EasyGL's `cnaIblAmbient`
+     * (`EasyGLRenderer::CnaGlIblDecl`), as the retired VULKAN renderer's `CnaIblAmbient` was, so
+     * the renderers answer an IBL query from one equation rather than from several readings of
+     * one description. The mip for a given
      * roughness is `roughness * (mipCount - 1)` -- `the prefiltering rule`, which is the formula `GpuDrawParams::iblPrefilteredMipCount` documents.
      *
      * At **group 3**, which the stock PBR pipeline layouts had free; the shadow block owns group 2

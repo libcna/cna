@@ -18,7 +18,6 @@
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
-#include "CNA/Platform/IPlatformVulkanSurface.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/Input/IPlatformGamepad.hpp"
 #include "CNA/Platform/Input/IPlatformHaptics.hpp"
@@ -48,10 +47,10 @@
 #  error "A CNA/Platform header transitively included SDL. The platform contract must be SDL-free."
 #endif
 
-// Likewise for the graphics APIs the services describe with opaque handles: neither
-// IPlatformVulkanSurface nor IPlatformGlContext may drag a real API header into every consumer.
+// Likewise for the graphics APIs the services describe with opaque handles: IPlatformGlContext
+// may not drag a real API header into every consumer, and no contract header includes Vulkan.
 #if defined(VK_VERSION_1_0) || defined(VULKAN_H_)
-#  error "A CNA/Platform header included Vulkan. Handles are deliberately opaque."
+#  error "A CNA/Platform header included Vulkan. The platform contract has no Vulkan service."
 #endif
 #if defined(GL_VERSION_1_1) || defined(__gl_h_) || defined(__glew_h__)
 #  error "A CNA/Platform header included OpenGL. GetProcAddress returns an untyped pointer."

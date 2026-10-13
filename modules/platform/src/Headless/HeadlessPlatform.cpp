@@ -222,7 +222,6 @@ namespace CNA::Platform::Headless {
     IPlatformFileSystem* HeadlessPlatform::GetFileSystem() { return fileSystem_.get(); }
     IPlatformSystemInfo* HeadlessPlatform::GetSystemInfo() { return systemInfo_.get(); }
     IPlatformGlContext* HeadlessPlatform::GetGlContext() { return nullptr; }
-    IPlatformVulkanSurface* HeadlessPlatform::GetVulkanSurface() { return nullptr; }
 
     std::unique_ptr<IPlatformSurfacePresenter> HeadlessPlatform::CreateSurfacePresenter(IPlatformWindow&)
     {

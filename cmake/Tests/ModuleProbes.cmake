@@ -167,7 +167,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # plans/plan_runtimerenderer.md RTR-P9-21: deliberately ALSO requires single-renderer mode. This
     # asserts the probe closure links no native graphics SDK at all, which is a true statement about
     # a HEADLESS-only build and a FALSE one about a multi-renderer build that happens to default to
-    # HEADLESS -- such a binary legitimately links Vulkan, wgpu-native or whatever else it was built with.
+    # HEADLESS -- such a binary legitimately links SDL3, wgpu-native or whatever else it was built with.
     # Converting this to list membership would have made it fail for a correct build.
     if(CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" AND NOT CNA_MULTI_RENDERER
             AND Python3_Interpreter_FOUND)
@@ -206,20 +206,6 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                     --target ${_cna_xmlfree_probe}
                     --forbid "libsharp_runtime_(xml|tinyxml2)")
         endforeach()
-    endif()
-
-    # VULKAN closure: the selected renderer's native SDK and nothing from any other family.
-    # Same reasoning as the HEADLESS closure above: "the selected renderer's SDK and nothing from
-    # any other family" is only a meaningful claim when exactly one renderer is compiled in.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN" AND NOT CNA_MULTI_RENDERER
-            AND Python3_Interpreter_FOUND)
-        add_test(NAME ModuleLinkClosure_VulkanRendererClosure
-            COMMAND Python3::Interpreter
-                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
-                --build-dir "${CMAKE_BINARY_DIR}"
-                --target probe_graphics
-                --forbid "d3d|dxgi|ddraw|d2d1|wgpu|webgpu|gdi32|shaderc"
-                --require "vulkan")
     endif()
 
     # cmake/UnitTests.cmake applies the repository-wide exit-77 skip convention before this
@@ -527,7 +513,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "SingleRenderer|HEADLESS|EMPTY|ACCEPT|renderer set -- HEADLESS"
         "DefaultInsideTheSet|SOFTWARE|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- SOFTWARE"
         "DefaultIsListedFirst|STUB|HEADLESS,SOFTWARE,STUB|ACCEPT|renderer set -- STUB"
-        "DefaultOutsideTheSet|SOFTWARE|OPENGL33,VULKAN|REJECT|is not a member of")
+        "DefaultOutsideTheSet|SOFTWARE|OPENGL33,SDL_GPU|REJECT|is not a member of")
     foreach(_cna_renderer_default_case IN LISTS _cna_renderer_default_cases)
         string(REPLACE "|" ";" _cna_renderer_default_fields "${_cna_renderer_default_case}")
         list(GET _cna_renderer_default_fields 0 _cna_case_name)
@@ -599,7 +585,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         "Option_DIRECTX12|OPTION|DIRECTX12|REFUSE|removed-renderers.md"
         "Option_OPENGLES2|OPTION|OPENGLES2|REFUSE|removed-renderers.md"
         "LiveSetMemberAccepted_WEBGL2|SET|WEBGL2|ACCEPT|"
-        "LiveSelectorAccepted_VULKAN|SELECTOR|VULKAN|ACCEPT|"
+        "SetMember_VULKAN|SET|VULKAN|REFUSE|removed-renderers.md"
+        "LiveSelectorAccepted_SDL_GPU|SELECTOR|SDL_GPU|ACCEPT|"
         "LiveSelectorAccepted_FNA3D|SELECTOR|FNA3D|ACCEPT|"
         "LiveSetMemberAccepted_STUB|SET|STUB|ACCEPT|"
         "UnknownNameStillUnknown|SELECTOR|NOT_A_RENDERER|REFUSE|unknown graphics renderer")
@@ -654,18 +641,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 --wayland-guard-applies ${CNA_TEST_WAYLAND_GUARD_APPLIES})
         set_tests_properties(CnaTestDisplayIsolation PROPERTIES LABELS "configuration" TIMEOUT 300)
     endif()
-    # plans/plan_vulkan_modern_graphics.md VMG-0007: every SPIR-V module the tree ships -- the Vulkan
-    # renderer's own shaders and every generated shader package -- validated by spirv-val against
-    # the Vulkan 1.1 environment VulkanRenderer creates. An offline gate like the package
-    # reproducibility tests: it exits 77 where spirv-val is not installed.
-    if(Python3_Interpreter_FOUND AND "VULKAN" IN_LIST CNA_RENDERER_IDENTITIES)
+    # plans/plan_vulkan_modern_graphics.md VMG-0007: every SPIR-V module the tree ships -- SDL_GPU's
+    # stock shaders and every generated shader package -- validated by spirv-val. An offline gate
+    # like the package reproducibility tests: it exits 77 where spirv-val is not installed.
+    if(Python3_Interpreter_FOUND AND "SDL_GPU" IN_LIST CNA_RENDERER_IDENTITIES)
         add_test(NAME SpirvPayloadValidation
             COMMAND Python3::Interpreter
-                "${CMAKE_CURRENT_SOURCE_DIR}/tools/vulkan/validate_spirv_payloads.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/validate_spirv_payloads.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/modules" "${CMAKE_CURRENT_SOURCE_DIR}/tests"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools")
         set_tests_properties(SpirvPayloadValidation PROPERTIES
-            SKIP_RETURN_CODE 77 LABELS "vulkan;shader;configuration")
+            SKIP_RETURN_CODE 77 LABELS "spirv;shader;configuration")
     endif()
     # plans/plan_gpu_test_isolation.md GTI-0007: the classifier the private GPU runner applies to
     # every run, which names tests that died on a graphics-profile refusal before their first check.

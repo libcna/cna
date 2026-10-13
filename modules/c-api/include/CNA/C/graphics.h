@@ -22,8 +22,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_OPENGL33 UINT32_C(4)
 /** @brief Identifies the WebGL 2 backend. */
 #define CNA_GRAPHICS_RENDERER_WEBGL2 UINT32_C(6)
-/** @brief Identifies the Vulkan backend. */
-#define CNA_GRAPHICS_RENDERER_VULKAN UINT32_C(8)
 /** @brief Identifies the WebGPU backend. */
 #define CNA_GRAPHICS_RENDERER_WEBGPU UINT32_C(9)
 /** @brief Identifies the no-window HEADLESS backend. */
@@ -53,8 +51,8 @@ typedef uint32_t CNA_GraphicsRendererType;
  * @ref CNA_GraphicsRendererType, as is any retired value within the range.
  *
  * Retired values, permanently reserved and never assigned to another renderer: 2 (OPENGLES2),
- * 5 (WEBGL1), 7 (BGFX), 10 (MAGNUM), 15 (DIRECTX12), 16 (DIRECT2D), 17 (CANVAS), 18 (HTML_DOM),
- * 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
+ * 5 (WEBGL1), 7 (BGFX), 8 (VULKAN), 10 (MAGNUM), 15 (DIRECTX12), 16 (DIRECT2D), 17 (CANVAS),
+ * 18 (HTML_DOM), 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
  * 23 (DIRECTX1), 24 (DIRECTX2), 25 (DIRECTX3), 26 (DIRECTX5), 27 (DIRECTX6), 28 (DIRECTX7),
  * 29 (DIRECTX8), 30 (DIRECTX10), 32 (OPENGLES1), 33 (OPENGL4), 34 (OPENGL1), 35 (OPENGL2),
  * 36 (WICKED), 37 (SOKOL), 38 (DILIGENT), 39 (GLIDE), 40 (GDI), 41 (LLGL), 44 (SVG_DOM),

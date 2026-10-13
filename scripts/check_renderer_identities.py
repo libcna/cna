@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
-CNA has exactly 14 public renderer identities (docs/removed-renderers.md). This check mechanically compares
+CNA has a curated set of public renderer identities (docs/renderer-registry.md). This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
 CNA_GRAPHICS_RENDERER cmake selection list, and the runtime renderer registry --
 against the canonical identity table below. Any addition, removal or rename of a
@@ -92,7 +92,7 @@ COUNTED_DOCUMENTS = {
 IDENTITY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+public\s+(?:renderer\s+)?identities")
 FAMILY_COUNT = re.compile(r"(?<![-\w])(\d+)\s+implementation\s+families\b")
 
-# Canonical public identities: (cmake selection name, enum name, C ABI value). 14 entries.
+# Canonical public identities: (cmake selection name, enum name, C ABI value).
 #
 # The C ABI value is the ONLY stable numeric identity contract CNA publishes. The C++ enum's
 # ordinals are not one and never were: they are dense and were renumbered when SKIA was retired in
@@ -104,7 +104,6 @@ IDENTITIES = [
     ("OPENGLES3", "OpenGLES3", 3),
     ("OPENGL33", "OpenGL33", 4),
     ("WEBGL2", "WebGL2", 6),
-    ("VULKAN", "Vulkan", 8),
     ("WEBGPU", "WebGPU", 9),
     ("HEADLESS", "Headless", 11),
     ("SOFTWARE", "Software", 12),
@@ -121,7 +120,8 @@ IDENTITIES = [
 # different semantics -- so this table only ever grows. SKIA (19) was retired in 2026-08; twenty-five
 # more on 2026-09-17, DIRECT2D (16), FREEDIRECT (21) and PORTABLEGL (46) on 2026-09-27, and
 # HTML_DOM (18), OPENGL4 (33), GDI (40) and SVG_DOM (44) on 2026-09-28, and OPENGLES2 (2),
-# WEBGL1 (5), DIRECTX12 (15) and CANVAS (17) on 2026-10-06 (docs/removed-renderers.md).
+# WEBGL1 (5), DIRECTX12 (15) and CANVAS (17) on 2026-10-06, and VULKAN (8) on 2026-10-13
+# (docs/removed-renderers.md).
 #
 # It is pinned here as well as in cmake/RendererIdentities.cmake on purpose. The CMake list exists
 # to REFUSE a retired selector at configure time; this one exists to make the refusal itself
@@ -129,7 +129,7 @@ IDENTITIES = [
 # precedent is concrete: eleven identities were retired on 2026-08-30 and restored on 2026-09-04,
 # and nothing mechanical would have stopped that restoration from taking different numbers.
 RETIRED_IDENTITIES = {
-    "OPENGLES2": 2, "WEBGL1": 5, "BGFX": 7, "MAGNUM": 10, "DIRECTX12": 15, "DIRECT2D": 16,
+    "OPENGLES2": 2, "WEBGL1": 5, "BGFX": 7, "VULKAN": 8, "MAGNUM": 10, "DIRECTX12": 15, "DIRECT2D": 16,
     "CANVAS": 17, "HTML_DOM": 18, "SKIA": 19, "BLEND2D": 20,
     "FREEDIRECT": 21, "DIRECTX1": 23, "DIRECTX2": 24, "DIRECTX3": 25, "DIRECTX5": 26,
     "DIRECTX6": 27, "DIRECTX7": 28, "DIRECTX8": 29, "DIRECTX10": 30, "OPENGLES1": 32,
@@ -425,6 +425,39 @@ def check_no_retired_selectors(identities):
     return problems
 
 
+def runtime_retired_names():
+    """GraphicsRendererSelection.cpp's RetiredRendererNames, as a list of names."""
+    path = os.path.join(REPO, "modules", "core", "src", "GraphicsRendererSelection.cpp")
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    m = re.search(r"RetiredRendererNames\{(.*?)\};", text, re.S)
+    if not m:
+        sys.exit("cannot locate RetiredRendererNames in GraphicsRendererSelection.cpp")
+    return re.findall(r'"([A-Z0-9_]+)"', m.group(1))
+
+
+def check_runtime_retired_names():
+    """The run-time refusal must know exactly the retired set the configure-time refusal knows.
+
+    GraphicsRendererSelection tells a program naming a retired renderer -- in CNA_GRAPHICS_RENDERER
+    or SetPreferred() -- that the renderer was retired, from GraphicsRendererSelection.cpp's own
+    list.
+    A name missing there would be reported as merely unknown; a name present there and not here
+    would be one that could never be selected and was never recorded as retired.
+    """
+    names = runtime_retired_names()
+    problems = []
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    if duplicates:
+        problems.append(f"RetiredRendererNames lists {duplicates} more than once.")
+    if set(names) != set(RETIRED_IDENTITIES):
+        problems.append(
+            "GraphicsRendererSelection.cpp's RetiredRendererNames disagrees with the retired "
+            f"table: missing {sorted(set(RETIRED_IDENTITIES) - set(names))}, unexpected "
+            f"{sorted(set(names) - set(RETIRED_IDENTITIES))}.")
+    return problems
+
+
 def documented_counts(identities, families):
     """Reports every stated count that disagrees with the registry, and every one gone invisible."""
     problems = []
@@ -499,6 +532,13 @@ def main():
         ok = False
         print("A retired renderer identity is selectable again:")
         for problem in resurrected:
+            print(f"  - {problem}")
+
+    runtime_retired = check_runtime_retired_names()
+    if runtime_retired:
+        ok = False
+        print("The run-time retired-renderer list diverges from the retired table:")
+        for problem in runtime_retired:
             print(f"  - {problem}")
 
     families = family_count()

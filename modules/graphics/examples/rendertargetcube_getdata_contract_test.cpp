@@ -156,22 +156,6 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
-#elif defined(CNA_RENDERER_VULKAN)
-    // `msaaCubeTargets` true since plan_vulkan.md VULKAN-216: a cube target's sample count is its
-    // OWN. Task 903 piggybacked it on the renderer's global `sampleCount_`, so a cube multisampled
-    // only when the BACKBUFFER was created multisampled -- which this test does not request, and
-    // the applied count came back 0. It is now whatever the DEVICE can give for the count this
-    // target asked for. The applied count is still asserted against the claim rather than assumed.
-    // `preservesOnRebind` true since REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube now
-    // carries a `preserveContents` flag, so VulkanRenderTargetCubeRenderer builds its face
-    // framebuffers against GetOrCreateRTRenderPass(depthFmt, !preserveContents) instead of
-    // hardcoding the discard variant. examples/rendertargetcube_usage_test.cpp is that finding's
-    // own full battery; what U1/U2 below keep is the single check that a preserved face is exactly
-    // what GetData reports.
-    // `rtCubeSetData` true since plans/plan_vulkan_parity.md VKPAR-0027: the face upload goes
-    // through the same per-face flush as the readback, top row first both ways, so not mirrored.
-    constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `mipMapCubeTargets` Real / `mipLevel` Exact: WEBGPU-114 builds a real mip chain for a
     // mipMap=true RenderTargetCube -- the colour texture carries the full chain and each face is

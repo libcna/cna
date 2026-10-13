@@ -30,7 +30,7 @@ endif()
 if(NOT CNA_APPLE_TARGET STREQUAL "NONE")
     message(FATAL_ERROR "PROBE: CNA_APPLE_TARGET must be NONE, got '\${CNA_APPLE_TARGET}'")
 endif()
-cna_apple_validate_renderer("VULKAN")
+cna_apple_validate_renderer("WEBGPU")
 cna_apple_configure_all_bundles()
 message(STATUS "PROBE-OK non-apple")
 EOF

@@ -59,10 +59,6 @@ namespace
     constexpr const char* kRendererName = "EASYGL";
     constexpr bool kRasterizes = true;
     constexpr bool kBackbufferReadbackRequired = true;
-#elif defined(CNA_RENDERER_VULKAN)
-    constexpr const char* kRendererName = "VULKAN";
-    constexpr bool kRasterizes = true;
-    constexpr bool kBackbufferReadbackRequired = true;
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
     constexpr bool kRasterizes = true;

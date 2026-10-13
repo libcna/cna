@@ -550,9 +550,10 @@ CNA_C_API CNA_Result cna_graphics_renderer_set_preferred_ext(CNA_GraphicsRendere
 /**
  * @brief Requests the renderer by name, accepting the `CNA_GRAPHICS_RENDERER` spellings.
  *
- * @param name UTF-8 renderer name, matched case-insensitively, e.g. `"VULKAN"`.
+ * @param name UTF-8 renderer name, matched case-insensitively, e.g. `"SDL_GPU"`.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the name is not a public
- *         renderer identity, `CNA_RESULT_INVALID_STATE` under the same conditions as above.
+ *         renderer identity (a retired name is refused too, and the error message says it was
+ *         retired), `CNA_RESULT_INVALID_STATE` under the same conditions as above.
  */
 CNA_C_API CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(CNA_StringView name);
 

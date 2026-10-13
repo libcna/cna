@@ -30,8 +30,8 @@ namespace CNA::Internal::Renderers
      *
      * Deliberately coarser than the exact window-flag bitmask GraphicsRendererDescriptor::
      * prepareWindowFlags() returns: this is the granularity at which two renderers can be compared
-     * for window compatibility. A windowing backend refuses to create one window carrying both an
-     * OpenGL and a Vulkan intent, so a fallback crossing from one kind to another cannot reuse the
+     * for window compatibility. A windowing backend refuses to create one window carrying two
+     * graphics-API intents, so a fallback crossing from one kind to another cannot reuse the
      * existing window and must recreate it (plans/plan_runtimerenderer.md design decision 8).
      */
     enum class RendererWindowKind
@@ -45,9 +45,6 @@ namespace CNA::Internal::Renderers
         /** @brief A window created with an OpenGL render intent. */
         OpenGL,
 
-        /** @brief A window created with a Vulkan render intent. */
-        Vulkan,
-
         /** @brief A window created with a Metal render intent. */
         Metal
     };
@@ -58,7 +55,7 @@ namespace CNA::Internal::Renderers
      * RendererWindowKind::None is compatible with everything in the sense that it needs no window;
      * a renderer that wants a window can never adopt a window that was never created, and one that
      * wants none never looks at the window it was handed. Two identical kinds are always
-     * compatible. Every other crossing (OpenGL vs Vulkan, OpenGL vs Metal, Plain vs OpenGL, ...)
+     * compatible. Every other crossing (OpenGL vs Metal, Plain vs OpenGL, ...)
      * requires the window to be destroyed and recreated.
      *
      * @param existing  Window kind the current window was created for.
@@ -291,9 +288,6 @@ namespace CNA::Internal::Renderers
          * they never resolve a native window or reach through IPlatform themselves.
          */
         bool needsGlContext = false;
-
-        /** @brief Whether this family is handed the platform's Vulkan surface service. */
-        bool needsVulkanSurface = false;
 
         /**
          * @brief Cheap, side-effect-free probe of whether this renderer can run here.
