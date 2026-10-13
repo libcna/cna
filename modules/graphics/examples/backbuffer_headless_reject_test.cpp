@@ -87,9 +87,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_METAL)
-    constexpr const char* kRendererName = "METAL";
-    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-162: this renderer has no declared backbuffer-readback capability contract."
 #endif

@@ -479,7 +479,7 @@ set(_cna_framework_modules
     devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
     directx9 easygl fna3d headless
-    metal sdl-gpu sdl-renderer software stub webgpu
+    sdl-gpu sdl-renderer software stub webgpu
     common/mojoshader)
 string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
 string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})

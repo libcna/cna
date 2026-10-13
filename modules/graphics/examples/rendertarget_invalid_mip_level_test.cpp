@@ -135,8 +135,6 @@ namespace
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
-#elif defined(CNA_RENDERER_METAL)
-    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-189: this renderer has no declared invalid-mip-level contract."
 #endif

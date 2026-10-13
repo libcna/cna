@@ -42,17 +42,19 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK non-apple" || {
 # ---------------------------------------------------------------------------
 # 2. iOS + allow-listed renderer: accepted.
 # ---------------------------------------------------------------------------
-cat > "${script}" <<EOF
+for renderer in SDL_RENDERER SDL_GPU; do
+    cat > "${script}" <<EOF
 set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")
 set(CNA_APPLE_IOS ON)
-cna_apple_validate_renderer("SDL_RENDERER")
+cna_apple_validate_renderer("${renderer}")
 message(STATUS "PROBE-OK allowed")
 EOF
-cmake -P "${script}" 2>&1 | grep -q "PROBE-OK allowed" || {
-    echo "FAIL: an allow-listed iOS renderer was rejected" >&2
-    exit 1
-}
+    cmake -P "${script}" 2>&1 | grep -q "PROBE-OK allowed" || {
+        echo "FAIL: the allow-listed iOS renderer ${renderer} was rejected" >&2
+        exit 1
+    }
+done
 
 # ---------------------------------------------------------------------------
 # 3. iOS + renderer outside the allow-list: refused, and the message says how to override.
@@ -90,11 +92,11 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK escape-hatch" || {
 }
 
 # ---------------------------------------------------------------------------
-# 4b. A renderer stays allow-listed only while the real Apple workflow builds it. SDL_GPU needs
-#     an iOS libshaderc and EasyGL needs two additional sibling repositories, neither of which is
-#     currently supplied by that workflow; accepting them would only postpone a known failure.
+# 4b. A renderer stays allow-listed only while the real Apple workflow builds it (SDL_GPU in a
+#     non-gating leg, as it is not yet qualified for iOS). EasyGL needs two additional sibling
+#     repositories the workflow does not supply; accepting it would only postpone a known failure.
 # ---------------------------------------------------------------------------
-for renderer in SDL_GPU OPENGLES3 HEADLESS SOFTWARE STUB; do
+for renderer in OPENGLES3 HEADLESS SOFTWARE STUB; do
     cat > "${script}" <<EOF
 set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")

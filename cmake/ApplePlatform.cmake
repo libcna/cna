@@ -245,7 +245,7 @@ endfunction()
 # audio, storage or physical-device behavior have been observed — see docs/apple-platforms.md.
 set(CNA_APPLE_IOS_RENDERERS
     "SDL_RENDERER"  # SDL3's own 2D renderer; Metal-backed on iOS
-    "METAL"         # CNA's native Metal renderer, UIKit view path (plans/plan_apple_m4.md AM4-037)
+    "SDL_GPU"       # SDL's GPU API on its Metal backend; not yet built or qualified for iOS
     CACHE INTERNAL "Renderers CNA wires up for an iOS build" FORCE)
 
 option(CNA_APPLE_ALLOW_UNVALIDATED_RENDERER

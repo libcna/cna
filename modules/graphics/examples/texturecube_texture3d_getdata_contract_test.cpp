@@ -150,9 +150,6 @@ namespace
     // Texture3D half of this file needs a HiDef device to have anything to measure.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
-#elif defined(CNA_RENDERER_METAL)
-    constexpr Contract kContract{"METAL", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, true};
 #else
 #error "REMED-GFX-130: this renderer has no declared TextureCube/Texture3D GetData contract."
 #endif

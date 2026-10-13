@@ -123,8 +123,7 @@ struct CapabilityExpectation
 // EasyGL, WebGPU and DirectX 9 all pull MojoShader in only as an extra,
 // off-by-default dependency none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS /
 // CNA_EASYGL_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
-// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_METAL_COMPILED_EFFECTS,
-// plans/plan_apple_m4.md AM4-144) -- selecting the renderer alone
+// CNA_DIRECTX9_COMPILED_EFFECTS) -- selecting the renderer alone
 // is not enough to expect the capability true for any of them.
 //
 // plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
@@ -132,7 +131,7 @@ struct CapabilityExpectation
 // "native-only" half of that sentence: browser WebGPU still ingests WGSL and nothing else, but CNA
 // now translates this route's SPIR-V into WGSL, so an Emscripten build configures the option and
 // answers true here for the same reason a native one does.
-#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS) || defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS) || defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS) || defined(CNA_RENDERER_METAL) && defined(CNA_METAL_COMPILED_EFFECTS)
+#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS) || defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS) || defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS) || defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS)
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;

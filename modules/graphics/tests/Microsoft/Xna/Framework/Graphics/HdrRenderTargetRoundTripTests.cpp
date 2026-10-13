@@ -476,13 +476,12 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
 }
 
 // plans/plan_apple_m4.md AM4-147: a float cube target's own texels through TextureCube.GetData and
-// SetData -- the declared-format transfer, not the Color one. Metal's cube target had no typed
-// route before this task (a rendered HdrBlendable or Vector4 face could be sampled but not read);
-// the other renderers answer this in their own suites.
+// SetData -- the declared-format transfer, not the Color one. First pinned on the retired METAL
+// renderer; SDL_GPU and WEBGPU refuse the typed read (handoff.md section 5.1).
 TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetTransfersItsTypedTexels)
 {
     using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, Fna3d);
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))

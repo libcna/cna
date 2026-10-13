@@ -34,8 +34,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_DIRECTX9 UINT32_C(22)
 /** @brief Identifies the SDL_GPU backend. */
 #define CNA_GRAPHICS_RENDERER_SDL_GPU UINT32_C(31)
-/** @brief Identifies the Apple Metal backend. */
-#define CNA_GRAPHICS_RENDERER_METAL UINT32_C(42)
 /** @brief Identifies the FNA3D backend. */
 #define CNA_GRAPHICS_RENDERER_FNA3D UINT32_C(43)
 
@@ -53,7 +51,7 @@ typedef uint32_t CNA_GraphicsRendererType;
  * 17 (CANVAS), 18 (HTML_DOM), 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
  * 23 (DIRECTX1), 24 (DIRECTX2), 25 (DIRECTX3), 26 (DIRECTX5), 27 (DIRECTX6), 28 (DIRECTX7),
  * 29 (DIRECTX8), 30 (DIRECTX10), 32 (OPENGLES1), 33 (OPENGL4), 34 (OPENGL1), 35 (OPENGL2),
- * 36 (WICKED), 37 (SOKOL), 38 (DILIGENT), 39 (GLIDE), 40 (GDI), 41 (LLGL), 44 (SVG_DOM),
+ * 36 (WICKED), 37 (SOKOL), 38 (DILIGENT), 39 (GLIDE), 40 (GDI), 41 (LLGL), 42 (METAL), 44 (SVG_DOM),
  * 45 (OPENVG), 46 (PORTABLEGL), 47 (TINYGL), 48 (IGL), 49 (PIXIJS), 50 (NANOVG) and 51 (RLGL).
  * Because values above this maximum include retired ones, a future identity takes the next
  * never-assigned value, 52, not the value after this maximum.

@@ -10,17 +10,14 @@ namespace CNA::Platform {
      *
      * This is creation-time information, not a setting that can be changed afterwards: a window
      * intended for OpenGL must be created with the corresponding native attribute already set,
-     * and the same is true for a Metal-capable view. Making it a post-creation setter would
-     * be an API that cannot work.
+     * Making it a post-creation setter would be an API that cannot work.
      */
     enum class WindowRenderIntent
     {
         /** @brief No graphics-API-specific window attributes are required. */
         None,
         /** @brief The window will host an OpenGL or OpenGL ES context. */
-        OpenGl,
-        /** @brief The window will host a Metal layer. */
-        Metal
+        OpenGl
     };
 
     /** @brief How a window occupies the display. */

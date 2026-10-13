@@ -29,9 +29,6 @@ option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX9 "Enable Direct3D 9 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_SDL_GPU "Enable SDL_gpu graphics renderer" OFF)
 
-# Metal owns the renderer directly; SDL provides only the native macOS window and CAMetalLayer.
-option(CNA_RENDERER_METAL "Enable native Apple Metal graphics renderer (macOS only)" OFF)
-
 # plans/plan_fna3d.md: FNA3D (https://github.com/FNA-XNA/FNA3D) -- the XNA-shaped C graphics library FNA
 # itself renders through. It names a portable middleware layer rather than one native API: FNA3D picks SDL_GPU, Direct3D 11 or OpenGL at RUNTIME (overridable
 # with the FNA3D_FORCE_DRIVER SDL hint). Shaders are Direct3D 9 Effect Framework binaries executed
@@ -127,16 +124,6 @@ endif()
 # names the platform rather than a dependency that was never configured for an iOS sysroot.
 # No-op on macOS and on every non-Apple target.
 cna_apple_validate_renderer("${CNA_GRAPHICS_RENDERER}")
-
-# Native Metal targets macOS and iOS/iPadOS. SDL is used only for the window; the renderer attaches
-# its CAMetalLayer-backed view to the platform's NSWindow or UIWindow and renders directly through
-# Metal. plans/plan_apple_m4.md AM4-037 added the UIKit path; whether iOS may select it is the Apple
-# allow-list's decision above. Every other system is refused here.
-if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin"
-   AND NOT CNA_APPLE_IOS)
-    message(FATAL_ERROR
-        "CNA: METAL renderer targets macOS and iOS only.")
-endif()
 
 # plans/plan_glbackends.md Phase A/GLB-7: the 3 GL-family public renderers (OPENGLES3/OPENGL33
 # desktop, WEBGL2 Emscripten) share one internal implementation (EasyGL, on top of the sibling
@@ -298,27 +285,6 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()
         add_compile_definitions(CNA_DIRECTX9_COMPILED_EFFECTS)
-    endif()
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "METAL")
-    enable_language(OBJCXX)
-    message(STATUS "CNA: Using native METAL graphics renderer")
-    set(RENDERER_DIR "modules/renderers/metal")
-    set(RENDERER_TARGET "cna_renderer_metal")
-    list(APPEND _cna_identity_defines CNA_RENDERER_METAL)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_METAL")
-    # plans/plan_apple_m4.md AM4-144: compiled XNA Effect bytecode through MojoShader's portable
-    # SPIR-V profile, translated to MSL in process by SPIRV-Cross -- the pinned source the SDL_GPU
-    # renderer's SDL_shadercross already uses -- and compiled by Metal at runtime. Off by default and
-    # shaped like the other CNA_*_COMPILED_EFFECTS options, for the same reason: both are fetched
-    # dependencies this renderer does not otherwise need. No external tool runs at runtime.
-    option(CNA_METAL_COMPILED_EFFECTS
-           "Build Metal support for compiled XNA Effect bytecode (plans/plan_apple_m4.md AM4-144)" OFF)
-    if(CNA_METAL_COMPILED_EFFECTS)
-        include(cmake/ThirdPartyFNA3D.cmake)
-        cna_configure_mojoshader()
-        include(cmake/ThirdPartySDLShaderCross.cmake)
-        cna_configure_spirv_cross()
-        add_compile_definitions(CNA_METAL_COMPILED_EFFECTS)
     endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     message(STATUS "CNA: Using SDL_GPU graphics renderer")

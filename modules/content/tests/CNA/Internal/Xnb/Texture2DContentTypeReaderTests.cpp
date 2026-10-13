@@ -139,7 +139,7 @@ TEST_F(Texture2DContentTypeReaderTest,
        PreservesEveryClassicUncompressedFormatAndExactBytes)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters()};
@@ -175,20 +175,6 @@ TEST_F(Texture2DContentTypeReaderTest,
                 0x31u + index * 19u + static_cast<std::size_t>(format));
         }
 
-        // plans/plan_apple_m4.md AM4-142: Metal's three packed 16-bit formats exist only on
-        // Apple-family GPUs; elsewhere they refuse the same way.
-        const bool metalPacked16 = format == SurfaceFormat::Bgr565 ||
-                                   format == SurfaceFormat::Bgra5551 ||
-                                   format == SurfaceFormat::Bgra4444;
-        const auto verdict =
-            device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format));
-        if (CNA_RENDERER_IS(Metal) && metalPacked16 &&
-            verdict != CNA::Internal::Renderers::RendererFormatVerdict::Supported)
-        {
-            EXPECT_THROW((void)ReadHandConstructedTexture2D(device, format, 2, 1, {expected}),
-                         std::runtime_error);
-            continue;
-        }
         Texture2D texture = ReadHandConstructedTexture2D(
             device, format, 2, 1, {expected});
         EXPECT_EQ(texture.getFormatProperty(), format);
@@ -205,7 +191,7 @@ TEST_F(Texture2DContentTypeReaderTest,
 {
     using namespace CNA::Testing::Renderers;
     // plans/plan_apple_m4.md AM4-148: Metal keeps a DXT texture's exact blocks too.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters()};
@@ -238,7 +224,7 @@ TEST_F(Texture2DContentTypeReaderTest,
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2ReadsTwoBytesPerTexel)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -289,7 +275,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
     // Same guard as NormalizedByte2ReadsTwoBytesPerTexel above: the reader constructs the texture
     // before it validates the per-level byte count, so the malformed-level rejection is observable
     // only on renderers that can create a NormalizedByte2 texture.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -317,7 +303,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte4PreservesSignedPackedTexels)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);

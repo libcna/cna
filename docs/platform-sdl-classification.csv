@@ -1,5 +1,5 @@
 symbol,area,owning_interface,task,occurrences,files,note
-SDL_AUDIODRIVER,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,98,19,audio driver selection env var; becomes audio configuration
+SDL_AUDIODRIVER,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,97,19,audio driver selection env var; becomes audio configuration
 SDL_AudioSpec,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,39,11,audio device/stream
 SDL_mixer,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,25,14,SDL header include
 SDL_AUDIO_S16LE,audio,CNA::Audio::Platform::IAudioDevice,PLAT-91..99,22,2,audio device/stream
@@ -54,7 +54,7 @@ SDL_ORIENTATION_LANDSCAPE_FLIPPED,display,IPlatformDisplays,PLAT-43,1,1,display/
 SDL_ORIENTATION_PORTRAIT,display,IPlatformDisplays,PLAT-43,1,1,display/video
 SDL_ORIENTATION_PORTRAIT_FLIPPED,display,IPlatformDisplays,PLAT-43,1,1,display/video
 SDL_ScreenSaverEnabled,display,IPlatformDisplays,PLAT-43,1,1,display/video
-SDL_GetError,error,PlatformException,PLAT-21,188,24,error reporting
+SDL_GetError,error,PlatformException,PLAT-21,185,24,error reporting
 SDL_ClearError,error,PlatformException,PLAT-21,3,2,error reporting
 SDL_SetError,error,PlatformException,PLAT-21,1,1,error reporting
 SDL_Event,event,PlatformEvent + IPlatform::PollEvents,PLAT-17/PLAT-33..38,54,7,event payload type
@@ -125,47 +125,41 @@ SDL_GetPrefPath,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
 SDL_GetUserFolder,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
 SDL_LoadFile,filesystem,IPlatformFileSystem,PLAT-44,1,1,filesystem
 SDL_LoadFile_IO,filesystem,IPlatformFileSystem,PLAT-44,1,1,IO stream API
-SDL_GL_GetAttribute,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,22,2,GL context
-SDL_GL_GetProcAddress,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,4,GL context
-SDL_GL_SetAttribute,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,3,GL context
-SDL_GLContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,8,2,GL context type
-SDL_GL_GetSwapInterval,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,8,1,GL context
-SDL_GL_MULTISAMPLEBUFFERS,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,3,GL context
-SDL_GL_MULTISAMPLESAMPLES,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,3,GL context
-SDL_GL_SetSwapInterval,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,4,GL context
-SDL_GL_DEPTH_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
-SDL_GL_DOUBLEBUFFER,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
-SDL_GL_STENCIL_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
-SDL_GL_CONTEXT_MAJOR_VERSION,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
-SDL_GL_CONTEXT_MINOR_VERSION,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
-SDL_GL_CONTEXT_PROFILE_CORE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
-SDL_GL_CONTEXT_PROFILE_ES,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
-SDL_GL_CONTEXT_PROFILE_MASK,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
-SDL_GL_CONTEXT_PROFILE_COMPATIBILITY,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,3,2,GL context
-SDL_GLAttr,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context type
-SDL_GL_ALPHA_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_BLUE_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_CONTEXT_FLAGS,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_CONTEXT_RESET_LOSE_CONTEXT,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_CONTEXT_RESET_NOTIFICATION,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_CreateContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
-SDL_GL_DestroyContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
-SDL_GL_GREEN_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_GetCurrentContext,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
-SDL_GL_GetCurrentWindow,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
-SDL_GL_MakeCurrent,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
-SDL_GL_RED_SIZE,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
-SDL_GL_ResetAttributes,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
-SDL_GL_SwapWindow,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
-SDL_Vulkan_LoadLibrary,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,Vulkan surface/extensions
-SDL_Vulkan_UnloadLibrary,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,Vulkan surface/extensions
-SDL_vulkan,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,SDL header include
-SDL_GL_,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,GL context
-SDL_Vulkan_CreateSurface,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,Vulkan surface/extensions
-SDL_Vulkan_DestroySurface,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,Vulkan surface/extensions
-SDL_Vulkan_GetInstanceExtensions,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,Vulkan surface/extensions
-SDL_opengl,gl-vulkan-interop,IPlatformGlContext / IPlatformVulkanSurface,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,SDL header include
+SDL_GL_GetAttribute,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,22,2,GL context
+SDL_GL_GetProcAddress,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,4,GL context
+SDL_GL_SetAttribute,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,10,3,GL context
+SDL_GLContext,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,8,2,GL context type
+SDL_GL_GetSwapInterval,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,8,1,GL context
+SDL_GL_MULTISAMPLEBUFFERS,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,3,GL context
+SDL_GL_MULTISAMPLESAMPLES,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,3,GL context
+SDL_GL_SetSwapInterval,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,6,4,GL context
+SDL_GL_DEPTH_SIZE,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_DOUBLEBUFFER,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_STENCIL_SIZE,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,5,3,GL context
+SDL_GL_CONTEXT_MAJOR_VERSION,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
+SDL_GL_CONTEXT_MINOR_VERSION,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
+SDL_GL_CONTEXT_PROFILE_CORE,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
+SDL_GL_CONTEXT_PROFILE_ES,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
+SDL_GL_CONTEXT_PROFILE_MASK,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,4,2,GL context
+SDL_GL_CONTEXT_PROFILE_COMPATIBILITY,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,3,2,GL context
+SDL_GLAttr,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context type
+SDL_GL_ALPHA_SIZE,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_BLUE_SIZE,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_CONTEXT_FLAGS,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_CONTEXT_RESET_LOSE_CONTEXT,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_CONTEXT_RESET_NOTIFICATION,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_CreateContext,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_DestroyContext,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_GREEN_SIZE,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_GetCurrentContext,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_GetCurrentWindow,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_MakeCurrent,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_RED_SIZE,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,1,GL context
+SDL_GL_ResetAttributes,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_SwapWindow,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,2,2,GL context
+SDL_GL_,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,GL context
+SDL_opengl,gl-vulkan-interop,IPlatformGlContext,PLAT-22/PLAT-23/PLAT-41/PLAT-42,1,1,SDL header include
 SDL_Keycode,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,24,4,keyboard mapping
 SDL_Haptic,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,22,1,haptics
 SDL_JoystickID,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,19,3,joystick
@@ -478,10 +472,10 @@ SDL_UpdateHapticEffect,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,haptic
 SDL_WarpMouseGlobal,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_WarpMouseInWindow,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,mouse/cursor
 SDL_gamepad,input,CNA/Platform/Input/*,PLAT-24/PLAT-77..90,1,1,SDL header include
-SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,25,11,init flag
 SDL_INIT_AUDIO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,24,8,init flag
-SDL_InitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,8,subsystem lifecycle
-SDL_QuitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,16,7,subsystem lifecycle
+SDL_INIT_VIDEO,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,23,11,init flag
+SDL_InitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,15,8,subsystem lifecycle
+SDL_QuitSubSystem,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,15,7,subsystem lifecycle
 SDL_Quit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,14,10,subsystem lifecycle
 SDL_WasInit,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,14,9,subsystem lifecycle
 SDL_Init,lifecycle,IPlatform::Initialize/Shutdown,PLAT-29,10,8,subsystem lifecycle
@@ -584,7 +578,7 @@ SDL_BLENDOPERATION_REV_SUBTRACT,pixel-format,CNA graphics types,PLAT-64/PLAT-65,
 SDL_BLENDOPERATION_SUBTRACT,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,blend mode
 SDL_CreateSurfaceFrom,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
 SDL_FLIP_NONE,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
-SDL_Renderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,270,91,SDL_Renderer object/API
+SDL_Renderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,259,87,SDL_Renderer object/API
 SDL_gpu,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,139,19,SDL header include
 SDL_GPUTextureFormat,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,137,2,SDL_GPU renderer API
 SDL_GPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,112,2,SDL_GPU renderer API
@@ -594,7 +588,7 @@ SDL_GPU_TEXTUREFORMAT_INVALID,sdl-renderer-specific,"allowlisted renderers (SDL_
 SDL_GPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,60,2,SDL_GPU renderer API
 SDL_GPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,58,5,SDL_GPU renderer API
 SDL_GPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,55,2,SDL_GPU renderer API
-SDL_RenderReadPixels,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,55,50,SDL_Renderer draw call
+SDL_RenderReadPixels,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,52,47,SDL_Renderer draw call
 SDL_GPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,49,2,SDL_GPU renderer API
 SDL_ReleaseGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,49,1,SDL_GPU resource API
 SDL_GPUPrimitiveType,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,42,2,SDL_GPU renderer API
@@ -703,7 +697,6 @@ SDL_GPU_SHADERFORMAT_MSL,sdl-renderer-specific,"allowlisted renderers (SDL_RENDE
 SDL_GPU_STOREOP_RESOLVE,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,2,SDL_GPU renderer API
 SDL_GPU_TEXTUREFORMAT_D32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
 SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_GPU renderer API
-SDL_GetRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,2,SDL_Renderer object/API
 SDL_LOGICAL_PRESENTATION_LETTERBOX,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,3,SDL_Renderer constant
 SDL_ReleaseGPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
 SDL_ReleaseGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,5,2,SDL_GPU resource API
@@ -761,6 +754,7 @@ SDL_GPU_VERTEXELEMENTFORMAT_SHORT4,sdl-renderer-specific,"allowlisted renderers 
 SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
 SDL_GenerateMipmapsForGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_GPU API
 SDL_GetRenderLogicalPresentationRect,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,2,SDL_Renderer state
+SDL_GetRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_Renderer object/API
 SDL_GetRendererName,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,1,SDL_Renderer object/API
 SDL_LOGICAL_PRESENTATION_OVERSCAN,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer constant
 SDL_LOGICAL_PRESENTATION_STRETCH,sdl-renderer-specific,"allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",PLAT-3/PLAT-76,3,3,SDL_Renderer constant
@@ -971,7 +965,7 @@ SDL_GetTicksNS,timing,IPlatform timing,PLAT-39,2,1,timing
 SDL_GetPerformanceCounter,timing,IPlatform timing,PLAT-39,1,1,timing
 SDL_GetPerformanceFrequency,timing,IPlatform timing,PLAT-39,1,1,timing
 SDL_GetTicks,timing,IPlatform timing,PLAT-39,1,1,timing
-SDL_Window,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,87,27,window management
+SDL_Window,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,84,26,window management
 SDL_GetWindowID,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,30,11,window management
 SDL_CreateWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,19,9,window management
 SDL_DestroyWindow,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,11,6,window management
@@ -1010,7 +1004,5 @@ SDL_SetWindowPosition,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window 
 SDL_SetWindowRelativeMouseMode,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
 SDL_SetWindowTitle,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window management
 SDL_WINDOW_INPUT_FOCUS,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window flag
-SDL_WINDOW_METAL,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window flag
 SDL_WINDOW_MINIMIZED,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window flag
-SDL_WINDOW_VULKAN,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,window flag
 SDL_video,window,IPlatformWindow,PLAT-18/PLAT-30/PLAT-31,1,1,SDL header include

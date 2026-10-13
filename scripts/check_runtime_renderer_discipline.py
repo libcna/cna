@@ -52,7 +52,7 @@ ALLOWED = {
 
 # Window creation is fully descriptor-driven as of P1: none of these may reappear in the XNA layer.
 WINDOW_MACROS = re.compile(
-    r"CNA_RENDERER_(EASYGL|METAL|FNA3D|HEADLESS|SOFTWARE|STUB)\b")
+    r"CNA_RENDERER_(EASYGL|FNA3D|HEADLESS|SOFTWARE|STUB)\b")
 
 MACRO = re.compile(r"CNA_RENDERER_[A-Z0-9_]+")
 

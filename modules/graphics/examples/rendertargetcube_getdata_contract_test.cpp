@@ -184,12 +184,6 @@ namespace
     // pins what GetData must do about it: refuse the levels that were never allocated.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Unsupported,
                                  true, false, Support::Exact, MipTargets::LevelsWithoutStorage, true, true, false, false, true};
-#elif defined(CNA_RENDERER_METAL)
-    // plans/plan_apple_m4.md AM4-141: `msaaCubeTargets` true -- each face renders into its own 2D
-    // multisample texture and resolves into the cube's slice. AM4-147: `rtCubeSetData` true -- a
-    // single-sampled cube target stores the uploaded face, in the same row order it reads back.
-    constexpr Contract kContract{"METAL", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #else
 #error "REMED-GFX-134: this renderer has no declared RenderTargetCube GetData contract."
 #endif

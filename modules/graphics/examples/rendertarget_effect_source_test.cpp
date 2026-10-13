@@ -186,8 +186,6 @@ namespace
     constexpr const char* kRendererName = "SDL_RENDERER";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
-#elif defined(CNA_RENDERER_METAL)
-    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-152: this renderer has no declared render-target effect-source contract."
 #endif

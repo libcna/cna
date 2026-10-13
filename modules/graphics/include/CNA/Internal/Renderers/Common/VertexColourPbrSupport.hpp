@@ -59,7 +59,7 @@ namespace CNA::Internal::Renderers
      *
      * @param params Draw state as the effect filled it.
      * @param strideInBytes The vertex buffer's stride.
-     * @param rendererName Short renderer identifier, e.g. "METAL".
+     * @param rendererName Short renderer identifier, e.g. "WEBGPU".
      * @throws std::runtime_error When the draw carries an enabled `COLOR_0` on stride 60 or 80.
      */
     inline void RequireVertexColourPbrSupportEXT(const GpuDrawParams& params,
@@ -76,7 +76,7 @@ namespace CNA::Internal::Renderers
             "the draw is refused rather than rendered with the opaque-white identity, which would be "
             "a visibly wrong surface reported as a successful draw. Use a renderer that implements it "
             "(EasyGL: OPENGLES3/OPENGL33/WEBGL2, SOFTWARE, "
-            "DIRECTX9, SDL_GPU, WEBGPU, METAL), or "
+            "DIRECTX9, SDL_GPU, WEBGPU), or "
             "set "
             "VertexColorEnabledEXT=false on the effect to accept "
             "the identity deliberately.");

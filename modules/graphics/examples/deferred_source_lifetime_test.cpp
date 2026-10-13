@@ -170,8 +170,6 @@ namespace
     constexpr const char* kRendererName = "SDL_RENDERER";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
-#elif defined(CNA_RENDERER_METAL)
-    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-167: this renderer has no declared deferred-source lifetime contract."
 #endif

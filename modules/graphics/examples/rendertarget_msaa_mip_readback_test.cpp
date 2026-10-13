@@ -141,8 +141,6 @@ namespace
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
-#elif defined(CNA_RENDERER_METAL)
-    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-186: this renderer has no declared target mip-readback contract."
 #endif
@@ -210,7 +208,7 @@ namespace
      * this file measures and prints what the extra attachment holds rather than inventing a value.
      */
     constexpr bool kMrtExtraAttachmentContentClaimable =
-#if defined(CNA_RENDERER_SDL_GPU) || defined(CNA_RENDERER_METAL)
+#if defined(CNA_RENDERER_SDL_GPU)
         // plans/plan_apple_m4.md AM4-097: Metal masks attachments past 0 out of its stock pipelines.
         true;
 #else

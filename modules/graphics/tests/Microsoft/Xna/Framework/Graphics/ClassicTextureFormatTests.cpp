@@ -74,12 +74,6 @@ namespace
             if (CNA_RENDERER_IS(Software))
                 ADD_FAILURE() << "Software must support classic SurfaceFormat ordinal "
                               << static_cast<int>(format);
-            // plans/plan_apple_m4.md AM4-142: so must Metal -- every format this file transfers
-            // has native Metal storage on every Metal device, and a verdict that regressed to
-            // Defer would otherwise turn these checks into silent returns.
-            if (CNA_RENDERER_IS(Metal))
-                ADD_FAILURE() << "Metal must support classic SurfaceFormat ordinal "
-                              << static_cast<int>(format);
             return;
         }
 
@@ -149,13 +143,7 @@ namespace
     {
         if (device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) !=
             RendererFormatVerdict::Supported)
-        {
-            // plans/plan_apple_m4.md AM4-142: as in VerifyExactTransfers.
-            if (CNA_RENDERER_IS(Metal))
-                ADD_FAILURE() << "Metal must sample classic SurfaceFormat ordinal "
-                              << static_cast<int>(format);
             return;
-        }
         SCOPED_TRACE(static_cast<int>(format));
         Texture2D texture(device, 1, 1, false, format);
         texture.SetData(&value, 1);
@@ -164,23 +152,6 @@ namespace
         EXPECT_NEAR(pixel.getGProperty(), g, tolerance);
         EXPECT_NEAR(pixel.getBProperty(), b, tolerance);
         EXPECT_NEAR(pixel.getAProperty(), a, tolerance);
-    }
-
-    /**
-     * @brief Whether Metal must store a classic format in a cube or a volume on this device.
-     *
-     * plans/plan_apple_m4.md AM4-147: every one this file transfers, except that the packed 16-bit
-     * trio exists only on Apple GPUs -- so for those the device's Texture2D verdict decides.
-     */
-    [[nodiscard]] bool MetalMustStoreCubeOrVolumeFormat(GraphicsDevice& device, SurfaceFormat format)
-    {
-        if (!CNA_RENDERER_IS(Metal))
-            return false;
-        if (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
-            format == SurfaceFormat::Bgra4444)
-            return device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
-                   RendererFormatVerdict::Supported;
-        return true;
     }
 
     template<typename T, typename Factory>
@@ -192,9 +163,6 @@ namespace
         {
             if (CNA_RENDERER_IS(Software))
                 ADD_FAILURE() << "Software must support classic cube SurfaceFormat ordinal "
-                              << static_cast<int>(format);
-            if (MetalMustStoreCubeOrVolumeFormat(device, format))
-                ADD_FAILURE() << "Metal must support classic cube SurfaceFormat ordinal "
                               << static_cast<int>(format);
             return;
         }
@@ -257,9 +225,6 @@ namespace
         {
             if (CNA_RENDERER_IS(Software))
                 ADD_FAILURE() << "Software must support classic volume SurfaceFormat ordinal "
-                              << static_cast<int>(format);
-            if (MetalMustStoreCubeOrVolumeFormat(device, format))
-                ADD_FAILURE() << "Metal must support classic volume SurfaceFormat ordinal "
                               << static_cast<int>(format);
             return;
         }
@@ -404,12 +369,7 @@ namespace
     {
         if (device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)) !=
             RendererFormatVerdict::Supported)
-        {
-            if (MetalMustStoreCubeOrVolumeFormat(device, format))
-                ADD_FAILURE() << "Metal must sample classic cube SurfaceFormat ordinal "
-                              << static_cast<int>(format);
             return;
-        }
         SCOPED_TRACE(static_cast<int>(format));
         TextureCube cube(device, 1, false, format);
         cube.SetData(CubeMapFace::PositiveZ, &value, 1);
@@ -609,8 +569,8 @@ TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
 
 // plans/plan_apple_m4.md AM4-148: a DXT3 and a DXT5 texture sampled in a real draw, alpha
 // included. Their readbacks return the blocks the renderer kept and the cube fixture's colour halves
-// are identical in BC2 and BC3, so only a sampled alpha tells the two block layouts apart -- found by
-// giving Metal's DXT5 the BC2 format, which every other DXT test still passed.
+// are identical in BC2 and BC3, so only a sampled alpha tells the two block layouts apart -- found
+// when one renderer gave DXT5 the BC2 format, which every other DXT test still passed.
 TEST(ClassicTextureFormat, DxtAlphaBlocksSampleTheirOwnEncoding)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
@@ -771,10 +731,8 @@ TEST(ClassicTextureFormat, FloatCubeFormatsPreserveHdrEnvironmentMapSampling)
 
 TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaims)
 {
-    // plans/plan_apple_m4.md AM4-147/AM4-148: Metal joined once its cube stored every
-    // uncompressed format and DXT.
-    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, Metal))
-        GTEST_SKIP() << "the audited cube capability belongs to Software, EasyGL and Metal";
+    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2))
+        GTEST_SKIP() << "the audited cube capability belongs to Software and EasyGL";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -799,17 +757,6 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
              SurfaceFormat::Alpha8})
     {
         SCOPED_TRACE(static_cast<int>(format));
-        // A Metal GPU without the packed 16-bit formats (not an Apple GPU) refuses them for a cube
-        // as it does for a Texture2D.
-        if (CNA_RENDERER_IS(Metal) && !MetalMustStoreCubeOrVolumeFormat(device, format) &&
-            format != SurfaceFormat::Color && format != SurfaceFormat::Dxt1 &&
-            format != SurfaceFormat::Dxt3 && format != SurfaceFormat::Dxt5)
-        {
-            EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)),
-                      RendererFormatVerdict::Unsupported);
-            EXPECT_THROW(TextureCube(device, 4, false, format), System::NotSupportedException);
-            continue;
-        }
         EXPECT_EQ(device.GetRenderer().ClassifyTextureCubeFormatEXT(
                       static_cast<int>(format)),
                   RendererFormatVerdict::Supported);
@@ -836,10 +783,8 @@ TEST(ClassicTextureFormat, PlainCubeCapabilityDoesNotInheritTexture2DFormatClaim
 
 TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContract)
 {
-    // plans/plan_apple_m4.md AM4-147: Metal joined once its volume stored every uncompressed
-    // classic format natively.
-    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2, Metal))
-        GTEST_SKIP() << "the audited volume capability belongs to Software, EasyGL and Metal";
+    if (!CNA_RENDERER_IS(Software, OpenGLES3, OpenGL33, WebGL2))
+        GTEST_SKIP() << "the audited volume capability belongs to Software and EasyGL";
 
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
@@ -855,15 +800,6 @@ TEST(ClassicTextureFormat, HiDefVolumeFormatsHaveAnExplicitCompleteRendererContr
              SurfaceFormat::HdrBlendable})
     {
         SCOPED_TRACE(static_cast<int>(format));
-        // AM4-147: a Metal device without the packed 16-bit formats (not an Apple GPU) refuses
-        // them for a volume exactly as it does for a Texture2D.
-        if (CNA_RENDERER_IS(Metal) && !MetalMustStoreCubeOrVolumeFormat(device, format))
-        {
-            EXPECT_EQ(device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)),
-                      RendererFormatVerdict::Unsupported);
-            EXPECT_THROW(Texture3D(device, 2, 2, 2, false, format), System::NotSupportedException);
-            continue;
-        }
         EXPECT_EQ(device.GetRenderer().ClassifyTexture3DFormatEXT(
                       static_cast<int>(format)),
                   RendererFormatVerdict::Supported);

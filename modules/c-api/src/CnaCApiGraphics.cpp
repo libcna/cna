@@ -354,7 +354,6 @@ static_assert(
         case CNA::GraphicsRendererType::Stub: return CNA_GRAPHICS_RENDERER_STUB;
         case CNA::GraphicsRendererType::DirectX9: return CNA_GRAPHICS_RENDERER_DIRECTX9;
         case CNA::GraphicsRendererType::SdlGpu: return CNA_GRAPHICS_RENDERER_SDL_GPU;
-        case CNA::GraphicsRendererType::Metal: return CNA_GRAPHICS_RENDERER_METAL;
         case CNA::GraphicsRendererType::Fna3d: return CNA_GRAPHICS_RENDERER_FNA3D;
     }
     return CNA_GRAPHICS_RENDERER_UNKNOWN;

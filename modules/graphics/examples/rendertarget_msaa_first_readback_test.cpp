@@ -125,9 +125,6 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
-#elif defined(CNA_RENDERER_METAL)
-    constexpr const char* kRendererName = "METAL";
-    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-154: this renderer has no declared first-readback contract."
 #endif

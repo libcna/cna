@@ -46,8 +46,6 @@ namespace CNA
         /** @brief SDL_GPU. */
         SdlGpu,
 
-        /** @brief Native Apple Metal. */
-        Metal,
 
         /** @brief FNA3D (FNA-XNA/FNA3D), the XNA-shaped C graphics library FNA itself renders
          * through; it selects SDL_GPU, Direct3D 11 or OpenGL internally at runtime. */
@@ -91,8 +89,6 @@ namespace CNA
         return GraphicsRendererType::DirectX9;
 #elif defined(CNA_RENDERER_SDL_GPU)
         return GraphicsRendererType::SdlGpu;
-#elif defined(CNA_RENDERER_METAL)
-        return GraphicsRendererType::Metal;
 #elif defined(CNA_RENDERER_FNA3D)
         return GraphicsRendererType::Fna3d;
 #else
@@ -129,7 +125,6 @@ namespace CNA
             case GraphicsRendererType::Stub:          return "STUB";
             case GraphicsRendererType::DirectX9:          return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:        return "SDL_GPU";
-            case GraphicsRendererType::Metal:          return "METAL";
             case GraphicsRendererType::Fna3d:         return "FNA3D";
         }
         return "UNKNOWN";

@@ -112,9 +112,9 @@ AREAS: dict[str, tuple[str, str, str]] = {
         "The handle handed to renderers; the 7 window properties define its minimum surface.",
     ),
     "gl-vulkan-interop": (
-        "IPlatformGlContext / IPlatformVulkanSurface",
+        "IPlatformGlContext",
         "PLAT-22/PLAT-23/PLAT-41/PLAT-42",
-        "GL context and Vulkan surface creation; frees 11 renderer families as a group.",
+        "GL context creation; the Vulkan surface service went with the retired VULKAN renderer.",
     ),
     "sdl-renderer-specific": (
         "allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",

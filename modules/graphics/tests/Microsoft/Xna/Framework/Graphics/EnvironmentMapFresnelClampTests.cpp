@@ -81,7 +81,7 @@ namespace
         // WINCLOSE-0020: DirectX11's env_map3d saturates the Fresnel weight per vertex, as XNA's
         // D3D9 COLOR output does, and reads the target back. plans/plan_apple_m4.md AM4-158: so
         // does Metal's cna_env vertex function (AM4-140).
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, Metal);
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software);
     }
 
     class EnvironmentMapFresnelClampTest : public ::testing::Test

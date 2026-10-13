@@ -134,7 +134,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, Metal);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software);
 }
 
 namespace
@@ -1989,7 +1989,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 // decoy range 4..6, while applying it twice underflows the vertex buffer.
 TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software);
     RequireInstancedRendering();
 
     const GridLayout layout = BackbufferLayout();
@@ -2039,7 +2039,7 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
     RunBindingOffsetAndFrequencyOracle();
 }
 

@@ -50,8 +50,7 @@ TEST(WindowDescriptionTests, HighDpiIsOptInNotDefault)
 
 TEST(WindowDescriptionTests, RenderIntentNamesAreDistinctAndStable)
 {
-    const WindowRenderIntent intents[] = {WindowRenderIntent::None, WindowRenderIntent::OpenGl,
-                                          WindowRenderIntent::Metal};
+    const WindowRenderIntent intents[] = {WindowRenderIntent::None, WindowRenderIntent::OpenGl};
     std::set<std::string> names;
     for (const WindowRenderIntent intent : intents)
     {
@@ -59,7 +58,7 @@ TEST(WindowDescriptionTests, RenderIntentNamesAreDistinctAndStable)
         EXPECT_EQ(&ToString(intent), &ToString(intent));
         names.insert(ToString(intent));
     }
-    EXPECT_EQ(names.size(), 3u);
+    EXPECT_EQ(names.size(), 2u);
 }
 
 TEST(WindowDescriptionTests, FullscreenModeNamesAreDistinctAndStable)

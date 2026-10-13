@@ -77,7 +77,6 @@ namespace CNA
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::SdlGpu:
-            case GraphicsRendererType::Metal:
                 return GraphicsBackendMaturity::Supported;
 
             case GraphicsRendererType::WebGPU:

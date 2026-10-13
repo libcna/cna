@@ -74,7 +74,7 @@ namespace
         // WINCLOSE-0020: DirectX11 computes the same rectangle through ComputeD3DPresentationGeometry
         // and letterboxes its readback with it (WINCLOSE-0012). plans/plan_apple_m4.md AM4-158:
         // Metal's GetDefaultViewportRect() is the same letterboxed presentation rectangle.
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, WebGPU, Metal);
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, WebGPU);
     }
 
     [[nodiscard]] std::string RendererName()
@@ -423,7 +423,7 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
     // AM4-025 (enrolled here by AM4-158). So probe them through that contract. A sprite covering the whole logical area must read back as ink at the logical
     // centre AND at the far logical corner: the corner placement this test exists to catch leaves
     // that corner at the clear colour. The bars have no logical pixels, so they are not readable here.
-    if (CNA_RENDERER_IS(OpenGL33, OpenGLES3, WebGL2, Metal))
+    if (CNA_RENDERER_IS(OpenGL33, OpenGLES3, WebGL2))
     {
         for (const auto& [x, y] : {std::pair{virtualSize / 2, virtualSize / 2},
                                    std::pair{virtualSize - 1, virtualSize - 1}})

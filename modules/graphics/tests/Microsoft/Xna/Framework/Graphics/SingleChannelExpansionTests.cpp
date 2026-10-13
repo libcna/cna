@@ -67,7 +67,7 @@ namespace
         // plans/plan_apple_m4.md AM4-158: Metal samples one-channel formats through a swizzled
         // view (AM4-142).
         return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Fna3d,
-                               Software, Metal);
+                               Software);
     }
 
     class SingleChannelExpansionTest : public ::testing::Test

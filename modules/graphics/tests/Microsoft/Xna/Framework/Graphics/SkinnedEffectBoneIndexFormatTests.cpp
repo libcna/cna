@@ -105,7 +105,7 @@ namespace
 TEST(SkinnedEffectBoneIndexFormatTest, Short4BlendIndicesSelectTheBoneTheyName)
 {
     using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, Fna3d);
 
     GraphicsDevice device;
     const Color selected = DrawWithBoneIndex(device, 1);

@@ -137,9 +137,6 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
-#elif defined(CNA_RENDERER_METAL)
-    constexpr bool kRasterizes = true;
-    constexpr const char* kRendererName = "METAL";
 #else
 #error "REMED-GFX-151: this renderer has no declared render-target producer/consumer contract."
 #endif

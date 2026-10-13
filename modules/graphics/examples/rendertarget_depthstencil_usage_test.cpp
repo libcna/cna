@@ -305,14 +305,6 @@ namespace
     constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, false, false, true, true, false, true};
-#elif defined(CNA_RENDERER_METAL)
-    // plans/plan_apple_m4.md AM4-141: Metal multisamples render targets on its own (no backbuffer
-    // request needed) and loads/stores their multisampled depth across bind cycles, so the
-    // multisampled RenderTarget2D preserves like every other target; the old row copied Vulkan's
-    // REMED-GFX-141 defect, inert while Metal had no MSAA.
-    constexpr Contract kContract{"METAL", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true,
-                                 true, true, true, true, true, true, false, false};
 #else
 #error "REMED-GFX-142: this renderer has no declared render-target depth/stencil contract."
 #endif

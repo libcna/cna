@@ -110,7 +110,6 @@ IDENTITIES = [
     ("STUB", "Stub", 13),
     ("DIRECTX9", "DirectX9", 22),
     ("SDL_GPU", "SdlGpu", 31),
-    ("METAL", "Metal", 42),
     ("FNA3D", "Fna3d", 43),
 ]
 
@@ -119,7 +118,7 @@ IDENTITIES = [
 # different semantics -- so this table only ever grows. SKIA (19) was retired in 2026-08; twenty-five
 # more on 2026-09-17, DIRECT2D (16), FREEDIRECT (21) and PORTABLEGL (46) on 2026-09-27, and
 # HTML_DOM (18), OPENGL4 (33), GDI (40) and SVG_DOM (44) on 2026-09-28, and OPENGLES2 (2),
-# WEBGL1 (5), DIRECTX12 (15) and CANVAS (17) on 2026-10-06, and VULKAN (8) and DIRECTX11 (14) on 2026-10-13
+# WEBGL1 (5), DIRECTX12 (15) and CANVAS (17) on 2026-10-06, and VULKAN (8), DIRECTX11 (14) and METAL (42) on 2026-10-13
 # (docs/removed-renderers.md).
 #
 # It is pinned here as well as in cmake/RendererIdentities.cmake on purpose. The CMake list exists
@@ -133,7 +132,7 @@ RETIRED_IDENTITIES = {
     "FREEDIRECT": 21, "DIRECTX1": 23, "DIRECTX2": 24, "DIRECTX3": 25, "DIRECTX5": 26,
     "DIRECTX6": 27, "DIRECTX7": 28, "DIRECTX8": 29, "DIRECTX10": 30, "OPENGLES1": 32,
     "OPENGL4": 33, "OPENGL1": 34, "OPENGL2": 35, "WICKED": 36, "SOKOL": 37, "DILIGENT": 38,
-    "GLIDE": 39, "GDI": 40, "LLGL": 41, "SVG_DOM": 44, "OPENVG": 45, "PORTABLEGL": 46,
+    "GLIDE": 39, "GDI": 40, "LLGL": 41, "METAL": 42, "SVG_DOM": 44, "OPENVG": 45, "PORTABLEGL": 46,
     "TINYGL": 47, "IGL": 48, "PIXIJS": 49, "NANOVG": 50, "RLGL": 51,
 }
 

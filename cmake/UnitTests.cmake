@@ -615,12 +615,6 @@ if(CNA_BUILD_TESTS)
             CNA_TEST_HAS_AUDIO_DURATION_PROBE=1)
     endif()
 
-    # The metal policy suites deliberately compile on every renderer (see their own header
-    # comments); their policy headers ride the unconditional header-interface target that renderer
-    # module always defines.
-    target_link_libraries(cna_test_build_config INTERFACE
-        cna_renderer_metal_headers)
-
     # GltfImportCoreTests.cpp includes CNA/Internal/GltfImport/GltfImportCore.hpp directly (to call
     # ExtractMesh() without spawning the CLI tool), which itself includes cgltf.h -- CNA's own
     # target_include_directories for that path is PRIVATE (see cmake/CnaLibrary.cmake), so it does

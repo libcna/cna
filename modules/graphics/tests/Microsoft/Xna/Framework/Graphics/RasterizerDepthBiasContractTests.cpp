@@ -161,7 +161,7 @@ namespace
 TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepthFormats)
 {
     // plans/plan_apple_m4.md AM4-151: Metal scales the bias to each target's own depth storage.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 #if defined(__APPLE__)
     // plans/plan_apple_m4.md AM4-171: Apple's OpenGL keeps every depth format as 32-bit float (it
     // runs on Metal, and Apple GPUs have no 24-bit depth) -- measured by clearing to a value a
@@ -205,7 +205,7 @@ TEST(RasterizerDepthBiasContractTest, ConstantBiasUsesNormalizedDepthAcrossDepth
 
 TEST(RasterizerDepthBiasContractTest, ConstantBiasAlsoAppliesToWireFrameFragments)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33);
 
     GraphicsDevice device;
     EXPECT_GT(DrawWireLayerAndCountGreen(device, 0.0f), 0)

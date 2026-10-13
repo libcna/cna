@@ -13,9 +13,8 @@ set(CNA_SPIRV_CROSS_GIT_REPOSITORY "https://github.com/KhronosGroup/SPIRV-Cross.
 set(CNA_SPIRV_CROSS_GIT_TAG "vulkan-sdk-1.4.350.0"
     CACHE STRING "Pinned SPIRV-Cross revision used by SDL_shadercross")
 
-# plans/plan_apple_m4.md AM4-144: SPIRV-Cross alone, for the Metal renderer's compiled XNA effects
-# (MojoShader SPIR-V -> MSL in process) as well as for SDL_shadercross below. Idempotent, so a
-# multi-renderer build that selects both configures the one pinned source once.
+# SPIRV-Cross alone, for SDL_shadercross below. Idempotent, so a configuration that reaches it
+# twice configures the one pinned source once.
 function(cna_configure_spirv_cross)
     if(TARGET spirv-cross-c)
         return()

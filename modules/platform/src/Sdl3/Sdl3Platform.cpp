@@ -432,7 +432,6 @@ namespace CNA::Platform::Sdl3 {
         switch (description.renderIntent)
         {
             case WindowRenderIntent::OpenGl: flags |= SDL_WINDOW_OPENGL; break;
-            case WindowRenderIntent::Metal:  flags |= SDL_WINDOW_METAL; break;
             case WindowRenderIntent::None:   break;
         }
 

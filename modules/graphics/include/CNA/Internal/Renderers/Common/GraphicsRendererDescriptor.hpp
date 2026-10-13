@@ -39,14 +39,11 @@ namespace CNA::Internal::Renderers
         /** @brief No window at all (HEADLESS, SOFTWARE, STUB). */
         None,
 
-        /** @brief An ordinary window with no graphics-API intent (SDL_RENDERER, the D3D family). */
+        /** @brief An ordinary window with no graphics-API intent (SDL_GPU, WEBGPU, DIRECTX9). */
         Plain,
 
         /** @brief A window created with an OpenGL render intent. */
-        OpenGL,
-
-        /** @brief A window created with a Metal render intent. */
-        Metal
+        OpenGL
     };
 
     /**
@@ -55,7 +52,7 @@ namespace CNA::Internal::Renderers
      * RendererWindowKind::None is compatible with everything in the sense that it needs no window;
      * a renderer that wants a window can never adopt a window that was never created, and one that
      * wants none never looks at the window it was handed. Two identical kinds are always
-     * compatible. Every other crossing (OpenGL vs Metal, Plain vs OpenGL, ...)
+     * compatible. Every other crossing (Plain vs OpenGL, ...)
      * requires the window to be destroyed and recreated.
      *
      * @param existing  Window kind the current window was created for.

@@ -131,19 +131,6 @@ foreach(_cna_renderer_dir IN LISTS CNA_RENDERER_DIRS)
     list(APPEND CNA_SELECTED_RENDERER_FAMILIES "${_cna_renderer_family}")
 endforeach()
 
-# metal keeps an unconditional header-interface target: its policy suites in
-# modules/renderers/metal/tests are deliberately host-portable and compile into the CnaTests corpus
-# on every renderer (see the suites' own header comments), so its CNA/Internal/Renderers/Metal
-# policy headers must stay reachable in every configuration. Because it is entered here rather
-# than by the per-family loop below, it is handed METAL's identity macros the way that loop hands
-# every other family its own -- whenever METAL is selected, not only as the default.
-set(CNA_RENDERER_TARGET_DEFINE "")
-list(FIND CNA_RENDERER_IDENTITIES METAL _cna_metal_index)
-if(NOT _cna_metal_index EQUAL -1)
-    list(GET CNA_RENDERER_TARGET_DEFINES ${_cna_metal_index} CNA_RENDERER_TARGET_DEFINE)
-endif()
-add_subdirectory(metal)
-
 # plans/plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
 # compiled XNA effects. Entered only where cna_mojoshader was configured, which today means the
 # FNA3D renderer, or an opt-in SDL_GPU, EasyGL, WebGPU, SOFTWARE or DirectX 9
@@ -194,9 +181,7 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     endif()
     list(APPEND _cna_entered_families "${_cna_renderer_family}")
 
-    if(NOT _cna_renderer_family STREQUAL "metal")
-        add_subdirectory(${_cna_renderer_family})
-    endif()
+    add_subdirectory(${_cna_renderer_family})
 endforeach()
 
 # Compile the descriptors of every family this configuration did NOT enter above, so that no

@@ -79,7 +79,7 @@
     },
     "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp": {
       "category": "text-evidence-assertion",
-      "max_references": 4
+      "max_references": 3
     },
     "modules/content/tests/CNA/Internal/GltfImport/GltfRendererPbrFallbackPolicyTests.cpp": {
       "category": "text-evidence-assertion",
@@ -282,10 +282,6 @@
       "max_references": 16
     },
     "modules/renderers/headless/examples/headless_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 6
-    },
-    "modules/renderers/metal/examples/metal_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6
     },

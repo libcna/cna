@@ -12,8 +12,8 @@ name: Apple platforms (macOS + iOS)
 #                   frame, and require its success marker. See docs/apple-platforms.md for the
 #                   remaining device/rendering evidence boundary.
 #
-# The Metal renderer keeps its own dedicated workflow (metal-macos-ci.yml); this one covers the
-# platform layer underneath every renderer.
+# SDL_GPU is the default renderer on Apple platforms, but it is not qualified there yet: its iOS
+# legs are non-gating (continue-on-error) until that campaign lands (handoff.md section 5.2).
 
 on:
   push:
@@ -212,6 +212,7 @@ jobs:
     # libc++, which gamer services use, so the build stopped there (plans/plan_apple_m4.md AM4-255).
     runs-on: macos-26
     timeout-minutes: 90
+    continue-on-error: ${{ matrix.experimental == true }}
 
     strategy:
       fail-fast: false
@@ -225,15 +226,18 @@ jobs:
             simulator: 'ON'
             renderer: SDL_RENDERER
             build_dir: cmake-build-ios-sim
-          # plans/plan_apple_m4.md AM4-037: the native Metal renderer's UIKit path.
-          - name: metal device
+          # SDL_GPU on its Metal backend: never yet built for iOS, so these legs report without
+          # gating the workflow.
+          - name: sdl-gpu device
             simulator: 'OFF'
-            renderer: METAL
-            build_dir: cmake-build-ios-metal
-          - name: metal simulator
+            renderer: SDL_GPU
+            build_dir: cmake-build-ios-sdlgpu
+            experimental: true
+          - name: sdl-gpu simulator
             simulator: 'ON'
-            renderer: METAL
-            build_dir: cmake-build-ios-sim-metal
+            renderer: SDL_GPU
+            build_dir: cmake-build-ios-sim-sdlgpu
+            experimental: true
 
     steps:
       - name: Checkout CNA
@@ -387,9 +391,9 @@ jobs:
 
           # plans/plan_apple_m4.md AM4-037: the pixel probe draws a clear colour, a SpriteBatch
           # quad and a BasicEffect triangle, reads them back before presenting and prints
-          # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. METAL only: SDL_RENDERER refuses an
+          # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. SDL_GPU only: SDL_RENDERER refuses an
           # exact readback through the letterbox scaling a phone's surface always needs.
-          if [ "${{ matrix.renderer }}" != "METAL" ]; then exit 0; fi
+          if [ "${{ matrix.renderer }}" != "SDL_GPU" ]; then exit 0; fi
           probe="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_pixel_probe.app' -print -quit)"
           codesign --force --deep --sign - "$probe"
           xcrun simctl install "$udid" "$probe"

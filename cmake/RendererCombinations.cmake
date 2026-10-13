@@ -22,7 +22,6 @@ set(CNA_RENDERER_WINDOWS_ONLY DIRECTX9)
 # WEBGL2 + DIRECTX9 request should be refused as "two platforms, one toolchain", not left to
 # whichever per-identity gate in RendererSelection.cmake happens to fire first.
 set(CNA_RENDERER_EMSCRIPTEN_ONLY WEBGL2)
-set(CNA_RENDERER_MACOS_ONLY METAL)
 
 # Rejects an unbuildable combination with a specific, actionable reason.
 #
@@ -47,8 +46,6 @@ function(_cna_renderer_platform identity out_var)
         set(${out_var} "Windows" PARENT_SCOPE)
     elseif(identity IN_LIST CNA_RENDERER_EMSCRIPTEN_ONLY)
         set(${out_var} "Emscripten" PARENT_SCOPE)
-    elseif(identity IN_LIST CNA_RENDERER_MACOS_ONLY)
-        set(${out_var} "macOS" PARENT_SCOPE)
     else()
         set(${out_var} "ANY" PARENT_SCOPE)
     endif()

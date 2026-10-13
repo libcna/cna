@@ -1003,9 +1003,7 @@ class TextureFilterMipContractTest : public Game
                 lodBiasRefused = true;
                 note(std::string("L4-L11 LOD bias refused by this renderer: ") + e.what());
             }
-#if !defined(CNA_RENDERER_METAL)
             check(!lodBiasRefused, "L4 only Metal may refuse a non-zero LOD bias");
-#endif
         }
 
         if (kLodBiasObservable && !lodBiasRefused)

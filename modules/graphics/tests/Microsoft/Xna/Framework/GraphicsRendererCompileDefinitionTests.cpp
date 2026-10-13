@@ -57,14 +57,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers. The trap is not
     // specific to that identity: this counter must gain an arm for every renderer that is added.
 
-    // plans/plan_metal.md METAL-232: the identical class of gap the D3D9 comment above documents --
-    // no commit in this file's own history ever added a Metal entry here, and this file has never
-    // actually been built/run under CNA_GRAPHICS_RENDERER=METAL (no Apple toolchain in any session
-    // to date), so this would have silently failed EXPECT_EQ(enabled, 1) the first time
-    // metal-macos-ci.yml's build actually ran the full CnaTests suite.
-#ifdef CNA_RENDERER_METAL
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_FNA3D
     ++enabled;
 #endif

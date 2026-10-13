@@ -320,7 +320,6 @@ namespace Microsoft::Xna::Framework::Graphics
             switch (kind)
             {
             case RendererWindowKind::OpenGL: return CNA::Platform::WindowRenderIntent::OpenGl;
-            case RendererWindowKind::Metal:  return CNA::Platform::WindowRenderIntent::Metal;
             case RendererWindowKind::Plain:
             case RendererWindowKind::None:
             default:                         return CNA::Platform::WindowRenderIntent::None;

@@ -28,7 +28,7 @@ Authoritative companions:
 
 ## 1. What CNA supports today
 
-**12 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
+**11 public renderer identities**, mechanically verified by `scripts/check_renderer_identities.py`
 against `modules/core/include/CNA/GraphicsRendererType.hpp`, `cmake/RendererIdentities.cmake`, the
 runtime registry and the C ABI. Selected at configure time via `-DCNA_GRAPHICS_RENDERER=<selector>`;
 implementations live in `modules/renderers/<family>/`. Twenty-five former identities were retired on
@@ -230,8 +230,8 @@ established the opposite policy: the set is curated, and on 2026-09-17 it went *
 2026-09-27 by three more, on 2026-09-28 by four more, and on 2026-10-06 by four more.
 
 The only renderer count that may be published anywhere is the one
-`scripts/check_renderer_identities.py` prints for the actual tree — today, **12 public identities
-over 10 implementation families**. Thirty-seven identities are retired, their ABI values permanently
+`scripts/check_renderer_identities.py` prints for the actual tree — today, **11 public identities
+over 9 implementation families**. Thirty-seven identities are retired, their ABI values permanently
 reserved (`docs/removed-renderers.md`).
 
 For the record of what this catalog has actually produced since 2026-08-13: three candidates built

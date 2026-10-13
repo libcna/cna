@@ -40,7 +40,7 @@ namespace
     /// scripts/check_renderer_identities.py is the registry gate for the public count; this
     /// restates it deliberately, as a tripwire rather than as a second list -- adding an identity
     /// fails here until the gate, the documentation and this number are updated together.
-    static_assert(RendererIdentityCount == 12,
+    static_assert(RendererIdentityCount == 11,
                   "the number of public renderer identities changed -- update "
                   "scripts/check_renderer_identities.py, cmake/RendererIdentities.cmake, "
                   "cmake/RendererRegistry.cmake and the documented count in the same change "
@@ -57,9 +57,8 @@ namespace
     constexpr std::array<GraphicsRendererType, RendererIdentityCount> AllRendererTypes =
         MakeAllRendererTypes();
 
-    constexpr std::array<RendererWindowKind, 4> AllWindowKinds{
+    constexpr std::array<RendererWindowKind, 3> AllWindowKinds{
         RendererWindowKind::None, RendererWindowKind::Plain, RendererWindowKind::OpenGL,
-        RendererWindowKind::Metal,
     };
 }
 
@@ -146,19 +145,10 @@ TEST(RendererWindowKindTest, CandidateNeedingAWindowCannotAdoptAWindowThatWasNev
     }
 }
 
-TEST(RendererWindowKindTest, OpenGLAndMetalNeverShareAWindow)
-{
-    // The concrete case design decision 8 exists for: SDL3 rejects a window created with two
-    // graphics-API intents, so this crossing always costs a window recreation.
-    EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::Metal));
-    EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::Metal, RendererWindowKind::OpenGL));
-}
-
 TEST(RendererWindowKindTest, PlainWindowIsNotInterchangeableWithAnApiWindow)
 {
     EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::Plain, RendererWindowKind::OpenGL));
     EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::Plain));
-    EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::Plain, RendererWindowKind::Metal));
 }
 
 TEST(RendererWindowKindTest, CompatibilityIsUsableInAConstantExpression)

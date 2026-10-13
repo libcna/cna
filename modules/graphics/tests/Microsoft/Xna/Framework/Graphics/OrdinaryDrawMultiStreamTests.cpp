@@ -142,7 +142,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool OrdinaryMultiStream()
 {
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, DirectX9,
-                            Software, SdlGpu, Metal);
+                            Software, SdlGpu);
 }
 
 namespace

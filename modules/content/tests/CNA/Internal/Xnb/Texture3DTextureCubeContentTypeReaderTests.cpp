@@ -159,23 +159,6 @@ namespace
         return std::any_cast<TextureCube>(typeReader->ReadUntyped(reader, std::any{}));
     }
 
-    /// Whether @p verdict is the one refusal in these format sweeps that is a DEVICE fact. On such a
-    /// device the load must fail loudly; everywhere else, and for every other format, the sweep
-    /// still demands the exact bytes.
-    [[nodiscard]] bool DeviceRefusesOptionalPackedFormat(
-        SurfaceFormat format, CNA::Internal::Renderers::RendererFormatVerdict verdict)
-    {
-        // plans/plan_apple_m4.md AM4-147: a Metal device that is not an Apple GPU has none of the
-        // packed 16-bit formats.
-        if (CNA_RENDERER_IS(Metal))
-            return (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
-                    format == SurfaceFormat::Bgra4444) &&
-                   verdict == CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
-        (void)format;
-        (void)verdict;
-        return false;
-    }
-
     class Texture3DTextureCubeContentTypeReaderTest : public ::testing::Test
     {
     protected:
@@ -320,7 +303,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
     // plans/plan_apple_m4.md AM4-147: Metal's every uncompressed one.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     constexpr std::array<SurfaceFormat, 15> formats{{
         SurfaceFormat::Color,
@@ -356,13 +339,6 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
             }
         }
 
-        if (DeviceRefusesOptionalPackedFormat(format,
-                gd.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format))))
-        {
-            EXPECT_THROW((void)ReadHandConstructedCube(gd, format, expected),
-                         System::NotSupportedException);
-            continue;
-        }
         TextureCube cube = ReadHandConstructedCube(gd, format, expected);
         EXPECT_EQ(cube.getFormatProperty(), format);
         EXPECT_EQ(cube.getLevelCountProperty(), 1);
@@ -381,7 +357,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0021: Vulkan's cube now stores every classic format.
     // plans/plan_apple_m4.md AM4-148: and Metal's, DXT included.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     constexpr std::array<SurfaceFormat, 3> formats{{
         SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
@@ -554,7 +530,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
     // plans/plan_apple_m4.md AM4-147: so does Metal's.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     struct FormatCase
     {
@@ -589,13 +565,6 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
                 0x21u + index * 17u + static_cast<std::size_t>(formatCase.format));
         }
 
-        if (DeviceRefusesOptionalPackedFormat(formatCase.format,
-                gd.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(formatCase.format))))
-        {
-            EXPECT_THROW((void)ReadHandConstructedVolume(gd, formatCase.format, 2, 1, 1, {expected}),
-                         System::NotSupportedException);
-            continue;
-        }
         const auto texture = ReadHandConstructedVolume(
             gd, formatCase.format, 2, 1, 1, {expected});
         ASSERT_NE(texture, nullptr);
@@ -616,7 +585,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
 {
     // plans/plan_vulkan_parity.md VKPAR-0029: Vulkan's volume now stores every classic format.
     // plans/plan_apple_m4.md AM4-147: so does Metal's.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2, Metal);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     const std::vector<std::vector<std::uint8_t>> expected{
         {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u},

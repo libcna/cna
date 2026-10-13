@@ -61,8 +61,7 @@ def main():
     # Every identity named in a rule list must be a real identity.
     identities = known_identities()
     for list_name in ("CNA_RENDERER_SHARED_EASYGL",
-                       "CNA_RENDERER_WINDOWS_ONLY", "CNA_RENDERER_EMSCRIPTEN_ONLY",
-                       "CNA_RENDERER_MACOS_ONLY"):
+                       "CNA_RENDERER_WINDOWS_ONLY", "CNA_RENDERER_EMSCRIPTEN_ONLY"):
         block = re.search(r"set\(" + list_name + r"\s(.*?)\)", cmake_text, re.S)
         if block is None:
             failures.append(f"{list_name} is missing from cmake/RendererCombinations.cmake")

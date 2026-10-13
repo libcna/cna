@@ -170,11 +170,6 @@ namespace
     // D3DUSAGE_RENDERTARGET cube texture and GetMultiSampleCount() reports 0 by construction.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, false,
                                  Support::Exact, false, true};
-#elif defined(CNA_RENDERER_METAL)
-    // plans/plan_apple_m4.md AM4-141: a multisampled cube face renders into that face's own 2D
-    // multisample texture and resolves into the cube's slice.
-    constexpr Contract kContract{"METAL", true, Support::Exact, true,
-                                 Support::Exact, false, false};
 #else
 #error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."
 #endif

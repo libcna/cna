@@ -123,7 +123,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool DeclarationLayout()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, SdlGpu, DirectX9, Metal);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, SdlGpu, DirectX9);
 }
 
 // The renderers measured on a real display here. D3D9/D3D11 stay outside it because no D3D
@@ -131,7 +131,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-6: the same set, evaluated at runtime.
 [[nodiscard]] inline bool DeclarationLayoutMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, SdlGpu, Metal);
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, SdlGpu);
 }
 
 /// REMED-GFX-234: does this renderer derive its native layout from the DECLARATION?
@@ -179,7 +179,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 {
     // plans/plan_apple_m4.md AM4-092: SDL_GPU builds its vertex input from the declaration since
     // SDLGPU-59; the arm predates it.
-    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, Metal,
+    return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software,
                            SdlGpu);
 }
 

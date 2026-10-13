@@ -14,8 +14,8 @@ static_assert(!getCurrentGraphicsRendererName().empty());
 constexpr GraphicsRendererType kCompileTimeType = getCurrentGraphicsRendererType();
 constexpr std::string_view kCompileTimeName = getCurrentGraphicsRendererName();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
-static_assert(kPublicRendererCount == 12,
-              "GraphicsRendererType must expose all 12 public renderer identities");
+static_assert(kPublicRendererCount == 11,
+              "GraphicsRendererType must expose all 11 public renderer identities");
 
 TEST(GraphicsRendererTypeTest, GetCurrentGraphicsRendererTypeDoesNotThrow)
 {
@@ -60,7 +60,6 @@ namespace
             case GraphicsRendererType::Stub:        return "STUB";
             case GraphicsRendererType::DirectX9:        return "DIRECTX9";
             case GraphicsRendererType::SdlGpu:      return "SDL_GPU";
-            case GraphicsRendererType::Metal:       return "METAL";
             case GraphicsRendererType::Fna3d:       return "FNA3D";
         }
         return {};
