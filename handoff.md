@@ -162,6 +162,16 @@ The single authoritative list. Every entry below was checked against the code on
    - `WEBGPU` counts only the draws after a `Clear` inside one occlusion run
      (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`: 192000 of 384000), although
      `AM4-108` recorded it passing on 2026-10-08.
+9. **Shared-test failures with `SDL_GPU` as the default renderer** (full `cmake-build-sdlgpu` run,
+   2026-10-13; each also fails or passes identically on `9edbf314e`):
+   - A game on a non-video platform asks `SDL_GPU` for its device and gets "no installed SDL_gpu
+     driver accepts SPIR-V": `GameEventSemanticsGoldenTest` `/Headless` and `/Terminal`, and
+     `GameWindowPlatformTest.DelegatesStateAndGeometryToTheSelectedPlatformWindow` inside
+     `CnaPlatformWindowTests`.
+   - `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails only under the
+     full parallel run (3 buffers requested instead of 2); alone it passed 40 of 40 on both commits.
+     `XnaModelSourceContentPipelineTest.AMaterialsTextureIsBuiltAsItsOwnAsset` also failed once in
+     that run and passes alone on both commits.
 
 ### 5.2 Limitations
 
