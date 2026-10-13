@@ -525,8 +525,13 @@ configure-time SDL build separately; it is not the main Ninja parallelism limit.
 deterministically if the focused `dev`, `unit`, or `release-modules` closures regain tests,
 examples, the C API, or optional backends. It also verifies that PCH, unity, and IPO remain opt-in
 and rejects routine project policy expressed through global `CMAKE_C_FLAGS`, `CMAKE_CXX_FLAGS`,
-linker flags, `add_compile_options()`, or `add_link_options()`. The isolated sanitizer flags used
-to build the standalone C API consumer are the only narrow, explicit exception.
+linker flags, `add_compile_options()`, or `add_link_options()`. An exception is one exact line in
+one named file, listed with its reason in the checker, and one whose line has gone fails as stale.
+There are four: the sanitizer flags passed to the standalone C API consumer's own configure;
+Emscripten's whole-module `-pthread` (AM4-240); the runtime-first link option's read -- never a
+write -- of a program directory's C++ and linker flags (LINK-043); and the `CnaCxxRuntimeLinkage`
+fixture's probe projects, whose programs choose their C++ runtime through a toolchain file and
+directory-wide options on purpose (LINK-054).
 
 The general Linux workflow records the actual configure and build commands with `/usr/bin/time`,
 keeps the Ninja build log, and runs `tools/build/report_build_performance.py` after the build. Its
