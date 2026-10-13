@@ -36,6 +36,16 @@ configure time by name; their reserved ABI values are in
 [`docs/removed-renderers.md`](docs/removed-renderers.md). Do not add or restore a renderer without an
 explicit owner decision.
 
+**Graphics layer.** Every renderer implements one contract, `IGraphicsRenderer`, for XNA graphics
+plus CNA's graphics extensions (SPIR-V/GLSL/HLSL/MSL/WGSL `ShaderEffect` with vertex/fragment
+`ShaderPackageEXT`, PBR and skinned PBR, image-based lighting, shadow reception, float render
+targets, instancing with base instance, compiled effects, `Texture3D`/`TextureCube`). There is no
+second, general-purpose GPU layer underneath: the compute-shader, storage-buffer/image,
+texture-array, memory-barrier, indirect-draw and GPU-timer abstractions were retired end to end on
+2026-10-13 (`plans/plan_modern_retirement.md`), including their common interfaces, backend
+implementations, capability/limit identities, C API routes and tests. `modules/graphics-ext/`
+remains (`docs/cnaext-engine-layer.md`).
+
 **Platforms.** `CNA_PLATFORM` is `SDL3` (default; Windows, X11, Wayland, macOS, iOS, Android and the
 browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERMINAL`. CNA's own
 `WIN32`/`X11`/`WAYLAND` backends were retired on 2026-10-06 and are refused by name.

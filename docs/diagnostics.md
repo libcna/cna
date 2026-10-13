@@ -104,8 +104,7 @@ The common engine seams currently publish these renderer-independent metrics:
 | `Runtime/DrawCount` | frame counter, exact | Successful `BeginDraw` paths that reached `Draw` and `EndDraw`. |
 | `Graphics/DrawCalls` | frame counter, exact | Successful common `GraphicsDevice` draw submissions. |
 | `Graphics/IndexedDrawCalls` / `NonIndexedDrawCalls` | frame counter, exact | Draw-call split at the common device layer. |
-| `Graphics/IndirectDrawCalls` | frame counter, exact | Indirect submissions; their GPU-resolved primitive count is not claimed. |
-| `Graphics/SubmittedPrimitives` | frame counter, exact for direct calls | Direct primitive count, multiplied by instance count for instanced draws. Indirect calls contribute zero because CNA does not read their GPU argument buffer. |
+| `Graphics/SubmittedPrimitives` | frame counter, exact | Primitive count, multiplied by instance count for instanced draws. |
 | `Graphics/RenderTargetChanges` | frame counter, exact | Actual binding-set transitions after validation and renderer acceptance; redundant sets are excluded. |
 | `Graphics/EffectChanges` | frame counter, exact | Changes to the common device's current effect pointer. |
 | `Graphics/TextureBindingChanges` | frame counter, exact | Texture-slot pointer changes in the common collection. |

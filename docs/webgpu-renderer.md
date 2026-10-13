@@ -1256,47 +1256,45 @@ allowance, because their worst channel difference is exactly 2: EasyGL's fragmen
 differently. That is rounding, not divergence.
 
 
-## The modern CNA Graphics API (CNAEXT) on WebGPU (2026-09-22, `WMG-0001`–`WMG-0015`)
+## CNA graphics extensions on WebGPU (2026-09-22, `WMG-0001`–`WMG-0015`)
 
 `plans/plan_webgpu_modern_graphics.md` is the evidence ledger; this is the capability boundary.
+The general-purpose modern GPU layer that workstream also implemented here — compute shaders,
+storage buffers and textures, the `Texture2DArray` facade, GPU timers and indirect draws over
+those resources — was retired together with its common interfaces
+(`plans/plan_modern_retirement.md`); nothing below describes it. What this renderer supports of
+CNA's graphics extensions:
 
-Before this workstream every modern member of `IGraphicsRenderer` took the interface's default body
-on this renderer — the honest "no" — and a third of the engine-layer suite declined to run rather
-than failing. What is supported now:
-
-* **Shader packages in WGSL.** Every stock engine-layer shader package carries a WGSL variant,
-  generated from the *same* Vulkan GLSL as its SPIR-V by
-  `tools/shader_package/generate_shader_package.py` (naga, transform `cna-webgpu-glsl/1`, with a
-  spv→wgsl→spv block-layout equivalence gate). Push constants become a `set = 3, binding = 0`
-  uniform block, combined samplers split into texture + sampler at `binding + 32`, and a uniform
-  block of small-element arrays becomes a `std430 readonly buffer` (WGSL's uniform address space
-  requires a 16-byte array stride). A block that mixes array and non-array members is refused by
-  name rather than rewritten.
+* **Shader packages in WGSL.** Every stock shader package carries a WGSL variant, generated from
+  the *same* Vulkan GLSL as its SPIR-V by `tools/shader_package/generate_shader_package.py` (naga,
+  transform `cna-webgpu-glsl/1`, with a spv→wgsl→spv block-layout equivalence gate). Push constants
+  become a `set = 3, binding = 0` uniform block, combined samplers split into texture + sampler at
+  `binding + 32`, and a uniform block of small-element arrays becomes a `std430 readonly buffer`
+  (WGSL's uniform address space requires a 16-byte array stride) — a detail of translating ordinary
+  vertex/fragment shaders, not a storage-buffer API. A block that mixes array and non-array members
+  is refused by name rather than rewritten.
 * **The descriptor binding contract**, mirroring Vulkan's: group 0 the draw texture and its sampler
   at binding 32; group 1 bound textures, cubes, volumes, uniform arrays (capacity 72) and the
-  engine matrices, each sampler at `binding + 32`; group 2 storage buffers; group 3 the 128-byte
-  scalar block. Which contract a package uses is read from the shader, not from its language.
-* **Compute shaders, storage buffers, `Texture2DArray`, storage textures, GPU timers**, and every
-  `GetMax*EXT`/`GetMin*EXT` limit read from the device's actual limits. Byte-granular storage-buffer
-  writes and copies go through a compute kernel, because `writeBuffer` and buffer-to-buffer copies
-  are 4-byte aligned; readback stages through a 256-byte-row-aligned buffer.
-* **Indirect draws** (`WMG-0013`), for the stock families and for a custom `ShaderEffect`.
-  `SupportsIndirectDrawEXT` is true only when the device has `IndirectFirstInstance`, because the
-  modern API's argument structs carry a `firstInstance`. Refused by name: a compiled (FX) effect, a
-  wireframe draw, a buffer not declared with `IndirectArguments` usage, another device's buffer.
+  engine matrices, each sampler at `binding + 32`; group 2 the stock families' shadow block; group
+  3 the 128-byte scalar block. Which contract a package uses is read from the shader, not from its
+  language.
+* **Every surviving `GetMax*EXT`/`GetMin*EXT` limit** — uniform-buffer bytes and offset alignment,
+  sampled textures per stage, vertex bindings and attributes, colour attachments — is read from the
+  device's actual limits. Readback stages through a 256-byte-row-aligned buffer.
 * **Shadow reception** (`WMG-0014`) in `BasicEffect`, `SkinnedEffect`, `PbrEffect` and
   `SkinnedPbrEffect` — directional, cascaded, point and spot — through a group-2 block identical
   across those families, the WGSL twin of Vulkan's `shadow_sampling.glsl`. A draw with a shadow map
   takes the per-pixel path whatever `PreferPerPixelLighting` says, as on Vulkan.
-
 * **Image-based lighting** (`WMG-0022`) in `PbrEffect` and `SkinnedPbrEffect`, through a group-3
   block that is the WGSL twin of Vulkan's `CnaIblAmbient` and EasyGL's `cnaIblAmbient` — the same
   split-sum equation, with `roughness * (mipCount - 1)` selecting the prefiltered mip through
   `textureSampleLevel`, and the three resources read through sampler slots 10, 11 and 12 as on the
   other two renderers. `SupportsImageBasedLightingEXT()` answers **true**.
+* **Base-instance drawing** (`SupportsBaseInstanceDrawingEXT()` answers true when the device can
+  begin an instanced draw at a caller-selected instance).
 * **Debug labels** (`WMG-0020`). `SetStringMarkerEXT` queues a label into the ordered stream and
   `wgpuRenderPassEncoderInsertDebugMarker` emits it at its own position among the draws; the
-  renderer additionally opens a debug group around each of its render and compute passes.
+  renderer additionally opens a debug group around each of its render passes.
 * **Per-instance vertex streams for a `ShaderEffect`** (`WMG-0021`), on both the descriptor and the
   legacy contract. Instance attribute locations continue after the per-vertex declaration's element
   count, which is EasyGL's and Vulkan's convention, so one shader source describes its inputs on all
