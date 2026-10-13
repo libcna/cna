@@ -146,7 +146,8 @@ The single authoritative list. Every entry below was checked against the code on
    combined value 5-7 falls through to the same default.
 8. **Shared-test failures with `VULKAN` and `WEBGPU` as the default renderer** (measured
    2026-10-13 on RADV through the private runner, full `cmake-build-vulkan` and
-   `cmake-build-webgpu` runs; the code paths involved are unchanged by the `MRT` campaign):
+   `cmake-build-webgpu` runs; every one fails identically on `9edbf314e`, the commit before the
+   `MRT` campaign, built in a throwaway worktree with the same options):
    - `VULKAN`'s `PackVulkanStreamsEXT` builds the combined multi-stream `VertexDeclaration` without
      XNA's usage-index remap, so two streams with the same usage throw "duplicate usage and usage
      index": `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices`,
