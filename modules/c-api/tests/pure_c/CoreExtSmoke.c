@@ -168,7 +168,6 @@ static int validate_names(void)
 }
 
 static const CNA_GraphicsRendererType live_renderer_identities[] = {
-        CNA_GRAPHICS_RENDERER_SDL_RENDERER,
         CNA_GRAPHICS_RENDERER_OPENGLES3,
         CNA_GRAPHICS_RENDERER_OPENGL33,
         CNA_GRAPHICS_RENDERER_WEBGL2,
@@ -185,7 +184,7 @@ static const CNA_GraphicsRendererType live_renderer_identities[] = {
  * no route may accept one, and no surviving constant may take one over. Several sit above
  * CNA_GRAPHICS_RENDERER_MAXIMUM, so the gap sweep below does not reach them on its own. */
 static const CNA_GraphicsRendererType retired_renderer_identities[] = {
-        UINT32_C(2), UINT32_C(5), UINT32_C(7), UINT32_C(8), UINT32_C(10), UINT32_C(14), UINT32_C(15), UINT32_C(16),
+        UINT32_C(1), UINT32_C(2), UINT32_C(5), UINT32_C(7), UINT32_C(8), UINT32_C(10), UINT32_C(14), UINT32_C(15), UINT32_C(16),
         UINT32_C(17), UINT32_C(18), UINT32_C(19), UINT32_C(20), UINT32_C(21), UINT32_C(23),
         UINT32_C(24), UINT32_C(25), UINT32_C(26), UINT32_C(27), UINT32_C(28), UINT32_C(29),
         UINT32_C(30), UINT32_C(32), UINT32_C(33), UINT32_C(34), UINT32_C(35), UINT32_C(36),
@@ -267,7 +266,7 @@ static int validate_backend_classification(void)
                 return 0;
             }
         }
-        for (identity = CNA_GRAPHICS_RENDERER_SDL_RENDERER;
+        for (identity = UINT32_C(1);
              identity <= CNA_GRAPHICS_RENDERER_MAXIMUM; ++identity) {
             if (!is_live_renderer_identity(identity) &&
                 (cna_graphics_backend_get_category(identity, &category) !=
@@ -506,7 +505,7 @@ static int validate_renderer_selection(void)
     /* Every live identity is accepted and every retired numeric gap is refused. */
     {
         CNA_GraphicsRendererType identity = CNA_GRAPHICS_RENDERER_UNKNOWN;
-        for (identity = CNA_GRAPHICS_RENDERER_SDL_RENDERER;
+        for (identity = UINT32_C(1);
              identity <= CNA_GRAPHICS_RENDERER_MAXIMUM; ++identity) {
             flag = UINT8_C(9);
             const CNA_Result result = cna_graphics_renderer_get_is_available_ext(identity, &flag);

@@ -1871,9 +1871,7 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
         "directx9", "easygl", "fna3d", "headless", "sdl-gpu",
         "software", "stub", "webgpu",
     }};
-    constexpr std::array<const char*, 1> inheritedRejecters{{
-        "sdl-renderer",
-    }};
+    constexpr std::array<const char*, 0> inheritedRejecters{};
 
     std::set<std::string> expected;
     for (const char* name : providers) { expected.insert(name); }
@@ -1903,9 +1901,7 @@ TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFa
         "directx9", "easygl", "fna3d", "headless", "sdl-gpu",
         "software", "stub", "webgpu",
     }};
-    constexpr std::array<const char*, 1> inheritedRejecters{{
-        "sdl-renderer",
-    }};
+    constexpr std::array<const char*, 0> inheritedRejecters{};
 
     const std::filesystem::path root = RepositoryRoot();
     const std::filesystem::path renderers = root / "modules" / "renderers";

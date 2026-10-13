@@ -42,7 +42,7 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK non-apple" || {
 # ---------------------------------------------------------------------------
 # 2. iOS + allow-listed renderer: accepted.
 # ---------------------------------------------------------------------------
-for renderer in SDL_RENDERER SDL_GPU; do
+for renderer in SOFTWARE SDL_GPU; do
     cat > "${script}" <<EOF
 set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")
@@ -83,7 +83,7 @@ set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")
 set(CNA_APPLE_IOS ON)
 set(CNA_APPLE_ALLOW_UNVALIDATED_RENDERER ON)
-cna_apple_validate_renderer("SOFTWARE")
+cna_apple_validate_renderer("HEADLESS")
 message(STATUS "PROBE-OK escape-hatch")
 EOF
 cmake -P "${script}" 2>&1 | grep -q "PROBE-OK escape-hatch" || {
@@ -96,7 +96,7 @@ cmake -P "${script}" 2>&1 | grep -q "PROBE-OK escape-hatch" || {
 #     non-gating leg, as it is not yet qualified for iOS). EasyGL needs two additional sibling
 #     repositories the workflow does not supply; accepting it would only postpone a known failure.
 # ---------------------------------------------------------------------------
-for renderer in OPENGLES3 HEADLESS SOFTWARE STUB; do
+for renderer in OPENGLES3 HEADLESS STUB; do
     cat > "${script}" <<EOF
 set(CMAKE_SOURCE_DIR "${repo_root}")
 include("${repo_root}/cmake/ApplePlatform.cmake")

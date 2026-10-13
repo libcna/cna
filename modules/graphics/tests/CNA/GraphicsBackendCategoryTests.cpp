@@ -17,8 +17,8 @@ static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCa
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
 constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Fna3d) + 1;
-static_assert(kPublicRendererCount == 11,
-              "GraphicsRendererType must expose all 11 public renderer identities");
+static_assert(kPublicRendererCount == 10,
+              "GraphicsRendererType must expose all 10 public renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
 {
@@ -49,7 +49,6 @@ namespace
             case GraphicsRendererType::DirectX9:
                 return GraphicsBackendCategory::Native;
 
-            case GraphicsRendererType::SdlRenderer:
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::Fna3d:

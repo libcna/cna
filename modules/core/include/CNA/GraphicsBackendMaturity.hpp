@@ -67,7 +67,6 @@ namespace CNA
     {
         switch (type)
         {
-            case GraphicsRendererType::SdlRenderer:
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::DirectX9:

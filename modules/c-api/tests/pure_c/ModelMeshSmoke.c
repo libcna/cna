@@ -216,11 +216,7 @@ static int validate_meshes(const CNA_Handle device)
             thrd_join(thread, 0) == thrd_success &&
             wrong_thread.result == CNA_RESULT_THREAD &&
             cna_graphics_device_get_renderer_info(device, &renderer) == CNA_RESULT_SUCCESS);
-    if (renderer.renderer_type == CNA_GRAPHICS_RENDERER_SDL_RENDERER) {
-        REQUIRE(cna_model_mesh_draw(empty_mesh) == CNA_RESULT_NOT_SUPPORTED);
-    } else {
-        REQUIRE(cna_model_mesh_draw(empty_mesh) == CNA_RESULT_SUCCESS);
-    }
+    REQUIRE(cna_model_mesh_draw(empty_mesh) == CNA_RESULT_SUCCESS);
 
     REQUIRE(cna_model_mesh_destroy(mesh) == CNA_RESULT_SUCCESS &&
             name_equals(mesh_alias, MeshName) && name_equals(found_mesh, MeshName) &&

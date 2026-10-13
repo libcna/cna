@@ -3,9 +3,10 @@
 ## ABI identity
 
 The current experimental ABI is **0.48.0** (`RRC-031`..`RRC-034`, the 2026-10-13 retirement). It
-**retires the public renderer identities `VULKAN` (`8`), `DIRECTX11` (`14`) and `METAL` (`42`)**
-together with the constants `CNA_GRAPHICS_RENDERER_VULKAN`, `CNA_GRAPHICS_RENDERER_DIRECTX11` and
-`CNA_GRAPHICS_RENDERER_METAL` that named them (`docs/removed-renderers.md`). The values are permanently reserved: every route that takes a
+**retires the public renderer identities `SDL_RENDERER` (`1`), `VULKAN` (`8`), `DIRECTX11` (`14`)
+and `METAL` (`42`)** together with the constants `CNA_GRAPHICS_RENDERER_SDL_RENDERER`,
+`CNA_GRAPHICS_RENDERER_VULKAN`, `CNA_GRAPHICS_RENDERER_DIRECTX11` and `CNA_GRAPHICS_RENDERER_METAL`
+that named them (`docs/removed-renderers.md`). The values are permanently reserved: every route that takes a
 `CNA_GraphicsRendererType` refuses them with `CNA_RESULT_INVALID_ARGUMENT`, and
 `cna_graphics_renderer_set_preferred_by_name_ext` refuses each name with an error that says the
 renderer was retired. `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`) and the next new

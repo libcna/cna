@@ -775,7 +775,7 @@ CNA_C_API CNA_Result cna_graphics_renderer_get_current_name_size(uint64_t* out_b
  * for a null output. No partial value is written.
  *
  * The name matches the `CNA_GRAPHICS_RENDERER` build option exactly, for example `"HEADLESS"` or
- * `"SDL_RENDERER"`.
+ * `"SDL_GPU"`.
  */
 CNA_C_API CNA_Result cna_graphics_renderer_copy_current_name(
     char* destination,

@@ -162,9 +162,6 @@ namespace
     // cycling, LOAD + RESOLVE_AND_STORE for a preserving target.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true,
                                  Support::Exact, false, false};
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-    constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, false,
-                                 Support::Unsupported, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `msaaEngages` false: D3D9RenderTargetCubeRenderer::Recreate() allocates a plain
     // D3DUSAGE_RENDERTARGET cube texture and GetMultiSampleCount() reports 0 by construction.

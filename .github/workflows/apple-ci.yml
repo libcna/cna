@@ -84,7 +84,7 @@ jobs:
         run: ./scripts/check-apple-platform-cmake.sh
 
   macos-build:
-    name: macOS (SDL_RENDERER, portable suites)
+    name: macOS (SOFTWARE, portable suites)
     # macos-26 (Xcode 26): macos-14's default Xcode 15.4 has no std::jthread/std::stop_token in its
     # libc++, which gamer services use, so the build stopped there (plans/plan_apple_m4.md AM4-255).
     runs-on: macos-26
@@ -120,7 +120,7 @@ jobs:
         working-directory: cna
         run: >
           cmake -S . -B cmake-build-macos
-          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_GRAPHICS_RENDERER=SOFTWARE
           -DCNA_BUILD_TESTS=ON
           -DCNA_BUILD_EXAMPLES=OFF
           -DCNA_ENABLE_DRACO=OFF
@@ -157,7 +157,7 @@ jobs:
         working-directory: cna
         run: >
           cmake -S . -B cmake-build-macos-bundle
-          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_GRAPHICS_RENDERER=SOFTWARE
           -DCNA_BUILD_TESTS=OFF
           -DCNA_BUILD_EXAMPLES=OFF
           -DCNA_ENABLE_NET=OFF
@@ -220,11 +220,11 @@ jobs:
         include:
           - name: device
             simulator: 'OFF'
-            renderer: SDL_RENDERER
+            renderer: SOFTWARE
             build_dir: cmake-build-ios
           - name: simulator
             simulator: 'ON'
-            renderer: SDL_RENDERER
+            renderer: SOFTWARE
             build_dir: cmake-build-ios-sim
           # SDL_GPU on its Metal backend: never yet built for iOS, so these legs report without
           # gating the workflow.
@@ -391,8 +391,8 @@ jobs:
 
           # plans/plan_apple_m4.md AM4-037: the pixel probe draws a clear colour, a SpriteBatch
           # quad and a BasicEffect triangle, reads them back before presenting and prints
-          # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. SDL_GPU only: SDL_RENDERER refuses an
-          # exact readback through the letterbox scaling a phone's surface always needs.
+          # CNA_APPLE_PIXELS_OK or CNA_APPLE_PIXELS_FAILED. SDL_GPU only: the probe reads the back
+          # buffer through the letterbox scaling a phone's surface always needs.
           if [ "${{ matrix.renderer }}" != "SDL_GPU" ]; then exit 0; fi
           probe="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_pixel_probe.app' -print -quit)"
           codesign --force --deep --sign - "$probe"

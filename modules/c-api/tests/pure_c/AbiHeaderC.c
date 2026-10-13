@@ -195,8 +195,7 @@ _Static_assert(sizeof(CNA_SkinningDataDescriptor) == 64U,
                "CNA SkinningData descriptor size changed");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
-_Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
-                   CNA_GRAPHICS_RENDERER_SDL_GPU == UINT32_C(31) &&
+_Static_assert(CNA_GRAPHICS_RENDERER_SDL_GPU == UINT32_C(31) &&
                    CNA_GRAPHICS_RENDERER_FNA3D == UINT32_C(43) &&
                    CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_FNA3D,
                "CNA renderer identities must remain stable");
@@ -210,6 +209,9 @@ _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
 #endif
 #if defined(CNA_GRAPHICS_RENDERER_METAL)
 #error "CNA_GRAPHICS_RENDERER_METAL names a retired renderer and must not be defined"
+#endif
+#if defined(CNA_GRAPHICS_RENDERER_SDL_RENDERER)
+#error "CNA_GRAPHICS_RENDERER_SDL_RENDERER names a retired renderer and must not be defined"
 #endif
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
                    CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12) &&

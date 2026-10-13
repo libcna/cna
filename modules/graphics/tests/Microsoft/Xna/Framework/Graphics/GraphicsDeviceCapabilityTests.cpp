@@ -100,12 +100,6 @@ struct CapabilityExpectation
         // Apple, Windows and the browser no driver takes it (modules/renderers/sdl-gpu/CMakeLists.txt
         // leaves the capability off there); elsewhere it needs libshaderc at build time, which
         // this table does not see, so that arm keeps the default.
-        // plans/plan_apple_m4.md AM4-179: SDL_RENDERER is 2D-only by design (SDL's 2D render API has
-        // no vertex buffers, attachments beyond one, queries or shaders); it answers false to
-        // everything but AdditiveBlending.
-        case GraphicsRendererType::SdlRenderer:
-            return {false, false, false};
-
         case GraphicsRendererType::SdlGpu:
 #if defined(__APPLE__) || defined(_WIN32) || defined(__EMSCRIPTEN__)
             return {true, false, false};
@@ -140,8 +134,7 @@ constexpr bool kExpectCompiledEffects = false;
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
-    // plans/plan_apple_m4.md AM4-179: the one 2D-only renderer says so.
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::ThreeD), !CNA_RENDERER_IS(SdlRenderer));
+    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
@@ -163,9 +156,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
         EXPECT_TRUE(withDepth.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
         return;
     }
-    // plans/plan_apple_m4.md AM4-179: SDL_RENDERER keeps no depth or stencil plane at all.
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer),
-              !CNA_RENDERER_IS(SdlRenderer));
+    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
@@ -446,9 +437,6 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     EXPECT_TRUE(reported)
         << "WebGPU under-reports WireFrame again -- WEBGPU-153's edge-expansion implementation is "
            "still in place while the capability claims the renderer cannot do it";
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-    // plans/plan_apple_m4.md AM4-179: a 2D renderer draws no polygons to outline.
-    EXPECT_FALSE(reported) << "SDL_RENDERER claims WireFrame support but draws no 3D primitives";
 #elif defined(CNA_RENDERER_STUB)
     // Stub answers false to EVERY capability, WireFrame included: it is a no-op renderer that
     // rasterizes nothing and keeps no state, so there is no rendering path a true report could

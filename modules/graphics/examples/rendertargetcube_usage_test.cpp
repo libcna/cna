@@ -168,9 +168,6 @@ namespace
     // SDL_GPU_STOREOP_RESOLVE_AND_STORE, so it is now true and M2/M3 require exact content.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-    constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, false, false,
-                                 false, Support::Unsupported, false, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `mipMapCubeTargets` true only in the sense that construction and level-0 rendering work:
     // D3D9RenderTargetCubeRenderer::Recreate() allocates ONE level whatever mipMap asked for

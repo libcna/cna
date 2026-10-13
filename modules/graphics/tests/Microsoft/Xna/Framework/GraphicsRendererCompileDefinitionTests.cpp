@@ -9,9 +9,6 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 {
     int enabled = 0;
 
-#ifdef CNA_RENDERER_SDL_RENDERER
-    ++enabled;
-#endif
 #ifdef CNA_RENDERER_EASYGL
     ++enabled;
 #endif

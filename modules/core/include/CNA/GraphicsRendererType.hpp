@@ -15,9 +15,6 @@ namespace CNA
      */
     enum class GraphicsRendererType
     {
-        /** @brief SDL's native 2D renderer (2D-only). */
-        SdlRenderer,
-
         /** @brief OpenGL ES (desktop/mobile GLES 3.0), internally implemented by EasyGL. */
         OpenGLES3,
 
@@ -67,9 +64,7 @@ namespace CNA
      */
     constexpr GraphicsRendererType getCurrentGraphicsRendererType()
     {
-#if defined(CNA_RENDERER_SDL_RENDERER)
-        return GraphicsRendererType::SdlRenderer;
-#elif defined(CNA_RENDERER_EASYGL)
+#if defined(CNA_RENDERER_EASYGL)
 #if defined(CNA_GL_PROFILE_OPENGL33)
         return GraphicsRendererType::OpenGL33;
 #elif defined(CNA_GL_PROFILE_WEBGL2)
@@ -100,7 +95,7 @@ namespace CNA
      * @brief Returns the human-readable name of any graphics renderer identity.
      *
      * The returned view matches the CNA_GRAPHICS_RENDERER CMake option value exactly
-     * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string
+     * (e.g. "OPENGLES3", "SDL_GPU", "DIRECTX9") and points at static storage (a string
      * literal), so it stays valid for the lifetime of the program.
      *
      * plans/plan_runtimerenderer.md RTR-P7-5: this is the single place the identity names exist. It takes the
@@ -115,7 +110,6 @@ namespace CNA
     {
         switch (type)
         {
-            case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
             case GraphicsRendererType::OpenGLES3:    return "OPENGLES3";
             case GraphicsRendererType::OpenGL33:    return "OPENGL33";
             case GraphicsRendererType::WebGL2:       return "WEBGL2";
@@ -133,7 +127,7 @@ namespace CNA
     /**
      * @brief Resolves a renderer name to its identity, case-insensitively.
      *
-     * Accepts exactly the CNA_GRAPHICS_RENDERER spellings ("SDL_RENDERER", "OPENGLES3",
+     * Accepts exactly the CNA_GRAPHICS_RENDERER spellings ("SDL_GPU", "OPENGLES3",
      * "DIRECTX9", ...). Case-insensitive because these names reach CNA through environment
      * variables and command lines, which are typed by hand.
      *
@@ -175,7 +169,7 @@ namespace CNA
      * @brief Returns the human-readable name of the graphics renderer compiled into this build.
      *
      * The returned view matches the CNA_GRAPHICS_RENDERER CMake option value exactly
-     * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string literal),
+     * (e.g. "OPENGLES3", "SDL_GPU", "DIRECTX9") and points at static storage (a string literal),
      * so it stays valid for the lifetime of the program. Like getCurrentGraphicsRendererType(),
      * this is a compile-time constant.
      *

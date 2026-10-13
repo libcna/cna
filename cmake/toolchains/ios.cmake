@@ -5,7 +5,7 @@
 #   # Device (arm64):
 #   cmake -B cmake-build-ios \
 #         -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-#         -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
+#         -DCNA_GRAPHICS_RENDERER=SOFTWARE \
 #         -DCNA_BUILD_TESTS=OFF
 #   cmake --build cmake-build-ios
 #
@@ -13,7 +13,7 @@
 #   cmake -B cmake-build-ios-sim \
 #         -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
 #         -DCNA_IOS_SIMULATOR=ON \
-#         -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
+#         -DCNA_GRAPHICS_RENDERER=SOFTWARE \
 #         -DCNA_BUILD_TESTS=OFF
 #
 # Either generator works: Ninja/Makefiles produce the .app bundles directly, and the Xcode

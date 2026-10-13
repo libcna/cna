@@ -176,9 +176,8 @@ using LoggerRoute = void (*)(std::string_view, CNA::LogCategory);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 11>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 10>
     RendererIdentities{{
-        {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES3, CNA::GraphicsRendererType::OpenGLES3},
         {CNA_GRAPHICS_RENDERER_OPENGL33, CNA::GraphicsRendererType::OpenGL33},
         {CNA_GRAPHICS_RENDERER_WEBGL2, CNA::GraphicsRendererType::WebGL2},

@@ -93,45 +93,6 @@ struct TransferView final {
     return Texture::GetBlockSizeSquaredEXT(format) != 1;
 }
 
-// Its only caller is the SDL_RENDERER mip-level refusal below, so every other renderer compiles
-// this without using it.
-[[nodiscard, maybe_unused]] bool IsTransferTypeCompatible(
-    const SurfaceFormat format,
-    const CNA_TextureDataType dataType) noexcept
-{
-    switch (dataType) {
-        case CNA_TEXTURE_DATA_COLOR:
-#if 1
-            return Texture::GetFormatSizeEXT(format) % 4 == 0;
-#endif
-        case CNA_TEXTURE_DATA_BGR565: return format == SurfaceFormat::Bgr565;
-        case CNA_TEXTURE_DATA_BGRA5551: return format == SurfaceFormat::Bgra5551;
-        case CNA_TEXTURE_DATA_BGRA4444: return format == SurfaceFormat::Bgra4444;
-        case CNA_TEXTURE_DATA_BYTE:
-#if 1
-            return format == SurfaceFormat::ByteEXT;
-#endif
-        case CNA_TEXTURE_DATA_NORMALIZED_BYTE2:
-            return format == SurfaceFormat::NormalizedByte2;
-        case CNA_TEXTURE_DATA_NORMALIZED_BYTE4:
-            return format == SurfaceFormat::NormalizedByte4;
-        case CNA_TEXTURE_DATA_RGBA1010102: return format == SurfaceFormat::Rgba1010102;
-        case CNA_TEXTURE_DATA_RG32: return format == SurfaceFormat::Rg32;
-        case CNA_TEXTURE_DATA_RGBA64: return format == SurfaceFormat::Rgba64;
-        case CNA_TEXTURE_DATA_ALPHA8: return format == SurfaceFormat::Alpha8;
-        case CNA_TEXTURE_DATA_SINGLE: return format == SurfaceFormat::Single;
-        case CNA_TEXTURE_DATA_VECTOR2: return format == SurfaceFormat::Vector2;
-        case CNA_TEXTURE_DATA_VECTOR4: return format == SurfaceFormat::Vector4;
-        case CNA_TEXTURE_DATA_HALF_SINGLE: return format == SurfaceFormat::HalfSingle;
-        case CNA_TEXTURE_DATA_HALF_VECTOR2: return format == SurfaceFormat::HalfVector2;
-        case CNA_TEXTURE_DATA_HALF_VECTOR4:
-            return format == SurfaceFormat::HalfVector4 ||
-                format == SurfaceFormat::HdrBlendable;
-        case CNA_TEXTURE_DATA_USHORT: return format == SurfaceFormat::UShortEXT;
-        default: return false;
-    }
-}
-
 /// Bytes in one caller element of @p dataType -- the `sizeof(T)` of XNA's `SetData<T>`.
 [[nodiscard]] uint64_t ElementSize(const CNA_TextureDataType dataType) noexcept
 {
@@ -793,15 +754,6 @@ void DispatchGetData(
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-#ifdef CNA_RENDERER_SDL_RENDERER
-    if (view.level > 0) {
-        if (!IsTransferTypeCompatible(texture->value->getFormatProperty(), dataType)) {
-            return InvalidArgument(
-                "The Texture2D upload element type does not match its surface format.");
-        }
-        return NotSupported("SDL_RENDERER does not support mip-level Texture2D uploads.");
-    }
-#endif
     DispatchSetData(*texture->value, dataType, view, data);
     return CNA_RESULT_SUCCESS;
 }

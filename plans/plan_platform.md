@@ -94,11 +94,11 @@ exclusions are worth 78 files that a naive `grep SDL_` misreports as coupling.
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **1007** |
-| Files referencing SDL (all) | **211** |
-| Production files (`src/` + `include/`) referencing SDL | **53** |
-| …of which are renderer production files | **16** |
-| Test/example files referencing SDL | **158** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **953** |
+| Files referencing SDL (all) | **144** |
+| Production files (`src/` + `include/`) referencing SDL | **50** |
+| …of which are renderer production files | **13** |
+| Test/example files referencing SDL | **94** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -108,7 +108,7 @@ Production SDL surface per module (`src/` + `include/` only):
 |---|---:|---|
 | `modules/platform` | 31 | - |
 | `modules/audio` | 6 | audio device/stream, mixer, microphone |
-| `modules/renderers/*` | 16 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (3 families) |
+| `modules/renderers/*` | 13 | native window handle, GL context, Vulkan surface, SDL renderer/GPU (2 families) |
 
 The native-window properties actually consumed today — these define the minimum
 `NativeWindowHandle` surface, so the struct is derived from measured need, not guessed:
@@ -267,7 +267,7 @@ renderers/{sdl-renderer,sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
    per-frame is a review rejection.
 5. **Every public renderer identity keeps working throughout.** No task may reduce renderer
    coverage. Every renderer migration task names the exact renderer(s) it touches and rebuilds
-   them. There are **11 public renderer identities** over **9 implementation families** today;
+   them. There are **10 public renderer identities** over **8 implementation families** today;
    the plan was written against 46 identities, which grew to 50 and then shrank to 25 when
    `plans/plan_renderer_cleanup.md` retired 25 of them (the `ASCII` identity had already been
    withdrawn in favour of a renderer-neutral post-process effect), to 22 when `RRC-012`

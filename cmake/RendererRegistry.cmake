@@ -27,7 +27,6 @@
 # at once -- each reached through its own accessor on the single EasyGL target.
 function(_cna_renderer_identity_map out_var)
     set(_map
-        SDL_RENDERER SdlRenderer
         OPENGLES3    EasyGL|GetDescriptorOpenGLES3
         OPENGL33     EasyGL|GetDescriptorOpenGL33
         WEBGL2       EasyGL|GetDescriptorWebGL2
@@ -36,7 +35,8 @@ function(_cna_renderer_identity_map out_var)
         SOFTWARE     Software
         STUB         Stub
         DIRECTX9     DirectX9
-        SDL_GPU      SdlGpu        FNA3D        Fna3d)
+        SDL_GPU      SdlGpu
+        FNA3D        Fna3d)
 
     set(${out_var} "${_map}" PARENT_SCOPE)
 endfunction()

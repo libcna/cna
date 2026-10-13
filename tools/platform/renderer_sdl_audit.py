@@ -57,7 +57,7 @@ from sdl_inventory import scan  # noqa: E402
 
 # Renderers whose identity is an SDL3 API. This is the allowlist plans/plan_platform.md's design
 # decision 6 permits; PLAT-76's --check asserts nothing else has joined it.
-SDL_NATIVE = frozenset({"sdl-renderer", "sdl-gpu"})
+SDL_NATIVE = frozenset({"sdl-gpu"})
 
 # Renderers allowlisted because the third-party library they wrap links SDL3 itself. CNA's own
 # sources here contain only small integration seams: FNA3D links SDL3 upstream. Migrating CNA code
@@ -284,7 +284,7 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
     out.write(
         f"1. **The allowlist is {len(allowlist)}:** "
         + ", ".join(f"`{f}`" for f in allowlist)
-        + ". `sdl-renderer` and `sdl-gpu` are SDL3 APIs by identity. `fna3d` wraps a third-party\n"
+        + ". `sdl-gpu` is an SDL3 API by identity. `fna3d` wraps a third-party\n"
         "   library that links SDL3 itself, so no amount of migrating CNA code removes its\n"
         "   dependency. That is a different kind of exception and is recorded as one.\n\n"
     )

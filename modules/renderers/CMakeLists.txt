@@ -19,7 +19,7 @@ target_link_libraries(cna_renderer_common INTERFACE cna_build_config)
 # plans/plan_runtimerenderer.md RTR-P6-6: this family's target name, derived from its own directory.
 #
 # modules/renderers/<family> builds cna_renderer_<family>, '-' becoming '_'
-# (sdl-renderer -> cna_renderer_sdl_renderer). Checked against every RendererSelection.cmake
+# (sdl-gpu -> cna_renderer_sdl_gpu). Checked against every RendererSelection.cmake
 # dir/target pair when this was introduced: all of them agree, so the mapping is a fact about the
 # layout rather than a convention this file hopes for.
 #

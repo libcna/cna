@@ -582,12 +582,7 @@ static int validate_aggregate(const CNA_Handle device)
             cna_model_mesh_get_name_byte_count(mesh_alias, &count) == CNA_RESULT_SUCCESS &&
             count == 4U &&
             cna_graphics_device_get_renderer_info(device, &renderer) == CNA_RESULT_SUCCESS);
-    if (renderer.renderer_type == CNA_GRAPHICS_RENDERER_SDL_RENDERER) {
-        REQUIRE(cna_model_draw(model, local[0], local[0], local[0]) ==
-                    CNA_RESULT_NOT_SUPPORTED);
-    } else {
-        REQUIRE(cna_model_draw(model, local[0], local[0], local[0]) == CNA_RESULT_SUCCESS);
-    }
+    REQUIRE(cna_model_draw(model, local[0], local[0], local[0]) == CNA_RESULT_SUCCESS);
 
     REQUIRE(cna_model_destroy(model) == CNA_RESULT_SUCCESS &&
             cna_model_destroy(simple) == CNA_RESULT_SUCCESS &&

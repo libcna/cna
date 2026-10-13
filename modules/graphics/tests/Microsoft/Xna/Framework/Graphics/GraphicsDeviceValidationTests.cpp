@@ -491,23 +491,11 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-    if (CNA_RENDERER_IS(SdlRenderer))
-    {
-    // Task 709: the SDL_RENDERER family
-    // supports exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
-    // binding more than one target here must throw clearly rather than silently rendering to only
-    // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
-    // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
-    // renderer's own single-target limitation, not the cap check.
-    // SOFTWARE-120 removed Software from this refusal set: it now owns a four-slot CPU binding and
-    // finalization path, so the generic positive arm below applies.
-    EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
-    }
-    else if (CNA_RENDERER_IS(Stub))
+    if (CNA_RENDERER_IS(Stub))
     {
     // plans/plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
     // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- so this is a different case from
-    // the single-target renderers above, which support one. GraphicsDevice rejects the bind before
+    // a single-target renderer, which supports one. GraphicsDevice rejects the bind before
     // reaching the renderer, because RenderTarget2D::GetRenderTargetRenderer() is null. Rejecting is
     // the correct behaviour and the reason it is asserted here: a no-op renderer must not report
     // false success for a target it cannot honour.

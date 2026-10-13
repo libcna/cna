@@ -139,12 +139,6 @@ namespace
     // reported as a renderer failure. profile_dead_tests.py named it DEAD-ON-PROFILE.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-    // 2D-only by design: CreateTextureCube()/CreateTexture3D() keep IGraphicsRenderer's own
-    // nullptr-returning defaults, so a TextureCube here has no storage at all and Texture3D is
-    // refused at construction (this renderer reports no GraphicsCapability::Texture3D).
-    constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
-                                 false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // plans/plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.

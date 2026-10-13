@@ -166,8 +166,6 @@ namespace
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-    constexpr const char* kRendererName = "SDL_RENDERER";
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
 #else
@@ -181,7 +179,7 @@ namespace
      * rather than asserted, exactly as the neighbouring render-target fixtures already do.
      */
     constexpr bool kRenderTargetCubeSupported =
-#if defined(CNA_RENDERER_SDL_RENDERER) || defined(CNA_RENDERER_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;

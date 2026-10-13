@@ -51,11 +51,11 @@ fi
 # A family whose dependency is missing is REPORTED as unavailable, never silently counted as a
 # pass. That distinction is the point of the gate: "7 of 9 ran, 2 could not be built here" is a
 # result, "all green" over a set that quietly shrank is not.
-RENDERERS=(OPENGLES3 SDL_GPU SDL_RENDERER)
+RENDERERS=(OPENGLES3 SDL_GPU)
 if [ "${1:-}" = "--tier" ]; then
     case "${2:-}" in
-        routine) RENDERERS=(OPENGLES3 SDL_RENDERER) ;;
-        full)    RENDERERS=(OPENGLES3 SDL_RENDERER SDL_GPU WEBGPU) ;;
+        routine) RENDERERS=(OPENGLES3) ;;
+        full)    RENDERERS=(OPENGLES3 SDL_GPU WEBGPU) ;;
         *) echo "usage: $0 [--tier routine|full] | [--multi \"R;R;...\"]" >&2; exit 2 ;;
     esac
     shift 2
@@ -64,7 +64,6 @@ fi
 declare -A RENDERER_DIRS=(
     [OPENGLES3]="cmake-build-debug"
     [SDL_GPU]="cmake-build-sdlgpu"
-    [SDL_RENDERER]="cmake-build-sdl"
     [WEBGPU]="cmake-build-webgpu"
 )
 declare -A RESULTS

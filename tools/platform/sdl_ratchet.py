@@ -28,7 +28,7 @@ The allowlist
 Established by PLAT-3 (docs/platform-renderer-sdl-audit.md) and design decision 6:
 
   * modules/platform/          -- the platform module itself; SDL3 lives here by definition
-  * modules/renderers/sdl-renderer, sdl-gpu   -- SDL by identity
+  * modules/renderers/sdl-gpu                 -- SDL by identity
   * modules/renderers/fna3d                   -- SDL by upstream dependency
   * the SDL3 audio implementation             -- separate contract, PLAT-91..99
 
@@ -59,7 +59,6 @@ BUDGET_FILE = Path("tools/platform/sdl_budget.json")
 # Path prefixes (repo-relative, POSIX separators) exempt from the ratchet.
 ALLOWLIST_PREFIXES: tuple[str, ...] = (
     "modules/platform/",
-    "modules/renderers/sdl-renderer/",
     "modules/renderers/sdl-gpu/",
     "modules/renderers/fna3d/",
     "modules/audio/src/Platform/Sdl3/",  # SDL3 playback and recording implementations

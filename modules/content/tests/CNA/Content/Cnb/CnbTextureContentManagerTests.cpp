@@ -78,8 +78,7 @@ namespace
     /// through, as an .xnb load passes a texture constructor's (CNA plans/plan_apple_m4.md AM4-268).
     [[nodiscard]] bool CubeStorageSupported()
     {
-        return !CNA_RENDERER_IS(CNA::Testing::Renderers::SdlRenderer,
-                                CNA::Testing::Renderers::Headless);
+        return !CNA_RENDERER_IS(CNA::Testing::Renderers::Headless);
     }
 
     /// A 2x2 image whose four texels are all different, so a transposed or shifted upload is

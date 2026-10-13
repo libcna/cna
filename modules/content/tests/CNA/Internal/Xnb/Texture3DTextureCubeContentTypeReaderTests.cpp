@@ -69,7 +69,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Headless);
+    return !CNA_RENDERER_IS(Headless);
 }
 
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }

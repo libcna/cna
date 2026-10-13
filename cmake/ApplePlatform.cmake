@@ -244,7 +244,7 @@ endfunction()
 # and the simulator smoke app exercises one frame. It does not mean correct pixels or any input,
 # audio, storage or physical-device behavior have been observed — see docs/apple-platforms.md.
 set(CNA_APPLE_IOS_RENDERERS
-    "SDL_RENDERER"  # SDL3's own 2D renderer; Metal-backed on iOS
+    "SOFTWARE"      # CNA's CPU renderer, presented through the platform's surface presenter
     "SDL_GPU"       # SDL's GPU API on its Metal backend; not yet built or qualified for iOS
     CACHE INTERNAL "Renderers CNA wires up for an iOS build" FORCE)
 

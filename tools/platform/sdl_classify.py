@@ -117,7 +117,7 @@ AREAS: dict[str, tuple[str, str, str]] = {
         "GL context creation; the Vulkan surface service went with the retired VULKAN renderer.",
     ),
     "sdl-renderer-specific": (
-        "allowlisted renderers (SDL_RENDERER, SDL_GPU, FNA3D)",
+        "allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",
         "PLAT-3/PLAT-76",
         "Legitimately SDL3-bound: these renderers *are* an SDL3 API. Never on the common interface.",
     ),

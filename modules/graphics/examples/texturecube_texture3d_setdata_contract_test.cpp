@@ -166,13 +166,6 @@ namespace
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Exact, true};
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-    // 2D-only by design: CreateTextureCube()/CreateTexture3D()/CreateRenderTargetCube() all keep
-    // IGraphicsRenderer's own nullptr-returning defaults, so no cube/volume storage exists at all
-    // and Texture3D is refused at construction.
-    constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
-                                 false, Support::Unsupported, Support::Unsupported,
-                                 Support::Unsupported, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     // plans/plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.

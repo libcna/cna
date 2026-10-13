@@ -101,8 +101,6 @@ namespace
         return "SOFTWARE";
 #elif defined(CNA_RENDERER_HEADLESS)
         return "HEADLESS";
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-        return "SDL_RENDERER";
 #else
         return "UNKNOWN";
 #endif

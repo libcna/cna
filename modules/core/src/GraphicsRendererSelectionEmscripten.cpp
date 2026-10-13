@@ -123,7 +123,8 @@ extern "C"
      */
     EMSCRIPTEN_KEEPALIVE const char* cna_read_module_preferred_renderer()
     {
-        // Comfortably longer than the longest identity spelling ("SDL_RENDERER", 12), and the JS
+        // Comfortably longer than the longest identity spelling, retired names included
+        // ("SDL_RENDERER", 12, which must still reach the retired-name refusal), and the JS
         // side refuses anything that does not fit rather than truncating it.
         static char buffer[64];
         static bool read = false;

@@ -14,8 +14,6 @@ typedef uint32_t CNA_GraphicsRendererType;
 
 /** @brief Indicates an unknown renderer identity. */
 #define CNA_GRAPHICS_RENDERER_UNKNOWN UINT32_C(0)
-/** @brief Identifies SDL's own 2D renderer backend. */
-#define CNA_GRAPHICS_RENDERER_SDL_RENDERER UINT32_C(1)
 /** @brief Identifies the OpenGL ES 3 backend. */
 #define CNA_GRAPHICS_RENDERER_OPENGLES3 UINT32_C(3)
 /** @brief Identifies the desktop OpenGL 3.3 backend. */
@@ -46,13 +44,14 @@ typedef uint32_t CNA_GraphicsRendererType;
  * Every value above @ref CNA_GRAPHICS_RENDERER_MAXIMUM is refused by every route that takes a
  * @ref CNA_GraphicsRendererType, as is any retired value within the range.
  *
- * Retired values, permanently reserved and never assigned to another renderer: 2 (OPENGLES2),
- * 5 (WEBGL1), 7 (BGFX), 8 (VULKAN), 10 (MAGNUM), 14 (DIRECTX11), 15 (DIRECTX12), 16 (DIRECT2D),
- * 17 (CANVAS), 18 (HTML_DOM), 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
+ * Retired values, permanently reserved and never assigned to another renderer: 1 (SDL_RENDERER),
+ * 2 (OPENGLES2), 5 (WEBGL1), 7 (BGFX), 8 (VULKAN), 10 (MAGNUM), 14 (DIRECTX11), 15 (DIRECTX12),
+ * 16 (DIRECT2D), 17 (CANVAS), 18 (HTML_DOM), 19 (SKIA), 20 (BLEND2D), 21 (FREEDIRECT),
  * 23 (DIRECTX1), 24 (DIRECTX2), 25 (DIRECTX3), 26 (DIRECTX5), 27 (DIRECTX6), 28 (DIRECTX7),
  * 29 (DIRECTX8), 30 (DIRECTX10), 32 (OPENGLES1), 33 (OPENGL4), 34 (OPENGL1), 35 (OPENGL2),
- * 36 (WICKED), 37 (SOKOL), 38 (DILIGENT), 39 (GLIDE), 40 (GDI), 41 (LLGL), 42 (METAL), 44 (SVG_DOM),
- * 45 (OPENVG), 46 (PORTABLEGL), 47 (TINYGL), 48 (IGL), 49 (PIXIJS), 50 (NANOVG) and 51 (RLGL).
+ * 36 (WICKED), 37 (SOKOL), 38 (DILIGENT), 39 (GLIDE), 40 (GDI), 41 (LLGL), 42 (METAL),
+ * 44 (SVG_DOM), 45 (OPENVG), 46 (PORTABLEGL), 47 (TINYGL), 48 (IGL), 49 (PIXIJS), 50 (NANOVG) and
+ * 51 (RLGL).
  * Because values above this maximum include retired ones, a future identity takes the next
  * never-assigned value, 52, not the value after this maximum.
  */

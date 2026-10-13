@@ -823,11 +823,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_graphics_ext_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_graphics_ext_smoke)
     add_test(NAME CApi_GraphicsExtSmoke COMMAND cna_c_api_graphics_ext_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_GraphicsExtSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_owned_graphics_device_smoke
         tests/pure_c/OwnedGraphicsDeviceSmoke.c
@@ -907,11 +902,6 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_render_target_lifetime_smoke)
     add_test(NAME CApi_RenderTargetLifetimeSmoke
         COMMAND cna_c_api_render_target_lifetime_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_RenderTargetLifetimeSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_storage_smoke
         tests/pure_c/StorageSmoke.c
@@ -1180,11 +1170,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_vertex_buffer_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_vertex_buffer_smoke)
     add_test(NAME CApi_VertexBufferSmoke COMMAND cna_c_api_vertex_buffer_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_VertexBufferSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_index_buffer_smoke
         tests/pure_c/IndexBufferSmoke.c
@@ -1198,11 +1183,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_index_buffer_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_index_buffer_smoke)
     add_test(NAME CApi_IndexBufferSmoke COMMAND cna_c_api_index_buffer_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_IndexBufferSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_effect_annotation_smoke
         tests/pure_c/EffectAnnotationSmoke.c
@@ -1255,11 +1235,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_effect_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_effect_smoke)
     add_test(NAME CApi_EffectSmoke COMMAND cna_c_api_effect_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_EffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_basic_effect_smoke
         tests/pure_c/BasicEffectSmoke.c
@@ -1273,11 +1248,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_basic_effect_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_basic_effect_smoke)
     add_test(NAME CApi_BasicEffectSmoke COMMAND cna_c_api_basic_effect_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_BasicEffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_stock_effect_smoke
         tests/pure_c/StockEffectSmoke.c
@@ -1291,11 +1261,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_stock_effect_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_stock_effect_smoke)
     add_test(NAME CApi_StockEffectSmoke COMMAND cna_c_api_stock_effect_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_StockEffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_skinned_effect_smoke
         tests/pure_c/SkinnedEffectSmoke.c
@@ -1309,11 +1274,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_skinned_effect_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_skinned_effect_smoke)
     add_test(NAME CApi_SkinnedEffectSmoke COMMAND cna_c_api_skinned_effect_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_SkinnedEffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_pbr_effect_smoke
         tests/pure_c/PbrEffectSmoke.c
@@ -1327,11 +1287,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_pbr_effect_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_pbr_effect_smoke)
     add_test(NAME CApi_PbrEffectSmoke COMMAND cna_c_api_pbr_effect_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_PbrEffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_model_bone_smoke
         tests/pure_c/ModelBoneSmoke.c
@@ -1371,11 +1326,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_model_mesh_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_model_mesh_smoke)
     add_test(NAME CApi_ModelMeshSmoke COMMAND cna_c_api_model_mesh_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_ModelMeshSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_model_smoke
         tests/pure_c/ModelSmoke.c
@@ -1389,11 +1339,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_model_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_model_smoke)
     add_test(NAME CApi_ModelSmoke COMMAND cna_c_api_model_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_ModelSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_morph_target_smoke
         tests/pure_c/MorphTargetSmoke.c
@@ -1407,11 +1352,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_morph_target_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_morph_target_smoke)
     add_test(NAME CApi_MorphTargetSmoke COMMAND cna_c_api_morph_target_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_MorphTargetSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_skinned_model_smoke
         tests/pure_c/SkinnedModelSmoke.c
@@ -1425,11 +1365,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_skinned_model_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_skinned_model_smoke)
     add_test(NAME CApi_SkinnedModelSmoke COMMAND cna_c_api_skinned_model_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_SkinnedModelSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_animation_player_smoke
         tests/pure_c/AnimationPlayerSmoke.c
@@ -1456,11 +1391,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_graphics_resource_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_graphics_resource_smoke)
     add_test(NAME CApi_GraphicsResourceSmoke COMMAND cna_c_api_graphics_resource_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_GraphicsResourceSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_texture_smoke
         tests/pure_c/TextureSmoke.c
@@ -1474,11 +1404,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_texture_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_texture_smoke)
     add_test(NAME CApi_TextureSmoke COMMAND cna_c_api_texture_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_TextureSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_texture_volume_smoke
         tests/pure_c/TextureVolumeSmoke.c
@@ -1492,11 +1417,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_texture_volume_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_texture_volume_smoke)
     add_test(NAME CApi_TextureVolumeSmoke COMMAND cna_c_api_texture_volume_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_TextureVolumeSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_lifecycle_smoke
         tests/pure_c/LifecycleSmoke.c
@@ -1510,11 +1430,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_lifecycle_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_lifecycle_smoke)
     add_test(NAME CApi_LifecycleSmoke COMMAND cna_c_api_lifecycle_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_LifecycleSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_content_smoke
         tests/pure_c/ContentSmoke.c
@@ -1531,15 +1446,9 @@ if(CNA_BUILD_TESTS)
     # The manifest suite builds its own content root through the storage API, so the storage root
     # is pinned to a build-tree location; dummy audio lets the WAV load route reach its real
     # success path instead of only its unsupported one.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_ContentSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-smoke-home"
-        )
-    else()
-        set_tests_properties(CApi_ContentSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-smoke-home"
-        )
-    endif()
+    set_tests_properties(CApi_ContentSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-smoke-home"
+    )
 
     add_executable(cna_c_api_graphics_surface_smoke
         tests/pure_c/GraphicsSurfaceSmoke.c
@@ -1553,11 +1462,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_graphics_surface_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_graphics_surface_smoke)
     add_test(NAME CApi_GraphicsSurfaceSmoke COMMAND cna_c_api_graphics_surface_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_GraphicsSurfaceSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_input_snapshots_smoke
         tests/pure_c/InputSnapshotsSmoke.c
@@ -1571,11 +1475,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_input_snapshots_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_input_snapshots_smoke)
     add_test(NAME CApi_InputSnapshotsSmoke COMMAND cna_c_api_input_snapshots_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_InputSnapshotsSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_haptics_smoke
         tests/pure_c/HapticsSmoke.c
@@ -1589,11 +1488,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_haptics_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_haptics_smoke)
     add_test(NAME CApi_HapticsSmoke COMMAND cna_c_api_haptics_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_HapticsSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_joystick_smoke
         tests/pure_c/JoystickSmoke.c
@@ -1607,11 +1501,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_joystick_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_joystick_smoke)
     add_test(NAME CApi_JoystickSmoke COMMAND cna_c_api_joystick_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_JoystickSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_input_devices_smoke
         tests/pure_c/InputDevicesSmoke.c
@@ -1625,11 +1514,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_input_devices_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_input_devices_smoke)
     add_test(NAME CApi_InputDevicesSmoke COMMAND cna_c_api_input_devices_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_InputDevicesSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_media_smoke
         tests/pure_c/MediaSmoke.c
@@ -1650,15 +1534,9 @@ if(CNA_BUILD_TESTS)
     # into the build tree the way CApi_StorageSmoke and CApi_ContentSmoke already do, and take
     # dummy audio unconditionally: loading a song reaches the audio device, and a test must not
     # depend on a reachable sound server to report on the media ABI.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_MediaSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
-        )
-    else()
-        set_tests_properties(CApi_MediaSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
-        )
-    endif()
+    set_tests_properties(CApi_MediaSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
+    )
 
     # The media library scans the platform's user folders, which SDL resolves through
     # $XDG_CONFIG_HOME/user-dirs.dirs. Pointing that at a generated fixture gives the suite a
@@ -1748,11 +1626,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_sensor_device_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_sensor_device_smoke)
     add_test(NAME CApi_SensorDeviceSmoke COMMAND cna_c_api_sensor_device_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_SensorDeviceSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_audio_streaming_smoke
         tests/pure_c/AudioStreamingSmoke.c
@@ -1765,15 +1638,9 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_audio_streaming_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_audio_streaming_smoke)
     add_test(NAME CApi_AudioStreamingSmoke COMMAND cna_c_api_audio_streaming_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_AudioStreamingSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
-        )
-    else()
-        set_tests_properties(CApi_AudioStreamingSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
-        )
-    endif()
+    set_tests_properties(CApi_AudioStreamingSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+    )
 
     add_executable(cna_c_api_audio_sound_effect_smoke
         tests/pure_c/AudioSoundEffectSmoke.c
@@ -1786,15 +1653,9 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_audio_sound_effect_smoke PRIVATE cna_c_api Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_audio_sound_effect_smoke)
     add_test(NAME CApi_AudioSoundEffectSmoke COMMAND cna_c_api_audio_sound_effect_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_AudioSoundEffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
-        )
-    else()
-        set_tests_properties(CApi_AudioSoundEffectSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
-        )
-    endif()
+    set_tests_properties(CApi_AudioSoundEffectSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+    )
 
     add_executable(cna_c_api_avatar_identities_smoke
         tests/pure_c/AvatarIdentitiesSmoke.c
@@ -1819,11 +1680,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_guide_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_guide_smoke)
     add_test(NAME CApi_GuideSmoke COMMAND cna_c_api_guide_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_GuideSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_gamer_properties_smoke
         tests/pure_c/GamerPropertiesSmoke.c
@@ -1902,15 +1758,9 @@ if(CNA_BUILD_TESTS)
     # CBIND-094. The gamer routes bring SDL up, and a default audio driver blocks where no sound
     # server answers -- the test hung rather than failing, which is the worse of the two. It had
     # no ENVIRONMENT at all; every neighbouring registration already takes dummy drivers.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_GamersSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
-        )
-    else()
-        set_tests_properties(CApi_GamersSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
-        )
-    endif()
+    set_tests_properties(CApi_GamersSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+    )
 
     add_executable(cna_c_api_gamer_identities_smoke
         tests/pure_c/GamerIdentitiesSmoke.c
@@ -1950,11 +1800,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_stress_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_stress_smoke)
     add_test(NAME CApi_StressSmoke COMMAND cna_c_api_stress_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_XactSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_audio_3d_smoke
         tests/pure_c/Audio3DSmoke.c
@@ -1967,15 +1812,9 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_audio_3d_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_audio_3d_smoke)
     add_test(NAME CApi_Audio3DSmoke COMMAND cna_c_api_audio_3d_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_Audio3DSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
-        )
-    else()
-        set_tests_properties(CApi_Audio3DSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
-        )
-    endif()
+    set_tests_properties(CApi_Audio3DSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+    )
 
     add_executable(cna_c_api_graphics_device_manager_smoke
         tests/pure_c/GraphicsDeviceManagerSmoke.c
@@ -1989,11 +1828,6 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_graphics_device_manager_smoke)
     add_test(NAME CApi_GraphicsDeviceManagerSmoke
         COMMAND cna_c_api_graphics_device_manager_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_GraphicsDeviceManagerSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_runtime_game_smoke
         tests/pure_c/RuntimeGameSmoke.c
@@ -2006,11 +1840,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_runtime_game_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_runtime_game_smoke)
     add_test(NAME CApi_RuntimeGameSmoke COMMAND cna_c_api_runtime_game_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_RuntimeGameSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_host_driven_run_smoke
         tests/pure_c/HostDrivenRunSmoke.c
@@ -2023,11 +1852,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_host_driven_run_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_host_driven_run_smoke)
     add_test(NAME CApi_HostDrivenRunSmoke COMMAND cna_c_api_host_driven_run_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_HostDrivenRunSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_foreign_thread_calls_smoke
         tests/pure_c/ForeignThreadCallsSmoke.c
@@ -2041,11 +1865,6 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_foreign_thread_calls_smoke)
     add_test(NAME CApi_ForeignThreadCallsSmoke COMMAND cna_c_api_foreign_thread_calls_smoke)
     set_tests_properties(CApi_ForeignThreadCallsSmoke PROPERTIES TIMEOUT 120)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_ForeignThreadCallsSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_runtime_components_smoke
         tests/pure_c/RuntimeComponentsSmoke.c
@@ -2058,11 +1877,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_runtime_components_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_runtime_components_smoke)
     add_test(NAME CApi_RuntimeComponentsSmoke COMMAND cna_c_api_runtime_components_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_RuntimeComponentsSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_runtime_component_device_borrow
         tests/pure_c/RuntimeComponentDeviceBorrow.c
@@ -2075,11 +1889,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_runtime_component_device_borrow PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_runtime_component_device_borrow)
     add_test(NAME CApi_RuntimeComponentDeviceBorrow COMMAND cna_c_api_runtime_component_device_borrow)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_RuntimeComponentDeviceBorrow PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_devices_smoke
         tests/pure_c/DevicesSmoke.c
@@ -2092,11 +1901,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_devices_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_devices_smoke)
     add_test(NAME CApi_DevicesSmoke COMMAND cna_c_api_devices_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_DevicesSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     add_executable(cna_c_api_sensor_events_smoke
         tests/pure_c/SensorEventsSmoke.c
@@ -2109,11 +1913,6 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_sensor_events_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_sensor_events_smoke)
     add_test(NAME CApi_SensorEventsSmoke COMMAND cna_c_api_sensor_events_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_SensorEventsSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
 
     # BINDFIX-041: exiting with a live game whose creating thread has already ended.
     add_executable(cna_c_api_exit_with_foreign_thread_game_smoke
@@ -2151,38 +1950,20 @@ if(CNA_BUILD_TESTS)
     target_compile_definitions(cna_c_api_video_smoke PRIVATE
         CNA_C_API_TEST_ASSET_DIR="${PROJECT_SOURCE_DIR}/tests/assets")
     add_test(NAME CApi_VideoSmoke COMMAND cna_c_api_video_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_VideoSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
-        )
-    else()
-        set_tests_properties(CApi_VideoSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
-        )
-    endif()
+    set_tests_properties(CApi_VideoSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+    )
 
     add_test(NAME CApi_MediaPlayerSmoke COMMAND cna_c_api_media_player_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
-        )
-    else()
-        set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
-        )
-    endif()
+    set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
+    )
 
     add_test(NAME CApi_MediaLibrarySmoke COMMAND cna_c_api_media_library_smoke)
     set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES SKIP_RETURN_CODE 77)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
-        )
-    else()
-        set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES
-            ENVIRONMENT "${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
-        )
-    endif()
+    set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES
+        ENVIRONMENT "${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
+    )
 
     add_executable(cna_c_api_audio_smoke
         tests/pure_c/AudioSmoke.c
@@ -2196,15 +1977,9 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_audio_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_audio_smoke)
     add_test(NAME CApi_AudioSmoke COMMAND cna_c_api_audio_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_AudioSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy"
-        )
-    else()
-        set_tests_properties(CApi_AudioSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
-        )
-    endif()
+    set_tests_properties(CApi_AudioSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+    )
 
     add_executable(cna_c_api_audio_unavailable_smoke
         tests/pure_c/AudioUnavailableSmoke.c
@@ -2217,15 +1992,9 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_audio_unavailable_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_audio_unavailable_smoke)
     add_test(NAME CApi_AudioUnavailableSmoke COMMAND cna_c_api_audio_unavailable_smoke)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_AudioUnavailableSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=cna_driver_that_does_not_exist;SDL_VIDEODRIVER=dummy"
-        )
-    else()
-        set_tests_properties(CApi_AudioUnavailableSmoke PROPERTIES
-            ENVIRONMENT "SDL_AUDIODRIVER=cna_driver_that_does_not_exist"
-        )
-    endif()
+    set_tests_properties(CApi_AudioUnavailableSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=cna_driver_that_does_not_exist"
+    )
 
     add_library(cna_c_api_header_c OBJECT tests/pure_c/AbiHeaderC.c)
     set_target_properties(cna_c_api_header_c PROPERTIES
@@ -2451,9 +2220,9 @@ if(CNA_BUILD_TESTS)
     # names it for a reason, and those are left exactly as they are. What this loop settles is the
     # rest: a test that names none inherits ctest's own environment, which on a developer machine is
     # the live desktop session -- a shared, externally mutated resource the suite does not own, and
-    # which another application can resize, focus, lock or blank underneath it. Every registration
-    # that scopes `SDL_VIDEODRIVER=dummy` to `SDL_RENDERER` therefore ran unpinned in every other
-    # renderer's tree, which is all three this campaign uses.
+    # which another application can resize, focus, lock or blank underneath it. Registrations that
+    # scoped `SDL_VIDEODRIVER=dummy` to the since-retired 2D renderer ran unpinned in every other
+    # renderer's tree.
     #
     # This is CBIND-094's rule applied to the display: a test whose result depends on the machine it
     # runs on is not evidence. It is deliberately **not** a claim to have diagnosed CBIND-101 -- that

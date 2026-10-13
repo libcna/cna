@@ -14,7 +14,6 @@ set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics rend
 unset(_cna_public_renderer_text)
 set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS ${CNA_RENDERER_PUBLIC_IDENTITIES})
 
-option(CNA_RENDERER_SDL_RENDERER "Enable SDL_Renderer graphics renderer" OFF)
 option(CNA_RENDERER_OPENGLES3 "Enable OpenGL ES graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_OPENGL33 "Enable desktop OpenGL 3.3 core graphics renderer (internally: EasyGL)" OFF)
 option(CNA_RENDERER_WEBGL2 "Enable WebGL 2 graphics renderer, Emscripten only (internally: EasyGL)" OFF)
@@ -182,13 +181,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     endif()
 endif()
 
-if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-    message(STATUS "CNA: Using SDL_RENDERER graphics renderer")
-    set(RENDERER_DIR "modules/renderers/sdl-renderer")
-    set(RENDERER_TARGET "cna_renderer_sdl_renderer")
-    list(APPEND _cna_identity_defines CNA_RENDERER_SDL_RENDERER)
-    set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_RENDERER")
-elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
     message(STATUS "CNA: Using ${CNA_GRAPHICS_RENDERER} graphics renderer (internal implementation: EasyGL)")
     set(RENDERER_DIR "modules/renderers/easygl")

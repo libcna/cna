@@ -268,7 +268,7 @@ TEST(CnbTextureCubeProducerTest, ATextureCubeCnbLoadsThroughContentManager)
     // SDL_RENDERER creates no cube resource and Headless stores no pixels, so both refuse
     // TextureCube::SetData (REMED-GFX-135), and the .cnb load passes that through (CNA
     // plans/plan_apple_m4.md AM4-268).
-    if (CNA_RENDERER_IS(CNA::Testing::Renderers::SdlRenderer, CNA::Testing::Renderers::Headless))
+    if (CNA_RENDERER_IS(CNA::Testing::Renderers::Headless))
     {
         EXPECT_THROW((void)cm.Load<Microsoft::Xna::Framework::Graphics::TextureCube>("sky"),
                      System::NotSupportedException);

@@ -157,10 +157,6 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
-#elif defined(CNA_RENDERER_SDL_RENDERER)
-    constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr const char* kRendererName = "SDL_RENDERER";
-    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX9";
