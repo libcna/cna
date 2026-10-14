@@ -93,7 +93,7 @@ behavior was compared, per the task's own explicit instruction.
 ## 4. Phase 1 — minimal CNA culling reproducer (no Model/FBX/texture/lighting/bones/animation)
 
 Two new permanent regression tests were added to `cna_graphics`, both registered on all 3
-runnable renderers (EasyGL, Vulkan, Bgfx (retired 2026-09-17)):
+runnable renderers (EasyGL, Vulkan (retired 2026-10-13), Bgfx (retired 2026-09-17)):
 
 ### 4.1 `modules/graphics/examples/rasterizerstate_cullmode_camera_test.cpp`
 
@@ -377,7 +377,7 @@ evidence that closed this investigation.
 ### `cna_graphics`
 
 - **New**: `modules/graphics/examples/rasterizerstate_cullmode_camera_test.cpp` (§4.1), registered on EasyGL/
-  Vulkan/Bgfx (retired 2026-09-17).
+  Vulkan (retired 2026-10-13)/Bgfx (retired 2026-09-17).
 - **New**: `modules/graphics/examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` (§4.2), registered on
   EasyGL/Vulkan/Bgfx.
 - **New**: this document + 3 reference screenshots and the XNA `CullModeTest` result (removed

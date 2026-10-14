@@ -331,7 +331,7 @@ images are diagnostic external-renderer evidence, not replacements for the spec-
 oracles. `tools/gltf_reference/` contains the local harness and browser driver;
 `scripts/gltf-reference-renderer-compare.py` verifies the renderer commit, serves only local files,
 runs the CNA viewer's clean `--reference-capture`, enforces the comparison thresholds and writes the
-per-asset provenance plus aggregate report. `GLTF-411`'s executed result is in §5.6.
+per-asset provenance plus aggregate report. `GLTF-411`'s executed result is in §5.5.
 The driver additionally requires `xvfb-run`, Python Pillow and a Chromium-compatible browser;
 `tools/gltf_reference/capture.mjs` defaults to `/usr/bin/google-chrome` and accepts an explicit
 `CNA_GLTF_CHROME` path. Browser automation is loaded from the pinned renderer's own `npm ci`
@@ -878,16 +878,8 @@ bindings, every factor/scalar, alpha state and five sampler slots. A separate ri
 every value non-default so an omitted field cannot accidentally agree through defaults. This is
 the L6 half of `GLTF-244`.
 
-The L7 half is now equally directory-driven on two independent shader implementations. EasyGL's
-and Vulkan's complete 148-asset two-process oracles include all 14 material fixtures. The focused Vulkan runner
-`scripts/gltf-l7-vulkan-materials.py` discovers the same 14 `mat-*` inputs, launches the production
-viewer twice per asset on an explicitly selected lavapipe ICD, rejects a clear capture and requires
-exact RGBA equality both between processes and against `tests/gltf-l7/vulkan-materials/`. All 14
-pass with 23,729 foreground pixels apiece. Its zero-delta policy, executable/input/output hashes
-and original focused scope remain in `docs/gltf-l7-vulkan-materials-report.json`; the checkout-only
-`GltfFixtureCorpus.VulkanMaterialL7ReportIsCompleteExactAndReproducible` guard keeps that boundary,
-the 14 source/golden hashes and the runner's two-process/exact-comparison clauses from drifting.
-The full Vulkan matrix and its separate integrity guard are described in §5.4.
+The L7 half is equally directory-driven: EasyGL's complete 148-asset two-process oracle (§5.3)
+includes all 14 material fixtures.
 
 `GltfPbrBrdf` is the renderer-independent analytic half of the shader contract (`GLTF-235`,
 `GLTF-343`, `GLTF-344`). It pins GGX distribution, direct-light Smith-Schlick geometry, Schlick
@@ -1010,25 +1002,16 @@ it has no 3D pipeline, and a golden captured from a renderer that draws nothing 
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
 
 The glTF-specific capability table in `docs/graphics-renderer-feature-matrix.md` (`GLTF-393`) keeps
-that distinction explicit for STUB, HEADLESS, OPENGLES3 and Vulkan across 32-bit indices,
-point/line topology, MRT and the PBR sRGB contract. Its point-topology audit found a real Vulkan
-gap: `PointListEXT` fell through to triangle topology with a zero vertex count. The fixed renderer
-now passes the shared 15-case framebuffer suite, including 32-bit indices and the actual PBR point
-pipeline, with no Vulkan validation messages.
+that distinction explicit for STUB, HEADLESS and OPENGLES3 across 32-bit indices, point/line
+topology, MRT and the PBR sRGB contract.
 
-`GLTF-386` adds a deliberately separate Windows data point rather than silently widening that
-four-renderer capability table. A MinGW DirectX11 build ran its complete registered `*Gltf*`
-selection through Wine and DXVK 2.6.0 on the Intel Iris Xe Vulkan device at D3D feature level 11.1:
-493 of 494 tests passed, and the symlink-escape case was the one explicit skip because the Wine
-filesystem reports symlink creation as unimplemented. DXVK's own version line satisfied the
-project wrapper's authenticity gate. The 26 registered `GltfToCnjToolTest` cases are not part of a
-Windows `CnaTests` binary because that suite launches the converter with POSIX process APIs; the
-converter itself still cross-builds. This run therefore establishes the available L1–L6 and
-loader/upload boundary, not corpus L7 pixels. It also exposed and fixed two host assumptions: an
+`GLTF-386`'s Windows run (a MinGW build under Wine) exposed and fixed two host assumptions: an
 RFC `/`-absolute URI is now classified as absolute even under Windows path semantics, and ladder
-traceability accepts the platform-excluded tool suite only while its source still declares it.
+traceability accepts the platform-excluded tool suite only while its source still declares it. The
+26 registered `GltfToCnjToolTest` cases are not part of a Windows `CnaTests` binary because that
+suite launches the converter with POSIX process APIs; the converter itself still cross-builds.
 
-`GLTF-387` adds the CPU SOFTWARE rasteriser as a fifth independent boundary. Its first L0–L6 run
+`GLTF-387` adds the CPU SOFTWARE rasteriser as an independent boundary. Its first L0–L6 run
 was 519/520 and exposed a gap hidden by every prior configuration: SOFTWARE rejected a stock
 PBR/Skinned draw whose optional base map was absent before it could validate the vertex record,
 then lacked the glTF-era 48/56/68-byte layouts behind that guard. An absent optional base map now
@@ -1040,15 +1023,15 @@ target/backbuffer cull, depth/depth-bias and stride-52 skinning pixels are green
 winding control separately found a pre-existing blank readback on a 4x-MSAA target, recorded under
 `GLTF-395` rather than misclassified as an importer or stride failure. `GLTF-395` then fixed that
 boundary: a level-zero SOFTWARE readback now snapshots the live four-sample plane without ending
-the render pass or exposing generated mip levels. The shared winding oracle is 127/127 on both
-EasyGL and Vulkan and green on SOFTWARE; HEADLESS also passes its explicit non-rasterising
+the render pass or exposing generated mip levels. The shared winding oracle is 127/127 on
+EasyGL and green on SOFTWARE; HEADLESS also passes its explicit non-rasterising
 boundary. It covers both windings under all three cull modes, ordinary/MSAA targets, every draw
 entry point, stock textured effects, mirrored transforms and SpriteBatch. The later whole-corpus
 L7 campaign is complete at 140 deterministic captures plus eight deterministic safe rejections;
-its two additional renderer-boundary findings and exact evidence are in §5.5.
+its two additional renderer-boundary findings and exact evidence are in §5.4.
 
 `GLTF-396` records the adjacent clip/depth boundary in `docs/gltf-conventions.md`. CNA projection
-matrices emit Direct3D/XNA `0 <= z <= w`: Vulkan consumes that range natively, EasyGL now converts
+matrices emit Direct3D/XNA `0 <= z <= w`: EasyGL converts
 it to OpenGL's wider clip interval in every renderer-owned 3D vertex shader, and SOFTWARE clips all
 six homogeneous XNA planes before mapping `z/w` directly. `SOFTWARE-336` adds the missing absolute
 EasyGL proof: stock clip `z=0` is the near depth endpoint and `z<0` is rejected. Existing viewport,
@@ -1057,8 +1040,8 @@ permitted for these renderer-owned conversions.
 
 `GLTF-397` similarly keeps render-target orientation out of import. The asymmetric asset UV lock
 remains byte-exact, while the shared 8x4 render-target sampling oracle feeds the same deliberately
-unflipped mesh UVs to an ordinary uploaded texture and to a rendered texture. EasyGL is 62/62,
-Vulkan 58/58 and SOFTWARE 62/62; HEADLESS passes its explicit refusal boundary. The stock 3D legs
+unflipped mesh UVs to an ordinary uploaded texture and to a rendered texture. EasyGL is 62/62
+and SOFTWARE 62/62; HEADLESS passes its explicit refusal boundary. The stock 3D legs
 prove both sources upright and texel-identical. EasyGL's `cnaSampleUV` flag is recomputed per bound
 resource and uploaded even when zero, so a bottom-up target correction cannot leak into the next
 ordinary glTF/PBR texture draw.
@@ -1096,34 +1079,7 @@ EasyGL unlit-origin NaN, owned by `GLTF-411` and fixed in `a88b14220`. The two p
 exceptions and all eight expected safe rejections have one named owner each. Reported/deferred
 features remain owned by their numerical diagnostics rather than being reclassified from pixels.
 
-### 5.4 Whole-corpus Vulkan L7 oracle (`GLTF-385` / `GLTF-390` / `GLTF-391`)
-
-The same `scripts/gltf-l7-corpus.py` protocol now has an independently measured Vulkan policy. It
-runs the production viewer twice for every canonical asset with
-`VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json`, records the concrete llvmpipe/lavapipe
-device identity, and compares only against renderer-owned `tests/gltf-l7/vulkan/` goldens. The
-result is 138 byte-identical 512×512 PNG pairs at exact RGB/alpha tolerance 0 and eight
-byte-identical non-zero safe rejections. Policy and exception reasons live in
-`tests/gltf-l7/vulkan-policy.json`; complete input, viewer, executable and PNG hashes live in
-`docs/gltf-l7-vulkan-corpus-report.json`.
-
-The first full campaign was deliberately reviewed before its images were accepted, and found a
-real renderer-owned defect. `uv1-material` arrived at the Vulkan boundary with the correct
-60-byte PBR vertex declaration and five-bit per-map selector, but the native pipeline still bound
-stride 48 and every fragment sample used UV0. That corrupted one triangle and left only 19,468
-foreground pixels. Vulkan now keys separate 48/60 and 68/76 PBR pipelines, binds UV1 at byte 48 or
-68, and compiles dedicated dual-UV rigid/skinned SPIR-V variants which consume the selector. The
-legacy single-UV shader blobs remain bit-identical. Two independent corrected captures render the
-complete 45,644-pixel numbered quad and agree byte-for-byte; the subsequent 146-asset campaign has
-zero active divergence.
-
-`GltfFixtureCorpus.VulkanCorpusL7ReportIsCompleteExactAndReproducible` makes the evidence portable
-to an ordinary no-display test: it re-hashes all 146 canonical sources and all 138 PNGs, requires
-the golden directory to equal the captured disposition set exactly, and locks the two-process,
-single-device and zero-tolerance policy. The focused 14-material Vulkan runner remains useful as a
-fast subsystem gate; its narrower report is not used to inflate the whole-corpus claim.
-
-### 5.5 Whole-corpus SOFTWARE L7 oracle (`GLTF-387` / `GLTF-390` / `GLTF-391`)
+### 5.4 Whole-corpus SOFTWARE L7 oracle (`GLTF-387` / `GLTF-390` / `GLTF-391`)
 
 The generalized corpus protocol also has an independently measured CPU-rasteriser policy. It runs
 the production viewer twice for every canonical asset with `CNA_GRAPHICS_RENDERER=SOFTWARE`,
@@ -1136,7 +1092,7 @@ exact RGB/alpha tolerance 0 and eight deterministic non-zero safe rejections. Po
 reasons live in `tests/gltf-l7/software-policy.json`; complete input, viewer, executable and PNG
 hashes live in `docs/gltf-l7-software-corpus-report.json`.
 
-As with Vulkan, the initial images were reviewed before becoming goldens. The first run stopped on
+The initial images were reviewed before becoming goldens. The first run stopped on
 `mode-points`: the importer had correctly preserved the core topology, but SOFTWARE's effect-aware
 native draw path still accepted only triangles. The renderer now rasterises `PointListEXT`,
 `LineList` and `LineStrip`, for indexed and non-indexed submissions, through the same clipped,
@@ -1146,7 +1102,7 @@ renderer intact, but the CPU fallback only knew stride 48/68. SOFTWARE now accep
 selects the base-colour UV with mask bit 0 and applies that map's affine transform. The corrected
 capture covers the complete 45,643-pixel numbered quad. This is deliberately bounded evidence:
 SOFTWARE's reduced PBR fallback samples base colour only, so its corpus does not claim full
-normal/MR/emissive/occlusion shading fidelity already established by EasyGL and Vulkan.
+normal/MR/emissive/occlusion shading fidelity already established by EasyGL.
 
 Reproduce the exact campaign after building the SOFTWARE viewer:
 
@@ -1163,7 +1119,7 @@ portable to a no-display unit test: it re-hashes all 146 canonical sources and a
 requires the golden directory to equal the captured disposition set, verifies each safe rejection,
 and locks the two-process, single-renderer and zero-tolerance policy.
 
-### 5.6 Pinned reference-renderer subset (`GLTF-411`)
+### 5.5 Pinned reference-renderer subset (`GLTF-411`)
 
 The supplementary reference comparison is now executed over 13 generated assets: JSON and GLB,
 ordinary and non-indexed triangles, interleaved and sparse accessors, converted strip topology,
@@ -1202,7 +1158,7 @@ an external renderer or browser to CNA's CI/runtime dependency graph. This 13-as
 the independent implementation check; the 146-asset EasyGL gate in §5.3 is the broad regression
 oracle. Neither is substituted for the other.
 
-### 5.7 Final viewer retake matrix (`GLTF-429`)
+### 5.6 Final viewer retake matrix (`GLTF-429`)
 
 The release retake is the exact 14-row Gate C matrix from `plans/plan_gltf.md` §30.3, executed by
 `scripts/gltf-viewer-retake.py`. Row 12 has separate sparse-attribute and sparse-index cases, so a

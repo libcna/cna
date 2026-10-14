@@ -52,5 +52,4 @@ inconsistent with a file's length are rejected with `ContentLoadException`
 Drawing goes through `SkinnedEffect` and the ordinary `GraphicsDevice` path, so a model renders
 wherever `SkinnedEffect` does. `EasyGL_SkinnedModel_AttachPart`
 (`modules/graphics/examples/skinned_model_attach_part_integration_test.cpp`) draws an attached part
-and checks the pixels; the renderers without 3D (SDL_Renderer) refuse the buffer and effect
-creation with their existing errors.
+and checks the pixels.

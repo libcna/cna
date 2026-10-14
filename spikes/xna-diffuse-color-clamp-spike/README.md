@@ -1,6 +1,6 @@
 # `BasicEffect.DiffuseColor` above 1 on the real XNA 4.0 runtime
 
-`plans/plan_vulkan.md` **VULKAN-197**, the CNA-wide sibling of finding **F-36**.
+**VULKAN-197** (the retired VULKAN renderer's plan, kept in Git history), the CNA-wide sibling of finding **F-36**.
 
 ## The question
 

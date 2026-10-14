@@ -82,14 +82,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   create route now also sets its handle output to `CNA_INVALID_HANDLE` before answering
   `CNA_RESULT_NOT_SUPPORTED`, as every other compiled-out create route already did.
 
+### Removed
+
+- **Four more renderer identities**, `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER`, leaving 10
+  public identities over 8 implementation families (`plans/plan_renderer_retirement.md`,
+  [`docs/removed-renderers.md`](docs/removed-renderers.md)). None is replaced or aliased: `SDL_GPU`
+  is the modern native path (SDL owns its Vulkan, Direct3D 12 and Metal backends) and the default on
+  Windows, macOS and iOS, `DIRECTX9` stays on Windows, and `OPENGLES3` is the default elsewhere
+  outside the browser. A retired name is refused at configure time and at run time (the
+  `CNA_GRAPHICS_RENDERER` environment variable, `GraphicsRendererSelection::SetPreferred`, the C
+  API's by-name route). Their C ABI values 1, 8, 14 and 42 are permanently reserved and the
+  experimental C ABI goes to `0.48.0`; no surviving identity is renumbered. Not carried over:
+  `SDL_GPU` compiles `ShaderEffect` out on Windows, Apple and Emscripten and has no occlusion
+  queries, and no surviving renderer implements `RendererFeature::BaseInstanceDrawing`.
+
 ### Fixed
 
-- **A process that asked a `DIRECTX11` build which formats an adapter supports no longer hangs at
-  exit.** `QueryRenderTargetFormat`, `QueryBackBufferFormat` and multisample clamping keep a
-  Direct3D 11 device for their queries, which a function-local static released from a static
-  destructor during process exit, after the driver's worker threads had already ended; the
-  release then waited on them forever. The device is now never destroyed. Found by the C API's
-  suites under Wine, where the ones that queried formats hung after `main` returned.
 - **`cna_assembly_copy_title_ext` refuses a null destination given a capacity.** It copied the
   title through the pointer without checking it, as the size-then-copy protocol in
   `docs/c-api/STRINGS_AND_BUFFERS.md` requires; it now answers `CNA_RESULT_INVALID_ARGUMENT`.

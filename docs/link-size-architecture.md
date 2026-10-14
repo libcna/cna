@@ -286,8 +286,8 @@ Neither build contains a symbol of the avatar catalog, `AvatarRenderer`, the glT
 cgltf, Draco, `MediaPlayer`, `Microphone`, `Microsoft::Xna::Framework::Net`, ENet, libcurl,
 `TextureCube`, `Texture3D`, `RenderTargetCube`, the camera, the tray, `CnbWriter` or the Headless
 and Terminal platforms; its shared-library dependencies are SDL3, SDL3_mixer, zstd
-and the C/C++ runtime. The footprint consumers stay within the same bounds on MinGW (DIRECTX11)
-and with `CNA_ENABLE_NET=OFF`, and the browser 2D demo (wasm, linking the whole `CNA` target)
+and the C/C++ runtime. The footprint consumers stay within the same bounds with
+`CNA_ENABLE_NET=OFF`, and the browser 2D demo (wasm, linking the whole `CNA` target)
 contains none of them either.
 
 ## What a 2D game still contains, and why

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-205.
+// VULKAN-205 (the retired VULKAN renderer's plan, kept in Git history).
 //
 // Does XNA scale a specular highlight by the per-vertex colour?
 //

@@ -104,8 +104,8 @@ returns `CNA_RESULT_INVALID_ARGUMENT`.
 ## Verified configurations
 
 `GraphicsSurfaceSmoke.c` and `GraphicsResourceSmoke.c` are strict C17 and run unchanged against
-HEADLESS and SDL_RENDERER with SDL dummy video. They cover common names, tags, device identity,
+HEADLESS. They cover common names, tags, device identity,
 disposal events and lifetime, state presets and device round trips, SpriteBatch state application,
 display/adapter/presentation snapshots, Texture2D/SpriteFont retention, render-target creation and
 binding/refusal, stale handles, parent ordering and wrong-thread access. HEADLESS is the explicit
-unsupported-storage control; SDL_RENDERER exercises real 2D target storage where available.
+unsupported-storage control.

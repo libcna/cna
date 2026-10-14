@@ -1,8 +1,7 @@
 # AlphaTestEffect Exactness Support Matrix
 
 Phase 43 (`plans/plan_graphics.md` Tasks 371–380) audited and pixel-verified `AlphaTestEffect`
-conformance against FNA across EasyGL and Vulkan. This document summarizes the findings and
-closes the phase.
+conformance against FNA. This document summarizes the findings and closes the phase.
 
 ---
 
@@ -32,9 +31,6 @@ function's below/at/above signature re-derived independently from FNA's `OnApply
 confirmed unique, giving the sweep real discriminating power beyond a single boundary point.
 **24/24 PASS, zero bugs** — EasyGL's comparison logic was already fully correct.
 
-Task 374 ported the identical sweep to Vulkan — the **first-ever** `AlphaTestEffect`
-`CompareFunction` pixel coverage Vulkan had. 24/24 PASS, byte-for-byte same expected values.
-
 ## 3. Reference-alpha scaling (Task 376)
 
 Tasks 371/373 had already established the `referenceAlpha/255.0f` scaling was correct, but neither
@@ -56,22 +52,9 @@ test.cpp`) using two `CompareFunction::Greater` reference thresholds chosen so "
 used" and "diffuse-alpha-alone" hypotheses diverge — 2/2 PASS, exact match. EasyGL reuses the same
 generic per-stride shaders `BasicEffect` uses, which already carry the correct vertex-color logic.
 
-**Vulkan: real bug found, `VertexColorEnabled` has zero effect, true by default — not fixed
-here.** Vulkan routes `AlphaTestEffect` through one generic alpha-test pipeline/shader
-(`alpha_test3d.vert/frag.glsl`) that only ever declares `position`+`texcoord` vertex inputs,
-never a color attribute — and critically,
-`AlphaTestEffect`'s own defaults already route essentially all real-world usage through this
-pipeline (`AlphaFunction=Greater`, `ReferenceAlpha=0` already produces `alphaTestActive=true`).
-Verified empirically with a temporary, uncommitted Vulkan port of the same test: both cases failed
-with vertex color completely dropped, matching the predicted `TextureColor×DiffuseColor×Alpha`-only
-formula exactly. **Opened Task 887** to unify Vulkan's alpha-test dispatch with its
-already-correct per-stride pipelines (mirroring EasyGL's architecture) — a genuinely large
-shader change, not a Task-377-sized fix.
-
 ## 5. Fog behavior (Task 378)
 
-**Real bug found and fixed on EasyGL; a much larger, pre-existing, project-wide gap discovered and
-not fixed (new Task 888).** `AlphaTestEffect::FillGpuDrawParams()` never forwarded any of
+**Real bug found and fixed on EasyGL.** `AlphaTestEffect::FillGpuDrawParams()` never forwarded any of
 `FogEnabled`/`FogColor`/`FogStart`/`FogEnd` — fog was a total no-op regardless of settings, even
 though EasyGL's shared per-stride shaders already fully implement fog generically (the same
 shaders `BasicEffect` uses, and already correctly wired from `BasicEffect::FillGpuDrawParams()`).
@@ -82,15 +65,6 @@ A 3-point Z-sweep pixel test (`easygl_alphatest_fog_test.cpp`) proved genuine in
 on/off switch — 3/3 PASS, near-exact match. Verified genuine discriminating power via `git stash`:
 2/3 assertions correctly failed pre-fix.
 
-**Much larger finding at the time, since fixed:** grepping every `.glsl` (Vulkan) shader file for
-"fog" found **zero matches anywhere** — fog was a total, project-wide no-op on Vulkan for
-**every** 3D effect, including `BasicEffect`, despite
-`BasicEffect::FillGpuDrawParams()` already forwarding the fields correctly on the C++ side.
-**Opened Task 888** to track it; **fixed by Task 899 (closed 2026-07-07)** — fog uniforms/varyings
-and the blend formula were added across every 3D shader on Vulkan, including
-`AlphaTestEffect`'s. See `docs/graphics-renderer-feature-matrix.md`'s "Fog, all applicable
-effects/pipelines" row for current status.
-
 ## 6. Null/disabled texture behavior (Task 379)
 
 FNA's `AlphaTestEffect` has no `TextureEnabled` flag; every shader variant unconditionally samples
@@ -100,25 +74,15 @@ match that result.**
 
 ## Support matrix
 
-| Feature | EasyGL | Vulkan |
-|---|---|---|
-| Property defaults (8/8) | ✅ Task 371/372 | ✅ (shared C++) |
-| `AlphaTest` switch, all 8 `CompareFunction` values | ✅ Task 373 | ✅ Task 374 |
-| `ReferenceAlpha` 0–255 scaling, boundary + out-of-range | ✅ Task 376 | ✅ (shared C++) |
-| `VertexColorEnabled` × `DiffuseColor` × alpha-test | ✅ Task 377 | ❌ Task 887 |
-| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 378 | ✅ fixed Task 899 (2026-07-07) |
-| Null texture samples opaque black | ✅ SOFTWARE-303 | ❌ retains old white convention |
+| Feature | EasyGL |
+|---|---|
+| Property defaults (8/8) | ✅ Task 371/372 |
+| `AlphaTest` switch, all 8 `CompareFunction` values | ✅ Task 373 |
+| `ReferenceAlpha` 0–255 scaling, boundary + out-of-range | ✅ Task 376 |
+| `VertexColorEnabled` × `DiffuseColor` × alpha-test | ✅ Task 377 |
+| Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 378 |
+| Null texture samples opaque black | ✅ SOFTWARE-303 |
 
-Legend: ✅ verified working · ❌ confirmed not implemented.
-
-## Open, tracked follow-up work
-
-Phase 43 opened 2 new tracked tasks:
-
-- **Task 887** — unify Vulkan's alpha-test pipeline dispatch with its already-correct
-  per-stride textured/colored-textured pipelines (mirroring EasyGL's architecture), so
-  `VertexColorEnabled` actually affects the alpha-test comparison there.
-- ~~**Task 888**~~ — **fixed by Task 899** (closed 2026-07-07): real fog is now implemented on
-  Vulkan, project-wide, for every 3D effect including `AlphaTestEffect`.
+Legend: ✅ verified working.
 
 This closes Phase 43 (`plans/plan_graphics.md` Tasks 371–380) in full.

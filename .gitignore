@@ -13,16 +13,13 @@ cmake-build-*
 cmake-build-debug/*
 cmake-build-web/*
 .junie/guide.md
-cmake-build-vulkan/*
 cmake-build-easygl/*
 .sdl-prebuilt/
 .sdl-prebuilt-*/
-cmake-build-sdl/*
 cmake-build-webgpu/*
 cmake-build-headless/*
 cmake-build-software/*
 cmake-build-stub/*
-cmake-build-d3d11/*
 cmake-build-ascii/*
 cmake-build-d3d9/*
 cmake-build-sdlgpu/*
@@ -30,8 +27,6 @@ vkd3d-proton.cache.write
 vkd3d-proton.cache
 vendor/wgpu-native/
 cmake-build-input-easygl/*
-cmake-build-input-vulkan/*
-cmake-build-input-sdlrenderer/*
 cmake-build-input-asan/*
 cmake-build-android/*
 cmake-build-devices-asan/*

@@ -3,6 +3,7 @@
 > Document scope: **game consoles** (Nintendo, PlayStation, Xbox, retro platforms), not a text
 > console/terminal. This document builds on `cnaplatform.md` (isolating SDL3 behind a platform API)—
 > that work is a **prerequisite** for consoles, not an alternative.
+> `SDL_RENDERER`, `VULKAN`, `DIRECTX11` and `METAL` were retired on 2026-10-13 (`docs/removed-renderers.md`).
 
 ## Short answer
 

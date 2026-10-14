@@ -17,11 +17,16 @@ also lists what is deliberately left undone.
 
 Read this before quoting anything below as "CNA supports iPhone".
 
-**macOS arm64** builds natively, runs the portable test suites, and has two GitHub Actions gates: the
-Apple workflow (`.github/workflows/apple-ci.yml`, `SDL_RENDERER` plus the platform/storage
-suites) and the older Metal workflow (`.github/workflows/metal-macos-ci.yml`). The Metal
-renderer's own supported contract is narrower than "it builds" — see
-[`docs/metal-renderer.md`](metal-renderer.md).
+**Renderers on Apple since 2026-10-13.** CNA's own `METAL` and `SDL_RENDERER` renderers are retired
+(`docs/removed-renderers.md`). `SDL_GPU` is the designated Apple renderer -- CNA maps XNA onto
+SDL_GPU and SDL drives Metal underneath it -- and the default on macOS and iOS. Its Apple status:
+on macOS it passed the full test tree on the Mac mini M4 (table below, `AM4-*`); it has not been
+re-qualified since the retirement, and on iOS it has never been built. That qualification is a
+separate, later campaign (`handoff.md` §5.2).
+
+**macOS arm64** builds natively, runs the portable test suites, and has one GitHub Actions gate: the
+Apple workflow (`.github/workflows/apple-ci.yml`, `SOFTWARE` plus the platform/storage suites,
+chosen because the gate is about the platform layer, not a GPU renderer).
 The CMake layer keys vendored dependencies by requested architecture and permits x86_64/universal
 builds, but the current hosted workflow runs on Apple silicon and is not Intel evidence.
 
@@ -36,11 +41,9 @@ renderer allow-list; and `cna_ios_smoke`, a real application that constructs `Ga
 frame. CI final-links that app for device and simulator, checks its Mach-O platform, entry-point
 symbols and dynamic dependencies, then installs and launches the simulator build.
 
-`plans/plan_apple_m4.md` `AM4-037` (Mac mini M4, macOS 27, Xcode 27, iOS 27 Simulator on an iPhone 17
-profile) added the native `METAL` renderer on iOS and `cna_ios_pixel_probe`, which reads back a
-clear colour, a SpriteBatch quad and a BasicEffect triangle: exact on 29 of 31 simulator launches
-(two all-zero runs right after first install did not reproduce). That is simulator pixel evidence
-for METAL only; SDL_RENDERER refuses exact readback through the letterbox scaling a phone needs.
+`cna_ios_pixel_probe` reads back a clear colour, a SpriteBatch quad and a BasicEffect triangle. Its
+simulator pixel evidence (`AM4-037`/`AM4-120`) was measured with the retired `METAL` renderer; it
+has not yet been measured with a surviving one.
 
 What does **not** exist is a run on a physical iPhone/iPad, device pixel correctness, real touch,
 audio, storage or performance evidence, an App Store package, or production signing. A green
@@ -54,7 +57,7 @@ checkout, submodules initialized):
 
 ```bash
 brew install ccache ffmpeg
-cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDL_GPU
 cmake --build cmake-build-macos --parallel 4
 ```
 
@@ -100,7 +103,7 @@ Requires a macOS host with Xcode installed.
 # Device (arm64)
 cmake -S . -B cmake-build-ios \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-      -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
+      -DCNA_GRAPHICS_RENDERER=SDL_GPU \
       -DCNA_ENABLE_NET=OFF \
       -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
 cmake --build cmake-build-ios --parallel 4
@@ -109,15 +112,16 @@ cmake --build cmake-build-ios --parallel 4
 cmake -S . -B cmake-build-ios-sim \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
       -DCNA_IOS_SIMULATOR=ON \
-      -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
+      -DCNA_GRAPHICS_RENDERER=SDL_GPU \
       -DCNA_ENABLE_NET=OFF \
       -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
 ```
 
 `CNA_ENABLE_NET=OFF` is required on iOS today: networking (`GamerServices` + `Net`) needs a
 libcurl for the target, and the iOS SDK ships none, so with networking on the configure stops at
-"Could NOT find CURL" (`plans/plan_apple_m4.md` `AM4-105`; Apple CI passes the same flag). Use
-`-DCNA_GRAPHICS_RENDERER=METAL` for the native Metal renderer.
+"Could NOT find CURL" (`plans/plan_apple_m4.md` `AM4-105`; Apple CI passes the same flag).
+`SDL_GPU` on iOS has never been built; `-DCNA_GRAPHICS_RENDERER=SOFTWARE` is the dependency-free
+alternative for a platform smoke run.
 
 Use the Xcode generator (`-G Xcode`) when you need to sign and deploy to a physical device:
 signing is expressed through `XCODE_ATTRIBUTE_*` target properties, which only Xcode consumes.
@@ -168,21 +172,22 @@ time with a readable message instead of somewhere deep inside a dependency build
 
 | Renderer | On iOS |
 |---|---|
-| `SDL_RENDERER` | Allowed. SDL3's own 2D renderer, Metal-backed on iOS. It is the only renderer built and final-linked by Apple CI. |
-| `SDL_GPU` | Refused by default. Its build currently requires a target-compatible shaderc dependency that the iOS workflow does not provide. |
+| `SDL_GPU` | Allowed, **unqualified**. The designated iOS renderer (SDL's Metal backend through SDL_shadercross). It has never been built for iOS; Apple CI builds it for device and simulator as a non-blocking leg until the SDL_GPU Apple qualification. |
+| `SOFTWARE` | Allowed. The CPU renderer, presenting through SDL's window surface; the blocking Apple CI legs final-link and launch the smoke app with it. |
 | `OPENGLES3` | Refused by default. It requires the sibling `easy-gl` and `meta-gl` repositories, which the iOS workflow does not provide or validate. |
-| `HEADLESS`, `SOFTWARE`, `STUB` | Refused by default. They may be useful for experiments, but they are not final-linked by Apple CI and therefore are not advertised as supported iOS configurations. |
-| `METAL` | Allowed (`plans/plan_apple_m4.md` `AM4-037`). CNA's native Metal renderer on a UIKit view in SDL's `UIWindow`. Built for device and simulator; the simulator runs `cna_ios_pixel_probe`, which checks a clear colour, a SpriteBatch quad and a BasicEffect triangle read back from the frame. |
-| Everything else | Refused. Desktop APIs cannot exist on iOS; other third-party-backed renderers have not been configured for an iOS sysroot. |
+| `HEADLESS`, `STUB` | Refused by default. Useful for experiments, but not final-linked by Apple CI. |
+| Everything else | Refused. Desktop APIs cannot exist on iOS; other third-party-backed renderers have not been configured for an iOS sysroot. `METAL` and `SDL_RENDERER`, which were allowed until 2026-10-13, are retired and refused everywhere. |
 
-"Allowed" means configure accepts it, CI final-links it for both iOS sysroots, and the simulator
-smoke app launches one frame. It does not mean correct pixels have been observed.
+"Allowed" means configure accepts it and CI final-links it for both iOS sysroots. It does not mean
+correct pixels have been observed, and for `SDL_GPU` not even that the CI leg is green yet.
 `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON` downgrades any refusal to a warning for experimentation;
 expect build or runtime failures, and nothing about such a configuration is supported.
 
 ## Mac mini M4 qualification (2026-10-07/08)
 
-`plans/plan_apple_m4.md` (`AM4-*`) is the task-by-task record; this is its summary. Host: Mac mini
+`plans/plan_apple_m4.md` (`AM4-*`) is the task-by-task record; this is its summary. It predates the
+2026-10-13 retirement: its `METAL` and `SDL_RENDERER` rows describe renderers CNA no longer has and
+are kept as the measurement they were. Host: Mac mini
 M4 (arm64, 16 GB), macOS 27.0.1, Xcode 27.0 / Apple clang 21, CMake 4.4.4, `CNA_PLATFORM=SDL3`
 (SDL's Cocoa and UIKit drivers -- CNA has no Cocoa/AppKit/UIKit backend of its own). Every number
 below was measured on that machine. Statuses: **PASS**, **PASS WITH KNOWN LIMITATION**,
@@ -202,7 +207,7 @@ baseline the qualification started from, its classification, and the full eviden
 |---|---|---|---|
 | sharp-runtime (standalone) | PASS WITH KNOWN LIMITATION | 18,127/18,127 at the Phase 4 head, 25 skip (native float `from_chars` absent below macOS 26 x17, `/rv` XNA sample fixtures x3, live SOAP x2, x86-64 layout pin, ...) | FileSystemWatcher has a kqueue backend since this campaign (AM4-055, hardened by AM4-101: per-file descriptors capped at half the soft limit, FIFOs never opened); see sharp-runtime `docs/Platform-macOS.md` |
 | SDL3 platform baseline (`SDL_RENDERER`) | PASS WITH KNOWN LIMITATION | full tree 10,940/10,940, 966 skip | 2D-only by design: the 966 are 3D cases declining on the renderer's by-name refusals (`AM4-179`) or a `ThreeD` precondition. Under the default `Unsupported3DGraphicsCallBehavior::Throw` a `TextureCube`/`Texture3D` is refused at construction and a `RenderTargetCube` at its face binding (`AM4-196`); a blend mode SDL's backend cannot draw is refused by name (`AM4-198`); a platform without SDL windows is the platform's refusal (`AM4-207`) |
-| `METAL` | PASS WITH KNOWN LIMITATION | full tree 11,015/11,015, 114 skip; Phase 3 (`AM4-134`..`AM4-159`): `ctest -L Metal` 261/261 with `MTL_DEBUG_LAYER`/`MTL_SHADER_VALIDATION` (101 shared pixel fixtures, 146 renderer-neutral oracles, 14 native); Release tree 261/261 (`AM4-156`); compiled effects (`CNA_METAL_COMPILED_EFFECTS=ON`) 43 Metal and 1,237 effect tests (`AM4-144`); cna-samples 91/91; iOS device build links; cna-examples 248/248 | MSAA, every XNA surface format (float, packed, DXT as BC or decoded), instancing, multi-stream input, compiled XNA effects, MRT outputs and the backbuffer's own depth format are native since Phase 3. Left: compiled effects are opt-in (off by default); custom `ShaderEffect`s are SpriteBatch-scoped MSL; `PresentInterval.Two` presents as `One`; the backbuffer is always BGRA8 (reported as `Color`); LOD bias needs macOS/iOS 26; a multisampled RenderTarget2D loses a `SetData` under `PreserveContents`. Phase 3 verdict: **SUPPORTED** -- not primary-production, because on-screen presentation, a physical iOS device and a soak run are unmeasured (`docs/metal-renderer.md`) |
+| `METAL` | PASS WITH KNOWN LIMITATION | full tree 11,015/11,015, 114 skip; Phase 3 (`AM4-134`..`AM4-159`): `ctest -L Metal` 261/261 with `MTL_DEBUG_LAYER`/`MTL_SHADER_VALIDATION` (101 shared pixel fixtures, 146 renderer-neutral oracles, 14 native); Release tree 261/261 (`AM4-156`); compiled effects (`CNA_METAL_COMPILED_EFFECTS=ON`) 43 Metal and 1,237 effect tests (`AM4-144`); cna-samples 91/91; iOS device build links; cna-examples 248/248 | MSAA, every XNA surface format (float, packed, DXT as BC or decoded), instancing, multi-stream input, compiled XNA effects, MRT outputs and the backbuffer's own depth format are native since Phase 3. Left: compiled effects are opt-in (off by default); custom `ShaderEffect`s are SpriteBatch-scoped MSL; `PresentInterval.Two` presents as `One`; the backbuffer is always BGRA8 (reported as `Color`); LOD bias needs macOS/iOS 26; a multisampled RenderTarget2D loses a `SetData` under `PreserveContents`. Phase 3 verdict: **SUPPORTED** -- not primary-production, because on-screen presentation, a physical iOS device and a soak run are unmeasured |
 | `OPENGL33` (EasyGL) | PASS WITH KNOWN LIMITATION | full tree 11,916/11,916, 128 skip, with compiled effects on (`CNA_EASYGL_COMPILED_EFFECTS=ON`); cna-samples 91/91 | Apple's GL ("4.1 Metal") stores 24-bit depth as float32, so a constant `DepthBias` is exact only for depths in [0.5, 1) and the normalized depth-bias contract is skipped there (`AM4-171`); the driver keeps an over-cap max anisotropy and clamps it when filtering (`AM4-172`) |
 | `SDL_GPU` (SDL's Metal driver) | PASS WITH KNOWN LIMITATION | full tree 10,962/10,962, 295 skip; cna-samples 90/91 | SDL3's GPU API has no occlusion queries, so LensFlare is `RENDERER_UNSUPPORTED`; SDL's Metal backend ignores `mip_lod_bias`. Fixed in Phase 4: point lists (`AM4-181`), XNA's forwarded draw ranges (`AM4-183`), float and wide `Texture2D` formats with Direct3D 9's channel fill (`AM4-184`), the platform refusal without SDL video (`AM4-176`) |
 | `WEBGPU` (wgpu-native v29.0.1.1, Metal backend) | PASS WITH KNOWN LIMITATION | full tree 10,968/10,968, 279 skip; cna-samples 91/91 | wgpu-native's Metal backend ignores `MultiSampleMask` (Metal pipelines have no sample-mask state) and counts occlusion as a boolean (`AM4-091`). Fixed in Phase 4: XNA's sixteen vertex bindings (`AM4-185`), block-aligned partial compressed cube writes (`AM4-186`), `HdrBlendable`/`HalfVector4` `Texture2D` (`AM4-187`) |
@@ -311,20 +316,22 @@ directory on both Apple platforms, so bundled content works without changes.
   outside it with a message naming the override, honours the override, and stays completely inert
   on a non-Apple host. It also checks all three static SDL switches, deployment floors, the macOS
   dependency fixup and both halves of the orientation bridge. Run it locally on any platform.
-- **`macos-build`** — macOS 14 runner, `SDL_RENDERER`, builds `CnaTests` and runs the platform,
+- **`macos-build`** — macOS runner, `SOFTWARE`, builds `CnaTests` and runs the platform,
   window, lifecycle, storage and desktop-OS suites (dummy audio driver, real video driver). A
   separate build tree enables `.app` bundling, final-links and launches `cna_macos_smoke.app`,
   and rejects dependencies that still point to the SDL build cache or a Homebrew prefix.
 - **`ios-build` (device, simulator)** — builds and final-links `cna_ios_smoke.app` for both
-  sysroots; validates `Info.plist`, Mach-O platform, `_main`/`_SDL_main`, and the absence of
-  dynamic SDL/build-machine dependencies. The simulator leg then boots an available iPhone,
-  ad-hoc signs and installs the app, launches it, and requires `CNA_APPLE_SMOKE_OK`.
+  sysroots with `SOFTWARE`; validates `Info.plist`, Mach-O platform, `_main`/`_SDL_main`, and the
+  absence of dynamic SDL/build-machine dependencies. The simulator leg then boots an available
+  iPhone, ad-hoc signs and installs the app, launches it, and requires `CNA_APPLE_SMOKE_OK`. Two
+  more legs do the same with `SDL_GPU` and also run `cna_ios_pixel_probe`; they are
+  `continue-on-error` until the SDL_GPU Apple qualification, so their result is information, not
+  a gate.
 
-All four jobs in this workflow are green in
-[run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749). That run is compile,
-bundle and bounded smoke evidence only; it does not expand the feature boundary stated above.
-
-`.github/workflows/metal-macos-ci.yml` keeps its own separate Metal renderer gate.
+Run [31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) was green with the
+since-retired `SDL_RENDERER`; the `SOFTWARE`/`SDL_GPU` legs have not run yet as of 2026-10-13. CI
+evidence is compile, bundle and bounded smoke evidence only; it does not expand the feature
+boundary stated above. The former `metal-macos-ci.yml` went with the `METAL` renderer.
 
 ## Known gaps
 

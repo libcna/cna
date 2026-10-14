@@ -9,8 +9,8 @@ were excellent reconnaissance; what is kept here is the finding, not the code.
 **The code is not gone.** Each entry names the commit that removed it; the parent of that commit
 holds the whole implementation (`git show <commit>^:modules/renderers/<family>/...`, or
 `git checkout <commit>^ -- modules/renderers/<family>`). Plans of renderers retired up to
-2026-09-27 stay in `plans/` as history, marked retired; those of the 2026-09-28 retirement were
-deleted with their renderers and live only in git history. What git does *not* preserve is the third-party project each renderer
+2026-09-27 stay in `plans/` as history, marked retired; those of the 2026-09-28 and 2026-10-13
+retirements were deleted with their renderers and live only in git history. What git does *not* preserve is the third-party project each renderer
 wrapped, so every entry records the exact dependency it was pinned to. That pairing — CNA's code in
 git history, the dependency's coordinates here — is the archive.
 
@@ -27,15 +27,21 @@ removal commit is a specification to port forward, not a patch to apply. Expect 
 A retired identity's C ABI value (`CNA_GRAPHICS_RENDERER_*`, `modules/c-api/include/CNA/C/graphics.h`)
 is **permanently reserved**: it is never assigned to another renderer, and surviving identities are
 never renumbered to close the gap. The next new identity takes value **52**. The same table lives in
-`cmake/RendererIdentities.cmake` (which refuses these names at configure time, naming the value)
-and in `scripts/check_renderer_identities.py` (which fails if a value or a name is reused).
+`cmake/RendererIdentities.cmake` (which refuses these names at configure time, naming the value),
+in `RetiredRendererNames` (`modules/core/src/GraphicsRendererSelection.cpp`, which makes
+`CNA_GRAPHICS_RENDERER`, `GraphicsRendererSelection::SetPreferred` and the C API's by-name route
+say a name was retired rather than unknown) and in `scripts/check_renderer_identities.py` (which
+fails if a value or a name is reused, or if the lists disagree).
 
 | Value | Identity | Removed |
 |---:|---|---|
+| 1 | `SDL_RENDERER` | 2026-10-13 |
 | 2 | `OPENGLES2` | 2026-10-06 |
 | 5 | `WEBGL1` | 2026-10-06 |
 | 7 | `BGFX` | 2026-09-17 |
+| 8 | `VULKAN` | 2026-10-13 |
 | 10 | `MAGNUM` | 2026-09-17 |
+| 14 | `DIRECTX11` | 2026-10-13 |
 | 15 | `DIRECTX12` | 2026-10-06 |
 | 16 | `DIRECT2D` | 2026-09-27 |
 | 17 | `CANVAS` | 2026-10-06 |
@@ -61,6 +67,7 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 | 39 | `GLIDE` | 2026-09-17 |
 | 40 | `GDI` | 2026-09-28 |
 | 41 | `LLGL` | 2026-09-17 |
+| 42 | `METAL` | 2026-10-13 |
 | 44 | `SVG_DOM` | 2026-09-28 |
 | 45 | `OPENVG` | 2026-09-17 |
 | 46 | `PORTABLEGL` | 2026-09-27 |
@@ -71,8 +78,61 @@ and in `scripts/check_renderer_identities.py` (which fails if a value or a name 
 | 51 | `RLGL` | 2026-09-17 |
 
 The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 2026-09-27 one, to
-`0.33.0` for the 2026-09-28 one and to `0.45.0` for the 2026-10-06 one
-(`docs/c-api/ABI_VERSIONING.md`).
+`0.33.0` for the 2026-09-28 one, to `0.45.0` for the 2026-10-06 one and to `0.48.0` for the
+2026-10-13 one (`docs/c-api/ABI_VERSIONING.md`).
+
+## The 2026-10-13 retirement
+
+An owner decision, final: CNA stops maintaining its own native Vulkan, Direct3D 11 and Metal
+renderers and SDL's 2D renderer (`RRC-030`..`RRC-037`; the ledger and full report are
+[`plans/plan_renderer_retirement.md`](../plans/plan_renderer_retirement.md)). `SDL_GPU` is CNA's
+modern native path -- CNA maps XNA 4.0 onto SDL_GPU, and SDL owns the Vulkan, Direct3D 12 and Metal
+backends underneath it. None of the four is aliased to `SDL_GPU` or to anything else: each name is
+refused at configure time by name and value, and at run time (`CNA_GRAPHICS_RENDERER`,
+`GraphicsRendererSelection::SetPreferred`, the C API's by-name route) with a message that says it
+was retired. CNA keeps 10 public renderer identities over 8 implementation families; C ABI 0.48.0.
+
+| Identity | C ABI | Reason | Coverage that remains |
+|---|---:|---|---|
+| `VULKAN` | 8 | A second, hand-written native Vulkan backend beside SDL_GPU's. | `SDL_GPU` (SDL's Vulkan backend on Linux and Android), `WEBGPU` (wgpu's), `FNA3D` through SDL_GPU. |
+| `DIRECTX11` | 14 | A native Direct3D 11 backend, with the shared `D3DCommon` core and its offline HLSL. | `SDL_GPU` (SDL's Direct3D 12 backend), `DIRECTX9`, `FNA3D` (its own D3D11 and SDL_GPU drivers). |
+| `METAL` | 42 | A native Metal backend for macOS and iOS (Objective-C++). | `SDL_GPU` (SDL's Metal backend), not yet re-qualified on Apple hardware. |
+| `SDL_RENDERER` | 1 | SDL's 2D API: 2D-only, it refused every 3D call. | `SDL_GPU`, `OPENGLES3`/`OPENGL33`, `SOFTWARE`. |
+
+**What went with them.** `modules/renderers/{vulkan,directx11,metal,sdl-renderer}` and
+`modules/renderers/common/d3d`; the platform's Vulkan-surface service and Metal window intent; the
+Vulkan and DirectX 11 glTF L7 corpora; the DirectX parity inventory, the D3D11 Wine/DXVK wrappers
+and HLSL toolchain; the HLSL post-process payloads graphics-ext carried for Direct3D 11; the
+`metal-macos-ci` workflow; the renderer documents and plans. Per-host defaults moved: `SDL_GPU` on
+Windows, macOS and iOS, `OPENGLES3` everywhere else outside the browser. The iOS allow-list is
+`SDL_GPU` and `SOFTWARE`.
+
+**Dependencies.** `VULKAN`: the system Vulkan loader and headers (`Vulkan::Vulkan`) and Python for
+its offline SPIR-V build. `DIRECTX11`: the Windows SDK's `d3d11`, `dxgi` and `d3dcompiler`.
+`METAL`: Apple's Metal, QuartzCore, Foundation and AppKit/UIKit frameworks. `SDL_RENDERER`: SDL3's
+own 2D API (SDL3 itself stays). The removal commits are `fe5e25994` (`VULKAN`), `def6f7747`
+(`DIRECTX11`), `22842c107` (`METAL`) and `86b8152f2` (`SDL_RENDERER`).
+
+**Tests.** Each suite was classified before deletion. Implementation tests went with their
+renderer; XNA behaviour not covered elsewhere became renderer-neutral conformance programs
+(`modules/graphics/examples/conformance/`, run as `<Renderer>_Conformance_*` by EasyGL, SDL_GPU and
+WebGPU) or CnaTests cases, and what surviving renderers get wrong is in `handoff.md` §5.1.
+
+**Kept on purpose.** SDL's own Vulkan/D3D12 patches and the `run-wine-vkd3d*.sh` launchers
+(`SDL_GPU`); MojoShader's D3D11 and Metal patches (`FNA3D`'s own drivers); SPIRV-Cross for
+SDL_shadercross; the platform's SDL_Renderer-based surface presenter that shows `SOFTWARE`'s CPU
+frames; the `ShaderLanguageEXT` HLSL/MSL identities.
+
+**Validation.** On Linux, from empty caches: the multi-renderer tree (`OPENGLES3` default with
+`OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) and the `SDL_GPU`, `WEBGPU`,
+`HEADLESS` and `SOFTWARE` trees built and ran their full suites through the private runner, every
+failure a `handoff.md` §5.1 entry; the Emscripten build ran the C API under node and two demos with
+`WEBGPU` in headless Chrome; Android compiled; the MinGW cross build ran the C API, the `DIRECTX9`
+suite and `SDL_GPU`'s Direct3D 12 backend under Wine. Details and numbers:
+`plans/plan_renderer_retirement.md`.
+
+**Not run:** native Windows (MSVC, Direct3D 12), macOS and iOS hardware, an Android device. SDL_GPU's
+qualification on those is the follow-up (`handoff.md` §5.2).
 
 ## The 2026-10-06 retirement
 

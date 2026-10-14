@@ -36,8 +36,8 @@ would drift. Anything above either maximum is refused by every route that accept
 `CNA_GRAPHICS_RENDERER_UNKNOWN` is a value routes *report*, never one they accept.
 
 **The renderer range is bounded but not contiguous, and a walker must expect gaps.** A retired
-identity's value is permanently reserved and never reassigned, so 2, 5, 7, 10, 15–21, 23–30,
-32–41 and 44–51 are holes: thirty-seven identities have been retired (`docs/removed-renderers.md`). A reserved value is a well-formed `uint32_t` in range that no longer names a
+identity's value is permanently reserved and never reassigned, so 1, 2, 5, 7, 8, 10, 14–21, 23–30,
+32–42 and 44–51 are holes: forty-one identities have been retired (`docs/removed-renderers.md`). A reserved value is a well-formed `uint32_t` in range that no longer names a
 renderer, and every route that takes a renderer identity refuses it with
 `CNA_RESULT_INVALID_ARGUMENT` — "not a public CNA renderer identity" — exactly as it refuses a value
 that was never assigned. Walking the range and keeping what is accepted is therefore correct; walking
@@ -85,14 +85,14 @@ destroy route remains available for cleanup after a failed flush.
 parameters. Full-buffer RGBA8 readback uses the native `GraphicsDevice::GetBackBufferData(Color*)`
 route after capacity validation and copies through native `Color` values; it never exposes or
 reinterprets renderer memory. HEADLESS has no rasterized backbuffer and returns
-`CNA_RESULT_NOT_SUPPORTED` without modifying the destination. The SDL_RENDERER C test verifies the
-exact red, green and blue uploaded texels plus an untouched clear pixel before presentation.
+`CNA_RESULT_NOT_SUPPORTED` without modifying the destination. On a renderer that can read its
+backbuffer back, `LifecycleSmoke.c` verifies the exact red, green and blue uploaded texels plus an
+untouched clear pixel before presentation.
 
 ## Test policy
 
 HEADLESS is the deterministic lifecycle/state control. It proves C callback order, handle lifetime,
 error behavior and honest refusal when no pixel result exists. It cannot by itself prove visual
-pixel correctness. The initial 2D slice therefore runs the same C test on SDL_RENDERER and checks
-exact pixels. Every later rendering claim requires an appropriate real-renderer observation in
+pixel correctness, so the same C test checks exact pixels wherever the backbuffer can be read back. Every later rendering claim requires an appropriate real-renderer observation in
 addition to HEADLESS. Renderer-specific unavailability is recorded in the public C API coverage
 matrix and feature documentation.

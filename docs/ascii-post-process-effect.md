@@ -72,8 +72,7 @@ available (see below).
 
 ## Renderer neutrality
 
-The effect does not depend on `SDL_RENDERER`, or any other specific renderer, as its
-architectural owner. It operates entirely through ordinary CNA graphics abstractions:
+The effect does not depend on any specific renderer as its architectural owner. It operates entirely through ordinary CNA graphics abstractions:
 `Texture2D`/`RenderTarget2D` (source), `GraphicsDevice` (owns the font-atlas texture and the
 currently-bound render target the effect draws into), and `SpriteBatch` (draws the glyph quads).
 It never downcasts to a concrete renderer type and never touches a renderer-internal API.
@@ -88,7 +87,7 @@ could never express (it was itself 2D-only and could not run any 3D-capable rend
 at all):
 
 ```text
-VULKAN (or any 3D-capable renderer) 3D scene
+any 3D-capable renderer's 3D scene
     -> RenderTarget2D
     -> AsciiPostProcessEffect
     -> backbuffer
@@ -111,8 +110,8 @@ algorithm), then re-uploads the result as textured quads via `SpriteBatch`. This
 GPU-to-CPU readback on every `Draw()` call — the same cost class the former `ASCII` renderer's own
 `Present()` already paid every frame (it read `gameTarget_` back on every present too). This
 implementation intentionally does not depend on `plans/plan_moderngraphics.md`, compute shaders, or any
-Vulkan-specific functionality — it works identically on every CNA renderer, including 2D-only,
-non-shader ones (`SDL_RENDERER`, `HEADLESS`, `SOFTWARE`, ...).
+renderer-specific functionality — it works identically on every CNA renderer, including non-shader
+ones (`HEADLESS`, `SOFTWARE`, ...).
 
 ## FUTURE ASCII GPU acceleration
 
@@ -122,7 +121,7 @@ renderers via `Microsoft::Xna::Framework::Graphics::ShaderEffect` (the same GLSL
 `CRTEffect`/`DepthEffect` already use). It is deliberately deferred, not implemented in this
 migration:
 
-- it would not run on 2D-only/non-shader renderers (`SDL_RENDERER`, `HEADLESS`, `SOFTWARE`, ...),
+- it would not run on non-shader renderers (`HEADLESS`, `SOFTWARE`, ...),
   which this effect must keep supporting uniformly, the same way `CRTEffect`/`DepthEffect` fall
   back to a no-op on those renderers today;
 - it is a genuinely new rendering-architecture investment (a GLSL luminance/glyph-selection shader,

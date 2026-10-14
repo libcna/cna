@@ -48,7 +48,7 @@ running the input tests. EasyGL is the default.
 ```bash
 # Configure with tests enabled (pick ONE backend):
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
-# or VULKAN / SDL_RENDERER
+# or SDL_GPU / SOFTWARE
 
 # Build the test binary:
 cmake --build cmake-build-input-easygl --target CnaTests
@@ -67,8 +67,8 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 > `--gtest_shuffle --gtest_repeat=5`, so every invocation runs the filtered subset five times, each under
 > a fresh shuffle seed. The input state is a process-wide singleton (`InputManager`, `GestureDetector`,
 > the `MouseCursor` stock cursors), so a future static-state leak would resurface as an order-dependent
-> failure here. This gate must stay **green on every built backend** (EasyGL / Vulkan /
-> SDL_RENDERER — the command is identical and backend-agnostic). For a deeper sweep, invoke the binary
+> failure here. This gate must stay **green on every built backend** (the command is identical and
+> backend-agnostic). For a deeper sweep, invoke the binary
 > directly with a higher `--gtest_repeat` and the `CNA_INPUT_TEST_FILTER` value.
 
 > Do **not** hand-copy a `--gtest_filter` string to select the input subset — it drifts (a new suite
@@ -85,8 +85,8 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 Recorded **2026-07-16** (updated from the 2026-07-06 baseline as part of `plans/plan_input.md` P13-006, the
 Input subsystem grew substantially in between — including the `feature/xnb` merge and the
 `audit_input.md` Phase 13 defect-remediation pass) in this checkout: Debian 13, g++ 14.2.0, CMake
-3.31.6, Ninja 1.12.1. Input is backend-agnostic — the input-filter count is identical on EasyGL /
-Vulkan / SDL_RENDERER.
+3.31.6, Ninja 1.12.1. Input is backend-agnostic — the input-filter count was identical on every
+backend then built.
 
 **Pinned versions (INPUT-DOC-014 / INP-0196).** Reference toolchain as above (g++ 14.2.0 / CMake 3.31.6 /
 Ninja 1.12.1, Debian 13).
@@ -175,8 +175,8 @@ Notes:
   this crash's discovery and should not be treated as still achievable.
 - The 20 pre-2026-07-17 full-suite failures (before the crash was discovered) were pre-existing and
   unrelated to Input: all 20 were in the XNB/Content/Model/Effect/Texture3D pipeline
-  (`"SDL_Renderer does not support 3D: CreateVertexBuffer"`, a known, documented `SDL_RENDERER`
-  backend limitation — see `docs/sdl-renderer-2d-completeness.md` Task 725), not an input regression.
+  (`"SDL_Renderer does not support 3D: CreateVertexBuffer"`, a documented limitation of the
+  since-retired `SDL_RENDERER` backend), not an input regression.
 - The canonical filter's last four tokens (`*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`) were
   added 2026-07-05 to catch the pure-enum value suites and the public-API header-hygiene suite that the
   older filter missed.
@@ -225,7 +225,7 @@ deviations.
 |---------|-------|-----|
 | CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init --recursive` |
 | CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna_input` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
-| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=VULKAN` (or SDL_RENDERER) |
+| CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=SDL_GPU` (or `SOFTWARE`) |
 | `ctest -L input` fails on 3 `MouseCursor` cases | headless `SDL_VIDEODRIVER=dummy` (null cursors) | run under a display: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest -L input` |
 | ASan reports leaks in `libGLX_mesa` | third-party Mesa GLX at process exit (not CNA) | run with `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1` (what CI uses) |
 | Gamepad panels stay "disconnected" in `demo_input` | no controller / SDL can't map the device | attach a controller SDL knows (see `gamecontrollerdb`); Steam Input presents a virtual pad |

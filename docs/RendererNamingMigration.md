@@ -2,7 +2,7 @@
 
 > **Historical campaign record.** This document describes the 2026-08 normalization as it stood
 > then. Twenty-five renderer identities were retired on 2026-09-17, `DIRECT2D`, `FREEDIRECT` and
-> `PORTABLEGL` on 2026-09-27, four more on each of 2026-09-28 and 2026-10-06, and `SKIA` in 2026-08;
+> `PORTABLEGL` on 2026-09-27, four more on each of 2026-09-28, 2026-10-06 and 2026-10-13, and `SKIA` in 2026-08;
 > the names below that belong to them are kept as the record of what the campaign renamed and are
 > refused by name at configure time today with their C ABI values permanently reserved.
 > `cmake/RendererIdentities.cmake` is the live registry and
@@ -77,8 +77,8 @@ Public identities (selector / enum / module directory / main class):
 | `DX8` | `DIRECTX8` (retired 2026-09-17) | `Dx8` | `DirectX8` | `renderers/dx8` | `renderers/directx8` | `DirectX8Renderer` |
 | `D3D9` | `DIRECTX9` | `D3D9` | `DirectX9` | `renderers/d3d9` | `renderers/directx9` | `DirectX9Renderer` |
 | `D3D10` | `DIRECTX10` (retired 2026-09-17) | `D3D10` | `DirectX10` | `renderers/d3d10` | `renderers/directx10` | `DirectX10Renderer` |
-| `D3D11` | `DIRECTX11` | `D3D11` | `DirectX11` | `renderers/d3d11` | `renderers/directx11` | `DirectX11Renderer` |
-| `D3D12` | `DIRECTX12` | `D3D12` | `DirectX12` | `renderers/d3d12` | `renderers/directx12` | `DirectX12Renderer` |
+| `D3D11` | `DIRECTX11` (retired 2026-10-13) | `D3D11` | `DirectX11` | `renderers/d3d11` | `renderers/directx11` | `DirectX11Renderer` |
+| `D3D12` | `DIRECTX12` (retired 2026-10-06) | `D3D12` | `DirectX12` | `renderers/d3d12` | `renderers/directx12` | `DirectX12Renderer` |
 
 There is intentionally **no DIRECTX4** (CNA never had that identity).
 `DIRECT2D` and `FREEDIRECT` (both retired 2026-09-27) were unchanged — and the `DIRECTX3` row
@@ -168,7 +168,7 @@ Names in the snapshot that no longer name a renderer: `SKIA` was retired in 2026
 and `OPENVG` on 2026-09-17. Each is refused by name at configure time and keeps its C ABI value
 permanently reserved; see [`removed-renderers.md`](removed-renderers.md).
 
-The live registry is `cmake/RendererIdentities.cmake` — 14 public renderer identities over 12
+The live registry is `cmake/RendererIdentities.cmake` — 10 public renderer identities over 8
 implementation families — pinned by `scripts/check_renderer_identities.py` against the
 `GraphicsRendererType` enum and the `CNA_GRAPHICS_RENDERER` STRINGS list, which also rejects the
 old selectors (`DX1`..`DX8`, `D3D9`..`D3D12`, `OPENGLES`) as unknown. See

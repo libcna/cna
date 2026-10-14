@@ -71,10 +71,9 @@ Explicit generic disposal keeps the C handle and immutable metadata alive while 
 renderer; subsequent data operations return `CNA_RESULT_INVALID_STATE`. Typed destruction then
 invalidates the handle generation and releases the game-child ownership count.
 
-`VertexBufferSmoke.c` is strict C17 and runs unchanged under HEADLESS and SDL_RENDERER. HEADLESS
-covers all seven value layouts, count and window overloads, all four dynamic option routes, raw
+`VertexBufferSmoke.c` is strict C17. Under HEADLESS it covers all seven value layouts, count and window overloads, all four dynamic option routes, raw
 upload, WriteOnly refusal, copied declarations, type/metadata queries, event separation, disposal,
-capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths. SDL_RENDERER advertises no 3D
-capability, so the same suite verifies atomic `CNA_RESULT_NOT_SUPPORTED` creation instead of
+capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths. On a renderer that advertises no
+3D capability the same suite verifies atomic `CNA_RESULT_NOT_SUPPORTED` creation instead of
 inventing a buffer. C17/C++23 header checks freeze the version-one descriptor layout, and the
 focused successful flow also runs under ASan+UBSan.

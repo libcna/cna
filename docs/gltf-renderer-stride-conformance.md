@@ -2,7 +2,7 @@
 
 Status: verified 2026-08-14 (`GLTF-158`…`GLTF-160`, `GLTF-168`, `GLTF-388`, `GLTF-389`).
 
-This matrix records the complete boundary between CNA's glTF importer and the four renderers in
+This matrix records the complete boundary between CNA's glTF importer and the renderers in
 the glTF correctness gate. The source of truth is
 `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp`; the importer now constructs a real
 `VertexDeclaration` from that table before the first upload. A byte stride is no longer the only
@@ -28,7 +28,7 @@ packing policy does not emit it; it is therefore outside this seven-stride matri
 
 ## Renderer matrix
 
-“Draw boundary” means `Model::Draw` followed by `GraphicsDevice::Present`, so deferred Vulkan
+“Draw boundary” means `Model::Draw` followed by `GraphicsDevice::Present`, so deferred
 commands are submitted rather than merely queued. “Native binding” means every declared element
 is translated to an API input attribute. It is not meaningful for the two non-rasterizing
 renderers, and is marked N/A rather than advertised as rendering support.
@@ -38,11 +38,8 @@ renderers, and is marked N/A rather than advertised as rendering support.
 | `STUB` | ✅ | N/A — `ThreeD=false`, explicit test skip | N/A | The common `VertexBuffer` retains and validates the complete declaration and exact upload bytes; STUB intentionally has no 3D pipeline. |
 | `HEADLESS` | ✅ | ✅ validation draw | N/A | Upload/count/index validation and the stock-effect draw route accept all seven. Optional PBR/skinned base textures follow the native renderers' neutral-white contract. No pixels or native attributes exist. |
 | `OPENGLES3` | ✅ | ✅ Mesa OpenGL ES 3.2 | ✅ | `EasyGLVertexBufferRenderer::ApplyLayout` takes the non-empty declaration path, binds one attribute per declaration element, maps `Color` to normalized `UNSIGNED_BYTE` and `Byte4` to the integer attribute path, then `RequireDeclarationFitsStockProgramEXT` checks the ordered semantic/format list against the selected shader. The old magic-stride switch remains an empty-declaration compatibility path and is no longer used by glTF. |
-| `VULKAN` | ✅ | ✅ lavapipe/llvmpipe | ✅ | `VulkanVertexBufferRenderer` remembers the declaration and `RequireFaithfulDeclarationEXT` compares it with the canonical layout at draw time. The audited native tables bind `20` as P/UV, `24` as P/C/UV, `32` as P/N/UV, `48` as P/N/T/UV, `52` as P/N/UV/W/I, `56` as P/N/UV/W/I/C and `68` as P/N/T/UV/W/I, with `R8G8B8A8_UNORM` for Color and `R8G8B8A8_UINT` for BlendIndices. |
 
-The Vulkan tables remain internal pipeline-selection details: they cannot silently reinterpret a
-glTF buffer because the propagated declaration is checked first. EasyGL instead consumes the
-declaration directly. STUB and HEADLESS keep honest non-rendering capability boundaries.
+EasyGL consumes the declaration directly. STUB and HEADLESS keep honest non-rendering capability boundaries.
 
 ## Automated evidence
 
@@ -73,14 +70,14 @@ declaration directly. STUB and HEADLESS keep honest non-rendering capability bou
   giving two different wrong colours: `OPENGL4` painted the record's `NORMAL` and `DILIGENT` drew
   black (both renderers have since been retired), where the plan row that opened the investigation had predicted one renderer. It needs a
   multi-renderer build (`CNA_MULTI_RENDERER`) and colour readback, so it is not in the CI matrix
-  below; it runs in `cmake-build-multi`, which covers eight renderers with `ThreeD`.
+  below; it runs in `cmake-build-multi`.
 - `FixedFunctionArrayLayout.*` (`GLTF-473`) pins the shared fixed-function layout guard's decision
   as a table over every canonical stride. It needs no device, so it runs in every build.
 - `.github/workflows/gltf-renderer-stride-ci.yml` builds and runs those tests for `STUB`,
-  `HEADLESS`, `OPENGLES3`, `VULKAN` and `SOFTWARE` on every relevant push and pull request.
+  `HEADLESS`, `OPENGLES3`, `SDL_GPU` and `SOFTWARE` on every relevant push and pull request.
 - `scripts/gltf-renderer-parity.sh` compares each renderer against the same committed L1–L5
-  goldens. The 2026-08-14 four-renderer run was byte-identical for all 42 selected L1–L5 tests;
-  HEADLESS, OPENGLES3 and Vulkan also had identical outcomes for all 507 tests in `*Gltf*`.
+  goldens. The 2026-08-14 run was byte-identical across renderers for all 42 selected L1–L5 tests;
+  HEADLESS and OPENGLES3 also had identical outcomes for all 507 tests in `*Gltf*`.
 
 This is an input-layout and submit oracle, not an image oracle. Corpus-wide pixel tolerances and
 reference PNGs remain the separate L7 work tracked by `GLTF-009` and `GLTF-390`.

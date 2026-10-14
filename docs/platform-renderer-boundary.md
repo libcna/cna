@@ -28,25 +28,22 @@ change; reaching for `IPlatformWindow` as an escape hatch is not allowed.
 
 ## Narrow graphics services are the only exception
 
-Three already-defined services may accompany the snapshot when the selected renderer needs the
+Two already-defined services may accompany the snapshot when the selected renderer needs the
 matching operation:
 
 - `IPlatformGlContext` creates/makes-current/swaps an OpenGL context by stable `WindowId` and
   exposes both object-oriented and C-callback entry-point resolution.
-- `IPlatformVulkanSurface` creates a Vulkan presentation surface by stable `WindowId` and destroys
-  it by opaque handle; the renderer never receives an `IPlatformWindow` escape hatch.
 - `IPlatformSurfacePresenter` puts one finished CPU RGBA frame on screen.
 
-These are surface plumbing, not drawing APIs. OpenGL/Vulkan/CPU drawing remains inside the
-renderer; the platform boundary is crossed only for context or surface lifecycle and at most once
-per presented frame. `GraphicsRendererCreateArgs` must carry only the applicable narrow service,
-not `IPlatform*`, and a missing required service is a deterministic construction error naming the
-capability. Native-handle renderers (DirectX, the native WebGPU path) need no service
-pointer at all.
+These are surface plumbing, not drawing APIs; the renderer never receives an `IPlatformWindow`
+escape hatch. OpenGL/CPU drawing remains inside the renderer; the platform boundary is crossed
+only for context or surface lifecycle and at most once per presented frame.
+`GraphicsRendererCreateArgs` must carry only the applicable narrow service, not `IPlatform*`, and
+a missing required service is a deterministic construction error naming the capability.
+Native-handle renderers (`DIRECTX9`, the native WebGPU path) need no service pointer at all.
 
-The three deliberate SDL exceptions (`SDL_RENDERER`, `SDL_GPU`, `FNA3D`) may keep
-their SDL-specific construction internally. They still do not make SDL types part of the common
-renderer interface.
+The two deliberate SDL exceptions (`SDL_GPU`, `FNA3D`) may keep their SDL-specific construction
+internally. They still do not make SDL types part of the common renderer interface.
 
 ## Lifetime and ownership
 
@@ -56,7 +53,7 @@ The ownership order is fixed:
 2. `GraphicsDevice` owns the `IPlatformWindow` and creates it before the renderer.
 3. The renderer may copy `RendererSurfaceInfo`; copying does not extend the native handle's
    lifetime.
-4. A GL context, Vulkan surface or CPU presenter is destroyed by the renderer before the renderer
+4. A GL context or CPU presenter is destroyed by the renderer before the renderer
    itself finishes destruction.
 5. `GraphicsDevice` destroys the renderer before destroying its platform window.
 
@@ -135,15 +132,14 @@ primitive, vertex, pixel or input event.
   renderer logical-game units. The renderer registry keyed by `WindowId` is authoritative for
   both directions; input never resolves a native window and falls back to a 1:1 mapping when no
   transform is registered. Each renderer accounts for its own presentation viewport, density and
-  letterbox/crop offsets. The SDL renderer remains an allowed implementation edge and performs its
-  native offset-aware conversion inside that module, not in input or the common interface.
+  letterbox/crop offsets.
 - PLAT-67 supplies `IPlatformGlContext` only to the selected EasyGL family. EasyGL owns its context
   transactionally, consumes resize and density from `RendererSurfaceInfo`, and has no native
   window-toolkit include, symbol or link input.
 - Normalized touch coordinates cross the event boundary together with the client size that defines
   them. Scaling to client units therefore also stays platform-neutral and requires no per-event
   window query in the consumer.
-- GL, Vulkan and CPU-presentation migrations use their narrow services. Other renderer families
+- GL and CPU-presentation migrations use their narrow services. Other renderer families
   use `NativeWindowHandle` and their own API directly.
 
 Verification for the code tasks must include a non-SDL fake window with a non-1.0 scale, a resize

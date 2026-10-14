@@ -157,7 +157,7 @@ with `CNA_ERROR_CATEGORY_NOT_SUPPORTED`. The exception message — default or cu
 caller through the ordinary per-thread UTF-8 diagnostic. The conversion lives in the shared
 exception firewall, so it applies to every C entry point, not just the device family. Only the
 DirectX 9 backend currently raises these conditions, so the conversion is proven by a focused
-adapter test rather than by a HEADLESS or SDL_RENDERER device.
+adapter test rather than by a HEADLESS device.
 
 `IGraphicsDeviceService` is an abstract C++ interface. C can neither implement nor instantiate it;
 `cna_game_get_graphics_device` is the C route to the device it exposes. Its four service-level

@@ -2,7 +2,7 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.48.0** (`RRC-031`..`RRC-034`, the 2026-10-13 retirement). It
+The current experimental ABI is **0.48.0** (`RRC-031`..`RRC-035`, the 2026-10-13 retirement). It
 **retires the public renderer identities `SDL_RENDERER` (`1`), `VULKAN` (`8`), `DIRECTX11` (`14`)
 and `METAL` (`42`)** together with the constants `CNA_GRAPHICS_RENDERER_SDL_RENDERER`,
 `CNA_GRAPHICS_RENDERER_VULKAN`, `CNA_GRAPHICS_RENDERER_DIRECTX11` and `CNA_GRAPHICS_RENDERER_METAL`
@@ -338,8 +338,8 @@ rather than Vulkan GLSL source. The distinction is observable: native CNA Vulkan
 words, while IGL's Vulkan backend compiles GLSL source, and both previously reported
 `CNA_SHADER_DIALECT_GLSL_VULKAN`. Existing identities retain values `0` through `6`; only
 `CNA_SHADER_DIALECT_MAXIMUM` moves from `6` to `7`. The minor increments because the closed
-enumerable range changed, and `plans/plan_vulkan.md` `VULKAN-264` records the renderer-side
-contract and tests.
+enumerable range changed, and `VULKAN-264` recorded the renderer-side contract and tests (the
+VULKAN renderer and its plan were retired on 2026-10-13).
 
 A caller that handles `0.24.0` dialects by name is unchanged. A caller that iterates through
 `CNA_SHADER_DIALECT_MAXIMUM` sees one additional identity and can now choose the correct payload
@@ -351,7 +351,7 @@ custom effect is actually **sampled** by that shader. `CNA_RENDERER_FEATURE_TEXT
 answers only that a volume can be uploaded and read back, and the two came apart in practice: the
 Vulkan renderer carried `Texture3D` data faithfully for a long time with no `sampler3D` path at
 all, so a caller asking the storage question got `supported` and a shader reading the volume got
-nothing (`plans/plan_vulkan.md` `VULKAN-164`, finding `F-31`). No existing identity changes
+nothing (`VULKAN-164`, finding `F-31`). No existing identity changes
 meaning; appending this one moves `CNA_RENDERER_FEATURE_MAXIMUM` from `29` to `30`, which is why
 the minor increments rather than the patch -- the same reason `0.8.0` gives for the five
 engine-layer capability identities it appended.

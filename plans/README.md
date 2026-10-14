@@ -61,18 +61,14 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 
 ## Graphics backends and renderers
 
-- [`plan_renderer_cleanup.md`](plan_renderer_cleanup.md) — retirement of 37 renderer identities and the
-  curated set of 14 that remains (`../docs/renderer-registry.md` is the canonical list).
-- [`plan_dx.md`](plan_dx.md) — Direct3D 11 (its Direct3D 12 half is history: `DIRECTX12` was retired
-  on 2026-10-06).
+- [`plan_renderer_retirement.md`](plan_renderer_retirement.md) — the 2026-10-13 retirement of
+  `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER`, and its report (`../docs/renderer-registry.md`
+  is the canonical list of the 10 identities that remain).
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
-- [`plan_metal.md`](plan_metal.md) — native Metal.
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
 - [`plan_stub.md`](plan_stub.md) — no-op stub renderer.
-- [`plan_vulkan.md`](plan_vulkan.md) — Vulkan renderer parity, correctness, validation and
-  EasyGL-equivalence plan.
 - [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
 - [`plan_webgpu_perf.md`](plan_webgpu_perf.md) — WebGPU's per-draw CPU cost: the open
   binding-model redesign (uniform arena with dynamic offsets, cached bind groups, fewer submits).

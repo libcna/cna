@@ -1,7 +1,6 @@
 # cmake build dirs
 cmake-build-debug/*
 cmake-build-release/*
-cmake-build-vulkan/*
 
 # third party submodules (SDL, googletest)
 third_party/*

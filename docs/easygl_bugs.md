@@ -82,7 +82,7 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 
 ## DepthBias is not in units of r (found and fixed in EasyGL 2026-09-08)
 
-**Status: fixed here, open in five other renderers.**
+**Status: fixed in EasyGL.**
 
 CNA was written on the premise that "XNA's `RasterizerState.DepthBias` is a float already
 expressed in units of `r`, the depth buffer format's minimum resolvable difference". That premise
@@ -102,14 +102,6 @@ whatever depth buffer is bound: a render target's own `DepthFormat` through
 `IRenderTargetRenderer::DepthBufferBitsEXT()`, otherwise the backbuffer's, tracked from
 `UpdatePresentationFormatEXT`. Tests: `EasyGLDepthBias.IsScaledByTheDepthBuffersOwnResolution`
 and `EasyGLDepthBias.DepthFormatOrdinalsMapToTheirRealPrecision`.
-
-**Still carrying the old premise**, all with the same one-line correction available and none of
-them verifiable on this host:
-
-| Renderer | Where | Effect on the sample's `-0.0001f` |
-|---|---|---|
-| `directx11` | `D3D11StateObjectCache.cpp` `GetOrCreate` | `lround(-0.0001)` is **0** -- the bias is dropped entirely |
-| `vulkan` | `VulkanRenderer::ApplyRasterizerState` | unscaled into `vkCmdSetDepthBias`'s `depthBiasConstantFactor` |
 
 ## Browser fullscreen reports a drawable the browser does not present (found 2026-09-08)
 

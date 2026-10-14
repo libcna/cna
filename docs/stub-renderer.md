@@ -84,8 +84,7 @@ class MyStubTest : public Game
   `...Texture3DReaderParsesHandConstructedBytes...`, `CnjEffectTest.LoadsRealCnjFixture`,
   `CnjStockEffectTest.CustomGlslEffectStillWorks`, `CnjTexture3DTest.LoadsRealCnjFixture` — all
   expect a real GPU-backed `Texture3D`/`TextureCube`/custom `Effect`, which this renderer does not
-  provide (same accepted-gap shape as `SDL_Renderer`'s own Task 725, see
-  `docs/graphics-renderer-feature-matrix.md`).
+  provide.
 - **Renders nothing.** `Clear()`/`Present()`/every `Draw*` call are no-ops; there is no framebuffer
   of any kind, CPU or GPU. This is the entire point, not a gap to close later.
 - **`ReadBackbuffer()` throws** (the shared `IGraphicsRenderer` default) — there is no real pixel

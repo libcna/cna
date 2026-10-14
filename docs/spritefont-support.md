@@ -1,9 +1,8 @@
 # SpriteFont Support and Limitations
 
 Phase 48 (`plans/plan_graphics.md` Tasks 421–430) audited `SpriteFont` against FNA's own `SpriteFont.cs`
-and pixel-verified `SpriteBatch::DrawString` rendering on both SDL_Renderer (Tasks 690–694, an
-earlier session) and EasyGL (Tasks 424–429, this session). This document summarizes the findings,
-the content-loading model, and known limitations, and closes the phase.
+and pixel-verified `SpriteBatch::DrawString` rendering on EasyGL (Tasks 424–429). This document
+summarizes the findings, the content-loading model, and known limitations, and closes the phase.
 
 ---
 
@@ -40,32 +39,31 @@ Added as a one-line forward to `MeasureString(text.ToString())`, mirroring the s
 algorithm for its `StringBuilder` overload purely to avoid `string`-conversion GC garbage — not a
 concern in C++, so CNA does not duplicate the algorithm.
 
-## 4. Pixel-verified `DrawString` rendering (Tasks 424–429 / 690–694)
+## 4. Pixel-verified `DrawString` rendering (Tasks 424–429)
 
-Every one of the following was independently pixel-verified on **both** SDL_Renderer and EasyGL,
-using the same hand-built single/two-glyph fixtures (see §5) and the same discriminating-power
+Every one of the following was pixel-verified on EasyGL, using the same hand-built single/two-glyph fixtures (see §5) and the same discriminating-power
 methodology (sabotage the relevant shared code, confirm the exact predicted check fails, restore,
 reconfirm):
 
-| Behavior | SDL_Renderer | EasyGL |
-|---|---|---|
-| Single glyph at a known position | ✅ Task 690 | ✅ Task 424 |
-| Multiple glyphs with `Spacing` + kerning | ✅ Task 691 | ✅ Task 425 |
-| `\n` advances by `LineSpacing` (not glyph height) | ✅ Task 692 | ✅ Task 426 |
-| Unknown-character → `DefaultCharacter` fallback | ✅ Task 693 | ✅ Task 427 |
-| `SpriteEffects` flip (mirrors glyph sequence, not just each glyph's own texture) | ✅ fixed Task 694 | ✅ Task 428 |
-| Rotation / origin / scale | ✅ Task 694 | ✅ Task 429 |
+| Behavior | EasyGL |
+|---|---|
+| Single glyph at a known position | ✅ Task 424 |
+| Multiple glyphs with `Spacing` + kerning | ✅ Task 425 |
+| `\n` advances by `LineSpacing` (not glyph height) | ✅ Task 426 |
+| Unknown-character → `DefaultCharacter` fallback | ✅ Task 427 |
+| `SpriteEffects` flip (mirrors glyph sequence, not just each glyph's own texture) | ✅ Task 428 |
+| Rotation / origin / scale | ✅ Task 429 |
 
 **One real, previously-undiscovered bug was found and fixed** (Task 694, in the shared,
-renderer-agnostic `SpriteBatch.cpp` — affects every renderer, not just SDL_Renderer):
+renderer-agnostic `SpriteBatch.cpp` — affects every renderer):
 `DrawString` previously forwarded `SpriteEffects` straight to the per-glyph draw call, which only
 flips that glyph's own texture sampling in place. The glyph **sequence and position** were never
 mirrored at all — FNA's real algorithm measures the whole string up front and shifts `origin` by the
 measured size on the mirrored axis, so later characters end up earlier on screen. Fixed by porting
 FNA's `axisDirectionX/Y`/`axisIsMirroredX/Y` lookup-table algorithm (re-derived in terms of CNA's own
 existing sign convention rather than copying FNA's internal variables verbatim). This closes the
-entire single/multi-glyph/newline/default-char/effects/rotation-scale pixel-verification range on
-both renderers (Tasks 424–429 mirroring 690–694).
+entire single/multi-glyph/newline/default-char/effects/rotation-scale pixel-verification range
+(Tasks 424–429).
 
 ## 5. Content-loading model and testing convention
 
@@ -75,8 +73,7 @@ constructor publicly with `CNAEXT` for callers that build glyph/cropping/kerning
 tables directly. The tests below use that direct construction path because
 they predate the XNB reader.
 
-Every SpriteFont test in this project — from the original SDL_Renderer pass (Tasks 690–694) through
-this phase's EasyGL pass (Tasks 424–429) — follows the same established convention: **hand-build a
+Every SpriteFont test in this project follows the same established convention: **hand-build a
 minimal fixture** rather than loading a real font asset. A typical fixture is a small solid-color
 atlas texture (e.g. an 8×8 or 16×8 block) with 1–2 glyphs, explicit `glyphBounds`/`cropping`
 rectangles, and hand-picked `kerning` (`Vector3(leftBearing, width, rightBearing)`) values chosen so
@@ -113,31 +110,23 @@ rather than silently left undocumented.
 
 ## Support matrix
 
-| Feature | SDL_Renderer | EasyGL | Vulkan |
-|---|---|---|---|
-| Property surface (`Characters`/`DefaultCharacter`/`LineSpacing`/`Spacing`) | ✅ (shared C++) | ✅ (shared C++) | ✅ (shared C++) |
-| `MeasureString(string)` | ✅ Task 422 | ✅ (shared C++) | ✅ (shared C++) |
-| `MeasureString(StringBuilder)` | ✅ Task 423 (fixed) | ✅ (shared C++) | ✅ (shared C++) |
-| Single-glyph placement | ✅ Task 690 | ✅ Task 424 | — not pixel-verified |
-| Multi-glyph spacing/kerning | ✅ Task 691 | ✅ Task 425 | — not pixel-verified |
-| Newline (`LineSpacing`) | ✅ Task 692 | ✅ Task 426 | — not pixel-verified |
-| Default-character fallback | ✅ Task 693 | ✅ Task 427 | — not pixel-verified |
-| `SpriteEffects` flip (single-axis) | ✅ fixed Task 694 | ✅ Task 428 | ✅ (shared fix) |
-| `SpriteEffects` flip (combined, both axes) | ❌ not representable | ❌ not representable | ❌ not representable |
-| Rotation / origin / scale | ✅ Task 694 | ✅ Task 429 | — not pixel-verified |
+| Feature | EasyGL |
+|---|---|
+| Property surface (`Characters`/`DefaultCharacter`/`LineSpacing`/`Spacing`) | ✅ (shared C++) |
+| `MeasureString(string)` | ✅ Task 422 (shared C++) |
+| `MeasureString(StringBuilder)` | ✅ Task 423 (shared C++) |
+| Single-glyph placement | ✅ Task 424 |
+| Multi-glyph spacing/kerning | ✅ Task 425 |
+| Newline (`LineSpacing`) | ✅ Task 426 |
+| Default-character fallback | ✅ Task 427 |
+| `SpriteEffects` flip (single-axis) | ✅ Task 428 |
+| `SpriteEffects` flip (combined, both axes) | ❌ not representable |
+| Rotation / origin / scale | ✅ Task 429 |
 
-Legend: ✅ verified working · ❌ confirmed not implemented/not representable · — not yet exercised
-by a dedicated pixel test on that renderer (the underlying logic is shared C++, so it very likely
-already works, but has not been independently pixel-verified there the way SDL_Renderer/EasyGL now
-are).
+Legend: ✅ verified working · ❌ confirmed not implemented/not representable.
 
 ## Open, tracked follow-up work
 
-- **Vulkan SpriteFont pixel-verification**: the renderer has no dedicated
-  single-glyph/multi-glyph/newline/default-char/effects/rotation-scale pixel-test pass the way
-  SDL_Renderer (Tasks 690–694) and EasyGL (Tasks 424–429) now do. The underlying `DrawString`
-  logic is entirely shared C++, so this is a confidence/coverage gap rather than a known bug, but
-  it has not been closed the same rigorous way for this renderer.
 - **Combined `SpriteEffects` flip** (§7): a genuine, minor API-completeness gap versus FNA's
   `[Flags]` enum. Not scoped to this phase; would need `SpriteEffects` operator overloads plus a
   4th `axisDir`/`axisIsMirrored` table entry in `SpriteBatch.cpp` if ever prioritized.

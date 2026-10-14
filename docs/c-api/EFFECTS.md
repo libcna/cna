@@ -105,8 +105,8 @@ Effect Framework header are `CNA_RESULT_INVALID_ARGUMENT`, and MonoGame's distin
 is `CNA_RESULT_NOT_SUPPORTED` — a recognized format this route does not accept, not a malformed
 one. Whether *valid* bytecode is then accepted is the renderer's answer, and
 `CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS` is how a caller asks in advance rather than by
-attempting it. That capability is true for the `FNA3D` renderer always, and for `SDL_GPU`, `VULKAN`,
-the EasyGL family, and `DIRECTX11` when their build option is on; unsupported renderers report false
+attempting it. That capability is true for the `FNA3D` renderer always, and for `SDL_GPU`, the EasyGL
+family, `WEBGPU`, `SOFTWARE` and `DIRECTX9` when their build option is on; unsupported renderers report false
 and refuse the bytecode rather than quietly drawing with a stock shader, because a silent fallback
 makes a porting bug look like an art bug. `docs/fx-compiled-effects.md` is the full matrix.
 
@@ -124,7 +124,7 @@ view is released. A current technique must originate from the same effect; the i
 explicitly selects null, after which applying one of that effect's passes reports invalid state.
 
 Type names and vertex/fragment shader sources use exact count/copy operations. Compiled bytecode is
-never reinterpreted as source: `cna_shader_effect_create` takes GLSL/HLSL/SPIR-V/Metal **source**
+never reinterpreted as source: `cna_shader_effect_create` takes GLSL/SPIR-V/WGSL **source**
 text and `cna_effect_create_compiled` takes Effect Framework **binaries**, and neither accepts the
 other's input. Ask `cna_graphics_device_get_shader_dialect_ext` which dialect the active renderer
 wants rather than inferring one from the renderer identity -- that inference is wrong in a build
@@ -215,34 +215,34 @@ CNA extensions and are not presented as XNA-origin APIs.
 
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
-atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
-SDL_RENDERER, while a focused HEADLESS run is checked with ASan+UBSan. C17/C++23 translation tests
+atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS,
+and a focused HEADLESS run is checked with ASan+UBSan. C17/C++23 translation tests
 freeze both handles and the version-one descriptor layouts.
 
 `EffectParameterSmoke.c` covers every scalar and array overload, ordinary/transposed matrices,
 strings, defaults, metadata, nested parameter/annotation collections, collection stability,
 texture overload dispatch and Texture2D retention. It also exercises atomic capacity failures and
-invalid, stale, wrong-kind and wrong-thread handles under both tested renderers, with a focused
+invalid, stale, wrong-kind and wrong-thread handles under HEADLESS, with a focused
 ASan+UBSan run. C17/C++23 assertions freeze value/texture tag ordinals plus handle and descriptor
 layouts.
 
 `EffectTechniqueSmoke.c` covers both technique constructors, automatic `P0`, unique identities,
 pass Apply dispatch, nested annotation/pass views, both collection families, stable aliases across
 growth and collection destruction, exact strings and invalid/stale/wrong-kind/wrong-thread paths.
-The same strict-C source runs under HEADLESS and SDL_RENDERER and in a focused ASan+UBSan build;
+The same strict-C source runs under HEADLESS and in a focused ASan+UBSan build;
 C17/C++23 assertions freeze all four handle widths.
 
 `EffectSmoke.c` covers the base adapter, EffectMaterial, ShaderEffect and SpriteEffect creation and
 same-type cloning, compiled-bytecode refusal, disposal and Apply, device/current-technique/pass
 validation, exact type/source strings, every shader uniform and matrix operation, renderer-state
 consistency, texture dispatch/retention and descendant lifetime after parent-handle destruction.
-It also covers invalid, stale, wrong-kind and wrong-thread calls under HEADLESS and SDL_RENDERER
+It also covers invalid, stale, wrong-kind and wrong-thread calls under HEADLESS
 and in a focused ASan+UBSan build; C17/C++23 assertions freeze `CNA_EffectHandle`.
 
 `BasicEffectSmoke.c` covers exact BasicEffect/DirectionalLight defaults, every generic interface
 and BasicEffect property operation, all three stable nested lights, the native default-lighting
 preset, same-type clone state, Texture2D retention and nested-light lifetime after parent-effect
-destruction. It runs under HEADLESS and SDL_RENDERER plus focused ASan+UBSan; invalid, stale,
+destruction. It runs under HEADLESS plus focused ASan+UBSan; invalid, stale,
 wrong-kind and wrong-thread cases are included and C17/C++23 assertions freeze the light handle.
 
 `StockEffectSmoke.c` covers exact defaults and type identities for AlphaTestEffect,
@@ -250,18 +250,18 @@ DualTextureEffect and EnvironmentMapEffect; every reusable interface and concret
 unclamped reference-alpha boundaries; enum, Boolean and texture-index validation; always-on
 environment lighting; same-device Texture2D/TextureCube ownership; independent clone retention;
 stable nested-light lifetime; Apply; and stale, wrong-kind and wrong-thread handles. The same
-strict-C test runs under HEADLESS and SDL_RENDERER plus focused ASan+UBSan.
+strict-C test runs under HEADLESS plus focused ASan+UBSan.
 
 `SkinnedEffectSmoke.c` covers all 72 identity defaults, the fixed maximum, exact copied bone
 round-trips, cloned palettes, insufficient-capacity atomicity, valid and invalid
 weights-per-vertex values, every material/interface/extension property, always-on lighting,
 Texture2D clone retention, stable nested-light lifetime, Apply and stale, wrong-kind and
-wrong-thread handles. It runs unchanged under HEADLESS and SDL_RENDERER plus focused ASan+UBSan;
+wrong-thread handles. It runs unchanged under HEADLESS plus focused ASan+UBSan;
 C17/C++23 assertions freeze the maximum.
 
 `PbrEffectSmoke.c` covers ColorMatrixEffect identity, finite validation, grayscale, reset and
 clone behavior; exact PbrEffect and SkinnedPbrEffect defaults; all shared matrix/fog/light/material
 operations; all five texture slots and clone-aware retention; all 72 identity bones, bounded
 palette transfer and weights; Apply, nested-light lifetime and invalid/stale/wrong-kind/
-wrong-thread paths. It runs unchanged under HEADLESS and SDL_RENDERER plus focused ASan+UBSan;
+wrong-thread paths. It runs unchanged under HEADLESS plus focused ASan+UBSan;
 C17/C++23 assertions freeze the color-matrix layout, slot identities and SkinnedPbr maximum.

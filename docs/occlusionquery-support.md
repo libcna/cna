@@ -43,11 +43,9 @@ profiles.
 | Renderer | Attaches to real GPU work? | Sequence validation | Pixel/query correctness | Status |
 |---|---|---|---|---|
 | **EasyGL** | ✅ Yes — `glBeginQuery`/`glEndQuery`, asking for `GL_SAMPLES_PASSED` and falling back to the boolean `GL_ANY_SAMPLES_PASSED` | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions (Tasks 445/446) **and count-vs-flag** (SAMPLE-041) | **Desktop GL is XNA-equivalent; GLES3 is truthfully boolean-only and cannot run coverage-ratio consumers faithfully** |
-| **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | Shared XNA validation (SOFTWARE-199) | ✅ Verified both directions, multi-draw-span and generation-safe reuse (Task 854 / MSR-026) | **Fully correct** |
 | **WebGPU** | ✅ Yes — draw tagging, a real `WGPUQuerySet`, resolve and asynchronous readback | Shared XNA validation (SOFTWARE-199) | ✅ Exact count verified by `WebGPU_OcclusionQuery`; representative LensFlare visually matches OPENGL33 | **Correct for a contiguous render-pass segment; a query spanning segments records only its first segment** |
 | **SDL_GPU** | N/A — construction throws the documented SDL_gpu API limitation | N/A | N/A | **Correctly unsupported: SDL_gpu 3.5.0 exposes fences but no occlusion/query-pool commands** |
 | **FNA3D** | Driver-dependent — the selected internal driver must create a real FNA3D query | Shared XNA validation (SOFTWARE-199) | ✅ OpenGL driver verified by capability tests and LensFlare; default SDL_GPU driver has no query | **Truthfully selected at device creation; not a renderer-wide unconditional capability** |
-| **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only renderer, Task 727) |
 
 ### EasyGL — correct, with a precision boundary that depends on the profile
 
@@ -113,70 +111,6 @@ the query's semantics.  CNA therefore records OPENGLES3 LensFlare as an upstream
 limitation/visual mismatch and does not multiply a boolean into a fabricated count.  Evidence is
 in the cna-samples result `matrix-results/msr-046-postfix-visual-representative`.
 
-### Vulkan — fixed, all 3 design questions resolved (Task 447/854, 2026-07-10)
-
-`VulkanOcclusionQueryRenderer::Begin()`/`End()` previously never injected `vkCmdBeginQuery`/
-`vkCmdEndQuery`, because this renderer defers ALL 3D and 2D draw calls into `pending3D_`/
-`activeBatches_` snapshots, recorded into real Vulkan commands only once per frame inside
-`RecordCommandBuffer` — well after `Begin()`/`End()` (called synchronously by game code around a
-draw call) already returned. `Pending3DDraw` had no query-association field at all, so occlusion
-queries on Vulkan always reported 0 visible pixels regardless of real visibility.
-
-Fixing this required resolving 3 genuinely non-obvious design questions, all now implemented per
-the project owner's decision to do the full fix:
-
-1. **Tagging** — a new `VulkanOcclusionQueryRenderer* occlusionQuery` field on `Pending3DDraw`, set
-   uniformly by a new `VulkanRenderer::PushPending3DDraw()` choke point (all 6
-   `pending3D_.push_back` call sites now route through it) from a new `activeOcclusionQuery_`
-   member, set by `Begin()` and cleared by `End()`.
-2. **Multi-draw-span policy** — a query MAY span multiple draw calls, as long as they all land in
-   the same render pass (i.e. target the same render target/backbuffer with no intervening
-   `SetRenderTarget` switch): `RecordCommandBuffer`'s `draw3DFor()` tracks contiguous runs of draws
-   sharing the same query tag and wraps each run in one real `vkCmdBeginQuery`/`vkCmdEndQuery`
-   pair. A query spanning a render-pass boundary (or a non-contiguous 2nd run within the same
-   render pass) is NOT re-opened — a `recordedThisFrame_` flag ensures only the first contiguous
-   run each frame is ever actually recorded, avoiding a Vulkan validation error (double
-   `vkCmdBeginQuery` without an intervening reset) rather than attempting to correctly sum results
-   across multiple render passes (a real FNA capability this implementation doesn't fully cover,
-   documented here rather than silently assumed).
-3. **Per-frame `vkCmdResetQueryPool` sequencing** — previously reset only once, at construction;
-   `RecordCommandBuffer()` now scans `pending3D_` for every distinct query tagged that frame and
-   issues one reset per query, before any render pass begins (Vulkan requires resets outside a
-   render pass instance) — so a query reused every frame (the idiomatic real-world usage pattern)
-   gets a fresh reset each time, not just the first.
-
-New `modules/renderers/vulkan/examples/vulkan_occlusionquery_pixelcount_test.cpp` (`Vulkan_OcclusionQuery_PixelCount`, 6/6
-pass): a fully-visible 64×64 quad reports `PixelCount()==4096` (the exact pixel count); a quad
-fully hidden behind a nearer opaque occluder reports `PixelCount()==0`; a 3rd scenario draws 2
-non-overlapping half-quads inside ONE `Begin()`/`End()` span and confirms `PixelCount()==4096`
-(summed across both draws), directly exercising decision 2's multi-draw-span policy. This sandbox's
-software Vulkan renderer (Mesa Lavapipe) reports fully accurate, discriminating pixel counts — no
-sandbox-limitation caveat needed. Verified via `git
-stash` revert-and-rebuild (reverting reproduced exactly the predicted failure, the 2
-query-correlation checks failing with `IsComplete()` never becoming true).
-
-#### Reused query pools publish only the submitted generation (MSR-026, 2026-10-04)
-
-A Vulkan query pool retains its available result until a queued `vkCmdResetQueryPool` executes.
-The renderer formerly polled the one-slot pool immediately after a new `Begin`/`End`, so a reused
-query could report the preceding generation as complete.  A second poll by `PixelCount` could then
-see the reset slot as unavailable, or both calls could silently consume the stale count.
-
-Recorded queries now retain the owning frame fence and submission generation, just as Vulkan GPU
-timers already do.  Results are not read until that submission completes; the explicit Vulkan
-availability word must be set; and the resulting count is cached until the next `Begin`, making a
-successful `IsComplete` observation monotonic.  `Vulkan_OcclusionQuery_ReuseGeneration` alternates
-32 exact 4096/2048-pixel generations on one query object.  It reproduced the stale 2048 result at
-cycle 16 before the repair, then passed 20 consecutive complete runs after it.  The existing
-precision, pixel-count and lifecycle-cycle tests pass alongside it, and the real `LensFlare`
-sample no longer intermittently throws between `IsComplete` and `PixelCount`.
-
-### SDL_Renderer — correctly unsupported
-
-`CreateOcclusionQuery()` correctly calls `ThrowNo3D("CreateOcclusionQuery")` (Task 727), matching
-this 2D-only renderer's established "throw at construction for unsupported 3D constructs" pattern.
-Since construction itself throws, `Begin()`/`End()` are unreachable — consistent, no gap.
-
 ## Summary
 
 | Area | Status |
@@ -184,8 +118,6 @@ Since construction itself throws, `Begin()`/`End()` are unreachable — consiste
 | XNA API surface + lifecycle/result state machine | ✅ Recovered XNA implementation audited and implemented renderer-neutrally; the prior FNA-only no-validation conclusion is superseded (SOFTWARE-199) |
 | `Dispose()`/active-query-destruction safety | ✅ Verified safe on EasyGL via 50-iteration stress test (Task 449) |
 | EasyGL pixel/query correctness | ✅ Both directions (visible → positive, occluded → zero) pixel-verified (Tasks 445-446) |
-| Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions, multi-draw-span and generation-safe reuse (MSR-026) |
 | WebGPU | ✅ Real exact-count query and representative LensFlare visual pass; cross-render-pass-span limitation remains explicit |
 | SDL_GPU | ⛔ Truthfully unsupported by the current public SDL_gpu API; no fake result |
 | FNA3D | ✅/⛔ Selected-driver dependent: OpenGL query and LensFlare pass; default SDL_GPU driver is truthfully unsupported |
-| SDL_Renderer | ✅ Correctly throws at construction (2D-only renderer, Task 727) |

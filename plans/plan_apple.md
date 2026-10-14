@@ -74,7 +74,7 @@ The current contract and validation boundary are maintained in
 | `APPLE-9` | `.github/workflows/apple-ci.yml`: host-portable checks, macOS build/tests, final-linked iOS device/simulator app validation, simulator install/launch | Done — [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) |
 | `APPLE-9a` | `scripts/check-apple-platform-cmake.sh`: exercises the Apple CMake layer from any host, since every line of it is behind `if(APPLE)` and unreachable otherwise | Done — passes on Linux |
 | `APPLE-10` | `modules/core/tests/CNA/TargetPlatformTests.cpp`: platform-helper coverage, including the macOS/iOS-specific expectations | Done |
-| `APPLE-11` | `METAL` on iOS: refused by default, configurable through `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` | Done (gate only) |
+| `APPLE-11` | `METAL` on iOS: refused by default, configurable through `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` | Done (gate only); void since `METAL` was retired on 2026-10-13 |
 | `APPLE-12` | Storage-root fallback follows the Apple convention instead of the Linux XDG layout | Done |
 | `APPLE-13` | Minimal `CNA/Platform/Entrypoint` + `Game::RunOneFrame()` app is final-linked for both Apple platforms and launched from macOS bundle/simulator CI | Done — [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) |
 | `APPLE-15` | Initial orientation set is seeded before the video subsystem starts; later `SupportedOrientations` changes reach the OS through `IPlatformWindow::SetSupportedOrientations` and invalidate UIKit's cached answer | Done |
@@ -130,8 +130,8 @@ These are unstarted, not attempted-and-failed:
   implementation work — but until it runs, iOS input is unobserved and iOS has no
   keyboard/mouse fallback to hide behind.
 - `APPLE-16` — app icons / asset catalog, `.ipa` packaging, signing documentation.
-- `APPLE-17` — decide whether `METAL` becomes the supported iOS renderer, which requires the
-  Metal renderer's own macOS contract gaps (`plan_metal.md`) to be closed first.
+- `APPLE-17` — retired with `METAL` on 2026-10-13. The iOS allow-list is now `SDL_GPU` (never yet
+  built for iOS) and `SOFTWARE`; qualifying `SDL_GPU` there is the follow-up (`handoff.md` §5.2).
 - `APPLE-18` — Mac Catalyst / tvOS, if ever wanted. Currently rejected at configure time on
   purpose, so that nothing pretends to target them.
 - `APPLE-19` — safe-area insets. The notch and the home indicator are not exposed to the game, so

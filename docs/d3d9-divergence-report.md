@@ -317,7 +317,4 @@ nobody has actually measured it") into a real number (10/31 pixel-perfect, three
 divergence patterns for the rest) and surfaced two concrete, previously-unmeasured `plans/plan_graphics.md`
 candidates (`fog_gradient_quad`'s negative-`FogEnd` handling, `envmap_fresnel_quad`'s Fresnel
 interpolation) plus one systemic rasterization-boundary gap (Pattern A, 17 scenes) — all **logged
-here, not fixed**, per this task's own explicit scope boundary. `Vulkan`/`D3D11` remain unmeasured by
-this exercise; repeating this same recipe (new `cna_*_test`-style CMake registration +
-`run-oracle-corpus-diff-<renderer>.sh` twin) against them is the natural next step, not attempted here
-to keep this task to its own stated scope.
+here, not fixed**, per this task's own explicit scope boundary.

@@ -107,13 +107,12 @@ surface (`plans/plan_runtimerenderer.md`):
       impossible. Enforced by the discipline gate.
 - [ ] The descriptor answers the pre-window questions honestly: `needsWindow`,
       `needsVideoSubsystem`, `windowKind`, `wantsHighDpi`, `glFramebuffer`, and which platform
-      services the family receives (`needsSurfacePresenter`, `needsGlContext`,
-      `needsVulkanSurface`). These are **data**, not hooks — a descriptor never names a windowing
-      library.
+      services the family receives (`needsSurfacePresenter`, `needsGlContext`). These are
+      **data**, not hooks — a descriptor never names a windowing library.
 - [ ] `windowKind` set to the kind the renderer's window really is — fallback uses it to decide
       whether a window can be reused or must be recreated. A family whose native API is chosen at
       runtime (`FNA3D` today) must report the kind it will *actually* ask for, from the same
-      resolution the renderer itself uses; a since-retired renderer once hardcoded `Vulkan` while
+      resolution the renderer itself uses; a since-retired renderer once hardcoded one kind while
       asking for a GL window, which only became visible when the cross-kind branch went live.
 - [ ] `isAvailable()` is a real probe where one is cheap and side-effect-free; `AlwaysAvailable`
       otherwise. Returning true is not a promise construction will succeed.

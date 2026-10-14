@@ -106,11 +106,8 @@ path used everywhere else, so no browser-specific input code exists in CNA. Brow
 ## Cross-cutting
 
 - **`SetPosition` on a scaled window** (all platforms): `Mouse::SetPosition` converts the caller's
-  logical coordinates to window space before `SDL_WarpMouseInWindow` (INPUT-MOUSE-002 (decision a-0001)).
-  Two paths, both correct for their scaling model:
-  - **SDL_Renderer** — `SDL_RenderCoordinatesToWindow`, which is **offset-aware**, so a true
-    letterbox (centering bars) maps correctly, not just scaled (verified with a non-square 200×100
-    window in task 858).
+  logical coordinates to window space before `SDL_WarpMouseInWindow` (INPUT-MOUSE-002 (decision a-0001)),
+  through the selected renderer's own transform, for example:
   - **EasyGL** — `IGraphicsRenderer::TransformLogicalToWindow`, which is **offset-aware**: it
     maps through `EasyGLSurfaceState::GetDefaultViewportRect()`, the same rectangle the GL
     viewport is set from, so a centred letterbox subtracts its bars before scaling. That is what
@@ -118,7 +115,6 @@ path used everywhere else, so no browser-specific input code exists in CNA. Brow
     `FixedHeightDynamicWidth`, where the rectangle is the whole drawable and the offsets are zero.
     (This bullet used to say EasyGL had no offset and did not need one; that stopped being true
     when the renderer gained its own `GetDefaultViewportRect()` override.)
-  - **Vulkan** — pass-through (no logical-presentation scaling).
 
   The conversion is unit-tested; the OS-cursor *landing* pixel is verifiable only where global-mouse
   readback works (X11, not Wayland — see the Wayland section).

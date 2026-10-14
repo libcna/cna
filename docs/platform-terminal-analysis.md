@@ -234,7 +234,7 @@ which is exactly what makes it a good test of the contract:
 | `supportsExactKeyboardState` | ~ | Kitty protocol only; see §5.1 |
 | `supportsGamepadRumble` / `Sensors` | ✗ | No channel |
 | `supportsNativeFileDialog` / `MessageBox` | ✗ | Would have to be drawn in-app |
-| `supportsVulkanSurface` / `OpenGLContext` | ✗ | No native handle at all |
+| `supportsOpenGLContext` | ✗ | No native handle at all |
 | `supportsSurfacePresentation` | ✓ | Via `TerminalSurfacePresenter` |
 | `supportsPixelAccurateMouse` | ✗ | Cell granularity, §5.2 |
 

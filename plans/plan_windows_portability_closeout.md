@@ -26,7 +26,7 @@ closeout, not another expansion plan.
 | WINCLOSE-0005 | UNC: `SongTest.FromUriTreatsARemoteAuthorityAsUncRatherThanSilentlyDroppingIt` | ✅ fixed |
 | WINCLOSE-0006 | Backslash semantics in an external content dependency | ✅ fixed |
 | WINCLOSE-0007 | Native Windows full suite, repeated | ✅ three identical runs |
-| WINCLOSE-0008 | SDL-free + Unicode-path + ASan re-proof | ✅ done; D3D11 ⛔ environment |
+| WINCLOSE-0008 | SDL-free + Unicode-path + ASan re-proof | ✅ done; D3D11 ⛔ environment (`DIRECTX11` retired 2026-10-13) |
 | WINCLOSE-0009 | Linux / X11 / Wayland / SDL matrix regression | ✅ zero new failures |
 | WINCLOSE-0010 | Git authorship audit and integration into `next` | ✅ clean, fast-forwarded |
 | WINCLOSE-0011 | **Post-closeout:** DirectX11 drew nothing after the first `Present` | ✅ fixed — found by running the demo, see below |
@@ -415,6 +415,9 @@ one check that proves a CNA binary runs from a path the machine cannot spell.
 ---
 
 ## What is left, and why it is not this workstream's to close
+
+(2026-10-13: `DIRECTX11` was retired, which closes F24 and the D3D11 rounds below as history;
+`docs/removed-renderers.md`.)
 
 **F24 — the Direct3D 11 device budget.** Still open, and now measured rather than described: the
 same test repeated in one process passes 7 times and fails 13; the boundary moves with what ran

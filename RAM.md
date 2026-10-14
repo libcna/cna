@@ -1,5 +1,7 @@
 # RAM Usage Analysis — mobile-eggbert
 
+> Historical record (measured on EasyGL and the VULKAN renderer, retired 2026-10-13).
+
 ## Vulkan: why mobile-eggbert went from ~28 MB to ~78 MB
 
 | Component | Size | Present before? |

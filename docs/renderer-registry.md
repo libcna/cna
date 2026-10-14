@@ -1,58 +1,56 @@
 # CNA renderer registry
 
-CNA exposes exactly **14 public renderer identities** over 12 implementation families. EasyGL is an
+CNA exposes exactly **10 public renderer identities** over 8 implementation families. EasyGL is an
 internal implementation shared by three public GL profiles and does not add a public identity.
-Internal renderer/API choices made by an abstraction such as FNA3D likewise do not add CNA
-identities.
+Internal renderer/API choices made by an abstraction such as SDL_GPU or FNA3D likewise do not add
+CNA identities: SDL_GPU's Vulkan, Direct3D 12 and Metal backends are SDL's, not CNA's.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not
-reasonably covered by the existing set; renderer count is not a goal in itself, and thirty-seven
+reasonably covered by the existing set; renderer count is not a goal in itself, and forty-one
 identities have been retired (`docs/removed-renderers.md`).
 
 The C++ enum is dense. The "C ABI value" column below is intentionally **not** dense: a retired
-identity's value is permanently reserved and never reassigned, so the range has gaps at 2, 5, 7,
-10, 15–21, 23–30, 32–41 and 44–51. The next new identity takes value 52.
+identity's value is permanently reserved and never reassigned, so the range has gaps at 1, 2, 5,
+7, 8, 10, 14–21, 23–30, 32–42 and 44–51. The next new identity takes value 52.
 
 ## Canonical public identities
 
 | C ABI value | Enum | Selector | Compile definition | Implementation / factory | Primary gate |
 |---:|---|---|---|---|---|
-| 1 | `SdlRenderer` | `SDL_RENDERER` | `CNA_RENDERER_SDL_RENDERER` | SDL Renderer / `SdlRenderer` | none |
 | 3 | `OpenGLES3` | `OPENGLES3` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES3` | EasyGL / `EasyGLRenderer` | non-Emscripten |
 | 4 | `OpenGL33` | `OPENGL33` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGL33` | shared EasyGL factory | non-Emscripten |
 | 6 | `WebGL2` | `WEBGL2` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_WEBGL2` | shared EasyGL factory | Emscripten |
-| 8 | `Vulkan` | `VULKAN` | `CNA_RENDERER_VULKAN` | Vulkan / `VulkanRenderer` | Vulkan SDK/runtime |
 | 9 | `WebGPU` | `WEBGPU` | `CNA_RENDERER_WEBGPU` | wgpu-native / `WebGPURenderer` | wgpu-native |
 | 11 | `Headless` | `HEADLESS` | `CNA_RENDERER_HEADLESS` | Headless / `HeadlessRenderer` | none |
 | 12 | `Software` | `SOFTWARE` | `CNA_RENDERER_SOFTWARE` | Software / `SoftwareRenderer` | none |
 | 13 | `Stub` | `STUB` | `CNA_RENDERER_STUB` | Stub / `StubRenderer` | none |
-| 14 | `DirectX11` | `DIRECTX11` | `CNA_RENDERER_DIRECTX11` | Direct3D 11 / `DirectX11Renderer` | Windows |
 | 22 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
-| 31 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL GPU runtime |
-| 42 | `Metal` | `METAL` | `CNA_RENDERER_METAL` | Metal / `MetalRenderer` | macOS/Darwin |
+| 31 | `SdlGpu` | `SDL_GPU` | `CNA_RENDERER_SDL_GPU` | SDL GPU / `SdlGpuRenderer` | SDL3 with a GPU driver (Vulkan, Direct3D 12 or Metal) |
 | 43 | `Fna3d` | `FNA3D` | `CNA_RENDERER_FNA3D` | FNA3D / `Fna3dRenderer` | FNA3D dependency |
 
-The three GL profiles share one implementation target, macro, and factory, so 14 public identities
-map to 12 concrete implementation factories. Their public contracts remain distinct because the
+The three GL profiles share one implementation target, macro, and factory, so 10 public identities
+map to 8 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `EASYGL` is not
 an accepted selector, and neither is any retired name: `cmake/RendererIdentities.cmake` refuses a
-retired selector by name, with its reserved value, rather than falling back to a default.
+retired selector by name, with its reserved value, rather than falling back to a default, and
+`GraphicsRendererSelection` refuses one at run time with a message that says it was retired.
 
 ## Capability classes
 
 - **No renderer:** `STUB` is a no-op; `HEADLESS` is validation/trace-oriented and makes no pixel
   fidelity claim.
-- **2D-oriented:** `SDL_RENDERER`.
 - **CPU bounded 3D:** `SOFTWARE`.
 - **Programmable/modern, with renderer-specific limits:** `OPENGLES3`, `OPENGL33`, `WEBGL2`,
-  `VULKAN`, `WEBGPU`, `DIRECTX9`, `DIRECTX11`, `SDL_GPU`, and `METAL`.
-- **Abstraction layer:** `FNA3D` selects SDL_GPU, Direct3D 11 or OpenGL at runtime; that internal
-  choice is not another CNA identity.
+  `WEBGPU`, `DIRECTX9` and `SDL_GPU`.
+- **Abstraction layer:** `SDL_GPU` is CNA's modern native path: CNA maps XNA 4.0 onto SDL_GPU, and
+  SDL picks Vulkan, Direct3D 12 or Metal underneath it. `FNA3D` selects SDL_GPU, Direct3D 11 or
+  OpenGL at runtime. Neither internal choice is another CNA identity.
 
-These classes are descriptive, not blanket parity claims. `WEBGPU` remains experimental. Metal's
-adapted native macOS validation remains an external gate. A capability query and each renderer
-document remain authoritative for the narrower operation-level boundary.
+These classes are descriptive, not blanket parity claims. `WEBGPU` remains experimental. `SDL_GPU`
+is validated on Linux (Vulkan) and, cross-compiled, under Wine with vkd3d-proton (Direct3D 12);
+native Windows, macOS and iOS qualification is open (`handoff.md` §5.2). A capability query and
+each renderer document remain authoritative for the narrower operation-level boundary.
 
 ## Registration invariants
 
@@ -60,6 +58,7 @@ document remain authoritative for the narrower operation-level boundary.
 target, factory branch, and platform/dependency gate must agree. No public selector/name may be
 duplicated, and no retired name or C ABI value may be reused. Every accepted selector either
 reaches its factory or rejects at its documented gate; every retired one is refused by name at
-configure time. `scripts/check_renderer_identities.py` holds the enum, the CMake list, the runtime
-registry, the C ABI table and the retired-value table to each other. The default is `WEBGL2` under
-Emscripten, `OPENGLES3` on Linux, and `SDL_RENDERER` elsewhere.
+configure time and at run time. `scripts/check_renderer_identities.py` holds the enum, the CMake
+list, the runtime registry, the C ABI table, the retired-value table and the run-time retired-name
+list to each other. The default is `WEBGL2` under Emscripten, `OPENGLES3` on Linux and Android, and
+`SDL_GPU` elsewhere (Windows, macOS, iOS).

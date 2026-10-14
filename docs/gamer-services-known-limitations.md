@@ -663,14 +663,14 @@ been run.
 
 - **Status:** not independently validated.
 - **CNA now:** on 2026-09-30 the full avatar review (257 frames: views, hands, feet, faces, every
-  expression, key frames of every animation; catalog v3) ran on OpenGL 3.3, Vulkan, SOFTWARE,
-  SDL_GPU (Vulkan backend) and WebGPU, one multi-renderer build, each renderer confirmed by its log.
-  Against OpenGL 3.3 the mean absolute pixel difference is at most 0.10/255 and silhouette overlap at
-  least 0.9995 in every frame; sheets inspected by eye agree. The XNA AvatarShadows sample runs on
-  OpenGL ES 3 (Mesa software). HEADLESS runs the API tests. Not measured: the DirectX and Metal
-  renderers (no Windows or macOS host), FNA3D and SDL_RENDERER.
+  expression, key frames of every animation; catalog v3) ran on OpenGL 3.3, Vulkan (retired
+  2026-10-13), SOFTWARE, SDL_GPU (Vulkan backend) and WebGPU, one multi-renderer build, each
+  renderer confirmed by its log. Against OpenGL 3.3 the mean absolute pixel difference is at most
+  0.10/255 and silhouette overlap at least 0.9995 in every frame; sheets inspected by eye agree.
+  The XNA AvatarShadows sample runs on OpenGL ES 3 (Mesa software). HEADLESS runs the API tests.
+  Not measured: `DIRECTX9` (no Windows host), FNA3D, and SDL_GPU's Direct3D 12 and Metal backends.
 - **Reason:** the remaining renderers need another host or a separate build.
-- **Observable impact:** unknown on those; none found on the five measured.
+- **Observable impact:** unknown on those; none found on the ones measured.
 - **Porting impact:** none known.
 - **Future work:** the same review on a Windows and a macOS host.
 

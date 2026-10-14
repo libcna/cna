@@ -19,8 +19,8 @@ and `../sharp-runtime` checkout every other renderer already requires.
 
 ## What this renderer is for (and isn't)
 
-Every other CNA renderer (`SDL_RENDERER`/`OPENGLES3`/`VULKAN`/`WEBGPU`) needs a real window and
-a real GPU context to run at all. That makes them unsuitable for fast, CI-friendly testing of game
+CNA's GPU renderers (`OPENGLES3`/`SDL_GPU`/`WEBGPU` and the rest) need a real window and a real
+GPU context to run at all. That makes them unsuitable for fast, CI-friendly testing of game
 *logic* — a CI container with no display server can't run them, and even where a virtual display
 (Xvfb) is available, spinning one up per test run is slow compared to what a logic test actually
 needs to prove.

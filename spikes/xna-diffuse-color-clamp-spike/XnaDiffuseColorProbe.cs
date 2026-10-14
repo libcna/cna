@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-197 (finding F-36's CNA-wide sibling).
+// VULKAN-197 (the retired VULKAN renderer's plan, kept in Git history) (finding F-36's CNA-wide sibling).
 //
 // Measures, on the real XNA 4.0 runtime, what happens to `BasicEffect.DiffuseColor` above 1 on the
 // UNLIT path. The property setter does not clamp (`BasicEffect.cs:117`), the value reaches the

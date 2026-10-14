@@ -28,7 +28,7 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | Per-family descriptors | ✅ all 8 implementation families / 10 public renderer identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
 | Namespaced factories / generated registry | ✅ all 8 factories namespaced; `cmake/RendererRegistry.cmake` emits the table, and the discipline gate checks every identity reaches it |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
-| Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified with `SDL_RENDERER;OPENGLES3;HEADLESS` and `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` multi builds |
+| Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified in multi-renderer builds (the measured sets included renderers retired since) |
 | Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
 | Runtime identity reporting | ✅ `GraphicsDevice::GetGraphicsRendererType/Name()` report the device's real renderer |
 
@@ -51,9 +51,9 @@ can serve them. Each renderer family answers them through its own
 |---|---|
 | Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB` |
 | Must the platform's video subsystem be started? | `needsVideoSubsystem` — false for the same families, which is what lets them run with no display server |
-| What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`/`Vulkan`/`Metal`), plus `wantsHighDpi` |
+| What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`), plus `wantsHighDpi` |
 | Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `FNA3D` has real work here |
-| Which platform services is it handed? | `needsSurfacePresenter`, `needsGlContext`, `needsVulkanSurface` |
+| Which platform services is it handed? | `needsSurfacePresenter`, `needsGlContext` |
 
 These last three groups were function-pointer hooks (`prepareWindowFlags()`,
 `applyPreWindowAttributes()`) when this design was written, and became **data** when the platform
@@ -86,9 +86,9 @@ reference (`cna_demo_renderer_selection`).
 int main()
 {
     // Before any GraphicsDevice is constructed:
-    CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::Vulkan);
+    CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::SdlGpu);
 
-    // Optional, off by default: try these in order if Vulkan is unavailable or fails to start.
+    // Optional, off by default: try these in order if SDL_GPU is unavailable or fails to start.
     CNA::GraphicsRendererSelection::SetFallbackChain({
         CNA::GraphicsRendererType::OpenGLES3,
         CNA::GraphicsRendererType::Software,
@@ -118,7 +118,7 @@ whole point: the compiled-in set is published into the selection layer before `m
 
 **Default: hard failure.** If the selected renderer is not compiled into the build, reports itself
 unavailable, or throws during initialization, CNA throws. There is no silent substitution — a game
-that asked for Vulkan and quietly got a CPU rasterizer is a worse outcome than a clear error.
+that asked for SDL_GPU and quietly got a CPU rasterizer is a worse outcome than a clear error.
 
 **Fallback is opt-in.** `SetFallbackChain()` or `EnableAutomaticFallback(true)` enables it. When
 enabled:
@@ -131,8 +131,8 @@ enabled:
 
 ### The window-kind limitation
 
-SDL3 refuses to create a window carrying both `SDL_WINDOW_OPENGL` and `SDL_WINDOW_VULKAN`. Falling
-back across that boundary therefore requires the SDL window to be destroyed and recreated, which is
+A window created for an OpenGL context (`SDL_WINDOW_OPENGL`) is not the plain window `SDL_GPU` and
+`WEBGPU` claim, and the other way round. Falling back across that boundary therefore requires the SDL window to be destroyed and recreated, which is
 only legal while CNA owns it. When the game supplied its own window through
 `PresentationParameters::DeviceWindowHandle`, such a candidate is skipped and recorded as
 `WindowKindConflict` rather than silently attempted.
@@ -165,7 +165,7 @@ outside the list is a **configure error**:
 ```text
 CMake Error at cmake/RendererDefaultSelection.cmake:54 (message):
   CNA: CNA_GRAPHICS_RENDERER=SOFTWARE is not a member of
-  CNA_GRAPHICS_RENDERERS="OPENGL33;VULKAN".
+  CNA_GRAPHICS_RENDERERS="OPENGL33;SDL_GPU".
 
     CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen from the compiled-in set, so it has to be one of them.
     Either add SOFTWARE to CNA_GRAPHICS_RENDERERS, or set -DCNA_GRAPHICS_RENDERER=OPENGL33 to make the list's first entry the default.
@@ -234,14 +234,11 @@ configure time, not merely to exist.
 | Set | Status |
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
-| `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
-| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
-| `OPENGLES3;OPENGL33;VULKAN;WEBGPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | ✅ builds (`RRC-018`, 2026-10-06). Its full CTest corpus (12,077 tests) and every family's own suite run with that family selected at runtime fail exactly the tests the parent commit fails in the same configuration, apart from load-sensitive cases that pass alone |
-| `OPENGLES3;OPENGL33;VULKAN;WEBGPU;SDL_GPU;FNA3D;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-020`–`RRC-022`, 2026-10-07): only the default's example suite registers. Its full CTest corpus (11,424 tests) fails 39 tests, each also failing in the eight-renderer set above at its parent commit; every one of the ten renderers runs the renderer benchmark selected at runtime from the one binary |
+| `OPENGLES3;OPENGL33;WEBGPU;SDL_GPU;FNA3D;SOFTWARE;HEADLESS;STUB` | ✅ builds with tests and examples (`RRC-035`, 2026-10-14): only the default's example suite registers; every renderer is selectable at run time, and the retirement campaign's focused suites ran with SDL_GPU, WEBGPU, SOFTWARE, FNA3D, HEADLESS and STUB selected that way (`plans/plan_renderer_retirement.md`). |
 | `WEBGL2;WEBGPU` (Emscripten) | ✅ one wasm bundle carries both. In headless Chrome on the real GPU (2026-10-07, emsdk 6.0.9) the renderer benchmark and `cna_house3d_demo --depth-probe` ran under each, selected at runtime through `Module.cnaPreferredRenderer`, with no extra link flags: a build that compiles `WEBGPU` in sizes the Asyncify stack for it automatically (`RRC-025`). With Emscripten's default 4 KiB stack `WEBGPU` aborted with `unreachable` (`RRC-018`) |
 
-Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27, 2026-09-28 or
-2026-10-06 are no longer listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
+Combinations whose evidence involved a renderer retired on 2026-09-17, 2026-09-27, 2026-09-28,
+2026-10-06 or 2026-10-13 are no longer listed: they cannot be configured any more, so the measurement is not reproducible. Those rows are in
 git history (`docs/removed-renderers.md` names the renderers).
 
 ### What a multi-renderer build makes newly testable
@@ -310,7 +307,7 @@ environment variable. A renderer with no smoke test registered in that build is 
 **skipped**, never as a pass — `ctest -L <label that matches nothing>` exits 0, so a wrong label
 would otherwise look like success. Only the default's family registers its example suite
 (`RRC-022`), so another renderer is smoke-tested through the default family's `GraphicsSmoke`
-tests where it has some (the GL, Vulkan, WebGPU and SDL_RENDERER families do) and is otherwise
+tests where it has some (the GL, SDL_GPU and WebGPU families do) and is otherwise
 reported as skipped: in the set above, `SOFTWARE` and `STUB` are.
 
 ### Comparing renderers against the XNA oracle, from one binary
@@ -335,7 +332,7 @@ without breaking a driver to do it:
 
 ```bash
 CNA_DEBUG_UNAVAILABLE_RENDERERS=HEADLESS ./mygame   # fails the availability probe
-CNA_DEBUG_FAIL_RENDERER_INIT=SDL_RENDERER ./mygame  # fails during initialization
+CNA_DEBUG_FAIL_RENDERER_INIT=SDL_GPU ./mygame       # fails during initialization
 ```
 
 The two are materially different. A failed probe happens before any window exists; a failed
@@ -344,7 +341,7 @@ and recreate the window. That second path is otherwise unreachable without a gen
 driver.
 
 It sits alongside the renderer-specific debug variables this project already has
-(`CNA_SDLGPU_TRACE_*`, `CNA_D3D11_DEBUG_LAYER`, `CNA_WEBGPU_TRACE_DRAW_ORDER`) — a named test seam,
+(`CNA_SDLGPU_TRACE_*`, `CNA_WEBGPU_TRACE_DRAW_ORDER`) — a named test seam,
 not something the resolution path does on its own.
 
 ---
@@ -470,7 +467,7 @@ The third-party archives behind LLGL were much larger than CNA's own wrapper —
 final executable grew by only ~4 MB, because the linker takes what is referenced rather than whole
 archives. **A renderer's cost in the binary is not its library's size on disk**, and estimating from
 archive sizes overstated it by an order of magnitude there. That conclusion is about linking, not
-about LLGL, and still applies to `VULKAN`, `WEBGPU` and `FNA3D`.
+about LLGL, and still applies to `SDL_GPU`, `WEBGPU` and `FNA3D`.
 
 ### What is NOT measured here, and why
 

@@ -20,13 +20,13 @@ on it) rather than assuming either way.
 - **[`inspector.md`](inspector.md)** — the optional authenticated out-of-process CNA Inspector,
   compact protocol, local browser UI, activation/security model, capabilities, and limitations.
   Inspector overhead measurements are in [`inspector-benchmark.md`](inspector-benchmark.md).
-- **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
-  (SDL_Renderer/EasyGL/Vulkan/DirectX). Start here for "does renderer X support feature Y."
+- **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status.
+  Start here for "does renderer X support feature Y."
 - **[`renderer-capability-profiles.md`](renderer-capability-profiles.md)** — the additive detailed
   feature/limit/per-format query model, its generated English limitations report and the matching
   C ABI. Start here when the legacy 64-bit capability summary is too coarse.
 - **[`gltf-renderer-stride-conformance.md`](gltf-renderer-stride-conformance.md)** — current
-  seven-layout audit and automated evidence across STUB, HEADLESS, OpenGL ES 3 and Vulkan.
+  seven-layout audit and automated evidence across STUB, HEADLESS and OpenGL ES 3.
 - **[`gltf-renderer-pbr-fallbacks.md`](gltf-renderer-pbr-fallbacks.md)** — five-map native binding
   ABIs and semantic neutral textures, audited across every PBR-capable renderer implementation.
 - **[`link-size-architecture.md`](link-size-architecture.md)** — why a CNA program contains only
@@ -78,17 +78,15 @@ original phase closed — check each file's own status banner/date.
 - `basiceffect-support.md`, `alphatesteffect-support.md`, `dualtextureeffect-support.md`,
   `environmentmapeffect-support.md`, `skinnedeffect-support.md` — stock-effect conformance.
   **Refreshed 2026-07-11**: fog rows (Task 899) and `BasicEffect`'s multi-light/specular rows
-  (Tasks 885/886) corrected from stale ❌ to ✅; a stale Vulkan `BlendState` mention in
-  `dualtextureeffect-support.md` §3 also corrected.
-- `depthstencilstate-support.md` — **refreshed 2026-07-11**: Vulkan's stencil-test pipeline (Task
-  870) and `ReferenceStencil` (Task 872, Vulkan-only) corrected from stale ❌ to ✅/fixed.
+  (Tasks 885/886) corrected from stale ❌ to ✅.
+- `depthstencilstate-support.md` — refreshed 2026-07-11.
 - `sampler-state-support.md` — **refreshed 2026-07-11**: mip-level `SetData` (Tasks 924-926) and
   EasyGL anisotropic filtering (Task 918) corrected from stale ❌ to ✅/fixed.
 - `rasterizerstate-support.md` — Phase 38 audit; see `graphics-renderer-feature-matrix.md` for the
   current per-renderer `DepthBias` status.
 - `model-content-pipeline-support.md` — current as of Task 916 (2026-07-09); honestly documents
   real remaining content-pipeline-loader gaps (no bone hierarchy, no `ParentBone`/`BoundingSphere`).
-- `occlusionquery-support.md` — current; tracks the Task 447/854 Vulkan fix correctly.
+- `occlusionquery-support.md` — per-renderer `OcclusionQuery` support.
 - `rendertarget-support.md`, `texture3d-texturecube-support.md`, `surface-format-support.md`,
   `texture-stream-formats.md`, `vertex-format-support.md`, `spritefont-support.md`,
   `viewport-displaymode-adapter-support.md` — not re-verified in the 2026-07-11 pass.
@@ -124,7 +122,6 @@ Kept for their investigation methodology and root-cause detail, not as current s
   boundary (macOS has a native CI gate; iOS final-links for device and runs a one-frame smoke app
   in the simulator, but still lacks physical-device and feature evidence). Task breakdown is in
   `../plans/plan_apple.md`.
-- `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
 - **[`ascii-post-process-effect.md`](ascii-post-process-effect.md)** — `CNA::Graphics::AsciiPostProcessEffect`,
   the renderer-neutral ASCII/glyph-grid post-process effect (`modules/graphics-ext/`) that replaced
   the former `ASCII` graphics-renderer identity.

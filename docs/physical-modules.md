@@ -69,20 +69,14 @@ not identities. Exactly one family's `${RENDERER_TARGET}` is configured per buil
 (`RENDERER_DIR = modules/renderers/<family>`); each family's `CMakeLists.txt` owns its
 specific SDK links, carried over branch-for-branch from the former central manifest.
 
-directx9, directx11, easygl, fna3d, headless, metal, sdl-gpu, sdl-renderer, software,
-stub, vulkan, webgpu.
+directx9, easygl, fna3d, headless, sdl-gpu, software, stub, webgpu.
 
 Common helper targets (deliberate sharing, not public identities):
 
-- **modules/renderers/common/d3d** — `cna_renderer_d3dcommon`, consumed by the d3d11
-  family only. D3D9 is independent (its own format/state mapping;
-  verified mechanically by include and link audit during the physical move).
+- **modules/renderers/common/mojoshader** — `cna_renderer_mojoshader_effect`, the
+  MojoShader-to-CNA translation shared by every family that executes compiled XNA effects.
 - **d3d9 effect sub-target** — `cna_renderer_d3d9_effect` (the isolated
   d3dcompiler-carrying custom-ShaderEffect path) lives inside modules/renderers/directx9.
-- **metal header interface** — `cna_renderer_metal_headers` is defined unconditionally: that
-  family's policy/ABI test suite deliberately compiles into the CnaTests corpus on every
-  renderer, so its `CNA/Internal/Renderers/Metal` policy headers stay reachable in every
-  configuration.
 
 ## Module examples — modules/<name>/examples/
 
@@ -113,7 +107,7 @@ implemented on `feature/module-examples` and promoted to `develop` on 2026-08-10
   the build root (`CMAKE_RUNTIME_OUTPUT_DIRECTORY`), where they have always been.
   `CNA_GRAPHICS_EXAMPLES_DIR` (set in `modules/CMakeLists.txt`) is how family registrations
   compile the graphics-owned shared fixtures per renderer and how consumers reach the
-  `common/` support headers. Cross-family reuse (e.g. Vulkan/DirectX building
+  `common/` support headers. Cross-family reuse (e.g. a family building
   EasyGL-authored golden fixtures) is spelled as an explicit
   `${CMAKE_SOURCE_DIR}/modules/renderers/<owner>/examples/` path. Module-registered tests
   get the root's headless-safe skip convention through `cna_apply_skip_convention()`
@@ -153,6 +147,6 @@ miscellaneous dumping ground again.
 - `cmake/Tests/ModuleProbes.cmake` — minimal-link probes for math, design, core, graphics, content,
   runtime, input, audio, media, storage, devices, devices-ext, graphics-ext, the CnaExt
   composition umbrella and net, with per-probe link-closure gates
-  (`scripts/check_module_link_closure.py`) and the HEADLESS native-SDK-free /
-  VULKAN closure configuration gates.
+  (`scripts/check_module_link_closure.py`) and the HEADLESS native-SDK-free closure
+  configuration gate.
 - `scripts/check_renderer_identities.py` — pins the 10 public renderer identities.

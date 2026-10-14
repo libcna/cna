@@ -57,7 +57,7 @@ Carried forward from `plan_win32_native_validation.md` and **not** re-litigated 
 
 | Id | What | Status entering this workstream |
 |---|---|---|
-| `F24` | D3D11 `DXGI_ERROR_UNSUPPORTED` after ~898 tests, never recovers; both controls (400 sequential cycles, 400 held) fail to reproduce it | **deferred**, environment-side, needs a physical Windows GPU. 1 480 of 1 557 failures. |
+| `F24` | D3D11 `DXGI_ERROR_UNSUPPORTED` after ~898 tests, never recovers; both controls (400 sequential cycles, 400 held) fail to reproduce it | **retired** with `DIRECTX11` on 2026-10-13; was deferred, environment-side, needs a physical Windows GPU. 1 480 of 1 557 failures. |
 | `F29` | `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` passes standalone, faults `0xC0000005` in the full run | **unresolved**, not claimed as validated |
 | `F30` | non-ASCII filesystem paths broken on Windows | **the subject of this workstream** |
 | `F31` | POSIX hardcoded in tests (`/bin/echo`, `/dev/null`), hiding an untested Windows `CreateProcess` path in `RunHostProcess` | open; in scope here (Phase 14/25) |

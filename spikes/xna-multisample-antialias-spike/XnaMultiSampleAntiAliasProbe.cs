@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-099.
+// VULKAN-099; the result is recorded in docs/rasterizerstate-support.md section 8.
 //
 // Measures, on the real XNA 4.0 runtime, what `RasterizerState.MultiSampleAntiAlias = false`
 // actually does to a draw on a multisampled render target. CNA drops the field before it reaches

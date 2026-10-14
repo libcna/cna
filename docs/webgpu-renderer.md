@@ -3,7 +3,7 @@
 ## Status
 
 The WebGPU renderer was activated by the project owner on **2026-07-12** and is an **experimental
-CNA graphics renderer** -- one of the project's 14 public renderer identities, native (wgpu-native)
+CNA graphics renderer** -- one of the project's 10 public renderer identities, native (wgpu-native)
 on desktop and, since 2026-08-26, also in the browser through Emscripten's emdawnwebgpu port. Select
 it with:
 
@@ -159,11 +159,7 @@ inside the tool's default tolerance of 40. A native `OPENGL33` (EasyGL) dump, pr
 Xvfb + Mesa `llvmpipe`, was compared too: WebGPU matches the CPU reference essentially exactly (0
 pixels over tolerance), whereas EasyGL differs from BOTH WebGPU and SOFTWARE at the same 57
 triangle-edge coverage pixels -- a GL fill-rule / pixel-centre convention difference at the triangle
-boundary, not a WebGPU defect (WebGPU is on the reference-matching side). Finally a native VULKAN dump
-(`cna_diag_vulkan` on the real AMD Radeon 780M / RADV) was compared: it is **byte-identical to the
-browser WebGPU dump (max diff 0)** -- unsurprising, since Chrome's WebGPU is Dawn on the same AMD
-Vulkan. So strict per-pixel edge parity is not universal across rasterizers, but the two Vulkan-backed
-paths (native Vulkan and browser WebGPU) are exact, and both agree with the CPU reference to within 1.
+boundary, not a WebGPU defect (WebGPU is on the reference-matching side).
 
 ## Automated native smoke test
 
@@ -309,21 +305,20 @@ all have since shipped — see the "Important limitations" section below for the
 the frame's own command encoder, `wgpuBufferMapAsync` polling. Because a naive implementation could
 only ever observe the *previous* frame's content on a swapchain-backed target, `Present()` was
 refactored into a shared `EnsureFrameRendered()` so `GetBackBufferData()` can force an on-demand
-render of whatever's queued so far in the current `Draw()` call — matching Vulkan's own
-on-demand-submit readback semantics. New `WebGPU_Clear_Readback` CTest.
+render of whatever's queued so far in the current `Draw()` call. New `WebGPU_Clear_Readback` CTest.
 
 Writing that test's alpha case then found and fixed a real, previously-unknown bug (`WEBGPU-132`):
 the `SpriteBatch` pipeline's blend factors didn't match its own shader's non-premultiplied output,
 so any tint/texture alpha strictly between 0 and 255 was silently ignored for colour — a
 translucent sprite rendered fully opaque. Invisible to `WEBGPU-126`'s manual screenshot review;
-caught only by a pixel assertion. Fixed by matching Vulkan's own blend-factor pairing.
+caught only by a pixel assertion.
 
 ## First 3D draw path (2026-07-12)
 
 `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (a `VertexPositionColor`, stride-16,
 unlit/untextured 3D draw — the path `GraphicsDevice.DrawUserPrimitives()`/
 `DrawUserIndexedPrimitives()` already route to directly) are implemented: a 128-float uniform
-buffer matching `VulkanRenderer::FillExtPushConst()`'s layout byte-for-byte, a `colored3d.wgsl`
+buffer, a `colored3d.wgsl`
 shader, and a depth-aware pipeline cache. New `WebGPU_Colored3D` CTest proves genuine depth-buffer
 comparison (not "last draw wins"): a near and a far full-screen quad resolve to the near one
 regardless of draw order. Since `IGraphicsRenderer::DrawPrimitivesEx()`'s own default implementation
@@ -338,8 +333,7 @@ the depth portion. Stencil ops (`WEBGPU-83`) are now implemented across **every 
 `GetOrCreatePipeline*3D()` bakes the XNA `DepthStencilState` stencil parameters into
 `WGPUStencilFaceState` (via `ToWGPUStencilOperation` / `FillWGPUStencilState`), captures the state
 per draw in its `*DrawCommand` (`CaptureStencilStateEXT`), folds the read/write masks into that
-family's pipeline cache key (WebGPU keeps the masks as *pipeline* state, unlike Vulkan's dynamic
-masks; a disabled stencil folds a constant, so non-stencil draws keep their existing keys), and
+family's pipeline cache key (WebGPU keeps the masks as *pipeline* state; a disabled stencil folds a constant, so non-stencil draws keep their existing keys), and
 applies the reference dynamically per draw (`wgpuRenderPassEncoderSetStencilReference`). This makes
 a stamp-then-gate stencil sequence (e.g. `Always`/`Replace` then `Equal`/`Keep`) work within one
 render-target bind cycle. Three tests prove it on the real GPU: the shared
@@ -417,8 +411,7 @@ target: its own colour texture, always created in the swapchain's own chosen for
 time) renders into it unchanged, with zero new pipeline-cache dimensions; and its own depth
 texture created in the exact format the requested `DepthFormat` maps to (`WEBGPU-39`,
 `MapDepthFormatEXT()`: `None`→no depth texture, `Depth16`→`Depth16Unorm`, `Depth24`→`Depth24Plus`,
-`Depth24Stencil8`→`Depth24PlusStencil8`, the same per-value mapping `VulkanRenderer::PickDepthFormat()`
-and EasyGL do). The pass's depth attachment, the pipeline's `depthStencil` state (null for `None`,
+`Depth24Stencil8`→`Depth24PlusStencil8`, the same per-value mapping EasyGL does). The pass's depth attachment, the pipeline's `depthStencil` state (null for `None`,
 where no depth test happens) and the stencil load/store ops (named only on a stencil-carrying format)
 are all threaded from that real format via `replayDepthFormat_`/`replayDepthHasStencil_`, and the
 format is part of the 3D and sprite pipeline keys so a pass with a different depth format gets its own
@@ -431,17 +424,15 @@ against the swapchain, lazily, the first time something actually needs the frame
 OUTGOING target the instant the target actually changes (closing out that render pass immediately
 via the new `RenderPendingDrawsToRenderTarget()`, and starting fresh accumulation for the new
 target) rather than tagging every one of this renderer's ~10 `Queue*Draw()` families with a target
-and replaying them grouped-by-target at final-flush time, closer to `VulkanRenderer`'s own
-deferred-recording model — the smaller change for a renderer with no pre-existing per-draw
-deferred/replay infrastructure to extend.
+and replaying them grouped-by-target at final-flush time — the smaller change for a renderer with
+no pre-existing per-draw deferred/replay infrastructure to extend.
 
 A `RenderTarget2D` sampled back as an ordinary texture (`SpriteBatch`/`BasicEffect.Texture`) needed
 one more fix: every `Queue*Draw()` previously resolved its bound texture with an *unchecked*
 `static_cast<const WebGPUTextureRenderer*>`, safe only because `WebGPUTextureRenderer` used to be the
 only `ITextureRenderer`-implementing class this renderer had. `WebGPURenderTargetRenderer` is a
 second, unrelated one, so this became a real hazard the first time a `GpuDrawParams::textureN`
-actually pointed at one — fixed by introducing `IWebGPUSamplable` (mirroring
-`VulkanRenderer`'s own `IVulkanSamplable`) and a `dynamic_cast`-based `ResolveSamplable()`
+actually pointed at one — fixed by introducing `IWebGPUSamplable` and a `dynamic_cast`-based `ResolveSamplable()`
 helper everywhere a texture pointer is stored, so an incompatible type now safely resolves to
 "unbound" instead of undefined behaviour.
 
@@ -470,9 +461,8 @@ backbuffer's own render pass.
 ## EnvironmentMapEffect and real instancing (2026-07-18)
 
 `env_map3d.wgsl` / `GetOrCreatePipelineEnvMap3D()` (`WEBGPU-25`/`36`/`74`) close this renderer's
-former "no cube-map shader at all" gap, ported from `VulkanRenderer`'s
-`env_map3d.{vert,frag}.glsl` (cross-checked against `EasyGLRenderer::
-EnsureEnvMapped3DProgram()`'s identical GLSL formula before porting). Stride 32
+former "no cube-map shader at all" gap, with the formula of `EasyGLRenderer::
+EnsureEnvMapped3DProgram()`'s GLSL. Stride 32
 (`VertexPositionNormalTexture`, the same layout as `lit_textured3d.wgsl`). Group 0 binding 0 is a
 new `Transform` UBO (mvp+world — WebGPU has no push constants); binding 1 is `EnvMapParams` (eye
 position, diffuse, emissive+amount, all 3 directional lights, envMapSpecular+Fresnel, fog, and a
@@ -493,18 +483,15 @@ independently proves the amount also gates it; the indexed-draw dispatch path is
 
 `instanced3d.wgsl` / `GetOrCreatePipelineInstanced3D()` / `DrawInstancedPrimitivesEx()`
 (`WEBGPU-27`/`38`/`68`) is the other half: a genuine second `WGPUVertexStepMode_Instance` vertex
-buffer binding carrying a per-instance mat4 world transform, ported from `VulkanRenderer`'s
-`instanced3d.{vert,frag}.glsl`. Unlike the bind-group-shaped families above, a second vertex stream
+buffer binding carrying a per-instance mat4 world transform. Unlike the bind-group-shaped families above, a second vertex stream
 needs **no new bind group layout at all** in WebGPU (vertex buffers are set via
 `wgpuRenderPassEncoderSetVertexBuffer()`, entirely separate from bind groups), so this reuses
 `coloredBindGroupLayout_`/`coloredPipelineLayout_` unchanged; `[0..15]` of that UBO is
 View×Projection rather than a full MVP, since world comes from the per-instance stream (matching
 `FillInstancedPushConst()`'s own deliberate choice to ignore the caller's own `World` matrix
-entirely). Unlike Vulkan's own hardcoded 64-byte instance-binding stride, this renderer's pipeline
-cache key genuinely includes both the per-vertex and per-instance buffer strides, so the GPU-side
+entirely). This renderer's pipeline cache key genuinely includes both the per-vertex and per-instance buffer strides, so the GPU-side
 binding always matches whatever the caller's buffers actually declare. `params.instanceVb ==
-nullptr` falls back to a real `DrawIndexedPrimitivesEx()` draw rather than throwing, matching
-`VulkanRenderer`'s identical fallback. `WebGPU_Instanced3D` (5/5, tested directly at the
+nullptr` falls back to a real `DrawIndexedPrimitivesEx()` draw rather than throwing. `WebGPU_Instanced3D` (5/5, tested directly at the
 `IGraphicsRenderer` level, matching `modules/renderers/directx9/examples/directx9_instanced_test.cpp`'s own established
 test-authoring convention for this API): 3 instances in ONE draw call each paint their own small
 quad at their own independently-predicted screen location with the shared `DiffuseColor` — proving
@@ -519,8 +506,7 @@ default. It owns ONE shared 6-array-layer colour `WGPUTexture` (the same layout
 `WebGPUTextureCubeRenderer`, WEBGPU-56/113, already established for a plain `TextureCube`) plus ONE
 shared `size`×`size` depth texture — created in the exact format the requested `DepthFormat` maps to
 (`WEBGPU-39`, `MapDepthFormatEXT()`; `None` allocates no depth texture at all) — reused across all 6
-faces, safe because only ONE face is ever bound/rendered-into at a time, mirroring
-`VulkanRenderTargetCubeRenderer`'s identical shared-depth-image choice. Each face gets its own
+faces, safe because only ONE face is ever bound/rendered-into at a time. Each face gets its own
 `WGPUTextureViewDimension_2D` view (the render-pass colour attachment); one further
 `WGPUTextureViewDimension_Cube` view spans all 6 layers for sampling back.
 
@@ -550,8 +536,7 @@ reflection/environment maps), so this wiring matters as much as the render-into 
 Per-face MSAA and `mipMap=true` mip regeneration are both implemented (`WEBGPU-114`, closed
 2026-08-27). MSAA: when the renderer's global `sampleCount_` > 1 each face renders into its own
 multisampled colour attachment and resolves into that face's single-sample layer — SIX separate
-single-layer MSAA textures, because WebGPU forbids a multisampled ARRAY texture (unlike Vulkan's
-6-layer image) — with the shared depth attachment allocated at the same sample count;
+single-layer MSAA textures, because WebGPU forbids a multisampled ARRAY texture — with the shared depth attachment allocated at the same sample count;
 `GetMultiSampleCount()` reports the applied count, mirroring `RenderTarget2D` (the per-instance
 `multiSampleCount` argument is not read — the cube multisamples only when the backbuffer was created
 multisampled). mipMap: the colour texture carries a full mip chain and each face is regenerated from
@@ -592,9 +577,9 @@ red/blue stripe check, whose boundary destination pixel reads back an exact `(12
 blend, not a hard unblended edge.
 
 **Important, deliberate, honestly-documented divergence from FNA and every sibling CNA renderer.**
-`VulkanRenderer`/`EasyGLRenderer` only ever regenerate mip content for a RENDER
-TARGET being unbound (`vkCmdBlitImage`/`glGenerateMipmap`-on-unbind, matching real FNA3D
-`OPENGL_ResolveTarget` semantics) — neither renderer, nor real FNA/XNA itself, auto-generates mip
+`EasyGLRenderer` only ever regenerates mip content for a RENDER
+TARGET being unbound (`glGenerateMipmap`-on-unbind, matching real FNA3D
+`OPENGL_ResolveTarget` semantics) — neither it, nor real FNA/XNA itself, auto-generates mip
 content for a PLAIN `Texture2D`/`TextureCube` at all (mip levels beyond 0 are always
 user/content-pipeline-supplied via explicit per-level `SetData()`, matching how a real XNA
 content-pipeline-processed `.xnb` already carries every level pre-baked at content-build time —
@@ -611,7 +596,7 @@ for the identical public `Texture2D`/`TextureCube(mipMap=true)` constructor call
 regenerate over it, exactly the same interaction a real mip chain has with itself.
 
 `RenderTarget2D`/`RenderTargetCube` mip regeneration (the actual FNA-equivalent feature, matching
-Vulkan/EasyGL's own render-target-only precedent) remains a separate, already-tracked, still-open
+EasyGL's own render-target-only precedent) remains a separate, already-tracked, still-open
 scope cut (see the `RenderTarget2D`/`RenderTargetCube` sections above) — this section's own work
 does not touch either render-target class.
 
@@ -715,13 +700,13 @@ Verified by the shared EasyGL↔WebGPU parity fixtures (`WEBGPU-207`, see
 `Effect(GraphicsDevice&, byte[])` -- the XNA Effect Framework binary a game's `.xnb` carries --
 runs on this renderer **natively**, behind the off-by-default `CNA_WEBGPU_COMPILED_EFFECTS` option
 (MojoShader is a fetched dependency the renderer does not otherwise need, the same arrangement
-SDL_GPU, EasyGL and Vulkan use). It passes the shared `plans/plan_fx.md` `FX-060` conformance suite
+SDL_GPU and EasyGL use). It passes the shared `plans/plan_fx.md` `FX-060` conformance suite
 **23/23 with no skips**, and `GraphicsCapability::CompiledEffects` reports true at the
 `GraphicsDevice` seam.
 
 **The route.** XNA/D3D9 bytecode -> MojoShader's portable `spirv` profile -> a combined-image-sampler
 rewrite -> `WGPUShaderSourceSPIRV`. There is no MojoShader WebGPU adapter, so the nine-function
-`MOJOSHADER_effectShaderContext` is CNA's own, as it is for Vulkan.
+`MOJOSHADER_effectShaderContext` is CNA's own.
 
 **The one translation step, and why it is needed.** MojoShader's Vulkan-mode SPIR-V emits one
 `OpTypeSampledImage` global per D3D9 sampler register -- Vulkan's combined-image-sampler shape.
@@ -749,7 +734,7 @@ a `Location` on `ps_1_x`'s `r0`-as-colour-output, a unique `OpEntryPoint` interf
 `gl_PointCoord` patch-up guarded on the variable it belongs to rather than on the `attrib_offsets`
 slot it shares. The last two closed the six passes that used to be refused (`plans/plan_fx.md`
 `FX-134`); every one of them is a gap the GLSL profile does not have, and the shared SPIR-V linker
-means Vulkan and SDL_GPU gained them too. **And the browser**: the same effects run under
+means SDL_GPU gained them too. **And the browser**: the same effects run under
 Emscripten, through WGSL translated from the same SPIR-V.
 
 **What does not, and why:**
@@ -1273,7 +1258,7 @@ CNA's graphics extensions:
   (WGSL's uniform address space requires a 16-byte array stride) — a detail of translating ordinary
   vertex/fragment shaders, not a storage-buffer API. A block that mixes array and non-array members
   is refused by name rather than rewritten.
-* **The descriptor binding contract**, mirroring Vulkan's: group 0 the draw texture and its sampler
+* **The descriptor binding contract**: group 0 the draw texture and its sampler
   at binding 32; group 1 bound textures, cubes, volumes, uniform arrays (capacity 72) and the
   engine matrices, each sampler at `binding + 32`; group 2 the stock families' shadow block; group
   3 the 128-byte scalar block. Which contract a package uses is read from the shader, not from its
@@ -1283,13 +1268,11 @@ CNA's graphics extensions:
   device's actual limits. Readback stages through a 256-byte-row-aligned buffer.
 * **Shadow reception** (`WMG-0014`) in `BasicEffect`, `SkinnedEffect`, `PbrEffect` and
   `SkinnedPbrEffect` — directional, cascaded, point and spot — through a group-2 block identical
-  across those families, the WGSL twin of Vulkan's `shadow_sampling.glsl`. A draw with a shadow map
-  takes the per-pixel path whatever `PreferPerPixelLighting` says, as on Vulkan.
+  across those families. A draw with a shadow map takes the per-pixel path whatever
+  `PreferPerPixelLighting` says.
 * **Image-based lighting** (`WMG-0022`) in `PbrEffect` and `SkinnedPbrEffect`, through a group-3
-  block that is the WGSL twin of Vulkan's `CnaIblAmbient` and EasyGL's `cnaIblAmbient` — the same
-  split-sum equation, with `roughness * (mipCount - 1)` selecting the prefiltered mip through
-  `textureSampleLevel`, and the three resources read through sampler slots 10, 11 and 12 as on the
-  other two renderers. `SupportsImageBasedLightingEXT()` answers **true**.
+  block that is the WGSL twin of EasyGL's `cnaIblAmbient` — the same split-sum equation, with `roughness * (mipCount - 1)` selecting the prefiltered mip through
+  `textureSampleLevel`, and the three resources read through sampler slots 10, 11 and 12 as on EasyGL. `SupportsImageBasedLightingEXT()` answers **true**.
 * **Base-instance drawing** (`SupportsBaseInstanceDrawingEXT()` answers true when the device can
   begin an instanced draw at a caller-selected instance).
 * **Debug labels** (`WMG-0020`). `SetStringMarkerEXT` queues a label into the ordered stream and
@@ -1297,13 +1280,12 @@ CNA's graphics extensions:
   renderer additionally opens a debug group around each of its render passes.
 * **Per-instance vertex streams for a `ShaderEffect`** (`WMG-0021`), on both the descriptor and the
   legacy contract. Instance attribute locations continue after the per-vertex declaration's element
-  count, which is EasyGL's and Vulkan's convention, so one shader source describes its inputs on all
-  three. The `InstanceFrequency` divisor is expanded per instance at queue time, because
+  count, which is EasyGL's convention, so one shader source describes its inputs on both. The `InstanceFrequency` divisor is expanded per instance at queue time, because
   wgpu-native's `WGPUVertexBufferLayout` carries a step mode and no step rate.
 
 What a caller must still ask about:
 
-* `ExecutesShaderEffectSourceEXT()` is **true** here, unlike Vulkan — this renderer really does
+* `ExecutesShaderEffectSourceEXT()` is **true** here — this renderer really does
   compile the source a `ShaderEffect` carries. That source must be WGSL: `GetShaderDialectEXT()`
   answers `Wgsl`, and a test that types GLSL into a `ShaderEffect` is asking a question this
   renderer cannot be asked.
@@ -1489,7 +1471,7 @@ recorded in `WebGpuWireFrameContractTests.cpp`, which measures the current one.
 
 A `ShaderEffect` constructed with WGSL vertex and fragment source is genuinely compiled and run by
 this renderer on the 3D draw routes (`DrawUserPrimitives` / `DrawUserIndexedPrimitives` /
-`DrawPrimitives` / `DrawIndexedPrimitives`). Unlike Vulkan (which takes SPIR-V) or SOFTWARE/HEADLESS
+`DrawPrimitives` / `DrawIndexedPrimitives`). Unlike SOFTWARE/HEADLESS
 (which accept a source and ignore it), WebGPU's pixels are its shader's, so it reports:
 
 - `GraphicsDevice.GetShaderDialectEXT()` → `ShaderDialectEXT::Wgsl` — ask this before supplying source;
@@ -1552,12 +1534,7 @@ topology -- and is no longer a deviation; see its section above.
 
 ## Architecture notes
 
-WebGPU and Vulkan are conceptually related explicit APIs, so the Vulkan renderer informed resource
-lifetime, surface recovery, command encoding and render-pass structure. The implementation is not a
-line-by-line Vulkan translation:
-
-- WebGPU uses WGSL shader modules rather than CNA's Vulkan SPIR-V modules.
-- Resource bindings use bind-group layouts and bind groups rather than Vulkan descriptor sets.
+- WebGPU uses WGSL shader modules; resource bindings use bind-group layouts and bind groups.
 - WebGPU has no push constants, so 3D effect data uses uniform buffers.
 - Per-draw vertex/uniform buffers are pooled, not churned (`WEBGPU-12`): `AcquireTransientBuffer`
   serves them from a bounded pool keyed by `(usage, power-of-two size class)` and `RecycleTransient-
@@ -1576,9 +1553,8 @@ line-by-line Vulkan translation:
   header. (`WMG-0024` once built it with `CNA_ENABLE_SDL=OFF` on CNA's own Wayland and X11
   platforms; those were retired on 2026-10-06, and a windowed WebGPU build now runs on SDL3.)
 
-The deliberate, collected departures from the Vulkan renderer — push constants → UBO, wireframe
-refusal, async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, and windowing
-handled by the shared platform — are documented in `docs/webgpu-vs-vulkan-deviations.md`.
-(`SetStringMarkerEXT` is no longer among them: `WMG-0020` implemented it.)
+The WebGPU-specific design choices — push constants → UBO, wireframe by edge expansion,
+async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, and windowing handled by
+the shared platform — are collected in `docs/webgpu-design-notes.md`.
 
 See `plans/plan_webgpu.md` for task-level status and the remaining parity work.

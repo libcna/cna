@@ -13,7 +13,7 @@ classes and enums:
 | `ShaderBindingTypeEXT`, `ShaderBindingRequirementEXT` | Resource-binding descriptions inside a portable shader package. |
 
 The ASCII font atlas and quantizer are internal. The CRT and depth shaders retain GLSL ES,
-desktop GLSL, SPIR-V, WGSL and HLSL variants. Direct rendering follows the ordinary
+desktop GLSL, SPIR-V and WGSL variants. Direct rendering follows the ordinary
 render-target plus SpriteBatch/effect pattern; no post-process chain is required.
 
 The former HDR render pipeline, pass framework, shadow engine, clustered rendering, probes,

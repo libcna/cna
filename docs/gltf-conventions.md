@@ -51,7 +51,7 @@ per-bound-resource flag: `cnaSampleUV(uv, flip)` receives `flip=1` only for a bo
 surface and `0` for an ordinary uploaded texture. Every flag is rebuilt and uploaded on every draw,
 including the all-zero case, so sampling a render target cannot leave state that flips the next glTF
 texture. PBR's base colour, normal, metallic-roughness, emissive and occlusion slots each have their
-own flag; Vulkan and SOFTWARE need no native-storage correction but expose the same top-left public
+own flag; SOFTWARE needs no native-storage correction but exposes the same top-left public
 result.
 
 The separation is asserted from both sides. `GltfConventions.PositionsNormalsAndUvsPassThroughUnchanged`
@@ -62,7 +62,7 @@ unique and standard, deliberately **unflipped** mesh UVs. Its CD legs require an
 `Texture2D` to sample upright and a `RenderTarget2D` containing the same logical bytes to match it
 texel-for-texel through stock 3D effects; other legs cover SpriteBatch, target chains, explicit
 public flips, MSAA, mipmaps, viewport and scissor without changing those mesh coordinates. Current
-results are EasyGL **62/62**, Vulkan **58/58** (its unsupported 4x path is recorded explicitly) and
+results are EasyGL **62/62** and
 SOFTWARE **62/62**; HEADLESS passes the declared non-rasterising/refusal boundary.
 
 ### The one thing that *is* converted, and why it is not an exception
@@ -693,7 +693,6 @@ The raster backends do not all implement that input in the same native clip volu
 
 | Backend | Native/effective rule | Consequence for CNA/glTF draws |
 |---|---|---|
-| Vulkan | Native `0 <= z <= w`; stock vertex shaders flip clip Y once and leave Z unchanged. `VkViewport` applies `MinDepth..MaxDepth`. | Exact XNA depth convention. |
 | EasyGL / OpenGL ES | Native `-w <= z <= w`; every renderer-owned 3D vertex shader converts XNA/D3D depth with `z'=2z-w`, exactly as MojoShader does for compiled Effects. | Exact XNA near/far clipping and full `MinDepth..MaxDepth` window-depth mapping. |
 | SOFTWARE | Clips every primitive against the six homogeneous XNA/D3D planes, divides by W, and applies `MinDepth + (z/w)*(MaxDepth-MinDepth)` directly. | Exact XNA clip-volume and depth-range convention. |
 | HEADLESS / STUB | No rasterisation. | No clip/depth claim; capability/refusal tests are the oracle. |

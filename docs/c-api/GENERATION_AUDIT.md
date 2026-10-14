@@ -398,5 +398,5 @@ at 30 seconds. All five pass with HEADLESS using the same binaries; the renderer
 and these test bodies were not changed by this audit. The existing adapter-query exit fix was
 preserved, but is not proof that every DirectX lifetime path works. Root cause of these residual
 driver/lifetime failures is not established, and native Windows validation remains necessary.
-This is a real outstanding platform result, not a claimed generation regression or a green
-DirectX certification. The current limitation is also recorded in `handoff.md` §5.
+This was a real outstanding platform result, not a claimed generation regression or a green
+DirectX certification. It lapsed when the `DIRECTX11` renderer was retired on 2026-10-13.

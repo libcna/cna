@@ -11,7 +11,7 @@ live bug list: `misc/known_bugs.md` and `misc/known_gaps.md` hold only the measu
 deviations) describe what a subsystem does by design, not what is broken. When a bug is fixed,
 delete its §5 entry (and its measurement record, if it has one) in the same commit.
 
-Last reconciled against the code and a full test run: **2026-10-10** (`next`).
+Last reconciled against the code and a full test run: **2026-10-14** (`next`).
 
 ## 1. Project summary
 
@@ -26,20 +26,21 @@ they are: no new renderers, asset formats, graphics engines or subsystems. Work 
 
 ## 2. Current status
 
-**Renderers.** 14 public identities over 12 implementation families — `SDL_RENDERER`, `OPENGLES3`,
-`OPENGL33`, `WEBGL2`, `VULKAN`, `WEBGPU`, `HEADLESS`, `SOFTWARE`, `STUB`, `DIRECTX11`, `DIRECTX9`,
-`SDL_GPU`, `METAL`, `FNA3D`; the three GL identities share the internal EasyGL implementation.
-The canonical list is `cmake/RendererIdentities.cmake` (held to the C++ enum and the C ABI by
+**Renderers.** 10 public identities over 8 implementation families — `OPENGLES3`, `OPENGL33`,
+`WEBGL2`, `WEBGPU`, `HEADLESS`, `SOFTWARE`, `STUB`, `DIRECTX9`, `SDL_GPU`, `FNA3D`; the three GL
+identities share the internal EasyGL implementation. `SDL_GPU` is CNA's modern native path: SDL
+owns its Vulkan, Direct3D 12 and Metal backends. The canonical list is
+`cmake/RendererIdentities.cmake` (held to the C++ enum and the C ABI by
 `scripts/check_renderer_identities.py`); the table with gates and factories is
-[`docs/renderer-registry.md`](docs/renderer-registry.md). 37 identities are retired and refused at
-configure time by name; their reserved ABI values are in
-[`docs/removed-renderers.md`](docs/removed-renderers.md). Do not add or restore a renderer without an
-explicit owner decision.
+[`docs/renderer-registry.md`](docs/renderer-registry.md). 41 identities are retired — `VULKAN`,
+`DIRECTX11`, `METAL` and `SDL_RENDERER` on 2026-10-13 — and refused by name at configure time and at
+run time; their reserved ABI values are in [`docs/removed-renderers.md`](docs/removed-renderers.md).
+Do not add or restore a renderer without an explicit owner decision.
 
 **Graphics layer.** Every renderer implements one contract, `IGraphicsRenderer`, for XNA graphics
-plus CNA's graphics extensions (SPIR-V/GLSL/HLSL/MSL/WGSL `ShaderEffect` with vertex/fragment
+plus CNA's graphics extensions (SPIR-V/GLSL/WGSL `ShaderEffect` with vertex/fragment
 `ShaderPackageEXT`, PBR and skinned PBR, image-based lighting, shadow reception, float render
-targets, instancing with base instance, compiled effects, `Texture3D`/`TextureCube`). There is no
+targets, instancing, compiled effects, `Texture3D`/`TextureCube`). There is no
 second, general-purpose GPU layer underneath: the compute-shader, storage-buffer/image,
 texture-array, memory-barrier, indirect-draw and GPU-timer abstractions were retired end to end on
 2026-10-13 (`plans/plan_modern_retirement.md`), including their common interfaces, backend
@@ -54,10 +55,10 @@ browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERM
 | Target | What is actually verified |
 |---|---|
 | Linux x86_64 | Everything; this is where the suites run. |
-| Windows | MinGW-w64 cross builds run under Wine (+DXVK) for `SDL_RENDERER`, `DIRECTX9`, `DIRECTX11`; MSVC builds in the Windows CI workflows. No real-Windows hardware validation is current. |
+| Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDL_GPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`; the manual MSVC workflow builds and runs the `DIRECTX9` suite. No real-Windows hardware validation is current (§5.2). |
 | Web (Emscripten) | `WEBGL2` and `WEBGPU` builds run in Chrome (`docs/web-emscripten-graphics-limitations.md`). |
-| Android | `OPENGLES3` on an x86_64 emulator (`docs/android-graphics-limitations.md`). |
-| macOS / iOS | macOS CI builds and runs the supported Metal contract; iOS is a simulator smoke app only (`docs/apple-platforms.md`). |
+| Android | `OPENGLES3`, the default there, on an x86_64 emulator; `SDL_GPU` on Android is not qualified (`docs/android-graphics-limitations.md`). |
+| macOS / iOS | macOS CI builds CNA with `SOFTWARE` and runs the portable platform suites and a bundle smoke app; iOS is a `SOFTWARE` simulator smoke app. `SDL_GPU` is the default on both but is not re-qualified there (§5.2, `docs/apple-platforms.md`). |
 
 **XNA API surface.** Every public type and every documented member of the Microsoft XNA 4.0 runtime
 reference is represented; the generated census is
@@ -69,6 +70,8 @@ behavioural fidelity is held by each module's tests. One member is deliberately 
 **Bindings.** C and C# are the maintained bindings. CNA.NET (`libcna/cna-dotnet` `develop`) admits
 exactly C ABI 0.47.0 and pins one CNA `next` commit (`CNA_UPSTREAM_COMMIT` in its
 `.github/workflows/build.yml`); its CI builds and loads the native library from that commit. CNA
+`next` is ABI 0.48.0 since the 2026-10-13 renderer retirement (four renderer constants removed, no
+route changed); CNA.NET names none of them and must admit 0.48.0 before it moves its pin. CNA
 `main`/`develop` are the v0.1.0 release (ABI 0.46.0), which CNA.NET refuses. The archived bindings in
 `cna-lab` stay pinned to older ABIs and are not maintained.
 
@@ -77,10 +80,14 @@ exactly C ABI 0.47.0 and pins one CNA `next` commit (`CNA_UPSTREAM_COMMIT` in it
 `docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
 planned.
 
-**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. On 2026-10-10 the
-HEADLESS Debug tree registered 8,808 tests and passed all 8,802 it ran (546 of them skip by design
-on that renderer; the 6 Wine-based XNA interop tests run separately), and the run left the checkout
-clean. CI: `general-tests-ci.yml` runs the unfiltered suite for `OPENGLES3` and fails on a dirty
+**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. Full Debug runs on
+2026-10-14, after the renderer retirement, through the private runner on RADV: `cmake-build-multi`
+(`OPENGLES3` default with `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`)
+11,313 tests, 5 failed, 197 skipped; `cmake-build-sdlgpu` (with the C API) 11,024, 21 failed;
+`cmake-build-webgpu` 10,854, 7 failed; `cmake-build-headless` 8,633, 3 failed;
+`cmake-build-software` 10,843, 4 failed. Every failure is a §5.1 entry (items 6, 7, 8 and 17),
+except SOFTWARE's three C API inventory gates, which measured another session's uncommitted header
+change and pass on the committed tree. CI: `general-tests-ci.yml` runs the unfiltered suite for `OPENGLES3` and fails on a dirty
 checkout; the other workflows are subsystem- or platform-specific.
 
 ## 3. Where current information lives
@@ -115,34 +122,24 @@ The single authoritative list. Every entry below was checked against the code on
 
 ### 5.1 Defects
 
-1. **`VULKAN` applies no realistic `RasterizerState.DepthBias`.** `VulkanRenderer.cpp` passes XNA's
-   normalized bias to `vkCmdSetDepthBias` unscaled (`draw.depthBias`), so a typical bias such as
-   `-1e-4` has no visible effect. XNA's value must be multiplied by `2^(depth bits)`, as EasyGL,
-   DirectX 11 (`XnaDepthBiasToD3D` in `modules/renderers/common/d3d/src/D3DStateMapping.cpp`),
-   SDL_GPU, WebGPU and Metal already do. `Vulkan_DepthBias` uses `-1e6` and so still encodes the old
-   premise, and `RasterizerDepthBiasContractTest` does not cover Vulkan. Measurement:
-   `misc/known_bugs.md` §1.
-2. **`SDL_RENDERER` ignores `TextureAddressMode::Wrap` and `Mirror`.** `SdlRenderer.cpp` has no
-   sampler address-mode handling, so wrapped or mirrored sprites draw clamped, silently
-   (`docs/sdl-renderer-2d-completeness.md`, Tasks 686/687).
-3. **`DIRECTX9` `BasicEffect` draws 12 of its 32 shader variants.** The other 20 (Position-only,
+1. **`DIRECTX9` `BasicEffect` draws 12 of its 32 shader variants.** The other 20 (Position-only,
    untextured lighting, lit with vertex colour) throw a named `std::runtime_error` from
    `D3D9EffectDraw.cpp`. Every register table exists; only the dispatch is missing.
-4. **Test defects, not renderer defects.** With `SDL_GPU` as the default renderer, two
+2. **Test defects, not renderer defects.** With `SDL_GPU` as the default renderer, two
    `SdlGpuIndexedDrawRangeTest` buffer-rewrite cases fail, and with `WEBGPU` two cases of the same
    class: they rewrite a buffer that is still bound, which the device correctly refuses
    (`RRC-026`, `a18a5d374`).
-5. **The XACT natural-completion tests are timing-dependent.** `CueTests.cpp`, `SoundBankTests.cpp`
+3. **The XACT natural-completion tests are timing-dependent.** `CueTests.cpp`, `SoundBankTests.cpp`
    and `WaveBankTests.cpp` wait with fixed 50 ms sleeps; under parallel load a rotating subset fails
    (`misc/known_bugs.md` §5). They pass on an idle machine.
-6. **`FNA3D` does not saturate the stock effects' `COLOR0` output**, which Direct3D 9 (and so XNA)
-   clamps to [0, 1] before interpolation — the rule `AM4-106` gave WebGPU and Metal. Three
+4. **`FNA3D` does not saturate the stock effects' `COLOR0` output**, which Direct3D 9 (and so XNA)
+   clamps to [0, 1] before interpolation — the rule `AM4-106` gave WebGPU. Three
    `CnaTests` pixel checks fail with `FNA3D` as the renderer (measured 2026-10-10, SDL_GPU Vulkan
    driver, AMD RADV): `BasicEffectVertexLightingSaturationTest.ALitSumAboveOneIsSaturatedBeforeTheTexel`,
    `.TheVertexColourScalesTheLitSumBeforeItIsSaturated`, and
    `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` (line 536: a
    negative diffuse colour times a negative texel gives 128 instead of 0).
-7. **`SendDataOptions` is not a flags enum, so `Chat` cannot be combined** (checked 2026-10-11;
+5. **`SendDataOptions` is not a flags enum, so `Chat` cannot be combined** (checked 2026-10-11;
    found by `GS-AUDIT-016`). XNA declares it `[Flags]` and documents `Chat` combined with
    `Reliable` and/or `InOrder`, with ordered chat packets ordered only among themselves
    (`xna4-spec/Microsoft.Xna.Framework.Net/SendDataOptions.xml`). CNA's
@@ -150,26 +147,15 @@ The single authoritative list. Every entry below was checked against the code on
    the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
    1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
    combined value 5-7 falls through to the same default.
-8. **Shared-test failures with `VULKAN` and `WEBGPU` as the default renderer** (measured
-   2026-10-13 on RADV through the private runner, full `cmake-build-vulkan` and
-   `cmake-build-webgpu` runs; every one fails identically on `9edbf314e`, the commit before the
-   `MRT` campaign, built in a throwaway worktree with the same options):
-   - `VULKAN`'s `PackVulkanStreamsEXT` builds the combined multi-stream `VertexDeclaration` without
-     XNA's usage-index remap, so two streams with the same usage throw "duplicate usage and usage
-     index": `InstancedDrawMultiStreamTest.DuplicateSemanticStreamsRemapToUnusedIndices`,
-     `OrdinaryDrawBindingOffsetTest.MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset`. A semantic
-     supplied only from binding slot 15 is refused as "does not supply every input"
-     (`OrdinaryDrawMultiStreamTest.SixteenBindingsCanSupplyAConsumedSemanticFromSlot15`).
-   - `VULKAN`'s `OcclusionQuery::IsComplete` does not flush, so the two `AM4-108` lifecycle tests
-     that poll before `Present` fail (`PollingIsCompleteAloneReachesTheResult`,
-     `ACountSpansAClearBetweenItsDraws`).
-   - `Vulkan_DrawRangeValidation` runs EasyGL's draw-range test, which expects EasyGL's native
-     range forwarding; Vulkan keeps managed range validation, so six forwarding checks fail.
-   - `WEBGPU` counts only the draws after a `Clear` inside one occlusion run
-     (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`: 192000 of 384000), although
-     `AM4-108` recorded it passing on 2026-10-08.
-9. **Shared-test failures with `SDL_GPU` as the default renderer** (full `cmake-build-sdlgpu` run,
-   2026-10-13; each also fails or passes identically on `9edbf314e`):
+6. **Shared-test failure with `WEBGPU` as the default renderer** (full `cmake-build-webgpu` runs on
+   RADV through the private runner, 2026-10-13 and 2026-10-14; it fails identically on
+   `9edbf314e`; the run's other failures are the conformance programs of item 8): `WEBGPU`
+   counts only the draws after a `Clear` inside one occlusion run
+   (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`: 192000 of 384000), although
+   `AM4-108` recorded it passing on 2026-10-08.
+7. **Shared-test failures with `SDL_GPU` as the default renderer** (full `cmake-build-sdlgpu` runs,
+   2026-10-13 and 2026-10-14; each also fails or passes identically on `9edbf314e`; the other
+   failures of those runs are items 8 and 17):
    - A game on a non-video platform asks `SDL_GPU` for its device and gets "no installed SDL_gpu
      driver accepts SPIR-V": `GameEventSemanticsGoldenTest` `/Headless` and `/Terminal`, and
      `GameWindowPlatformTest.DelegatesStateAndGeometryToTheSelectedPlatformWindow` inside
@@ -179,7 +165,7 @@ The single authoritative list. Every entry below was checked against the code on
      `XnaModelSourceContentPipelineTest.AMaterialsTextureIsBuiltAsItsOwnAsset` also failed once in
      that run and passes alone on both commits.
 
-10. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
+8. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
     The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
     of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites; measured 2026-10-13 on
     Linux through the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan) and `WEBGPU`:
@@ -197,18 +183,114 @@ The single authoritative list. Every entry below was checked against the code on
       edge texel (`render_target_own_msaa` D); a `SkinnedEffect` over a declaration without normal,
       weights or bone indices draws nothing and reports success (`stock_effect_unsupplied_input` C).
     - SDL_GPU: cube faces in a multi-render-target set throw `std::runtime_error` while
-      `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4; DIRECTX9 has the same refusal); a
+      `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4 and the three `RenderTargetSemantics`
+      plural cube-face cases; DIRECTX9 has the same refusal, and HEADLESS refuses the three
+      `RenderTargetSemantics` cases with "cannot bind a cube face alongside other render targets",
+      `cmake-build-headless` 2026-10-14); a
       `ShaderEffect` uniform array beyond its declared capacity is truncated silently
       (`shader_effect_refusal` E); the portable 3D `ShaderEffect` probe draws nothing on the
       one-stream routes (`shader_effect_3d_layout` A-C, G) and two vertex streams are refused (D/E).
+    - SDL_GPU, compiled XNA effects (`SdlGpuCompiledEffectDrawTest`, the shared helpers in
+      `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`, 2026-10-14): a quad covering
+      pixels 1-2 under Direct3D 9's pixel-centre convention lands half a pixel up and left
+      (`SharedHalfPixelCoverageContract`); a texture set on the device slot after `Apply()` is not the
+      one the draw samples (`SharedDeviceTextureSlotAfterApplyContract`); and a pixel shader writing
+      `COLOR2` into a one-target pass draws with a Vulkan validation warning (output location 2 has
+      no attachment), which fails `SdlGpu_CompiledEffectRuntime`.
     - WebGPU: a `ShaderEffect` disposed after `End()` and before the flush drops its draw
       (`deferred_effect_query_lifetime` E2-E4; `webgpu_effect_outlived_by_draw_test` Check B asserts
       the drop, contrary to XNA); two vertex streams into a `ShaderEffect` are refused, and a missing
       input is refused only at replay, after which the queued draw throws again from a destructor and
       terminates the process (`shader_effect_3d_layout` D/E, F/H, run last for that reason).
+    - SDL_GPU and WebGPU: an unlit `BasicEffect` over the 36-byte Position+Normal+Colour+TexCoord
+      record does not saturate vertex colour × `DiffuseColor` at the vertex, as Direct3D 9's `oD0`
+      does (`*_Conformance_basiceffect_unlit_vertex_color_36byte` B: 255 instead of XNA's 178; EasyGL
+      passes). The program was registered only by the retired `VULKAN` suite until 2026-10-13.
+    - SDL_GPU and WebGPU, in three `CnaTests` cases first pinned on the retired `METAL` (now gated to
+      the renderers that pass them): a `Vector4` `RenderTargetCube` face's typed `GetData` throws
+      "did not return the complete declared-format cube region"
+      (`HdrRenderTargetRoundTripTest.AFloatCubeTargetTransfersItsTypedTexels`); `Short2` positions
+      are not read as their integer values (SDL_GPU draws the wrong pixel, WebGPU aborts;
+      `IntegerVertexElementTest`); and `SkinnedEffect` refuses `Short4` blend indices, which XNA
+      accepts (`SkinnedEffectBoneIndexFormatTest`). Measured 2026-10-13 by selecting each renderer
+      at run time in `cmake-build-multi`.
     - SDL_GPU and WebGPU ignore `SpecularTextureCoordinateSetEXT` (81 instead of 66, measured by
       selecting them at run time against `pbr_texture_slot_mapping_test.cpp` in the EasyGL-default
       multi-renderer tree).
+
+9. **`EasyGL`'s per-pixel `SkinnedEffect` draws a textured, ambient-only quad white.** With a real
+    red `Texture2D` bound and `PreferPerPixelLighting=true` the draw reads (255,255,255,255); the
+    per-vertex program draws red, as Software did when measured. It does not depend on the lights,
+    the specular colour, the matrices or the draw order (Radeon 780M, `OPENGL33`, 2026-09-21). The
+    fault is in the diffuse path, `litRGB * texColor.rgb` in `EnsureSkinnedProgram`: either
+    `uEmissiveColor` arrives wrong for this program or it does not see the bound texture.
+    `StockEffectNullTextureTest.SkinnedEffectSamplesOpaqueBlack` skips exactly this case
+    (`CNA_RENDERER_IS(OpenGL33, OpenGLES3)`); `WEBGL2` shares the program and was not measured.
+    (`GSC-F1`, `VKPAR-0011`.)
+10. **The stock PBR programs of `SDL_GPU`, `WEBGPU` and `DIRECTX9` have no guard for a zero normal or
+    tangent.** They normalise the interpolated normal and the Gram-Schmidt tangent without checking
+    its length (`sdl-gpu/src/shaders/pbr3d.frag.glsl`, the two WGSL PBR programs in
+    `webgpu_shaders.hpp`, `directx9/src/shaders/cna/Pbr3D.hlsl` and `PbrSkinned3D.hlsl`). A singular
+    World or a missing, zero or normal-parallel tangent reaches `normalize(0)`: NaN on drivers that
+    compute `x*inversesqrt(0)`, or a surface that loses all direct light on llvmpipe. EasyGL falls
+    back to a fixed normal and a perpendicular tangent; `easygl_pbr_degenerate_basis_test` is the
+    oracle. (`GSC-0009`, found by living-room-simulator.)
+11. **Only EasyGL honours glTF `doubleSided` on `PbrEffect`/`SkinnedPbrEffect`.**
+    `GpuDrawParams::pbrDoubleSided` is read only by `EasyGLRenderer.cpp`, which flips N, T and B on
+    the back face and accounts for a mirroring World. `SDL_GPU`, `WEBGPU` and `DIRECTX9` ignore it,
+    so the back of a leaf is shaded with the normal of the side facing away. Each needs the flag,
+    the mirror sign and its own front-facing input checked against its winding convention; the
+    oracle is `easygl_pbr_double_sided_test`. (`GSC-0010`, living-room-simulator R-3.)
+12. **Test defect: the EasyGL `EnvironmentMapEffect` golden is stale and its tolerance hides it.**
+    `examples/golden/easygl_environmentmapeffect_golden_test.png` predates `FX-123`/`FX-124`, which
+    moved EasyGL's environment-map program to D3D9's vertex-colour clamp and precision.
+    `EasyGL_EnvironmentMapEffect_Golden` (tolerance 20) measured a maximum difference of 20 on
+    2026-09-07, one step from failing; the other golden scenes measure 0-1. Confirm today's render
+    is the corrected picture, re-capture with `CNA_UPDATE_GOLDEN=1` and lower the tolerance in the
+    same commit. (`VULKAN-186`, finding F-33.)
+13. **Test-coverage defect: `DeclarationGuardTest`'s refusal legs never run on a renderer that also
+    translates declarations.** `TranslatesDeclarations()` (`VertexDeclarationLayoutTests.cpp`) is a
+    per-renderer boolean, true for `OpenGLES3`, `OpenGL33`, `WebGL2`, `WebGPU`, `Software` and
+    `SdlGpu`, and each refusal leg opens with `if (TranslatesDeclarations()) GTEST_SKIP()`. Those
+    renderers translate what they can and still refuse the rest by name, so none of them asserts
+    that a refused draw rasterizes nothing, leaves the device usable, and is refused identically by
+    every upload route. Fix: probe candidate declarations for one the renderer really refuses and
+    run the legs against it. (`VULKAN-203`, finding F-38.)
+
+14. **Compiled XNA effects on the MojoShader SPIR-V route (`SDL_GPU`, `WEBGPU`) get two Shader
+    Model 1-3 cases wrong** (found 2026-10-08 by `AM4-144` on the retired `METAL` route, fixed only
+    in that renderer's adapter, not re-measured since): `vPos` is not the integer pixel Direct3D 9
+    defines (a half-pixel offset), and `TEXBEM`/`TEXBEML` read zero bump matrices because neither
+    adapter fills the two float4s per sampler MojoShader appends to the uniform block. Shared with
+    every SPIR-V backend; the oracles are EasyGL's Shader Model 1-3 compiled-effect sections.
+15. **The MinGW-w64 cross-build cannot compile `CnaTests.exe`** (found 2026-10-13 configuring
+    `cmake-build-mingw`; none of the files is renderer code). GamerServices and content-pipeline
+    tests call POSIX `setenv`/`unsetenv`/`getpid` and include `sys/wait.h`, and
+    `tools/net/service_session_client_harness.cpp` includes `poll.h`; MinGW has none of them.
+    `scripts/check_no_posix_setenv.py` fails on the same files. The rest of the tree (the
+    `DIRECTX9` and `SDL_GPU` suites, the C API smokes, the examples) builds.
+
+16. **`DIRECTX9` under Wine+DXVK fails part of its own and the shared suite** (first run of a
+    `DIRECTX9`-default MinGW tree, `cmake-build-mingw`, 2026-10-13; not diagnosed, and some may be
+    DXVK's). The `DIRECTX9` suite passes 43 of 57: eleven example programs (`DirectX9_Smoke`,
+    `_CompiledEffects`, `_Draw`, `_DrawEx`, `_Instanced`, `_DrawOffset`, `_Pbr`,
+    `_SkinnedVertexColor`, `_SpriteBatch`, `_EffectRenderer`, `_SpriteBatch_CustomEffect`) read the
+    back buffer on a Reach device and abort (a test defect: they never request HiDef), and three
+    shared contracts fail on pixels -- `TextureFilterMipContract` L3/L9 (negative `MaxMipLevel`),
+    `GraphicsDevice_OrderedClear` V3/V4 (a depth or stencil `Clear` under a scissor is scissored;
+    XNA clears the whole attachment) and `Backbuffer_PassOrder` C5/C6/D1/D2/O1-O4 (depth across
+    back-buffer cycles). `CnaGraphicsTests.exe`: 2,612 pass, 288 skip, 36 fail (among them the
+    cube-face MRT refusal of item 8 and occlusion-query lifecycle cases); `CnaContentTests.exe`:
+    1,703 pass, 29 skip, 1 fail (`RendererStrideConformance`, an unlit stride-32 record). Under the
+    same Wine, `CApi_MediaPlayerSmoke` fails with `SOFTWARE`, and a pre-campaign build of it hangs.
+17. **A C API game still alive at process exit crashes `SDL_GPU` in a Debug build** (first C API run
+    with `SDL_GPU`, `cmake-build-sdlgpu`, 2026-10-14): the five `CApi_TeardownLifetime_*` cases that
+    leave a game alive segfault. The C API's static `RuntimeState` destroys the game during
+    `exit()`, `SdlGpuRenderer`'s destructor calls `SDL_ReleaseWindowFromGPUDevice`, and SDL's
+    `VULKAN_Wait` calls into `libVkLayer_khronos_validation.so`, which has already been finalised.
+    The validation layer is loaded because Debug builds create the device in debug mode; Release is
+    not measured. Every other C API case passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with
+    the extension layer.
 
 ### 5.2 Limitations
 
@@ -218,16 +300,24 @@ The single authoritative list. Every entry below was checked against the code on
   to `Color` as XNA's preferred-format rule allows (`misc/known_gaps.md` §1).
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
   (`misc/known_gaps.md` §4, `docs/browser-network-readiness.md`).
-- `DIRECTX9`/`DIRECTX11` are validated under Wine (+DXVK) only; real-Windows hardware validation is
-  not current. The C API's pure-C suites run under Wine from the MinGW-w64 build; `MediaLibrarySmoke`
-  reports a skip on Windows, whose known folders cannot be pointed at its fixture. iOS has simulator smoke evidence only; `METAL` is validated by the macOS CI contract.
-- The 2026-10-12 C API audit observed Wine/DXVK DirectX11 timeouts in Draw3DSmoke, ContentSmoke
-  and TeardownLifetime children-alive/partial/cycles. Partial teardown also times out serially;
-  all five pass with HEADLESS in the same binary. Root cause is not established. See the audit's
-  validation record; this is not a green full DirectX lifetime run.
+- `DIRECTX9` is validated under Wine (+DXVK) only, and `SDL_GPU`'s Direct3D 12 backend under Wine
+  (+vkd3d-proton) only; real-Windows hardware validation is not current. The C API's pure-C suites
+  run under Wine from the MinGW-w64 build; `MediaLibrarySmoke` reports a skip on Windows, whose
+  known folders cannot be pointed at its fixture.
+- **`SDL_GPU` is the default renderer on Windows, macOS and iOS but is not qualified there** since
+  the 2026-10-13 retirement of `DIRECTX11` and `METAL` (`docs/removed-renderers.md`). Evidence that
+  exists: the full tree passed with `SDL_GPU` (Metal backend) on a Mac mini M4 in the AM4 campaign,
+  before the retirement; Direct3D 12 runs under Wine. Not done: a native Windows (Direct3D 12) run,
+  a re-run on Apple hardware, and any iOS build (`SDL_GPU` has never been built for iOS; CI tries it
+  as a non-gating leg). Known gaps against the retired native backends, each to be implemented or
+  capability-gated in that campaign: `ShaderEffect` (`CustomEffects`) is compiled out on Windows,
+  Apple and the browser because no runtime GLSL-to-SPIR-V-to-DXIL/MSL path exists; occlusion queries
+  are unavailable (SDL_gpu 3.5 has none); `RendererFeature::BaseInstanceDrawing` is implemented by
+  no surviving renderer, although SDL_gpu's draw calls take a first instance.
+- iOS has simulator smoke evidence only, with `SOFTWARE`.
 - `WEBGPU` is experimental; its open items are in the status summary of `plans/plan_webgpu.md`.
-- `SDL_RENDERER` is 2D-only (3D calls throw), `SOFTWARE` is a bounded CPU renderer, and `HEADLESS`
-  and `STUB` make no pixel claim (`docs/renderer-registry.md`, "Capability classes").
+- `SOFTWARE` is a bounded CPU renderer, and `HEADLESS` and `STUB` make no pixel claim
+  (`docs/renderer-registry.md`, "Capability classes").
 - Per-subsystem capability boundaries, by design rather than defect, are in the documents listed
   in §3.
 - In a `CNA_SHARED_LIBRARY=ON` tree, `CMAKE_LINK_DEPENDS_NO_SHARED` (`CMakeLists.txt`) keeps the
@@ -268,8 +358,8 @@ python3 scripts/check_renderer_identities.py
 python3 tools/platform/sdl_inventory.py --check && python3 tools/platform/sdl_classify.py --check
 ```
 
-- GPU renderers are tested in their own trees (`cmake-build-vulkan`, `cmake-build-multi`, …) through
-  the same private runner. Never run several renderers' full suites at the same time: GPU and driver
+- GPU renderers are tested in their own trees (`cmake-build-sdlgpu`, `cmake-build-webgpu`,
+  `cmake-build-multi`, …) through the same private runner. Never run several renderers' full suites at the same time: GPU and driver
   contention produces false failures.
 - `CMakePresets.json` has the focused unit, sanitizer, web, Apple and multi-renderer presets.
 - System packages for a fresh Debian machine: [`programs.md`](programs.md).

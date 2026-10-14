@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-194.
+// VULKAN-194 (the retired VULKAN renderer's plan, kept in Git history).
 //
 // Does SpriteBatch.Begin leave its SamplerState in GraphicsDevice.SamplerStates[0], and does a 3D
 // draw AFTER the batch then sample with it?

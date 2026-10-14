@@ -1,6 +1,6 @@
 # Does XNA scale a specular highlight by the per-vertex colour?
 
-`plans/plan_vulkan.md` **VULKAN-205**.
+**VULKAN-205** (the retired VULKAN renderer's plan, kept in Git history).
 
 ## Why the question needed a probe at all
 

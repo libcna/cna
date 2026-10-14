@@ -1,6 +1,6 @@
 # Does `SpriteBatch` leave its sampler in `GraphicsDevice.SamplerStates[0]`?
 
-`plans/plan_vulkan.md` **VULKAN-194**.
+**VULKAN-194** (the retired VULKAN renderer's plan, kept in Git history).
 
 ## The question
 

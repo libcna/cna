@@ -43,9 +43,8 @@ paths.
    disposed at once (sections 3–5) but does not cancel accepted work. The native object is
    destroyed at once if nothing uses it, kept while a deferred CPU record references it, and retired
    against the submission's completion token while submitted GPU work references it. Routine
-   disposal never waits for the whole device or queue: Vulkan uses fence values, Metal command-buffer
-   completion and WebGPU work-done completion, while GL and D3D11 rely on their native ordering and
-   reference lifetime and delete on the owning context thread. Device shutdown is the one terminal
+   disposal never waits for the whole device or queue: WebGPU uses work-done completion, while GL
+   relies on its native ordering and reference lifetime and deletes on the owning context thread. Device shutdown is the one terminal
    boundary. It may discard unsubmitted records, wait for submitted work and drain retirement before
    destroying the device. A lost device may abandon handles under its API's loss rules.
 
@@ -53,9 +52,6 @@ paths.
    requested resource, range and mip need, then waits for that copy's completion. It never waits for
    device-wide idle and flushes no unrelated later work:
    - GL: the prior commands, then `glReadPixels` or buffer mapping on the owning context;
-   - D3D11: a copy to a staging resource, then `Map`;
-   - Vulkan: the copy is recorded, its ordered prefix submitted, and its fence awaited;
-   - Metal: a blit to a CPU-visible buffer, then a wait for that command buffer;
    - WebGPU: a copy to a mappable buffer, pumping only until that map completes.
 
    Frame-slot reuse and presentation may apply bounded back-pressure. Disposal, upload and draw
@@ -73,7 +69,7 @@ paths.
 
 7. **Synchronization belongs to the renderer.** The renderer derives barriers, layout transitions,
    pass breaks and cache visibility from declared usage and call order. The public API exposes no
-   Vulkan layout or stage mask, Metal hazard mode, GL barrier bit or WebGPU usage object, and the
+   native layout, stage mask, hazard mode, GL barrier bit or WebGPU usage object, and the
    application never needs one for correctness.
 
 8. **No native objects in the public API.** Public descriptors and handles hold CNA value types
@@ -151,7 +147,7 @@ std::vector<GraphicsResource*> toDispose = std::move(resources_);
 resources_.clear();
 for (GraphicsResource* res : toDispose)
     static_cast<System::IDisposable*>(res)->Dispose();
-destroyNativeResources();   // SDL context, Vulkan instance, etc.
+destroyNativeResources();   // SDL context, GPU device, etc.
 ```
 
 This means:
@@ -251,24 +247,6 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 - If the GL context is lost (window resize, driver crash), renderers may hold invalid
   IDs. Current EasyGL does not implement context-loss recovery; the safest approach is
   to dispose all resources and recreate from scratch.
-
-### Vulkan
-
-- Vulkan handles (`VkBuffer`, `VkImage`, `VkDeviceMemory`) are freed during renderer
-  destruction or the renderer's frame-fence-gated retirement pass. The logical device
-  (`VkDevice`) is still valid at that point.
-- The disposal order guaranteed by `GraphicsDevice::Dispose()` (resources first, device
-  renderer second) satisfies this requirement automatically.
-- Textures, buffers, effects, render targets and queries detach deferred wrapper pointers and
-  retire referenced native handles after the consuming frame fence. Applications must not call
-  `vkDeviceWaitIdle` (nor can they access the native device).
-
-### SDL_Renderer
-
-- `SDL_Texture` objects are destroyed with `SDL_DestroyTexture`. The `SDL_Renderer`
-  must still exist at that point.
-- The disposal order in `GraphicsDevice::Dispose()` (textures first, renderer second)
-  satisfies this requirement.
 
 ---
 

@@ -1,26 +1,20 @@
 # Graphics renderer feature matrix — established GPU paths and CPU/raster companions
 
 Master, up-to-date cross-renderer feature matrix for CNA's established renderers, written for
-Task 451 (Phase 51), extended 2026-07-14 with a `DIRECTX11` column (`../plans/plan_dx.md`, Phase DX11
-`DX-96`), then a `DIRECTX9` column (`../plans/plan_dx9.md`, `D9-130`) 2026-07-15, once each
-renderer's feature set was broad enough for a meaningful row-by-row comparison. The experimental
-WebGPU renderer is intentionally tracked separately in [`webgpu-renderer.md`](webgpu-renderer.md)
-and `../plans/plan_webgpu.md` until its feature surface is broad enough for meaningful parity
-columns.
+Task 451 (Phase 51) and extended 2026-07-15 with a `DIRECTX9` column (`../plans/plan_dx9.md`,
+`D9-130`). The experimental WebGPU renderer is intentionally tracked separately in
+[`webgpu-renderer.md`](webgpu-renderer.md) and `../plans/plan_webgpu.md`; SDL_GPU
+(`../plans/plan_sdlgpu.md`) and FNA3D ([`fna3d-renderer.md`](fna3d-renderer.md)) have no columns
+here. A cell is only marked ✅ if a real, GPU-facing pixel/behavior check actually exercised it;
+anything implemented but not independently pixel-tested is marked 🟨, and anything not
+attempted/not built at all is marked ⬜ (distinct from this doc's own ❌, which means "tested and
+found to genuinely not work").
 
-**A `DIRECTX11` cell means "verified through Wine+DXVK on this dev machine's real GPU," not "verified
-on real Windows hardware"** — see `docs/directx11-renderer.md`'s own "Known limitations" for the
-real-Windows gate (`plans/plan_dx.md` `DX-90`/`DX-91`) that still applies on top of every ✅ below.
-The 2026-09-09 DX17 corpus passes **266/266 D3D11**. A cell is only marked ✅ if a real,
-GPU-facing pixel/behavior check actually exercised it; anything implemented but not independently
-pixel-tested is marked 🟨, and anything not attempted/not built at all is marked ⬜ (distinct from
-this doc's own ❌, which means "tested and found to genuinely not work").
-
-**The `DIRECTX9` column measures something narrower and stricter than the other columns: pixel-for-pixel
+**The `DIRECTX9` column measures something narrower and stricter than the EasyGL column: pixel-for-pixel
 indistinguishability from the real XNA 4.0 runtime**, not just "feature works." A `DIRECTX9` ✅ means the
 feature is exercised by `tools/xna-oracle/`'s checked-in scene corpus (`D9-120`, `D3D9_XNA_Diff`
 CTest) and its render is byte-identical (`--tolerance 0`) to the real XNA 4.0 runtime's own render of
-the same scene — a strictly stronger bar than any other column's ✅. Like `DIRECTX11`, this is
+the same scene — a strictly stronger bar than the EasyGL column's ✅. This is
 "verified through Wine+DXVK on this dev machine's real GPU," not real Windows hardware (`D9-140`,
 open). See `docs/directx9-renderer.md` and `docs/d3d9-divergence-report.md` for the full detail this
 column's cells summarize.
@@ -76,21 +70,20 @@ reference and a dependency-free placeholder, not a pixel-parity or diagnostic to
 
 The glTF differential campaign has a deliberately narrower executable renderer set than the
 project-wide tables below: STUB establishes importer independence, HEADLESS observes the native
-draw boundary without rasterising, and OPENGLES3 plus Vulkan provide independent real graphics APIs
-and framebuffer evidence. This table records the four renderer-sensitive features named by
+draw boundary without rasterising, and OPENGLES3 provides real graphics-API and framebuffer
+evidence. This table records the four renderer-sensitive features named by
 `plans/plan_gltf.md`; it does not turn a boundary-only result into pixel support.
 
 Status here is specific: ✅ means a real native draw or framebuffer assertion; ◇ means the complete
 value/topology reaches an observable non-rasterising boundary; ❌ means the renderer explicitly has
 no such route. The general feature tables remain authoritative for renderers outside this campaign,
-while `gltf-renderer-pbr-fallbacks.md` carries the separate 15-PBR-renderer shader inventory.
+while `gltf-renderer-pbr-fallbacks.md` carries the separate PBR shader inventory.
 
 | Renderer | 32-bit index draw | `POINTS` | line modes | MRT | glTF PBR sRGB contract | Evidence boundary |
 |---|---:|---:|---:|---:|---:|---|
 | STUB | ❌ | ❌ | ❌ | ❌ | ◇ | Imports and L1–L6 effect capture run, but `SupportsCapability(ThreeD)` is false and no draw is submitted. |
 | HEADLESS | ◇ | ◇ | ◇ | ◇ | ◇ | `HeadlessIndexBufferRenderer`, topology/MRT trace and `GpuDrawParams` are observable; no pixel is produced. |
 | OPENGLES3 / EasyGL | ✅ | ✅ | ✅ | ✅ | ✅ | Full glTF selection 520/520; `PointListPrimitiveTest`, its interleaved line control, EasyGL MRT tests and `EasyGL_Pbr_SrgbTransfer`. |
-| Vulkan | ✅ | ✅ | ✅ | ✅ | ✅ | Full glTF selection 520/520; 15/15 `PointListPrimitiveTest` cases include a 32-bit indexed point and the real PBR point pipeline, assert zero validation messages, and sit beside Vulkan MRT and `Vulkan_Pbr_SrgbTransfer` tests. |
 
 MRT is recorded because a conformance/viewer harness may render diagnostic outputs to several
 attachments; core glTF itself has one material colour result and does not require MRT. Likewise,
@@ -98,7 +91,7 @@ attachments; core glTF itself has one material colour result and does not requir
 normal/MR/occlusion and factors linear, mix fog in linear space, then optionally encode the final
 RGB. It is not a claim that every native texture or swap-chain format is sRGB. The ordinary
 `GltfRendererPbrFallbackPolicy.EveryPbrShaderHonorsColorSpaceDeclarations` source audit prevents the
-other eleven PBR implementations from silently diverging even when this machine cannot execute
+other PBR implementations from silently diverging even when this machine cannot execute
 them.
 
 ### All-renderer 32-bit index audit (`GLTF-163`)
@@ -107,8 +100,7 @@ This is a source-capability matrix, not a claim that all platform APIs were exec
 host. It covers every renderer directory that implements
 `CreateIndexBuffer16`. ✅ means the renderer owns an explicit 32-bit factory and preserves uint32
 values to its draw boundary; ◇ means the exact width is observable but that renderer deliberately
-does not rasterise; `conditional` means the native device extension decides; ❌ means construction
-is rejected clearly because the renderer has no corresponding 3D route.
+does not rasterise.
 
 The shared `IGraphicsRenderer::CreateIndexBuffer32` no longer delegates to
 `CreateIndexBuffer16`: it throws `32-bit index buffers are not supported by this renderer`.
@@ -120,17 +112,13 @@ runtime contract is independently exercised by
 
 | Renderer | Status | 32-bit route / refusal boundary |
 |---|---:|---|
-| DirectX 11 | ✅ | Explicit factory; `DXGI_FORMAT_R32_UINT`. |
 | DirectX 9 | ✅ | Explicit factory; `D3DFMT_INDEX32`. |
 | EasyGL | ✅ | Explicit factory; draw selects `GL_UNSIGNED_INT`. |
 | FNA3D | ✅ | Explicit factory; FNA3D 32-bit index element size. |
 | Headless | ◇ | Width-locked uint32 shadow and validated indexed-draw trace; no pixels. |
-| Metal | ✅ | Explicit factory; `MTLIndexTypeUInt32`. |
 | SDL_GPU | ✅ | Explicit width-locked factory; `SDL_GPU_INDEXELEMENTSIZE_32BIT`. |
-| SDL_Renderer | ❌ | 2D-only; inherits the shared refusal. |
 | Software | ✅ | Width-locked uint32 CPU buffer and raster path. |
 | Stub | ◇ | Explicit width-locked handle accepts uint32 exactly; renderer intentionally draws nothing. |
-| Vulkan | ✅ | Explicit factory; `VK_INDEX_TYPE_UINT32`. |
 | WebGPU | ✅ | Explicit factory; `WGPUIndexFormat_Uint32`. |
 
 SDL_GPU and Stub were exact-width implementations that previously relied on the unsafe shared
@@ -146,10 +134,9 @@ The shared uint32 factory throws the width-specific message above for every rend
 explicit 32-bit route.
 
 The Direct3D comparison audit found the remaining silent point-topology defaults. D3D9's five draw
-implementations and the D3D11 count/native mappers select their APIs' real point-list
-topologies. The shared validation fixture accepts all five public primitive types while rejecting an
-invalid ordinal. No Direct3D mapper retains an unnamed default that can silently turn a future
-topology into a triangle list.
+implementations select the API's real point-list topology. The shared validation fixture accepts
+all five public primitive types while rejecting an invalid ordinal. No D3D9 mapper retains an
+unnamed default that can silently turn a future topology into a triangle list.
 
 The `SKIA` identity was retired on 2026-08-30 and is not restored; this document previously
 carried a 23-row "Skia CPU-raster 2D companion matrix" beside the tables below. It was removed on
@@ -158,40 +145,28 @@ at a `docs/skia-*.md` page or `plans/plan_skia.md` that was deleted with the ren
 matrix could no longer be checked against anything. `docs/removed-renderers.md` is the tombstone,
 and the removal commit is the record.
 
-**Supersedes `docs/coverage.md`**, which is dated 2026-06-21
-and predates almost this entire session's work
-(dozens of real bugs fixed across all 4 renderers, an entire SDL_Renderer 2D-only audit phase,
-Model/OcclusionQuery correctness phases) and never covered SDL_Renderer at all. `docs/coverage.md`
-is kept for its still-accurate non-Graphics namespace estimates (Audio/Media/Content/Net/
-GamerServices); this doc is Graphics-only and current.
-
 Status legend: ✅ correct and verified · ⚠️ partial/emulated/environment-limited · ❌ known gap, not
 fixed · ⛔ BLOCKED, needs a project-owner architecture decision · 🟨 implemented but not
-independently verified (D3D9/D3D11 columns only, see above) · ⬜ not attempted this session
-(D3D9/D3D11 columns only).
+independently verified (D3D9 column only, see above) · ⬜ not attempted this session (D3D9 column
+only).
 
 ## 2D SpriteBatch / SpriteFont
 
-| Feature | EasyGL | Vulkan | SDL_Renderer | D3D9 | D3D11 |
-|---|---|---|---|---|---|
-| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | ✅ — covered by the Vulkan SpriteBatch suite: `Vulkan_SpriteBatch_LayerDepthOrder` and `_MultiBeginEnd` for sort modes and batching, `_TransformMatrix` for the transform, `Vulkan_SpriteEffects_Flip` for flip. **Previously** "not separately re-audited (Task 861)", which was honest phrasing for an unmeasured cell rather than a claim; it is measured now (`VULKAN-481`, D-05) | ✅ (2 real bugs fixed: rotation pivot, `transformMatrix`) | ✅ real Microsoft `SpriteEffect.fx`, oracle-verified 0-divergence for rotation (`sprite_rotated_quad`), flip (`sprite_flipped_quad`), multi-texture batching (`sprite_multitexture_quad`), and 3 of 5 `SpriteSortMode` values (`Deferred`/`BackToFront`/`FrontToBack`, `D9-93`); `.Immediate`/`.Texture` confirmed not oracle-viable, not a coverage gap — see `docs/directx9-renderer.md` | ✅ destination-rect placement + `SpriteEffects::FlipHorizontally` (`DX-70`) plus rotation/scale/source-crop-rect, real geometrically-derived pixel proof (`DX-131`, Checks Y2–Y4); `SpriteSortMode` deliberately has no dedicated test — its ordering logic lives entirely in shared, renderer-agnostic `SpriteBatch.cpp` |
-| Custom `Effect` via `Begin(effect)` | ✅ | ✅ | ❌ throws by design (no shader stage, 2D-only renderer) | ✅ **row corrected 2026-07-16 — was stale.** Real color-inversion custom-GLSL shader via `D3D9EffectRenderer` (runtime `D3DCompile()`), through the real public `SpriteBatch.Begin(effect)` API (`D9-110`/`D9-111`/`D9-112`, Phase D9-11 closed 2026-07-15) — this cell previously said "not started," written before that phase landed | ✅ real color-inversion custom-HLSL pixel test (`DX-71`) |
-| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | ✅ — `Vulkan_SpriteFont_SingleGlyph`, `_MultiGlyphSpacing`, `_Newline` and `_DefaultCharacterFallback` cover placement, spacing, newline and fallback; flip is covered for sprites by `Vulkan_SpriteEffects_Flip` rather than by a SpriteFont-specific test. **Previously** "not separately re-audited (Task 861)" (`VULKAN-481`, D-05) | ✅ (1 real cross-renderer bug found and fixed, Task 694) | ⬜ not attempted this renderer | ✅ exact glyph placement (checked inside + all 4 edge midpoints), per-glyph advance, newline line-drop+x-reset, `FlipVertically` via an asymmetric glyph — real pixel proof through the back buffer (`DX-127`) |
-| `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch | ✅ | ✅ | ⛔ **BLOCKED** (Tasks 686/687) | ✅ real `D3DSAMP_ADDRESSU`/`V`, oracle-verified: distinct 4-band tiling (Wrap) vs. symmetric mirroring pattern (Mirror), proven genuinely different from each other, not just "some non-Clamp behavior" (`D9-92`, `sprite_wrap_quad`/`sprite_mirror_quad`) | ✅ real `D3D11SamplerCache`-backed Wrap/Mirror with discriminating probe pixels (`DX-72`) |
-
-Note: several per-effect `docs/*-support.md` files (e.g. `basiceffect-support.md`) predate Tasks
-885-900's fog/lighting/specular fixes on Vulkan and still show some of these rows as gaps —
-this matrix reflects the current, post-fix state; those individual docs are due for a refresh but
-not rewritten here (out of this task's own scope).
+| Feature | EasyGL | D3D9 |
+|---|---|---|
+| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | ✅ real Microsoft `SpriteEffect.fx`, oracle-verified 0-divergence for rotation (`sprite_rotated_quad`), flip (`sprite_flipped_quad`), multi-texture batching (`sprite_multitexture_quad`), and 3 of 5 `SpriteSortMode` values (`Deferred`/`BackToFront`/`FrontToBack`, `D9-93`); `.Immediate`/`.Texture` confirmed not oracle-viable, not a coverage gap — see `docs/directx9-renderer.md` |
+| Custom `Effect` via `Begin(effect)` | ✅ | ✅ **row corrected 2026-07-16 — was stale.** Real color-inversion custom-GLSL shader via `D3D9EffectRenderer` (runtime `D3DCompile()`), through the real public `SpriteBatch.Begin(effect)` API (`D9-110`/`D9-111`/`D9-112`, Phase D9-11 closed 2026-07-15) — this cell previously said "not started," written before that phase landed |
+| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | ⬜ not attempted this renderer |
+| `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch | ✅ | ✅ real `D3DSAMP_ADDRESSU`/`V`, oracle-verified: distinct 4-band tiling (Wrap) vs. symmetric mirroring pattern (Mirror), proven genuinely different from each other, not just "some non-Clamp behavior" (`D9-92`, `sprite_wrap_quad`/`sprite_mirror_quad`) |
 
 ## RenderTarget / MSAA / mip / depth
 
-| Feature | EasyGL | Vulkan | SDL_Renderer | D3D9 | D3D11 |
-|---|---|---|---|---|---|
-| `RenderTarget2D`/`RenderTargetCube`/MRT construction | ✅ | ✅ | ✅ (MRT count > 1 throws by design, Task 709) | ✅ **row corrected 2026-07-16 — the crash below is fixed.** `MaxRenderTargets` `GraphicsProfile` ceiling (Reach=1/HiDef=4) real and mutation-verified (`D9-103`); full construction/bind/clear/readback pixel-verified (`DirectX9_Smoke` Checks S/T/U). The reproducible, uncaught DXVK crash this cell used to describe (sampling a `RenderTarget2D` as an ordinary effect texture) was root-caused and fixed 2026-07-16 — a real CNA-side type-confusion bug (`static_cast` between the unrelated sibling classes `D3D9TextureRenderer`/`D3D9RenderTargetRenderer`), not a DXVK/environment limitation (see `NEXT.md` §4). No `D9-A5` oracle scene exercises this path yet, though — that remains open, separately from the crash | ✅ `RenderTarget2D` full bind+clear+readback+unbind-restores-backbuffer pixel-verified; real 2-target MRT bind+independent-clear verified via one `OMSetRenderTargets` call (`plans/plan_dx.md` `DX-43`/`DX-46`); `RenderTargetCube` also has the full bind+clear+readback+unbind proof plus a per-face independence check (`DX-129`) |
-| MSAA (both RT types) | ✅ | ✅ | N/A (2D-only, no AA needed) | ⬜ not attempted — the render-target-as-texture crash that used to block this is fixed (2026-07-16, see the row above), but no oracle scene exercises `RenderTarget2D`/`RenderTargetCube` MSAA yet | ✅ `RenderTarget2D` 4x MSAA clear+resolve pixel-verified, device-queried via `CheckMultisampleQualityLevels` (`DX-45`); `RenderTargetCube` MSAA now also real, face-scoped resolve via a plain (non-cube) MSAA `Texture2DMSArray` + a separate cube-flagged resolve texture (`DX-152`) |
-| Mip chains (both RT types) | ✅ | ✅ | N/A | ⬜ not attempted — same as MSAA above: no longer crash-blocked (2026-07-16), just not yet oracle-covered | ✅ `RenderTarget2D` real (driver `GenerateMips()`, box-filtered content pixel-verified per level) + `RenderTargetCube` real for face 0 (`DX-144`) and a non-zero face (`DX-153`, confirming the whole-resource `GenerateMips()` call genuinely regenerates whichever face was just drawn to) |
-| Per-instance `DepthStencilFormat` fidelity | ✅ | ✅ (Task 911) | ⚠️ emulated (echoes the requested format back, no real backing storage) | ⬜ not attempted — same as MSAA/mip above: no longer crash-blocked (2026-07-16), just not yet oracle-covered | ✅ real GPU-resource-level format introspection — `None` creates no depth resource at all, `Depth16` genuinely lands on `D16_UNORM` (not silently upgraded), `Depth24`/`Depth24Stencil8` both genuinely share the same `D24_UNORM_S8_UINT` fallback (`DX-145`) |
+| Feature | EasyGL | D3D9 |
+|---|---|---|
+| `RenderTarget2D`/`RenderTargetCube`/MRT construction | ✅ | ✅ **row corrected 2026-07-16 — the crash below is fixed.** `MaxRenderTargets` `GraphicsProfile` ceiling (Reach=1/HiDef=4) real and mutation-verified (`D9-103`); full construction/bind/clear/readback pixel-verified (`DirectX9_Smoke` Checks S/T/U). The reproducible, uncaught DXVK crash this cell used to describe (sampling a `RenderTarget2D` as an ordinary effect texture) was root-caused and fixed 2026-07-16 — a real CNA-side type-confusion bug (`static_cast` between the unrelated sibling classes `D3D9TextureRenderer`/`D3D9RenderTargetRenderer`), not a DXVK/environment limitation (see `NEXT.md` §4). No `D9-A5` oracle scene exercises this path yet, though — that remains open, separately from the crash |
+| MSAA (both RT types) | ✅ | ⬜ not attempted — the render-target-as-texture crash that used to block this is fixed (2026-07-16, see the row above), but no oracle scene exercises `RenderTarget2D`/`RenderTargetCube` MSAA yet |
+| Mip chains (both RT types) | ✅ | ⬜ not attempted — same as MSAA above: no longer crash-blocked (2026-07-16), just not yet oracle-covered |
+| Per-instance `DepthStencilFormat` fidelity | ✅ | ⬜ not attempted — same as MSAA/mip above: no longer crash-blocked (2026-07-16), just not yet oracle-covered |
 
 ### Shared MRT attachment limit (Task 775)
 
@@ -203,72 +178,44 @@ itself could support.
 
 ## Texture2D / Texture3D / TextureCube
 
-| Feature | EasyGL | Vulkan | SDL_Renderer | D3D9 | D3D11 |
-|---|---|---|---|---|---|
-| Texture2D `SetData`/`GetData`/`FromStream`/`SaveAsPng`/NPOT | ✅ | ✅ | ✅ (4 real bugs found and fixed) | ✅ real `D3DPOOL_MANAGED` upload, exercised (and oracle-verified byte-exact) by every textured scene in the corpus (`texturepixel=` used 64×); `FromStream`/`SaveAsPng`/NPOT-on-`Reach` not separately tested | ✅ `SetData`/`GetData` byte-exact GPU round-trip verified (`DX-40`); NPOT (a genuinely non-power-of-two 5×3 texture) and `FromStream`/`SaveAsPng` (real PNG encode/decode round-trip, every pixel of a varying pattern) both real (`DX-140`) |
-| Texture2D mip-level `SetData` (level > 0) | ✅ | ✅ — `VulkanTextureRenderer::UpdatePixelsLevel` performs a real staged upload per level. **Previously** "❌ silent no-op (Task 867)", true when written, corrected by `VULKAN-481` (D-03) | ❌ throws by design (Task 681) | ⬜ not attempted — no oracle scene exercises mip level > 0 | ✅ real, deterministic direct-GPU-readback proof — `UpdatePixelsLevel(1,...)` round-trips exact bytes, and level 0's own content is independently confirmed unaffected (`DX-126`) |
-| Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | ✅ | ⛔ **BLOCKED** — construction succeeds silently with a null renderer, 94-test blast radius (Task 725) | 🟨 split: `TextureCube` `SetData` real, oracle-verified byte-exact via `envmap_quad`/`envmap_fresnel_quad`; `Texture3D` has only its `GraphicsProfile` size-ceiling mutation-verified (`D9-103`) — no oracle scene or GPU round-trip test exists for `Texture3D` at all | ✅ byte-exact GPU round-trip verified for both types at mip 0 (`DX-41`/`DX-42`) |
-| Texture3D/TextureCube sampled in shaders | ❌ don't inherit `Texture` (Task 863, architectural) | ❌ | N/A | 🟨 `TextureCube` sampled and oracle-verified byte-exact via `EnvironmentMapEffect` (`envmap_quad`/`envmap_fresnel_quad`); `Texture3D` has no consuming shader variant tested | 🟨 `TextureCube` sampled and pixel-verified via `env_map3d` (`DX-66`); `Texture3D` has no consuming shader variant, unverified in a shader |
-| Non-`Color` `SurfaceFormat` for real GPU texture data | ⛔ **BLOCKED** (Task 732) | same shared-code limitation | same | same shared-code limitation | ✅ `DX-214`/`DX-225`: all 17 uncompressed core-XNA formats plus DXT1/3/5 retain native DXGI storage in 2D/cube/3D, with format-aware mip, partial-upload and readback proof |
+| Feature | EasyGL | D3D9 |
+|---|---|---|
+| Texture2D `SetData`/`GetData`/`FromStream`/`SaveAsPng`/NPOT | ✅ | ✅ real `D3DPOOL_MANAGED` upload, exercised (and oracle-verified byte-exact) by every textured scene in the corpus (`texturepixel=` used 64×); `FromStream`/`SaveAsPng`/NPOT-on-`Reach` not separately tested |
+| Texture2D mip-level `SetData` (level > 0) | ✅ | ⬜ not attempted — no oracle scene exercises mip level > 0 |
+| Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | 🟨 split: `TextureCube` `SetData` real, oracle-verified byte-exact via `envmap_quad`/`envmap_fresnel_quad`; `Texture3D` has only its `GraphicsProfile` size-ceiling mutation-verified (`D9-103`) — no oracle scene or GPU round-trip test exists for `Texture3D` at all |
+| Texture3D/TextureCube sampled in shaders | ❌ don't inherit `Texture` (Task 863, architectural) | 🟨 `TextureCube` sampled and oracle-verified byte-exact via `EnvironmentMapEffect` (`envmap_quad`/`envmap_fresnel_quad`); `Texture3D` has no consuming shader variant tested |
+| Non-`Color` `SurfaceFormat` for real GPU texture data | ⛔ **BLOCKED** (Task 732) | same shared-code limitation |
 
 ## GraphicsDevice state objects
 
-| Feature | EasyGL | Vulkan | SDL_Renderer | D3D9 | D3D11 |
-|---|---|---|---|---|---|
-| `BlendState` (all presets + custom factors/equations) | ✅ | ✅ **FIXED (Task 868, 2026-07-09)** — real per-`Blend`/`BlendFunction` mapping across all 9 3D pipeline-creation sites; was "almost entirely fake" (hardcoded one blend equation regardless of request, confirmed 5× via pixel tests) before this fix | ✅ (2 real bugs fixed) | ✅ real `D3DRS_SRCBLEND`/`DESTBLEND` per-preset dispatch, `Opaque`/`AlphaBlend` pixel-behavior-verified (`DirectX9_BlendState_Opaque`/`_AlphaBlend`) and separately mutation-verified (src/dst swap caught, `D9-122`) | ✅ full shared state corpus covers every preset, separate colour/alpha factors and functions, blend factor, write masks, SpriteBatch/3D paths and reset (`DX-204`, `DX-227`) |
-| `DepthStencilState` (compare func + full stencil ops) | ✅ | ✅ (Task 870 — real per-pipeline compare-op + stencil) | ✅ never throws (deliberate no-op, matches FNA's renderer-agnostic-until-drawn model) | ✅ real `D3DRS_STENCILENABLE`/compare-func dispatch, pixel-verified (`DirectX9_DepthStencilState_StencilEnable`) and mutation-verified (forced-false caught, `D9-122`) | ✅ shared corpus proves depth compare/write, stencil enable/functions/three ops, masks, two-sided faces and state reset (`DX-202`, `DX-203`, `DX-227`) |
-| `RasterizerState` | ✅ | ✅ — cull modes, fill mode and scissor are covered by `Vulkan_FillMode_WireFrame`, `Vulkan_SpriteBatch_BeginRasterizerState` and `Vulkan_Deferred_Scissor`; `DepthBias` drives real dynamic `vkCmdSetDepthBias` (§7.4). **Previously** "not separately re-confirmed this pass" (`VULKAN-481`, D-05) | ✅ never throws | ✅ real `D3DRS_CULLMODE` winding-order dispatch, pixel-verified (`DirectX9_RasterizerState_CullMode`) and mutation-verified (forced-none caught, `D9-122`); depth-bias not separately tested — see this doc's own "Remaining genuine D3D9 limitations" section for `D9-62`'s own outstanding depth-bias oracle-proof attempt (investigated 2026-07-16, not closed: no observable effect at any tested magnitude, suspected environment/driver limitation shared with `Vulkan_DepthBias`) | ✅ cull/winding, scissor, constant normalized depth bias and slope-scale bias are pixel-proven; bias converts against the active D16/D24 target (`DX-201`, `DX-206`, `DX-227`, `DX-256`) |
-| Per-slot `SamplerState` (16 slots) | ✅ | ✅ | ✅ (1 real bug fixed) | 🟨 real `D3DSAMP_ADDRESSU`/`V`/`MAGFILTER`/`MINFILTER` wiring, Wrap/Mirror pixel-behavior oracle-verified via SpriteBatch (`D9-92`); not tested across all 16 slots simultaneously | ✅ 16 independent slots plus filter/address behavior; differential mip colours prove `MaxMipLevel`, LOD bias, independent `AddressW` and reset (`DX-142`, `DX-216`, `DX-257`) |
-| `GraphicsDevice.ReferenceStencil` | ✅ shared stamp/test fixture passes on EasyGL (`GraphicsDevice_ReferenceStencil`, remeasured 2026-09-09) | ✅ **FIXED** — connected via `vkCmdSetStencilReference`, an undocumented side effect of Task 870 (corrected 2026-07-09) | N/A | ⬜ not attempted — no D3D9 test exercises `SetReferenceStencil()` | ✅ the reference value makes only the stamped half pass through a real DSV (`DX-203`, `DX-227`) |
-| `Clear` honors `ClearOptions::Stencil` | ✅ `GraphicsDevice_ClearStencil` and `ClearOverloads` pass on EasyGL (remeasured 2026-09-09) | ❌ | ⚠️ emulated | ⬜ not attempted — `DirectX9_Smoke` covers plain `Clear(r,g,b,a)` only, not the `ClearOptions` combo variants | ✅ shared clear-stencil fixture clears, stamps and tests the DSV; overload combinations are covered (`DX-227`) |
-
-### Vulkan optional device-feature gating (Task 454)
-
-Investigated whether Vulkan's `VkPhysicalDeviceFeatures`-gated optional capabilities are requested
-safely (a device that doesn't support a requested optional feature makes `vkCreateDevice` fail
-outright, unlike GL's more forgiving capability model). Confirmed the device-creation code
-(`VulkanRenderer`'s constructor) only ever requests the 2 optional features CNA actually
-uses — `fillModeNonSolid` (`FillMode::WireFrame`) and `samplerAnisotropy` (anisotropic texture
-filtering) — and both are correctly gated behind a real `vkGetPhysicalDeviceFeatures` query first
-(`if (supported.fillModeNonSolid) { feat.fillModeNonSolid = VK_TRUE; fillModeNonSolidSupported_ =
-true; }`, same shape for `samplerAnisotropy`). Neither is ever unconditionally requested. Downstream
-usage sites correctly gate on the resulting `fillModeNonSolidSupported_`/`anisotropySupported_`
-flags (e.g. `fillModeWireframe_ = (fillMode == 1) && fillModeNonSolidSupported_` — a device without
-`fillModeNonSolid` silently falls back to solid fill rather than requesting an invalid pipeline
-state), and `maxSamplerAnisotropy_` is read from real `VkPhysicalDeviceLimits` and used to clamp any
-requested anisotropy level. MSAA sample-count selection (`PickSampleCount`) also respects the
-device's real `framebufferColorSampleCounts` limit, picking the best available count ≤ the
-requested one rather than assuming an arbitrary count is always supported. **No gap found** — this
-was already correctly implemented, just not previously documented anywhere; recorded here per Task
-454's own "throw or document fallback behavior" framing (this renderer's own answer is "gracefully
-falls back," which is the idiomatic Vulkan pattern for optional features, not a bug needing a fix).
+| Feature | EasyGL | D3D9 |
+|---|---|---|
+| `BlendState` (all presets + custom factors/equations) | ✅ | ✅ real `D3DRS_SRCBLEND`/`DESTBLEND` per-preset dispatch, `Opaque`/`AlphaBlend` pixel-behavior-verified (`DirectX9_BlendState_Opaque`/`_AlphaBlend`) and separately mutation-verified (src/dst swap caught, `D9-122`) |
+| `DepthStencilState` (compare func + full stencil ops) | ✅ | ✅ real `D3DRS_STENCILENABLE`/compare-func dispatch, pixel-verified (`DirectX9_DepthStencilState_StencilEnable`) and mutation-verified (forced-false caught, `D9-122`) |
+| `RasterizerState` | ✅ | ✅ real `D3DRS_CULLMODE` winding-order dispatch, pixel-verified (`DirectX9_RasterizerState_CullMode`) and mutation-verified (forced-none caught, `D9-122`); depth-bias not separately tested — see this doc's own "Remaining genuine D3D9 limitations" section for `D9-62`'s own outstanding depth-bias oracle-proof attempt (investigated 2026-07-16, not closed: no observable effect at any tested magnitude, suspected environment/driver limitation) |
+| Per-slot `SamplerState` (16 slots) | ✅ | 🟨 real `D3DSAMP_ADDRESSU`/`V`/`MAGFILTER`/`MINFILTER` wiring, Wrap/Mirror pixel-behavior oracle-verified via SpriteBatch (`D9-92`); not tested across all 16 slots simultaneously |
+| `GraphicsDevice.ReferenceStencil` | ✅ shared stamp/test fixture passes on EasyGL (`GraphicsDevice_ReferenceStencil`, remeasured 2026-09-09) | ⬜ not attempted — no D3D9 test exercises `SetReferenceStencil()` |
+| `Clear` honors `ClearOptions::Stencil` | ✅ `GraphicsDevice_ClearStencil` and `ClearOverloads` pass on EasyGL (remeasured 2026-09-09) | ⬜ not attempted — `DirectX9_Smoke` covers plain `Clear(r,g,b,a)` only, not the `ClearOptions` combo variants |
 
 ## OcclusionQuery (Phase 50, closed this session — see `docs/occlusionquery-support.md` for full detail)
 
-| Feature | EasyGL | Vulkan | SDL_Renderer | D3D9 | D3D11 |
-|---|---|---|---|---|---|
-| Wired to real GPU work (`Begin`/`End`) | ✅ | ✅ **FIXED (Task 447, 2026-07-10)** — real per-draw-call query correlation via `Pending3DDraw::occlusionQuery` tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording in `RecordCommandBuffer()` | N/A — throws at construction (Task 727) | ⬜ **not built at all** — `plans/plan_dx9.md`'s task list has no `IDirect3DQuery9`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsRenderer`'s own silent `nullptr` default | ✅ real `ID3D11Query(D3D11_QUERY_OCCLUSION)`, `Begin`/`End`/`GetData` wired (`DX-47`) |
-| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | ✅ verified both directions, plus a multi-draw-span check (Task 854) — this sandbox's software Vulkan driver (Mesa Lavapipe) reports fully accurate, discriminating pixel counts (4096 visible / 0 occluded on a 64×64 quad) | N/A | N/A — no query support exists | ✅ **stale row, corrected 2026-07-15** — `plans/plan_dx.md` `DX-147` closed this: the same `ID3D11Query` object reused around a genuinely visible (viewport-covering) draw reports a real positive `PixelCount()`, then around a fully off-screen draw reports exactly 0, both-directions discriminating (`DirectX11_Smoke` 91→93/93). This row previously described the pre-`DX-147` state |
+| Feature | EasyGL | D3D9 |
+|---|---|---|
+| Wired to real GPU work (`Begin`/`End`) | ✅ | ⬜ **not built at all** — `plans/plan_dx9.md`'s task list has no `IDirect3DQuery9`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsRenderer`'s own silent `nullptr` default |
+| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | N/A — no query support exists |
 
 ## Model (Phase 49, closed this session — see `docs/model-content-pipeline-support.md` for full detail)
 
-| Feature | Status | D3D9 | D3D11 |
-|---|---|---|---|
-| Runtime API (`Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone`) | ✅ fully audited/FNA-faithful, several real bugs found and fixed (Tasks 431-439) | ⬜ not separately tested against this renderer | ✅ a real 2-bone hierarchy drives `Model::Draw()` → `ModelMesh::Draw()`'s genuine orchestration (bone transform, `SetVertexBuffer`/`setIndices`/`DrawIndexedPrimitives`/`EffectPass::Apply`), pixel-verified through the back buffer (`DX-128`) |
-| Content-pipeline loading (`ModelTypeReader`) | 🟨 the custom `.model.json` format is not XNB-compatible, but hierarchy/parent bones, textures/effects, skeleton animation and 32-bit indices are implemented and covered (`DX-231`) | ⬜ not separately tested against this renderer | ✅ all nine public model/content fixtures pass, including `Content.Load<Model>()`, hierarchy, texture, skeleton, animation and 32-bit indices (`DX-231`) |
-| `Model` constructor root-bone-index flexibility | ✅ fixed (Task 916, 2026-07-09) | ⬜ not separately tested against this renderer | ✅ real proof (`DX-155`) — `getRootProperty()` genuinely returns the non-zero-indexed bone, plus a full 5-argument-constructor draw through the real renderer |
-
-`cna_reference_dump` and `cna_demo_2d` now link under `DIRECTX11`. The former static-library
-cycle around `Effect::Apply()` is declared explicitly in CMake, and the demo no longer depends on an
-undeclared raw SDL include; the previous warning here was obsolete.
+| Feature | Status | D3D9 |
+|---|---|---|
+| Runtime API (`Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone`) | ✅ fully audited/FNA-faithful, several real bugs found and fixed (Tasks 431-439) | ⬜ not separately tested against this renderer |
+| Content-pipeline loading (`ModelTypeReader`) | 🟨 the custom `.model.json` format is not XNB-compatible, but hierarchy/parent bones, textures/effects, skeleton animation and 32-bit indices are implemented and covered | ⬜ not separately tested against this renderer |
+| `Model` constructor root-bone-index flexibility | ✅ fixed (Task 916, 2026-07-09) | ⬜ not separately tested against this renderer |
 
 ## Every currently-BLOCKED task (⛔)
 
 | Task | Renderer | One-line reason |
 |---|---|---|
-| 686 | SDL_Renderer | `TextureAddressMode::Wrap` via `SpriteBatch` — no native support in the `Draw()` path used; 3 options (throw / rewrite to `SDL_RenderGeometry` / hybrid), none picked |
-| 687 | SDL_Renderer | Same underlying constraint as 686, for `Mirror` — resolving 686 resolves this too |
-| 725 | SDL_Renderer | **Resolved 2026-10-09 (`219330aeb`, AM4-196):** construction follows the unsupported-3D policy — refused by name under the default `Throw`, stubbed under `WarnAndStub` |
 | 732 | EasyGL | Real `SurfaceFormat` GPU forwarding conflicts with an already-shipped, already-tested `Texture::ValidateFormat` contract (Task 176) plus the public `SetData`/`GetData` API being `Color*`-only |
 
 ## Known pre-existing test-failure baseline, per renderer
@@ -279,76 +226,6 @@ contention false failures):
 
 - **EasyGL**: 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`,
   `easy-gl-resource-smoke-tests`. Reconfirmed as recently as Task 449's own regression (4510/4513).
-- **Vulkan**: **superseded. Current baseline (2026-09-06, `plans/plan_vulkan.md` §7.5): the
-  dedicated suite `ctest -R '^Vulkan_'` is **254/254** with no skips, and the full `ctest` is
-  **9095/9111** with 16 failures, every one of which reproduces under EasyGL and is therefore not
-  this renderer's (`VULKAN-475`).** The line below is kept because two of its claims were wrong
-  in ways worth seeing rather than deleting. *What it said:* "verified 2026-07-11: `CnaTests`
-  4371/4373 (2 hardware skips), `ctest` 126/127 — 1 remaining failure, `Vulkan_DepthBias`."
-  *Why it is superseded:* the counts are from a much smaller suite; and `Vulkan_DepthBias` was
-  **not** a renderer defect at all — §7.4 measured it as a *test* written against OpenGL's depth
-  range, while the renderer drives real dynamic `vkCmdSetDepthBias` from ten pipeline sites.
-  *And the device:* those numbers came from **Mesa lavapipe**, a software driver, which the
-  original line did not say (`VULKAN-481`, D-07). Both the 5×
-  `BlendState` failures (Task 868, fixed 2026-07-09, commit `459a0e37`) and the 3
-  `ContentManagerSkinnedModelTest.*` segfaults (Task 953, fixed 2026-07-11) that used to make up
-  this baseline are gone — no exclusions needed anymore. **Historical correction (2026-07-09,
-  Task 861):** this row previously said "12" pre-existing failures and additionally claimed
-  "several `DepthStencilState`-adjacent" ones — both wrong; `DepthStencilState`'s own
-  compare-op/stencil-op tests all pass (Task 870 fixed this).
-- **SDL_Renderer**: 13 known pre-existing, all throwing `"SDL_Renderer does not support 3D"` —
-  matches this renderer's accepted 2D-only architectural scope exactly (`EffectApplyTest`,
-  `GraphicsDeviceValidationTest.SetRenderTargets_*`, `SkinnedModelEXTPartTest.*`,
-  `ContentManagerSkinnedModelTest.*`). Confirmed via Task 915's own systematic full-suite run.
-
-## Remaining genuine Vulkan limitations (Task 861, 2026-07-09)
-
-Phase 73 (Tasks 664-665, 825-861) was written as a checklist of individual Vulkan pixel-test tasks,
-but Tasks 825-860 were never checked off — later, higher-numbered work (Tasks 484/495/499/500,
-plus the fog/lighting/effect fixes at 885-900) independently established most of the same ground,
-superseding the original per-row checklist without formally closing each row. This section is
-Task 861's real deliverable: the actual current state, confirmed by spot-checking a representative
-sample of Tasks 825-860 against real test coverage rather than re-verifying all 36 rows from
-scratch (that would be Task 738-scale work, out of this task's own scope).
-
-**Genuinely already covered by real, current Vulkan tests** (confirmed via
-`ctest --test-dir cmake-build-vulkan -N -R "^Vulkan_"`, 93 real tests): `TextureAddressMode`
-(Clamp/Mirror), `TextureFilter` (Point vs. Linear), anisotropic filtering, all 7 `BlendState`
-presets, all 6 `DepthStencilState` aspects, `CullMode`, `Viewport`, render-target lifecycle
-(sample-after-unbind, MSAA, mip chains, depth-format fidelity, MRT-adjacent), and all 5 stock
-effects including fog and several per-effect sub-features (specular, Fresnel, eye position, bone
-blending) — this maps directly onto Tasks 825-849's own topics. **Confirmed genuine bugs found by
-this later work**: `BlendState` (Task 868, **fixed 2026-07-09**), one isolated
-`RasterizerState.DepthBias` sub-case (still open) — these are the real content behind Tasks 831-833
-and 839's own topics, not clean passes.
-
-**A real, previously-undocumented gap found by this spot-check**: unlike EasyGL and SDL_Renderer,
-Vulkan has **no dedicated pixel test** for `SpriteBatch`'s sort-mode ordering, rotation/scale/
-source-rectangle-cropping/`SpriteEffects` flip (Task 851/850's own topics), `SpriteFont` glyph
-placement (Task 852), or `Model` multi-mesh hierarchy transform propagation (Task 853) —
-confirmed via `grep`/`ctest -N` finding zero `Vulkan_SpriteFont*`/`Vulkan_Model*`/
-`Vulkan_SpriteSortMode*` test names, despite `Vulkan_SpriteBatch_MultiBeginEnd` and
-`Vulkan_Demo2D_SmokeTest` confirming basic `SpriteBatch` drawing works. Corrected the feature
-matrix's own "2D SpriteBatch/SpriteFont" table above, which previously (incorrectly) rated Vulkan
-✅ for this without a backing test, to "not separately re-audited" — matching the honest phrasing
-already used for the adjacent SpriteFont row. This is a **test-coverage gap, not a confirmed
-behavioral bug** — the underlying `SpriteBatch`/`SpriteFont`/`Model` code is renderer-agnostic C++
-already pixel-verified on EasyGL/SDL_Renderer, so a regression specifically on Vulkan is unlikely,
-but it is genuinely unverified there. Not opened as a new numbered task here (that's Task 738-scale
-triage work); flagging it in this matrix is this task's own real scope.
-
-**`OcclusionQuery` visible-vs-occluded pixel test on Vulkan (Task 854's own topic)**: **FIXED,
-2026-07-10** — was Task 447's ⛔ BLOCKED status (Vulkan's deferred-draw architecture couldn't
-correlate a query's Begin/End span with a draw at all); now resolved via real per-draw-call query
-tagging and `vkCmdBeginQuery`/`vkCmdEndQuery` recording, see the `OcclusionQuery` table above.
-
-**Bottom line**: Vulkan's real, current, confirmed-open limitation is exactly 1 — the isolated
-`RasterizerState.DepthBias` sub-case. `BlendState` (Task 868) is fixed as of 2026-07-09, and
-`ReferenceStencil` is fixed on Vulkan specifically (an undocumented side effect of Task 870); the
-`ReferenceStencil` gap (Task 872) remains open only on EasyGL. The 2D
-SpriteBatch/SpriteFont/Model-hierarchy test-coverage gap above is real but distinct in kind
-(untested, not un-implemented or known-broken). `OcclusionQuery` (Task 447/854) is no longer on this
-list — fixed in full.
 
 ## New tracked follow-up tasks opened this session
 
@@ -358,7 +235,7 @@ list — fixed in full.
 
 ## Remaining genuine D3D9 limitations (`D9-130`, 2026-07-15)
 
-Unlike the other columns, `DIRECTX9`'s ✅ cells above are not "implemented and plausible" — they are
+Unlike the EasyGL column, `DIRECTX9`'s ✅ cells above are not "implemented and plausible" — they are
 each backed by a byte-identical (`--tolerance 0`) match against the real XNA 4.0 runtime for a
 checked-in oracle scene (`D9-120`, `D3D9_XNA_Diff`). The corpus has grown to 36/36 scenes (0
 diverge) as of Task 1101 (2026-07-16), up from 31 at `D9-130`'s original 2026-07-15 writing.
@@ -369,7 +246,7 @@ removed** — the genuine, currently-open gaps are:
   size-ceiling is tested; no scene in the corpus samples a `Texture3D` in a shader.
 - **`OcclusionQuery` is not built** for this renderer.
 - **Not verified on real Windows hardware** (`D9-140`) — every result here is Wine+DXVK-on-this-
-  machine, same caveat as `DIRECTX11`.
+  machine.
 
 Fixed since this section was originally written (2026-07-15):
 
@@ -386,7 +263,7 @@ Fixed since this section was originally written (2026-07-15):
   `VSBasicPixelLighting`) remains permanently unreachable, blocked by the same missing Position-only
   vertex layout as the untextured vertex-lit bucket — unrelated to this fix. This was also the
   project-wide "Divergence 1" every other CNA renderer shared; `plans/plan_graphics.md` Phase 80 has since
-  fixed EasyGL/Vulkan/WebGPU(`BasicEffect`-only)/D3D11 too. Software subsequently gained
+  fixed EasyGL and WebGPU (`BasicEffect`-only) too. Software subsequently gained
   distinct per-vertex/per-pixel classic lighting in `SOFTWARE-113` and `SOFTWARE-115`; the old
   no-lighting statement is retained here only as the historical state when this D3D9 note landed.
 - ~~`CnaTests` does not build under D3D9~~ — **fixed** (`D9-123`, 2026-07-15, same session `D9-130`
@@ -399,13 +276,7 @@ measurement this section summarizes.
 
 ## See also
 
-- `docs/coverage.md` — non-Graphics namespace estimates (Audio/Media/Content/Net/GamerServices),
-  still broadly accurate; its own Graphics section is superseded by this document.
-- `docs/sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 audit in verbose detail.
 - `docs/model-content-pipeline-support.md`, `docs/occlusionquery-support.md` — full detail for
   those 2 systems, summarized above.
 - `docs/directx9-renderer.md`, `docs/d3d9-divergence-report.md` — the `DIRECTX9` column's full detail: what
   it proves, the oracle harness, and the honest DXVK-authenticity caveat every result inherits.
-- Per-effect docs (`docs/basiceffect-support.md` etc.) — largely predate Tasks 885-900's
-  fog/lighting/specular fixes on Vulkan; this matrix reflects the current state, those
-  individual docs have not been refreshed (out of this task's own scope).

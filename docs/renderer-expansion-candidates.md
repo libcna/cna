@@ -42,11 +42,10 @@ EasyGL implementation while keeping distinct public contracts (context, shader p
 | Class | Identities | Count |
 |---|---|---:|
 | No pixels (validation/no-op) | `HEADLESS`, `STUB` | 2 |
-| 2D-oriented | `SDL_RENDERER` | 1 |
 | CPU 3D | `SOFTWARE` | 1 |
-| Programmable / modern | `OPENGLES3`, `OPENGL33`, `WEBGL2`, `VULKAN`, `WEBGPU`, `METAL`, `DIRECTX9`, `DIRECTX11`, `SDL_GPU` | 9 |
+| Programmable / modern | `OPENGLES3`, `OPENGL33`, `WEBGL2`, `WEBGPU`, `DIRECTX9`, `SDL_GPU` | 6 |
 | Abstraction layer | `FNA3D` | 1 |
-| **Total** | | **14** |
+| **Total** | | **10** |
 
 Notes that must not be misstated anywhere: `WEBGPU` is experimental with a bounded verified
 surface; the `ASCII` identity was **removed** in favour of the renderer-neutral
@@ -88,8 +87,8 @@ curation retired identities that all satisfied it. Several rows argue against a 
 longer exists; where that is so, the row is marked, because the comparison it drew is no longer
 available.
 
-Effort: **S** ≈ one focused lane, **M** ≈ a plan file of ~30–60 tasks, **L** ≈ comparable to the
-Vulkan campaign, **XL** ≈ needs hardware or a toolchain CNA does not have.
+Effort: **S** ≈ one focused lane, **M** ≈ a plan file of ~30–60 tasks, **L** ≈ comparable to a
+whole native-renderer campaign, **XL** ≈ needs hardware or a toolchain CNA does not have.
 Licenses are as commonly reported upstream and **must be re-verified at spike time** — several are
 copyleft or version-dependent and could be disqualifying.
 
@@ -99,7 +98,7 @@ copyleft or version-dependent and could be disqualifying.
 |---:|---|---|---|---|---|---|---|---|
 | A1 | `OSMESA` | Mesa `libOSMesa` | CPU GL 4.x | Real, spec-complete desktop GL executed with **zero GPU and zero display server** — the only way to run the full EasyGL desktop feature matrix in CI. The retired `PORTABLEGL` was a partial GL 3.x reimplementation, not Mesa. | none (CPU) | S | low | MIT |
 | A2 | `TINYGL` | C-Chads/tinygl (Bellard lineage) | CPU fixed-function | **DELIVERED 2026-08-13, RETIRED 2026-09-17.** Fixed-function GL 1.x on CPU. Its argument rested on contrasts with `OPENGL1` (also retired) and `PORTABLEGL`; in practice its 1-bit colour-key transparency, absent stencil/scissor/render-targets and absent shaders left it unable to serve as a general CPU renderer, which `SOFTWARE` already does (`PORTABLEGL`, also retired, did too). See `../plans/plan_tinygl.md`. | none | S | low | zlib-style, acknowledgment required |
-| A3 | `SWIFTSHADER` | google/swiftshader | CPU Vulkan | A conformant **Vulkan** API surface with no GPU — lets the `VULKAN` renderer's contract be regression-tested on GPU-less machines without claiming it as `VULKAN`. (Weigh against §4's llvmpipe/lavapipe ruling: a software **driver** behind `VULKAN` is not an identity.) | none | M | med | Apache-2.0 |
+| A3 | `SWIFTSHADER` | google/swiftshader | CPU Vulkan | A conformant **Vulkan** API surface with no GPU. ⚠ Premise expired: the native `VULKAN` identity it was meant to test was retired on 2026-10-13; `SDL_GPU`'s Vulkan backend already runs on lavapipe. (Weigh against §4's llvmpipe/lavapipe ruling: a software **driver** behind `VULKAN` is not an identity.) | none | M | med | Apache-2.0 |
 | A4 | `CAIRO` | cairo | 2D vector | ⚠ Premise expired: the `SKIA` and `BLEND2D` identities it was meant to sit beside are both retired, so CNA has no CPU 2D vector identity for it to be a *third* of. What survives is the device-agnostic backend set (image, X11, PDF, SVG) behind one API. | system pkg | M | med | LGPL-2.1 / MPL-1.1 — **verify** |
 | A5 | `XLIB` | X11 `XImage`/MIT-SHM | 2D presentation | CPU pixels pushed straight to a bare X server, no SDL, no GL, no toolkit (the X11 counterpart of the Win32 GDI presentation `GDI` did until its 2026-09-28 retirement). | Linux + X11 | S | low | MIT |
 | A6 | `NANOVG` | memononen/nanovg | 2D vector on GL | **DELIVERED 2026-08-19, RETIRED 2026-09-17.** Vector-first 2D on a real GPU context through NanoVG's own compiled GLSL pipeline. Its distinguishing comparisons were all against identities retired on the same day (`OPENVG`, `SKIA`, `BLEND2D`), which is itself the lesson: a candidate defined only by how it differs from other candidates does not establish that any of them were needed. See `../plans/plan_nanovg.md`. | GL context | S | low | zlib |
@@ -116,7 +115,7 @@ also strengthen CI.
 | # | Identity | Upstream | Class | Proves what nothing else proves | Effort | Risk | License |
 |---:|---|---|---|---|---|---|---|
 | B1 | `RLGL` | raysan5/raylib (`rlgl.h` only) | Low-level OpenGL abstraction | **STARTED 2026-09-12, RETIRED 2026-09-17 before completion.** Only its device/clear/readback/present/resize slice was ever runtime-validated; texture, draw, effect and render-target work never landed. The clearest case in this catalog of a renderer retired as unfinished rather than as inadequate. See `../plans/plan_rlgl.md`. | L | high | zlib |
-| B2 | `SFML` | SFML `Graphics` | 2D | Classic RAII C++ 2D API as a renderer host; view/transform model unlike `SDL_RENDERER`. | S | low | zlib |
+| B2 | `SFML` | SFML `Graphics` | 2D | Classic RAII C++ 2D API as a renderer host; view/transform model unlike SDL's 2D render API (whose `SDL_RENDERER` identity was retired on 2026-10-13). | S | low | zlib |
 | B3 | `ALLEGRO` | Allegro 5 | 2D | Another mature 2D game library with its own bitmap/target model. | S | low | zlib-like |
 | B4 | `OGRE` | Ogre-Next / Ogre 14 | Engine RenderSystem | A **scene-graph engine's** RenderSystem driven by an immediate XNA API — the hardest structural mismatch to prove, and the most valuable if it works. | L | high | MIT |
 | B5 | `IRRLICHT` | Irrlicht | Engine, multi-driver | An engine that ships **its own software rasterizers alongside GL/D3D** — a single identity spanning both worlds. | M | med | zlib |
@@ -141,7 +140,7 @@ also strengthen CI.
 
 | # | Identity | Upstream | Class | Proves what nothing else proves | Gate | Effort | Risk |
 |---:|---|---|---|---|---|---|---|
-| C1 | `QUARTZ2D` | CoreGraphics | 2D | macOS's native 2D API — today macOS has exactly one native identity (`METAL`). | macOS | M | med |
+| C1 | `QUARTZ2D` | CoreGraphics | 2D | macOS's native 2D API — macOS has no native CNA identity of its own (`SDL_GPU` drives Metal). | macOS | M | med |
 | C2 | `ANDROID_CANVAS` | `android.graphics.Canvas` via JNI | 2D | Android's own 2D stack; CNA currently reaches Android only through GL. | Android | M | high |
 | C3 | `ANATIVEWINDOW` | NDK `ANativeWindow` | 2D presentation | Direct CPU buffer lock/post with no Java and no GL — the Android peer of `FBDEV`. | Android NDK | M | med |
 | C4 | `WEBGPU_WEB` | Browser WebGPU (Emscripten) | Programmable | **WITHDRAWN 2026-09-04 — this row's premise is false.** It argued browser WebGPU was identity-worthy because `WEBGPU` was native-only. `WEBGPU` shipped its browser backend on 2026-08-26 (`WEBGPU-119`–`123`), through Emscripten's emdawnwebgpu port: 2D, the 3D `BasicEffect` path and every stock effect render in a real browser, byte-identical to native Vulkan. `docs/webgpu-renderer.md` states it is *"one renderer identity with two backends, not two renderers"*, which is §4's own Dawn ruling applied to the same question. Nothing to add. | — | — | — |
@@ -174,15 +173,15 @@ dishonestly. Recorded here so the question does not have to be re-litigated.
 | Thing | Correct treatment |
 |---|---|
 | ANGLE | A GLES **driver**; `OPENGLES3` already runs on it. At most a documented runtime option. |
-| llvmpipe / lavapipe | Software **drivers** behind `OPENGL*`/`VULKAN`. Note `SWIFTSHADER` (A3) is proposed as an identity only because it is a distinct, separately-selected stack — if that argument fails at spike time, it becomes an option too. |
-| MoltenVK | A Vulkan implementation on Metal; `VULKAN` on macOS, not a new name. |
+| llvmpipe / lavapipe | Software **drivers** behind `OPENGL*` and `SDL_GPU`'s Vulkan backend. Note `SWIFTSHADER` (A3) is proposed as an identity only because it is a distinct, separately-selected stack — if that argument fails at spike time, it becomes an option too. |
+| MoltenVK | A Vulkan implementation on Metal; a driver, not a new name. |
 | Zink | GL-on-Vulkan driver. |
 | Dawn | A second native WebGPU implementation → a **profile** of `WEBGPU`, like the GL profiles. |
 | Skia Ganesh / Graphite | GPU backends of Skia, whose CNA identity was retired in 2026-08. Were Skia ever revisited, they would be backends of one identity, not two. |
 | EGL/GBM headless GL | A context-creation mode of the GL identities. |
 | PNG/PPM frame dump | A **present sink** any renderer can gain; not a renderer. |
 | SDL 1.2 | Superseded; CNA targets SDL3. |
-| `DIRECTX4` | Never shipped publicly. Moot since 2026-09-17: the legacy series was retired and CNA's Direct3D identities are now `DIRECTX9` and `DIRECTX11` only. |
+| `DIRECTX4` | Never shipped publicly. Moot since 2026-09-17: the legacy series was retired, and since 2026-10-13 CNA's only Direct3D identity is `DIRECTX9`. |
 | Terminal ASCII/glyph output | Already solved renderer-neutrally by `AsciiPostProcessEffect`. Only true-pixel terminal transports (A10) are identity-worthy. |
 
 ## 5. Requirements any candidate must satisfy before it counts
@@ -215,8 +214,7 @@ there is no queue.
 
 What survives from it is one observation worth keeping, because it is about CNA rather than about
 any candidate: the entries that would most help are the ones that improve testing of renderers CNA
-**already has** — a GPU-less path for the existing GL identities (A1 `OSMESA`) or for `VULKAN`
-(A3 `SWIFTSHADER`) — and those may well be better as build options behind an existing identity than
+**already has** — a GPU-less path for the existing GL identities (A1 `OSMESA`) — and those may well be better as build options behind an existing identity than
 as identities of their own (§4). `A9 OPENGLES32` remains the only candidate that could truthfully
 report a capability no current identity reports (compute, tessellation, geometry). None of this is
 authorization.

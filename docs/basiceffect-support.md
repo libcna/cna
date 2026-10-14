@@ -1,18 +1,7 @@
 # BasicEffect Exactness Support Matrix
 
-> **Status update, 2026-07-11:** Tasks 885 (`DirectionalLight1`/`2` + lit-path `EmissiveColor`) and
-> 886 (real specular highlights) — listed as open in §4 and the support matrix below — **are now
-> implemented**: `BasicEffect.cpp` forwards both additional lights (gated on their own `Enabled`
-> flags) and a real `SpecularColor`/`SpecularPower` term. Per `docs/graphics-renderer-feature-matrix.md`,
-> "BasicEffect core (MVP, lighting, texture, vertex color)", "`DirectionalLight1`/`2` +
-> `EmissiveColor`", and "real specular highlights" are all ✅ on EasyGL/Vulkan with no open
-> gaps. This document predates that work (flagged in the feature matrix's own "See also" section)
-> and has not been refreshed row-by-row; treat §4 and the matrix below as historical, and
-> `docs/graphics-renderer-feature-matrix.md`/`docs/xna-4-api-coverage.md` as current.
-
 Phase 42 (`plans/plan_graphics.md` Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
-against FNA across EasyGL and Vulkan. This document summarizes
-the findings and closes the phase.
+against FNA. This document summarizes the findings and closes the phase.
 
 ---
 
@@ -28,7 +17,7 @@ direction/diffuse/specular) match FNA literal-for-literal — no fix needed.
 ## 2. No-lighting shader paths (Tasks 364–367)
 
 All four combinations of `TextureEnabled`/`VertexColorEnabled` with `LightingEnabled=false` (the
-real FNA default) were pixel-verified on EasyGL and Vulkan, each with a discriminating,
+real FNA default) were pixel-verified on EasyGL, each with a discriminating,
 non-degenerate test (distinct non-white/non-primary colors chosen so partial-product failure modes
 are numerically distinguishable from the correct result — never a case where "ignored" and
 "correct" would coincidentally look the same):
@@ -39,8 +28,8 @@ are numerically distinguishable from the correct result — never a case where "
 - **Task 366** (`TextureEnabled=true`, no vertex color): verify-only, already correct.
 - **Task 367** (`TextureEnabled=true` AND `VertexColorEnabled=true`, the stride-24
   `VertexPositionColorTexture` path): found and fixed **1 real bug** — EasyGL's
-  stride-24 shader silently dropped `DiffuseColor` entirely (no uniform, no multiply at all);
-  Vulkan's `colored_textured3d.vert.glsl` already had it right. Fixing EasyGL's bug also exposed a
+  stride-24 shader silently dropped `DiffuseColor` entirely (no uniform, no multiply at all).
+  Fixing EasyGL's bug also exposed a
   stale pre-existing test (Task 189's combinations test case (d)) that only passed *because of*
   the bug being fixed — corrected to set `VertexColorEnabled=true`, restoring its own stated intent.
 
@@ -53,7 +42,7 @@ dot product is real math and not a boolean lit/unlit check — plus a back-facin
 the negative-dot clamp) and a `DirectionalLight0.Enabled=false` case (proves the light can be
 switched off). Found and fixed **1 real bug**:
 
-- **Shared C++, both renderers**: `BasicEffect::FillGpuDrawParams()` forwarded
+- **Shared C++**: `BasicEffect::FillGpuDrawParams()` forwarded
   `DirectionalLight0`'s `Direction`/`DiffuseColor` unconditionally, never checking
   `DirectionalLight0.Enabled` — a disabled light still lit the surface.
 
@@ -67,7 +56,7 @@ independently-structured lit formula (ambient forwarded as its own raw uniform, 
 Task 368) is mathematically identical to FNA's once a plain `+EmissiveColor` term is added after
 the ambient/diffuse multiply.
 
-**Fixed** (shared C++, both renderers, no shader changes needed): `FillGpuDrawParams()` forwarded
+**Fixed** (shared C++, no shader changes needed): `FillGpuDrawParams()` forwarded
 `DiffuseColor*Alpha` alone in every case, always silently dropping `EmissiveColor` in the
 no-lighting path — the exact gap Task 366 had deferred.
 
@@ -77,16 +66,14 @@ changes into a single task):
 
 - **Task 885** — the *lit*-path `+EmissiveColor` term, plus `DirectionalLight1`/`DirectionalLight2`
   forwarding (still completely unforwarded, unchanged since Task 361). EasyGL just needs a new
-  uniform; **Vulkan needs to expand the shared 128-byte stock-3D push-constant budget** (`FillExtPushConst()`'s `float[32]`), which is also reused byte-for-byte by
-  `SkinnedEffect`'s draw path — a genuine shared-architecture change, not a Vulkan-shader-only
-  tweak.
+  uniform.
 - **Task 886** — real specular highlights. Confirmed **zero specular infrastructure exists
   anywhere** for `BasicEffect` (no `GpuDrawParams` fields for `SpecularColor`/`SpecularPower`/
   per-light specular; no eye-position wiring in `BasicEffect::FillGpuDrawParams()`, though
   `EnvironmentMapEffect`/`SkinnedEffect` already have prior art to reuse). A new feature, not a bug
-  fix, sized similarly to the already-tracked Task 868/870/878/879 renderer-parity items.
+  fix.
 
-## 5. Cross-renderer consistency (Task 370)
+## 5. Integration capstone (Task 370)
 
 Closed the phase with a capstone test combining everything Tasks 364–369 verified individually —
 `TextureEnabled` + `VertexColorEnabled` + `DiffuseColor` + `EmissiveColor`, `LightingEnabled=false`
@@ -94,20 +81,18 @@ Closed the phase with a capstone test combining everything Tasks 364–369 verif
 any `BasicEffect` pixel test, a **real 2×2 multi-texel texture** (every prior task used a 1×1
 solid color) sampled at all 4 texel centers via 4 separate draws.
 
-**Result: both renderers produced byte-identical pixel output**, matching the FNA-derived expected
-formula (`TextureColor × VertexColor × (DiffuseColor+EmissiveColor)`) at all 4 sample points. No
+**Result: the pixel output matched the FNA-derived expected formula (`TextureColor × VertexColor × (DiffuseColor+EmissiveColor)`) at all 4 sample points. No
 new bugs found — this was pure integration verification, and it passed cleanly on the first attempt
 thanks to Tasks 364–369's fixes already being in place.
 
-## 6. `DiffuseColor` above 1 is saturated per vertex (`plans/plan_vulkan.md` VULKAN-197, 2026-09-07)
+## 6. `DiffuseColor` above 1 is saturated per vertex (2026-09-07)
 
 `BasicEffect.DiffuseColor` is a `Vector3` with no clamp in its setter (`BasicEffect.cs:117`), and
 `Alpha` is an unclamped `float`, so a game can hand the shader a value above 1. XNA still renders it
 as 1 — not because the effect clamps, but because the **unlit** path writes the value to
 `vout.Diffuse`, which `Structures.fxh` declares `COLOR0`, and **Direct3D 9 saturates a vertex
 shader's colour output registers before interpolation**. It is the same `oD0`/`oD1` rule
-`plans/plan_fx.md` FX-123 measured for the vertex-lit programs and `VULKAN-196` measured for
-`EnvironmentMapEffect`'s blend factor.
+`plans/plan_fx.md` FX-123 measured for the vertex-lit programs.
 
 **Measured on the real XNA 4.0 runtime** (`spikes/xna-diffuse-color-clamp-spike/`), with a **grey**
 `(100,100,100)` texture — never white, or both answers saturate at the output and the probe could
@@ -129,8 +114,7 @@ sampled at the centre:
 `178` is the midpoint of `saturate(2.0) = 255` and `saturate(0.4) = 102`. Interpolating the raw
 product first gives `1.2` and clips to `255` — the two orders are **77 levels** apart there.
 
-**Renderer status.** The Vulkan renderer clamps ten vertex shaders at the vertex stage as of
-`VULKAN-197` and reproduces every number above. **EasyGL does not**, and its structure is different
+**Renderer status.** **EasyGL does not clamp at the vertex stage**, and its structure is different
 rather than merely unfixed: its unlit programs apply `uDiffuseColor` in the **fragment** stage
 (`FragColor = vc * uDiffuseColor`, `EasyGLRenderer.cpp:7768`), so there is no colour varying for the
 saturate to apply to. `FX-123` fixed only its two vertex-**lit** programs. That half belongs to
@@ -142,9 +126,9 @@ shader, unclamped, with only the render-target write saturating it. Clamping CNA
 varying would make it *more* clamped than XNA.
 
 Guarded by `modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp`, registered as
-`Vulkan_BasicEffect_DiffuseColorClamp`.
+`SdlGpu_BasicEffect_DiffuseColorClamp`.
 
-## 7. Vertex layouts a lit `BasicEffect` accepts (`plans/plan_vulkan.md` VULKAN-198/199/200, 2026-09-07)
+## 7. Vertex layouts a lit `BasicEffect` accepts (2026-09-07)
 
 XNA selects a stock `BasicEffect` shader from what the vertex *declaration* says, not from the
 buffer's stride — and the two disagree more often than they look like they would. Two ordinary XNA
@@ -159,14 +143,6 @@ layouts are 24 and 36 bytes:
 second as a stride case, and its lit programs carry a colour attribute. `FX-125` is the record of
 what it cost to find out — a mesh with a colour channel fell onto the *unlit* program and
 `SAMPLE-047`'s sphere rendered as a flat green disc.
-
-**Vulkan** refused both outright until `VULKAN-199`/`VULKAN-200`: its lit family was selected by
-`stride == 32` and existed for exactly one layout, so the declaration-fidelity guard refused the
-draw rather than reading a normal's twelve bytes as a packed colour and a UV. Refusing is the right
-failure — but a game using either layout could not draw at all. Both now render, and the selection
-is set-exact: a declaration is matched as a whole element set, because a renderer's "is this layout
-complete" test asks whether every input the *shader* consumes was supplied and cannot notice a
-declared element the shader ignores.
 
 **The vertex-colour ordering is the part that is easy to get subtly wrong**, and it differs between
 the two lighting families:
@@ -188,36 +164,27 @@ at byte 24 and the UV at 28, while `aUV` is location 2 (inherited from the colou
 plausible `(64,64,0)` that is *neither* the unlit vertex colour *nor* lit-but-colourless. It passes
 both negative checks. That is why the test asserts the exact value the arithmetic predicts.
 
-Guarded by `Vulkan_BasicEffect_PositionNormal` (EasyGL's `SAMPLE-002` source),
-`Vulkan_BasicEffectLitVertexColor` (EasyGL's `FX-125` source) and
-`modules/graphics/examples/basiceffect_lit_vertex_color_perpixel_test.cpp`. The last exists because
-the `FX-125` source sets `PreferPerPixelLighting(false)` in its own body, so registering it alone
-would leave the per-pixel half of the fix untested.
-
-The **unlit** 36-byte record draws too, since `VULKAN-201` — routed to the ordinary unlit
-colour-and-texture program, so it reaches the same D3D9 `oD0` saturate every other unlit coloured
-record reaches. Sending it to the coloured *lit* shaders' unlit branch would have been a smaller
-change and a worse one: that branch does not clamp at the vertex, and the two answers differ by
-**77 levels** across a colour gradient at `DiffuseColor = 2` (midpoint 178 against 255).
-
-**Still refused on Vulkan:** any lit declaration outside the sets above.
+Guarded by `EasyGL_BasicEffect_PositionNormal` (`SAMPLE-002`) and
+`EasyGL_BasicEffectLitVertexColor` (`FX-125`). The `FX-125` source sets
+`PreferPerPixelLighting(false)`, so the per-pixel half is covered by the conformance program
+`basiceffect_lit_vertex_color_perpixel` (`<Renderer>_Conformance_*` on EasyGL, SDL_GPU and WebGPU).
 
 ## Support matrix
 
-| Feature | EasyGL | Vulkan |
-|---|---|---|
-| Property defaults (22/22) | ✅ Task 361/362 | ✅ (shared C++) |
-| `EnableDefaultLighting()` exact constants | ✅ Task 363 | ✅ (shared C++) |
-| No-texture, `VertexColorEnabled` toggle | ✅ fixed Task 364 | ✅ fixed Task 364 |
-| Texture × diffuse (no vertex color) | ✅ Task 366 | ✅ Task 366 |
-| Texture × vertex color × diffuse (stride 24) | ✅ fixed Task 367 | ✅ already correct |
-| One directional light, diffuse + ambient | ✅ Task 368 | ✅ Task 368 |
-| `DirectionalLight0.Enabled` gating | ✅ fixed Task 368 | ✅ fixed Task 368 |
-| `DiffuseColor+EmissiveColor`, no lighting | ✅ fixed Task 369 | ✅ fixed Task 369 |
-| `EmissiveColor` while lit | ✅ fixed Task 885 | ✅ fixed Task 885 |
-| `DirectionalLight1`/`2` (multi-light) | ✅ fixed Task 885 | ✅ fixed Task 885 |
-| Real specular highlights | ✅ fixed Task 886 | ✅ fixed Task 886 |
-| Cross-renderer pixel consistency | ✅ Task 370 | ✅ Task 370 |
+| Feature | EasyGL |
+|---|---|
+| Property defaults (22/22) | ✅ Task 361/362 |
+| `EnableDefaultLighting()` exact constants | ✅ Task 363 |
+| No-texture, `VertexColorEnabled` toggle | ✅ fixed Task 364 |
+| Texture × diffuse (no vertex color) | ✅ Task 366 |
+| Texture × vertex color × diffuse (stride 24) | ✅ fixed Task 367 |
+| One directional light, diffuse + ambient | ✅ Task 368 |
+| `DirectionalLight0.Enabled` gating | ✅ fixed Task 368 |
+| `DiffuseColor+EmissiveColor`, no lighting | ✅ fixed Task 369 |
+| `EmissiveColor` while lit | ✅ fixed Task 885 |
+| `DirectionalLight1`/`2` (multi-light) | ✅ fixed Task 885 |
+| Real specular highlights | ✅ fixed Task 886 |
+| Combined integration capstone | ✅ Task 370 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented (historical — see status banner at top).
 
@@ -226,10 +193,8 @@ Legend: ✅ verified working · ❌ confirmed not implemented (historical — se
 Phase 42 opened 2 new tracked tasks, both since closed:
 
 - ~~**Task 885**~~ — **fixed.** Lit-path `EmissiveColor` + `DirectionalLight1`/`DirectionalLight2`
-  forwarding now implemented on both renderers.
+  forwarding now implemented.
 - ~~**Task 886**~~ — **fixed.** Real specular highlights (`SpecularColor`/`SpecularPower`) now
-  implemented on both renderers.
+  implemented.
 
-This closes Phase 42 (`plans/plan_graphics.md` Tasks 361–370) in full. Note `BasicEffect` is unrelated to
-`EnvironmentMapEffect`/`SkinnedEffect`, whose own `DirectionalLight1`/`2` forwarding gaps (Tasks
-890/891/893) remain genuinely open — see `NEXT.md` §5.
+This closes Phase 42 (`plans/plan_graphics.md` Tasks 361–370) in full.

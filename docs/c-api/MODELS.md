@@ -23,8 +23,8 @@ native object identity rather than matching names or indices.
 `ModelBoneSmoke.c` covers both constructors, exact UTF-8 names, capacity atomicity, indices,
 identity and mutated transforms, optional parents, live collection growth, index/name/contains
 operations, multiple aliases, transitive hierarchy lifetime, expired parents, cycle refusal and
-invalid, stale, wrong-kind and wrong-thread calls. The same strict-C source runs under HEADLESS and
-SDL_RENDERER plus focused ASan+UBSan; C17/C++23 assertions freeze both handle widths.
+invalid, stale, wrong-kind and wrong-thread calls. The same strict-C source runs under HEADLESS
+plus focused ASan+UBSan; C17/C++23 assertions freeze both handle widths.
 
 ## Model mesh parts and collections
 
@@ -48,8 +48,8 @@ next model slice.
 `ModelMeshPartSmoke.c` covers both constructors, all scalar getters/setters, opaque tags,
 optional resource state, snapshot count/index and alias lifetime, invalid arrays, stale,
 wrong-kind and wrong-thread handles. It also proves that retained effects and supported buffers
-cannot be disposed or destroyed early. HEADLESS and SDL_RENDERER run the same strict-C source;
-backend buffer refusal remains an explicit `NOT_SUPPORTED` result.
+cannot be disposed or destroyed early. Backend buffer refusal remains an explicit `NOT_SUPPORTED`
+result.
 
 ## Model meshes and aggregate collections
 
@@ -74,8 +74,8 @@ exact UTF-8 find and object-identity contains operations; its returned handles s
 `cna_model_mesh_draw` calls native `ModelMesh::Draw` only when the device reports 3D support and
 otherwise returns `CNA_RESULT_NOT_SUPPORTED` before native mutation. `ModelMeshSmoke.c` covers
 both constructors, all properties, both collections, duplicate effects, transitive lifetime,
-safe surviving parts, draw capability behavior and error/thread paths under HEADLESS and
-SDL_RENDERER, plus a focused ASan+UBSan run.
+safe surviving parts, draw capability behavior and error/thread paths under HEADLESS, plus a
+focused ASan+UBSan run.
 
 ## Top-level models
 
@@ -98,7 +98,7 @@ model targets a renderer without 3D support.
 
 `ModelSmoke.c` covers all constructors and properties, nullable root/parents, retained collections,
 owned-context releases, all transform routes and capacity failures, transitive lifetime, renderer
-draw behavior and thread/handle errors under HEADLESS and SDL_RENDERER plus ASan+UBSan.
+draw behavior and thread/handle errors under HEADLESS plus ASan+UBSan.
 
 ## Morph-target extensions
 
@@ -124,7 +124,7 @@ remains a separate sidecar. Re-upload requires an attached VertexBuffer with suf
 `MorphTargetSmoke.c` covers descriptor ABI and deep copying, all fields, mutable weights/tracks,
 LINEAR/STEP/Hermite evaluation, blend math, normal normalization, untouched UV bytes, output
 atomicity, malformed inputs, part attachment/upload, transitive lifetime and invalid, stale,
-wrong-kind and wrong-thread paths under HEADLESS and SDL_RENDERER plus ASan+UBSan.
+wrong-kind and wrong-thread paths under HEADLESS plus ASan+UBSan.
 
 ## GPU-skinned model extensions
 
@@ -156,8 +156,8 @@ texture handles remain retained by the model until removal or destruction.
 mutation, exact interpolation/clamp/loop transforms, move construction/assignment, capacity
 atomicity, malformed hierarchy/time/boolean input, attach mismatch and replace-by-name transfer,
 optional texture and resource-count behavior, disposal protection and release, plus stale,
-wrong-kind and wrong-thread calls. The strict-C test runs under HEADLESS and SDL_RENDERER using
-SDL's dummy virtual video driver, with a focused ASan+UBSan run.
+wrong-kind and wrong-thread calls. The strict-C test runs under HEADLESS, with a focused ASan+UBSan
+run.
 
 ## SkinningData and AnimationPlayer
 
@@ -178,6 +178,6 @@ protocol.
 `AnimationPlayerSmoke.c` covers all SkinningData fields, descriptor deep copying, type identity,
 clip lookup/track copies, initial bind pose, root-prefix composition, StartClip, relative and
 absolute updates, loop/clamp behavior, all three transform arrays, retained data lifetime,
-capacity atomicity and handle/thread/input failures. It runs unchanged under HEADLESS and
-SDL_RENDERER, with a focused ASan+UBSan run. This completes the CBIND-035E model and animation
+capacity atomicity and handle/thread/input failures. It runs unchanged under HEADLESS, with a
+focused ASan+UBSan run. This completes the CBIND-035E model and animation
 slice.

@@ -227,7 +227,7 @@ The **src/ tree of a module** keeps the Phase-2 area convention: XNA API impleme
 modules/graphics/src/Xna/Texture2D.cpp        # Microsoft::Xna::Framework::Graphics::Texture2D
 modules/input/src/Internal/SdlInputBridge.cpp # CNA::Internal::Input
 modules/math/src/Vector3.cpp                  # Framework-root math type
-modules/renderers/vulkan/src/…                # one directory per renderer family
+modules/renderers/sdl-gpu/src/…               # one directory per renderer family
 ```
 
 A new production `.cpp` placed outside every module directory fails the configure (the
@@ -390,7 +390,7 @@ After making changes:
    (`cmake --build <build-dir>`) or a specific test/example target by its own name (matching AGENTS.md).
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
-Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
+Default debug build dir: `cmake-build-debug/`. SDL_GPU build dir: `cmake-build-sdlgpu/`.
 Multi-renderer build dir: `cmake-build-multi/` (see below).
 
 ### Runtime renderer selection (second build mode)
@@ -442,11 +442,11 @@ directory and is shared by all multi-renderer work.
 
 ```bash
 tools/platform/run_gpu_tests_private.sh <build-dir> [ctest arguments...]
-# e.g. tools/platform/run_gpu_tests_private.sh cmake-build-vulkan -R '^Vulkan_' -j6
+# e.g. tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu -R '^SdlGpu_' -j6
 ```
 
 It starts a headless Weston and a private rootful Xwayland (DRI3, the real GPU — Xvfb cannot present
-Vulkan) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
+Vulkan, which SDL_GPU uses on Linux) and runs `ctest` against them; nothing appears on the desktop. `CNA_TEST_DISPLAY` is empty by
 default, so registered tests inherit the launcher's `DISPLAY`; the live desktop needs an explicit
 `-DCNA_TEST_DISPLAY=:0 -DCNA_TEST_ALLOW_LIVE_DISPLAY=ON` (see `cmake/TestDisplayPolicy.cmake` and
 `plans/plan_gpu_test_isolation.md`). The runner refuses a tree that still forces a display.
@@ -522,7 +522,7 @@ SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
 
 - `modules/platform/src/Sdl3/`;
 - `modules/audio/src/Platform/Sdl3/` and the mixer implementation isolated inside audio;
-- renderer families `sdl-renderer`, `sdl-gpu`, and `fna3d`.
+- renderer families `sdl-gpu` and `fna3d`.
 
 A genuinely backend-specific test belongs with the platform implementation it exercises. Consumer tests use
 canned platform services or the parameterized conformance suite, not native event injection.
@@ -544,22 +544,24 @@ See `docs/platform-abstraction.md` for the contract and implementation checklist
 task/evidence log is `plans/plan_platform.md`.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
-(`SDL_RENDERER` | `OPENGLES3` | `OPENGL33` | `WEBGL2` | `VULKAN` | `WEBGPU` | `HEADLESS` |
-`SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX9` | `SDL_GPU` | `METAL` | `FNA3D`). These are exactly
-**14 public identities** over 12 implementation families; EasyGL remains an internal
-implementation shared by three GL profiles. The canonical list lives in
+(`OPENGLES3` | `OPENGL33` | `WEBGL2` | `WEBGPU` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX9` |
+`SDL_GPU` | `FNA3D`). These are exactly **10 public identities** over 8 implementation families;
+EasyGL remains an internal implementation shared by three GL profiles. `SDL_GPU` is CNA's modern
+native path: CNA maps XNA 4.0 onto SDL_GPU, and SDL owns its Vulkan, Direct3D 12 and Metal
+backends. The canonical list lives in
 `cmake/RendererIdentities.cmake` and is pinned by `scripts/check_renderer_identities.py`.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not
-reasonably covered by the existing set -- never because the count would grow. Thirty-seven identities
-are retired (`BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`/`8`/`10`/`12`,
+reasonably covered by the existing set -- never because the count would grow. Forty-one identities
+are retired (`VULKAN`, `DIRECTX11`, `METAL`, `SDL_RENDERER`, `BGFX`, `MAGNUM`, `SKIA`, `BLEND2D`, `DIRECTX1`/`2`/`3`/`5`/`6`/`7`/`8`/`10`/`12`,
 `OPENGLES1`, `OPENGLES2`, `OPENGL1`, `OPENGL2`, `WEBGL1`, `WICKED`, `SOKOL`, `DILIGENT`, `GLIDE`,
 `LLGL`, `OPENVG`, `TINYGL`, `IGL`, `PIXIJS`, `NANOVG`, `RLGL`, `DIRECT2D`, `FREEDIRECT`,
 `PORTABLEGL`, `GDI`, `HTML_DOM`, `SVG_DOM`, `OPENGL4`, `CANVAS`), and the
 former `ASCII` identity was replaced by the renderer-neutral `CNA::Graphics::AsciiPostProcessEffect`
 (`modules/graphics-ext/`, see `docs/ascii-post-process-effect.md`). A retired selector is refused at configure time, by name and
-with its permanently reserved C ABI value; its number is never reassigned. Do not resurrect one
+with its permanently reserved C ABI value, and at run time as retired rather than unknown; its
+number is never reassigned and no surviving renderer is an alias for it. Do not resurrect one
 without a fresh owner instruction -- see `docs/removed-renderers.md`.
 
 `WEBGPU` is experimental but past a 2D baseline, with a real 3D route (stock effects, instancing,
@@ -588,7 +590,7 @@ stay `UpperCamelCase`.
 
 **Asking a renderer what it will actually do.** `GraphicsCapability::CustomEffects` means the
 renderer *accepts* an effect, not that it runs your shader source: SOFTWARE and HEADLESS accept any
-source and keep rendering with their own fixed path, and Vulkan's `ShaderEffect` takes SPIR-V rather
+source and keep rendering with their own fixed path, and SDL_GPU's `ShaderEffect` takes SPIR-V rather
 than GLSL. The detailed capability profile (`docs/renderer-capability-profiles.md`) answers the
 narrower question; new shader-based code must ask it rather than the coarse capability alone.
 
@@ -606,7 +608,7 @@ its renderer implementation.
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
 - It is past a 2D baseline (stock effects, render targets, MSAA, instancing, stencil, compressed
-  textures; see `docs/webgpu-renderer.md`). Do not describe it as Vulkan-level or full XNA 3D
+  textures; see `docs/webgpu-renderer.md`). Do not describe it as full XNA 3D
   parity until the remaining tasks in `plans/plan_webgpu.md` are actually complete.
 - Preserve the established renderers: WebGPU changes should remain renderer-local or common only
   where a common-interface change is genuinely required and verified across existing renderers.

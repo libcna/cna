@@ -22,7 +22,7 @@ not presented as elapsed-time improvements.
 | Fast debug | Controlled content compilation fell 9.7% and the build tree fell 47.2% with line tables. | `CNA_DEBUG_INFO=FULL` is default; `dev-fast-debug` opts in. |
 | Clean-CI unity | Four-job core/math clean closure fell 25.6%; a one-source rebuild regressed 5.7%. | Default `CNA_ENABLE_UNITY_BUILD=OFF`; `unit-unity` is leaf-only. |
 | Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=DEFAULT`; `AUTO`, `LLD`, and `MOLD` are explicit alternatives. |
-| Shared runtime | `cmake-build-vulkan` (Debug, `VULKAN;OPENGL33`) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a Vulkan renderer `.cpp` edit now relinks 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.27; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
+| Shared runtime | A Debug `VULKAN;OPENGL33` tree (2026-09-21, renderer since retired) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a renderer `.cpp` edit relinked 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.27; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
 | ccache | A public-header rebuild recovered 23/23 compile edges as direct hits in 0.36 s, with no preprocessed hits or eviction. | `CNA_USE_CCACHE=OFF`; CNA never changes global sloppiness/direct-mode policy. |
 | Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges; this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
 
@@ -268,13 +268,14 @@ rules exist to limit, that is the dominant cost of an edit–build–test cycle.
 pull in nothing), with `LINK_LIBRARY_OVERRIDE_<lib>` resolving the feature conflict that
 inter-module dependencies otherwise cause. `CNA` then gives consumers `libcna.so`, the
 **compile-only** usage requirements of the archives (`$<COMPILE_ONLY:...>`), and the libraries those
-archives depend on that are not inside `libcna.so` (Vulkan, SDL, X11, sharp-runtime, ...).
+archives depend on that are not inside `libcna.so` (SDL, X11, wgpu-native, sharp-runtime, ...).
 `cmake/SharedRuntimeLibrary.cmake` holds the closure walk; "CNA-owned" means a non-imported target
 whose `SOURCE_DIR` is under `modules/`. The CNA archives therefore never appear on a consumer's link
 line, so a module edit does not relink consumers, and `CMAKE_LINK_DEPENDS_NO_SHARED` keeps a rebuilt
 `libcna.so` from relinking them either.
 
-**Measured**, same machine and configuration:
+**Measured**, same machine and configuration (`VULKAN` was retired on 2026-10-13; the figures stand
+as recorded):
 
 | | Static | Shared |
 | --- | --- | --- |

@@ -35,8 +35,7 @@ cmake -S . -B cmake-build-d3d9 \
 cmake --build cmake-build-d3d9 -j
 ```
 
-`D3D9`, like `D3D11`, is hard-gated to Windows cross-compilation (or native Windows) at
-configure time.
+`D3D9` is hard-gated to Windows cross-compilation (or native Windows) at configure time.
 
 ## What's real
 
@@ -64,9 +63,8 @@ configure time.
   query, which is exactly what every other renderer's `IsProfileSupported() { return true; }`
   honestly is (and correctly stays).
 - **Buffers, textures, render targets, MRT, MSAA, occlusion queries, NPOT, hardware instancing,
-  all render/blend/depth-stencil/rasterizer state** — same shape as `D3D11`'s own established
-  coverage, real `SetRenderState`/`SetSamplerState` sequences (D3D9 has no state objects to
-  cache — design decision 11).
+  all render/blend/depth-stencil/rasterizer state** — real `SetRenderState`/`SetSamplerState`
+  sequences (D3D9 has no state objects to cache — design decision 11).
 
 ## What's not (yet)
 
@@ -108,8 +106,8 @@ narrower one than "authentically indistinguishable from XNA on real hardware." T
 
 ## Development environment: Wine + DXVK dev-loop
 
-Same shape as `D3D11`'s own dev loop (`docs/directx11-renderer.md`), plus a SECOND, separate Wine
-prefix for the real XNA 4.0 oracle:
+The cross-built Windows binaries run under Wine + DXVK, plus a SECOND, separate Wine prefix for the
+real XNA 4.0 oracle:
 
 ```text
 Debian (this repo's actual dev machine)
@@ -153,7 +151,7 @@ need the separate XNA prefix to run.
 
 ## Writing a D3D9 test
 
-Two established patterns, matching `D3D11`'s own precedent:
+Two established patterns:
 
 1. **`Game`-subclass CTests** (`examples/directx9_*_test.cpp`) — the normal path for anything
    exercising the real public XNA API (`DirectX9_Smoke`, `DirectX9_Draw`, `DirectX9_DrawEx`, `DirectX9_SpriteBatch`,
@@ -177,8 +175,7 @@ target feature disabled is worse than no check at all).
 
 - **Not verified on real Windows hardware** (`D9-140`, `needs_human`) — see the DXVK-authenticity
   caveat above.
-- **`CnaTests` does not build under D3D9** (`D9-123`) — same POSIX `::setenv()` wall `D3D11`
-  already documents.
+- **`CnaTests` does not build under D3D9** (`D9-123`) — the POSIX `::setenv()` wall.
 - **`DirectX9_Common`'s lookup-table checks are mostly not individually mutation-verified** — `D9-122`
   closed the highest-value gaps (blend state, device-lost recovery, MRT, render-target bind,
   vertex-buffer upload, cube-texture upload) but explicitly left most of `DirectX9_Common`'s ~30

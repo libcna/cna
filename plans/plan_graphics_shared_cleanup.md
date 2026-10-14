@@ -20,8 +20,8 @@ None of it is physical-GPU evidence.
 | GSC-0006 | Direct3D debug-layer messages fail tests | ✅ |
 | GSC-0007 | `CaseInsensitivePathTest` contract (formerly WINNATIVE-F26) | ✅ |
 | GSC-0008 | Audio test fixtures isolated per process (`%TEMP%` race) | ✅ |
-| GSC-0009 | PBR shading basis guarded against a zero normal or tangent on every family | ⬜ EasyGL done |
-| GSC-0010 | PBR double-sided materials shade the back face with the basis reversed on every family | ⬜ EasyGL done |
+| GSC-0009 | PBR shading basis guarded against a zero normal or tangent on every family | EasyGL done; the rest moved to `handoff.md` §5.1 (2026-10-13) |
+| GSC-0010 | PBR double-sided materials shade the back face with the basis reversed on every family | EasyGL done; the rest moved to `handoff.md` §5.1 (2026-10-13) |
 
 Follow-ups found on the way are listed at the end; none of them was fixed here.
 
@@ -296,6 +296,9 @@ is the control the swap does not affect) and `StockEffectNullTextureTest` failed
 and the AlphaTest `Always` case above). Restored, touched and rebuilt: 10/10 pass.
 
 ## Follow-ups (not fixed here)
+
+2026-10-13: GSC-F1 moved to `handoff.md` §5.1; GSC-F2, GSC-F3 and GSC-F4 closed with the retirement of
+`VULKAN` and `DIRECTX11` (the D3D corpus inventory went with DirectX 11).
 
 | Item | Class |
 |---|---|

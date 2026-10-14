@@ -3,7 +3,7 @@
 ## Status
 
 The native C API is experimental. Its initial `0.1.0` shared library and public C17 headers provide
-the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycle slice
+the ABI/error substrate plus a HEADLESS-tested `Game` lifecycle slice
 (`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
 complete `Texture`/`Texture2D` construction, properties, typed mip/rectangle transfer and
 PNG/JPEG memory/file routes, owned Texture3D/TextureCube creation and complete
@@ -139,8 +139,9 @@ connection and native audio-playback availability. An unsupported operation retu
 `CNA_RESULT_NOT_SUPPORTED` instead of silently changing behavior.
 
 The automated vertical slice runs with HEADLESS for deterministic state and honest unsupported
-readback behavior. The same strict-C source runs under SDL_RENDERER and verifies exact texture,
-SpriteBatch, clear and backbuffer pixels rather than inferring rendering correctness from calls.
+readback behavior. On a renderer that can read its backbuffer back, the same strict-C source
+verifies exact texture, SpriteBatch, clear and backbuffer pixels rather than inferring rendering
+correctness from calls.
 
 ## Hard boundaries
 

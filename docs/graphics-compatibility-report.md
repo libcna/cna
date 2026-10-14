@@ -5,7 +5,8 @@
 > update: `IndexElementSize` (Task 921), Vulkan `BlendState` (Task 868), EasyGL anisotropic
 > filtering (Task 918), `Model` root-bone default (Task 916), and `SpriteBatch::Draw`'s optional
 > source rectangle (Task 922) are **all closed** — 5/5. Of the original 5 BLOCKED tasks, Vulkan
-> `OcclusionQuery` (447) is also closed (2026-07-10); the other 4 (686/687, 725, 732) still need a
+> `OcclusionQuery` (447) is also closed (2026-07-10); of the other 4, 686/687 went with SDL_Renderer
+> (retired with Vulkan on 2026-10-13), 725 was resolved on 2026-10-09, and 732 still needs a
 > project-owner architecture decision. **Do not treat the percentages and bug counts in this report
 > as current** — they are a dated snapshot of Task 500's 2026-07-09 milestone declaration, kept
 > below for its methodology (how the numbers were computed), not as a live status. For current
@@ -35,9 +36,9 @@ per-renderer awareness).
 | Renderer | Integration-only | Full suite | Source |
 |---|---|---|---|
 | EasyGL | 166/168 = **98.81%** | 4522/4525 = **99.93%** (4527/4530 = **99.93%** after Task 498's 5 new tests) | Tasks 493/494/498 |
-| Vulkan | 87/93 = **93.55%** | 4369/4378 = **99.79%** | Task 495, cross-checked against Task 911's baseline |
+| Vulkan (retired 2026-10-13) | 87/93 = **93.55%** | 4369/4378 = **99.79%** | Task 495, cross-checked against Task 911's baseline |
 | Bgfx (retired 2026-09-17) | 54/56 = **96.43%** | 4413/4414 = **99.98%** baseline, but see correction below | Task 496, cross-checked against Task 448's baseline |
-| SDL_Renderer | 67/67 = **100.00%** (2D-only, by design) | 4410/4421 = **99.75%** (11 failures, all by-design "3D not supported" throws, not bugs) | Task 497 |
+| SDL_Renderer (retired 2026-10-13) | 67/67 = **100.00%** (2D-only, by design) | 4410/4421 = **99.75%** (11 failures, all by-design "3D not supported" throws, not bugs) | Task 497 |
 
 **Correction found while cross-checking (2026-07-09):** `docs/xna-4-api-coverage.md`'s per-renderer
 table (Task 484) cited Bgfx's known baseline as "1" pre-existing failure

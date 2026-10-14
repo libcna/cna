@@ -25,7 +25,7 @@ uses native scratch storage and copies to the caller only after complete success
 `cna_texture3d_set_data_bytes` is the direct form of `SetDataPointerEXT`; for the current Color
 contract its byte count must equal four times the requested voxel count.
 
-HEADLESS and SDL_RENDERER report no real volume storage. Their C creation route therefore returns
+HEADLESS reports no real volume storage. Its C creation route therefore returns
 `CNA_RESULT_NOT_SUPPORTED` with an invalid output handle instead of manufacturing a usable
 Texture3D. Renderers that advertise the capability remain responsible for accepting or explicitly
 refusing each mip/box operation.
@@ -51,7 +51,7 @@ the game. Typed destroy validates the exact concrete kind, invalidates the gener
 handle and rejects stale, wrong-kind and wrong-thread use. Explicit generic disposal keeps the C
 handle alive for disposal-state queries until typed destruction.
 
-`TextureVolumeSmoke.c` is strict C17 and runs unchanged under HEADLESS and SDL_RENDERER. It covers
+`TextureVolumeSmoke.c` is strict C17 and runs unchanged under HEADLESS. It covers
 all six faces, full/mip/rectangle validation, array capacity and atomicity, exact native type text,
 DDS input, common Texture and GraphicsResource routes, RenderTargetCube inheritance, disposal,
 parent order and invalid/stale/wrong-kind/wrong-thread failures. C17 and C++23 compile-time

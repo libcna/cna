@@ -6,6 +6,8 @@
 > [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md); current known
 > bugs and limitations are in [`handoff.md`](handoff.md) §5.
 
+> Notes naming Vulkan, Metal, DirectX 11 or SDL_Renderer predate their retirement on 2026-10-13.
+
 > **XACTBUILD-001 / SAMPLE-122 (2026-10-03):** BuildXact now sends genuine `/WINDOWS`/`/XBOX360`
 > switches and shares the effect compiler's Wine path spelling. Three invocation regressions fail
 > before correction; 45/45 focused task/effect cases and 2/2 genuine SDK gates pass. Unchanged

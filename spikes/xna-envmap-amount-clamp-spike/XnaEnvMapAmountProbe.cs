@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_vulkan.md VULKAN-196 (finding F-36).
+// VULKAN-196 (the retired VULKAN renderer's plan, kept in Git history) (finding F-36).
 //
 // Measures, on the real XNA 4.0 runtime, what happens to `EnvironmentMapEffect.EnvironmentMapAmount`
 // above 1. The property setter does not clamp (`EnvironmentMapEffect.cs:283`), the value is written

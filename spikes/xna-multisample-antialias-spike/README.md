@@ -1,6 +1,6 @@
 # `RasterizerState.MultiSampleAntiAlias` on the real XNA 4.0 runtime
 
-`plans/plan_vulkan.md` **VULKAN-099**.
+First run for **VULKAN-099**; the result is recorded in `docs/rasterizerstate-support.md` §8.
 
 ## Why this exists
 
@@ -11,8 +11,8 @@ renderer: `MultiSampleAntiAlias`. The value is stored on `RasterizerState`, read
 `(cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias)` — five parameters, no
 sixth.
 
-Adding a sixth parameter changes an interface twelve renderer families implement, so `VULKAN-099`
-refuses to do it on a reading of the name. What the flag *promises* is narrower than it sounds: on
+Adding a sixth parameter changes an interface every renderer family implements, so `VULKAN-099`
+refused to do it on a reading of the name. What the flag *promises* is narrower than it sounds: on
 D3D9 it is `D3DRS_MULTISAMPLEANTIALIAS`, which gates multisample rasterization for the draw, while
 D3D11's nearest equivalent (`RasterizerDesc.MultisampleEnable`) affects only line and point
 antialiasing — the render target's sample count governs everything else, independently. Which of
@@ -53,6 +53,6 @@ goes to stdout and to `probe-output.txt` next to the executable.
 
 ## Result
 
-Recorded in `plans/plan_vulkan.md` VULKAN-099 and, once the row closes, in
-`docs/vulkan-renderer.md`. This file deliberately does not duplicate the numbers — a spike README
-that carries its own copy of a measurement is how two versions of it start to exist.
+Recorded in `docs/rasterizerstate-support.md` §8. This file deliberately does not duplicate the
+numbers — a spike README that carries its own copy of a measurement is how two versions of it start
+to exist.

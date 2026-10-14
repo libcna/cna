@@ -1,8 +1,7 @@
 # SkinnedEffect Exactness Support Matrix
 
 Phase 46 (`plans/plan_graphics.md` Tasks 401–410) audited and pixel-verified `SkinnedEffect` conformance
-against FNA across its EasyGL and Vulkan graphics renderers. This document summarizes
-the findings and closes the phase.
+against FNA. This document summarizes the findings and closes the phase.
 
 ---
 
@@ -33,14 +32,14 @@ the same one-line-per-field pattern used for `FogColor`.
 Opened 3 new backlog tasks: **Task 893** (`DirectionalLight1`/`DirectionalLight2` unforwarded,
 same shape as `BasicEffect`'s Task 885 and `EnvironmentMapEffect`'s Task 890 — `SkinnedEffect.fx`
 shares the same `Lighting.fxh`/`ComputeLights` mechanism), **Task 894** (`SpecularColor`/
-`SpecularPower` have zero GPU implementation on either renderer — `GpuDrawParams` has no
+`SpecularPower` have zero GPU implementation — `GpuDrawParams` has no
 generic specular fields at all, same shape as `BasicEffect`'s Task 886), and **Task 895**
-(`WeightsPerVertex` is a complete GPU no-op on both renderers — FNA's real `Skin(vin, boneCount)`
+(`WeightsPerVertex` is a complete GPU no-op — FNA's real `Skin(vin, boneCount)`
 HLSL function only sums the first `boneCount` weight/index pairs, but CNA's skinning shader
 unconditionally sums all 4 regardless of the property's value; only visible when unused weight
 slots hold nonzero data). Also noted, **not** opened as a bug (an acceptable, strictly-more-
 accurate deviation, same class as Task 396's per-pixel-Fresnel note): `PreferPerPixelLighting=false`
-is effectively a no-op since `NdotL` is always computed in the fragment shader on every renderer.
+is effectively a no-op since `NdotL` is always computed in the fragment shader.
 
 ## 2. Default-value unit tests, `MaxBones` linker gap (Task 402)
 
@@ -89,13 +88,11 @@ confirms the quad does **not** move.
 
 ## 5. Single translation bone (Task 407)
 
-**Verify-only, zero bugs found.** Formalized the pre-existing (Task 123) EasyGL-only
+**Verify-only, zero bugs found.** Formalized the pre-existing (Task 123)
 `skinned_effect_integration_test.cpp` translation-bone scenario into Phase 46's own per-renderer
-naming/registration convention, extending it to Vulkan for the first time. All vertices
-bound 100% to a single bone set to a real, non-identity `Matrix.CreateTranslation(+0.5,0,0)`. Both
-renderers produced the exact predicted output on the first attempt (EasyGL `(174,0,0)`, Vulkan
-`(160,0,0)` — the small EasyGL-vs-Vulkan RGB difference is the same pre-existing
-per-renderer lighting-precision variance seen throughout this project, not a bug).
+naming/registration convention. All vertices bound 100% to a single bone set to a real,
+non-identity `Matrix.CreateTranslation(+0.5,0,0)`; EasyGL produced the exact predicted output
+`(174,0,0)` on the first attempt.
 
 ## 6. Two-bone weighted blend (Task 408)
 
@@ -105,15 +102,15 @@ Deliberately chose a discriminating, non-trivial bone pair rather than a saturat
 `Bones[0]=Translate(-0.5,0,0)`, `Bones[1]=Translate(+1.5,0,0)`, weights split `0.5`/`0.5` → net
 blended shift `= 0.5×(-0.5)+0.5×(1.5) = +0.5`, a value distinct from either individual bone's own
 shift — so a bug that picked one bone alone (ignoring the other's weight) would produce a clearly
-different, wrong result rather than accidentally matching. All 3 renderers produced the exact
-predicted output on the first attempt, byte-identical to Task 407's own per-renderer values.
+different, wrong result rather than accidentally matching. The exact predicted output appeared on
+the first attempt, byte-identical to Task 407's own value.
 
 **Discriminating power independently verified**: temporarily changed the EasyGL test's weights to
 `(1,0)` (bone 0 alone) and reran — predicted shift becomes `-0.5` instead of `+0.5`; observed
 exactly the predicted swap (quad moved to the *left* read-back point instead of centre) before
 restoring the real `0.5`/`0.5` test.
 
-## 7. Cross-renderer consistency (Task 409)
+## 7. Integration capstone (Task 409)
 
 **Capstone, zero new bugs found.** Combined Tasks 406–408's individually-verified pieces (identity
 no-op, single-bone translation, 2-bone weighted blend) into **one scene, one bone-palette upload,
@@ -122,27 +119,26 @@ within a single draw*, not just when each is exercised in its own dedicated draw
 share identical authored geometry and are distinguished only by their per-vertex weight/index
 data, directly testing that the vertex shader reads genuinely per-vertex skinning attributes.
 
-**Result: both renderers produced the exact predicted output on the first attempt**, each
-byte-identical across all 3 quads within itself and matching each renderer's own Task 406–408
-single-quad values exactly (EasyGL all 3 = `(174,0,0)`; Vulkan all 3 = `(160,0,0)`) — strong
+**Result: the exact predicted output on the first attempt**, byte-identical across all 3 quads and
+matching the Task 406–408 single-quad values exactly (all 3 = `(174,0,0)` on EasyGL) — strong
 evidence the 3 independent bone/weight combinations apply correctly and simultaneously within one
 draw call.
 
 ## Support matrix
 
-| Feature | EasyGL | Vulkan |
-|---|---|---|
-| Property defaults | ✅ Task 401/402 | ✅ (shared C++) |
-| `Clone()` preserves `SpecularColor`/`SpecularPower` | ✅ fixed Task 401 | ✅ fixed Task 401 |
-| `MaxBones`/bone-count bounds-checking | ✅ Task 402/403/405 | ✅ (shared C++) |
-| `GetBoneTransforms` independent-copy semantics | ✅ Task 404 | ✅ (shared C++) |
-| Identity bone palette → zero deformation | ✅ Task 406 | ✅ Task 406 |
-| Single-bone translation | ✅ Task 407 | ✅ Task 407 |
-| Two-bone weighted blend | ✅ Task 408 | ✅ Task 408 |
-| Multi-quad/multi-bone composition in one draw call | ✅ Task 409 | ✅ Task 409 |
-| `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 893 (2026-07-11) | ✅ fixed Task 893 |
-| `SpecularColor`/`SpecularPower` GPU implementation | ✅ fixed Task 894 (2026-07-11) | ✅ fixed Task 894 |
-| `WeightsPerVertex` GPU enforcement | ✅ fixed Task 895 (2026-07-11) | ✅ fixed Task 895 |
+| Feature | EasyGL |
+|---|---|
+| Property defaults | ✅ Task 401/402 |
+| `Clone()` preserves `SpecularColor`/`SpecularPower` | ✅ fixed Task 401 |
+| `MaxBones`/bone-count bounds-checking | ✅ Task 402/403/405 |
+| `GetBoneTransforms` independent-copy semantics | ✅ Task 404 |
+| Identity bone palette → zero deformation | ✅ Task 406 |
+| Single-bone translation | ✅ Task 407 |
+| Two-bone weighted blend | ✅ Task 408 |
+| Multi-quad/multi-bone composition in one draw call | ✅ Task 409 |
+| `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 893 (2026-07-11) |
+| `SpecularColor`/`SpecularPower` GPU implementation | ✅ fixed Task 894 (2026-07-11) |
+| `WeightsPerVertex` GPU enforcement | ✅ fixed Task 895 (2026-07-11) |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
 
@@ -151,14 +147,14 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 Phase 46 opened 3 new tracked tasks (all from Task 401's opener audit):
 
 - ~~**Task 893**~~ — **fixed, 2026-07-11**: `DirectionalLight1`/`DirectionalLight2` now forward on
-  `SkinnedEffect` on both renderers, mirroring `BasicEffect`'s (Task 885/886) and
+  `SkinnedEffect`, mirroring `BasicEffect`'s (Task 885/886) and
   `EnvironmentMapEffect`'s (Task 890) own fixes. See `NEXT.md` §3 for the full write-up.
 - ~~**Task 894**~~ — **fixed, 2026-07-11**: real GPU specular highlights (half-vector Blinn-Phong,
   matching `BasicEffect`'s Task 886 formula exactly) now implemented for `SkinnedEffect`'s
-  `SpecularColor`/`SpecularPower` on both renderers, including new World-matrix/EyePosition
-  plumbing each renderer's skinned shader previously had zero infrastructure for. See `NEXT.md` §3.
+  `SpecularColor`/`SpecularPower`, including new World-matrix/EyePosition
+  plumbing the skinned shader previously had zero infrastructure for. See `NEXT.md` §3.
 - ~~**Task 895**~~ — **fixed, 2026-07-11**: `WeightsPerVertex` is now a real GPU-enforced constraint
-  on both renderers — each renderer's skinning vertex shader gates bone-weight accumulation with
+  — the skinning vertex shader gates bone-weight accumulation with
   `>=2`/`>=4` conditionals, matching FNA's real `Skin(vin, boneCount)` behavior of only summing the
   first `boneCount` weight/index pairs. See `NEXT.md` §3.
 

@@ -180,7 +180,7 @@ and static, so these statements are tested rather than described.
   process's main thread. Off it, a renderer that needs that driver is refused with a message that
   says so, and SOFTWARE runs on SDL's offscreen driver without a window -- see
   [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
-- **Without a display**, `SDL_VIDEODRIVER=dummy` serves the SOFTWARE and SDL_RENDERER renderers.
+- **Without a display**, `SDL_VIDEODRIVER=dummy` serves the SOFTWARE renderer.
   SDL's `offscreen` driver creates its contexts through EGL, which macOS does not have.
 
 ## Where to go next

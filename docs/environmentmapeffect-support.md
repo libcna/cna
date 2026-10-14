@@ -1,8 +1,7 @@
 # EnvironmentMapEffect Exactness Support Matrix
 
 Phase 45 (`plans/plan_graphics.md` Tasks 391–400) audited and pixel-verified `EnvironmentMapEffect`
-conformance against FNA across EasyGL and Vulkan. This document
-summarizes the findings and closes the phase.
+conformance against FNA. This document summarizes the findings and closes the phase.
 
 ---
 
@@ -36,37 +35,37 @@ clone, and nothing copied the source's actual value across. Fixed all 4 with a o
 
 ## 2. Cube-map blend formula (Tasks 393–394)
 
-Task 393 verified `EnvironmentMapAmount=0` correctly ignores the cube map on both renderers —
+Task 393 verified `EnvironmentMapAmount=0` correctly ignores the cube map —
 **zero bugs in its own scope** — but surfaced a real formula-level discrepancy: FNA's real
 `PSEnvMap` pixel shader **lerps** between the lit/textured color and the cube map
 (`color.rgb = lerp(color.rgb, envmap.rgb, EnvironmentMapAmount)`), while CNA's actual shader
-formula on both renderers **added** the cube map on top instead
+formula **added** the cube map on top instead
 (`rgb = litRGB×texColor.rgb + envColor×Amount + specular`). Both formulas coincide exactly at
 `Amount=0` (why Task 393's own scope couldn't catch it) but diverge sharply at `Amount=1`.
 
-**Task 394 confirmed and FIXED this real formula bug on both renderers.** A literal "white
+**Task 394 confirmed and FIXED this real formula bug.** A literal "white
 cubemap" sub-case (matching the task's own title) couldn't discriminate the two formulas — both
 saturate to `(255,255,255)` identically, the same 0/1-saturation blind spot Task 383 already
 taught this project to watch for. A second, deliberately non-saturated **gray cubemap**
 `(128,128,128)` sub-case, combined with a genuinely nonzero lit/textured contribution, cleanly
 discriminated them: FNA's lerp predicts `(128,128,128)` (fully replaced); CNA's additive formula
 predicted `(228,178,153)` (added on top) — empirically confirmed as CNA's exact pre-fix output.
-**Fixed** on both renderers by changing the additive term to a proper `mix()`
+**Fixed** by changing the additive term to a proper `mix()`
 (`vec3 baseColor=litRGB*texColor.rgb; vec3 rgb=mix(baseColor,envColor,Amount)+specular;`).
 
 ## 3. `EnvironmentMapSpecular` alpha scaling (Task 395)
 
-**Real, confirmed formula bug found and fixed on both renderers.** FNA's real `PSEnvMapSpecular`
+**Real, confirmed formula bug found and fixed.** FNA's real `PSEnvMapSpecular`
 pixel shader scales the specular term by the cube map's own **alpha** channel, further scaled by
 the combined texture×diffuse alpha (`envmap = SAMPLE_CUBEMAP(...) * color.a;
 color.rgb += EnvironmentMapSpecular * envmap.a`). CNA's actual shader formula added
-`EnvironmentMapSpecular` as a **flat, unscaled constant** on both renderers, never reading the
+`EnvironmentMapSpecular` as a **flat, unscaled constant**, never reading the
 cube map's alpha channel at all. Isolated the test with `EnvironmentMapAmount=0` (removing the
 base-lerp term from the picture) and opaque texture/diffuse (`combinedAlpha=1`, isolating purely
 to the cube map's own alpha channel): an opaque cube map (`alpha=255`) is not discriminating
 (scaling by 1.0 changes nothing); a translucent cube map (`alpha=128`) is — FNA predicts
 `(151,101,76)`, CNA's flat-additive formula predicts `(202,152,127)`, empirically confirmed as the
-exact pre-fix output. **Fixed** on both renderers by sampling the cube map's full `vec4` (not just
+exact pre-fix output. **Fixed** by sampling the cube map's full `vec4` (not just
 `.rgb`/`.xyz`) and scaling the specular term by `envSample.a × combinedAlpha`. Deliberately left
 unfixed and opened as **Task 891**: the base lerp's `envColor` term is still unscaled by combined
 texture×diffuse alpha (FNA's `envmap = SAMPLE_CUBEMAP(...) * color.a` scales both `envmap.rgb` and
@@ -75,7 +74,7 @@ texture/diffuse alpha is strictly less than 1, unexercised by any test to date.
 
 ## 4. Fresnel edge-weighting (Task 396)
 
-**Real, confirmed missing-feature gap found and fixed on both renderers.** Tasks 393/394 already
+**Real, confirmed missing-feature gap found and fixed.** Tasks 393/394 already
 confirmed CNA implemented **no Fresnel uniform at all** — the env-map blend factor was always the
 flat `EnvironmentMapAmount` regardless of view angle, instead of FNA's real per-vertex
 `pow(max(1-abs(dot(eyeVector,worldNormal)),0),FresnelFactor)*EnvironmentMapAmount` term (the
@@ -87,9 +86,8 @@ suppressed** at normal incidence (the physically-correct behavior). CNA's pre-fi
 formula would instead still fully apply the cube map here: FNA predicts `(100,50,25)` (suppressed),
 CNA's pre-fix formula predicted `(128,128,128)` (fully applied), empirically confirmed. **Fixed**
 by adding `fresnelEnabled`/`fresnelFactor` to `GpuDrawParams` (forwarded from
-`FillGpuDrawParams()`) and threading a per-pixel `viewAngle`/`pow()` term into both renderers'
-fragment shaders — Vulkan repurposed previously-unused UBO padding rather than
-growing the layout. Computed per-pixel rather than FNA's per-vertex (then rasterizer-interpolated)
+`FillGpuDrawParams()`) and threading a per-pixel `viewAngle`/`pow()` term into the
+fragment shaders. Computed per-pixel rather than FNA's per-vertex (then rasterizer-interpolated)
 computation — an acceptable, strictly-more-accurate CNA-vs-FNA deviation on coarse tessellation,
 not a regression.
 
@@ -102,7 +100,7 @@ per face** and 2 camera positions via `Matrix::CreateLookAt` with a fixed origin
 quad's centre always projects to screen centre regardless of how oblique the eye is): a
 straight-on eye hits the `PositiveZ` face exactly; an off-axis eye hits the `NegativeX` face by a
 ~10× dominant-component margin — 2 clearly different, exactly-predicted faces, proof by
-construction that `EyePosition` wiring works correctly end-to-end on both renderers.
+construction that `EyePosition` wiring works correctly end-to-end.
 
 ## 6. `World` transform / normal-matrix correctness (Task 398)
 
@@ -111,8 +109,7 @@ construction that `EyePosition` wiring works correctly end-to-end on both render
 correct for pure rotation/uniform-scale/translation; under **non-uniform scale** the correct
 transform is `transpose(inverse(World3x3))`. Auditing found: **EasyGL** computed the "normal
 matrix" as `World`'s raw upper-left 3x3 on the CPU side (shared infra also used by `BasicEffect`'s
-lit-textured pipeline) — WRONG. **Vulkan** already computes `transpose(inverse(mat3(world)))`
-directly in-shader — already CORRECT, no fix needed. Notably,
+lit-textured pipeline) — WRONG. Notably,
 `EnvironmentMapEffect::OnApply()` already computes the correct `WorldInverseTranspose` for its own
 `EffectParameter` (API/content-pipeline fidelity) — but this value was never forwarded into the
 actual GPU dispatch on the buggy renderer. A synthetic, non-axis-aligned test normal combined
@@ -121,7 +118,7 @@ results between the correct and buggy formulas, empirically confirmed as the exa
 **Fixed** via the standard cofactor/determinant shortcut
 (`normalMatrix = cofactor(World3x3)/det(World3x3)`) computed on the CPU side.
 
-## 7. Cross-renderer consistency (Task 399)
+## 7. Integration capstone (Task 399)
 
 Closed the pixel-verification work with a capstone test combining everything Tasks 394–398
 verified individually — the lerp blend, alpha-scaled specular, Fresnel suppression,
@@ -131,12 +128,11 @@ correctly together, not just in isolation. Deliberately chose parameters so Fres
 term, landing on the same easily-verified numeric target Task 395 derived (`(151,101,76)`) via a
 genuinely different code path.
 
-**Result: both renderers produced the exact predicted `(151,101,76)` on the first attempt** —
-EasyGL and Vulkan alike. No new bugs found — pure integration verification; a clean pass on
+**Result: the exact predicted `(151,101,76)` on the first attempt.** No new bugs found — pure integration verification; a clean pass on
 the first attempt is itself a meaningful confirmation that Tasks 394–398's fixes don't just work
 in narrow isolation but compose correctly when combined in one scene.
 
-## 8. `EnvironmentMapAmount` above 1 is saturated (`plans/plan_vulkan.md` VULKAN-196, 2026-09-07)
+## 8. `EnvironmentMapAmount` above 1 is saturated (2026-09-07)
 
 `EnvironmentMapAmount` has no clamp in its property setter (`EnvironmentMapEffect.cs:283`), so a
 game can hand the shader a value above 1. XNA still renders it as 1, and the reason is not in the
@@ -151,40 +147,35 @@ interpolation** — the same `oD0`/`oD1` rule `plans/plan_fx.md` FX-123 measured
 | `EnvironmentMapAmount` | 0.5 | 1.0 | 2.0 | 3.0 |
 |---|---|---|---|---|
 | real XNA | `(100,100,100)` | `(200,200,200)` | `(200,200,200)` | `(200,200,200)` |
-| CNA Vulkan, before | `(100,100,100)` | `(200,200,200)` | **`(255,255,255)`** | **`(255,255,255)`** |
-| CNA Vulkan, after | `(100,100,100)` | `(200,200,200)` | `(200,200,200)` | `(200,200,200)` |
 
 The 0.5 column is the positive control: without it, "2.0 renders as 1.0" cannot be told apart from
 "the amount does nothing on this stack".
 
-EasyGL already clamped (`EasyGLRenderer.cpp:8423`); Vulkan did not, so this was a renderer parity
-gap as well as an XNA divergence. The clamp belongs in the **vertex** stage, where D3D9 applies it —
+EasyGL clamps (`EasyGLRenderer.cpp:8423`). The clamp belongs in the **vertex** stage, where D3D9 applies it —
 clamping after interpolation would interpolate the raw value first and give a different gradient.
 
 Guarded by `modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp`, registered as
-`Vulkan_EnvironmentMapEffect_AmountClamp`. The source is renderer-agnostic and its legs are
+`SdlGpu_EnvironmentMapEffect_AmountClamp`. The source is renderer-agnostic and its legs are
 relational, so registering it for another renderer is one line in that family's `CMakeLists.txt`.
 
-**The unlit sibling was the same defect one effect over.** The same D3D9 rule applies to
-`vout.Diffuse : COLOR0`, and neither renderer clamped it; `plans/plan_vulkan.md` VULKAN-197 measured
-it on the real runtime and fixed the Vulkan half in ten vertex shaders. See §6 of
+**The unlit sibling is the same rule one effect over** (`vout.Diffuse : COLOR0`). See §6 of
 `docs/basiceffect-support.md` — including the colour-gradient case, where the two orders are 77
 levels apart. EasyGL's half is still open and belongs to `plans/plan_fx.md`.
 
 ## Support matrix
 
-| Feature | EasyGL | Vulkan |
-|---|---|---|
-| Property defaults (14/14) | ✅ Task 391/392 | ✅ (shared C++) |
-| `Clone()` preserves `FogColor` | ✅ fixed Task 392 | ✅ fixed Task 392 |
-| Cube-map blend: `lerp` not additive | ✅ fixed Task 394 | ✅ fixed Task 394 |
-| `EnvironmentMapSpecular × envmap.a` | ✅ fixed Task 395 | ✅ fixed Task 395 |
-| Base lerp `envColor × combinedAlpha` | ✅ fixed Task 891 | ✅ fixed Task 891 |
-| Fresnel edge-weighting | ✅ fixed Task 396 | ✅ fixed Task 396 |
-| `EyePosition` → reflection vector | ✅ Task 397 | ✅ Task 397 |
-| `World` non-uniform-scale normal transform | ✅ fixed Task 398 | ✅ Task 398 (already correct) |
-| `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 890 (2026-07-11) | ✅ fixed Task 890 |
-| Cross-renderer pixel consistency | ✅ Task 399 | ✅ Task 399 |
+| Feature | EasyGL |
+|---|---|
+| Property defaults (14/14) | ✅ Task 391/392 |
+| `Clone()` preserves `FogColor` | ✅ fixed Task 392 |
+| Cube-map blend: `lerp` not additive | ✅ fixed Task 394 |
+| `EnvironmentMapSpecular × envmap.a` | ✅ fixed Task 395 |
+| Base lerp `envColor × combinedAlpha` | ✅ fixed Task 891 |
+| Fresnel edge-weighting | ✅ fixed Task 396 |
+| `EyePosition` → reflection vector | ✅ Task 397 |
+| `World` non-uniform-scale normal transform | ✅ fixed Task 398 |
+| `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 890 (2026-07-11) |
+| Combined integration capstone | ✅ Task 399 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
 
@@ -193,10 +184,10 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 Phase 45 opened 2 new tracked tasks:
 
 - ~~**Task 890**~~ (opened by Task 391) — **fixed, 2026-07-11**: `DirectionalLight1`/
-  `DirectionalLight2` now forward on `EnvironmentMapEffect` on both renderers, mirroring
+  `DirectionalLight2` now forward on `EnvironmentMapEffect`, mirroring
   `BasicEffect`'s own fix (Task 885/886). See `NEXT.md` §3 for the full write-up.
 - ~~**Task 891**~~ (opened by Task 395) — **fixed**: the base cube-map lerp target (`envColor`) is
-  now scaled by combined texture×diffuse alpha on both renderers, the other half of the
+  now scaled by combined texture×diffuse alpha, the other half of the
   `envmap = ... * color.a` formula Task 395's specular-only fix didn't cover.
 
 This closes Phase 45 (`plans/plan_graphics.md` Tasks 391–400) in full.

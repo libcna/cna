@@ -142,7 +142,9 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
             "cmake/Modules/Platform/Emscripten.cmake (or use emcmake), or use OPENGLES3/OPENGL33 "
             "for a native desktop/mobile GL build.")
     endif()
-    if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Linux and Android, where OPENGLES3 is the default, are where it is tested.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux"
+            AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
         message(WARNING "CNA: ${CNA_GRAPHICS_RENDERER} renderer is primarily tested on Linux. Other platforms may require additional setup.")
     endif()
     # easy-gl is a SIBLING repository checkout, not a git submodule of this

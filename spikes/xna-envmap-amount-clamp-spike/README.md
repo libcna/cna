@@ -1,6 +1,6 @@
 # `EnvironmentMapAmount` above 1 on the real XNA 4.0 runtime
 
-`plans/plan_vulkan.md` **VULKAN-196**, finding **F-36**.
+**VULKAN-196** (the retired VULKAN renderer's plan, kept in Git history), finding **F-36**.
 
 ## The question
 

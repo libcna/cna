@@ -88,7 +88,7 @@ constructor. Task 896 (2026-07-10ish) found and fixed this exact class of bug fo
 | Renderer | Depth test default (own member/GL state) | Blend default (own member/GL state) | Matches XNA before this fix? |
 |---|---|---|---|
 | EasyGL | Plain OpenGL raw default: **disabled** (`easygl::Device::initialize()` never calls `set_depth_test_enabled(true)`) | Plain OpenGL raw default: **disabled** (behaviourally equivalent to Opaque, since Opaque = One/Zero = no-op blend) | **Depth: NO. Blend: coincidentally yes** (raw-disabled happens to look like Opaque). |
-| Vulkan | `depthTestEnabled_ = true`, `depthWriteEnabled_ = true` (own C++ member defaults) | `blendEnabled_ = false` (own C++ member default) | **Yes, by coincidence of its own member initializers** -- unaffected by this bug either way. |
+| Vulkan (retired 2026-10-13) | `depthTestEnabled_ = true`, `depthWriteEnabled_ = true` (own C++ member defaults) | `blendEnabled_ = false` (own C++ member default) | **Yes, by coincidence of its own member initializers** -- unaffected by this bug either way. |
 | Bgfx (retired 2026-09-17) | `depthFlags_ = BGFX_STATE_DEPTH_TEST_LESS \| BGFX_STATE_WRITE_Z` (own member default) | `blendFlags_ = BGFX_STATE_BLEND_ALPHA` (own member default) | **Depth: yes (coincidence). Blend: NO** -- alpha blending was silently ON by default. |
 
 Real FNA's own `GraphicsDevice.cs` constructor (authoritative reference, confirmed by direct
@@ -176,7 +176,7 @@ code ever explicitly sets it.
 
 New shared (3-renderer) regression test: `modules/graphics/examples/graphicsdevice_default_state_occlusion_test.cpp`,
 registered as `EasyGL_GraphicsDevice_DefaultStateOcclusion` / `Vulkan_GraphicsDevice_
-DefaultStateOcclusion` / `Bgfx_GraphicsDevice_DefaultStateOcclusion` (Bgfx retired 2026-09-17).
+DefaultStateOcclusion` / `Bgfx_GraphicsDevice_DefaultStateOcclusion` (Bgfx retired 2026-09-17, Vulkan 2026-10-13).
 
 **Deliberately unlike every other depth/blend test in this project** (which all explicitly call
 `setDepthStencilStateProperty()`/`setBlendStateProperty()`/`setRasterizerStateProperty()` before

@@ -29,9 +29,9 @@ plan gave it its own public name.
   on `PATH` by default — source `~/emsdk/emsdk_env.sh` and additionally add
   `~/emsdk/upstream/emscripten` and `~/emsdk/node/*/bin` to `PATH`). `emcmake cmake
   -DCNA_GRAPHICS_RENDERER=WEBGL2` configures cleanly and the core `CNA` library compiles cleanly.
-- ✅ **Real full-binary link** — building the actual `cna_house3d_demo` example target (gated to
-  the GL-family + `VULKAN` renderers, `cmake/Examples.cmake`) initially failed with
-  `wasm-ld: undefined symbol: __cpp_exception`, a genuine exception-handling ABI mismatch between
+- ✅ **Real full-binary link** — building the actual `cna_house3d_demo` example target (enabled for
+  the GL-family renderers among others, `modules/graphics/examples/CMakeLists.txt`) initially
+  failed with `wasm-ld: undefined symbol: __cpp_exception`, a genuine exception-handling ABI mismatch between
   CNA's own top-level Emscripten flags and the sibling `easy-gl`/`meta-gl` chain's. Root-caused and
   fixed entirely within `cnagl` (`plans/plan_glbackends.md` GLB-39, `CMakeLists.txt`) — no sibling-repo
   change needed. After the fix, `cna_house3d_demo` links cleanly, producing a real

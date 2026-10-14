@@ -13,7 +13,7 @@ see `docs/platform-sdl-lifecycle-audit.md`.
 - windows, events and monotonic timing;
 - input snapshots and device sessions;
 - displays, clipboard, dialogs, tray, cameras, filesystem and host information;
-- creation seams for OpenGL contexts, Vulkan surfaces and finished CPU-frame presentation.
+- creation seams for OpenGL contexts and finished CPU-frame presentation.
 
 A graphics renderer receives `RendererSurfaceInfo` and the one narrow service it needs. It then
 talks directly to its graphics API. `IPlatformSurfacePresenter` is deliberately a one-finished-
@@ -43,16 +43,15 @@ What a renderer needs from the window system still reaches it unchanged.
 
 | Host | SDL video driver | `NativeWindowSystem` and handles | Consumed directly by |
 |---|---|---|---|
-| Windows | `windows` | `Win32`: `HWND` | Direct3D 9/11, WebGPU |
+| Windows | `windows` | `Win32`: `HWND` | Direct3D 9, WebGPU |
 | Linux, X11 | `x11` | `X11`: `Display*` + `Window` XID | WebGPU |
 | Linux, Wayland | `wayland` | `Wayland`: `wl_display*` + `wl_surface*` | WebGPU |
-| macOS | `cocoa` | `Cocoa`: `NSWindow*` | Metal, WebGPU |
+| macOS | `cocoa` | `Cocoa`: `NSWindow*` | WebGPU |
 | Android | `android` | `Android`: `ANativeWindow*` | WebGPU |
 
-The other renderers do not read the handle themselves: Vulkan asks `IPlatformVulkanSurface` and
-the OpenGL/OpenGL ES (EasyGL) family asks `IPlatformGlContext`, both implemented over SDL by the
-SDL3 platform for the same window, and `SDL_RENDERER`, `SDL_GPU` and `FNA3D` are handed the SDL
-window itself.
+The other renderers do not read the handle themselves: the OpenGL/OpenGL ES (EasyGL) family asks
+`IPlatformGlContext`, implemented over SDL by the SDL3 platform for the same window, and `SDL_GPU`
+and `FNA3D` are handed the SDL window itself.
 
 CNA's own direct `WIN32`, `X11` and `WAYLAND` platform implementations were retired on 2026-10-06,
 and SDL2 platform and audio support on 2026-10-04. None of them is a selectable value any more, and
@@ -138,7 +137,7 @@ Implementations must:
   library itself exposes process-global lifetime.
 
 For SDL3, `SdlGlobalStateMutex()` is process-wide, while `ownedRefCounts_` is per instance. The
-same lock covers the process-global OpenGL attribute set and Vulkan loader counter. The application
+same lock covers the process-global OpenGL attribute set. The application
 remains responsible for its own `SDL_Init()`/`SDL_Quit()` calls.
 
 ### Events are batches

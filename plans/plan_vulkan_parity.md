@@ -1,5 +1,9 @@
 # plan_vulkan_parity.md — Vulkan renderer parity on real Radeon/RADV hardware
 
+**History.** `VULKAN` was retired on 2026-10-13 (`docs/removed-renderers.md`). The XNA-measured
+shared contracts and infrastructure recorded here stay in force; VKPAR-0011's open EasyGL defect
+moved to `handoff.md` §5.1.
+
 A hardware-validation workstream for the **existing classic CNA/XNA Graphics contract** on the
 Vulkan renderer. Not a modern-graphics/CNAEXT project, not a performance project, and not a second
 copy of `plans/plan_vulkan.md` — that campaign's 243 rows reached their verdict on **2026-09-11**
@@ -34,7 +38,7 @@ evidence:
 | VKPAR-0008 | Wayland + Vulkan surface path on RADV | ✅ |
 | VKPAR-0009 | SDL-free native configurations (X11 and Wayland) | ✅ |
 | VKPAR-0010 | Baselines, measured and classified | ✅ |
-| VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced and narrowed, not fixed |
+| VKPAR-0011 | GSC-F1 — EasyGL per-pixel SkinnedEffect ambient-only white | ◐ reproduced and narrowed, not fixed; moved to `handoff.md` §5.1 |
 | VKPAR-0012 | Validation layers and synchronization validation | ✅ |
 | VKPAR-0013 | The remaining Vulkan failures | ✅ closed out by VKPAR-0018–0029; one Vulkan test left, recorded |
 | VKPAR-0014 | Channel expansion: two contradictory contracts, settled by measuring XNA | ✅ |

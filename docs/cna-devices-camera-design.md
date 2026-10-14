@@ -84,8 +84,7 @@ texture pipeline found it is already solved, generically, by existing infrastruc
 - `include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`'s `ITextureRenderer`
   interface already has `virtual void UpdatePixels(const uint8_t* rgba, int stride)`
   — an in-place, full-level-0 RGBA pixel update, implemented per graphics renderer
-  (`OPENGLES3`/`SDL_RENDERER`/`VULKAN`) but exposed through one common,
-  renderer-agnostic virtual call.
+  but exposed through one common, renderer-agnostic virtual call.
 - `Microsoft::Xna::Framework::Graphics::Texture2D` already exposes
   `SetDataRGBA(const uint8_t* data, int pixelCount)` (`Texture2D.hpp:196`, `CNAEXT`) as
   a public entry point that (per its own doc comment, "Prefer the Texture2D(device, w,

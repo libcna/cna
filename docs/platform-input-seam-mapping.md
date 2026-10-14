@@ -169,6 +169,5 @@ handle store first would otherwise have broken `OpenFromJoystickEXT` between com
 5. Standalone haptics → `IPlatformHaptics` (**complete, PLAT-84**); the remaining rich effect model
    stays behind its narrowed seam pending its own design decision.
 
-The two renderer examples that call `InputManager::SetKeyState` directly
-(`modules/renderers/easygl/examples/`, `modules/renderers/sdl-renderer/examples/`) use it as a
-synthetic-input injection seam and are unaffected: PLAT-86 removed only the independent touch store.
+Renderer examples that called `InputManager::SetKeyState` directly as a synthetic-input
+injection seam were unaffected: PLAT-86 removed only the independent touch store.

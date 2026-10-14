@@ -55,10 +55,9 @@ Explicit generic disposal keeps the C handle and immutable metadata alive while 
 renderer; later data operations return `CNA_RESULT_INVALID_STATE`. Typed destruction invalidates
 the handle generation and releases the game-child ownership count.
 
-`IndexBufferSmoke.c` is strict C17 and runs unchanged under HEADLESS and SDL_RENDERER. HEADLESS
-covers both index widths, count and caller-window overloads, static/dynamic construction, all three
+`IndexBufferSmoke.c` is strict C17. Under HEADLESS it covers both index widths, count and caller-window overloads, static/dynamic construction, all three
 streaming options, WriteOnly refusal, metadata/type queries, generic resource state, event
 separation, disposal, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths.
-SDL_RENDERER advertises no 3D capability, so the same suite verifies atomic
+On a renderer that advertises no 3D capability the same suite verifies atomic
 `CNA_RESULT_NOT_SUPPORTED` creation. C17/C++23 header checks freeze all version-one layouts, and the
 focused successful flow also runs under ASan+UBSan.

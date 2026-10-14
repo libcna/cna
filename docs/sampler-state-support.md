@@ -1,17 +1,12 @@
 # SamplerState / Texture Sampling Support Matrix
 
-> **Status update, 2026-07-11:** two gaps this document treats as open below are now fixed. **Task
-> 867** (`Texture2D::SetData(level>0)` silent no-op on Vulkan, §6) was split into Tasks 924
-> (EasyGL)/925 (Vulkan) and both are closed (2026-07-09) — mip-level `SetData` is now real GPU
-> upload on both hardware renderers. **Task 918** (EasyGL `TextureFilter::Anisotropic`
-> falling back to trilinear, §7) is also fixed (2026-07-09) — EasyGL now issues a real
-> `GL_EXT_texture_filter_anisotropic` call. The ❌ markers for these in §6/§7 and the summary table
-> below are historical. See `docs/xna-4-api-coverage.md`'s per-class table or `handoff.md` §5 for
+> **Status update, 2026-07-11:** Task 867 (mip-level `SetData` and mipmap incompleteness, §6;
+> fixed on EasyGL as Task 924) and Task 918 (EasyGL `TextureFilter::Anisotropic` falling back to
+> trilinear, §7) are fixed (2026-07-09); §6/§7 describe them as found. See `handoff.md` §5 for
 > current status.
 
 Phase 35 (`plans/plan_graphics.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture
-sampling conformance against FNA across its EasyGL and Vulkan graphics renderers. This
-document summarizes the findings.
+sampling conformance against FNA. This document summarizes the findings.
 
 ---
 
@@ -40,17 +35,14 @@ slot, confirmed via a new `SamplerStateCollectionTests.cpp`.
 
 **`GraphicsDevice.SamplerStates`/`VertexSamplerStates` was silently ignored by essentially all 3D
 stock-effect texture draws** (`BasicEffect`/`DualTextureEffect`/`AlphaTestEffect`/
-`EnvironmentMapEffect`/`SkinnedEffect`), for three different, renderer-specific reasons, all fixed
-this session:
+`EnvironmentMapEffect`/`SkinnedEffect`), fixed this session:
 
 | Renderer | Root cause | Fix |
 |---|---|---|
 | EasyGL / shared `GraphicsDevice` | All 18 `DrawUserPrimitives`/`DrawUserIndexedPrimitives`/`DrawInstancedPrimitives` overloads never called `applySamplerStatesToRenderer()` — unlike `DrawPrimitives`/`DrawIndexedPrimitives`, which do. | Added the missing call to all 18 sites. |
-| Vulkan | `GetOrCreateDualTexDescSet` hardcoded `defaultSampler_` (Linear+ClampToEdge) into both descriptor image slots and cached the descriptor set keyed only by image views — the correctly-computed `slotSamplers_[0]`/`[1]` were never actually bound. | Threaded both samplers through as parameters; widened the descriptor cache key to include them (mirrors the already-correct single-texture `GetOrCreateTexSamplerDescSet(view, sampler)` pattern). |
 
-Proven with a pixel test (`modules/renderers/easygl/examples/easygl_sampler_state_effect_test.cpp`, registered on both
-EasyGL and Vulkan as `*_SamplerState_DualTextureEffect`) that initially failed on both
-renderers and now passes.
+Proven with a pixel test (`modules/renderers/easygl/examples/easygl_sampler_state_effect_test.cpp`,
+`EasyGL_SamplerState_DualTextureEffect`) that initially failed and now passes.
 
 **Practical impact**: before this fix, any XNA-ported game drawing textured 3D geometry through
 the `DrawUserPrimitives` family (the normal way to use stock effects) had its assigned
@@ -68,7 +60,7 @@ pattern texture with UV sampled past the `[0,1]` range:
 | `Wrap` | ✅ Already covered (Task 295) | Task 293's own fix-proof test already *is* a `Wrap` pixel test on a 3D stock effect — no duplicate written. |
 | `Mirror` | ✅ Verified (Task 296) | FNA has no `PointMirror` static preset, so this test builds a custom `SamplerState`. Sample point chosen deliberately (`u=1.6`, not the `u=1.25` used elsewhere) so `Mirror`'s answer can't coincidentally match `Clamp`'s. |
 
-All three renderers already correctly mapped `TextureAddressMode` to their GPU's wrap/clamp/mirror
+The renderers already correctly mapped `TextureAddressMode` to their GPU's wrap/clamp/mirror
 address modes — no bugs found in the mapping itself; the only real bug in this whole area was
 Task 293's binding-never-applied issue above, which these tests now guard against regressing.
 
@@ -77,15 +69,15 @@ Task 293's binding-never-applied issue above, which these tests now guard agains
 First genuinely new-ground test in Phase 35 — no prior test exercised `TextureFilter` itself. New
 test draws 4 columns in one frame (magnification × {`Point`,`Linear`}, minification ×
 {`Point`,`Linear`}) on `DualTextureEffect`, sampling each at a texel boundary: `Point` reads a
-pure, unblended colour; `Linear` reads a genuine ~50/50 blend. All 4 checks passed on both renderers
-on the first run (blend values landed at 127–128, exactly as predicted).
+pure, unblended colour; `Linear` reads a genuine ~50/50 blend. All 4 checks passed on the first
+run (blend values landed at 127–128, exactly as predicted).
 
-CNA maps XNA's single `TextureFilter` value to one GL/Vulkan min+mag filter pair (matching FNA's
+CNA maps XNA's single `TextureFilter` value to one GL min+mag filter pair (matching FNA's
 flat enum, which has no separate min/mag control), and generates no mipmaps by default, so
 magnification and minification exercise *identical* underlying sampler math in this project — the
 two scales in this test confirm robustness at scale, not a functionally distinct GPU code path.
 
-## 6. Mipmap filter behavior (Task 298) — second severe finding
+## 6. Mipmap filter behavior (Task 298)
 
 **EasyGL: verified correct for explicit `Mip*` filters.** A test with a real 8-level mipmapped
 `Texture2D` (level colours: 0–2 Red, 3–7 Green) drawn at an 8×8px on-screen size (forcing GPU
@@ -96,16 +88,6 @@ to be mip-aware too): CNA doesn't set `GL_TEXTURE_MAX_LEVEL` to match each textu
 count, so using a mip-aware GL filter unconditionally for the common non-mipmapped (single-level)
 texture case would render it GL-incomplete (typically solid black). Documented as an accepted
 tradeoff, tracked as part of Task 867's scope.
-
-**Vulkan: found and tracked a severe, separate bug (Task 867).** `Texture2D::SetData(level>0,...)`
-is a **total silent no-op** on Vulkan — `ITextureRenderer::UpdatePixelsLevel` has an
-empty default body that the renderer doesn't override. This is the same severity class as the
-already-tracked Task 865 (`Texture3D`/`TextureCube::GetData` no-op), but for `Texture2D` itself,
-previously undocumented. Vulkan additionally hardcodes `VkImageCreateInfo::mipLevels=1`,
-`VkImageViewCreateInfo::levelCount=1`, and never sets sampler `minLod`/`maxLod` (defaulting to 0,
-clamping automatic LOD selection to level 0 regardless of filter) — all fixes needed together for
-Vulkan `Texture2D` mips to work at all. The confounded Vulkan test variant was un-registered rather
-than left misleadingly failing for the wrong reason.
 
 ## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (plans/plan_fx.md FX-083, 2026-08-17)
 
@@ -123,7 +105,6 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | EasyGL `AddressW` | **implemented** since FX-092 — sampler-object `GL_TEXTURE_WRAP_R` | — |
 | WebGPU | **implemented** (`WEBGPU-161`) — `WGPUSamplerDescriptor::lodMinClamp`, and part of the 64-bit sampler cache key | **implemented** — by WGSL `textureSampleBias` on every stock 3D route (`WEBGPU-205`) and, by rewriting the compiled shader's SPIR-V, on compiled XNA Effects too (`WEBGPU-208`); `WGPUSamplerDescriptor` has no `lodBias` field at all, so both are shader emulations |
 | WebGPU `AddressW` | **implemented** (`WEBGPU-160`) — `WGPUSamplerDescriptor::addressModeW`, through the same ordinal table U and V use | — |
-| Direct3D 11 | **implemented** — `D3D11_SAMPLER_DESC::MinLOD`; behaviorally proven by `SamplerLodAddressWContract` | **implemented** — `D3D11_SAMPLER_DESC::MipLODBias`; behaviorally proven by `SamplerLodAddressWContract` |
 | every other renderer | default no-op | default no-op |
 
 **EasyGL compiled vertex sampling is the narrow ES exception since FX-146 (2026-10-04).** A
@@ -231,43 +212,38 @@ LOD bias, once written by an Effect's own `sampler_state` block, survived into e
 that slot -- including a stock `SpriteBatch` flush, which in XNA assigns its whole `SamplerState` to
 slot zero and therefore resets them. Both renderers now establish the complete sampler state on
 every application rather than the subset the call names. Any renderer that keeps mutable per-slot
-sampler state has this hazard; a renderer that builds a fresh descriptor per draw (Vulkan, WebGPU)
-cannot.
+sampler state has this hazard; a renderer that builds a fresh descriptor per draw (WebGPU) cannot.
 
 EasyGL also adopted `ApplySamplerAddressW` in the same pass, so its `GL_TEXTURE_WRAP_R` row above is
 no longer "not adopted".
 
-Direct3D 11 adopted all three fields in DX-216. DX-257 then added the shared
-`SamplerLodAddressWContract`: nine differential pixel checks prove level-zero and level-one mip
-selection, positive LOD bias and reset, independent V/W Clamp and Wrap behavior, and state reset.
-The same fixture passes 9/9 on Direct3D 11 and EasyGL `OPENGL33`.
+The shared `SamplerLodAddressWContract`'s nine differential pixel checks prove level-zero and
+level-one mip selection, positive LOD bias and reset, independent V/W Clamp and Wrap behavior, and
+state reset; it passes 9/9 on EasyGL `OPENGL33`.
 
 ## 7. Anisotropic filtering (Task 299, EasyGL row updated 2026-07-11 per Task 918)
 
 | Renderer | Status |
 |---|---|
-| Vulkan | **Correct.** Queries `VkPhysicalDeviceFeatures.samplerAnisotropy` support and the real device cap (`VkPhysicalDeviceProperties.limits.maxSamplerAnisotropy`), clamps the requested `MaxAnisotropy` to it before creating the sampler. |
-| EasyGL | **Fixed, Task 918 (2026-07-09).** At the time this section was written, `TextureFilter::Anisotropic` silently fell back to plain trilinear filtering — the underlying `easy-gl` library had zero anisotropy-related API and `MaxAnisotropy` had no effect at any value. Now real: gated on `GL_EXT_texture_filter_anisotropic` being available, reads the live driver cap, and clamps the requested `MaxAnisotropy` to it before applying, matching Vulkan's own pattern above. |
+| EasyGL | **Fixed, Task 918 (2026-07-09).** At the time this section was written, `TextureFilter::Anisotropic` silently fell back to plain trilinear filtering — the underlying `easy-gl` library had zero anisotropy-related API and `MaxAnisotropy` had no effect at any value. Now real: gated on `GL_EXT_texture_filter_anisotropic` being available, reads the live driver cap, and clamps the requested `MaxAnisotropy` to it before applying. |
 
 A true visual anisotropic-quality pixel test (comparing detail preservation under oblique/
 aspect-skewed minification) was judged too driver-dependent/fragile to assert precisely across
 renderers. Instead, the task's own "caps and fallback" framing was tested literally: a new test
 assigns `MaxAnisotropy=9999` (far beyond any real GPU's cap) and confirms this does not crash or
-throw on either renderer — the load-bearing assertion.
+throw — the load-bearing assertion.
 
 **Additional finding while building this test**: at the time, assigning `TextureFilter::Anisotropic`
 to an ordinary single-level `Texture2D` (e.g. `Texture2D::CreateFromPixels`, the common case for
 real game textures) rendered **solid black on EasyGL** — the exact same mipmap-incompleteness
-symptom as §6, since `Anisotropic` also maps to a `_MIPMAP_`-suffixed GL filter. Vulkan did not
-share this symptom (rendered correctly even on a single-level texture). This confirmed Task 867's
-root cause was broader than just Vulkan's `Texture2D` mip pipeline — EasyGL needed a
-`GL_TEXTURE_MAX_LEVEL` fix too. **Fixed, Task 924 (2026-07-09)** — `GL_TEXTURE_MAX_LEVEL` is now
+symptom as §6, since `Anisotropic` also maps to a `_MIPMAP_`-suffixed GL filter, so EasyGL needed a
+`GL_TEXTURE_MAX_LEVEL` fix (Task 867's scope). **Fixed, Task 924 (2026-07-09)** — `GL_TEXTURE_MAX_LEVEL` is now
 clamped to each texture's real level count, so a single-level texture no longer reads as
 GL-incomplete under `Anisotropic`/`Mip*` filters.
 
 ---
 
-## 8. The half of Task 293 that a `SpriteBatch` frame never reached (`plans/plan_vulkan.md` VULKAN-166, 2026-09-07)
+## 8. The half of Task 293 that a `SpriteBatch` frame never reached (2026-09-07)
 
 Task 293 above fixed `GraphicsDevice.SamplerStates[u]` for the **3D** draw entry points, by adding
 the missing `applySamplerStatesToRenderer()` calls to the eighteen `DrawUserPrimitives` overloads
@@ -277,8 +253,8 @@ pushed slots 1–15 to any renderer at all. The renderer kept whatever those slo
 earlier 3D draw, or the state it was constructed with.
 
 Invisible for years, because a stock sprite draw uses exactly one texture and the batch carries its
-sampler down its own path (`ISpriteBatchRenderer::SetSamplerFilter`/`SetSamplerAddressMode`, and
-since VULKAN-164 `SetSamplerAddressModeWEXT`). It becomes decisive the moment a **custom effect**
+sampler down its own path (`ISpriteBatchRenderer::SetSamplerFilter`/`SetSamplerAddressMode`/
+`SetSamplerAddressModeWEXT`). It becomes decisive the moment a **custom effect**
 binds a second texture to the same batch: XNA governs the texture at sampler register *u* with
 `SamplerStates[u]`, and CNA gave every unit slot 0's state.
 
@@ -292,11 +268,11 @@ not an `Immediate` one.
 
 **It publishes from slot 1 upward, deliberately.** Slot 0 already has a writer — the batch's own
 sampler, down the `ISpriteBatchRenderer` path — and giving one slot two writers with no ordering
-between them across twelve renderer families is the exact shape of the bug Task 293 fixed and of
-VULKAN-164's second defect. That is still true, and it is still slot 1 upward that gets *pushed to
+between them across the renderer families is the exact shape of the bug Task 293 fixed. That is
+still true, and it is still slot 1 upward that gets *pushed to
 the renderer* from the sprite path.
 
-## 9. What a `SpriteBatch` leaves behind in `SamplerStates[0]` (`plans/plan_vulkan.md` VULKAN-194, 2026-09-07)
+## 9. What a `SpriteBatch` leaves behind in `SamplerStates[0]` (2026-09-07)
 
 §8 left one divergence open on purpose: `GraphicsDevice.SamplerStates[0]` did not hold the batch's
 `SamplerState` afterwards, where XNA's `PrepRenderState` assigns it (`SpriteBatch.cs:1426`). It does
@@ -324,16 +300,15 @@ CNA-wide, not renderer-specific. A game that relied on the old behaviour should 
 `SamplerStates[0]` explicitly after `End()` — which is what it would have had to do on XNA too.
 
 Asserted by `modules/graphics/examples/spritebatch_sampler0_publication_test.cpp`, registered on
-Vulkan and EasyGL.
+EasyGL and SDL_GPU.
 
-## 10. The W axis reaches EasyGL too (`plans/plan_vulkan.md` VULKAN-206, 2026-09-07)
+## 10. The W axis reaches EasyGL (2026-09-07)
 
-`VULKAN-164` gave `ISpriteBatchRenderer` a `SetSamplerAddressModeWEXT` hook, additive with a no-op
-default, because `SpriteBatch` was forwarding a batch sampler's filter and its U and V axes and
-dropping W — invisible to 2D sampling, which never consults W, and decisive for a `sampler3D`.
-Vulkan was the only renderer that took it.
+`ISpriteBatchRenderer` has a `SetSamplerAddressModeWEXT` hook, additive with a no-op default,
+because `SpriteBatch` was forwarding a batch sampler's filter and its U and V axes and dropping W —
+invisible to 2D sampling, which never consults W, and decisive for a `sampler3D`.
 
-EasyGL takes it now. `EasyGLRenderer::ApplySamplerState` derives `WrapR` from `addressU`, which is
+EasyGL takes it. `EasyGLRenderer::ApplySamplerState` derives `WrapR` from `addressU`, which is
 correct for every XNA 4.0 preset — `PointClamp`, `LinearWrap` and the rest set all three axes alike
 — and wrong for a `SamplerState` that set W on its own. The sprite flush applies the batch's own W
 after it, at both flush sites (the stock one and the compiled-effect one), and only when the batch
@@ -343,35 +318,28 @@ through `Begin()`.
 **Why one override is enough here.** On this renderer `ShaderEffect::SetTexture(0, volume)` binds
 `GL_TEXTURE_3D` on GL unit 0 while the sprite's own texture occupies `GL_TEXTURE_2D` on the same
 unit, and a single GL sampler object at that unit governs both — so the batch's slot-0 sampler is
-exactly what addresses the volume. Vulkan numbers this differently (a bound effect texture lives in
-descriptor set 1), which is why the two renderers have sibling tests rather than one shared file.
+exactly what addresses the volume.
 
 Asserted by `modules/renderers/easygl/examples/easygl_texture3d_addressw_test.cpp`
-(`EasyGL_Texture3DAddressW`), the sibling of `Vulkan_Texture3DAddressW`.
-
-Pixel-proven on Vulkan by `Vulkan_ShaderEffect_PerUnitSampler`
-(`modules/renderers/vulkan/examples/vulkan_shader_effect_per_unit_sampler_test.cpp`): two 1×1×2
-volumes bound to units 0 and 1 of one `ShaderEffect`, sampled at `W = 1.25`, with `AddressW = Wrap`
-on one unit and `Clamp` on the other. One pixel separates all four possible worlds, and the test
-carries both mutations that produced them.
+(`EasyGL_Texture3DAddressW`).
 
 ## Summary: what actually works today, per renderer
 
-**Updated 2026-07-11** — Vulkan mip `SetData` and EasyGL anisotropic filtering rows reflect
-Tasks 924/925/926 and 918 (see the status banner at the top of this document).
+**Updated 2026-07-11** — the mip `SetData` and anisotropic filtering rows reflect Tasks 924 and
+918 (see the status banner at the top of this document).
 
-| Feature | EasyGL | Vulkan |
-|---|---|---|
-| `SamplerState` API/presets/`Name` | ✅ | ✅ |
-| Default `SamplerStates`/`VertexSamplerStates` (`LinearWrap`) | ✅ | ✅ |
-| Per-slot sampler actually applied on 3D stock-effect draws | ✅ (fixed) | ✅ (fixed) |
-| `TextureAddressMode::Clamp`/`Wrap`/`Mirror` | ✅ | ✅ |
-| `TextureFilter::Point` vs `Linear` | ✅ | ✅ |
-| Mip-level `SetData(level>0)` uploads real GPU data | ✅ (fixed, Task 924) | ✅ (fixed, Task 925) |
-| Mip-aware filters (`LinearMipPoint` etc.) select the correct mip | ✅ (mipmapped textures only) | ✅ (Task 925 fixed the underlying mip upload) |
-| `Point`/`Linear`/`Mip*` filters on a **non-mipmapped** texture | ✅ (fixed, Task 924 — `GL_TEXTURE_MAX_LEVEL` now clamped to the real level count, so a single-level texture no longer reads as GL-incomplete under a mip-aware filter) | ✅ no incompleteness issue |
-| `TextureFilter::Anisotropic` — level respected | ✅ (fixed, Task 918 — real `GL_EXT_texture_filter_anisotropic`, clamped to driver cap) | ✅ correct, capped to device limit |
-| Extreme/over-cap `MaxAnisotropy` doesn't crash | ✅ | ✅ |
+| Feature | EasyGL |
+|---|---|
+| `SamplerState` API/presets/`Name` | ✅ |
+| Default `SamplerStates`/`VertexSamplerStates` (`LinearWrap`) | ✅ |
+| Per-slot sampler actually applied on 3D stock-effect draws | ✅ (fixed) |
+| `TextureAddressMode::Clamp`/`Wrap`/`Mirror` | ✅ |
+| `TextureFilter::Point` vs `Linear` | ✅ |
+| Mip-level `SetData(level>0)` uploads real GPU data | ✅ (fixed, Task 924) |
+| Mip-aware filters (`LinearMipPoint` etc.) select the correct mip | ✅ (mipmapped textures only) |
+| `Point`/`Linear`/`Mip*` filters on a **non-mipmapped** texture | ✅ (fixed, Task 924 — `GL_TEXTURE_MAX_LEVEL` now clamped to the real level count, so a single-level texture no longer reads as GL-incomplete under a mip-aware filter) |
+| `TextureFilter::Anisotropic` — level respected | ✅ (fixed, Task 918 — real `GL_EXT_texture_filter_anisotropic`, clamped to driver cap) |
+| Extreme/over-cap `MaxAnisotropy` doesn't crash | ✅ |
 
 Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/inconsistent ·
 🔍 not empirically verified this phase.
@@ -380,10 +348,9 @@ Legend: ✅ verified working · ❌ confirmed broken/absent · ⚠️ partial/in
 
 - **Task 866** — `BlendState`/`DepthStencilState`/`RasterizerState` static presets don't set
   `Name` (same gap `SamplerState` had before Task 291).
-- ~~**Task 867**~~ — **fixed**, split into Tasks 924 (EasyGL)/925 (Vulkan), both closed
-  2026-07-09: `Texture2D::SetData(level>0,...)` now does a real GPU upload on both hardware
-  renderers, Vulkan's `mipLevels`/`levelCount`/`minLod`/`maxLod` are no longer hardcoded, and
-  EasyGL's `GL_TEXTURE_MAX_LEVEL` mipmap-incompleteness black-screen bug is fixed.
+- ~~**Task 867**~~ — **fixed** as Task 924 (2026-07-09): `Texture2D::SetData(level>0,...)` now
+  does a real GPU upload on EasyGL, and EasyGL's `GL_TEXTURE_MAX_LEVEL` mipmap-incompleteness
+  black-screen bug is fixed.
 - ~~EasyGL's anisotropic filtering gap~~ — **fixed, Task 918** (2026-07-09): real
   `GL_EXT_texture_filter_anisotropic` support added, gated on the extension genuinely being
   available and clamped to the live driver's `MaxTextureMaxAnisotropy` cap.

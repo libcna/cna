@@ -216,9 +216,8 @@ Full per-task detail lives in `plans/plan_input.md` (Phases I1–I6) and `AUDIT.
   (INPUT-MOUSE-002 (decision a-0001)), so the OS cursor lands at the correct client coordinate on
   a scaled window. `GetState` applies the inverse. PLAT-66 made the `WindowId` renderer registry
   the single authoritative path for both operations: the input layer never looks up a native
-  window or special-cases one renderer. Renderer implementations own their presentation geometry;
-  the SDL renderer delegates locally to its offset-aware native transform, while other renderers
-  implement the same platform-client↔logical contract in their own terms. A deterministic
+  window or special-cases one renderer. Renderer implementations own their presentation geometry
+  and implement the same platform-client↔logical contract in their own terms. A deterministic
   200×100-client / 100×100-logical test pins the 50-pixel letterbox offset and round trip under all
   platform selections.
 - Normalized touch events carry the logical client width/height captured by the platform event
@@ -304,7 +303,7 @@ process lifetime) is shaken out by the baked-in `--gtest_shuffle --gtest_repeat=
 determinism gate (INPUT-BUILD-009); bump the repeat higher via a direct binary invocation with the same
 filter variable if you want more iterations.
 
-Swap `-DCNA_GRAPHICS_RENDERER=OPENGLES3` for `VULKAN` to verify the same input tests on the
+Swap `-DCNA_GRAPHICS_RENDERER=OPENGLES3` for `SDL_GPU` to verify the same input tests on the
 other backends. The full suite is just
 `./cmake-build-input-easygl/CnaTests` with no filter.
 

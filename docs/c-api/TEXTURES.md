@@ -58,9 +58,7 @@ accepts exactly `width * height * 4` caller-owned RGBA8 bytes for level zero; si
 failure leaves the texture unchanged.
 
 Surface-format creation and successful typed transfer remain native-renderer capabilities.
-HEADLESS and SDL_RENDERER currently create Color textures only. HEADLESS exercises higher mip
-uploads; SDL_RENDERER has no native mip-level upload path, so a compatible level-above-zero upload
-returns `CNA_RESULT_NOT_SUPPORTED` before changing the CPU shadow.
+HEADLESS currently creates Color textures only and exercises higher mip uploads.
 
 ## Images, files and streams
 
@@ -75,10 +73,9 @@ file-with-device constructors cover both native path constructors.
 
 ## Evidence
 
-`TextureSmoke.c` is compiled as strict C17 and runs unchanged under HEADLESS and SDL_RENDERER. It
+`TextureSmoke.c` is compiled as strict C17 and runs unchanged under HEADLESS. It
 covers all 27 format helpers/creation gates, dispatch and rejection for all 18 data identities,
-successful Color full/rectangle transfers, HEADLESS mip transfer, SDL's explicit mip limitation,
-every public factory/query/encoding route, PNG/JPEG signatures and file round-trips, both decoded
+successful Color full/rectangle transfers, HEADLESS mip transfer, every public factory/query/encoding route, PNG/JPEG signatures and file round-trips, both decoded
 resize modes, storage/type text, capacity atomicity and invalid/stale/wrong-kind/wrong-thread
 handles. The same strict-C test now also runs on EasyGL OPENGLES3, where native-supported non-Color
 formats pass the device-aware creation gate. `ContentSmoke.c` independently proves exact two-level
