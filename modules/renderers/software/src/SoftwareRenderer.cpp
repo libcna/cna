@@ -1550,6 +1550,38 @@ namespace CNA::Internal::Renderers::Software
             float specular[3] = {0.0f, 0.0f, 0.0f};
         };
 
+        /// The point or spot light a BasicEffect can carry (BasicEffect.PunctualLightEXT, GpuDrawParams::punctualKind).
+        /// The same equation as the EasyGL stock shaders' cnaPunctualLight -- inverse-square falloff windowed to zero at
+        /// the range, a squared smoothstep-free cone for a spot -- so the two renderers light a scene alike. Its shadow
+        /// map is not evaluated here: this renderer lights without shadowing the punctual light.
+        void AddPunctualDiffuse(const Vector3& worldPosition, const Vector3& worldNormal,
+                                const GpuDrawParams& params, float (&diffuseSum)[3])
+        {
+            if (params.punctualKind <= 0) return;
+            const Vector3 offset(params.punctualPosition[0] - worldPosition.X,
+                                 params.punctualPosition[1] - worldPosition.Y,
+                                 params.punctualPosition[2] - worldPosition.Z);
+            const float distance = std::sqrt(offset.X * offset.X + offset.Y * offset.Y + offset.Z * offset.Z);
+            if (distance > params.punctualRange || distance < 1e-5f) return;
+            const Vector3 toLight(offset.X / distance, offset.Y / distance, offset.Z / distance);
+            const float t = distance / params.punctualRange;
+            const float window = std::clamp(1.0f - t * t * t * t, 0.0f, 1.0f);
+            float attenuation = window * window / (1.0f + distance * distance);
+            if (params.punctualKind > 1)
+            {
+                const Vector3 axis = NormalizeOrZero(Vector3(params.punctualDirection[0], params.punctualDirection[1],
+                                                             params.punctualDirection[2]));
+                const float cosAngle = -(axis.X * toLight.X + axis.Y * toLight.Y + axis.Z * toLight.Z);
+                const float cone = std::clamp((cosAngle - params.punctualCosOuter) /
+                                                  std::max(params.punctualCosInner - params.punctualCosOuter, 1e-4f),
+                                              0.0f, 1.0f);
+                attenuation *= cone * cone;
+            }
+            const float nDotL = std::max(worldNormal.X * toLight.X + worldNormal.Y * toLight.Y + worldNormal.Z * toLight.Z, 0.0f);
+            for (int channel = 0; channel < 3; ++channel)
+                diffuseSum[channel] += params.punctualDiffuse[channel] * nDotL * attenuation;
+        }
+
         /// SOFTWARE-113/114/115: FNA StockEffects/HLSL/Lighting.fxh ComputeLights. Effect-specific
         /// FillGpuDrawParams prepares ambient/emissive consistently before this shared equation.
         [[nodiscard]] ClassicLightingResult ComputeClassicLighting(
@@ -1594,6 +1626,8 @@ namespace CNA::Internal::Renderers::Software
                         specularWeight * specularColors[light][channel];
                 }
             }
+
+            AddPunctualDiffuse(worldPosition, worldNormal, params, diffuseSum);
 
             ClassicLightingResult result;
             for (int channel = 0; channel < 3; ++channel)

@@ -2604,6 +2604,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_RenderTargetCube_GetDataContract COMMAND cna_test_easygl_rendertargetcube_getdata_contract
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # BasicEffect.PunctualLightEXT (point and spot): lights a surface, honours range and cone.
+        cna_easygl_test(cna_test_easygl_basiceffect_punctual_light
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/basiceffect_punctuallight_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BasicEffect_PunctualLight COMMAND cna_test_easygl_basiceffect_punctual_light
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-137 (sampling half): a RenderTargetCube rendered into and then sampled by direction
         # (EnvironmentMapEffect) must keep "up" as up. GL fills a rendered face bottom-up, so the stock
         # env-map program mirrors the lookup direction for a rendered cube (uEnvCubeFlip).

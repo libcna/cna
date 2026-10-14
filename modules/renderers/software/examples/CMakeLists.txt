@@ -75,6 +75,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Rasterizer COMMAND cna_test_software_rasterizer
         TIMEOUT 30 LABELS "Software")
 
+    # BasicEffect.PunctualLightEXT (point and spot) must light a surface; the museum-simulator found it ignored.
+    cna_software_test(cna_test_software_punctual_light
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/basiceffect_punctuallight_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffect_PunctualLight COMMAND cna_test_software_punctual_light
+        TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_effects software_effects_test.cpp)
     cna_register_renderer_test(NAME Software_Effects COMMAND cna_test_software_effects
         TIMEOUT 30 LABELS "Software")
