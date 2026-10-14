@@ -24,7 +24,7 @@
 //
 // The palette is deliberately restricted to fully saturated 0/255 channel values. Those are exact
 // fixed points of sRGB encoding, so the one renderer whose cube target is sRGB-encoded
-// (REMED-GFX-096 already records WebGPU's) needs no tolerance, no colour-space model and no
+// (the plural cube-face handoff fix already records WebGPU's) needs no tolerance, no colour-space model and no
 // weakened assertion here -- every comparison in this file is byte-exact.
 //
 // The public row order is not assumed. `RenderTarget2D::GetData` is the established, already
@@ -179,7 +179,7 @@ namespace
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, false, Support::Exact, MipTargets::Real, true, true, false, false, true};
 #else
-#error "REMED-GFX-134: this renderer has no declared RenderTargetCube GetData contract."
+#error "this renderer has no declared RenderTargetCube GetData contract."
 #endif
 
     /// Two unrelated destination pre-fills. Neither equals any pattern colour, so "still the
@@ -800,9 +800,9 @@ class RenderTargetCubeGetDataContractTest : public Game
                   dev.getTexturesProperty()(0, &cube);
               }),
               "A1 active: sampling the ACTIVE cube target through the texture collection is "
-              "rejected (REMED-GFX-039)");
+              "rejected ");
         check(Throws<System::InvalidOperationException>([&] { cube.Dispose(); }),
-              "A2 active: disposing the ACTIVE cube target is rejected (REMED-GFX-039)");
+              "A2 active: disposing the ACTIVE cube target is rejected ");
 
         // XNA rejects data transfer while the resource is bound as a render target.
         {
@@ -1178,7 +1178,7 @@ class RenderTargetCubeGetDataContractTest : public Game
         if (!kContract.rtCubeSetData)
         {
             check(refused,
-                  "W1 upload: this renderer's RenderTargetCube refuses SetData (REMED-GFX-135), so "
+                  "W1 upload: this renderer's RenderTargetCube refuses SetData , so "
                   "there is no uploaded face to round-trip");
             return;
         }
@@ -1292,7 +1292,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-134 RenderTargetCube GetData contract -- renderer %s\n",
+        std::printf("RenderTargetCube GetData contract -- renderer %s\n",
                     kContract.name);
 
         const std::vector<Color> reference = RunOrientationReference(dev);

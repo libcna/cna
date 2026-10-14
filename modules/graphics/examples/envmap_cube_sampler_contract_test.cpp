@@ -8,7 +8,7 @@
 // `SamplerStates[1]` filters the cube (`EnvironmentMapEffect.EnvironmentMap`). This is not a summary
 // taken on trust: `env_map3d.frag.glsl` declares `binding = 0 sampler2D uTexture` and
 // `binding = 1 samplerCube uEnvMap`, and the retired VULKAN renderer's `GetOrCreateEnvMapDescSet`
-// -- corrected under REMED-GFX-169 and the reference this fixture was first measured against --
+// -- corrected under the stock-effect sampler fix and the reference this fixture was first measured against --
 // wrote `slotSamplers_[0]` into binding 0 and `slotSamplers_[1]` into binding 1. The two slots are
 // INDEPENDENT: changing one may not alter what the other resource looks like, both must be captured
 // when the draw is issued so a later public change cannot reach back into a queued command, and an
@@ -1112,7 +1112,7 @@ class EnvMapCubeSamplerContractTest : public Game
                   std::to_string(OffPalette(pix, cubeSet_)) + " off-palette)");
             note(std::string("I[") + n.name + "]: " + std::to_string(fromExpected) + "/" +
                  std::to_string(pix.size()) + " pixels come from the " + n.name +
-                 " face's own texels (orientation is settled by REMED-GFX-134, not here)");
+                 " face's own texels (orientation is settled by the cube readback contract, not here)");
         }
 
         int identicalPairs = 0;
@@ -1519,7 +1519,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-173 EnvironmentMapEffect cube-sampler contract on %s ===\n",
+        std::printf("=== EnvironmentMapEffect cube-sampler contract on %s ===\n",
                     kRendererName);
 
         RunPalette();

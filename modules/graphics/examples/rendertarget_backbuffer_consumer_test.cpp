@@ -135,7 +135,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-155: this renderer has no declared backbuffer-consumer contract."
+#error "this renderer has no declared backbuffer-consumer contract."
 #endif
 
     /**
@@ -549,7 +549,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         Readback r = ReadWholeTarget(dst, kPW, kPH);
         if (!RequireReadable(r, "A1 render-target consumer control")) return;
         CheckSlot(r, 0, "A1 a never-read producer sampled into another RENDER TARGET is exact "
-                        "(the control REMED-GFX-151 left green)", PatternColor);
+                        "(the control left green)", PatternColor);
     }
 
     /**
@@ -585,7 +585,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         if (!kStockEffectRtSourceSupported)
         {
             std::printf("[INFO] B2: %s cannot hand a RenderTarget2D to a stock 3D effect "
-                        "(REMED-GFX-152) -- boundary recorded, B1 carries the contract here\n",
+                        " -- boundary recorded, B1 carries the contract here\n",
                         kRendererName);
             std::fflush(stdout);
         }
@@ -970,7 +970,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         if (!kStockEffectRtSourceSupported)
         {
             std::printf("[INFO] I: %s cannot hand a RenderTarget2D to a stock 3D effect "
-                        "(REMED-GFX-152) -- boundary recorded\n", kRendererName);
+                        " -- boundary recorded\n", kRendererName);
             std::fflush(stdout);
             return;
         }
@@ -1395,7 +1395,7 @@ protected:
         ResetState(dev);
         dev.Clear(Color(0, 0, 0, 255));
 
-        std::printf("[INFO] REMED-GFX-155 same-frame render target -> BACKBUFFER consumer on %s "
+        std::printf("[INFO] same-frame render target -> BACKBUFFER consumer on %s "
                     "(%dx%d pattern, %dx%d backbuffer, %s)\n", kRendererName, kPW, kPH, kBBW, kBBH,
                     preferMultiSampling_ ? "PreferMultiSampling=true" : "PreferMultiSampling=false");
         std::fflush(stdout);

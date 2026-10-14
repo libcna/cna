@@ -123,7 +123,7 @@ namespace
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-163: this renderer has no declared MSAA/depth attachment contract."
+#error "this renderer has no declared MSAA/depth attachment contract."
 #endif
 
     /**
@@ -753,7 +753,7 @@ class RenderTargetMsaaDepthContractTest : public Game
                      "MULTISAMPLED colour attachment into its sampleable handle (4x no-depth read " +
                      std::string(got[2] ? "exact" : "black") + ", 4x depth read " +
                      std::string(got[3] ? "exact" : "black") + ") -- a renderer capability boundary, "
-                     "NOT the REMED-GFX-163 attachment defect: construction, binding, clearing, "
+                     "NOT the attachment defect: construction, binding, clearing, "
                      "drawing and teardown all complete, which is what the M/L legs measure. The "
                      "depth legs fall back to a single-sampled depth-backed target so their subject "
                      "stays measurable.");
@@ -861,7 +861,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         if (!kStencilSupported)
         {
             boundary("D5: " + std::string(kRendererName) + " runs no stencil test at all (see "
-                     "kStencilSupported) -- boundary recorded, not a REMED-GFX-163 result");
+                     "kStencilSupported) -- boundary recorded, not a result");
             return;
         }
         DeclareDepthLegSamples("D5");
@@ -1184,7 +1184,7 @@ namespace
                             legId, kLegTimeoutSeconds);
             else if (sig == SIGTRAP)
                 std::printf("[FATAL] leg %s: SIGTRAP%s -- a native ASSERT killed the process. This "
-                            "is the REMED-GFX-163 signature; the last [STEP] line above names the "
+                            "is the signature; the last [STEP] line above names the "
                             "call that did it.\n", legId, core);
             else if (sig == SIGABRT)
                 std::printf("[FATAL] leg %s: SIGABRT%s -- std::terminate or abort()\n", legId, core);
@@ -1265,7 +1265,7 @@ int main(int argc, char** argv)
     if (onlyLeg.empty())
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
-        std::printf("[INFO] REMED-GFX-163 supervisor on %s: %d legs, each in its own process\n",
+        std::printf("[INFO] supervisor on %s: %d legs, each in its own process\n",
                     kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;

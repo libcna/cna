@@ -168,7 +168,7 @@ TEST(FileDialogWithoutAServiceTest, TheCallbackStillFiresSoACallerIsNotLeftWaiti
 }
 
 // The concurrency test that used to live here raced a caller thread against
-// SetBackendForTesting, pinning REMED-DEVICES-001: a swap could destroy the backend while a call
+// SetBackendForTesting, pinning the dialog mutex-lifetime fix: a swap could destroy the backend while a call
 // was still running through it. It is deleted rather than ported, because with no swappable
 // backend the race has no parts left to have -- there is nothing to swap and nothing to destroy.
 //

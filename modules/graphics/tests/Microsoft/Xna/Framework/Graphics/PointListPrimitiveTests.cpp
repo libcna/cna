@@ -1241,7 +1241,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 // Indexed addressing is deliberately exercised only at offset zero here: SDL_GPU passes literal
 // 0/0 for first_index and vertex_offset at every native indexed-draw site, so public
 // startIndex/baseVertex do not reach the native draw (the SDL_GPU counterpart of
-// REMED-GFX-020/060/107, recorded separately as REMED-GFX-117). That is an addressing defect, not a
+// the specular/vertex-colour fix/060/107, recorded separately as the indexed startIndex/baseVertex fix). That is an addressing defect, not a
 // topology defect, and is not corrected here. The non-indexed case below does carry a nonzero
 // vertexStart, which this renderer honours.
 TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)

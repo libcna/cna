@@ -186,7 +186,7 @@ namespace
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};
 #else
-#error "REMED-GFX-146: this renderer has no declared deferred-scissor contract."
+#error "this renderer has no declared deferred-scissor contract."
 #endif
 
     const Color kBlack  (  0,   0,   0, 255);
@@ -2195,7 +2195,7 @@ class DeferredScissorCaptureTest : public Game
             bbW_ = vp.getWidthProperty();
             bbH_ = vp.getHeightProperty();
         }
-        std::printf("REMED-GFX-146 deferred scissor capture -- renderer %s, backbuffer %dx%d\n",
+        std::printf("deferred scissor capture -- renderer %s, backbuffer %dx%d\n",
                     kContract.name, bbW_, bbH_);
 
         RunLeftRightLeft(dev);

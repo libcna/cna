@@ -88,7 +88,7 @@ TEST(PictureLibraryIndexTest, EmptyOrMissingRootProducesNoResultsWithoutCrashing
     EXPECT_TRUE(missing.GetPictures().empty());
 }
 
-// REMED-TEST-004(c): PictureLibraryIndex.cpp's ScanDirectory() already has an explicit
+// PictureLibraryIndex.cpp's ScanDirectory() already has an explicit
 // `visited` weakly_canonical-keyed cycle guard ("cycle guard, matching MediaLibraryIndex's own
 // approach") -- this coverage gap test is expected to PASS, proving the guard that already exists
 // actually works, matching MediaLibraryIndexTest.TerminatesOnASelfReferentialSymlinkCycle for the
@@ -119,7 +119,7 @@ TEST(PictureLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
     std::filesystem::remove_all(root, ec);
 }
 
-// REMED-TEST-004(c): an unreadable subdirectory (real file-permission denial) must be silently
+// the earlier test-gap fix(c): an unreadable subdirectory (real file-permission denial) must be silently
 // skipped via std::filesystem::directory_options::skip_permission_denied, not crash or throw --
 // PictureLibraryIndex.cpp already passes that option to its directory_iterator. Matches
 // MediaLibraryIndexTest.SkipsAnUnreadableSubdirectoryWithoutCrashing's own pattern for the music

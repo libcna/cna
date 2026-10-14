@@ -41,7 +41,7 @@
 //
 // Boundaries this file does NOT cross:
 //   * Depth/stencil preservation is the render-target depth/stencil lifetime contract's. Here depth only has to not corrupt colour.
-//   * Only mip level 0 is asserted (REMED-GFX-138/139 own cube mip storage).
+//   * Only mip level 0 is asserted (the resolved cube image fix/139 own cube mip storage).
 //   * Cube SAMPLING orientation is untouched; the resolved bytes GetData returns are the subject.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -168,7 +168,7 @@ namespace
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, false,
                                  Support::Exact, false, true};
 #else
-#error "REMED-GFX-141: this renderer has no declared multisampled RenderTargetCube contract."
+#error "this renderer has no declared multisampled RenderTargetCube contract."
 #endif
 
     /// Destination pre-fills. Neither equals any pattern colour nor the discard colour.
@@ -805,7 +805,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-141 multisampled RenderTargetCube face isolation -- renderer %s\n",
+        std::printf("multisampled RenderTargetCube face isolation -- renderer %s\n",
                     kContract.name);
 
         if (!kContract.cubeTargets)

@@ -631,7 +631,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-169 stock-effect sampler contract on %s ===\n", kRendererName);
+        std::printf("=== stock-effect sampler contract on %s ===\n", kRendererName);
 
         if (!kRasterizes)
         {

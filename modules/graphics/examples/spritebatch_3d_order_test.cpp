@@ -28,7 +28,7 @@
 // failure shapes are distinguishable, which is the whole point.
 //
 // Every stripe is FULL HEIGHT, so nothing here depends on whether a renderer's readback or its
-// render-target sampling is Y-flipped (REMED-GFX-067/147/153 are not this file's subject). The
+// render-target sampling is Y-flipped (the render-target mirroring fix/147/153 are not this file's subject). The
 // palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison is byte-exact
 // on sRGB renderers too. Clip-space stripe coordinates are used for the 3D family, so this file
 // cannot accidentally exercise the viewport-segmentation machinery instead of
@@ -178,7 +178,7 @@ namespace
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-157: this renderer has no declared SpriteBatch/3D ordering contract."
+#error "this renderer has no declared SpriteBatch/3D ordering contract."
 #endif
 
     /**
@@ -834,7 +834,7 @@ class SpriteBatch3DOrderTest : public Game
         {
             // The wanted quad sits at vertex 6 of a 12-vertex buffer whose first six vertices are a
             // degenerate quad, so a renderer that ignores vertexStart draws nothing visible rather
-            // than the right thing by accident (REMED-GFX-119/125's contract).
+            // than the right thing by accident (the Software vertexStart fix/125's contract).
             VertexPositionTexture q[12];
             QuadVPT(0, 0, q);          // degenerate: zero width
             QuadVPT(from, to, q + 6);
@@ -1450,7 +1450,7 @@ class SpriteBatch3DOrderTest : public Game
         if (!kDraws3D) { skip("J: skipped -- no stock 3D rasterization here"); return; }
         if (!RequirePublicFamilyOrder("J")) return;
         static_assert(kClearAfterDrawWins,
-                      "REMED-GFX-156: leg J used to be SKIPPED behind this gate on SDL_GPU and "
+                      "leg J used to be SKIPPED behind this gate on SDL_GPU and "
                       "WebGPU, which is how a whole file's worth of Clear coverage measured "
                       "nothing on the two renderers that needed it. A renderer that regresses must "
                       "restore the declaration rather than re-introduce the skip.");
@@ -2107,7 +2107,7 @@ protected:
         ResetState(dev);
         dev.Clear(kClear);
 
-        std::printf("[INFO] REMED-GFX-157 SpriteBatch/3D public ordering on %s "
+        std::printf("[INFO] SpriteBatch/3D public ordering on %s "
                     "(%d stripes, requested %dx%d backbuffer, actual %dx%d)\n",
                     kRendererName, kStripes, kBBW, kBBH,
                     dev.getPresentationParametersProperty().getBackBufferWidthProperty(),

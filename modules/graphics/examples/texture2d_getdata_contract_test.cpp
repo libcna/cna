@@ -111,7 +111,7 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-127: this renderer has no declared Texture2D::GetData render-target contract."
+#error "this renderer has no declared Texture2D::GetData render-target contract."
 #endif
 
     /// Two unrelated destination pre-fills. Neither equals any pattern colour, so "still the

@@ -1108,7 +1108,7 @@ protected:
         }
 
         GraphicsDevice& dev = getGraphicsDeviceProperty();
-        std::printf("=== REMED-GFX-175 TextureFilter mip contract -- renderer %s ===\n", kRendererName);
+        std::printf("=== TextureFilter mip contract -- renderer %s ===\n", kRendererName);
 
         RunA();
         if (flatLevels_ < 4)

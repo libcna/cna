@@ -714,7 +714,7 @@ protected:
                     << " (DiffuseColor=(" << d.r << ',' << d.g << ',' << d.b << ") Alpha=" << d.a
                     << " VertexColorEnabled=" << (vertexColorEnabled ? "true" : "false")
                     << " COLOR0=" << colors[static_cast<std::size_t>(column)].ToString()
-                    << "). REMED-GFX-215: raw COLOR0 would read "
+                    << "). raw COLOR0 would read "
                     << RawColor0(colors[static_cast<std::size_t>(column)]).ToString()
                     << " and a dropped COLOR0 "
                     << ExpectedColor(colors[static_cast<std::size_t>(column)], false, d).ToString()
@@ -880,7 +880,7 @@ TEST_F(InstancedDiffuseColorTest, NeutralDiffuseColorCannotDistinguishRawColor0)
         const Rgba& c = kColumnColors[static_cast<std::size_t>(column)];
         EXPECT_TRUE(NearlyEqual(ExpectedColor(c, true, kNeutralState), RawColor0(c)))
             << "neutral DiffuseColor must be indistinguishable from raw COLOR0 -- that is the "
-               "degeneracy REMED-GFX-215's oracle exists to avoid";
+               "degeneracy the DiffuseColor oracle exists to avoid";
         EXPECT_FALSE(NearlyEqual(ExpectedColor(c, true, kNonNeutral), RawColor0(c)))
             << "column " << column << ": this file's non-neutral DiffuseColor must SEPARATE the "
                "correct product " << ExpectedColor(c, true, kNonNeutral).ToString()
@@ -1435,7 +1435,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
         // Every measured renderer that ACCEPTS the stride builds its native layout from the
         // declaration, so the geometry lands exactly where it belongs and the full contract holds.
         //
-        // bgfx carried a declared exemption here until REMED-GFX-216: its `MakeBgfxLayout` keyed on the
+        // bgfx carried a declared exemption here until the stride-derived layout fix: its `MakeBgfxLayout` keyed on the
         // buffer stride alone, so a stride-12 declaration fell to a fallback that emitted a 16-byte
         // Position+Color0 layout over a 12-byte buffer and lit 27385 of these 50752 pixels. That arm
         // asserted the measured shortfall precisely so it would FAIL the moment the defect was fixed --

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-MEDIA-001 / 32-bit CI coverage (BUILD_TEST_CI Wave 2): AudioTagParser.cpp's own
+// the AudioTagParser overflow fix / 32-bit CI coverage (BUILD_TEST_CI Wave 2): AudioTagParser.cpp's own
 // ExceedsBound(std::size_t pos, std::size_t len, std::size_t bound) bounds check is only actually
 // exercised at a genuine 32-bit std::size_t width if this binary itself is compiled and run for a
 // 32-bit target. AudioTagParserTests.cpp's own 32-bit-relevant cases (Id3v23FrameSizeOverflow...,

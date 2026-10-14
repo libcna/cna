@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // The Software (CPU-raster) renderer must honor GraphicsDevice.ScissorRectangle when
 // RasterizerState.ScissorTestEnable is true -- for both the 2D SpriteBatch path and the 3D raster
-// path -- exactly like the GPU renderers corrected by REMED-GFX-013 (the retired VULKAN renderer) /
+// path -- exactly like the GPU renderers corrected by the scissor-with-target fix (the retired VULKAN renderer) /
 // GFX-068 (SdlGpu) etc.
 //
 // XNA/FNA contract: ScissorRectangle is a framebuffer/target-space rectangle (NOT viewport-local).
@@ -133,7 +133,7 @@ class SoftwareScissorTest : public Game
 
     // Build the scissor RasterizerState (CullNone so the raster geometry is
     // winding-agnostic and the check isolates scissor clipping) and BOTH store it for DrawSprite to
-    // pass through SpriteBatch.Begin (REMED-GFX-081 made Begin honor its rasterizerState argument)
+    // pass through SpriteBatch.Begin (the Begin(rasterizerState) fix made Begin honor its rasterizerState argument)
     // AND assign it to the device so the 3D DrawPrimitives checks (which read
     // GraphicsDevice.RasterizerState directly) see the same state.
     void SetScissorEnabled(GraphicsDevice& dev, bool enable)

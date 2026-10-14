@@ -16,7 +16,7 @@
 // THE DEFECT this file reproduces was local to the retired VULKAN renderer, a whole-frame-deferred
 // recorder: every Clear/sprite/3D call was queued and replayed once, at Present, into one command
 // buffer whose passes were ordered by the public bind-cycle ("segment") id. A GetData readback of a
-// target could not wait for Present, so REMED-GFX-074 added an early flush that recorded and
+// target could not wait for Present, so the deferred target lifetime fix added an early flush that recorded and
 // submitted that target's passes immediately -- and, to avoid double-rendering at Present, it
 // consumed what it recorded. That flush filtered the frame's segment list down to the target being
 // READ:
@@ -136,7 +136,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-151: this renderer has no declared render-target producer/consumer contract."
+#error "this renderer has no declared render-target producer/consumer contract."
 #endif
 
     /**
@@ -570,7 +570,7 @@ class RenderTargetProducerConsumerTest : public Game
         if (!kStockEffectRtSourceSupported)
         {
             std::printf("[INFO] C legs: %s cannot hand a RenderTarget2D to a stock 3D effect "
-                        "(REMED-GFX-152) -- boundary recorded, SpriteBatch legs still cover the "
+                        " -- boundary recorded, SpriteBatch legs still cover the "
                         "contract here\n", kRendererName);
             std::fflush(stdout);
             return;
@@ -854,7 +854,7 @@ class RenderTargetProducerConsumerTest : public Game
                                 c.getBProperty() == 0 && c.getAProperty() == 0) ++empty;
                         }
                     check(good < kPW * kPH,
-                          std::string("D6 REMED-GFX-155 pinned: a never-read render target reaching "
+                          std::string("D6 pinned: a never-read render target reaching "
                           "a BACKBUFFER consumer does not reproduce the source on ") + kRendererName +
                           " (" + std::to_string(good) + "/" + std::to_string(kPW * kPH) +
                           " correct, " + std::to_string(empty) + " entirely empty) while the same "
@@ -1062,7 +1062,7 @@ class RenderTargetProducerConsumerTest : public Game
                     bool all = true;
                     for (const Color& c : r.pixels) if (!Same(c, clearB)) { all = false; break; }
                     static_assert(kOrderedClearAfterDrawWins,
-                                  "REMED-GFX-156: every renderer this fixture runs on delivers an "
+                                  "every renderer this fixture runs on delivers an "
                                   "ordered Clear now; a renderer that regresses must re-introduce "
                                   "the declaration rather than weaken this leg.");
                     check(all, std::string("G3 ") + u.name +
@@ -1195,7 +1195,7 @@ class RenderTargetProducerConsumerTest : public Game
         {
             // Owns the backbuffer consumer on this renderer, so there is no honest
             // ordering to measure here until it is fixed -- recorded, not asserted either way.
-            std::printf("[INFO] I2 not measurable on %s: REMED-GFX-155 (a never-read target "
+            std::printf("[INFO] I2 not measurable on %s: (a never-read target "
                         "reaching a backbuffer consumer) owns this path; got %s\n",
                         kRendererName, ColorText(r.at(0, 0)).c_str());
             std::fflush(stdout);
@@ -1240,7 +1240,7 @@ protected:
         ResetState(dev);
         dev.Clear(Color(0, 0, 0, 255));
 
-        std::printf("[INFO] REMED-GFX-151 same-frame render-to-texture producer/consumer on %s "
+        std::printf("[INFO] same-frame render-to-texture producer/consumer on %s "
                     "(%dx%d pattern, %s)\n", kRendererName, kPW, kPH,
                     preferMultiSampling_ ? "PreferMultiSampling=true" : "PreferMultiSampling=false");
         std::fflush(stdout);

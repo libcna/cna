@@ -489,7 +489,7 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   to the objects or context it describes and dropped on context loss:
   1. `samplerShadows_`: `GraphicsDevice::applySamplerStatesToRenderer` re-applies all sixteen pixel
      samplers before every draw, about 11 parameter writes and 3 binds each. Every write still
-     happens logically -- REMED-GFX-174 and FX-092 require the object's full state to follow each
+     happens logically -- the EasyGL sampler-completeness fix and FX-092 require the object's full state to follow each
      application -- but the GL call is skipped when the object already holds that exact value
      (bitwise for floats). EasyGL is the only writer and binder of `samplers_`; the record resets
      when an object is recreated.

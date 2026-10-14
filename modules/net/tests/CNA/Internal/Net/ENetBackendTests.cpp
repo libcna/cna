@@ -3116,7 +3116,7 @@ TEST(ENetBackendTest, HostRejectsDuplicateClientHelloFromAlreadyHandshakedPeer) 
 }
 
 TEST(ENetBackendTest, HostAcceptsFreshClientHelloAfterALegitimateDisconnectAndReconnect) {
-    // Regression for REMED-NET-003: the per-peer resend guard is keyed on live ENetPeer identity
+    // Regression for the ClientHello resend guard: the per-peer resend guard is keyed on live ENetPeer identity
     // (state.PeerWireIds, erased on disconnect - see HandleClientHello's own comment) - a genuine
     // reconnect always arrives as a brand-new CONNECT event on a fresh peer object and must not be
     // mistaken for a resend on the old, already-torn-down connection.

@@ -36,7 +36,7 @@
 //   * blend-state leakage -- an `Additive` batch followed by an `Opaque` one, with the second
 //     sprite over the first. Opaque must REPLACE, so the overlap reads the second sprite's colour
 //     exactly. A renderer that let the first batch's blend state survive its `End()` reads the sum;
-//   * a destination inside a `RenderTarget2D` -- `REMED-GFX-019`: sprite coordinates inside a bound
+//   * a destination inside a `RenderTarget2D` -- the render-target clip-space fix: sprite coordinates inside a bound
 //     target are the TARGET's own, not the backbuffer's. The sprite is placed at an offset that
 //     would land somewhere else entirely if the backbuffer's coordinate system leaked in.
 

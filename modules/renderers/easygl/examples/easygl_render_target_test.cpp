@@ -153,7 +153,7 @@ protected:
                     gotBL.getRProperty(), gotBL.getGProperty(), gotBL.getBProperty(),
                     gotBR.getRProperty(), gotBR.getGProperty(), gotBR.getBProperty(),
                     (!quadrantsOk && verticallyMirrored)
-                        ? " -- EXACTLY VERTICALLY MIRRORED (REMED-GFX-147)" : "");
+                        ? " -- EXACTLY VERTICALLY MIRRORED " : "");
 
         result_ = (pass && quadrantsOk) ? 0 : 1;
         Exit();

@@ -165,7 +165,7 @@ protected:
         if (std::chrono::steady_clock::now() >= deadline_)
         {
             check(false, "Timed out waiting for the real window resize to propagate within "
-                          "the wall-clock deadline (REMED-BUILD-010: a live desktop compositor can "
+                          "the wall-clock deadline (a live desktop compositor can "
                           "throttle/delay this indefinitely for an unfocused or unmapped window; "
                           "this is an environment/window-manager-state sensitivity, not a defect in "
                           "the resize/viewport code itself, which check 2's own PASS already proves "

@@ -5,7 +5,7 @@
 // The rendering oracle in VertexDeclarationLayoutTests.cpp proves the OUTCOME on whichever renderer
 // this build selected. This file proves the DECISION, on every build, without a device: the
 // predicate is a pure header-only function over a declaration and a description of the native
-// layout a renderer actually programs, so the whole matrix the vertex-declaration fidelity guard and REMED-GFX-218 care
+// layout a renderer actually programs, so the whole matrix the vertex-declaration fidelity guard and the EasyGL attribute-placement finding care
 // about can be asserted directly rather than inferred from pixels.
 //
 // WHY THE RULE IS ASYMMETRIC. The exit triage rejected "the declaration must equal the stride

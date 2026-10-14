@@ -209,7 +209,7 @@ namespace
                                  true, true, true,
                                  true, true, false, false, false, true, true};
 #else
-#error "REMED-GFX-129: this renderer has no declared ordered-Clear contract."
+#error "this renderer has no declared ordered-Clear contract."
 #endif
 
     std::string ColorText(const Color& c)
@@ -505,7 +505,7 @@ class OrderedClearTest : public Game
         else
             ExpectUniform(p, kRT, kRT, kRed,
                           "O1 draw then Clear: this renderer's only clear mechanism is the pass load "
-                          "action, so the earlier draw survives (declared REMED-GFX-129 defect)");
+                          "action, so the earlier draw survives (declared ordered-Clear defect)");
     }
 
     /// O2 -- Clear, then a PARTIAL draw: the clear colour must survive outside the draw.
@@ -672,7 +672,7 @@ class OrderedClearTest : public Game
         else
             ExpectHalves(p, kRT, kRT, kBlue, kRed,
                          "U1 Discard + Clear: the load-action clear runs first, so the draw "
-                         "survives (declared defect)");
+                         "survives (declared ordered-Clear defect)");
     }
 
     /// U2 -- PlatformContents preserves, and the Clear must still win over what it preserved.
@@ -1162,7 +1162,7 @@ class OrderedClearTest : public Game
         if (kContract.clearIgnoresViewport)
             ExpectUniform(p, kRT, kRT, kGreen,
                           "V1 Clear under a sub-viewport: Clear covers the whole target, "
-                          "unrestricted by Viewport (REMED-GFX-018 contract)");
+                          "unrestricted by Viewport (ClearOptions contract)");
         else
             Expect(p, kRT, kRT,
                    [](int x, int y) { return (x < kHalf && y < kHalf) ? kGreen : kRed; },
@@ -1198,7 +1198,7 @@ class OrderedClearTest : public Game
         if (kContract.clearIgnoresScissor)
             ExpectUniform(p, kRT, kRT, kGreen,
                           "V2 Clear under a scissor: Clear covers the whole target, unrestricted "
-                          "by ScissorRectangle (REMED-GFX-018 contract)");
+                          "by ScissorRectangle (ClearOptions contract)");
         else
             Expect(p, kRT, kRT,
                    [](int x, int y) { return (x < kHalf && y < kHalf) ? kGreen : kRed; },
@@ -1715,7 +1715,7 @@ protected:
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-129 ordered GraphicsDevice::Clear -- renderer %s\n", kContract.name);
+        std::printf("ordered GraphicsDevice::Clear -- renderer %s\n", kContract.name);
 
         RunDrawThenClearSingleCycle(dev);
         RunClearThenPartialDraw(dev);

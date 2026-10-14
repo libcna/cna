@@ -185,7 +185,7 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-152: this renderer has no declared render-target effect-source contract."
+#error "this renderer has no declared render-target effect-source contract."
 #endif
 
     /**
@@ -1325,7 +1325,7 @@ class RenderTargetEffectSourceTest : public Game
     }
 
     /**
-     * @brief Leg M2 -- REMED-GFX-166 across every stock-effect family with a 2D texture slot.
+     * @brief Leg M2 -- the dying-producer fix across every stock-effect family with a 2D texture slot.
      *
      * Leg M1 proves the destroyed-source contract on one family and one draw mode. The Vulkan defect
      * it exposed lived in the DESTINATION ownership, which is family-independent -- but "should be
@@ -1362,7 +1362,7 @@ class RenderTargetEffectSourceTest : public Game
     }
 
     /**
-     * @brief Leg M3 -- REMED-GFX-166 across every way the consumer geometry reaches the device.
+     * @brief Leg M3 -- the dying-producer fix across every way the consumer geometry reaches the device.
      *
      * The destination is captured at the same enqueue choke point for all of them, so a mode that
      * pushed its command anywhere else would show up here and nowhere else.
@@ -2223,7 +2223,7 @@ protected:
         }
 
         done_ = true;
-        std::printf("[INFO] REMED-GFX-152 render-target-as-effect-source on %s (%dx%d pattern%s)\n",
+        std::printf("[INFO] render-target-as-effect-source on %s (%dx%d pattern%s)\n",
                     kRendererName, kPW, kPH,
                     onlyLeg_.empty() ? "" : (", leg " + onlyLeg_).c_str());
         std::fflush(stdout);
@@ -2400,7 +2400,7 @@ int main(int argc, char** argv)
     {
         // Supervisor. Each leg runs in its own child so a SIGSEGV is a reported result rather than
         // the end of the run.
-        std::printf("[INFO] REMED-GFX-152 supervisor: %zu legs, each in its own process\n",
+        std::printf("[INFO] supervisor: %zu legs, each in its own process\n",
                     sizeof(kLegIds) / sizeof(kLegIds[0]));
         std::fflush(stdout);
         int passed = 0, crashes = 0, skips = 0;

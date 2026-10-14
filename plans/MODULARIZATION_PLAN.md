@@ -357,7 +357,7 @@ updated with evidence as phases complete.
   6118 ctest tests at `-j4`: 11 failed → serial rerun: 9 were parallel flakes (ENet×6,
   audio-timing×3), leaving exactly 2 deterministic pristine failures:
   `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` (the accepted
-  REMED-GFX-133 residual) and `Headless_Smoke` (aborts with an index-buffer primitive-range
+  the headless_smoke_test Check F residual residual) and `Headless_Smoke` (aborts with an index-buffer primitive-range
   throw in this environment). This is the control profile the modular build must match.
 
 ### P2 — module split (commits 268d3b962 + 6c9a64da3)
@@ -403,7 +403,7 @@ updated with evidence as phases complete.
 ### P3 — representative configurations (commits ede258a35 + 08224fe9a)
 - **HEADLESS (canonical):** modular full ctest = 6130 tests (pristine control 6118 + exactly the
   12 new module gates; name diff shows additions only); serial rerun leaves exactly the control's
-  2 deterministic pristine residuals (REMED-GFX-133 `SetRenderTargets_FourTargets`,
+  2 deterministic pristine residuals (the headless_smoke_test Check F residual `SetRenderTargets_FourTargets`,
   `Headless_Smoke` primitive-range abort). `ModuleLinkClosure_GraphicsNativeSdkFree` passes —
   graphics-core's closure carries no native renderer SDK.
 - **VULKAN (native family):** full tree builds after two findings: (1) the backend reverse edge
@@ -422,7 +422,7 @@ updated with evidence as phases complete.
   the strict environment.
 - Strict curated corpus (`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:check_initialization_order=1:strict_init_order=1`,
   `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`; Vector2/Decimal/DateTime/audio/registry/
-  capability areas): **650 = 647 pass + 3 skip + 0 fail, zero reports** — the REMED-GFX-221
+  capability areas): **650 = 647 pass + 3 skip + 0 fail, zero reports** — the GestureDetector static-initialization fix
   initialization-order coverage is retained and green.
 - A broader full-suite sweep (beyond any previously gated sanitizer scope) additionally surfaced
   **pre-existing** findings in unchanged code, each proven present in the pristine tree:
@@ -647,7 +647,7 @@ location itself the ownership statement.
 - **HEADLESS (canonical):** rebuilt; full ctest = 6130 registrations (pristine
   control 6118 + the 12 module gates, by name); `-j4` failures reduce, after
   the serial rerun of the known ENet/audio-timing flake families, to exactly
-  the control's 2 accepted deterministic residuals (REMED-GFX-133
+  the control's 2 accepted deterministic residuals (the headless_smoke_test Check F residual
   `SetRenderTargets_FourTargets`, `Headless_Smoke`).
 - **VULKAN (native family):** full tree rebuilt from the new layout; focused
   run against the configured `CNA_TEST_DISPLAY` Xvfb: 222 registrations
@@ -663,7 +663,7 @@ location itself the ownership statement.
   module probes run clean under
   `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:check_initialization_order=1:strict_init_order=1`;
   the strict curated corpus (identical Phase-1 filter) = **650 ran, 647 pass +
-  3 skip + 0 fail, exit 0, zero sanitizer reports** — the REMED-GFX-221
+  3 skip + 0 fail, exit 0, zero sanitizer reports** — the GestureDetector static-initialization fix
   initialization-order coverage retained and green. Zero NEW CNA-originating
   findings; the pre-existing P6-recorded findings (Net harness-child leak,
   `Vector3::GetHashCode` non-finite-hash UB) were not re-opened.

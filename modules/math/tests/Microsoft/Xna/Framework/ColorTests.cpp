@@ -452,7 +452,7 @@ TEST(ColorTest, PackFromVector4SetsComponents)
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
-// REMED-CORE-004, revised against the XNA 4.0 runtime itself
+// the Color packing clamp, revised against the XNA 4.0 runtime itself
 // (tests/reference/xna40/framework/framework-packing-oracle.json, cases color/packfromvector4_*):
 // XNA's IPackedVector.PackFromVector4 saturates and rounds exactly like the Color(Vector4)
 // constructor, so an out-of-range component clamps at 0/255 rather than wrapping. FNA's does not

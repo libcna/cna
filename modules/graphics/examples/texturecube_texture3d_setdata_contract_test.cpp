@@ -174,7 +174,7 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, true};
 #else
-#error "REMED-GFX-135: this renderer has no declared TextureCube/Texture3D SetData contract."
+#error "this renderer has no declared TextureCube/Texture3D SetData contract."
 #endif
 
     /// Destination pre-fill for readbacks. Equal to no pattern colour, so "still the sentinel" and
@@ -998,7 +998,7 @@ class CubeVolumeSetDataContractTest : public Game
             catch (...) {}
             check(threw,
                   "V1 volume: Texture3D construction is refused on this renderer, so no upload can "
-                  "reach a resource that does not exist (REMED-CONTENT-004)");
+                  "reach a resource that does not exist ");
             return;
         }
 
@@ -1325,7 +1325,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-135 TextureCube/Texture3D SetData contract -- renderer %s\n",
+        std::printf("TextureCube/Texture3D SetData contract -- renderer %s\n",
                     kContract.name);
 
         if (kContract.cubeHasRenderer)

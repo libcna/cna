@@ -21,6 +21,7 @@
 #include "System/IO/MemoryStream.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/IO/IOException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -83,7 +84,7 @@ namespace Microsoft::Xna::Framework
             const std::streamsize length = file.tellg();
             if (length < 0)
             {
-                throw std::runtime_error("[TitleContainer] Failed to determine file size: " + realName);
+                throw System::IO::IOException("[TitleContainer] Failed to determine file size: " + realName);
             }
 
             file.seekg(0, std::ios::beg);
@@ -97,7 +98,7 @@ namespace Microsoft::Xna::Framework
             if (length > 0 && !file.read(static_cast<char*>(buffer), length))
             {
                 std::free(buffer);
-                throw std::runtime_error("[TitleContainer] Failed to read file: " + realName);
+                throw System::IO::IOException("[TitleContainer] Failed to read file: " + realName);
             }
 
             size = static_cast<IntPtr>(length);
@@ -138,7 +139,7 @@ namespace Microsoft::Xna::Framework
         }
 #endif
 
-        throw std::runtime_error("[TitleContainer] File not found: " + realName);
+        throw System::IO::FileNotFoundException("Could not find file '" + realName + "'.", realName);
     }
 
     void TitleContainer::FreePointer(void* pointer)

@@ -109,7 +109,7 @@ here, because it flattens the kernel. Instrumented, the case renders a 64-pixel 
 1024 shadow map, so its five PCF taps span about 0.3 of one frame pixel: with the correction off the
 whole frame carried two intermediate values, and with it on, none. The penumbra is narrower than a
 pixel and a ~0.49px shift steps every sample over it. The assertion was sound and the dimensions
-were not. Closed as REMED-GFX-240 by giving that one case a 256-pixel frame against the smallest
+were not. Closed as the PCF kernel test fix by giving that one case a 256-pixel frame against the smallest
 map, where five taps span ~2.5 pixels; nothing in the shadow layer or the renderer changed.
 
 ## Third question: which SurfaceFormats XNA accepts
@@ -124,7 +124,7 @@ map, where five taps span ~2.5 pixels; nothing in the shadow layer or the render
 
 Reach refuses the other eleven with `NotSupportedException`; HiDef refuses none of them. Format
 legality in XNA is a **profile** question. CNA makes it a **renderer-capability** question -- its
-profile gate covers texture size only -- which closed `REMED-GFX-241` (a fixture demanded a throw
+profile gate covers texture size only -- which closed the signed-normalized format guard (a fixture demanded a throw
 for `NormalizedByte2`, which XNA accepts at either profile and the renderer had already stopped
 refusing) and opened the profile-based texture-format rule (`Bgra5551` is refused by CNA and accepted by XNA, and the
 eleven HiDef-only formats stay refused even on a HiDef device).
@@ -148,7 +148,7 @@ minus the three block-compressed formats.
 reported all twenty formats "accepted" at both profiles, which was implausible enough to make the
 leg report what the target actually IS rather than that construction had not thrown -- and that is
 where the substitution appeared. CNA deliberately does NOT follow this (MOD-115); see
-`REMED-GFX-245`.
+the render-target format rule.
 
 ## Fifth question: constant depth bias
 

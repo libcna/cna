@@ -212,7 +212,7 @@ per cycle and therefore walks into it on its **first** frame — it never was th
 its name suggests.
 
 **Fix**: `ForgetEffectEXT`, from the effect's own destructor, drops every queued draw that still
-names it and counts the drop. Dropping rather than keeping alive, because REMED-GFX-167's
+names it and counts the drop. Dropping rather than keeping alive, because the deferred-source lifetime fix's
 `keepAlive` route works for textures only because a samplable is shared-owned, while an
 `IEffectRenderer` is owned uniquely by its XNA `Effect`; widening that is an interface change across
 every renderer. A draw whose effect no longer exists cannot be honoured.

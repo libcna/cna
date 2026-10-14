@@ -391,7 +391,7 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 //     refusal mutated nothing and that Solid still works afterwards;
 //   * an HONEST SKIP where the renderer has no pixel route to measure at all.
 //
-// WEBGPU-115 FILLED THE REJECTION ARM. When REMED-GFX-209 measured this contract the arm had an
+// WEBGPU-115 FILLED THE REJECTION ARM. When the WireFrame capability test contract measured this contract the arm had an
 // EMPTY registration set -- no renderer refused, so the absence was recorded rather than a rejection
 // manufactured. WebGPU used to report true, accept the request, build and natively submit a
 // distinct pipeline for it, and return a frame byte-identical to Solid. It now reports false and
@@ -399,7 +399,7 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // matrix for that boundary lives in WebGpuWireFrameContractTests.cpp; this file keeps the
 // per-renderer shape of the contract.
 //
-// HISTORICAL EASYGL FINDING, SUPERSEDED. REMED-GFX-219 promoted a narrow GL_LINES edge expansion
+// HISTORICAL EASYGL FINDING, SUPERSEDED. the EasyGL wireframe fix promoted a narrow GL_LINES edge expansion
 // after one unclipped triangle passed. SOFTWARE-178 proved that path could not preserve culling,
 // polygon depth bias or topology-wide state and bypassed whole draw families. EasyGL now uses
 // native polygon mode when available and otherwise takes the same truthful refusal shape.

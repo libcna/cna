@@ -1222,7 +1222,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-170 TextureFilter ordinal contract on %s ===\n", kRendererName);
+        std::printf("=== TextureFilter ordinal contract on %s ===\n", kRendererName);
         note("MIP BOUNDARY: every texture here has ONE level, so the mipmap half of each ordinal "
              "is asserted through the native sampler descriptor (CNA_WEBGPU_SAMPLER_TRACE / "
              "CNA_SDLGPU_SAMPLER_TRACE), not through pixels. No mip generation is added.");

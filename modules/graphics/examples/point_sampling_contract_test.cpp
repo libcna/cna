@@ -862,7 +862,7 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-150 point-sampling contract on %s ===\n", kRendererName);
+        std::printf("=== point-sampling contract on %s ===\n", kRendererName);
 
         if (!kRasterizes)
         {

@@ -433,7 +433,7 @@ class SdlGpuRenderStateTest : public Game
     void RunScissorCheck(GraphicsDevice& dev)
     {
         // Force everything queued by the EARLIER checks (still pending -- nothing has called
-        // GetData() yet) to flush NOW, while scissor is still disabled. Pre-REMED-GFX-068 this was
+        // GetData() yet) to flush NOW, while scissor is still disabled. Before the per-pass scissor fix this was
         // required for correctness: the scissor was applied once per pass from the live state, and
         // all pending targets share a single EnsureFrameRendered() flush, so a scissor-enabled read
         // here as the frame's FIRST GetData() would retroactively clip every other still-pending

@@ -1915,7 +1915,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior (EasyGL's gap was
-        # fixed by REMED-GFX-236; an ordinary test that must pass)
+        # fixed by the ReferenceStencil fix; an ordinary test that must pass)
         cna_easygl_test(cna_test_easygl_graphicsdevice_reference_stencil
                         easygl_graphicsdevice_reference_stencil_test.cpp)
         cna_register_renderer_test(NAME EasyGL_GraphicsDevice_ReferenceStencil COMMAND cna_test_easygl_graphicsdevice_reference_stencil
@@ -1998,7 +1998,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # SAMPLE-001: XNA/D3D9 considers integer screen coordinates pixel centers. The original
-        # Primitives sample relies on that convention for every one-pixel star. REMED-GFX-239 moved
+        # Primitives sample relies on that convention for every one-pixel star. the pixel-centre guard moved
         # The fixture to the shared contract directory: the convention is XNA's, not EasyGL's, so
         # every renderer owes it and a renderer that does not implement it must say so by failing
         # rather than by never being asked.

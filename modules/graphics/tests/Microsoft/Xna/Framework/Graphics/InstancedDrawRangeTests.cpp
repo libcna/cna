@@ -720,7 +720,7 @@ namespace
         /// to GLSL's column constructor on the GLSL profile and to HLSL's ROW constructor on
         /// SPIR-V/HLSL/Metal/WGSL -- bgfx supplies `mtxFromCols()` for exactly this. The matrix is
         /// therefore transposed on the Vulkan route, the translation lands in `w`, and every
-        /// instance past the first is projected somewhere unpredictable. That is REMED-GFX-121, an
+        /// instance past the first is projected somewhere unpredictable. That is the bgfx instance-matrix finding, an
         /// independent pre-existing finding (A/B-proven against this task's fix), NOT this task's
         /// geometry-range defect -- so the instance axis is reduced to one instance on the affected
         /// routes while the geometry-range contract is still asserted in full on every route.
@@ -743,7 +743,7 @@ namespace
         // plans/plan_runtimerenderer.md RTR-P9-5: this member is now always defined -- it used to sit
         // behind CNA_INSTANCED_BINDING_OFFSET_ORACLE, but a declaration cannot be guarded by a
         // runtime predicate. The two tests that call it carry the renderer gate instead.
-        /// The binding oracle (REMED-GFX-123 reused it verbatim for the since-retired
+        /// The binding oracle (the D3D instanced offset fix reused it verbatim for the since-retired
         /// D3D11/D3D12 route). The mesh and instance buffers both begin with asymmetric decoys.
         /// `VertexOffset=3` and instance `VertexOffset=1` are ELEMENT offsets while every native
         /// binding underneath is expressed in bytes (GL pointers, for one); `InstanceFrequency=2`
@@ -1142,7 +1142,7 @@ TEST_F(InstancedDrawRangeTest, InstanceCountIsIndependentOfTheGeometryRange)
 {
     RequireInstancedRendering();
     if (!PerInstanceTransformIsApplied())
-        GTEST_SKIP() << "REMED-GFX-121: this renderer does not apply the per-instance world "
+        GTEST_SKIP() << "this renderer does not apply the per-instance world "
                         "matrix, so the instance axis carries no information here";
 
     const GridLayout layout = BackbufferLayout();

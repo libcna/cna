@@ -302,7 +302,7 @@ namespace
                                  true, true, true, true, true,
                                  true, true, false, false, true, true, false, true};
 #else
-#error "REMED-GFX-142: this renderer has no declared render-target depth/stencil contract."
+#error "this renderer has no declared render-target depth/stencil contract."
 #endif
 
     // --- The palette. 0/255-only, so every comparison is byte-exact even on an sRGB target. ---
@@ -1078,8 +1078,8 @@ class RenderTargetDepthStencilUsageTest : public Game
                  "be built here)");
         else if (!canRead || !kContract.msaaCubeReadback || !kContract.depthInRT)
             skip("U4 multisampled cube depth (no resolved readback of a multisampled cube FACE on "
-                 "this renderer -- a different route from the RenderTarget2D one REMED-GFX-154 "
-                 "fixed, and REMED-GFX-134's separately recorded boundary)");
+                 "this renderer -- a different route from the RenderTarget2D one "
+                 "fixed, and the cube readback contract's separately recorded boundary)");
         else
         {
             auto cube = MakeCube(dev, RenderTargetUsage::PreserveContents,
@@ -1090,7 +1090,7 @@ class RenderTargetDepthStencilUsageTest : public Game
                      "applied " + std::to_string(applied) + ")");
             else if (!canRead || !kContract.msaaCubeReadback || !kContract.depthInRT)
                 skip("U4 multisampled cube depth (no resolved readback of a multisampled cube "
-                     "FACE on this renderer -- REMED-GFX-134's separately recorded boundary)");
+                     "FACE on this renderer -- the cube readback contract's separately recorded boundary)");
             else
             {
                 dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveZ);  DepthCycle1(dev);
@@ -1224,7 +1224,7 @@ protected:
         }
         done_ = true;
 
-        std::printf("=== REMED-GFX-142 render-target depth/stencil lifetime -- %s ===\n",
+        std::printf("=== render-target depth/stencil lifetime -- %s ===\n",
                     kContract.name);
 
         try

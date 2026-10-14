@@ -162,7 +162,7 @@ namespace
     constexpr const char* kRendererName = "DIRECTX9";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
-#error "REMED-GFX-149: this renderer has no declared Texture2D::GetData render-target contract."
+#error "this renderer has no declared Texture2D::GetData render-target contract."
 #endif
 
     // ───────────────────────────────────────────────────────────────────────────

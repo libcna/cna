@@ -140,7 +140,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-147: this renderer has no declared render-target orientation contract."
+#error "this renderer has no declared render-target orientation contract."
 #endif
 
     /**
@@ -620,7 +620,7 @@ class RenderTargetSamplingOrientationTest : public Game
             // cover render-target sampling here, and the ordinary-texture control below still
             // covers mesh-UV sampling.
             std::printf("[INFO] CD legs: %s cannot use a RenderTarget2D as a stock 3D effect's "
-                        "texture (REMED-GFX-152: SdlGpuRenderTargetRenderer static_cast to the "
+                        "texture (SdlGpuRenderTargetRenderer static_cast to the "
                         "unrelated SdlGpuTextureRenderer) -- boundary recorded\n", kRendererName);
             std::fflush(stdout);
         }
@@ -807,7 +807,7 @@ class RenderTargetSamplingOrientationTest : public Game
         if (!RequireReadable(r, "G0 sample a never-read target")) return;
 
         static_assert(kSampleWithoutReadbackWorks,
-                      "REMED-GFX-151 is fixed on every renderer; this leg is an orientation check "
+                      "is fixed on every renderer; this leg is an orientation check "
                       "again, not a pinned defect. A renderer that regresses must fail G0, not "
                       "re-declare it.");
         CheckPattern(r, "G0 render -> unbind -> sample with no readback of the source is upright");
@@ -1468,17 +1468,17 @@ class RenderTargetSamplingOrientationTest : public Game
             std::printf("[INFO] O1 RenderTargetCube unavailable here (%s) -- boundary recorded\n",
                         what.c_str());
             std::fflush(stdout);
-            check(true, "O1 cube boundary recorded, not changed by REMED-GFX-147");
+            check(true, "O1 cube boundary recorded, not changed by ");
             return;
         }
         const Color tl = face[static_cast<std::size_t>(3) * 16 + 3];
         const Color bl = face[static_cast<std::size_t>(12) * 16 + 3];
-        std::printf("[INFO] O1 RenderTargetCube +X face row3=%s row12=%s (REMED-GFX-137 owns this)\n",
+        std::printf("[INFO] O1 RenderTargetCube +X face row3=%s row12=%s (owns this)\n",
                     ColorText(tl).c_str(), ColorText(bl).c_str());
         std::fflush(stdout);
         check(!Same(tl, bl),
               "O1 RenderTargetCube face readback still carries a real, non-uniform rendered image "
-              "(orientation itself is REMED-GFX-137's, unchanged here)");
+              "(orientation itself is 's, unchanged here)");
     }
 
 protected:
@@ -1509,7 +1509,7 @@ protected:
         ResetState(dev);
         dev.Clear(Color(0, 0, 0, 255));
 
-        std::printf("[INFO] REMED-GFX-147 render-target sampling orientation on %s (%dx%d pattern)\n",
+        std::printf("[INFO] render-target sampling orientation on %s (%dx%d pattern)\n",
                     kRendererName, kPW, kPH);
         std::fflush(stdout);
 

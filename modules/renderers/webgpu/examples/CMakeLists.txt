@@ -623,7 +623,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # BlendState.ColorWriteChannels (RT0) via WGPUColorTargetState.writeMask +
     # BlendState.MultiSampleMask via WGPUMultisampleState.mask (both in Make3DPipelineKey). This
-    # remains the generic 3D control; REMED-GFX-102 now independently covers the keyed SpriteBatch
+    # remains the generic 3D control; the per-Begin BlendState fix now independently covers the keyed SpriteBatch
     # path for both fields. MultiSampleMask IS compiled in (wgpu-native mask is real).
     cna_webgpu_test(cna_test_webgpu_colorwritechannels ${CNA_GRAPHICS_EXAMPLES_DIR}/gfx077_colorwritechannels_3d_test.cpp)
     target_compile_definitions(cna_test_webgpu_colorwritechannels PRIVATE GFX077_MULTISAMPLEMASK_SUPPORTED)

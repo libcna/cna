@@ -218,7 +218,7 @@ namespace
     constexpr Contract kContract{"DIRECTX9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
 #else
-#error "REMED-GFX-143: this renderer has no declared backbuffer command-order contract."
+#error "this renderer has no declared backbuffer command-order contract."
 #endif
 
     /**
@@ -1382,7 +1382,7 @@ protected:
             bbW_ = vp.getWidthProperty();
             bbH_ = vp.getHeightProperty();
         }
-        std::printf("REMED-GFX-143 backbuffer command order -- renderer %s, backbuffer %dx%d\n",
+        std::printf("backbuffer command order -- renderer %s, backbuffer %dx%d\n",
                     kContract.name, bbW_, bbH_);
 
         if (!kContract.rt2dTargets)

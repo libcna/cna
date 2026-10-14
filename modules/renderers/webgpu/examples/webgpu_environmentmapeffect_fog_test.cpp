@@ -469,7 +469,7 @@ protected:
         // the complete EnvironmentMapEffect RGB and preserves the established output alpha.
         CheckRender("complete material/environment composition is fogged last", halfWorld, identity, Ortho(), true);
 
-        std::printf("=== REMED-GFX-100 WebGPU EnvironmentMap fog: %d/%d PASS ===\n", passed_, total_);
+        std::printf("=== WebGPU EnvironmentMap fog: %d/%d PASS ===\n", passed_, total_);
         result_ = passed_ == total_ ? 0 : 1;
         Exit();
     }

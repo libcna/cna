@@ -63,7 +63,7 @@
 #include <vector>
 
 #ifndef CNA_RENDERER_SDL_GPU
-#error "REMED-GFX-188's native/public cube-mip regression is SDL_GPU-only."
+#error "'s native/public cube-mip regression is SDL_GPU-only."
 #endif
 
 using namespace Microsoft::Xna::Framework;
@@ -722,7 +722,7 @@ protected:
         }
         catch (const std::exception& e)
         {
-            Check(false, std::string("unexpected exception in REMED-GFX-188 matrix: ") + e.what());
+            Check(false, std::string("unexpected exception in matrix: ") + e.what());
             try { device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr)); }
             catch (...) {}
         }
@@ -733,7 +733,7 @@ protected:
     {
         if (renderer_ != nullptr)
             Check(renderer_->IsDebugModeEnabledEXT(), "SDL_GPU native debug mode is enabled");
-        std::printf("[INFO] REMED-GFX-188 SDL_GPU cube mip matrix: %d/%d checks passed\n",
+        std::printf("[INFO] SDL_GPU cube mip matrix: %d/%d checks passed\n",
                     passed_, total_);
         std::fflush(stdout);
         result_ = passed_ == total_ ? 0 : 1;

@@ -8,7 +8,7 @@
 //  1. The 3D families. SdlGpu keeps nine separate draw-command queues plus `spriteCommands_`, all
 //     replayed through one `drawOrder_` walk. The oracle exercises `DrawKind::Sprite`; the
 //     `Colored` family reaches `RenderQueuedDraws` through a different queue, a different
-//     `Issue*Draw`, a different pipeline cache and -- for indexed draws -- REMED-GFX-117's
+//     `Issue*Draw`, a different pipeline cache and -- for indexed draws -- the indexed startIndex/baseVertex fix's
 //     `ResolveIndexedRange`. A segment filter that worked for sprites and not for those would be
 //     invisible to the oracle.
 //
@@ -620,7 +620,7 @@ protected:
         if (phase_ != 1) { Exit(); return; }
         phase_ = 2;
 
-        std::printf("REMED-GFX-145 SDL_GPU pass boundaries: 3D families, uploads, depth clears\n");
+        std::printf("SDL_GPU pass boundaries: 3D families, uploads, depth clears\n");
         RunIndexedThenNonIndexed(dev);
         RunIndexedThenNonIndexedPreserve(dev);
         RunIndexedOffsetsPerCycle(dev);

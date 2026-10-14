@@ -144,7 +144,7 @@ namespace
     constexpr bool kDraws3D = true;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-160: this renderer has no declared winding contract."
+#error "this renderer has no declared winding contract."
 #endif
 
     /**
@@ -367,7 +367,7 @@ class FrontFaceWindingTest : public Game
             if (dest.rt == nullptr && !kBackbufferReadRejectsWhenNonRasterizing)
             {
                 skip(label + ": " + kRendererName + " does not yet reject the BACKBUFFER readback "
-                     "on a non-rasterizing device (REMED-GFX-162, open) -- declared, not absorbed");
+                     "on a non-rasterizing device (declared boundary) -- declared, not absorbed");
                 return false;
             }
             check(r.threwNotSupported,
@@ -1225,7 +1225,7 @@ class FrontFaceWindingTest : public Game
         ResetState(dev);
         dev.Clear(kClear);
 
-        std::printf("[INFO] REMED-GFX-160 front-face winding on %s "
+        std::printf("[INFO] front-face winding on %s "
                     "(requested %dx%d backbuffer, actual %dx%d)\n",
                     kRendererName, kW, kH,
                     dev.getPresentationParametersProperty().getBackBufferWidthProperty(),

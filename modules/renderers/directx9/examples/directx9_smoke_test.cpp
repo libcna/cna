@@ -668,7 +668,7 @@ protected:
                   "D9-53: SetRenderTarget2D(nullptr) genuinely restores the back buffer -- Clear()+readback exact afterward");
         }
 
-        // ---- Check GFX077: REMED-GFX-077 runtime verification -- BlendState.ColorWriteChannels
+        // ---- Check GFX077: the ColorWriteChannels fix runtime verification -- BlendState.ColorWriteChannels
         // (RT0 -> D3DRS_COLORWRITEENABLE, a dynamic render state) against the real DXVK9 device. An
         // opaque full-screen quad (blend disabled) is drawn into an off-screen render target so the
         // ONLY thing that can preserve a destination channel is the colour write mask gating the
@@ -1327,7 +1327,7 @@ protected:
             check(stateOk && surfaceOk && viewportOk && capsOk && compareControlsOk && clearOk &&
                   offscreenOk &&
                   isRed(withDepth) && isGreen(withoutWrite) && isRed(restoredDepth),
-                  "REMED-GFX-089: reachable DepthStencilState.Default maps to ZENABLE=TRUE, "
+                  "reachable DepthStencilState.Default maps to ZENABLE=TRUE, "
                   "ZWRITEENABLE=TRUE, ZFUNC=LESSEQUAL on a compatible bound D24S8 surface; near "
                   "red rejects far green on both backbuffer and offscreen RT, depth clear values "
                   "gate draws, write-off differs, and A->B->A restores identical depth behavior");

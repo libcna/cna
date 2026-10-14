@@ -106,7 +106,7 @@ namespace
             ran_ = true;
 
             auto& dev = getGraphicsDeviceProperty();
-            std::printf("[INFO] REMED-GFX-164 active-target alpha/resolve matrix on EASYGL\n");
+            std::printf("[INFO] active-target alpha/resolve matrix on EASYGL\n");
 
             RunConstructionAndFormat(dev);
             RunClearAndDrawing(dev, 0, "non-MSAA");

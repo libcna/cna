@@ -84,7 +84,7 @@ namespace
     constexpr const char* kRendererName = "DIRECTX9";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-165: this renderer has no declared backbuffer-readback contract."
+#error "this renderer has no declared backbuffer-readback contract."
 #endif
 
     // Cross-renderer control scope. These are PRE-EXISTING renderer behaviours this task
@@ -677,7 +677,7 @@ int main(int argc, char** argv)
 #if CNA_GFX165_CAN_ISOLATE
     if (onlyLeg.empty())
     {
-        std::printf("[INFO] REMED-GFX-165 supervisor: %zu legs, each in its own process\n",
+        std::printf("[INFO] supervisor: %zu legs, each in its own process\n",
                     sizeof(kLegIds) / sizeof(kLegIds[0]));
         std::fflush(stdout);
         int passed = 0, crashes = 0, skips = 0;

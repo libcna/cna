@@ -235,7 +235,7 @@ protected:
                         "in ONE frame\n", okC ? "PASS" : "FAIL");
             if (okC) ++passCount_;
 
-            // Check D -- REMED-GFX-237: a clear must ignore the stencil WRITE mask AND put it back.
+            // Check D -- the write-mask restore fix: a clear must ignore the stencil WRITE mask AND put it back.
             // Nothing covered the restore: with it deleted, all 65 stencil tests still passed.
             StampStencil(dev, 0x05);
             const bool okD = ClearThenWriteMaskedDrawKeepsStencil(dev, 0x05);

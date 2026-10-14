@@ -85,7 +85,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Effects COMMAND cna_test_software_effects
         TIMEOUT 30 LABELS "Software")
 
-    # Deterministic shared public GraphicsDevice depth contract. REMED-GFX-030
+    # Deterministic shared public GraphicsDevice depth contract. the Software depth-state fix
     # closes Software's former fixed-LessEqual/write-on-pass boundary, so DepthRead is asserted too.
     cna_software_test(cna_test_software_depth_contract ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_depth_contract_test.cpp)
     cna_register_renderer_test(NAME Software_GraphicsDevice_DepthContract

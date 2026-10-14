@@ -85,7 +85,7 @@ namespace
     constexpr const char* kRendererName = "DIRECTX9";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-161: this renderer has no declared first-read contract."
+#error "this renderer has no declared first-read contract."
 #endif
 
     // BGFX honours only a full-surface backbuffer read; a sub-rectangle reads back zeros (a
@@ -699,7 +699,7 @@ int main(int argc, char** argv)
 #if CNA_GFX161_CAN_ISOLATE
     if (onlyLeg.empty())
     {
-        std::printf("[INFO] REMED-GFX-161 supervisor: %zu legs, each in its own process\n",
+        std::printf("[INFO] supervisor: %zu legs, each in its own process\n",
                     sizeof(kLegIds) / sizeof(kLegIds[0]));
         std::fflush(stdout);
         int passed = 0, crashes = 0, skips = 0;

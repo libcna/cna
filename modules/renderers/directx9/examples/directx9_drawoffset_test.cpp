@@ -5,7 +5,7 @@
 // the underlying IDirect3DDevice9::DrawPrimitive(StartVertex) /
 // DrawIndexedPrimitive(BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount) calls.
 //
-// This is the D3D9 counterpart of the D3D11/D3D12 fix REMED-GFX-020 already landed. It was split
+// This is the D3D9 counterpart of the D3D11/D3D12 fix the specular/vertex-colour fix already landed. It was split
 // out from GFX-020 (its own Phase-12 cross-renderer sweep confirmed D3D9 had the identical
 // hardcoded-zero defect class spread across several draw sites, out of GFX-020's D3D11/D3DCommon
 // scope). D3D9 runtime is verifiable via Wine + DXVK9, so unlike the build-only D3D12 half of

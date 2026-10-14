@@ -64,7 +64,7 @@ protected:
         const int   lineSpacing    = 24;
         const float spacing        = 0.0f;
 
-        // Task REMED-GFX-002 made the constructor refuse a defaultCharacter absent from the
+        // Task the SpriteFont lookup fix made the constructor refuse a defaultCharacter absent from the
         // character list. plans/plan_software.md SOFTWARE-353 then recovered what XNA does: its
         // internal (content) constructor stores the value unchecked, and only the PUBLIC setter
         // validates. plans/plan_vulkan_parity.md VKPAR-0022 moved this leg to that contract.
@@ -175,7 +175,7 @@ protected:
         check(f.getDefaultCharacterProperty().value() == u'?', "DefaultCharacter == '?'");
         f.setDefaultCharacterProperty(std::nullopt);
         check(!f.getDefaultCharacterProperty().has_value(), "DefaultCharacter nullopt");
-        // '*' is not one of chars2's glyphs -- Task REMED-GFX-002 requires this to be rejected,
+        // '*' is not one of chars2's glyphs -- Task the SpriteFont lookup fix requires this to be rejected,
         // matching the constructor's own validation above.
         {
             bool threw = false;

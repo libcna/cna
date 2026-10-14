@@ -213,7 +213,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
 
     static void Print(const char* label, const Cost& d)
     {
-        std::printf("[ MEASURE  ] REMED-GFX-211/213 WebGPU %s: passes=%zu submits=%zu "
+        std::printf("[ MEASURE  ] WebGPU %s: passes=%zu submits=%zu "
                     "coloredPipelines=+%zu instancedPipelines=+%zu bufferAcquisitions=%zu "
                     "nativePipelines=+%zu nativeCommandBuffers=%zu\n",
                     label, d.passes, d.submits, d.coloredPipelines, d.instancedPipelines,
@@ -259,7 +259,7 @@ class WebGpuInstancedOffsetFrequencyCardinalityTest : public Game
 
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
-        std::printf("REMED-GFX-211/213 instanced offset+frequency cardinality -- WEBGPU\n");
+        std::printf("instanced offset+frequency cardinality -- WEBGPU\n");
 #ifndef CNA_HAVE_WGPU_NATIVE_REPORT
         std::printf("NOTE: wgpu.h was not found, so native live-object counts read 0 and only the "
                     "CNA-side counters below are decisive.\n");

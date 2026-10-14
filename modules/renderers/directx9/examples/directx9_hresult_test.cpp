@@ -283,6 +283,6 @@ int main()
 
     SDL_DestroyWindow(window);
     SDL_Quit();
-    std::printf("=== %d/%d PASS (REMED-GFX-092 HRESULT checks) ===\n", passed, total);
+    std::printf("=== %d/%d PASS (HRESULT checks) ===\n", passed, total);
     return passed == total ? 0 : 1;
 }

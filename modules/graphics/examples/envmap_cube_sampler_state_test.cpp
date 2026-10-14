@@ -123,7 +123,7 @@ namespace
     /// Whether a declared-but-unwritten mip chain has a DEFINED answer on this renderer. Real
     /// XNA/D3D leave the content of a level nobody uploaded undefined, so this is not a public
     /// contract; the mip-filter component fix made it a deliberate, conservative Software guarantee (the sampler
-    /// bounds itself at the last level that was really supplied) and REMED-GFX-182 extended that
+    /// bounds itself at the last level that was really supplied) and the cube sampler state fix extended that
     /// per cube face. Asserted where it is a guarantee, reported everywhere else.
 #if defined(CNA_RENDERER_SOFTWARE)
     constexpr bool kUnwrittenChainIsBounded = true;
@@ -762,7 +762,7 @@ class EnvMapCubeSamplerStateTest : public Game
         catch (const std::exception& e)
         {
             note(std::string("N9: this renderer refuses to CREATE a RenderTargetCube (") + e.what() +
-                 "), so no cube render target can reach the sampler. REMED-GFX-173's leg L is the "
+                 "), so no cube render target can reach the sampler. The cube sampler fix's leg L is the "
                  "place that measures it where it exists.");
             return;
         }
@@ -771,7 +771,7 @@ class EnvMapCubeSamplerStateTest : public Game
             dev.SetRenderTarget(rtc.get(), CubeMapFace::PositiveX);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetDeviceState(dev, kBBW, kBBH);
-            note("N9: this renderer BINDS a RenderTargetCube face; REMED-GFX-173's leg L measures "
+            note("N9: this renderer BINDS a RenderTargetCube face; the cube sampler fix's leg L measures "
                  "the sampler contract against it, and this fixture leaves it there.");
         }
         catch (const std::exception& e)
@@ -881,7 +881,7 @@ protected:
         done_ = true;
 
         GraphicsDevice& dev = getGraphicsDeviceProperty();
-        std::printf("=== REMED-GFX-182 EnvironmentMapEffect slot-1 sampler state [%s] ===\n",
+        std::printf("=== EnvironmentMapEffect slot-1 sampler state [%s] ===\n",
                     kRendererName);
 
         if (!paletteOk_)

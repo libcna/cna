@@ -2,7 +2,7 @@
 //
 // CheckedMultiplyOrThrow() is the shared overflow-safe-multiplication helper
 // extracted while fixing a signed-integer-overflow UB finding (confirmed by UBSan) inside
-// Texture2DContentTypeReader.cpp's own REMED-CONTENT-001 decoded-byte-size validation. These
+// Texture2DContentTypeReader.cpp's own the Texture2D reader hardening decoded-byte-size validation. These
 // tests exercise the helper directly, independent of any one reader's byte-stream plumbing.
 
 #include <gtest/gtest.h>
@@ -36,7 +36,7 @@ TEST(XnbArithmeticTest, AnyZeroFactorProducesZeroWithoutThrowing)
     EXPECT_EQ(CheckedMultiplyOrThrow({0, 2147483647LL, 4}, "test"), 0);
 }
 
-// The exact shape that triggered REMED-CONTENT-009: two factors each near INT32_MAX multiply to a
+// The exact shape that triggered the content-path fix: two factors each near INT32_MAX multiply to a
 // value still representable in int64_t (~4.6e18, under INT64_MAX's ~9.22e18), but the "* 4" a
 // texture reader appends for the bytes-per-pixel factor pushes the running product over INT64_MAX
 // -- undefined behavior with raw multiplication, a clean exception here.

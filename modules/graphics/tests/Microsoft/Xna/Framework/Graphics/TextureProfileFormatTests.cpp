@@ -153,7 +153,7 @@ TEST(TextureProfileFormat, NothingRendersIntoABlockCompressedSurface)
     // The render-target list is the Texture2D list minus the three compressed formats, at both
     // profiles. The predicate is exposed and measured even though RenderTarget2D does not yet
     // consult it: XNA SUBSTITUTES Color rather than refusing, and MOD-115 deliberately refuses
-    // instead, so wiring it in is the owner's call. REMED-GFX-245.
+    // instead, so wiring it in is the owner's call. the render-target format rule.
     for (const GraphicsProfile profile : {GraphicsProfile::Reach, GraphicsProfile::HiDef})
     {
         SCOPED_TRACE(static_cast<int>(profile));

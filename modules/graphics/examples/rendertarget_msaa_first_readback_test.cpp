@@ -126,7 +126,7 @@ namespace
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-154: this renderer has no declared first-readback contract."
+#error "this renderer has no declared first-readback contract."
 #endif
 
     /**
@@ -988,7 +988,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         if (!kMsaaMipLevelProbeSafe)
         {
             boundary("G1 mip level 1 of a mipmapped multisampled target SEGFAULTS on this renderer "
-                     "(REMED-GFX-186, isolated by this task's controls) -- a SIGSEGV cannot be "
+                     "(isolated by this task's controls) -- a SIGSEGV cannot be "
                      "caught, so the probe is declared instead of issued. Level 0 above is exact.");
             check(true, "G1 mip level 1 behaviour is classified rather than absorbed");
             return;
@@ -1253,7 +1253,7 @@ int main(int argc, char** argv)
     if (onlyLeg.empty())
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
-        std::printf("[INFO] REMED-GFX-154 supervisor on %s: %d legs, each in its own process\n",
+        std::printf("[INFO] supervisor on %s: %d legs, each in its own process\n",
                     kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;

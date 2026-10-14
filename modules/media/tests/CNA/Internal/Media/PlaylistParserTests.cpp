@@ -48,7 +48,7 @@ TEST(PlaylistParserTest, MissingPlaylistFileProducesEmptyResultWithoutCrashing)
 
 namespace
 {
-    // Isolated scratch directory for the REMED-CONTENT-002 containment tests below, so they don't
+    // Isolated scratch directory for the path-containment fix containment tests below, so they don't
     // depend on (or risk mutating) the checked-in tests/assets/media/music/ fixtures.
     class ScratchPlaylistDir
     {

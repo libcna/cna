@@ -1,7 +1,7 @@
 # The general/default CnaTests suite has never once run in any CI workflow this
 # project has had. d3d-windows-ci.yml / devices-tests.yml / input-ci.yml each select a label or
 # --gtest_filter scoped to their own subsystem (a Direct3D renderer, the Devices/Sensors suite, the
-# `input` label) -- none of them ever runs `ctest` unfiltered. Combined with REMED-BUILD-001 (fixed:
+# `input` label) -- none of them ever runs `ctest` unfiltered. Combined with the test working-directory fix (fixed:
 # gtest_discover_tests(CnaTests) previously had no WORKING_DIRECTORY, so ~220 of these tests failed
 # under ctest even when it WAS invoked), this meant ~220 tests covering Media, audio-tag parsing, the
 # XNB content pipeline, ENet networking, and Lzx decompression -- including both of this project's
@@ -15,7 +15,7 @@
 # already has its own narrower, renderer-specific CI path or none at all).
 #
 # There is no known-failure allowlist: the last entry, EasyGL_GraphicsDevice_ReferenceStencil, was
-# fixed by REMED-GFX-236 and re-verified passing on 2026-10-10. Any failing test fails the job; the
+# fixed by the ReferenceStencil fix and re-verified passing on 2026-10-10. Any failing test fails the job; the
 # current known defects are listed in handoff.md section 5.
 name: general-tests-ci
 

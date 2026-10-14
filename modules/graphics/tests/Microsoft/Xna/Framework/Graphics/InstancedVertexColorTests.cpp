@@ -779,7 +779,7 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledFalseIgnoresGeometryColorOnBo
 // DrawIndexedColoredPrimitives, whose QueueColoredDraw throws "requires a stride-16
 // (VertexPositionColor) vertex buffer". That is an ordinary-route defect of a different class --
 // a supported public call that throws rather than one that renders the wrong colour -- it
-// reproduces identically on unfixed HEAD, and it is recorded as REMED-GFX-214, not fixed here.
+// reproduces identically on unfixed HEAD, and it is recorded as the stride-24 untextured route, not fixed here.
 // The instanced half of this leg is the and is asserted unconditionally; the
 // route-agreement half is asserted only where the ordinary route actually rendered, and the
 // rejection text is printed when it did not.
@@ -853,7 +853,7 @@ TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOn
     {
         std::cout << "[ GFX-212  ] " << RendererName()
                   << " stride24/ordinary-route: REJECTED -- " << ordinaryRejection
-                  << " (REMED-GFX-214, an ordinary-route boundary this leg does not close)"
+                  << " (an ordinary-route boundary this leg does not close)"
                   << std::endl;
     }
 }

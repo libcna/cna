@@ -137,7 +137,7 @@ namespace
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
 #else
-#error "REMED-GFX-180: this renderer has no declared present-lifecycle contract."
+#error "this renderer has no declared present-lifecycle contract."
 #endif
 
     /**
@@ -1250,7 +1250,7 @@ int main(int argc, char** argv)
     if (onlyLeg.empty())
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
-        std::printf("[INFO] REMED-GFX-180 supervisor on %s: %d legs, each in its own process\n",
+        std::printf("[INFO] supervisor on %s: %d legs, each in its own process\n",
                     kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;

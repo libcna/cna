@@ -1147,7 +1147,7 @@ public:
         }
 
         GraphicsDevice& dev = getGraphicsDeviceProperty();
-        std::printf("=== REMED-GFX-177 descriptor capacity contract -- renderer %s ===\n", kRendererName);
+        std::printf("=== descriptor capacity contract -- renderer %s ===\n", kRendererName);
 
         // One probe, before any leg: construct a cube and write one face. Whatever this renderer
         // does with cube textures, it does it here and not inside a cardinality measurement.

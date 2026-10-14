@@ -156,14 +156,14 @@ protected:
         dev.ResourceDestroyed +=
             [&](System::Object*, const ResourceDestroyedEventArgs& args)
             {
-                if (args.getNameProperty() == "REMED-GFX-004")
+                if (args.getNameProperty() == "handle-release-probe")
                     ++cubeDestroyCount;
             };
 
         {
             RenderTargetCube rt(
                 dev, 4, false, SurfaceFormat::Color, DepthFormat::None);
-            rt.setNameProperty("REMED-GFX-004");
+            rt.setNameProperty("handle-release-probe");
             check(rt.GetRenderTargetCubeRenderer() != nullptr,
                   "RenderTargetCube: renderer is live before explicit Dispose");
 
@@ -187,7 +187,7 @@ protected:
         {
             RenderTargetCube rt(
                 dev, 4, false, SurfaceFormat::Color, DepthFormat::None);
-            rt.setNameProperty("REMED-GFX-004");
+            rt.setNameProperty("handle-release-probe");
             check(rt.GetRenderTargetCubeRenderer() != nullptr,
                   "RenderTargetCube: renderer is live before destructor-only cleanup");
         }
@@ -196,7 +196,7 @@ protected:
 
         auto* deviceOwned = new RenderTargetCube(
             dev, 4, false, SurfaceFormat::Color, DepthFormat::None);
-        deviceOwned->setNameProperty("REMED-GFX-004");
+        deviceOwned->setNameProperty("handle-release-probe");
         check(deviceOwned->GetRenderTargetCubeRenderer() != nullptr,
               "RenderTargetCube: renderer is live before device-first disposal");
 

@@ -823,7 +823,7 @@ namespace
             GTEST_SKIP()                                                                     \
                 << "Renderer reports GraphicsCapability::MultiStreamVertexInput = false: "     \
                    "mixed-frequency multi-stream vertex input is not implemented on this "    \
-                   "renderer (REMED-GFX-203..208). The draw is rejected with "                 \
+                   "renderer (..208). The draw is rejected with "                 \
                    "System::NotSupportedException rather than rendered from a subset of the " \
                    "bound streams -- see "                                                    \
                    "UnsupportedRendererRejectsMixedStreamInstancingDeterministically.";        \
@@ -1885,19 +1885,19 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
               {"instance-offset-ignored", CellsForDraw(shifts, 0, kInstanceCount, 1, 0, kLiveBand)},
           })
         : "rejected: " + rejection;
-    PrintTriageMeasurement("REMED-GFX-211", "legA(instance-offset)", reading, snapshot, layout);
+    PrintTriageMeasurement("", "legA(instance-offset)", reading, snapshot, layout);
 
     if (BindingOffsetOracle())
     {
         EXPECT_EQ(std::string("instance-offset-honoured"), reading)
-            << "REMED-GFX-122/123/211/213 corrected this renderer: the per-instance binding's own VertexOffset "
+            << "corrected this renderer: the per-instance binding's own VertexOffset "
                "must select records 1..4, not 0..3"
             << DescribeFrame(snapshot, layout);
     }
     else
     {
         EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-            << "REMED-GFX-211 triage on " << RendererName() << ": the frame matched no reading "
+            << "triage on " << RendererName() << ": the frame matched no reading "
                "this leg can name, so the measurement is not decisive and the ticket cannot be "
                "classified from it"
             << DescribeFrame(snapshot, layout);
@@ -1964,19 +1964,19 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
                             kTriageMeshDecoyColumn, kTriageMeshDecoyBand)},
           })
         : "rejected: " + rejection;
-    PrintTriageMeasurement("REMED-GFX-211", "legB(per-vertex-offset)", reading, snapshot, layout);
+    PrintTriageMeasurement("", "legB(per-vertex-offset)", reading, snapshot, layout);
 
     if (BindingOffsetOracle())
     {
         EXPECT_EQ(std::string("vertex-offset-honoured"), reading)
-            << "REMED-GFX-122/123/211/213 corrected this renderer: the geometry binding's own VertexOffset must "
+            << "corrected this renderer: the geometry binding's own VertexOffset must "
                "skip the decoy triangle on the instanced route too"
             << DescribeFrame(snapshot, layout);
     }
     else
     {
         EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-            << "REMED-GFX-211 triage on " << RendererName() << ": the frame matched no reading "
+            << "triage on " << RendererName() << ": the frame matched no reading "
                "this leg can name, so the per-vertex side cannot be classified from it"
             << DescribeFrame(snapshot, layout);
     }
@@ -2054,19 +2054,19 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
                CellsForDraw(shifts, kTriageMeshPrefix, kInstanceCount, 1, 0, kLiveBand)},
           })
         : "rejected: " + rejection;
-    PrintTriageMeasurement("REMED-GFX-211", "legC(both-offsets)", reading, snapshot, layout);
+    PrintTriageMeasurement("", "legC(both-offsets)", reading, snapshot, layout);
 
     if (BindingOffsetOracle())
     {
         EXPECT_EQ(std::string("both-offsets-honoured"), reading)
-            << "REMED-GFX-122/123/211/213 corrected this renderer: each binding's own VertexOffset applies to "
+            << "corrected this renderer: each binding's own VertexOffset applies to "
                "its own stream, exactly once"
             << DescribeFrame(snapshot, layout);
     }
     else
     {
         EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-            << "REMED-GFX-211 triage on " << RendererName() << ": the frame matched none of the "
+            << "triage on " << RendererName() << ": the frame matched none of the "
                "six readings this leg can name"
             << DescribeFrame(snapshot, layout);
     }
@@ -2143,7 +2143,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
         const FrameSnapshot snapshot = CaptureTarget(target);
         const std::string reading =
             rejection.empty() ? ReadFrame(snapshot, layout, readings) : "rejected: " + rejection;
-        PrintTriageMeasurement("REMED-GFX-213", leg, reading, snapshot, layout);
+        PrintTriageMeasurement("", leg, reading, snapshot, layout);
         return reading;
     };
 
@@ -2168,14 +2168,14 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
     {
         EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
             << "this renderer implements the per-instance divisor -- EasyGL through "
-               "glVertexAttribDivisor, REMED-GFX-213 by expanding the grouping into a renderer's "
+               "glVertexAttribDivisor, by expanding the grouping into a renderer's "
                "own instance staging copies: six instances at InstanceFrequency 2 must consume "
                "records 0,0,1,1,2,2";
     }
     else
     {
         EXPECT_NE(std::string("UNCLASSIFIED"), atTwo)
-            << "REMED-GFX-213 triage on " << RendererName() << ": the frequency-2 frame matched "
+            << "triage on " << RendererName() << ": the frequency-2 frame matched "
                "no reading this leg can name, so the ticket cannot be classified from it";
     }
 }
@@ -2253,7 +2253,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         const std::string reading = !rejection.empty() ? "rejected: " + rejection
                                   : lit == 0           ? std::string("nothing-rendered")
                                                        : std::string(CodeName(code));
-        PrintTriageMeasurement("REMED-GFX-212", leg, reading, snapshot, layout);
+        PrintTriageMeasurement("", leg, reading, snapshot, layout);
         return reading;
     };
 
@@ -2275,7 +2275,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         // stream on this route, asserting that pixel measurement until the correction landed and made
         // the assertion fail -- which is what forced its removal.
         EXPECT_EQ(ordinary, instanced)
-            << "REMED-GFX-212: this renderer was measured honouring VertexColorEnabled on BOTH routes, "
+            << "this renderer was measured honouring VertexColorEnabled on BOTH routes, "
                "which is the reference contract -- BasicEffect's shader index has no instancing term, "
                "so the same vertex shader runs for both";
     }
@@ -2559,7 +2559,7 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
         // DrawInstancedPrimitivesEx at all, so every instanced draw -- one stream or four -- reaches
         // IGraphicsRenderer's own default. The mixed-stream array must reach that SAME declared
         // boundary and not some other failure; this arm fails the moment such a renderer gains an
-        // instanced path, so the boundary cannot outlive itself. REMED-GFX-210 records that CNA has
+        // instanced path, so the boundary cannot outlive itself. the instancing capability query records that CNA has
         // no capability a caller can query for hardware instancing (FNA3D's own
         // FNA3D_SupportsHardwareInstancing), which is why this arm has to be selected by renderer set.
         try
@@ -2567,7 +2567,7 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
             draw();
             ADD_FAILURE()
                 << "this renderer was expected to implement no instanced draw path at all, but the "
-                   "mixed-stream draw was accepted -- see REMED-GFX-210";
+                   "mixed-stream draw was accepted -- see ";
         }
         catch (const std::exception& e)
         {

@@ -211,7 +211,7 @@ namespace
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
 #else
-#error "REMED-GFX-140: this renderer has no declared render-target pass-boundary contract."
+#error "this renderer has no declared render-target pass-boundary contract."
 #endif
 
     /// Destination pre-fill. Equals no pattern colour, no marker colour and not the discard colour.
@@ -1318,7 +1318,7 @@ protected:
         phase_ = 2;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-140 render-target pass boundaries -- renderer %s\n", kContract.name);
+        std::printf("render-target pass boundaries -- renderer %s\n", kContract.name);
 
         if (!kContract.rt2dTargets)
         {

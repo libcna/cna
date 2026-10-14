@@ -157,7 +157,7 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true, true, true, true};
 #else
-#error "REMED-GFX-116: this renderer has no declared deferred-viewport contract."
+#error "this renderer has no declared deferred-viewport contract."
 #endif
 
     const Color kBlack  (  0,   0,   0, 255);
@@ -1653,7 +1653,7 @@ class DeferredViewportCaptureTest : public Game
             bbW_ = vp.getWidthProperty();
             bbH_ = vp.getHeightProperty();
         }
-        std::printf("REMED-GFX-116 deferred viewport capture -- renderer %s, backbuffer %dx%d\n",
+        std::printf("deferred viewport capture -- renderer %s, backbuffer %dx%d\n",
                     kContract.name, bbW_, bbH_);
 
         RunLeftRightLeft(dev);

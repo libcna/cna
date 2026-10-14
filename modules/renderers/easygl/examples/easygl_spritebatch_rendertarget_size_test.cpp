@@ -17,7 +17,7 @@
 // pixels (17 x 11 for the 48x32 target, and the identical size for the 64x40 target), NOT on an
 // absolute origin. This is deliberately invariant to EasyGL's GL-bottom-left render-target sampling
 // orientation (which vertically flips the blit -- a separate, pre-existing EasyGL convention, not
-// The REMED-GFX-019 defect) while still discriminating the exact failure mode: the pre-fix
+// the render-target clip-space fix defect) while still discriminating the exact failure mode: the pre-fix
 // backbuffer-relative mapping would compress the sprite to roughly 8x5 render-target pixels (96/48
 // x-scale, 72/32 y-scale), which these width/height bounds reject. Only Red/Black (gamma-invariant
 // 0/255 channel values) are used.

@@ -108,7 +108,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr bool kKnownStripBoundary = false;
 #else
-#error "REMED-GFX-183: this renderer has no declared triangle-strip control boundary."
+#error "this renderer has no declared triangle-strip control boundary."
 #endif
 
     constexpr bool kEveryPathRequired =
@@ -844,7 +844,7 @@ class TriangleStripWindingTest : public Game
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
 
-        std::printf("[INFO] REMED-GFX-183 triangle-strip winding on %s\n", kRendererName);
+        std::printf("[INFO] triangle-strip winding on %s\n", kRendererName);
         std::fflush(stdout);
 
         if (!kRasterizes ||

@@ -153,7 +153,7 @@ protected:
         std::printf("[%s] LinearMipPoint at 8x8px (128->1 texture): sample=(%d,%d,%d), expect GREEN (high mip selected)\n",
                     mipAwareOk ? "PASS" : "FAIL",
                     mipAware.getRProperty(), mipAware.getGProperty(), mipAware.getBProperty());
-        std::printf("[%s] Point at 8x8px (same texture): sample=(%d,%d,%d), expect GREEN (REMED-GFX-175: Point's mip component is POINT, not absent)\n",
+        std::printf("[%s] Point at 8x8px (same texture): sample=(%d,%d,%d), expect GREEN (Point's mip component is POINT, not absent)\n",
                     pointOnlyOk ? "PASS" : "FAIL",
                     pointOnly.getRProperty(), pointOnly.getGProperty(), pointOnly.getBProperty());
 

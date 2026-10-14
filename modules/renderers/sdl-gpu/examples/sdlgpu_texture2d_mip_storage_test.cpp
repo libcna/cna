@@ -1334,10 +1334,10 @@ protected:
         done_ = true;
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-176 SDL_GPU Texture2D mip storage and upload ===\n");
+        std::printf("=== SDL_GPU Texture2D mip storage and upload ===\n");
         note("SCOPE: ordinary sampled Texture2D only. TextureCube, Texture3D, RenderTarget2D and "
              "RenderTargetCube already pass a real CalculateMipLevels to SDL and have their own "
-             "level-aware upload paths; they are classified, not changed, by REMED-GFX-176.");
+             "level-aware upload paths; they are classified, not changed, by .");
         note("NO MIP GENERATION: nothing here calls or expects SDL_GenerateMipmapsForGPUTexture "
              "for a Texture2D. Construction allocates the declared levels; content is only ever "
              "what a caller uploaded.");

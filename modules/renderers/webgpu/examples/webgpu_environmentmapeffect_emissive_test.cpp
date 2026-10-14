@@ -201,7 +201,7 @@ protected:
         //   wrong  (emissive+lightSum)*diffuse = 0.25 -> tex*0.25 == calibAlpha (fails vs calibCore)
         Color core = RenderEmissive(dev, Vector3(0.5f, 0.5f, 0.5f), Vector3(0.5f, 0.5f, 0.5f), 1.0f);
         check(colorNear(core, calibCore),
-              "REMED-GFX-007 core: non-white Diffuse + Emissive, Alpha=1 -> emissive added unscaled",
+              "core: non-white Diffuse + Emissive, Alpha=1 -> emissive added unscaled",
               core, calibCore);
 
         // (2) ALPHA-SQUARING discriminator -- Alpha=0.5.
@@ -209,7 +209,7 @@ protected:
         //   wrong  (emissive*Alpha)*(diffuse*Alpha) = 0.0625 -> tex*0.0625 (fails vs calibAlpha)
         Color alphaHalf = RenderEmissive(dev, Vector3(0.5f, 0.5f, 0.5f), Vector3(0.5f, 0.5f, 0.5f), 0.5f);
         check(colorNear(alphaHalf, calibAlpha),
-              "REMED-GFX-007 alpha: Alpha=0.5 -> no alpha-squaring (single Alpha, not Alpha^2)",
+              "alpha: Alpha=0.5 -> no alpha-squaring (single Alpha, not Alpha^2)",
               alphaHalf, calibAlpha);
 
         // (3) WHITE-DIFFUSE control -- both formulas coincide (the masking case). Passes pre/post.

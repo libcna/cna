@@ -26,7 +26,7 @@
 // Renderer scope. EasyGL, WebGPU, D3D9 and Software raster render 3D triangles and support
 // backbuffer readback, so they carry the permanent TriangleList coverage. The full five-topology
 // sweep additionally needs PointListEXT, which D3D9 still routes through its triangle-list default
-// (the independent REMED-GFX-114), so that sweep runs on EasyGL, WebGPU and Software. PointListEXT
+// (the independent the PointList default fix), so that sweep runs on EasyGL, WebGPU and Software. PointListEXT
 // remains extension-only regression coverage; the four classic XNA topologies are required parity
 // behavior.
 
@@ -998,7 +998,7 @@ TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
         << "a render-target-only draw reached the backbuffer";
 
     // Rendered target pixels live only on the GPU; sample the finished target through the ordinary
-    // texture path. REMED-GFX-124 restored this half on Software too -- the target's colour storage
+    // texture path. the Software render-target storage fix restored this half on Software too -- the target's colour storage
     // is now reachable through the same capability every other texture is sampled through, so this
     // is no longer a per-renderer carve-out.
     device.SetVertexBuffer(nullptr);
@@ -1451,8 +1451,8 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedDrawConsumesExactlyTheRequeste
 // The same requested range under render states that could each independently produce a wrong
 // picture: both cull modes against a fixed winding, depth testing on and off, an explicitly
 // restated full viewport and scissor, and a readback from a render target instead of the
-// backbuffer. Software raster's own regressions own these individually (REMED-GFX-030 depth,
-// Viewport, REMED-GFX-080 scissor, REMED-GFX-082 fill mode); here they exist only to
+// backbuffer. Software raster's own regressions own these individually (the Software depth-state fix depth,
+// Viewport, the Software scissor fix scissor, the FillMode fix fill mode); here they exist only to
 // rule every one of them out as the cause of the consumed range.
 TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStateAndTarget)
 {
@@ -1479,7 +1479,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStat
         /// Draws the same range into a RenderTarget2D first, then measures the backbuffer draw.
         /// The round trip is what this case is about; the target's own content and the
         /// producer-to-consumer sampling assertion live in
-        /// NonIndexedRangeHoldsOnRenderTargetAndBackbuffer, which REMED-GFX-124 restored on every
+        /// NonIndexedRangeHoldsOnRenderTargetAndBackbuffer, which the Software render-target storage fix restored on every
         /// renderer including Software.
         bool renderTargetRoundTrip;
         /// False only for the cull mode that removes this fixture's winding outright. Stating it

@@ -137,7 +137,7 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
 #else
-#error "REMED-GFX-189: this renderer has no declared invalid-mip-level contract."
+#error "this renderer has no declared invalid-mip-level contract."
 #endif
 
     /**
@@ -864,7 +864,7 @@ class RenderTargetInvalidMipLevelTest : public Game
         ExpectLevelRejected(*rt, -1,      &one, 1, kGuard, "A1 level == -1");
 
         // The upper and lower ends of the SAME range, asserted in one place so they cannot drift
-        // apart again. REMED-GFX-192 routes both through the one shared guard before dimensions.
+        // apart again. the mip-level readback fix routes both through the one shared guard before dimensions.
         ReadWholeLevel(*rt, n - 1, "A1 final valid level survives the four rejections");
 
         ExercisePlainTextureSetDataContract(dev);
@@ -1353,7 +1353,7 @@ class RenderTargetInvalidMipLevelTest : public Game
     }
 
     /**
-     * @brief H1 -- an MRT member's invalid level, kept strictly clear of REMED-GFX-190.
+     * @brief H1 -- an MRT member's invalid level, kept strictly clear of the MRT mip regeneration fix.
      *
      * An MRT attachment is an ordinary `RenderTarget2D` read through the very same renderer route,
      * so its invalid-level rejection IS this ticket's subject and is asserted here. Its generated
@@ -1402,7 +1402,7 @@ class RenderTargetInvalidMipLevelTest : public Game
 
         ReadWholeLevel(*a, 0, "H1 attachment 0 level 0");
 
-        // Level 1 CONTENT belongs to REMED-GFX-190, not here: measure and print, assert only that
+        // Level 1 CONTENT belongs to the MRT mip regeneration fix, not here: measure and print, assert only that
         // the transfer itself is complete and inside its window. Only a mip-mapped target HAS a
         // level 1 to read: a renderer whose RenderTarget2D is single-level (WEBGPU-53/54 refuses
         // mipMap=true, so kMipMappedTargetSupported is false) has no level 1, and its rejection is
@@ -1415,7 +1415,7 @@ class RenderTargetInvalidMipLevelTest : public Game
         const int nb = b->getLevelCountProperty();
         ExpectLevelRejected(*a, na, &one, 1, kGuard, "H1 MRT attachment 0 level == LevelCount");
         ExpectLevelRejected(*b, nb, &one, 1, kGuard, "H1 MRT attachment 1 level == LevelCount");
-        boundary("H1: MRT mip CONTENT is REMED-GFX-190's subject and is deliberately NOT claimed "
+        boundary("H1: MRT mip CONTENT is the MRT mip regeneration fix's subject and is deliberately NOT claimed "
                  "here -- only the invalid-level rejection, which shares this ticket's route");
     }
 
@@ -1640,7 +1640,7 @@ int main(int argc, char** argv)
     if (onlyLeg.empty())
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
-        std::printf("[INFO] REMED-GFX-189 supervisor on %s: %d legs, each in its own process\n",
+        std::printf("[INFO] supervisor on %s: %d legs, each in its own process\n",
                     kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;

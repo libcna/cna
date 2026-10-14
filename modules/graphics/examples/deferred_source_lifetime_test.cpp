@@ -169,7 +169,7 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-167: this renderer has no declared deferred-source lifetime contract."
+#error "this renderer has no declared deferred-source lifetime contract."
 #endif
 
     /**
@@ -844,7 +844,7 @@ class DeferredSourceLifetimeTest : public Game
             ProduceInto(dev, a, patternTex_);
             BeginBackbuffer(dev);
             Consume3D(dev, &a);
-            throw std::runtime_error("REMED-GFX-167 deliberate unwind");
+            throw std::runtime_error("deliberate unwind");
         }
         catch (const std::runtime_error&)
         {
@@ -1110,7 +1110,7 @@ protected:
             return;   // <-- `a` dies here, and this frame's Present replays its draw
         }
 
-        std::printf("[INFO] REMED-GFX-167 deferred-source lifetime on %s (%dx%d pattern%s)\n",
+        std::printf("[INFO] deferred-source lifetime on %s (%dx%d pattern%s)\n",
                     kRendererName, kPW, kPH,
                     onlyLeg_.empty() ? "" : (", leg " + onlyLeg_).c_str());
         std::fflush(stdout);
@@ -1354,7 +1354,7 @@ int main(int argc, char** argv)
     {
         // Supervisor. Each leg runs in its own child so a SIGSEGV is a reported result rather than
         // the end of the run.
-        std::printf("[INFO] REMED-GFX-167 supervisor: %zu legs, each in its own process\n",
+        std::printf("[INFO] supervisor: %zu legs, each in its own process\n",
                     sizeof(kLegIds) / sizeof(kLegIds[0]));
         std::fflush(stdout);
         int passed = 0, crashes = 0, skips = 0;

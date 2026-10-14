@@ -662,7 +662,7 @@ protected:
     ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
     ///     the element list rather than from its semantic, so any declaration whose element order
     ///     differs from the selected stock program's input order binds the wrong attributes --
-    ///     REMED-GFX-218.
+    ///     the EasyGL attribute-placement finding.
     ///
     /// Neither translator may be written here. the declaration-fidelity guard instead makes both safe: a
     /// declaration those inferred layouts cannot represent faithfully is REFUSED deterministically
@@ -689,8 +689,8 @@ protected:
                     EXPECT_FALSE(r.rendered)
                         << c.name << '/' << RouteName(route) << " on " << RendererName()
                         << " was ACCEPTED. This declaration collides with the byte-stride table this "
-                           "renderer infers its native layout from, so REMED-GFX-DECL-GUARD must refuse it "
-                           "before any native work. If the picture below is correct, REMED-GFX-217/218's "
+                           "renderer infers its native layout from, so must refuse it "
+                           "before any native work. If the picture below is correct, the declaration-fidelity findings' "
                            "real translator has landed and this arm is stale; if it is wrong, the guard "
                            "regressed and a draw is being rendered from the wrong bytes"
                         << DescribeFrame(r.frame);
@@ -1223,7 +1223,7 @@ void main() { FragColor = vColor; }
     std::cout << "[ DECL-GUARD ] EasyGL ShaderEffect control: "
               << (rejection.empty() ? DescribeFrame(frame) : '"' + rejection + '"') << std::endl;
     ASSERT_TRUE(rejection.empty())
-        << "the stock-program guard fired on a custom ShaderEffect draw. REMED-GFX-218's "
+        << "the stock-program guard fired on a custom ShaderEffect draw. The EasyGL attribute-placement finding's "
            "checkpoint action must leave the custom path untouched: " << rejection;
 
     // The shader writes COLOR0 straight out with no DiffuseColor term, so each column carries its
@@ -1245,6 +1245,6 @@ void main() { FragColor = vColor; }
 
 // ---------------------------------------------------------------------------
 // bgfx-only: the native layout itself. The rendering legs above prove the OUTCOME; this proves the
-// DECISION, which is what REMED-GFX-216 is actually about.
+// DECISION, which is what the stride-derived layout fix is actually about.
 // ---------------------------------------------------------------------------
 

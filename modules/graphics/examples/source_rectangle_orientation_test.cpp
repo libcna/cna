@@ -77,7 +77,7 @@ namespace
     constexpr bool kRasterizes = false;
     constexpr bool kBackbufferReadbackRequired = false;
 #else
-#error "REMED-GFX-153 fixture requires a declared renderer contract."
+#error "fixture requires a declared renderer contract."
 #endif
 
     constexpr int kRowW = 8;
@@ -732,7 +732,7 @@ class SourceRectangleOrientationTest final : public Game
 
     void RunAll(GraphicsDevice& device)
     {
-        std::printf("[INFO] REMED-GFX-153 source-rectangle orientation on %s\n", kRendererName);
+        std::printf("[INFO] source-rectangle orientation on %s\n", kRendererName);
         std::fflush(stdout);
 
         if (!kRasterizes)

@@ -120,7 +120,7 @@ The rule XNA follows, everywhere a float channel becomes an integer one:
 
 FNA truncates in the constructors (`R = (byte) MathHelper.Clamp(color.X * 255, Byte.MinValue,
 Byte.MaxValue);`, `Color.cs`) and neither clamps nor rounds in `PackFromVector4`, which is what
-CNA reproduced and what `REMED-CORE-004` pinned. XNA wins, so those pins were rewritten against
+CNA reproduced and what the Color packing clamp pinned. XNA wins, so those pins were rewritten against
 the measurements rather than deleted.
 
 Two consequences worth naming. The old `+ 0.5f then cast` and `std::clamp` paths let a NaN

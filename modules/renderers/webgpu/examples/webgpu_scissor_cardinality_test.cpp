@@ -150,7 +150,7 @@ class WebGpuScissorCardinalityTest : public Game
 
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
-        std::printf("REMED-GFX-146 scissor state cardinality -- WEBGPU\n");
+        std::printf("scissor state cardinality -- WEBGPU\n");
 
         // Warm-up cycle: creates the one Colored3D and the one sprite pipeline this file's draws
         // need, and gets the frame past its first swapchain acquisition, so every delta below

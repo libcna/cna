@@ -89,7 +89,7 @@ protected:
             check(threwSetPosX && threwSetNegX,
                   "TextureCube: SetData() on two independent faces throws a deterministic "
                   "System::NotSupportedException -- this renderer stores no pixel data, so it "
-                  "refuses the upload rather than accepting and discarding it (REMED-GFX-135)");
+                  "refuses the upload rather than accepting and discarding it ");
             // False-positive audit: these two checks used to be `check(true, ...)`
             // -- they asserted nothing at all about what GetData produced, so any behaviour
             // whatsoever passed them. They were then strengthened to PIN what the Headless cube
@@ -122,7 +122,7 @@ protected:
                   "TextureCube: GetData() on two independent faces throws a deterministic "
                   "System::NotSupportedException and leaves BOTH destinations byte-for-byte at "
                   "their non-zero sentinels -- this renderer stores no pixel data, so it refuses "
-                  "rather than fabricating a transparent-black face (REMED-GFX-130)");
+                  "rather than fabricating a transparent-black face ");
         }
 
         // Check B: Texture3D construction is REJECTED on this renderer.
@@ -146,7 +146,7 @@ protected:
             check(threw,
                   "Texture3D: construction is rejected with System::NotSupportedException -- this "
                   "renderer reports no GraphicsCapability::Texture3D and must not silently accept "
-                  "volume data (REMED-CONTENT-004)");
+                  "volume data ");
         }
 
         // Check C: RenderTarget2D bind/unbind, viewport reflects the bound target's own size.

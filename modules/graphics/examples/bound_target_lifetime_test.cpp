@@ -170,7 +170,7 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-168: this renderer has no declared bound-target lifetime contract."
+#error "this renderer has no declared bound-target lifetime contract."
 #endif
 
     /**
@@ -1573,7 +1573,7 @@ int main(int argc, char** argv)
     {
         // Supervisor. Each leg runs in its own child so a SIGSEGV is a reported result rather than
         // the end of the run.
-        std::printf("[INFO] REMED-GFX-168 supervisor: %zu legs, each in its own process\n",
+        std::printf("[INFO] supervisor: %zu legs, each in its own process\n",
                     sizeof(kLegIds) / sizeof(kLegIds[0]));
         std::fflush(stdout);
         int passed = 0, crashes = 0, skips = 0;

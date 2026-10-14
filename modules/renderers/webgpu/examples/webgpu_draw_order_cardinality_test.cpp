@@ -189,7 +189,7 @@ class WebGpuDrawOrderCardinalityTest : public Game
 
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<WebGPURenderer&>(dev.GetRenderer());
-        std::printf("REMED-GFX-159 cross-family draw order cardinality -- WEBGPU\n");
+        std::printf("cross-family draw order cardinality -- WEBGPU\n");
         std::fflush(stdout);
 
         // Warm-up: creates the one Colored3D pipeline and the one sprite pipeline everything below

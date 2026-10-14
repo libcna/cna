@@ -145,7 +145,7 @@ namespace
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};
 #else
-#error "REMED-GFX-130: this renderer has no declared TextureCube/Texture3D GetData contract."
+#error "this renderer has no declared TextureCube/Texture3D GetData contract."
 #endif
 
     /// Two unrelated destination pre-fills. Neither equals any pattern colour, so "still the
@@ -1043,7 +1043,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-130 TextureCube/Texture3D GetData contract -- renderer %s\n",
+        std::printf("TextureCube/Texture3D GetData contract -- renderer %s\n",
                     kContract.name);
 
         if (kContract.cubeHasRenderer)

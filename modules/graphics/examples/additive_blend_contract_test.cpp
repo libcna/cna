@@ -76,7 +76,7 @@ namespace
     constexpr bool kRasterizes = false;
     constexpr bool kBackbufferReadback = false;
 #else
-#error "REMED-GFX-148: this renderer has no declared Additive control contract."
+#error "this renderer has no declared Additive control contract."
 #endif
 
     constexpr int kW = 12;
@@ -465,7 +465,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         if (frame_ == 1)
         {
-            std::printf("[INFO] REMED-GFX-148 Additive contract on %s\n", kRendererName);
+            std::printf("[INFO] Additive contract on %s\n", kRendererName);
             ContractDefinitions();
             if (!kRasterizes)
             {

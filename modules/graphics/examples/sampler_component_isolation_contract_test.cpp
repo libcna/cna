@@ -639,7 +639,7 @@ class SamplerComponentIsolationTest : public Game
             note(std::string("D4 mip component of ordinal 0/1 -- minifying a ") +
                  std::to_string(mipLevels_) + "-level chain under Linear samples " +
                  (lvl0 ? "LEVEL 0 (no mip term)" : "a MIP LEVEL") +
-                 "; the public table says mip=Linear. Reported as REMED-GFX-175, not changed here.");
+                 "; the public table says mip=Linear. Reported as not changed here.");
         }
     }
 
@@ -789,7 +789,7 @@ class SamplerComponentIsolationTest : public Game
             try {
                 (void)Draw3D(dev, 16, 8, tex8x4_, MakeSampler(TextureFilter::Point));
             } catch (...) { threw = true; }
-            check(threw, "HEADLESS rejects render-target readback (REMED-GFX-127 contract)");
+            check(threw, "HEADLESS rejects render-target readback (honest-readback contract)");
         }
         else
         {

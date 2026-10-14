@@ -181,7 +181,7 @@ protected:
         Color core = RenderEmissive(dev, tex, *cube, Vector3(0.5f, 0.5f, 0.5f),
                                     Vector3(0.5f, 0.5f, 0.5f), 1.0f, quad);
         Check(ColourMatch(core, Color(100, 50, 25, 255)),
-              "REMED-GFX-007 core: non-white Diffuse + Emissive, Alpha=1 -> emissive added unscaled",
+              "core: non-white Diffuse + Emissive, Alpha=1 -> emissive added unscaled",
               core, Color(100, 50, 25, 255));
 
         // (2) ALPHA-SQUARING discriminator -- Alpha=0.5.
@@ -191,7 +191,7 @@ protected:
         Color alphaHalf = RenderEmissive(dev, tex, *cube, Vector3(0.5f, 0.5f, 0.5f),
                                          Vector3(0.5f, 0.5f, 0.5f), 0.5f, quad);
         Check(ColourMatch(alphaHalf, Color(50, 25, 13, 128)),
-              "REMED-GFX-007 alpha: Alpha=0.5 -> no alpha-squaring (single Alpha, not Alpha^2)",
+              "alpha: Alpha=0.5 -> no alpha-squaring (single Alpha, not Alpha^2)",
               alphaHalf, Color(50, 25, 13, 128));
 
         // (3) WHITE-DIFFUSE control -- proves both formulas coincide when Diffuse=white (the reason

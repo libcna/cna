@@ -54,7 +54,7 @@ class SurfaceFormatThrowsTest : public Game
     }
 
     /// Two things refuse with System::NotSupportedException. A renderer without real
-    /// volume-texture storage refuses EVERY Texture3D construction up front (REMED-CONTENT-004's
+    /// volume-texture storage refuses EVERY Texture3D construction up front (the Texture3D content-reader fix's
     /// gate), before any format validation runs. And the profile-based texture-format rule: a format the device's
     /// GraphicsProfile excludes is refused by the profile, whatever the renderer could carry --
     /// XNA's own exception type for its own restriction, measured on the real 4.0 runtime where
@@ -267,7 +267,7 @@ protected:
         });
 #endif
 #if 1
-        // REMED-GFX-244, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before
+        // the EasyGL 16-bit/normalized storage fix, same guard as Bgra5551 above. Bgra4444 had no non-Skia leg at all before
         // this ticket, so its behaviour on every GL profile was simply unstated.
         expectPerRendererClaim(dev, "Texture2D Bgr565", SurfaceFormat::Bgr565, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);

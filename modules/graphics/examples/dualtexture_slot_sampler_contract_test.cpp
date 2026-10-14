@@ -1616,7 +1616,7 @@ protected:
         done_ = true;
         GraphicsDevice& dev = getGraphicsDeviceProperty();
 
-        std::printf("=== REMED-GFX-172 DualTextureEffect independent slot samplers on %s ===\n",
+        std::printf("=== DualTextureEffect independent slot samplers on %s ===\n",
                     kRendererName);
         std::fflush(stdout);
 

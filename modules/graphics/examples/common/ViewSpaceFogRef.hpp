@@ -3,7 +3,7 @@
 //
 // Purpose: give every renderer's view-space-fog test the SAME canonical scenes and the SAME
 // analytically-derived expected colors, so their numeric results are directly cross-renderer
-// comparable (REMED-GFX-010 Phase 5 / Phase 12).
+// comparable (the view-space fog fix Phase 5 / Phase 12).
 //
 // The XNA/FNA fog semantic (EffectHelpers.SetFogVector + Common.fxh ComputeFogFactor):
 //   fogFactor = saturate(dot(objectPos, FogVector))          // FNA: 1 = fully fogged
@@ -67,7 +67,7 @@ namespace CNA::Examples::VSFogRef
         return 1.0f - Saturate(scale * (viewZ + fogStart));
     }
 
-    // The OLD, buggy OBJECT-SPACE "keep" factor (what every pre-REMED-GFX-010 shader computes:
+    // The OLD, buggy OBJECT-SPACE "keep" factor (what every pre-shader computes:
     // clamp((objZ + FogEnd)/(FogEnd - FogStart), 0, 1)).
     inline float ObjectKeep(float objZ, float fogStart, float fogEnd, bool fogEnabled)
     {

@@ -180,7 +180,7 @@ namespace
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-131: this renderer has no declared mid-tone colour contract."
+#error "this renderer has no declared mid-tone colour contract."
 #endif
 
     constexpr int kBBW = 64;   ///< Backbuffer width.
@@ -695,7 +695,7 @@ class ColorSpaceMidToneContractTest : public Game
         }
         CheckPaletteReadback(r, std::string("E1 RenderTarget2D A -> sampled -> RenderTarget2D B") +
                                 (kRtSampleOrientation == RtSampleOrientation::BottomUp
-                                     ? " (row order un-flipped: REMED-GFX-147)" : ""));
+                                     ? " (row order un-flipped: )" : ""));
         PrintTransferTable(r, "RT2D-A->RT2D-B");
     }
 
@@ -933,7 +933,7 @@ class ColorSpaceMidToneContractTest : public Game
             check(ok, std::string("I2 Additive blend of mid-tone source over mid-tone destination "
                                   "matches the byte-space result") +
                       (kAdditiveContract == AdditiveContract::SourceOnly
-                           ? " (destination term dropped: REMED-GFX-148)" : "") + detail);
+                           ? " (destination term dropped: )" : "") + detail);
         }
     }
 
@@ -960,7 +960,7 @@ protected:
         ResetState(dev);
         dev.Clear(Color(0, 0, 0, 255));
 
-        std::printf("[INFO] REMED-GFX-131 mid-tone colour contract on %s\n", kRendererName);
+        std::printf("[INFO] mid-tone colour contract on %s\n", kRendererName);
         std::fflush(stdout);
 
         LegA(dev);

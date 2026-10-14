@@ -6,7 +6,7 @@
 // or renderer on ANY renderer -- the only way to affect sprite rasterizer state was to assign
 // GraphicsDevice.RasterizerState directly. This is a shared-layer defect in SpriteBatch.cpp, not a
 // renderer bug; the Software renderer is used here purely as a deterministic CPU-readback oracle
-// (its ScissorRectangle became genuinely functional in REMED-GFX-080).
+// (its ScissorRectangle became genuinely functional in the Software scissor fix).
 //
 // FNA contract (SpriteBatch.cs Begin + PrepRenderState, verbatim):
 //   this.rasterizerState = rasterizerState ?? RasterizerState.CullCounterClockwise;

@@ -149,7 +149,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "DIRECTX9";
 #else
-#error "REMED-GFX-158: this renderer has no declared first-use contract."
+#error "this renderer has no declared first-use contract."
 #endif
 
     /**
@@ -1102,7 +1102,7 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        std::printf("[INFO] REMED-GFX-158 immediate render-target first use on %s "
+        std::printf("[INFO] immediate render-target first use on %s "
                     "(%dx%d pattern, %dx%d backbuffer, legs: %s)\n",
                     kRendererName, kPW, kPH, kBBW, kBBH,
                     legFilter_.empty() ? "all" : legFilter_.c_str());
@@ -1138,7 +1138,7 @@ protected:
             if (leg.needsStockEffectRtSource && !kStockEffectRtSourceSupported)
             {
                 std::printf("[INFO] %s: skipped -- %s cannot use a RenderTarget2D as a stock "
-                            "effect texture (REMED-GFX-152)\n", leg.id, kRendererName);
+                            "effect texture \n", leg.id, kRendererName);
                 std::fflush(stdout);
                 continue;
             }

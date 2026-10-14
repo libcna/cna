@@ -249,7 +249,7 @@ namespace
                 return d;
             };
 
-            std::printf("REMED-GFX-212 WebGPU instanced vertex-colour cardinality\n");
+            std::printf("WebGPU instanced vertex-colour cardinality\n");
 
             // Warm-up, deliberately through the ORDINARY route so the Instanced3D cache is still
             // cold when the first measured cycle runs. The very first render-target cycle after

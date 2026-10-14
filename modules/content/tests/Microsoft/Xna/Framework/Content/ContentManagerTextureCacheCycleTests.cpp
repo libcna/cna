@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-223, ContentManager side. CnjCacheIsolationTests pins the .cnj colour-key case; these
+// the cache-reconstruction fix, ContentManager side. CnjCacheIsolationTests pins the .cnj colour-key case; these
 // pin the XNA ContentManager-owned texture-cache lifecycle underneath it -- hits, repeated loads,
 // wrappers outliving each other, and teardown while entries are still registered.
 

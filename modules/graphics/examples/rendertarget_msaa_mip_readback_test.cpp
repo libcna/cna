@@ -140,7 +140,7 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
 #else
-#error "REMED-GFX-186: this renderer has no declared target mip-readback contract."
+#error "this renderer has no declared target mip-readback contract."
 #endif
 
     /**
@@ -1276,7 +1276,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
     void LegH5()  { ChainLeg("H5",  8,  4); }
     void LegH6()  { ChainLeg("H6", 13,  7); }
 
-    // The same three UNEVEN chains without multisampling at all. REMED-GFX-187 is a property of
+    // The same three UNEVEN chains without multisampling at all. the MSAA mip readback fix is a property of
     // mip-generation arithmetic, not resolve, so matching H4/H5/H6 proves the corrected contract
     // on both routes while keeping the resolve subject independently covered.
     void LegH7()  { ChainLeg("H7",  5,  3, 0); }
@@ -1702,7 +1702,7 @@ namespace
             else if (sig == SIGABRT)
                 std::printf("[FATAL] leg %s: SIGABRT%s -- std::terminate or abort()\n", legId, core);
             else if (sig == SIGSEGV)
-                std::printf("[FATAL] leg %s: SIGSEGV%s -- REMED-GFX-186's signature; the last "
+                std::printf("[FATAL] leg %s: SIGSEGV%s -- the generated-mip readback defect's signature; the last "
                             "[STEP] line names the public call that reached it\n", legId, core);
             else
                 std::printf("[FATAL] leg %s: killed by signal %d (%s)%s\n", legId, sig,
@@ -1779,7 +1779,7 @@ int main(int argc, char** argv)
     if (onlyLeg.empty())
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));
-        std::printf("[INFO] REMED-GFX-186 supervisor on %s: %d legs, each in its own process\n",
+        std::printf("[INFO] supervisor on %s: %d legs, each in its own process\n",
                     kRendererName, total);
         std::fflush(stdout);
         int passed = 0, skippedCount = 0;

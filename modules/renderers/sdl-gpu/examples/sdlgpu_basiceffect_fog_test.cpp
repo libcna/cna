@@ -8,7 +8,7 @@
 //   colored_textured3d  (VertexPositionColorTexture,  stride 24)
 //   lit_textured3d      (VertexPositionNormalTexture, stride 32, LightingEnabled=false)
 //
-// Formula (the REMED-GFX-005 corrected, oracle-validated form, identical to EasyGL's):
+// Formula (the fog formula fix corrected, oracle-validated form, identical to EasyGL's):
 //   keep     = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
 //   finalRGB = mix(FogColor, geomRGB, keep)                      (keep=1 -> no fog, 0 -> full fog)
 //

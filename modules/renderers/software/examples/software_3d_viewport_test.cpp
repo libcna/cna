@@ -2,7 +2,7 @@
 // The Software (CPU-raster) renderer's 3D draw path (DrawColoredPrimitives /
 // DrawIndexedColoredPrimitives / DrawPrimitivesEx / DrawIndexedPrimitivesEx) must honor a custom
 // GraphicsDevice.Viewport, exactly like the GPU renderers and like the SpriteBatch path fixed by
-// REMED-GFX-073.
+// the SpriteBatch viewport fix.
 //
 // XNA/FNA contract (FNA Viewport.Project, verbatim): a post-perspective-divide NDC position is
 // mapped into framebuffer pixels by

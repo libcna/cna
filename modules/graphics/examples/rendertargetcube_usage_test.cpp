@@ -175,7 +175,7 @@ namespace
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, true,
                                  false, Support::Exact, false, true, true};
 #else
-#error "REMED-GFX-136: this renderer has no declared RenderTargetCube usage contract."
+#error "this renderer has no declared RenderTargetCube usage contract."
 #endif
 
     /// Destination pre-fills. Neither equals any pattern colour nor the discard colour.
@@ -1200,7 +1200,7 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
-        std::printf("REMED-GFX-136 RenderTargetCube RenderTargetUsage -- renderer %s\n",
+        std::printf("RenderTargetCube RenderTargetUsage -- renderer %s\n",
                     kContract.name);
 
         RunPublicPropertyChecks(dev);
