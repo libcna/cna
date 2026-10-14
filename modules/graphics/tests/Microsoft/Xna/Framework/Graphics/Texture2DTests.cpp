@@ -26,6 +26,10 @@ using namespace CNA::Testing::Renderers;
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
@@ -56,6 +60,10 @@ using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
+using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using System::IO::MemoryStream;
 
@@ -444,6 +452,71 @@ TEST(Texture2DTest, DefaultConstructorLevelCountIsOne)
 {
     Texture2D tex;
     EXPECT_EQ(tex.getLevelCountProperty(), 1);
+}
+
+// RRC-047: CNA's Texture2D is a value type whose copies share one GPU texture (REMED-GFX-223), so
+// disposing one handle must neither release the texture under the other nor disturb its pixels;
+// the texture goes when its last handle does, and a second Dispose of either handle is a no-op.
+// The retired SDL_RENDERER suite held this (Task 689, sdlrenderer_texture2d_dispose_test.cpp);
+// XNA has no copies -- this is CNA's own rule for its value-type wrapper.
+TEST(Texture2DTest, ACopySurvivesDisposingTheOriginalAndDoubleDisposeIsANoOp)
+{
+    GraphicsDevice device;
+    std::unique_ptr<Texture2D> original;
+    try
+    {
+        original = std::make_unique<Texture2D>(device, 2, 1, false, SurfaceFormat::Color);
+    }
+    catch (const System::NotSupportedException&)
+    {
+        GTEST_SKIP() << "this renderer creates no Texture2D storage";
+    }
+    const std::array<Color, 2> pixels{Color::Red, Color::Blue};
+    original->SetData(pixels.data(), static_cast<int>(pixels.size()));
+
+    Texture2D copy(*original);
+    original->Dispose();
+    EXPECT_TRUE(original->getIsDisposedProperty());
+    EXPECT_FALSE(copy.getIsDisposedProperty());
+
+    std::array<Color, 2> read{};
+    ASSERT_NO_THROW(copy.GetData(read.data(), static_cast<int>(read.size())));
+    EXPECT_EQ(read[0], Color::Red);
+    EXPECT_EQ(read[1], Color::Blue);
+    EXPECT_THROW(original->GetData(read.data(), static_cast<int>(read.size())),
+                 System::ObjectDisposedException);
+
+    // The GPU texture itself survived, not only its CPU copy: the surviving handle still draws.
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    {
+        SpriteBatch batch(device);
+        device.Clear(Color::Black);
+        batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &SamplerState::PointClamp,
+                    nullptr, nullptr);
+        batch.Draw(copy, Rectangle(0, 0, 2, 1), Color::White);
+        batch.End();
+    }
+    std::array<Color, 2> drawn{};
+    const Rectangle region(0, 0, 2, 1);
+    bool readable = true;
+    try
+    {
+        device.GetBackBufferData(&region, drawn.data(), 0, 2);
+    }
+    catch (const System::NotSupportedException&)
+    {
+        readable = false; // HEADLESS and STUB keep no back-buffer pixels
+    }
+    if (readable)
+    {
+        EXPECT_EQ(drawn[0], Color::Red);
+        EXPECT_EQ(drawn[1], Color::Blue);
+    }
+
+    EXPECT_NO_THROW(original->Dispose());
+    EXPECT_NO_THROW(copy.Dispose());
+    EXPECT_TRUE(copy.getIsDisposedProperty());
+    EXPECT_NO_THROW(copy.Dispose());
 }
 
 // SOFTWARE-275: byte is an ordinary XNA SetData<T>/GetData<T> element type, not a CNA-only

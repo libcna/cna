@@ -196,6 +196,10 @@ set(CNA_CONFORMANCE_FIXTURES
     # with DiffuseColor 2 saturates per vertex, as Direct3D 9's oD0 does).
     basiceffect_lit_vertex_color_perpixel
     basiceffect_unlit_vertex_color_36byte
+    # from vulkan_applied_multisample_test.cpp (VULKAN-347), RRC-047: a multisample request is
+    # clamped by FNA's rule (rounded down to a power of two, 1 to 0) and PresentationParameters and
+    # RenderTarget2D report the count applied, alike, for requests 0-16 including 3, 5, 7 and 9.
+    multisample_count_clamp
 )
 
 # Builds and registers every fixture for one renderer.

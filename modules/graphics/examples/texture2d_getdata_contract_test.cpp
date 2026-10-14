@@ -51,6 +51,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -653,10 +654,12 @@ class Texture2DGetDataContractTest : public Game
 
         // B9: reading a target that is STILL BOUND, on a target of its own so the rebind cannot
         // disturb anything above (RenderTargetUsage::DiscardContents legitimately wipes a target
-        // when it is bound again). Renderers differ on whether they can serve an active-target read
-        // -- some flush their pending work and can, others cannot -- so this asserts only the
-        // property this finding is about: whichever way it goes, the answer must be honest, the
-        // exact content or a deterministic rejection, never a fabricated frame reported as success.
+        // when it is bound again). Microsoft XNA refuses any data transfer on an active render
+        // target with InvalidOperationException -- unbinding is the resolve boundary -- and CNA's
+        // shared layer enforces that before any renderer is asked (Texture::
+        // ThrowIfDataTransferResourceInUseEXT). So the read must be refused, the destination left
+        // untouched, and the very same read must then succeed once the target is unbound (RRC-047:
+        // this leg used to accept the exact content as well, which XNA never returns).
         {
             RenderTarget2D live(dev, kW, kH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                 RenderTargetUsage::DiscardContents);
@@ -670,27 +673,38 @@ class Texture2DGetDataContractTest : public Game
             FillRect(dev, Rectangle(kW - kBlock, kH - kBlock, kBlock, kBlock), BlockBottomRight());
 
             std::vector<Color> got(static_cast<std::size_t>(kW) * kH, SentinelCD());
-            bool threw = false;
-            std::string what;
+            bool invalidOperation = false;
+            std::string what = "not refused";
             try { live.GetData(got.data(), 0, static_cast<int>(got.size())); }
-            catch (const std::exception& e) { threw = true; what = e.what(); }
-            catch (...) { threw = true; what = "(non-std exception)"; }
+            catch (const System::InvalidOperationException& e) { invalidOperation = true; what = e.what(); }
+            catch (const std::exception& e) { what = std::string("wrong exception: ") + e.what(); }
+            catch (...) { what = "(non-std exception)"; }
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
+            check(invalidOperation && CountSame(got, SentinelCD()) == got.size(),
+                  "B9 reading a still-bound render target throws InvalidOperationException and "
+                  "leaves the destination untouched [" + what + ", " +
+                      std::to_string(CountSame(got, SentinelCD())) + "/" +
+                      std::to_string(got.size()) + " untouched]");
 
-            std::size_t exactPixels = 0;
-            for (int y = 0; y < kH; ++y)
-                for (int x = 0; x < kW; ++x)
-                    if (Same(got[static_cast<std::size_t>(y) * kW + x], PatternPixel(x, y)))
-                        ++exactPixels;
-            const bool honest = threw ? (CountSame(got, SentinelCD()) == got.size())
-                                      : (exactPixels == got.size());
-            check(honest,
-                  "B9 reading a still-bound render target either returns its exact content or is "
-                  "rejected with the destination untouched" +
-                      (threw ? (" [threw " + what + "]")
-                             : (" [exact " + std::to_string(exactPixels) + "/" +
-                                std::to_string(got.size()) + "]")));
+            // The refusal above is the shared layer's and holds on every renderer; reading the
+            // content back afterwards needs a renderer that stores it (not HEADLESS).
+            if (kRtContract == RtContract::Exact)
+            {
+                std::vector<Color> after(static_cast<std::size_t>(kW) * kH, SentinelCD());
+                std::string afterWhat;
+                try { live.GetData(after.data(), 0, static_cast<int>(after.size())); }
+                catch (const std::exception& e) { afterWhat = std::string(" [threw ") + e.what() + "]"; }
+                std::size_t exactPixels = 0;
+                for (int y = 0; y < kH; ++y)
+                    for (int x = 0; x < kW; ++x)
+                        if (Same(after[static_cast<std::size_t>(y) * kW + x], PatternPixel(x, y)))
+                            ++exactPixels;
+                check(exactPixels == after.size(),
+                      "B9 once unbound, the same target reads back its exact content [exact " +
+                          std::to_string(exactPixels) + "/" + std::to_string(after.size()) + "]" +
+                          afterWhat);
+            }
         }
 
         // B5: two live targets keep separate storage.

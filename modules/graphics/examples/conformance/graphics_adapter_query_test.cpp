@@ -19,7 +19,9 @@
 //   * the answers do not change once the device and its resources exist.
 //
 // First written for the retired DIRECTX11 renderer (DX-245, plans/plan_graphics_shared_cleanup.md
-// GSC-0005); the Direct3D-specific fixed back-buffer table it used to assert is not carried over.
+// GSC-0005); the Direct3D-specific fixed back-buffer table and its >= 4x MSAA floor are not carried
+// over. That original, graphics_adapter_query_contract_test.cpp, was removed in RRC-047 once the two
+// renderer-neutral checks only it made had been moved here.
 //
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = the default adapter does not support HiDef.
 
@@ -146,6 +148,17 @@ class GraphicsAdapterQueryTest final : public Game
         Check(a.samples < kImpossibleSampleRequest && IsZeroOrPowerOfTwo(a.samples),
               "the substituted back-buffer sample count is below the request, and 0 or a power of two (got " +
                   std::to_string(a.samples) + ")");
+        // XNA answers both queries through one QueryFormat routine, so for the same Color format
+        // the back buffer and a render target are clamped alike (carried over from
+        // graphics_adapter_query_contract_test.cpp, RRC-047).
+        Check(backBufferClamp_ == renderTargetClamp_,
+              "the back-buffer and render-target Color queries select the same multisample clamp (" +
+                  std::to_string(backBufferClamp_) + " vs " + std::to_string(renderTargetClamp_) + ")");
+
+        a = Query(adapter, true, SurfaceFormat::Rgba1010102, DepthFormat::None, kImpossibleSampleRequest,
+                  "BB Rgba1010102/None/1024");
+        Check(a.depth == DepthFormat::None,
+              "a None depth request is kept whichever back-buffer format the query selects");
     }
 
 protected:

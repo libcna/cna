@@ -182,7 +182,11 @@ The single authoritative list. Every entry below was checked against the code on
       says `Color`, and `GraphicsDevice::Reset` does not clamp `MultiSampleCount` through the query
       (`*_Conformance_graphics_adapter_query`). FNA3D also does not apply `GraphicsDeviceManager`'s
       default `Depth24` request in that program. HEADLESS reports `MultiSampleAntiAliasing` while
-      applying 0 samples (`Headless_Conformance_capability_truth`).
+      applying 0 samples (`Headless_Conformance_capability_truth`). `*_Conformance_multisample_count_clamp`
+      (RRC-047, FNA's `ClosestMSAAPower` rule for requests 0-16) passes on EasyGL, SDL_GPU, WebGPU
+      and SOFTWARE; FNA3D's back buffer keeps a 3, 5 or 7 request unrounded while its render
+      targets round it down, and HEADLESS's render targets echo every request unclamped while its
+      back buffer applies 0.
     - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered
       edge texel (`render_target_own_msaa` D). EasyGL, SOFTWARE and FNA3D: a `SkinnedEffect` over a
       declaration without normal, weights or bone indices draws nothing and reports success

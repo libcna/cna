@@ -10,11 +10,13 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -183,6 +185,63 @@ TEST(TextureDataBindingContractTest, ActiveRenderTarget2DRejectsWritesAndReadbac
     {
         GTEST_SKIP() << "the active renderer validates render-target use but has no readback path";
     }
+}
+
+// RRC-047: XNA refuses every data read from an active render target; this was held strictly only
+// by an EasyGL-specific program while the shared pixel program accepted the exact content too. The
+// refusal is the shared layer's, so it is asserted here for every GetData overload, with the
+// destination untouched, and for a target bound as the SECOND slot of a multiple-target set.
+TEST(TextureDataBindingContractTest, ActiveRenderTarget2DRefusesEveryReadOverloadAndKeepsTheDestination)
+{
+    GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    RenderTarget2D target(device, 2, 2);
+    if (!BindOrSkip(device, target))
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+
+    const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
+    const auto refusesUntouched = [&](const char* overload, const auto& read) {
+        std::array<Color, 4> destination{};
+        destination.fill(sentinel);
+        try
+        {
+            read(destination.data());
+            ADD_FAILURE() << overload << ": the read of an active render target was accepted";
+        }
+        catch (const System::InvalidOperationException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(System::InvalidOperationException)) << overload;
+        }
+        catch (const std::exception& exception)
+        {
+            ADD_FAILURE() << overload << ": threw " << typeid(exception).name() << ": "
+                          << exception.what();
+        }
+        for (const Color& pixel : destination)
+            EXPECT_EQ(pixel, sentinel) << overload << ": the destination was written";
+    };
+
+    const Microsoft::Xna::Framework::Rectangle whole(0, 0, 2, 2);
+    refusesUntouched("GetData(data, count)", [&](Color* d) { target.GetData(d, 4); });
+    refusesUntouched("GetData(data, start, count)", [&](Color* d) { target.GetData(d, 0, 4); });
+    refusesUntouched("GetData(level, null rect, ...)",
+                     [&](Color* d) { target.GetData(0, nullptr, d, 0, 4); });
+    refusesUntouched("GetData(level, rect, ...)", [&](Color* d) { target.GetData(0, &whole, d, 0, 4); });
+
+    // Bound as the second of two targets: still active, still refused.
+    RenderTarget2D first(device, 2, 2);
+    try
+    {
+        device.SetRenderTargets({Microsoft::Xna::Framework::Graphics::RenderTargetBinding(&first),
+                                 Microsoft::Xna::Framework::Graphics::RenderTargetBinding(&target)});
+    }
+    catch (const System::NotSupportedException&)
+    {
+        device.SetRenderTarget(nullptr);
+        return; // a renderer without multiple render targets has asserted all it can above
+    }
+    refusesUntouched("GetData while bound as the second target", [&](Color* d) { target.GetData(d, 4); });
+    device.SetRenderTarget(nullptr);
 }
 
 TEST(TextureDataBindingContractTest, ActiveRenderTarget2DPrecedesLevelAndCopyWindowValidation)
