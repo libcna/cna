@@ -17,6 +17,12 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
@@ -64,12 +70,28 @@ namespace
         return registry;
     }
 
-    /** @brief A source root holding one model fixture and, when it names one, its texture. */
+    /** @brief This process's id, spelled the way MSVC and POSIX each require. */
+    [[nodiscard]] int CurrentProcessId()
+    {
+#if defined(_WIN32)
+        return ::_getpid();
+#else
+        return ::getpid();
+#endif
+    }
+
+    /**
+     * @brief A source root holding one model fixture and, when it names one, its texture.
+     *
+     * The root is per process: two tests that build the same fixture run concurrently under
+     * `ctest -j`, and each removes its root when it starts and when it ends.
+     */
     class ModelSource
     {
     public:
         explicit ModelSource(const std::string& fixture, const std::string& companion = {})
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp_model_" + fixture))
+            : root_(std::filesystem::temp_directory_path() /
+                    ("cna_xnapp_model_" + fixture + "_" + std::to_string(CurrentProcessId())))
         {
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(root_);
