@@ -127,10 +127,11 @@ frames; the `ShaderLanguageEXT` HLSL/MSL identities.
 `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) in Debug and Release and the
 `SDL_GPU`, `WEBGPU`, `HEADLESS`, `SOFTWARE` and `FNA3D` trees built and ran their full suites through
 the private runner, every failure a `handoff.md` §5.1 entry; the Emscripten build ran the C API
-under node and two demos with `WEBGPU` and with `WEBGL2` in headless Chrome; the Android C API ran
-on an x86_64 emulator; the MinGW cross build ran the C API, the `DIRECTX9` suite and `SDL_GPU`'s
-Direct3D 12 backend under Wine. Not run: native Windows, macOS, iOS, rendering on Android. Details
-and numbers: `plans/plan_renderer_retirement.md`.
+under node and two demos with `WEBGPU` and with `WEBGL2` in headless Chrome; on an x86_64 Android
+emulator the C API's identity checks passed and `OPENGLES3` ran the C API lifecycle smoke to exit 0;
+the MinGW cross build ran the C API, the `DIRECTX9` suite and `SDL_GPU`'s Direct3D 12 backend under
+Wine. Not run: native Windows, macOS, iOS, a physical Android device. Details and numbers:
+`plans/plan_renderer_retirement.md`.
 
 **Not run:** native Windows (MSVC, Direct3D 12), macOS and iOS hardware, an Android device. SDL_GPU's
 qualification on those is the follow-up (`handoff.md` §5.2).

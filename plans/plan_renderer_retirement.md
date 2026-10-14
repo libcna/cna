@@ -1,4 +1,4 @@
-# Plan: retiring VULKAN, DIRECTX11, METAL and SDL_RENDERER (RRC-030..RRC-037)
+# Plan: retiring VULKAN, DIRECTX11, METAL and SDL_RENDERER (RRC-030..RRC-039)
 
 2026-10-13/14. An owner decision, final: CNA stops maintaining its own native Vulkan, Direct3D 11
 and Metal renderers and SDL's 2D renderer. `SDL_GPU` is CNA's modern native cross-platform path --
@@ -18,9 +18,10 @@ Apple hardware is a separate, later campaign (`handoff.md` §5.2).
 | RRC-035 | Retire `SDL_RENDERER`; new per-host defaults | `86b8152f2` | done |
 | RRC-036 | Comments, messages and tool data that described the retired renderers as present | `387b5c20c` | done |
 | RRC-037 | Documentation, plans, handoff; validation; this report | `27f8d2ecc` | done |
-| RRC-038 | Remaining references, exact counts; Release, FNA3D, Android-emulator and WebGL2 validation | this commit | done |
+| RRC-038 | Remaining references, exact counts; Release, FNA3D, Android-emulator and WebGL2 validation | `cc547f522` | done |
+| RRC-039 | Rendering on Android (`OPENGLES3` on the emulator); the report finalised | the RRC-039 commit | done |
 
-## Report
+## Final report
 
 ### What was removed
 
@@ -54,13 +55,16 @@ Apple hardware is a separate, later campaign (`handoff.md` §5.2).
 - **Build trees:** `cmake-build-vulkan` (11 GB) and `cmake-build-d3d11` (4.2 GB) deleted;
   `cmake-build-mingw` (`DIRECTX9` default with `SDL_GPU`, `SOFTWARE`, `HEADLESS`) replaces the latter.
 
-**Size** (every tracked blob counted with `git cat-file`, campaign base `b1ec33424` against the
-RRC-037 tree; `third_party/` and `vendor/` are submodules and not counted): tracked files 7,892 ->
-7,160 (-732), text lines 2,512,549 -> 2,246,658 (-265,891); `git diff --shortstat`: 1,410 files
-changed, 13,010 insertions, 278,901 deletions, 294 of the files binary (goldens, glTF corpora). The
-five removed implementation directories held 434 files and 242,960 lines; the plans and documents
-13,000 and 10,700 more. What grew: `modules/graphics` +7,662 (the migrated conformance programs and
-shared examples), `tests` +381 (the compiled-effect helpers), `sdl-gpu` +241 (`shadow_sampling.glsl`).
+**Size** (every tracked blob counted with `git cat-file`, campaign base `b1ec33424` against
+the RRC-039 commit, the campaign's last; `third_party/` and `vendor/` are not counted):
+tracked files 7,892 -> 7,160 (-732), text lines 2,512,549 -> 2,246,828 (-265,721);
+`git diff --shortstat`: 1,419 files changed, 13,204 insertions, 278,925 deletions, 294 of the
+files binary (goldens, glTF corpora). Two other sessions' commits landed in that range
+(`c1006b03e`, `49b1d3a99`: 9 files, +97/-2 lines), so the campaign's own reduction is 265,816
+lines. The five removed implementation directories held 434 files and 242,960 lines; the plans and
+documents 13,000 and 10,700 more. What grew: `modules/graphics` +7,662 (the migrated conformance
+programs and shared examples), `tests` +381 (the compiled-effect helpers), `sdl-gpu` +241
+(`shadow_sampling.glsl`).
 Test registrations removed, counted exactly: CTest registrations in the deleted directories --
 `VULKAN` 374, `DIRECTX11` 6, `METAL` 18, `SDL_RENDERER` 80 -- plus the 264 shared-corpus fixtures
 `cmake/DirectXParityTests.cmake` registered as `DirectX11_*` (the same programs still run on the
@@ -219,8 +223,11 @@ resolves to `OPENGLES3` and no longer warns about it; `cna_c_api` builds. On the
 emulator a throwaway NDK program linked against that `libcna_c_api.so` (with the tree's SDL3 and
 SDL3_mixer) passed 15 of 15 checks: ABI 0.48.0, `OPENGLES3` the default and the only renderer
 compiled in, the four retired names refused in either spelling, the reserved values 1, 8, 14 and
-42 refused, `OPENGLES3` accepted. Drawing needs an APK (SDL's Activity), which was not built, so
-rendering on Android is not re-measured here.
+42 refused, `OPENGLES3` accepted. Rendering (RRC-039): an APK built from SDL's own
+`android-project` template around those libraries ran the C API's `LifecycleSmoke.c` -- a game
+whose load, update and draw callbacks issue both draw-command families and check the back buffer
+-- on the same emulator: EasyGL initialised on OpenGL ES 3.0 (SwiftShader), the active renderer was
+`OPENGLES3`, and the smoke exited 0. The probe project was deleted afterwards.
 
 **Windows.** `cmake-build-mingw` (MinGW-w64 GCC 14 cross build, Release; `DIRECTX9` default with
 `SDL_GPU`, `SOFTWARE`, `HEADLESS`; C API, NET), rebuilt on the final code: every target builds
@@ -233,9 +240,8 @@ except the eight test units that use POSIX-only APIs, so `CnaTests.exe` does not
 Wine with `DIRECTX9` on 2026-10-13, after `DIRECTX11` was retired (item 16).
 
 **Not run here:** native Windows (MSVC, Direct3D 12 hardware); macOS and iOS (no Apple host, so
-`SDL_GPU` on Metal and the iOS allow-list are configure-checked only); a physical Android device,
-and rendering on Android at all (no APK was built); Release builds other than the multi-renderer
-tree.
+`SDL_GPU` on Metal and the iOS allow-list are configure-checked only); a physical Android device;
+Release builds other than the multi-renderer tree.
 
 ### Intentional remaining references
 
@@ -245,26 +251,30 @@ Every tracked file outside `third_party/` was searched for every spelling (`Vulk
 by three review passes over three partitions, then by a classification script whose first-match
 patterns sort each line into one kind. Rewritten or removed were present-tense claims,
 current-renderer lists naming a retiree, and pointers to deleted files, plans and tests (RRC-036,
-RRC-038). 5,973 lines remain (counted after RRC-038), every one of them one of:
+RRC-038). 5,974 lines remain (counted after RRC-039), every one of them one of:
 
-| Kind | Lines | Examples |
-|---|---:|---|
-| History files | 4,374 | `plans/`, `remediation/`, `misc/`, `CHANGELOG.md`, `docs/removed-renderers.md`, `docs/c-api/ABI_VERSIONING.md`, `spikes/`, the XNA-runtime oracles in `tools/xna-oracle/` |
-| Dated audits and migration documents | 184 | `AUDIT.md`, `RAM.md`, the culling and depth audits, `docs/graphics-compatibility-report.md`, `docs/build-performance.md` measurements, `docs/RendererNamingMigration.md`, `docs/xna-4-api-coverage.md`'s history sections -- marked as predating the retirement where they read as current |
-| Retirement statements and machinery | 343 | "the retired VULKAN renderer ...", refusal and reserved-value text, `CnaRendererRetired_*` |
-| Task-ID provenance | 204 | `VULKAN-`, `DX-`, `AM4-`, `METAL-` task IDs on the finding they explain |
-| SDL_GPU's own backends | 175 | SDL's Vulkan, Direct3D 12 and Metal drivers, `SDL_HINT_GPU_DRIVER`, the two SDL Vulkan patches |
-| Vulkan-GLSL dialect and SPIR-V | 122 | `.vulkan.` shader-package sources, `VK_*`/`Vk*` API names, clip-space conventions |
-| Other past-tense provenance | 98 | what a retired renderer did or measured where it explains a test |
-| Vulkan implementations and tools | 51 | lavapipe, llvmpipe, RADV, MoltenVK, DXVK, vkd3d-proton, DRI3, loaders |
-| SDL3's own `SDL_Renderer` API | 47 | the surface presenter that shows `SOFTWARE`'s frames, the SDL classifier |
-| Direct3D API semantics | 47 | D3D9/D3D11/D3D12 rules cited for comparison |
-| wgpu and browser backends | 37 | `WebGPUMetalSurface`, wgpu's Metal adapter |
-| FNA3D and MojoShader | 22 | FNA3D's own D3D11 and SDL_GPU drivers, MojoShader's Metal/D3D11 profiles |
-| Identity tables | 12 | `cmake/RendererIdentities.cmake`, `scripts/check_renderer_identities.py` |
-| False positives | 11 | glTF "metal" materials, "a magnet or metal object" |
-| Apple APIs | 6 | Metal as Apple's API under SDL_GPU and wgpu |
-| Build-tree names | 4 | `cmake-build-vulkan` in past build-performance figures |
-| Read by hand, no pattern | 236 | `GlslVulkan`/`CNA_SHADER_DIALECT_GLSL_VULKAN` (ABI dialect identities), the reserved values in `graphics.h`, the negative tests in `GraphicsRendererSelectionTests` and `ModuleProbes.cmake`, API comparisons and provenance the patterns miss |
+| Kind | Lines | Goal category | Examples |
+|---|---:|---|---|
+| History files | 4,375 | historical | `plans/`, `remediation/`, `misc/`, `CHANGELOG.md`, `docs/removed-renderers.md`, `docs/c-api/ABI_VERSIONING.md`, `spikes/`, the XNA-runtime oracles in `tools/xna-oracle/` |
+| Dated audits and migration documents | 184 | historical, migration documentation | `AUDIT.md`, `RAM.md`, the culling and depth audits, `docs/graphics-compatibility-report.md`, `docs/build-performance.md` measurements, `docs/RendererNamingMigration.md`, `docs/xna-4-api-coverage.md`'s history sections -- marked as predating the retirement where they read as current |
+| Retirement statements and machinery | 343 | retired-selector diagnostic, historical | "the retired VULKAN renderer ...", refusal and reserved-value text, `CnaRendererRetired_*` |
+| Task-ID provenance | 204 | historical | `VULKAN-`, `DX-`, `AM4-`, `METAL-` task IDs on the finding they explain |
+| SDL_GPU's own backends | 175 | not the retired renderer: SDL's drivers | SDL's Vulkan, Direct3D 12 and Metal drivers, `SDL_HINT_GPU_DRIVER`, the two SDL Vulkan patches |
+| Vulkan-GLSL dialect and SPIR-V | 122 | not the retired renderer: a shader language | `.vulkan.` shader-package sources, `VK_*`/`Vk*` API names, clip-space conventions |
+| Other past-tense provenance | 98 | historical | what a retired renderer did or measured where it explains a test |
+| Vulkan implementations and tools | 51 | not the retired renderer: drivers and translation layers | lavapipe, llvmpipe, RADV, MoltenVK, DXVK, vkd3d-proton, DRI3, loaders |
+| SDL3's own `SDL_Renderer` API | 47 | not the retired renderer: SDL's 2D API | the surface presenter that shows `SOFTWARE`'s frames, the SDL classifier |
+| Direct3D API semantics | 47 | not the retired renderer: an API | D3D9/D3D11/D3D12 rules cited for comparison |
+| wgpu and browser backends | 37 | not the retired renderer: wgpu's drivers | `WebGPUMetalSurface`, wgpu's Metal adapter |
+| FNA3D and MojoShader | 22 | not the retired renderer: FNA3D's drivers | FNA3D's own D3D11 and SDL_GPU drivers, MojoShader's Metal/D3D11 profiles |
+| Identity tables | 12 | ABI-reserved | `cmake/RendererIdentities.cmake`, `scripts/check_renderer_identities.py` |
+| False positives | 11 | not the retired renderer: other meanings | glTF "metal" materials, "a magnet or metal object" |
+| Apple APIs | 6 | not the retired renderer: Apple's API | Metal as Apple's API under SDL_GPU and wgpu |
+| Build-tree names | 4 | historical | `cmake-build-vulkan` in past build-performance figures |
+| Read by hand, no pattern | 236 | ABI-reserved, negative test, historical | `GlslVulkan`/`CNA_SHADER_DIALECT_GLSL_VULKAN` (ABI dialect identities), the reserved values in `graphics.h`, the negative tests in `GraphicsRendererSelectionTests` and `ModuleProbes.cmake`, API comparisons and provenance the patterns miss |
 
-Older retirements' leftovers (LLGL, bgfx, Sokol notes) were out of scope and left alone.
+The SDL_GPU, wgpu, FNA3D and Vulkan-GLSL rows are not references to CNA's retired renderers: they
+name the backends SDL, wgpu and FNA3D drive underneath the surviving renderers -- the delegation
+this campaign chose -- and the shader dialect whose SPIR-V `SDL_GPU` consumes; removing them would
+misdescribe how the survivors work. Older retirements' leftovers (LLGL, bgfx, Sokol notes) were out
+of scope and left alone.
