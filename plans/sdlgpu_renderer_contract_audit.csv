@@ -96,7 +96,6 @@ ISpriteBatchRenderer,"SetSamplerMipState :: void (int, float)",1000,default-no-o
 ISpriteBatchRenderer,"SetSamplerAddressMode :: void (int, int)",1010,default-no-op,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81
 ISpriteBatchRenderer,"SetSamplerState :: void (int, int, int, int, int, int, float)",1042,default-delegates-or-value,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81
 ISpriteBatchRenderer,SetSamplerAddressW :: void (int),1060,default-no-op,classic-xna-observable,SpriteBatch=inherited:default-no-op,SpriteBatch=inherited:default-no-op,=,SDLGPU-64/76/79/81
-ISpriteBatchRenderer,SetSamplerAddressModeWEXT :: void (int),1078,default-no-op,classic-xna-observable,SpriteBatch=inherited:default-no-op,SpriteBatch=inherited:default-no-op,=,SDLGPU-64/76/79/81
 ISpriteBatchRenderer,SetImmediateMode :: void (bool),1095,default-no-op,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81
 ISpriteBatchRenderer,"Draw :: void (const ITextureRenderer &, float, float)",1096,required,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81
 ISpriteBatchRenderer,"Draw :: void (const ITextureRenderer &, const Rectangle &, const Rectangle &, const Color &)",1097,required,classic-xna-observable,SpriteBatch=override,SpriteBatch=override,=,SDLGPU-64/76/79/81

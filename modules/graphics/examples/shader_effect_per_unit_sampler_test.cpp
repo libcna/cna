@@ -13,9 +13,10 @@
 // `SamplerStates[1..15]` to any renderer at all. `SpriteBatch` now publishes them, from the two
 // places FNA's `PrepRenderState` runs (`Begin()` for `Immediate`, `FlushBatch()` otherwise), and
 // from slot 1 upward: slot 0 already has a writer -- the batch's own
-// `SetSamplerFilter`/`SetSamplerAddressMode`/`SetSamplerAddressModeWEXT` -- and giving one slot two
-// writers with no ordering between them across twelve renderer families is how VULKAN-164's
-// defect (2) happened in the first place.
+// `ISpriteBatchRenderer::SetSamplerState` -- and giving one slot two writers with no ordering
+// between them across the renderer families is how VULKAN-164's defect (2) happened in the first
+// place (VULKAN-164/166 are the provenance: the defect was found on the since-retired Vulkan
+// renderer).
 //
 // Both volumes are 1x1x2 and are sampled at `W = 1.25`, outside [0,1], which is the only place an
 // address mode is observable. X and Y cannot contribute -- there is one voxel on each.

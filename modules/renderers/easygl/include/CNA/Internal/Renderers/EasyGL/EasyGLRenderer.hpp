@@ -860,7 +860,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
          *
          * This renderer overrides the COMPLETE hook, so IGraphicsRenderer's default fan-out to
-         * SetSamplerMipState/SetSamplerAddressW/SetSamplerAddressModeWEXT does not run here -- this
+         * SetSamplerMipState/SetSamplerAddressW does not run here -- this
          * method does all of their work and carries maxAnisotropy besides, which none of them did.
          *
          * @param textureFilter Raw `TextureFilter` ordinal.

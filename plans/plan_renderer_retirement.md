@@ -30,6 +30,7 @@ finish it; none restores a retired renderer, option or constant.
 | Task | Scope | Status |
 |---|---|---|
 | RRC-040 | One run-time retired-renderer table (`CNA/Internal/RetiredGraphicsRenderers.hpp`); name refusals carry the reserved value, the C API's numeric routes refuse 1/8/14/42 as retired and an unknown value as unknown; strict-C, C++ and environment-variable regression tests | done |
+| RRC-041 | Remove `ISpriteBatchRenderer::SetSamplerAddressModeWEXT` and its fan-out call (its only implementor was VULKAN); AddressW keeps reaching DIRECTX9 through `SetSamplerAddressW` and the complete-hook renderers through `SetSamplerState`, pinned by `SpriteBatchTests` | done |
 
 ## Final report
 

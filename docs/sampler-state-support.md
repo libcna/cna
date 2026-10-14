@@ -253,8 +253,7 @@ pushed slots 1–15 to any renderer at all. The renderer kept whatever those slo
 earlier 3D draw, or the state it was constructed with.
 
 Invisible for years, because a stock sprite draw uses exactly one texture and the batch carries its
-sampler down its own path (`ISpriteBatchRenderer::SetSamplerFilter`/`SetSamplerAddressMode`/
-`SetSamplerAddressModeWEXT`). It becomes decisive the moment a **custom effect**
+sampler down its own path (`ISpriteBatchRenderer::SetSamplerState`). It becomes decisive the moment a **custom effect**
 binds a second texture to the same batch: XNA governs the texture at sampler register *u* with
 `SamplerStates[u]`, and CNA gave every unit slot 0's state.
 
@@ -304,9 +303,13 @@ EasyGL and SDL_GPU.
 
 ## 10. The W axis reaches EasyGL (2026-09-07)
 
-`ISpriteBatchRenderer` has a `SetSamplerAddressModeWEXT` hook, additive with a no-op default,
-because `SpriteBatch` was forwarding a batch sampler's filter and its U and V axes and dropping W —
-invisible to 2D sampling, which never consults W, and decisive for a `sampler3D`.
+`SpriteBatch` was forwarding a batch sampler's filter and its U and V axes and dropping W —
+invisible to 2D sampling, which never consults W, and decisive for a `sampler3D`. The W axis now
+travels in `ISpriteBatchRenderer::SetSamplerState`, which carries all seven `SamplerState`
+properties; its default body fans out to `SetSamplerAddressW` for a renderer (DirectX 9) that
+overrides only the per-property hooks. (The `SetSamplerAddressModeWEXT` hook this section
+originally described was removed on 2026-10-14, RRC-041: its only implementor was the retired
+Vulkan renderer.)
 
 EasyGL takes it. `EasyGLRenderer::ApplySamplerState` derives `WrapR` from `addressU`, which is
 correct for every XNA 4.0 preset — `PointClamp`, `LinearWrap` and the rest set all three axes alike

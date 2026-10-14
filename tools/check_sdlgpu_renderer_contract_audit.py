@@ -307,11 +307,6 @@ ALLOWED_CLASSIC_SDL_INHERITED: set[tuple[str, str, str]] = {
         "SpriteBatch",
     ),
     (
-        "ISpriteBatchRenderer",
-        "SetSamplerAddressModeWEXT :: void (int)",
-        "SpriteBatch",
-    ),
-    (
         "IGraphicsRenderer",
         "AcquireThreadContextLeaseEXT :: std::unique_ptr<IRendererThreadContextLease> "
         "(RendererThreadContextLeaseRelease)",

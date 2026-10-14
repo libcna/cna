@@ -2167,7 +2167,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Called from every draw entry point with the default, and from SpriteBatch's flush
          * with firstSlot == 1 (VULKAN-166): a sprite batch owns slot 0 through
-         * ISpriteBatchRenderer::SetSamplerFilter/SetSamplerAddressMode/SetSamplerAddressModeWEXT,
+         * ISpriteBatchRenderer::SetSamplerState (and its fan-out to the per-property hooks),
          * so re-publishing it here would give one slot two writers with no ordering between them
          * across the renderer families. Slots 1 and up have no other writer at all, which is why
          * a ShaderEffect's second texture unit could not be sampled differently from its first.

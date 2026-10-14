@@ -4,13 +4,12 @@
 //
 // The hook and the half that was missing
 // --------------------------------------
-// `VULKAN-164` established the XNA rule and added the shared-layer hook: XNA assigns the *whole*
-// `SamplerState` to `GraphicsDevice.SamplerStates[0]`, W included, and CNA's `SpriteBatch` was
-// forwarding the filter and the U and V axes only. `ISpriteBatchRenderer::SetSamplerAddressModeWEXT`
-// carries the third axis, additive with a no-op default so the other renderers were unchanged, and
-// Vulkan was the only family that took it (`Vulkan_Texture3DAddressW`).
+// `VULKAN-164` (found on the since-retired Vulkan renderer) established the XNA rule: XNA assigns
+// the *whole* `SamplerState` to `GraphicsDevice.SamplerStates[0]`, W included, and CNA's
+// `SpriteBatch` was forwarding the filter and the U and V axes only. The batch's W now reaches the
+// renderer through `ISpriteBatchRenderer::SetSamplerState`, which EasyGL overrides.
 //
-// This is the same proof on the maturity reference. `EasyGLRenderer::ApplySamplerState` derives
+// This is the proof on the maturity reference. `EasyGLRenderer::ApplySamplerState` derives
 // `WrapR` from `addressU` -- correct for every XNA 4.0 preset, since `PointClamp`, `LinearWrap` and
 // the rest set all three axes alike, and wrong for a state that set W on its own. The one place it
 // shows is a volume texture, which a 2D sprite never has.

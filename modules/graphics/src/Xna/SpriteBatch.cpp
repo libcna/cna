@@ -347,14 +347,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
-                // ONE call carrying all seven SamplerState properties. Three hooks for this job met
-                // when `next` merged into `sdlgpu` (2026-09-11): sdlgpu's complete-state
-                // SetSamplerState, the dx branch's SetSamplerAddressW + SetSamplerMipState, and the
-                // vulkan branch's SetSamplerAddressModeWEXT. All three had implementors, so the
-                // fan-out lives in IGraphicsRenderer::SetSamplerState's default body rather than
-                // here -- a renderer that overrides the complete hook gets everything directly, one
-                // that overrides only the older names keeps being told exactly as before, and this
-                // layer no longer has to know which family implements which spelling.
+                // ONE call carrying all seven SamplerState properties. The fan-out to the older
+                // per-property hooks (SetSamplerAddressW + SetSamplerMipState, which DirectX 9
+                // implements) lives in IGraphicsRenderer::SetSamplerState's default body rather
+                // than here -- a renderer that overrides the complete hook gets everything
+                // directly, one that overrides only the older names keeps being told exactly as
+                // before, and this layer does not have to know which family implements which.
                 //
                 // maxAnisotropy reaches a renderer for the first time here; only sdlgpu's hook
                 // ever carried it.

@@ -1010,24 +1010,13 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Sets every public `SamplerState` property for the current batch.
          *
-         * This is the ONE hook SpriteBatch calls, and it carries all seven properties. Three
-         * designs for this job met here when `next` merged into `sdlgpu` (2026-09-11) and this is
-         * the one that survived, because it is the only one that is complete:
-         *
-         *   - `sdlgpu` added this complete-state hook. It alone carries `maxAnisotropy`.
-         *   - the `dx` branch added `SetSamplerAddressW` plus `SetSamplerMipState` (DX-257).
-         *   - the `vulkan` branch added `SetSamplerAddressModeWEXT` (VULKAN-164) for the same W
-         *     axis under a different name.
-         *
-         * SdlGpu, WebGPU and EasyGL override this one; DirectX 9 overrides
-         * `SetSamplerAddressW`/`SetSamplerMipState`; `SetSamplerAddressModeWEXT` lost its last
-         * implementor with the retired Vulkan renderer. So the default below FANS OUT to
-         * every legacy hook rather than only to the two it originally forwarded. A renderer that
-         * overrides this method receives everything directly; one that overrides only the older
-         * hooks keeps receiving exactly what it did before, W and mip state included. Neither can
-         * silently stop being told, which is what calling just one of the three would have caused.
-         *
-         * This retires the "unifying them is a follow-up" note the `vulkan` merge left here.
+         * This is the ONE hook SpriteBatch calls, and it carries all seven properties. SdlGpu,
+         * WebGPU and EasyGL override it and receive everything directly. A renderer that overrides
+         * only the older per-property hooks -- DirectX 9 implements `SetSamplerAddressW` and
+         * `SetSamplerMipState` (DX-257) -- is served by the default below, which FANS OUT to every
+         * one of them, W and mip state included, so no renderer can silently stop being told a
+         * property. (A third spelling of the W axis, `SetSamplerAddressModeWEXT`, was removed in
+         * RRC-041: its only implementor was the retired Vulkan renderer.)
          *
          * @param textureFilter Raw `TextureFilter` ordinal.
          * @param addressU Raw `TextureAddressMode` ordinal for U.
@@ -1045,35 +1034,20 @@ namespace CNA::Internal::Renderers
             SetSamplerAddressMode(addressU, addressV);
             SetSamplerMipState(maxMipLevel, lodBias);
             SetSamplerAddressW(addressW);
-            SetSamplerAddressModeWEXT(addressW);
         }
         /**
          * @brief Sets the volume-texture W address mode applied to each Draw call.
          *
-         * The `dx` branch's spelling; DirectX 9 implements this one. Reached through
-         * `SetSamplerState`'s default fan-out.
+         * DirectX 9 implements this one. Reached through `SetSamplerState`'s default fan-out.
+         *
+         * Separate from `SetSamplerAddressMode` because that method's two-argument signature is
+         * implemented by every renderer. XNA's SpriteBatch assigns the WHOLE SamplerState to
+         * `GraphicsDevice.SamplerStates[0]`, W included; a W that reached no renderer would be
+         * invisible to 2D sampling and decide what a `sampler3D` reads outside [0,1].
          *
          * @param addressW Raw TextureAddressMode int value for W (0=Wrap, 1=Clamp, 2=Mirror).
          */
         virtual void SetSamplerAddressW(int /*addressW*/) {}
-        /**
-         * @brief CNAEXT. Sets the W texture address mode of the batch's SamplerState.
-         *
-         * The `vulkan` branch's spelling of the same axis (VULKAN-164); no current renderer
-         * implements it (the retired Vulkan renderer did). Like `SetSamplerAddressW` it is reached
-         * through `SetSamplerState`'s default fan-out -- so a renderer is told exactly once per
-         * name it actually overrides.
-         *
-         * Separate from `SetSamplerAddressMode` because that method's two-argument signature is
-         * implemented by every renderer and widening it would break them all. XNA's SpriteBatch
-         * assigns the WHOLE SamplerState to `GraphicsDevice.SamplerStates[0]`, W included; CNA
-         * forwarded only the filter and the U/V axes, so a state that differed from a preset only
-         * in `AddressW` reached no renderer at all. That is invisible to 2D sampling -- which is
-         * why it went unnoticed -- and decides what a `sampler3D` reads outside [0,1].
-         *
-         * @param addressW The batch SamplerState's `TextureAddressMode` ordinal for W.
-         */
-        virtual void SetSamplerAddressModeWEXT(int /*addressW*/) {}
         /**
          * @brief CNAEXT. Tells the renderer whether the batch SpriteBatch::Begin() just started is
          *        SpriteSortMode::Immediate.

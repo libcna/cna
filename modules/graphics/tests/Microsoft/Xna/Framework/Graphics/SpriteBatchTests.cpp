@@ -84,6 +84,8 @@ namespace
         bool thrown_ = false;
     };
 
+    // Overrides only the per-property sampler hooks -- DirectX 9's shape -- so every value below
+    // reaches it through ISpriteBatchRenderer::SetSamplerState's default fan-out.
     class RecordingSamplerSpriteBatchRenderer final : public RecordingSpriteBatchRenderer
     {
     public:
@@ -99,10 +101,12 @@ namespace
             addressU = u;
             addressV = v;
         }
+        void SetSamplerAddressW(int w) override { addressW = w; }
 
         int filter = -1;
         int addressU = -1;
         int addressV = -1;
+        int addressW = -1;
         int maxAnisotropy = -1;
         int maxMipLevel = -1;
         float lodBias = 0.0f;
@@ -385,6 +389,7 @@ TEST(SpriteBatchTest, DeferredSamplerReadsEveryPropertyAtEndBoundary)
     sampler.setFilterProperty(TextureFilter::MinLinearMagPointMipLinear);
     sampler.setAddressUProperty(TextureAddressMode::Wrap);
     sampler.setAddressVProperty(TextureAddressMode::Mirror);
+    sampler.setAddressWProperty(TextureAddressMode::Mirror);
     sampler.setMaxAnisotropyProperty(11);
     sampler.setMaxMipLevelProperty(3);
     sampler.setMipMapLevelOfDetailBiasProperty(-0.75f);
@@ -394,6 +399,8 @@ TEST(SpriteBatchTest, DeferredSamplerReadsEveryPropertyAtEndBoundary)
               static_cast<int>(TextureFilter::MinLinearMagPointMipLinear));
     EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
     EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Mirror));
+    // RRC-041: W reaches a renderer that implements only SetSamplerAddressW.
+    EXPECT_EQ(recording->addressW, static_cast<int>(TextureAddressMode::Mirror));
     EXPECT_EQ(recording->maxAnisotropy, 11);
     EXPECT_EQ(recording->maxMipLevel, 3);
     EXPECT_FLOAT_EQ(recording->lodBias, -0.75f);
@@ -413,11 +420,13 @@ TEST(SpriteBatchTest, InvalidSamplerEnumsUseXnaFallbacksOnPrivateRendererChannel
     sampler.setFilterProperty(static_cast<TextureFilter>(12345));
     sampler.setAddressUProperty(static_cast<TextureAddressMode>(12345));
     sampler.setAddressVProperty(static_cast<TextureAddressMode>(12345));
+    sampler.setAddressWProperty(static_cast<TextureAddressMode>(12345));
 
     batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler, nullptr, nullptr);
     EXPECT_EQ(recording->filter, static_cast<int>(TextureFilter::Linear));
     EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
     EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Wrap));
+    EXPECT_EQ(recording->addressW, static_cast<int>(TextureAddressMode::Wrap));
     batch.End();
 
     EXPECT_EQ(recording->filter, static_cast<int>(TextureFilter::Linear));
