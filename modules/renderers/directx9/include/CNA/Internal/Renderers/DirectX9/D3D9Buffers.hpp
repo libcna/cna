@@ -70,7 +70,9 @@ namespace CNA::Internal::Renderers::DirectX9
         [[nodiscard]] IDirect3DVertexBuffer9* GetBufferEXT() const { return buffer_.Get(); }
 
     private:
-        void EnsureCapacity(std::size_t requiredBytes);
+        void SetDataInternal(const void* data, int vertex_count, std::size_t stride_in_bytes,
+                             SetDataOptions options, bool dynamic);
+        void EnsureCapacity(std::size_t requiredBytes, bool dynamic);
         void Upload(const void* data, std::size_t byteCount, SetDataOptions options);
 
         DirectX9Renderer& owner_;
@@ -80,6 +82,8 @@ namespace CNA::Internal::Renderers::DirectX9
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         UINT byteWidth_ = 0;
+        /// D3DUSAGE_DYNAMIC in D3DPOOL_DEFAULT (lost on Reset) rather than D3DPOOL_MANAGED.
+        bool dynamic_ = false;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
         mutable ComPtr<IDirect3DVertexDeclaration9> nativeDeclaration_;
     };
@@ -129,8 +133,9 @@ namespace CNA::Internal::Renderers::DirectX9
         [[nodiscard]] D3DFORMAT GetFormatEXT() const;
 
     private:
-        void EnsureCapacity(std::size_t requiredBytes);
-        void Upload(const void* data, std::size_t byteCount, SetDataOptions options, bool dataIsThirtyTwoBit);
+        void EnsureCapacity(std::size_t requiredBytes, bool dynamic);
+        void Upload(const void* data, std::size_t byteCount, SetDataOptions options, bool dataIsThirtyTwoBit,
+                    bool dynamic);
 
         DirectX9Renderer& owner_;
         ComPtr<IDirect3DDevice9> device_;
@@ -139,5 +144,7 @@ namespace CNA::Internal::Renderers::DirectX9
         int indexCount_ = 0;
         bool thirtyTwoBit_ = false;
         UINT byteWidth_ = 0;
+        /// See D3D9VertexBufferRenderer::dynamic_.
+        bool dynamic_ = false;
     };
 }

@@ -4251,6 +4251,9 @@ namespace Microsoft::Xna::Framework::Graphics
                     blendStateDirty_ = true;
                     depthStencilStateDirty_ = true;
                     rasterizerStateDirty_ = true;
+                    // The native reset also emptied the default-pool-equivalent resources (dynamic
+                    // buffers, render targets), exactly as a device-loss Reset does.
+                    NotifyContentLostResourcesEXT();
                     break;
             }
         };

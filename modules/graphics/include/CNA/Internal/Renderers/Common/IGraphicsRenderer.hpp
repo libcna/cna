@@ -3304,7 +3304,12 @@ namespace CNA::Internal::Renderers
         /// The device was successfully reset and resources recreated. Fires
         /// GraphicsDevice::DeviceReset.
         Reset,
-        /** @brief Native presentation reset invalidated cached state without a device-loss event. */
+        /**
+         * @brief Native presentation reset invalidated cached state without a device-loss event.
+         *
+         * The reset also discards the contents of the renderer's default-pool-equivalent resources
+         * (dynamic buffers, render targets), so GraphicsDevice marks them content-lost.
+         */
         StateInvalidated
     };
 

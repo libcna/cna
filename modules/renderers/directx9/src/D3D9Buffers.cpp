@@ -66,13 +66,16 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9VertexBufferRenderer::ReleaseDefaultPoolResourceEXT()
     {
+        // A D3DPOOL_MANAGED buffer survives Reset() with its contents; only the dynamic one is
+        // a losable default-pool object.
+        if (!dynamic_) return;
         buffer_.Reset();
         byteWidth_ = 0;
     }
 
-    void D3D9VertexBufferRenderer::EnsureCapacity(std::size_t requiredBytes)
+    void D3D9VertexBufferRenderer::EnsureCapacity(std::size_t requiredBytes, bool dynamic)
     {
-        if (buffer_ && requiredBytes <= byteWidth_) return;
+        if (buffer_ && dynamic == dynamic_ && requiredBytes <= byteWidth_) return;
 
         // Never shrinks -- grow to the larger of what's actually requested and the
         // originally-declared vertex capacity at this call's stride, so a buffer created with a
@@ -83,11 +86,13 @@ namespace CNA::Internal::Renderers::DirectX9
         if (newByteWidth == 0) newByteWidth = static_cast<UINT>(requiredBytes);
 
         ComPtr<IDirect3DVertexBuffer9> newBuffer;
-        // design decision 2: D3DUSAGE_DYNAMIC requires D3DPOOL_DEFAULT (D3D9 forbids DYNAMIC with
-        // POOL_MANAGED) -- this buffer does NOT survive Reset() automatically; see
+        // A static (XNA VertexBuffer) upload lives in D3DPOOL_MANAGED, which keeps its contents
+        // across every Reset() -- the resize at the first Present() included. D3DUSAGE_DYNAMIC
+        // requires D3DPOOL_DEFAULT, so a dynamic upload does not survive Reset(); see
         // ReleaseDefaultPoolResourceEXT() and DirectX9Renderer::PerformResetRecovery().
         const HRESULT hr = device_->CreateVertexBuffer(
-            newByteWidth, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT,
+            newByteWidth, dynamic ? (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY) : D3DUSAGE_WRITEONLY, 0,
+            dynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED,
             newBuffer.ReleaseAndGetAddressOf(), nullptr);
         if (FAILED(hr))
         {
@@ -95,12 +100,15 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         buffer_ = newBuffer;
         byteWidth_ = newByteWidth;
+        dynamic_ = dynamic;
     }
 
     void D3D9VertexBufferRenderer::Upload(const void* data, std::size_t byteCount, SetDataOptions options)
     {
         void* locked = nullptr;
-        const HRESULT hr = buffer_->Lock(0, static_cast<UINT>(byteCount), &locked, LockFlagsFor(options));
+        // DISCARD/NOOVERWRITE are only legal on a D3DUSAGE_DYNAMIC buffer.
+        const DWORD flags = dynamic_ ? LockFlagsFor(options) : 0;
+        const HRESULT hr = buffer_->Lock(0, static_cast<UINT>(byteCount), &locked, flags);
         if (FAILED(hr))
         {
             throw std::runtime_error("D3D9VertexBufferRenderer: Lock failed, hr=" + FormatHr(hr));
@@ -111,11 +119,20 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9VertexBufferRenderer::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
     {
-        SetDataWithOptions(data, vertex_count, stride_in_bytes, SetDataOptions::None);
+        // A buffer that has already been streamed with options stays dynamic; the whole buffer
+        // is replaced either way.
+        SetDataInternal(data, vertex_count, stride_in_bytes, SetDataOptions::None, dynamic_);
     }
 
     void D3D9VertexBufferRenderer::SetDataWithOptions(
         const void* data, int vertex_count, std::size_t stride_in_bytes, SetDataOptions options)
+    {
+        SetDataInternal(data, vertex_count, stride_in_bytes, options, true);
+    }
+
+    void D3D9VertexBufferRenderer::SetDataInternal(
+        const void* data, int vertex_count, std::size_t stride_in_bytes, SetDataOptions options,
+        bool dynamic)
     {
         stride_ = stride_in_bytes;
         const std::size_t byteCount = static_cast<std::size_t>(vertex_count) * stride_in_bytes;
@@ -124,8 +141,8 @@ namespace CNA::Internal::Renderers::DirectX9
         // very first SetData() call) has nothing "in flight" to preserve -- D3DLOCK_DISCARD is
         // always correct there regardless of what the caller requested; NOOVERWRITE only makes
         // sense against an existing, already-uploaded-to buffer.
-        const bool wasFresh = !buffer_;
-        EnsureCapacity(byteCount);
+        const bool wasFresh = !buffer_ || dynamic != dynamic_;
+        EnsureCapacity(byteCount, dynamic);
         Upload(data, byteCount, wasFresh ? SetDataOptions::Discard : options);
         vertexCount_ = vertex_count;
     }
@@ -148,6 +165,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9IndexBufferRenderer::ReleaseDefaultPoolResourceEXT()
     {
+        if (!dynamic_) return;
         buffer_.Reset();
         byteWidth_ = 0;
     }
@@ -157,9 +175,9 @@ namespace CNA::Internal::Renderers::DirectX9
         return thirtyTwoBit_ ? D3DFMT_INDEX32 : D3DFMT_INDEX16;
     }
 
-    void D3D9IndexBufferRenderer::EnsureCapacity(std::size_t requiredBytes)
+    void D3D9IndexBufferRenderer::EnsureCapacity(std::size_t requiredBytes, bool dynamic)
     {
-        if (buffer_ && requiredBytes <= byteWidth_) return;
+        if (buffer_ && dynamic == dynamic_ && requiredBytes <= byteWidth_) return;
 
         const std::size_t elementSize = thirtyTwoBit_ ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
         const std::size_t capacityBytes = static_cast<std::size_t>(capacity_) * elementSize;
@@ -167,8 +185,10 @@ namespace CNA::Internal::Renderers::DirectX9
         if (newByteWidth == 0) newByteWidth = static_cast<UINT>(requiredBytes);
 
         ComPtr<IDirect3DIndexBuffer9> newBuffer;
+        // Same pool split as D3D9VertexBufferRenderer::EnsureCapacity().
         const HRESULT hr = device_->CreateIndexBuffer(
-            newByteWidth, D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY, GetFormatEXT(), D3DPOOL_DEFAULT,
+            newByteWidth, dynamic ? (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY) : D3DUSAGE_WRITEONLY,
+            GetFormatEXT(), dynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED,
             newBuffer.ReleaseAndGetAddressOf(), nullptr);
         if (FAILED(hr))
         {
@@ -176,10 +196,12 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         buffer_ = newBuffer;
         byteWidth_ = newByteWidth;
+        dynamic_ = dynamic;
     }
 
     void D3D9IndexBufferRenderer::Upload(
-        const void* data, std::size_t byteCount, SetDataOptions options, bool dataIsThirtyTwoBit)
+        const void* data, std::size_t byteCount, SetDataOptions options, bool dataIsThirtyTwoBit,
+        bool dynamic)
     {
         if (dataIsThirtyTwoBit != thirtyTwoBit_)
         {
@@ -191,10 +213,10 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // See D3D9VertexBufferRenderer::SetDataWithOptions()'s own comment: a freshly-(re)created
         // buffer always uses DISCARD, regardless of what the caller requested.
-        const bool wasFresh = !buffer_;
-        EnsureCapacity(byteCount);
+        const bool wasFresh = !buffer_ || dynamic != dynamic_;
+        EnsureCapacity(byteCount, dynamic);
         void* locked = nullptr;
-        const DWORD flags = LockFlagsFor(wasFresh ? SetDataOptions::Discard : options);
+        const DWORD flags = dynamic_ ? LockFlagsFor(wasFresh ? SetDataOptions::Discard : options) : 0;
         const HRESULT hr = buffer_->Lock(0, static_cast<UINT>(byteCount), &locked, flags);
         if (FAILED(hr))
         {
@@ -207,21 +229,23 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9IndexBufferRenderer::SetData16(const void* data, int index_count)
     {
-        SetData16WithOptions(data, index_count, SetDataOptions::None);
+        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint16_t),
+               SetDataOptions::None, false, dynamic_);
     }
 
     void D3D9IndexBufferRenderer::SetData32(const void* data, int index_count)
     {
-        SetData32WithOptions(data, index_count, SetDataOptions::None);
+        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint32_t),
+               SetDataOptions::None, true, dynamic_);
     }
 
     void D3D9IndexBufferRenderer::SetData16WithOptions(const void* data, int index_count, SetDataOptions options)
     {
-        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint16_t), options, false);
+        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint16_t), options, false, true);
     }
 
     void D3D9IndexBufferRenderer::SetData32WithOptions(const void* data, int index_count, SetDataOptions options)
     {
-        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint32_t), options, true);
+        Upload(data, static_cast<std::size_t>(index_count) * sizeof(std::uint32_t), options, true, true);
     }
 }

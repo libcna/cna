@@ -289,26 +289,30 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     `scripts/check_no_posix_setenv.py` fails on the same files. The rest of the tree (the
     `DIRECTX9` and `SDL_GPU` suites, the C API smokes, the examples) builds.
 
-15. **`DIRECTX9` under Wine+DXVK: one shared contract still fails** (re-measured 2026-10-14 after the
-    remediation closure; the `DIRECTX9` suite passes 56 of 57). `Backbuffer_PassOrder` fails its
-    3D legs (C5/C6, D1/D2, O1-O4, U2) while every sprite, clear, viewport and MRT leg passes.
-    Instrumented: after a `SpriteBatch` flush and/or a render-target cycle, a stride-16
-    `BasicEffect` `DrawPrimitives` on the back buffer no longer lands its quads -- the dump shows
-    half-quads in sprite colours instead, i.e. the vertex data fetched is not the bound buffer's,
-    with every render state, viewport, depth format and the vertex declaration identical to the
-    passing legs. `DirectX9_Draw` passes because it never mixes sprites and 3D. Undiagnosed beyond
-    that. Fixed on the way: the eleven example programs that read the back buffer request HiDef;
-    a negative `MaxMipLevel` maps to the last level as XNA's unsigned write does
-    (`TextureFilterMipContract` L3/L9); `Clear` lifts the viewport and scissor like XNA
+15. **`DIRECTX9` under Wine+DXVK: module gtest failures remain** (re-measured 2026-10-15). The
+    `DIRECTX9` ctest suite passes 58/58, `Backbuffer_PassOrder` included; the one flake is
+    `DirectX9_CompiledEffects`, which about every other run hangs at the end of its first test
+    inside DXVK 2.6.0's device release (the main thread sits in a Win32 object wait below
+    `~DirectX9Renderer` after the renderer released the device, before the window is destroyed; a
+    rerun passes). `Backbuffer_PassOrder`'s 3D legs failed
+    because every D3D9 vertex and index buffer was `D3DUSAGE_DYNAMIC` in `D3DPOOL_DEFAULT`, so the
+    native `Reset` that applies the window's real size at the first `Present` emptied the static
+    buffers a game had filled in `LoadContent`. Static buffers are `D3DPOOL_MANAGED` now and the
+    resize `Reset` reports the dynamic buffers and render targets it does empty as content-lost
+    (`DirectX9_BufferResetSurvival`). Fixed on the way: the eleven example programs that read the
+    back buffer request HiDef; a negative `MaxMipLevel` maps to the last level as XNA's unsigned
+    write does (`TextureFilterMipContract` L3/L9); `Clear` lifts the viewport and scissor like XNA
     (`GraphicsDevice_OrderedClear`); a compiled effect samples the texture set on the device slot
     after `Apply()` (`CompiledEffects`); `CnaRendererTests.exe` builds; `DirectX9_FrameRecovery`
-    waits for the retried `Reset` inside a window instead of at one fixed update, so it no longer
-    fails on `ctest` timing. Module gtests under the same Wine (rebuilt 2026-10-14):
-    `CnaGraphicsTests.exe` 34 failures (`DeclarationGuard`, `GenericUserArrayDraw`,
-    `ContextRecovery`, `EffectTest` authentic-FX, `BasicEffectVertexLightingSaturation`,
-    `GraphicsAdapterTest` substitution, instanced colour routes, occlusion lifecycle -- all
-    D3D9-specific behaviour, none diagnosed), `CnaContentTests.exe` 1,705 pass / 1 failure
-    (`RendererStrideConformance`, the unlit stride-32 record).
+    waits for the retried `Reset` inside a window instead of at one fixed update. Module gtests
+    under the same Wine: `CnaGraphicsTests.exe` 2,632 pass / 34 failures (unchanged by the buffer fix:
+    `DeclarationGuard`, `GenericUserArrayDraw`, `ContextRecovery`, the authentic-FX `EffectTest` pair,
+    `BasicEffectVertexLightingSaturation`, `GraphicsAdapterTest` format substitution, the instanced
+    colour routes, `OcclusionQueryLifecycle`, `PointListPrimitive`, `RenderTargetFormatAgreement`,
+    `HdrRenderTargetRoundTrip`, `OrdinaryDrawBindingOffset`, `DrawRouteValidation`), measured as eight
+    `GTEST_TOTAL_SHARDS` shards because one 2,956-test Wine process dies or hangs at a varying point;
+    `CnaContentTests.exe` 1,705 pass / 1 failure (`RendererStrideConformance`, the unlit stride-32
+    record).
 16. **A C API game still alive at process exit crashes `SDL_GPU` in a Debug build** (first C API run
     with `SDL_GPU`, `cmake-build-sdlgpu`, 2026-10-14): the five `CApi_TeardownLifetime_*` cases that
     leave a game alive segfault. The C API's static `RuntimeState` destroys the game during

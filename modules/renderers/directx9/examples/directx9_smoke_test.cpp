@@ -47,7 +47,7 @@
 // Check P -- a device-lost/recover cycle genuinely releases and lazily recreates a registered
 //   D3DPOOL_DEFAULT vertex buffer's underlying COM object (D9-40's device-lost hook, proven for
 //   real, not just "didn't crash") -- matches real XNA/D3D9 behavior where a DYNAMIC buffer's
-//   content does not survive DeviceReset.
+//   content does not survive DeviceReset while a static (D3DPOOL_MANAGED) buffer's does.
 // Check Q -- a real D3D9TextureRenderer round-trips exact RGBA8 bytes (D9-50): constructor upload
 //   and a later UpdatePixelsLevel() replacement are both confirmed via a direct LockRect(READONLY)
 //   on the D3DPOOL_MANAGED texture (no staging-texture dance needed, D9-4's own confirmed payoff).
@@ -477,14 +477,28 @@ protected:
         // RegisterDefaultPoolResourceEXT()/ReleaseDefaultPoolResourceEXT() actually work, not just
         // "didn't crash") -- real XNA/D3D9 behavior: a DYNAMIC buffer's content does not survive
         // DeviceReset, so the caller is expected to SetData() again afterward, which this does.
+        // A static (D3DPOOL_MANAGED) buffer keeps its contents through the same cycle.
         {
             auto vb = renderer.CreateVertexBuffer(1);
             auto& d3d9Vb = static_cast<D3D9VertexBufferRenderer&>(*vb);
             const float before[3] = {11.0f, 22.0f, 33.0f};
-            vb->SetData(before, 1, sizeof(before));
+            vb->SetDataWithOptions(before, 1, sizeof(before), SetDataOptions::Discard);
+            auto staticVb = renderer.CreateVertexBuffer(1);
+            auto& d3d9StaticVb = static_cast<D3D9VertexBufferRenderer&>(*staticVb);
+            staticVb->SetData(before, 1, sizeof(before));
 
             renderer.DebugSimulateContextLoss();
             renderer.DebugRestoreContext();
+
+            {
+                void* lockedStatic = nullptr;
+                HRESULT hrStatic = d3d9StaticVb.GetBufferEXT() == nullptr ? E_FAIL :
+                    d3d9StaticVb.GetBufferEXT()->Lock(0, sizeof(before), &lockedStatic, D3DLOCK_READONLY);
+                const bool kept = SUCCEEDED(hrStatic) &&
+                                  std::memcmp(lockedStatic, before, sizeof(before)) == 0;
+                if (SUCCEEDED(hrStatic)) d3d9StaticVb.GetBufferEXT()->Unlock();
+                check(kept, "D9-40: a static (D3DPOOL_MANAGED) vertex buffer keeps its contents across Reset()");
+            }
 
             check(d3d9Vb.GetBufferEXT() == nullptr,
                   "D9-40: ReleaseDefaultPoolResourceEXT() genuinely released the buffer across Reset() "
@@ -497,7 +511,7 @@ protected:
             // was genuinely null after release (checked above), and the buffer genuinely holds the
             // NEW data afterward (checked below) -- both are actual behavior, not address bookkeeping.
             const float after[3] = {44.0f, 55.0f, 66.0f};
-            vb->SetData(after, 1, sizeof(after));
+            vb->SetDataWithOptions(after, 1, sizeof(after), SetDataOptions::Discard);
             check(d3d9Vb.GetBufferEXT() != nullptr,
                   "D9-40: SetData() after recovery lazily recreates a real D3D9 buffer object");
 
