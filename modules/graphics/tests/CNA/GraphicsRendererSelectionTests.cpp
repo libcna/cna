@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 using CNA::GraphicsRendererSelection;
@@ -178,8 +179,11 @@ TEST_F(GraphicsRendererSelectionTest, ARetiredNameIsReportedAsRetiredRatherThanU
     // An old configuration that still names a retired renderer is told it was retired and what
     // this build offers instead -- not that it misspelled something, and never routed to the
     // renderer that took over its role (docs/removed-renderers.md).
-    for (const char* retired :
-         {"VULKAN", "vulkan", "DIRECTX11", "METAL", "SDL_RENDERER", "OPENGL4"})
+    // RRC-042: and, like the configure-time refusal, which C ABI value stays reserved for it.
+    const std::pair<const char*, const char*> cases[] = {
+        {"VULKAN", "value 8 "}, {"vulkan", "value 8 "}, {"DIRECTX11", "value 14 "},
+        {"METAL", "value 42 "}, {"SDL_RENDERER", "value 1 "}, {"OPENGL4", "value 33 "}};
+    for (const auto& [retired, value] : cases)
     {
         SCOPED_TRACE(retired);
         try
@@ -191,12 +195,78 @@ TEST_F(GraphicsRendererSelectionTest, ARetiredNameIsReportedAsRetiredRatherThanU
         {
             const std::string message = e.what();
             EXPECT_NE(message.find("retired"), std::string::npos) << message;
+            EXPECT_NE(message.find(value), std::string::npos) << message;
+            EXPECT_NE(message.find("permanently reserved"), std::string::npos) << message;
             EXPECT_NE(message.find(CNA::getGraphicsRendererName(Built())), std::string::npos)
                 << message;
         }
         EXPECT_FALSE(GraphicsRendererSelection::IsLatched());
     }
 }
+
+TEST_F(GraphicsRendererSelectionTest, AnUnknownNameIsNotReportedAsRetired)
+{
+    try
+    {
+        GraphicsRendererSelection::SetPreferred("NOT_A_RENDERER");
+        FAIL() << "expected ArgumentException";
+    }
+    catch (const System::ArgumentException& e)
+    {
+        const std::string message = e.what();
+        EXPECT_EQ(message.find("retired"), std::string::npos) << message;
+        EXPECT_NE(message.find("does not name any"), std::string::npos) << message;
+    }
+}
+
+// RRC-042: a program launched with CNA_GRAPHICS_RENDERER still naming one of the four renderers
+// retired on 2026-10-13 is refused on every query, and told it was retired and which value stays
+// reserved -- never handed the default renderer, and never an alias such as SDL_GPU.
+class GraphicsRendererSelectionRetiredEnvironmentTest
+    : public GraphicsRendererSelectionTest,
+      public ::testing::WithParamInterface<std::pair<std::string, std::string>>
+{
+};
+
+TEST_P(GraphicsRendererSelectionRetiredEnvironmentTest, IsRefusedAsRetired)
+{
+    const auto& [retired, value] = GetParam();
+    const std::optional<std::string> previous =
+        System::Environment::GetEnvironmentVariable("CNA_GRAPHICS_RENDERER");
+    System::Environment::SetEnvironmentVariable("CNA_GRAPHICS_RENDERER", retired);
+    GraphicsRendererSelection::ResetForTestingEXT();
+    EnsurePublished();
+
+    for (int query = 0; query < 2; ++query)
+    {
+        try
+        {
+            (void)GraphicsRendererSelection::GetSelected();
+            ADD_FAILURE() << "expected InvalidOperationException";
+        }
+        catch (const System::InvalidOperationException& e)
+        {
+            const std::string message = e.what();
+            EXPECT_NE(message.find("CNA_GRAPHICS_RENDERER="), std::string::npos) << message;
+            EXPECT_NE(message.find("retired"), std::string::npos) << message;
+            EXPECT_NE(message.find(value), std::string::npos) << message;
+        }
+    }
+    EXPECT_FALSE(GraphicsRendererSelection::IsLatched());
+
+    System::Environment::SetEnvironmentVariable("CNA_GRAPHICS_RENDERER", previous);
+    GraphicsRendererSelection::ResetForTestingEXT();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    RetiredOn20261013, GraphicsRendererSelectionRetiredEnvironmentTest,
+    ::testing::Values(std::pair<std::string, std::string>{"SDL_RENDERER", "value 1 "},
+                      std::pair<std::string, std::string>{"VULKAN", "value 8 "},
+                      std::pair<std::string, std::string>{"DIRECTX11", "value 14 "},
+                      std::pair<std::string, std::string>{"METAL", "value 42 "}),
+    [](const ::testing::TestParamInfo<std::pair<std::string, std::string>>& info) {
+        return info.param.first;
+    });
 
 TEST_F(GraphicsRendererSelectionTest, SetPreferredRejectsARendererThatIsNotCompiledIn)
 {

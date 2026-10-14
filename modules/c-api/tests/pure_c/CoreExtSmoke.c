@@ -552,6 +552,69 @@ static int validate_renderer_selection(void)
     return 1;
 }
 
+/* True when the calling thread's last error message contains `needle`. */
+static int last_error_contains(const char* const needle)
+{
+    char message[512];
+    uint64_t bytes = UINT64_C(0);
+    memset(message, 0, sizeof(message));
+    if (cna_error_copy_last_message(message, (uint64_t)sizeof(message) - 1U, &bytes) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return strstr(message, needle) != 0;
+}
+
+/* RRC-042: the four renderers retired on 2026-10-13, by name and by their reserved value. Each is
+   refused as retired -- its message says so and names the value that stays reserved -- while a
+   name or value that never belonged to a renderer is refused as unknown, without the word. The
+   values are raw on purpose: the constants were removed from graphics.h and must not come back. */
+static int validate_retired_renderer_diagnostics(void)
+{
+    static const char* const names[4] = {"SDL_RENDERER", "VULKAN", "DIRECTX11", "METAL"};
+    static const char* const values[4] = {"value 1 ", "value 8 ", "value 14 ", "value 42 "};
+    static const CNA_GraphicsRendererType numbers[4] = {
+        UINT32_C(1), UINT32_C(8), UINT32_C(14), UINT32_C(42)
+    };
+    CNA_Bool flag = UINT8_C(9);
+    size_t index = 0U;
+
+    for (index = 0U; index < 4U; ++index) {
+        if (cna_graphics_renderer_set_preferred_by_name_ext(view(names[index])) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            !last_error_contains("retired") || !last_error_contains(values[index]) ||
+            !last_error_contains(names[index])) {
+            return (fprintf(stderr, "RETIRED NAME %s\n", names[index]), 0);
+        }
+        if (cna_graphics_renderer_set_preferred_ext(numbers[index]) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            !last_error_contains("retired") || !last_error_contains(values[index]) ||
+            !last_error_contains(names[index]) ||
+            cna_graphics_renderer_get_is_available_ext(numbers[index], &flag) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            !last_error_contains("retired")) {
+            return (fprintf(stderr, "RETIRED VALUE %s\n", names[index]), 0);
+        }
+    }
+    /* The lower-case spelling is the same retired renderer. */
+    if (cna_graphics_renderer_set_preferred_by_name_ext(view("vulkan")) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        !last_error_contains("retired") || !last_error_contains("value 8 ")) {
+        return (fprintf(stderr, "RETIRED NAME vulkan\n"), 0);
+    }
+    /* Unknown is not retired: a misspelling, the next never-used value 52 and UINT32_MAX. */
+    if (cna_graphics_renderer_set_preferred_by_name_ext(view("NOT_A_RENDERER")) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        last_error_contains("retired") ||
+        cna_graphics_renderer_set_preferred_ext(UINT32_C(52)) != CNA_RESULT_INVALID_ARGUMENT ||
+        last_error_contains("retired") ||
+        cna_graphics_renderer_set_preferred_ext(UINT32_MAX) != CNA_RESULT_INVALID_ARGUMENT ||
+        last_error_contains("retired")) {
+        return (fprintf(stderr, "UNKNOWN REPORTED AS RETIRED\n"), 0);
+    }
+    return 1;
+}
+
 /* CBIND-049: the log sink and the compile-time platform answers. A C sink matters more than it
    looks: the default writes to stderr and never stdout, because a terminal-hosted game draws its
    frame on stdout and a log line there would corrupt it. */
@@ -665,6 +728,9 @@ int main(void)
     }
     if (!validate_log_sink_and_platform()) {
         return 8;
+    }
+    if (!validate_retired_renderer_diagnostics()) {
+        return 9;
     }
     return 0;
 }

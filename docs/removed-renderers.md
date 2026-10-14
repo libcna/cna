@@ -28,10 +28,12 @@ A retired identity's C ABI value (`CNA_GRAPHICS_RENDERER_*`, `modules/c-api/incl
 is **permanently reserved**: it is never assigned to another renderer, and surviving identities are
 never renumbered to close the gap. The next new identity takes value **52**. The same table lives in
 `cmake/RendererIdentities.cmake` (which refuses these names at configure time, naming the value),
-in `RetiredRendererNames` (`modules/core/src/GraphicsRendererSelection.cpp`, which makes
-`CNA_GRAPHICS_RENDERER`, `GraphicsRendererSelection::SetPreferred` and the C API's by-name route
-say a name was retired rather than unknown) and in `scripts/check_renderer_identities.py` (which
-fails if a value or a name is reused, or if the lists disagree).
+in `RetiredGraphicsRenderers` (`modules/core/include/CNA/Internal/RetiredGraphicsRenderers.hpp`,
+the run-time copy: it makes `CNA_GRAPHICS_RENDERER`, `GraphicsRendererSelection::SetPreferred` and
+the C API's by-name route say a name was retired, with its reserved value, rather than unknown, and
+the C API's numeric routes refuse a retired value as retired rather than as an ordinary invalid
+one) and in `scripts/check_renderer_identities.py` (which fails if a value or a name is reused, or
+if any two of the three tables disagree).
 
 | Value | Identity | Removed |
 |---:|---|---|

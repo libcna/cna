@@ -8,6 +8,7 @@
 
 #include "CNA/GraphicsBackendCategory.hpp"
 #include "CNA/GraphicsBackendMaturity.hpp"
+#include "CNA/Internal/RetiredGraphicsRenderers.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/Logger.hpp"
 
@@ -114,42 +115,21 @@ namespace CNA
                 ", or configure a fallback chain with SetFallbackChain().";
         }
 
-        /// The renderer identities CNA has retired, in their CNA_GRAPHICS_RENDERER spelling. A
-        /// retired name is no identity and nothing aliases it to a surviving renderer; it is kept
-        /// only so that a configuration still naming one is told the renderer was retired rather
-        /// than that the name is unknown. The same list, with each name's permanently reserved C
-        /// ABI value, is cmake/RendererIdentities.cmake's CNA_RENDERER_RETIRED_IDENTITIES;
-        /// scripts/check_renderer_identities.py holds the two equal (docs/removed-renderers.md).
-        constexpr std::array<std::string_view, 41> RetiredRendererNames{
-            "SDL_RENDERER", "OPENGLES2", "WEBGL1", "BGFX", "VULKAN", "MAGNUM", "DIRECTX11",
-            "DIRECTX12", "DIRECT2D", "CANVAS", "HTML_DOM", "SKIA", "BLEND2D", "FREEDIRECT",
-            "DIRECTX1", "DIRECTX2", "DIRECTX3", "DIRECTX5", "DIRECTX6", "DIRECTX7", "DIRECTX8",
-            "DIRECTX10", "OPENGLES1", "OPENGL4", "OPENGL1", "OPENGL2", "WICKED", "SOKOL",
-            "DILIGENT", "GLIDE", "GDI", "LLGL", "METAL", "SVG_DOM", "OPENVG", "PORTABLEGL",
-            "TINYGL", "IGL", "PIXIJS", "NANOVG", "RLGL"};
-
-        [[nodiscard]] bool IsRetiredName(std::string_view name)
-        {
-            const auto upper = [](char c) {
-                return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
-            };
-            return std::any_of(RetiredRendererNames.begin(), RetiredRendererNames.end(),
-                [&](std::string_view retired) {
-                    return retired.size() == name.size()
-                        && std::equal(retired.begin(), retired.end(), name.begin(),
-                                      [&](char a, char b) { return a == upper(b); });
-                });
-        }
-
-        /// A name that names no identity. A retired renderer is said to be retired -- and not
-        /// replaced -- rather than unknown, so an old configuration learns what happened to it.
+        /// A name that names no identity. A retired renderer is said to be retired -- with its
+        /// permanently reserved C ABI value, and not replaced -- rather than unknown, so an old
+        /// configuration learns what happened to it. The retired table is
+        /// CNA/Internal/RetiredGraphicsRenderers.hpp, the run-time copy of
+        /// cmake/RendererIdentities.cmake's CNA_RENDERER_RETIRED_IDENTITIES.
         [[nodiscard]] std::string UnrecognizedNameMessage(std::string_view name)
         {
-            if (IsRetiredName(name))
+            if (const Internal::RetiredGraphicsRenderer* retired =
+                    Internal::FindRetiredGraphicsRendererByName(name))
             {
-                return "\"" + std::string(name) + "\" names a graphics renderer CNA has retired "
-                    "(docs/removed-renderers.md); no other renderer stands in for it. Available in "
-                    "this build: " + AvailableList() + ".";
+                return "\"" + std::string(name) + "\" names the " + std::string(retired->name) +
+                    " graphics renderer, which CNA has retired; its C ABI value " +
+                    std::to_string(retired->value) + " stays permanently reserved and no surviving "
+                    "renderer stands in for it (docs/removed-renderers.md). Available in this "
+                    "build: " + AvailableList() + ".";
             }
             return "\"" + std::string(name) + "\" does not name any CNA graphics renderer. "
                 "Available in this build: " + AvailableList() + ".";

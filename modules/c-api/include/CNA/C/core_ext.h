@@ -537,7 +537,9 @@ typedef struct CNA_GraphicsRendererFallbackRecord {
  * @brief Requests the renderer CNA should attempt first.
  *
  * @param type One `CNA_GRAPHICS_RENDERER_*` identity.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity,
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity (a
+ *         retired renderer's reserved value is refused too, and the error message names the
+ *         retired renderer and says the value stays reserved),
  *         `CNA_RESULT_INVALID_STATE` once the selection is latched or when the identity is not in
  *         this build and no fallback chain was configured.
  *
@@ -553,7 +555,8 @@ CNA_C_API CNA_Result cna_graphics_renderer_set_preferred_ext(CNA_GraphicsRendere
  * @param name UTF-8 renderer name, matched case-insensitively, e.g. `"SDL_GPU"`.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the name is not a public
  *         renderer identity (a retired name is refused too, and the error message says it was
- *         retired), `CNA_RESULT_INVALID_STATE` under the same conditions as above.
+ *         retired and which C ABI value stays reserved for it), `CNA_RESULT_INVALID_STATE` under
+ *         the same conditions as above.
  */
 CNA_C_API CNA_Result cna_graphics_renderer_set_preferred_by_name_ext(CNA_StringView name);
 

@@ -21,6 +21,16 @@ Apple hardware is a separate, later campaign (`handoff.md` §5.2).
 | RRC-038 | Remaining references, exact counts; Release, FNA3D, Android-emulator and WebGL2 validation | `cc547f522` | done |
 | RRC-039 | Rendering on Android (`OPENGLES3` on the emulator); the report finalised | the RRC-039 commit | done |
 
+### Close-out remediation (RRC-040 onward)
+
+A 2026-10-14 audit found the retirement structurally complete but not closed out across
+diagnostics, common renderer contracts, shared test coverage, CI and current documents. These tasks
+finish it; none restores a retired renderer, option or constant.
+
+| Task | Scope | Status |
+|---|---|---|
+| RRC-040 | One run-time retired-renderer table (`CNA/Internal/RetiredGraphicsRenderers.hpp`); name refusals carry the reserved value, the C API's numeric routes refuse 1/8/14/42 as retired and an unknown value as unknown; strict-C, C++ and environment-variable regression tests | done |
+
 ## Final report
 
 ### What was removed

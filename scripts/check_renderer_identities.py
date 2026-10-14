@@ -423,36 +423,41 @@ def check_no_retired_selectors(identities):
     return problems
 
 
-def runtime_retired_names():
-    """GraphicsRendererSelection.cpp's RetiredRendererNames, as a list of names."""
-    path = os.path.join(REPO, "modules", "core", "src", "GraphicsRendererSelection.cpp")
+def runtime_retired_identities():
+    """CNA/Internal/RetiredGraphicsRenderers.hpp's RetiredGraphicsRenderers, as (name, value) pairs."""
+    path = os.path.join(REPO, "modules", "core", "include", "CNA", "Internal",
+                        "RetiredGraphicsRenderers.hpp")
     with open(path, encoding="utf-8") as handle:
         text = handle.read()
-    m = re.search(r"RetiredRendererNames\{(.*?)\};", text, re.S)
+    m = re.search(r"RetiredGraphicsRenderers\{\{(.*?)\}\};", text, re.S)
     if not m:
-        sys.exit("cannot locate RetiredRendererNames in GraphicsRendererSelection.cpp")
-    return re.findall(r'"([A-Z0-9_]+)"', m.group(1))
+        sys.exit("cannot locate RetiredGraphicsRenderers in RetiredGraphicsRenderers.hpp")
+    return [(name, int(value))
+            for name, value in re.findall(r'\{"([A-Z0-9_]+)",\s*(\d+)\}', m.group(1))]
 
 
 def check_runtime_retired_names():
     """The run-time refusal must know exactly the retired set the configure-time refusal knows.
 
     GraphicsRendererSelection tells a program naming a retired renderer -- in CNA_GRAPHICS_RENDERER
-    or SetPreferred() -- that the renderer was retired, from GraphicsRendererSelection.cpp's own
-    list.
-    A name missing there would be reported as merely unknown; a name present there and not here
-    would be one that could never be selected and was never recorded as retired.
+    or SetPreferred() -- that the renderer was retired and which value stays reserved, and the C
+    API's numeric routes refuse a retired value as retired, both from the one run-time table in
+    CNA/Internal/RetiredGraphicsRenderers.hpp. A name missing there would be reported as merely
+    unknown; a name present there and not here would be one that could never be selected and was
+    never recorded as retired; a wrong value would misreport which value is reserved.
     """
-    names = runtime_retired_names()
+    pairs = runtime_retired_identities()
+    names = [name for name, _ in pairs]
     problems = []
     duplicates = sorted({n for n in names if names.count(n) > 1})
     if duplicates:
-        problems.append(f"RetiredRendererNames lists {duplicates} more than once.")
-    if set(names) != set(RETIRED_IDENTITIES):
+        problems.append(f"RetiredGraphicsRenderers lists {duplicates} more than once.")
+    runtime = dict(pairs)
+    if runtime != RETIRED_IDENTITIES:
         problems.append(
-            "GraphicsRendererSelection.cpp's RetiredRendererNames disagrees with the retired "
-            f"table: missing {sorted(set(RETIRED_IDENTITIES) - set(names))}, unexpected "
-            f"{sorted(set(names) - set(RETIRED_IDENTITIES))}.")
+            "RetiredGraphicsRenderers.hpp disagrees with the retired table: missing or "
+            f"different {sorted((n, v) for n, v in RETIRED_IDENTITIES.items() if runtime.get(n) != v)}, "
+            f"unexpected {sorted((n, v) for n, v in runtime.items() if RETIRED_IDENTITIES.get(n) != v)}.")
     return problems
 
 

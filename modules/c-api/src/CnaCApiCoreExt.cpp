@@ -11,6 +11,7 @@
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsRendererFallbackRecord.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/Internal/RetiredGraphicsRenderers.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/LogLevel.hpp"
 #include "CNA/Logger.hpp"
@@ -223,6 +224,16 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
             *outType = native;
             return CNA_RESULT_SUCCESS;
         }
+    }
+    // A retired value is reported as retired, so an old caller learns what happened to its
+    // renderer rather than being told it passed something meaningless; nothing aliases it.
+    if (const CNA::Internal::RetiredGraphicsRenderer* retired =
+            CNA::Internal::FindRetiredGraphicsRendererByValue(type)) {
+        return InvalidArgument(
+            "The requested renderer value " + std::to_string(retired->value) + " belongs to " +
+            std::string(retired->name) +
+            ", a graphics renderer CNA has retired; the value stays permanently reserved and no "
+            "surviving renderer stands in for it (docs/removed-renderers.md).");
     }
     return InvalidArgument("The requested renderer is not a public CNA renderer identity.");
 }
