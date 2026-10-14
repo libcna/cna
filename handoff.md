@@ -80,19 +80,18 @@ route changed); CNA.NET names none of them and must admit 0.48.0 before it moves
 `docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
 planned.
 
-**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. Full Debug runs on
-2026-10-14 through the private runner on RADV. After the renderer retirement: `cmake-build-webgpu`
-10,854 tests, 7 failed; `cmake-build-headless` 8,633, 3 failed; `cmake-build-software` 10,843, 4
-failed; the Release multi-renderer tree (`build-probe`) 11,316, 5 failed. After the FNA3D fixes
-(`plans/plan_fna3d.md` FNA3D-51, -54 to -57): `cmake-build-multi` (`OPENGLES3` default with
-`OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) 11,319, 5 failed, 197
-skipped; `cmake-build-sdlgpu` (with the C API and compiled effects) 11,028, 22 failed;
-`cmake-build-fna3d` 10,665 on FNA3D's SDL_GPU driver, 0 failed, and on its OpenGL driver (the
-tree's own lane; 23 failures before), 1 failed. Every failure is a §5.1 entry (items 5, 6, 7 and
-16), except SOFTWARE's three C API inventory gates, which measured another session's uncommitted
-header change and pass on the committed tree, and two cases that failed once and pass alone: in
-the SDL_GPU run `CnaInputTests`, and in the FNA3D OpenGL run a SystemLink discovery case, whose
-UDP port is machine-wide. CI: `general-tests-ci.yml` runs the unfiltered suite for
+**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. Latest full Debug
+runs, 2026-10-14 after the renderer-retirement close-out (RRC-040..RRC-053, which added the shared
+conformance and cross-family registrations), through the private runner on RADV:
+`cmake-build-multi` (`OPENGLES3` default with `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`,
+`HEADLESS`, `STUB`; C API) 11,340 tests, 6 failed, 210 skipped; `cmake-build-sdlgpu` 11,189, 27
+failed; `cmake-build-software` 10,888, 8 failed; `cmake-build-headless` 8,680, 6 failed;
+`cmake-build-fna3d` (its OpenGL driver) 10,707, 5 failed; `cmake-build-webgpu` 10,872, 8 failed.
+Every failure is a §5.1 entry (items 5, 6, 7 and 16), except cases that failed once and pass alone:
+a GamerServices keyring case in the multi run, `XnaDifferentialBuildTest` (a Wine-hosted XNA build,
+which §7 says to run outside the private runtime) in the SDL_GPU run, and in the SOFTWARE run four
+ENet/SystemLink discovery cases and `CnaInputTests`, which ran while another ENet test held the
+machine-wide discovery port. CI: `general-tests-ci.yml` runs the unfiltered suite for
 `OPENGLES3` and fails on a dirty checkout; the other workflows are subsystem- or platform-specific.
 
 ## 3. Where current information lives

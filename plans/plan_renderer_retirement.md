@@ -43,6 +43,34 @@ finish it; none restores a retired renderer, option or constant.
 | RRC-051 | CI builds the new default renderer where the retired native ones used to be: a gating `macos-sdlgpu` job (SDL's Metal backend) and an `SDL_GPU` leg in the manual native-MSVC Windows workflow (Direct3D 12), both running `scripts/ci/run-sdlgpu-smoke.sh`, which requires every program to exit 0. The iOS `SDL_GPU` legs stay non-gating (no recorded iOS build, determinism unmeasured). Neither new job has run: CI runs on push, and nothing was pushed | done (unrun in CI) |
 | RRC-052 | The live pointers left in the files RRC-049's sweep excluded: `plans/plan_street_sdlgpu.md` (deleted with the retirement) prefixes in SDL_GPU sources and tests, and two "cross-renderer control for Vulkan's correction" registrations | done |
 | RRC-053 | The final report re-measured from Git history (`b1ec33424`..`f698d0f54`): its "after" sizes are those of `3df66da5c`; three other sessions' commits, not two; removal-commit sizes beside the at-base ones; test registrations split into literal calls and expanded CTest cases (DIRECTX11 329, METAL 258), GoogleTest cases and test identities; the migrated-versus-deleted table rebuilt in units Git can show; handoff references corrected to items 7 and 13 | done |
+| RRC-054 | Validation of the close-out: renderer, platform and C API gates; full Debug suites of six trees (below) | done |
+
+**Close-out validation (RRC-054, 2026-10-14).** Linux x86-64, RADV, Debug, every GPU/window test
+through `tools/platform/run_gpu_tests_private.sh`. Gates passing: `check_renderer_identities`,
+`check_runtime_renderer_discipline`, `check_removed_renderer_api`, `check_renderer_combinations`,
+`check_renderer_target_discipline`, `check_renderer_descriptors`,
+`check_build_performance_policy`, `check-apple-platform-cmake.sh`, the six platform gates
+(`sdl_ratchet` with `--strict`), every C API generator check (routes and their tests, ABI baseline
+with the built library, declared exports, coverage, limitations, compatibility, release gate, route
+coverage, documented export counts), and `check_clean_checkout` after the runs.
+`check_no_posix_setenv.py` fails on 42 pre-existing `setenv`/`unsetenv` uses in files this series
+did not touch (it adds none).
+
+| Tree | Tests | Failed | Skipped |
+|---|---:|---:|---:|
+| `cmake-build-multi` (`OPENGLES3` default + 7; C API) | 11,340 | 6 | 210 |
+| `cmake-build-sdlgpu` (`SDL_GPU`, CNAEXT, C API) | 11,189 | 27 | 268 |
+| `cmake-build-software` | 10,888 | 8 | 120 |
+| `cmake-build-headless` | 8,680 | 6 | 567 |
+| `cmake-build-fna3d` (OpenGL driver) | 10,707 | 5 | 419 |
+| `cmake-build-webgpu` | 10,872 | 8 | 273 |
+
+Every failure is a `handoff.md` §5.1 entry (items 5, 6, 7 and 16, including the deviations the new
+SOFTWARE/FNA3D/HEADLESS conformance and SDL_GPU cross-family registrations exposed), except cases
+that pass alone: a GamerServices keyring case (multi), `XnaDifferentialBuildTest` (a Wine-hosted
+XNA build that runs outside the private runtime; SDL_GPU) and five network/input cases that ran
+beside a concurrent ENet test (SOFTWARE). Not run: native Windows, macOS, iOS, Android, the browser,
+DIRECTX9 under Wine, Release builds; the new macOS and Windows `SDL_GPU` CI jobs have not run.
 
 ## Final report
 
