@@ -2554,6 +2554,10 @@ namespace CNA::Internal::Renderers::WebGPU
             /// plans/plan_apple_m4.md AM4-108: that query's run (its `runId_` at queue time). A draw
             /// queued before the query was begun again belongs to the abandoned run and is not counted.
             std::uint32_t occlusionRun = 0;
+            /// The BlendState.BlendFactor in force when this draw was queued. A 3D draw sets it as the pass's blend
+            /// constant at replay, so a factor changed (or reset) between queueing and the flush no longer reaches
+            /// the draw. Sprites carry their own copy in their captured blend snapshot (REMED-GFX-102).
+            float blendFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         };
 
         /**
@@ -2670,6 +2674,11 @@ namespace CNA::Internal::Renderers::WebGPU
             /// draw (REMED-GFX-102); 3D draws read the pass-level one, which before this change
             /// they were guaranteed because they always ran first.
             bool blendConstantIsPassDefault = true;
+            /// The blend factor the 3D draw being issued was queued with (copied from its @ref DrawOrderEntry), and
+            /// the constant currently set on the pass for the 3D families (what @ref blendConstantIsPassDefault
+            /// describes). A 3D draw resets the constant only when it differs.
+            float drawBlend[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+            float passBlend[4] = {1.0f, 1.0f, 1.0f, 1.0f};
             /// REMED-GFX-172, trace only: the public enqueue position of the draw currently being
             /// issued. Carried here rather than added to every Issue* signature, and read by
             /// nothing but the multi-texture sampler trace.

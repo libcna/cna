@@ -8618,10 +8618,15 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // because sprites could only ever run after them; now one can precede a 3D draw, so the
         // pass-level value is restored rather than inherited. What a 3D draw sees is therefore
         // byte-identical to what it saw before this change.
-        if (!state.blendConstantIsPassDefault)
+        const bool factorChanged = state.passBlend[0] != state.drawBlend[0] || state.passBlend[1] != state.drawBlend[1] ||
+                                   state.passBlend[2] != state.drawBlend[2] || state.passBlend[3] != state.drawBlend[3];
+        if (!state.blendConstantIsPassDefault || factorChanged)
         {
-            const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
+            // The factor this draw was queued with, not the renderer's current one: a 3D draw replayed at the flush used to
+            // see whatever BlendFactor was set last (a draw followed by a reset to BlendState.Opaque lost its factor).
+            const WGPUColor blendConstant{state.drawBlend[0], state.drawBlend[1], state.drawBlend[2], state.drawBlend[3]};
             wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+            for (int c = 0; c < 4; ++c) state.passBlend[c] = state.drawBlend[c];
             state.blendConstantIsPassDefault = true;
         }
         // Every 3D issue function binds its own pipeline and its own vertex buffer into slot 0
@@ -8726,6 +8731,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPU-84: tag the draw with the occlusion query open at queue time (nullptr if none), so
         // replay can wrap exactly this query's draws in BeginOcclusionQuery/EndOcclusionQuery.
         entry.occlusionQuery = activeOcclusionQuery_;
+        entry.blendFactor[0] = blendFactorR_;
+        entry.blendFactor[1] = blendFactorG_;
+        entry.blendFactor[2] = blendFactorB_;
+        entry.blendFactor[3] = blendFactorA_;
         if (activeOcclusionQuery_ != nullptr)
         {
             entry.occlusionRun = activeOcclusionQuery_->runId_;
@@ -11451,6 +11460,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const bool trace = TraceDrawOrder();
 
         ReplayState state{};
+        // The pass opened with the renderer's current factor as its constant (see where the segment begins).
+        state.passBlend[0] = blendFactorR_;
+        state.passBlend[1] = blendFactorG_;
+        state.passBlend[2] = blendFactorB_;
+        state.passBlend[3] = blendFactorA_;
         std::size_t issued = 0;
         // WEBGPU-84: the occlusion query whose BeginOcclusionQuery is currently open on this pass.
         WebGPUOcclusionQueryRenderer* openQuery = nullptr;
@@ -11505,6 +11519,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 continue;
             }
 
+            for (int c = 0; c < 4; ++c) state.drawBlend[c] = entry.blendFactor[c];
             // REMED-GFX-172, trace only: both positions the multi-texture sampler trace reports.
             state.publicOrder = entry.order;
             state.replayPosition = issued;

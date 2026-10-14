@@ -105,6 +105,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # A 3D draw keeps the BlendState.BlendFactor it was queued with, however the state changes before the flush
+    # (found by the museum-simulator's BlendFactor room: the factor was read at replay, so a following BlendState.Opaque erased it).
+    cna_webgpu_test(cna_test_webgpu_blendfactor_deferred ${CNA_GRAPHICS_EXAMPLES_DIR}/blendfactor_deferred_draw_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_BlendFactor_DeferredDraw COMMAND cna_test_webgpu_blendfactor_deferred
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Phase 63: DrawPrimitivesEx/DrawIndexedPrimitivesEx real GpuDrawParams dispatch (stride 16).
     cna_webgpu_test(cna_test_webgpu_drawprimitivesex webgpu_drawprimitivesex_test.cpp)
     cna_register_renderer_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex
