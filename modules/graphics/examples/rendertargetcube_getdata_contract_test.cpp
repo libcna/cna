@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-134: a RenderTargetCube's rendered colour must have exactly ONE honest public outcome
+// A RenderTargetCube's rendered colour must have exactly ONE honest public outcome
 // -- `RenderTargetCube::GetData` returns the face that was really rendered, or it rejects the
 // request deterministically. Never a fabricated face, never another face's content, never a
 // mirrored or rotated one, never an unresolved multisample surface.
 //
-// REMED-GFX-130 made the *reporting* honest: `ITextureCubeRenderer::GetData`'s default became
+// Made the *reporting* honest: `ITextureCubeRenderer::GetData`'s default became
 // `return false`, so a renderer with no rendered-cube readback raises System::NotSupportedException
 // instead of handing back the shared layer's own zeroed scratch buffer. What it deliberately did
 // NOT do was implement the missing readback, and it recorded the consequence: only SdlGpu and
@@ -13,7 +13,7 @@
 // same file -- refused. This file is the oracle for closing that gap.
 //
 // Why the content producer is drawn geometry and never Clear():
-//   * REMED-GFX-129 separately recorded a PreserveContents Clear defect (on the retired VULKAN
+// * separately recorded a PreserveContents Clear defect (on the retired VULKAN
 //     renderer), so a Clear-based oracle would confuse two findings;
 //   * a uniform clear colour cannot detect a vertical flip, a horizontal flip, a 180-degree
 //     rotation, a wrong face, a stale previous face, or an unresolved multisample surface.
@@ -28,16 +28,16 @@
 // weakened assertion here -- every comparison in this file is byte-exact.
 //
 // The public row order is not assumed. `RenderTarget2D::GetData` is the established, already
-// REMED-GFX-127-verified normalization for "what did rendering put at the top of this target", so
+// The honest Texture2D::GetData contract-verified normalization for "what did rendering put at the top of this target", so
 // check O1 renders the identical pattern into a RenderTarget2D of the same size, reads it back, and
 // requires the cube-face readback to agree with it. A renderer whose native cube readback is
-// bottom-up (REMED-GFX-067's originBottomLeft class of question) must normalize exactly once, and
+// bottom-up (the originBottomLeft class of question) must normalize exactly once, and
 // checks R4/R5/R6 -- final row, final column, lower-right corner -- fail loudly if it normalizes
 // twice, or not at all, or on the wrong axis.
 //
 // Sentinels are used, but never as the success oracle: checks Z1/Z2 record permanently that "the
 // call overwrote my destination" and "the destination is no longer the sentinel" both PASS on the
-// pre-REMED-GFX-130 fabricated transparent-black face, which is why every other check here asserts
+// pre-the honest TextureCube/Texture3D readback contract fabricated transparent-black face, which is why every other check here asserts
 // exact rendered content instead.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -131,7 +131,7 @@ namespace
         MipTargets mipMapCubeTargets; ///< What a mipMap=true RenderTargetCube really is here.
         bool    preservesOnRebind; ///< RenderTargetUsage::PreserveContents survives a rebind cycle.
         bool    exactAlpha;        ///< A non-255 rendered alpha survives readback exactly.
-        bool    rtCubeSetData;     ///< RenderTargetCube::SetData stores pixels (REMED-GFX-135).
+        bool    rtCubeSetData;     ///< RenderTargetCube::SetData stores pixels.
         /// True when an UPLOADED face reads back vertically mirrored. See check W1.
         bool    rtCubeUploadMirrored;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
@@ -140,7 +140,7 @@ namespace
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless executes no rasterization at all: CreateRenderTargetCube returns a real object so
     // binding/tracing works, but nothing is ever drawn into it, so there is no rendered face it
-    // could honestly return. REMED-GFX-130 already deleted the zero-filled buffers that used to
+    // could honestly return. the honest TextureCube/Texture3D readback contract already deleted the zero-filled buffers that used to
     // make its cube readback look like one.
     // `msaaCubeTargets` true: this renderer records and reports the requested sample count as
     // applied, which is what a state-tracking diagnostic renderer is for -- it is a bookkeeping
@@ -161,7 +161,7 @@ namespace
     // mipMap=true RenderTargetCube -- the colour texture carries the full chain and each face is
     // regenerated from its resolved level 0 after that face's render pass (GenerateMipsForLayer),
     // so GetData at level > 0 returns real downsampled content. `preservesOnRebind` true since
-    // REMED-GFX-136: RenderPendingDrawsToRenderTargetCubeFace() no longer hardcodes WGPULoadOp_Clear,
+    // RenderPendingDrawsToRenderTargetCubeFace() no longer hardcodes WGPULoadOp_Clear,
     // it uses the same `clearPending || !preserveContents` choice as its RenderTarget2D sibling.
     // `msaaCubeTargets` TRUE as of WEBGPU-165: the per-instance multiSampleCount argument used to be
     // discarded (every pipeline baked one renderer-global count until WEBGPU-197), so a standalone
@@ -173,13 +173,11 @@ namespace
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
-    // D3D9RenderTargetCubeRenderer reports GetMultiSampleCount() == 0 unconditionally and its
-    // Recreate() allocates exactly ONE level whatever `mipMap` asked for, so this target is
-    // single-sample and level-0-only -- while RenderTargetCube::LevelCount still reports the whole
-    // chain. `MipTargets::LevelsWithoutStorage` records that mismatch as an independent finding and
-    // pins what GetData must do about it: refuse the levels that were never allocated.
-    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Unsupported,
-                                 true, false, Support::Exact, MipTargets::LevelsWithoutStorage, true, true, false, false, true};
+    // D3D9RenderTargetCubeRenderer reports GetMultiSampleCount() == 0 unconditionally (no MSAA
+    // cube), while a `mipMap` cube allocates its full chain and regenerates each face's chain on
+    // unbind (StretchRect per level), so every level is readable.
+    constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
+                                 true, false, Support::Exact, MipTargets::Real, true, true, false, false, true};
 #else
 #error "REMED-GFX-134: this renderer has no declared RenderTargetCube GetData contract."
 #endif
@@ -189,7 +187,7 @@ namespace
     Color SentinelCD() { return Color(0xCD, 0xCD, 0xCD, 0xCD); }
     Color SentinelA5() { return Color(0xA5, 0xA5, 0xA5, 0xA5); }
 
-    /// The fabricated content a no-op renderer produced through the pre-REMED-GFX-130 shared layer.
+    /// The fabricated content a no-op renderer produced through the pre-the honest TextureCube/Texture3D readback contract shared layer.
     Color Fabricated() { return Color(0, 0, 0, 0); }
 
     /**
@@ -493,7 +491,7 @@ class RenderTargetCubeGetDataContractTest : public Game
     // =====================================================================
 
     /// O1 -- the orientation reference. RenderTarget2D::GetData is the established normalization
-    /// for "what did rendering put at the top of this target" (REMED-GFX-127), so the cube faces
+    /// for "what did rendering put at the top of this target", so the cube faces
     /// below are required to agree with what it reports for the identical draw.
     std::vector<Color> RunOrientationReference(GraphicsDevice& dev)
     {

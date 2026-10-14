@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-223. Texture2D::ReconstructFromCache() builds through the protected constructor
+// Texture2D::ReconstructFromCache() builds through the protected constructor
 // RenderTarget2D owns, which raises gpuOnlyContent_ -- the flag that declares "the live renderer
 // is the sole authority for this resource's pixels, trust no CPU shadow". A reconstructed ordinary
 // texture is not a render target: its shadow IS authoritative and its renderer can be shared with
@@ -243,14 +243,11 @@ TEST_F(Texture2DCacheReconstructionTest, RenderTargetKeepsItsRendererAndDropsThe
 
 // (7) render-target readback is served by the target's own surface, never by a retained upload
 // shadow, and a renderer that cannot read its colour attachment back refuses without fabricating
-// pixels (REMED-GFX-127's contract).
+// pixels (the contract).
 //
-// Deliberately NOT asserted: that the readback equals the bytes just uploaded. ITextureRenderer
-// declares UpdatePixels with an empty default body, and a render-target renderer that does not
-// override it drops the upload silently -- EasyGL's does not override it, so the honest answer
-// there is the target's cleared surface. That gap is recorded separately as REMED-GFX-224; it is
-// not what this test is for, and pinning the upload here would pin the gap instead of the
-// contract.
+// Deliberately NOT asserted here: that the readback equals the bytes just uploaded. That is the
+// upload contract, pinned by RenderTargetUploadRoundTripTests; this test is about where the
+// readback is served from.
 TEST_F(Texture2DCacheReconstructionTest, RenderTargetReadbackComesFromTheSurfaceNotAnUploadShadow)
 {
     if (!RenderTarget2DSupported())

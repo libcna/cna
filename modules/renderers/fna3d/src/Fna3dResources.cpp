@@ -471,6 +471,54 @@ namespace CNA::Internal::Renderers::Fna3d
         return true;
     }
 
+    void Fna3dRenderTargetRenderer::UpdatePixels(const std::uint8_t* pixels, int stride)
+    {
+        if (pixels == nullptr || texture_ == nullptr)
+        {
+            return;
+        }
+        const int levelBytes = FormatRegionByteCount(surfaceFormat_, width_, height_);
+        const int tightStride = FormatRowByteCount(surfaceFormat_, width_);
+        if (levelBytes <= 0 || tightStride <= 0 || (stride > 0 && stride < tightStride))
+        {
+            return;
+        }
+        FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D upload");
+        if (stride == tightStride || stride <= 0)
+        {
+            FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0,
+                                   const_cast<std::uint8_t*>(pixels), levelBytes);
+            return;
+        }
+        std::vector<std::uint8_t> packed(static_cast<std::size_t>(levelBytes));
+        for (int row = 0; row < height_; ++row)
+        {
+            std::memcpy(packed.data() + static_cast<std::size_t>(row) * tightStride,
+                        pixels + static_cast<std::size_t>(row) * stride,
+                        static_cast<std::size_t>(tightStride));
+        }
+        FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0, packed.data(),
+                               static_cast<int32_t>(packed.size()));
+    }
+
+    void Fna3dRenderTargetRenderer::UpdatePixelsLevel(int level, const std::uint8_t* pixels,
+                                                      int levelW, int levelH)
+    {
+        if (pixels == nullptr || texture_ == nullptr || level < 0 || level >= levelCount_ ||
+            levelW != LevelExtent(width_, level) || levelH != LevelExtent(height_, level))
+        {
+            return;
+        }
+        const int levelBytes = FormatRegionByteCount(surfaceFormat_, levelW, levelH);
+        if (levelBytes <= 0)
+        {
+            return;
+        }
+        FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D upload");
+        FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
+                               const_cast<std::uint8_t*>(pixels), levelBytes);
+    }
+
     // ---------------------------------------------------------------------------------------
     // Fna3dTextureCubeRenderer
     // ---------------------------------------------------------------------------------------

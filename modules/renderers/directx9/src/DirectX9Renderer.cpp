@@ -1125,20 +1125,22 @@ namespace CNA::Internal::Renderers::DirectX9
     }
 
     std::unique_ptr<IRenderTargetRenderer> DirectX9Renderer::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/, int multiSampleCount)
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<D3D9RenderTargetRenderer>(*this, device_.Get(), w, h, depthFormat, multiSampleCount);
+        return std::make_unique<D3D9RenderTargetRenderer>(*this, device_.Get(), w, h, depthFormat,
+                                                          mipMap, multiSampleCount);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> DirectX9Renderer::CreateRenderTargetCube(
-        int size, int depthFormat, bool preserveContents, bool /*mipMap*/, int /*multiSampleCount*/)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int /*multiSampleCount*/)
     {
-        // REMED-GFX-136: consumed by being deliberately unused. D3D9 has no load action at all --
+        // Consumed by being deliberately unused. D3D9 has no load action at all --
         // SetRenderTarget swaps the surface and leaves its contents alone -- so a cube face is
         // preserved by construction, and the only clear it ever sees is the one
         // GraphicsDevice::SetRenderTargets issues for a DiscardContents target.
         (void) preserveContents;
-        return std::make_unique<D3D9RenderTargetCubeRenderer>(*this, device_.Get(), size, depthFormat);
+        return std::make_unique<D3D9RenderTargetCubeRenderer>(*this, device_.Get(), size, depthFormat,
+                                                              mipMap);
     }
 
     int DirectX9Renderer::ClampMultiSampleCountEXT(D3DFORMAT format, int requested) const
@@ -1340,6 +1342,7 @@ namespace CNA::Internal::Renderers::DirectX9
             // snapshots the currently-bound pair so a failed back-buffer restore can put this pair
             // back exactly instead of silently leaving an ambiguous half-switch.
             if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
+            if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
             RestoreBackBufferRenderTargetEXT();
             currentCustomRT_ = nullptr;
             currentCustomCubeRT_ = nullptr;
@@ -1348,6 +1351,7 @@ namespace CNA::Internal::Renderers::DirectX9
         auto* d3d9Rt = static_cast<D3D9RenderTargetRenderer*>(rt);
         if (currentCustomRT_ && currentCustomRT_ != d3d9Rt)
             currentCustomRT_->ResolveForTransitionEXT();
+        if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
         d3d9Rt->BindAsRenderTarget();
         // Commit renderer bookkeeping only after the entire color/depth/viewport transition
         // succeeds.  A throwing bind therefore leaves the previous native binding and pointer
@@ -1361,6 +1365,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!rt)
         {
             if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
+            if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
             RestoreBackBufferRenderTargetEXT();
             currentCustomRT_ = nullptr;
             currentCustomCubeRT_ = nullptr;
@@ -1368,6 +1373,8 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         auto* d3d9CubeRt = static_cast<D3D9RenderTargetCubeRenderer*>(rt);
         if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
+        if (currentCustomCubeRT_ && currentCustomCubeRT_ != d3d9CubeRt)
+            currentCustomCubeRT_->ResolveForTransitionEXT();
         d3d9CubeRt->BindAsRenderTargetFace(face);
         currentCustomCubeRT_ = d3d9CubeRt;
         currentCustomRT_ = nullptr;
@@ -1423,6 +1430,7 @@ namespace CNA::Internal::Renderers::DirectX9
         auto* first = static_cast<D3D9RenderTargetRenderer*>(
             renderTargets[0].GetRenderTarget2D());
         if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
+        if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
         BindRenderTargetSurfacesEXT(colorSurfaces.data(), count, first->GetDepthStencilSurfaceEXT(),
                                     first->GetDepthStencilFormatEXT(), first->GetWidth(),
                                     first->GetHeight(), "binding multiple render targets");
@@ -1494,7 +1502,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                  "ApplyBlendState(D3DRS_DESTBLENDALPHA)");
         SetRenderStateCheckedEXT(D3DRS_BLENDOPALPHA, BlendFunctionToD3D9(alphaBlendFunc), kUnsafeBlendState,
                                  "ApplyBlendState(D3DRS_BLENDOPALPHA)");
-        // REMED-GFX-077: XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to
+        // XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to
         // D3DCOLORWRITEENABLE_*, so the raw value drops straight into D3DRS_COLORWRITEENABLE. These
         // are dynamic render states (no state object → nothing to cache/key). Slot 0 is always
         // supported; the independent per-RT masks (slots 1/2/3) need D3DPMISCCAPS_INDEPENDENTWRITEMASKS.

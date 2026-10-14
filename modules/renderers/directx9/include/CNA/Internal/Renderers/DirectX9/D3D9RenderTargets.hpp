@@ -24,9 +24,9 @@
 // the sampleable D3DPOOL_DEFAULT texture via StretchRect on unbind. D3D9RenderTargetCubeRenderer
 // deliberately does NOT support MSAA.
 //
-// Mip-chain auto-generation on unbind (IGraphicsRenderer's documented mipMap behavior) is NOT
-// implemented here -- `mipMap` is accepted but only a single level is ever allocated. A genuine,
-// named gap (plans/plan_dx9.md's own D9-53 row), not a silent divergence.
+// A `mipMap` target allocates its full chain and regenerates it on unbind by StretchRect-ing each
+// level into the next (D3D9's own render-target downsample; autogen textures would hide the
+// sublevels from GetSurfaceLevel and so from GetData).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"
@@ -45,7 +45,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
     public:
         D3D9RenderTargetRenderer(DirectX9Renderer& owner, IDirect3DDevice9* device,
-                                int w, int h, int depthFormat, int multiSampleCount);
+                                int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
         ~D3D9RenderTargetRenderer() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
@@ -57,7 +57,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /**
          * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
          *
-         * REMED-GFX-127. D3D9 has a real, fully synchronous readback for a D3DPOOL_DEFAULT render
+         * D3D9 has a real, fully synchronous readback for a D3DPOOL_DEFAULT render
          * target: `IDirect3DDevice9::GetRenderTargetData` copies the colour surface into a
          * D3DPOOL_SYSTEMMEM offscreen plain surface, which is then `LockRect`ed for the requested
          * rectangle. When this target is multisampled the read still comes from the resolved,
@@ -70,8 +70,8 @@ namespace CNA::Internal::Renderers::DirectX9
          * hold no extra resources. Storage is D3DFMT_A8B8G8R8, whose byte order is already R,G,B,A,
          * so no swizzle applies; rows are top-first, so no flip applies.
          *
-         * @param level      Mip level; this renderer allocates a single level (see this file's own
-         *                   header note on mip-chain generation).
+         * @param level      Mip level; every level of a `mipMap` target is readable once the
+         *                   target has been unbound (which regenerates the chain).
          * @param x          Left edge of the requested rectangle, in pixels.
          * @param y          Top edge of the requested rectangle, in pixels.
          * @param w          Width of the requested rectangle, in pixels.
@@ -81,12 +81,39 @@ namespace CNA::Internal::Renderers::DirectX9
          * @return True once the whole rectangle has been written; false if this target's
          *         D3DPOOL_DEFAULT resources are currently released (device lost) or D3D9 could not
          *         complete the copy, leaving @p data untouched.
-         * @throws System::NotSupportedException if @p level is above 0.
+         * @throws System::NotSupportedException if @p level is beyond the allocated chain.
          * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle leaves
-         *         the target, or @p dataLength is too small for the rectangle.
+         *         the level, or @p dataLength is too small for the rectangle.
          */
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Replaces level 0 with caller-supplied RGBA8 texels (a RenderTarget2D is a
+         *        Texture2D, so `SetData` on one is legal XNA).
+         *
+         * Goes through a system-memory surface and `UpdateSurface`, the mirror image of
+         * `GetData`'s `GetRenderTargetData` readback. A multisampled target's offscreen surface is
+         * seeded too, so a draw that follows composes over the upload rather than resolving stale
+         * samples over it.
+         *
+         * @param data   Tightly packed or @p stride-pitched RGBA8 rows, top row first.
+         * @param stride Source row pitch in bytes; a non-positive value means tightly packed.
+         * @throws std::invalid_argument if @p stride is smaller than one row.
+         * @throws std::runtime_error if D3D9 refuses the copy.
+         */
+        void UpdatePixels(const uint8_t* data, int stride) override;
+
+        /**
+         * @brief Replaces one allocated mip level with tightly packed RGBA8 texels.
+         * @param level  Mip level to write.
+         * @param data   @p levelW x @p levelH RGBA8 texels, top row first.
+         * @param levelW Width of @p level.
+         * @param levelH Height of @p level.
+         * @throws System::NotSupportedException if @p level is beyond the allocated chain.
+         * @throws std::invalid_argument if the dimensions do not match the level.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) override;
 
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
@@ -115,10 +142,16 @@ namespace CNA::Internal::Renderers::DirectX9
         /// surface before a device Reset(). Lazily recreated on the next BindAsRenderTarget() call.
         void ReleaseDefaultPoolResourceEXT() override;
 
-        /// REMED-GFX-092: resolves an outgoing MSAA target without changing the currently-bound
-        /// native target pair.  The owner uses this before its checked/rollback-capable target
-        /// transition, so a failed switch can restore the still-valid prior binding.
+        /// Finishes an outgoing target without changing the currently-bound native target pair:
+        /// resolves an MSAA target into its texture, then regenerates a `mipMap` target's chain.
+        /// The owner uses this before its checked/rollback-capable target transition, so a failed
+        /// switch can restore the still-valid prior binding.
         void ResolveForTransitionEXT();
+
+        /// Downsamples level 0 into every further level of a `mipMap` target (StretchRect per
+        /// level); a no-op for a single-level target. Part of every transition away from the
+        /// target, after the MSAA resolve.
+        void RegenerateMipChainEXT();
 
         /// D9-54: recreates the D3DPOOL_DEFAULT resources if a prior device-lost recovery released
         /// them, without also binding this target -- an MRT bind (DirectX9Renderer::
@@ -129,6 +162,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     private:
         void Recreate();
+        void UploadLevel(int level, const uint8_t* data, int levelW, int levelH, int stride);
 
         DirectX9Renderer* owner_ = nullptr;
         ComPtr<IDirect3DDevice9> device_;
@@ -141,6 +175,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         int width_ = 0;
         int height_ = 0;
+        int levelCount_ = 1;
         int depthFormatOrdinal_ = 0;
         bool hasDepth_ = false;
         int requestedMultiSampleCount_ = 0;
@@ -154,12 +189,15 @@ namespace CNA::Internal::Renderers::DirectX9
     {
     public:
         D3D9RenderTargetCubeRenderer(DirectX9Renderer& owner, IDirect3DDevice9* device,
-                                    int size, int depthFormat);
+                                    int size, int depthFormat, bool mipMap);
         ~D3D9RenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
+        /// Finishes the face being rendered without changing the native binding: regenerates a
+        /// `mipMap` cube's chain for that face. The owner calls it before every target transition.
+        void ResolveForTransitionEXT();
         [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
         /** @brief Returns the XNA depth format used for this target's depth-stencil surface. */
         [[nodiscard]] int GetDepthStencilFormatEXT() const { return depthFormatOrdinal_; }
@@ -170,7 +208,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /**
          * @brief Reads a RENDERED cube face back to the CPU.
          *
-         * REMED-GFX-134. `D3D9RenderTargetRenderer::GetData`'s mechanism, applied to one cube face:
+         * `D3D9RenderTargetRenderer::GetData`'s mechanism, applied to one cube face:
          * a `D3DUSAGE_RENDERTARGET` surface in `D3DPOOL_DEFAULT` cannot be locked, so the face's
          * surface is copied into a `D3DPOOL_SYSTEMMEM` offscreen-plain surface with
          * `GetRenderTargetData` (which also synchronises with the GPU) and that copy is locked.
@@ -205,7 +243,11 @@ namespace CNA::Internal::Renderers::DirectX9
         ComPtr<IDirect3DCubeTexture9> texture_;
         ComPtr<IDirect3DSurface9> depthStencilSurface_;
 
+        /// Downsamples one face's level 0 into its further levels; a no-op for a single level.
+        void RegenerateFaceMipChain(int face);
+
         int size_ = 0;
+        int levelCount_ = 1;
         int depthFormatOrdinal_ = 0;
         bool hasDepth_ = false;
         int activeFace_ = -1;

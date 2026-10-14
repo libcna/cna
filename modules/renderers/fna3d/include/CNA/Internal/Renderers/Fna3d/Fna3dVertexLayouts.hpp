@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::Fna3d
      * FNA3D binds a real `FNA3D_VertexDeclaration` per stream, so whenever the caller supplies a
      * `VertexDeclaration` this renderer uses it verbatim and never consults this table. It exists
      * only for the internal routes that bind no public `VertexBufferBinding` at all -- SpriteBatch,
-     * `DrawUser*`, `DrawColoredPrimitives`, and REMED-GFX-233's legacy empty-declaration buffer --
+     * `DrawUser*`, `DrawColoredPrimitives`, and the earlier fix's legacy empty-declaration buffer --
      * where the byte stride of the staged buffer is the only description available.
      *
      * The offsets and semantics are the repository-wide layout every other CNA renderer dispatches

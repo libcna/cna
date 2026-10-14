@@ -261,6 +261,28 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data,
                                    int dataLength) const override;
 
+        /**
+         * @brief Replaces level 0 of the target's texture with caller-supplied texels.
+         *
+         * A RenderTarget2D is a Texture2D, so `SetData` on one is legal XNA; the texels land in
+         * the texture a later draw samples and a later `GetData` reads, exactly as FNA writes
+         * them. A multisampled target's next resolve overwrites them, as in FNA.
+         *
+         * @param pixels Format-native texels, top row first.
+         * @param stride Source row pitch in bytes; a non-positive value means tightly packed.
+         */
+        void UpdatePixels(const std::uint8_t* pixels, int stride) override;
+
+        /**
+         * @brief Replaces one mip level of the target's texture with tightly packed texels.
+         * @param level  Mip level to write.
+         * @param pixels Format-native texels, top row first.
+         * @param levelW Width of @p level in texels.
+         * @param levelH Height of @p level in texels.
+         */
+        void UpdatePixelsLevel(int level, const std::uint8_t* pixels, int levelW,
+                               int levelH) override;
+
         /** @brief CNAEXT. The destination texture this target resolves into. */
         [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override
         {
