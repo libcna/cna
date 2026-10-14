@@ -342,5 +342,12 @@ These remain outside the verified support boundary:
 - No current Intel-macOS CI run; x86_64 and universal builds are configured but unverified.
 - No safe-area handling: the notch/home-indicator insets are not exposed to the game, so
   full-screen UI can sit under them.
+- No high-density (Retina) back buffer. CNA creates the game window without
+  `SDL_WINDOW_HIGH_PIXEL_DENSITY` (`CNA::Platform::WindowDescription::highDpi` stays false; the
+  retired `METAL` renderer was the only one that asked for it, and the descriptor field that carried
+  the request was removed with it, RRC-042), so by SDL3's documented behaviour the back buffer is
+  sized in points and the system scales it -- XNA's model of a back buffer sized in window pixels.
+  The Mac mini M4 qualification above ran `SDL_GPU` this way; Retina-resolution rendering is not
+  offered and has not been measured.
 - No app-icon or asset-catalog generation, no `.ipa` packaging, no App Store metadata.
 - No Mac Catalyst, tvOS, watchOS or visionOS target.

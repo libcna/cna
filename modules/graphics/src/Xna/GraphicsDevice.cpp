@@ -3806,12 +3806,15 @@ namespace Microsoft::Xna::Framework::Graphics
         description.resizable = false;
 
         // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P1/P2): next derived the render
-        // intent, the high-density backing and the framebuffer bits from #if defined(CNA_RENDERER_*)
-        // chains. That is exactly the construct P1/P3 removed, and it cannot be right in a
-        // multi-renderer binary: several families are compiled in at once, so the chains describe
-        // whichever macros happen to be defined rather than the renderer actually being created.
-        // The descriptor already answers all three questions for the family in hand.
-        description.highDpi = descriptor.wantsHighDpi;
+        // intent and the framebuffer bits from #if defined(CNA_RENDERER_*) chains. That is exactly
+        // the construct P1/P3 removed, and it cannot be right in a multi-renderer binary: several
+        // families are compiled in at once, so the chains describe whichever macros happen to be
+        // defined rather than the renderer actually being created. The descriptor answers both
+        // for the family in hand.
+        //
+        // The window keeps WindowDescription's default `highDpi = false`: an XNA back buffer is
+        // sized in window pixels, and no surviving renderer asks for a high-density backing (the
+        // retired Metal renderer was the only one that did; RRC-042).
         description.renderIntent = renderIntentFor(descriptor.windowKind);
 
         // A desktop GLX visual fixes these attributes when the window is created, before the

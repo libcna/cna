@@ -216,16 +216,13 @@ namespace CNA::Internal::Renderers
          */
         bool needsVideoSubsystem = false;
 
-        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P2): this used to be
-        // `std::uint32_t (*prepareWindowFlags)()`, returning a raw windowing-library flag bitmask,
-        // which put that library in all 15 renderer descriptors and broke next's decoupling ratchet
-        // (19 files, 94 references over a budget of 0).
-        //
-        // Nothing was lost by dropping it: every descriptor's hook only mapped windowKind onto those
-        // flags, which GraphicsDevice can do once, behind the platform contract. The single
-        // exception was Metal asking for a high-density backing, and that is data, so it is data
-        // here.
-        bool wantsHighDpi = false;
+        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P2): a
+        // `std::uint32_t (*prepareWindowFlags)()` hook returning a raw windowing-library flag
+        // bitmask used to live here; every descriptor's hook only mapped windowKind onto those
+        // flags, which GraphicsDevice does once, behind the platform contract. Its one exception,
+        // the retired Metal renderer's high-density backing, became a `wantsHighDpi` field that no
+        // surviving renderer set, and was removed with it (RRC-042): a window's pixel density is a
+        // platform request (`CNA::Platform::WindowDescription::highDpi`), not a renderer property.
 
         /**
          * @brief Framebuffer attributes that must be fixed before the window exists.

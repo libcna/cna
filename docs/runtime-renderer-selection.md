@@ -51,7 +51,7 @@ can serve them. Each renderer family answers them through its own
 |---|---|
 | Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB` |
 | Must the platform's video subsystem be started? | `needsVideoSubsystem` — false for the same families, which is what lets them run with no display server |
-| What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`), plus `wantsHighDpi` |
+| What kind of window does it need? | `windowKind` (`None`/`Plain`/`OpenGL`) |
 | Anything to fix before the window exists? | `glFramebuffer` — depth/stencil/double-buffer/multisample bits, which a desktop GLX visual fixes at window-creation time. Only `FNA3D` has real work here |
 | Which platform services is it handed? | `needsSurfacePresenter`, `needsGlContext` |
 
