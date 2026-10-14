@@ -195,7 +195,7 @@ def audit(repo_root: Path) -> tuple[list[dict[str, object]], dict[str, str]]:
         code_symbols = per_family_code_symbols.get(family, Counter())
         code_sdl_specific = {
             s for s in code_symbols
-            if (classify_symbol(s) or (None,))[0] == "sdl-renderer-specific"}
+            if (classify_symbol(s) or (None,))[0] == "renderer-sdl-api"}
         presentation = code_sdl_specific & PRESENTATION_CALLS
 
         # A real service need is any call into a platform area. SDL_Window named as a bare type does
@@ -258,7 +258,7 @@ def render_markdown(rows: list[dict[str, object]], identities: dict[str, str]) -
         "sdl-upstream": "Own sources are effectively SDL-free; the wrapped third-party library links SDL3. Allowlisted for a dependency reason.",
         "cpu-presentation": "CPU rasteriser using SDL_Renderer only to present finished pixels. Needs a platform presentation service.",
         "interface-leak": "Names only the common boundary's bare SDL_Window type. Freed by PLAT-58/PLAT-61.",
-        "migratable": "Uses platform services only (native handle, GL/Vulkan, window, events).",
+        "migratable": "Uses platform services only (native handle, GL context, window, events).",
         "sdl-free": "No SDL references at all.",
     }
     for verdict in VERDICT_ORDER:

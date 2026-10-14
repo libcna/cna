@@ -24,8 +24,9 @@
 //   Stream 1 (per-instance, step rate 1):    TEXCOORD1..4 (FLOAT4 each, offsets 0/16/32/48,
 //                                             stride 64) -- one float4 "row" per semantic, matching
 //                                             the 64-byte-per-instance world-matrix convention
-//                                             DirectX11Renderer::DrawInstancedPrimitivesEx()
-//                                             already established for GpuDrawParams::instanceVb.
+//                                             the retired DirectX11Renderer's
+//                                             DrawInstancedPrimitivesEx() had established for
+//                                             GpuDrawParams::instanceVb.
 
 float4 ViewProj0 : register(c0);
 float4 ViewProj1 : register(c1);

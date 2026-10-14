@@ -18,7 +18,7 @@
 // (D3DDECLTYPE_UBYTE4N, matching D9-82's own R,G,B,A-ascending finding, not D3DDECLTYPE_D3DCOLOR),
 // TextureCoordinate Vector2 @16 -- the EXISTING stride-24 D3D9VertexDeclarations layout, D9-22's
 // own "VertexPositionColorTexture" entry, reused as-is) and a real float4x4 MatrixTransform
-// constant (v0, 4 registers) instead of the D3D11 renderer's scalar ViewportSize pair.
+// constant (v0, 4 registers) instead of the retired D3D11 renderer's scalar ViewportSize pair.
 //
 // Design decision 10: the D3D9 half-pixel offset (XNA's D3D9-era SpriteBatch compensates for
 // Direct3D 9's texel-center-at-integer-coordinate convention, which D3D10+/modern APIs do not

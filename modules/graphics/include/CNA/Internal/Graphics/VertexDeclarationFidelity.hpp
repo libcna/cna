@@ -300,9 +300,9 @@ namespace CNA::Internal::Graphics
         // THE CANONICAL STRIDE TABLE. Every renderer in REMED-GFX-217's scope transcribes exactly
         // this: EasyGLRenderer's ApplyLayout switch and SoftwareRenderer's BuildGenericClipVertex
         // byte reader, as did the since-retired D3DVertexFormatHelper's kStride16..kStride68
-        // arrays and VulkanRenderer's per-pipeline attribute arrays. They agree because all of
-        // them were derived from the same seven built-in XNA vertex types, whose declarations take
-        // their offsets from CNA/Internal/Graphics/BuiltInVertexStreams.hpp.
+        // arrays and the since-retired VulkanRenderer's per-pipeline attribute arrays. They agree
+        // because all of them were derived from the same seven built-in XNA vertex types, whose
+        // declarations take their offsets from CNA/Internal/Graphics/BuiltInVertexStreams.hpp.
 
         inline constexpr InferredVertexElement kStride16[] = {
             {VertexElementUsage::Position, 0,  0, VertexElementFormat::Vector3},

@@ -124,12 +124,13 @@ SDL_shadercross; the platform's SDL_Renderer-based surface presenter that shows 
 frames; the `ShaderLanguageEXT` HLSL/MSL identities.
 
 **Validation.** On Linux, from empty caches: the multi-renderer tree (`OPENGLES3` default with
-`OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) and the `SDL_GPU`, `WEBGPU`,
-`HEADLESS` and `SOFTWARE` trees built and ran their full suites through the private runner, every
-failure a `handoff.md` §5.1 entry; the Emscripten build ran the C API under node and two demos with
-`WEBGPU` in headless Chrome; Android compiled; the MinGW cross build ran the C API, the `DIRECTX9`
-suite and `SDL_GPU`'s Direct3D 12 backend under Wine. Details and numbers:
-`plans/plan_renderer_retirement.md`.
+`OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`) in Debug and Release and the
+`SDL_GPU`, `WEBGPU`, `HEADLESS`, `SOFTWARE` and `FNA3D` trees built and ran their full suites through
+the private runner, every failure a `handoff.md` §5.1 entry; the Emscripten build ran the C API
+under node and two demos with `WEBGPU` and with `WEBGL2` in headless Chrome; the Android C API ran
+on an x86_64 emulator; the MinGW cross build ran the C API, the `DIRECTX9` suite and `SDL_GPU`'s
+Direct3D 12 backend under Wine. Not run: native Windows, macOS, iOS, rendering on Android. Details
+and numbers: `plans/plan_renderer_retirement.md`.
 
 **Not run:** native Windows (MSVC, Direct3D 12), macOS and iOS hardware, an Android device. SDL_GPU's
 qualification on those is the follow-up (`handoff.md` §5.2).

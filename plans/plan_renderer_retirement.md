@@ -17,14 +17,15 @@ Apple hardware is a separate, later campaign (`handoff.md` §5.2).
 | RRC-034 | Retire `METAL` | `22842c107` | done |
 | RRC-035 | Retire `SDL_RENDERER`; new per-host defaults | `86b8152f2` | done |
 | RRC-036 | Comments, messages and tool data that described the retired renderers as present | `387b5c20c` | done |
-| RRC-037 | Documentation, plans, handoff; validation; this report | this commit | done |
+| RRC-037 | Documentation, plans, handoff; validation; this report | `27f8d2ecc` | done |
+| RRC-038 | Remaining references, exact counts; Release, FNA3D, Android-emulator and WebGL2 validation | this commit | done |
 
 ## Report
 
 ### What was removed
 
 - **Renderer families:** `modules/renderers/vulkan` (200 files, 86,695 lines), `directx11` (30 /
-  11,433), `common/d3d` (`D3DCommon`, 64 / 112,090, about 105,000 of them generated DXBC headers),
+  11,433), `common/d3d` (`D3DCommon`, 64 / 112,090, 105,453 of them in two generated DXBC headers),
   `metal` (68 / 20,578, Objective-C++) and `sdl-renderer` (72 / 12,164): descriptors, factories,
   shaders, examples and suites.
 - **Identity and registration:** the four enumerators of `GraphicsRendererType`, their registry,
@@ -60,8 +61,12 @@ changed, 13,010 insertions, 278,901 deletions, 294 of the files binary (goldens,
 five removed implementation directories held 434 files and 242,960 lines; the plans and documents
 13,000 and 10,700 more. What grew: `modules/graphics` +7,662 (the migrated conformance programs and
 shared examples), `tests` +381 (the compiled-effect helpers), `sdl-gpu` +241 (`shadow_sampling.glsl`).
-Test registrations removed with the suites, counted from the deleted CMake files: Vulkan about 375,
-DirectX 11 about 270 (the parity inventory and the suite), Metal about 18, SDL_RENDERER about 80.
+Test registrations removed, counted exactly: CTest registrations in the deleted directories --
+`VULKAN` 374, `DIRECTX11` 6, `METAL` 18, `SDL_RENDERER` 80 -- plus the 264 shared-corpus fixtures
+`cmake/DirectXParityTests.cmake` registered as `DirectX11_*` (the same programs still run on the
+survivors); GoogleTest cases in the deleted directories -- `VULKAN` 31, `DIRECTX11` 22, `D3DCommon`
+9, `METAL` 304 (its 29 policy suites). In shared test files 30 renderer-specific cases went and 48
+were added (the migrated cases and the compiled-effect helper calls).
 
 **Identities:** 14 public identities over 12 families before, 10 over 8 after (`OPENGLES3`,
 `OPENGL33`, `WEBGL2` = EasyGL; `WEBGPU`, `HEADLESS`, `SOFTWARE`, `STUB`, `DIRECTX9`, `SDL_GPU`,
@@ -146,7 +151,8 @@ compiled-effect `vPos`/`TEXBEM` gaps that only the Metal route had fixed.
    survivor implements it; SDL_gpu's draw calls take a first instance).
 5. The SDL_GPU defects in `handoff.md` §5.1 items 7, 8, 10, 14 and 17 -- among them the
    compiled-effect half-pixel coverage and device-slot contracts and the C API's exit-time teardown
-   crash, both found by this campaign's runs.
+   crash in Debug builds (the validation layer is unloaded first; Release passes), both found by
+   this campaign's runs.
 
 ### Validation
 
@@ -178,6 +184,8 @@ regeneration byte-identical to the committed `spirv_shaders.hpp`.
 | `cmake-build-webgpu` | `WEBGPU` (wgpu-native on Vulkan), CNAEXT | 10,854 | 7 | 260 |
 | `cmake-build-headless` | `HEADLESS` platform and renderer | 8,633 | 3 | 528 |
 | `cmake-build-software` | `SOFTWARE`, its compiled effects, CNAEXT | 10,843 | 4 | 103 |
+| `cmake-build-fna3d` | `FNA3D` (its OpenGL driver, as its CTest environment forces) | 10,664 | 23 | 399 |
+| `build-probe` (Release) | the multi-renderer set above, Release, C API | 11,316 | 5 | 197 |
 
 Every failure is a `handoff.md` §5.1 entry: the multi tree's 5 are EasyGL conformance programs
 (item 8); SDL_GPU's 21 are the non-video-platform device cases (item 7), the cube-face MRT refusal,
@@ -186,21 +194,33 @@ crashes (item 17, the first C API run on `SDL_GPU`); WebGPU's 7 are the occlusio
 `Clear` (item 6) and six conformance programs (item 8); HEADLESS's 3 are the cube-face MRT refusal
 (item 8). SOFTWARE's 4 are the load-dependent `DynamicSoundEffectInstanceTest` case (item 7) and the
 three C API inventory gates, which measured the other session's uncommitted `ContentManager` member
-(one new protected symbol); on the committed tree those gates pass (the multi and SDL_GPU runs). The retired-name refusals (`CnaRendererRetired_*` configure probes,
+(one new protected symbol); on the committed tree those gates pass (the multi and SDL_GPU runs).
+FNA3D's 23 are item 4's two saturation cases and item 18: 17 cases that create a second device or
+game in one process (a documented FNA3D limitation), two multisampled read-backs that return 0, and
+two content-pipeline cases that pass alone. The Release tree fails exactly the Debug multi tree's
+5. Item 17 is Debug-only: with `SDL_GPU`
+selected at run time the seven `CApi_TeardownLifetime_*` cases pass in the Release tree (no
+validation layer) and `game-alive` segfaults in the Debug one. The retired-name refusals (`CnaRendererRetired_*` configure probes,
 `GraphicsRendererSelectionTests`, `CoreExtSmoke.c`) pass in every tree that registers them.
 
 **Web.** `cmake-build-wasm-multi` (`WEBGL2` default + `WEBGPU`, Emscripten): `cna_c_api_wasm`,
-`cna_demo_2d`, `cna_house3d_demo` and `cna_demo_renderer_selection` build. Under node the C API
-module reports ABI 0.48.0 with 3,207 of 3,207 exports present. In headless Chrome (inside the
-private runner) `cna_demo_2d` and `cna_house3d_demo` pass the 120-frame smoke with `WEBGPU`
-selected at run time (clean teardown, no WebGPU error); with the `WEBGL2` default both initialise
-EasyGL on WebGL 2.0, load their content and run for the 30-second budget with no abort or error,
-but `scripts/run-webgpu-browser-test.sh` has no WebGL completion marker, so the end of the smoke
-loop was not observed.
+`cna_demo_2d`, `cna_house3d_demo`, `cna_demo_renderer_selection` and `cna_bench_graphics_renderer`
+build. Under node the C API module reports ABI 0.48.0 with 3,207 of 3,207 exports present. In
+headless Chrome (inside the private runner): with `WEBGPU` selected at run time `cna_demo_2d` and
+`cna_house3d_demo` pass the 120-frame smoke (clean teardown, no WebGPU error); on the `WEBGL2`
+default `cna_bench_graphics_renderer` draws its 500-sprite scene (47-57 fps) and exits with status
+0, and a page-side frame counter shows both demos' smoke loops end on their own (`cna_demo_2d`
+stops at 117 browser frames, `cna_house3d_demo` at 106 for its 120 fixed-step updates) with no
+abort or error. `scripts/run-webgpu-browser-test.sh` has no WebGL completion marker of its own,
+which is why the counter was added to a scratch copy of its page.
 
 **Android.** `cmake-build-android-x86_64` (NDK 29, Release): a configure that names no renderer
-resolves to `OPENGLES3` and no longer warns about it; `cna_c_api` builds. Nothing was run on an
-emulator or a device.
+resolves to `OPENGLES3` and no longer warns about it; `cna_c_api` builds. On the x86_64 Android 35
+emulator a throwaway NDK program linked against that `libcna_c_api.so` (with the tree's SDL3 and
+SDL3_mixer) passed 15 of 15 checks: ABI 0.48.0, `OPENGLES3` the default and the only renderer
+compiled in, the four retired names refused in either spelling, the reserved values 1, 8, 14 and
+42 refused, `OPENGLES3` accepted. Drawing needs an APK (SDL's Activity), which was not built, so
+rendering on Android is not re-measured here.
 
 **Windows.** `cmake-build-mingw` (MinGW-w64 GCC 14 cross build, Release; `DIRECTX9` default with
 `SDL_GPU`, `SOFTWARE`, `HEADLESS`; C API, NET), rebuilt on the final code: every target builds
@@ -212,30 +232,39 @@ except the eight test units that use POSIX-only APIs, so `CnaTests.exe` does not
 (500 sprites and 20 stock-effect meshes per frame, clean exit). The module gtest binaries ran under
 Wine with `DIRECTX9` on 2026-10-13, after `DIRECTX11` was retired (item 16).
 
-**Not run here:** native Windows (MSVC, Direct3D 12 hardware), macOS and iOS (no Apple host), an
-Android emulator or device, Release builds of the Linux trees, and the `FNA3D`-default family
-example suite (it registers only in a tree whose default is `FNA3D`); `FNA3D` ran inside
-`cmake-build-multi` through runtime-selected `CnaTests` cases and its 59 compiled-effect tests.
+**Not run here:** native Windows (MSVC, Direct3D 12 hardware); macOS and iOS (no Apple host, so
+`SDL_GPU` on Metal and the iOS allow-list are configure-checked only); a physical Android device,
+and rendering on Android at all (no APK was built); Release builds other than the multi-renderer
+tree.
 
 ### Intentional remaining references
 
 Every tracked file outside `third_party/` was searched for every spelling (`Vulkan`, `Direct3D 11`,
 `DirectX 11`, `D3D11`, `DX11`, `D3DCommon`, `Metal` but not `metallic`, `SDL_Renderer`,
-`SDL_RENDERER`, `sdl-renderer`, `SdlRenderer`), and every hit outside the history files was read
-in three partitions. Rewritten were present-tense claims, current-renderer lists naming a
-retiree, and pointers to deleted files, plans and tests. About 6,300 lines remain; each is one of:
+`SDL_RENDERER`, `sdl-renderer`, `SdlRenderer`), and every hit outside the history files was read --
+by three review passes over three partitions, then by a classification script whose first-match
+patterns sort each line into one kind. Rewritten or removed were present-tense claims,
+current-renderer lists naming a retiree, and pointers to deleted files, plans and tests (RRC-036,
+RRC-038). 5,973 lines remain (counted after RRC-038), every one of them one of:
 
-| Kind | Lines (approx.) | Examples |
+| Kind | Lines | Examples |
 |---|---:|---|
-| History | 4,300 | `plans/`, `remediation/`, `misc/`, `CHANGELOG.md`, this report, `docs/removed-renderers.md`, `docs/c-api/ABI_VERSIONING.md`, `spikes/`, the XNA-runtime oracles in `tools/xna-oracle/`; dated audits (`AUDIT.md`, `RAM.md`, the culling and depth audits, `docs/graphics-compatibility-report.md`, `docs/build-performance.md` measurements), marked as predating the retirement where they read as current |
-| SDL_GPU's own backends | 450 | SDL's Vulkan (Linux, Android), Direct3D 12 (Windows) and Metal (Apple) drivers, `SDL_HINT_GPU_DRIVER`, the two SDL Vulkan patches in `cmake/patches/`, lavapipe in CI |
-| Provenance | 570 | past-tense records of what a retired renderer did or measured where that explains a test or an XNA finding; `VULKAN-`, `DX-`, `AM4-` task IDs; "moved from the retired VULKAN suite" |
-| Vulkan-GLSL dialect, SPIR-V | 130 | `ShaderLanguageEXT::GlslVulkan`, `CNA_SHADER_DIALECT_GLSL_VULKAN` (ABI), the `.vulkan.` shader-package sources that produce SDL_GPU's SPIR-V and WebGPU's WGSL |
-| Vulkan implementations and tools | 70 | lavapipe, llvmpipe, RADV, MoltenVK, DXVK, vkd3d-proton, DRI3, loaders and ICDs |
-| API semantics | 100 | SDL3's own `SDL_Renderer` in the platform's surface presenter for `SOFTWARE`; D3D11 and Metal API rules cited for comparison |
-| wgpu, FNA3D | 65 | `WebGPUMetalSurface` (wgpu's Metal backend), FNA3D's own D3D11 and SDL_GPU drivers, MojoShader's D3D11 and Metal patches |
-| Retirement machinery | 30 | `cmake/RendererIdentities.cmake`, `RetiredRendererNames`, the reserved values in `graphics.h`, `AbiHeaderC.c`, `CoreExtSmoke.c`, `CnaRendererRetired_*`, `GraphicsRendererSelectionTests` |
-| False positives | 20 | glTF "metal" materials, "a magnet or metal object" |
+| History files | 4,374 | `plans/`, `remediation/`, `misc/`, `CHANGELOG.md`, `docs/removed-renderers.md`, `docs/c-api/ABI_VERSIONING.md`, `spikes/`, the XNA-runtime oracles in `tools/xna-oracle/` |
+| Dated audits and migration documents | 184 | `AUDIT.md`, `RAM.md`, the culling and depth audits, `docs/graphics-compatibility-report.md`, `docs/build-performance.md` measurements, `docs/RendererNamingMigration.md`, `docs/xna-4-api-coverage.md`'s history sections -- marked as predating the retirement where they read as current |
+| Retirement statements and machinery | 343 | "the retired VULKAN renderer ...", refusal and reserved-value text, `CnaRendererRetired_*` |
+| Task-ID provenance | 204 | `VULKAN-`, `DX-`, `AM4-`, `METAL-` task IDs on the finding they explain |
+| SDL_GPU's own backends | 175 | SDL's Vulkan, Direct3D 12 and Metal drivers, `SDL_HINT_GPU_DRIVER`, the two SDL Vulkan patches |
+| Vulkan-GLSL dialect and SPIR-V | 122 | `.vulkan.` shader-package sources, `VK_*`/`Vk*` API names, clip-space conventions |
+| Other past-tense provenance | 98 | what a retired renderer did or measured where it explains a test |
+| Vulkan implementations and tools | 51 | lavapipe, llvmpipe, RADV, MoltenVK, DXVK, vkd3d-proton, DRI3, loaders |
+| SDL3's own `SDL_Renderer` API | 47 | the surface presenter that shows `SOFTWARE`'s frames, the SDL classifier |
+| Direct3D API semantics | 47 | D3D9/D3D11/D3D12 rules cited for comparison |
+| wgpu and browser backends | 37 | `WebGPUMetalSurface`, wgpu's Metal adapter |
+| FNA3D and MojoShader | 22 | FNA3D's own D3D11 and SDL_GPU drivers, MojoShader's Metal/D3D11 profiles |
+| Identity tables | 12 | `cmake/RendererIdentities.cmake`, `scripts/check_renderer_identities.py` |
+| False positives | 11 | glTF "metal" materials, "a magnet or metal object" |
+| Apple APIs | 6 | Metal as Apple's API under SDL_GPU and wgpu |
+| Build-tree names | 4 | `cmake-build-vulkan` in past build-performance figures |
+| Read by hand, no pattern | 236 | `GlslVulkan`/`CNA_SHADER_DIALECT_GLSL_VULKAN` (ABI dialect identities), the reserved values in `graphics.h`, the negative tests in `GraphicsRendererSelectionTests` and `ModuleProbes.cmake`, API comparisons and provenance the patterns miss |
 
-`cmake-build-vulkan` survives only as the measured tree in past build-performance figures. Older
-retirements' leftovers (LLGL, bgfx, Sokol notes) were out of scope and left alone.
+Older retirements' leftovers (LLGL, bgfx, Sokol notes) were out of scope and left alone.

@@ -546,279 +546,279 @@ SDL_SCALEMODE_LINEAR,pixel-format,CNA graphics types,PLAT-64/PLAT-65,3,2,surface
 SDL_SCALEMODE_NEAREST,pixel-format,CNA graphics types,PLAT-64/PLAT-65,3,2,surface
 SDL_CreateSurfaceFrom,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
 SDL_DestroySurface,pixel-format,CNA graphics types,PLAT-64/PLAT-65,1,1,surface
-SDL_gpu,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,138,18,SDL header include
-SDL_GPUTextureFormat,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,137,2,SDL_GPU renderer API
-SDL_GPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,112,2,SDL_GPU renderer API
-SDL_GPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,76,4,SDL_GPU renderer API
-SDL_GPUSampleCount,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,69,3,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_INVALID,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,61,2,SDL_GPU renderer API
-SDL_GPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,60,2,SDL_GPU renderer API
-SDL_GPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,58,5,SDL_GPU renderer API
-SDL_GPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,55,2,SDL_GPU renderer API
-SDL_GPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,49,2,SDL_GPU renderer API
-SDL_ReleaseGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,49,1,SDL_GPU resource API
-SDL_GPUPrimitiveType,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,42,2,SDL_GPU renderer API
-SDL_GPU_SHADERFORMAT_SPIRV,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,39,2,SDL_GPU renderer API
-SDL_GPUShaderCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,35,3,SDL_GPU renderer API
-SDL_GPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,32,5,SDL_GPU renderer API
-SDL_GPU_SAMPLECOUNT_1,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,32,3,SDL_GPU renderer API
-SDL_GPUVertexAttribute,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,30,6,SDL_GPU renderer API
-SDL_PushGPUVertexUniformData,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,29,3,SDL_GPU command/pass API
-SDL_GPU_TEXTURETYPE_2D,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,26,3,SDL_GPU renderer API
-SDL_PushGPUFragmentUniformData,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,26,1,SDL_GPU command/pass API
-SDL_GPUShaderFormat,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,23,4,SDL_GPU renderer API
-SDL_AcquireGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,22,1,SDL_GPU command/pass API
-SDL_GPUColorTargetDescription,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,20,2,SDL_GPU renderer API
-SDL_GPU_TEXTUREUSAGE_SAMPLER,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,20,1,SDL_GPU renderer API
-SDL_MapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,20,1,SDL_GPU command/pass API
-SDL_GPUBufferBinding,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
-SDL_GPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
-SDL_GPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,2,SDL_GPU renderer API
-SDL_GPUTextureSamplerBinding,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
-SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,2,SDL_GPU renderer API
-SDL_ReleaseGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,3,SDL_GPU resource API
-SDL_GPUGraphicsPipelineCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,18,3,SDL_GPU renderer API
-SDL_GPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,18,2,SDL_GPU renderer API
-SDL_GPU_SHADERSTAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,18,1,SDL_GPU renderer API
-SDL_CreateGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,17,2,SDL_GPU resource API
-SDL_GPUColorTargetInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,17,7,SDL_GPU renderer API
-SDL_GPU_LOADOP_CLEAR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,17,2,SDL_GPU renderer API
-SDL_BeginGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,16,1,SDL_GPU command/pass API
-SDL_BindGPUFragmentSamplers,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,16,4,SDL_GPU command/pass API
-SDL_GPUTextureCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,16,1,SDL_GPU renderer API
-SDL_CreateGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,1,SDL_GPU resource API
-SDL_GPUTextureRegion,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
-SDL_GPUTextureSupportsFormat,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
-SDL_GPUTransferBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
-SDL_UnmapGPUTransferBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,1,SDL_GPU command/pass API
-SDL_BindGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,14,1,SDL_GPU command/pass API
-SDL_GPUVertexBufferDescription,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,14,4,SDL_GPU renderer API
-SDL_SetGPUStencilReference,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,14,2,SDL_GPU resource API
-SDL_GPU_FILTER_LINEAR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,1,SDL_GPU renderer API
-SDL_SubmitGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,2,SDL_GPU command/pass API
-SDL_shadercross,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,3,SDL_shadercross shader compilation
-SDL_GPUTextureTransferInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,12,1,SDL_GPU renderer API
-SDL_GPU_LOADOP_LOAD,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,12,2,SDL_GPU renderer API
-SDL_GPU_TEXTURETYPE_CUBE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,12,4,SDL_GPU renderer API
-SDL_EndGPUCopyPass,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU command/pass API
-SDL_GPU_FILTER_NEAREST,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
-SDL_GPU_SHADERSTAGE_FRAGMENT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
-SDL_GPU_STOREOP_STORE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,3,SDL_GPU renderer API
-SDL_GPU_VERTEXINPUTRATE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,3,SDL_GPU renderer API
-SDL_SetGPUScissor,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,4,SDL_GPU resource API
-SDL_BindGPUIndexBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
-SDL_DownloadFromGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,2,SDL_GPU API
-SDL_GPURasterizerState,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,2,SDL_GPU renderer API
-SDL_GPU_INDEXELEMENTSIZE_16BIT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
-SDL_GPU_INDEXELEMENTSIZE_32BIT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
-SDL_SubmitGPUCommandBufferAndAcquireFence,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
-SDL_UploadToGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,3,SDL_GPU API
-SDL_BeginGPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,4,SDL_GPU command/pass API
-SDL_BindGPUVertexBuffers,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,1,SDL_GPU command/pass API
-SDL_GPU_BUFFERUSAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
-SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,3,SDL_GPU renderer API
-SDL_Renderer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,6,SDL_Renderer object/API
-SDL_SetGPUViewport,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,3,SDL_GPU resource API
-SDL_GPU_STOREOP_RESOLVE_AND_STORE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,3,SDL_GPU renderer API
-SDL_ReleaseGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,1,SDL_GPU resource API
-SDL_ReleaseGPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,1,SDL_GPU resource API
-SDL_ClaimWindowForGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,7,3,SDL_GPU API
-SDL_DrawGPUIndexedPrimitives,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,7,2,SDL_GPU command/pass API
-SDL_GPUSamplerCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,7,2,SDL_GPU renderer API
-SDL_CreateGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,2,SDL_GPU resource API
-SDL_CreateGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU resource API
-SDL_DrawGPUPrimitives,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU command/pass API
-SDL_GPUBufferUsageFlags,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
-SDL_GPU_LOADOP_DONT_CARE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
-SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
-SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,3,SDL_GPU renderer API
-SDL_SetGPUBlendConstants,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,3,SDL_GPU resource API
-SDL_UploadToGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,3,SDL_GPU API
-SDL_CreateGPUBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
-SDL_CreateGPUShader,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,4,SDL_GPU resource API
-SDL_DestroyTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,2,SDL_Renderer texture
-SDL_GPUBufferCreateInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
-SDL_GPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
-SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
-SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
-SDL_GPU_SHADERFORMAT_MSL,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
-SDL_GPU_STOREOP_RESOLVE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,2,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_D32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,3,SDL_GPU renderer API
-SDL_ReleaseGPUFence,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
-SDL_ReleaseGPUGraphicsPipeline,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,2,SDL_GPU resource API
-SDL_WaitAndAcquireGPUSwapchainTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,3,SDL_GPU API
-SDL_WaitForGPUFences,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU API
-SDL_BlitGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU command/pass API
-SDL_GPUBufferRegion,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPUDepthStencilState,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
-SDL_GPUTextureLocation,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPUTransferBufferLocation,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPUViewport,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPU_CULLMODE_NONE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
-SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPU_SAMPLECOUNT_4,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_GPU_VERTEXINPUTRATE_INSTANCE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
-SDL_ReleaseWindowFromGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU API
-SDL_Texture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,3,SDL_Renderer texture
-SDL_BindGPUVertexSamplers,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU command/pass API
-SDL_CalculateGPUTextureFormatSize,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU API
-SDL_DestroyGPUDevice,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU resource API
-SDL_GPUBlitInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPUColorTargetBlendState,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU renderer API
-SDL_GPUDepthStencilTargetInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPUFilter,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPUVertexElementFormat,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_CONSTANT_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU renderer API
-SDL_GPU_BUFFERUSAGE_INDEX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_FILLMODE_FILL,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_SAMPLECOUNT_2,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_SAMPLECOUNT_8,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_SHADERFORMAT_DXIL,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_D16_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_D24_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
-SDL_GPU_TEXTURETYPE_3D,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_HALF2,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_HALF4,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_SHORT2,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_SHORT4,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
-SDL_GenerateMipmapsForGPUTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU API
-SDL_GetGPUDeviceDriver,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU resource API
-SDL_GetRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_Renderer object/API
-SDL_SetTextureScaleMode,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_Renderer texture
-SDL_ShaderCross_GetSPIRVShaderFormats,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_shadercross shader compilation
-SDL_CancelGPUCommandBuffer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU command/pass API
-SDL_CopyGPUTextureToTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
-SDL_CreateGPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
-SDL_CreateRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer object/API
-SDL_CreateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer texture
-SDL_DestroyRenderer,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer object/API
-SDL_EndGPURenderPass,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
-SDL_GPUBlendFactor,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUBlendOp,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUCullMode,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUSamplerAddressMode,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUSamplerMipmapMode,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUStencilOp,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPUTextureSupportsSampleCount,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU renderer API
-SDL_GPU_PRESENTMODE_IMMEDIATE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_PRESENTMODE_MAILBOX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_SAMPLERADDRESSMODE_REPEAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_SHADERFORMAT_DXBC,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_STOREOP_DONT_CARE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_BC1_RGBA_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_BC2_RGBA_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
-SDL_GenerateMipmapsForGPU,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU API
-SDL_GetGPUShaderFormats,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU resource API
-SDL_GetRenderOutputSize,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer state
-SDL_InsertGPUDebugLabel,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
-SDL_LOGICAL_PRESENTATION_DISABLED,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
-SDL_LOGICAL_PRESENTATION_LETTERBOX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
-SDL_LOGICAL_PRESENTATION_OVERSCAN,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
-SDL_LOGICAL_PRESENTATION_STRETCH,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
-SDL_RENDERER_VSYNC_DISABLED,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
-SDL_ReleaseGPUSampler,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
-SDL_RenderClear,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer draw call
-SDL_RenderPresent,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer draw call
-SDL_RenderTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer draw call
-SDL_RendererLogicalPresentation,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer object/API
-SDL_SetGPUSwapchainParameters,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
-SDL_SetRenderLogicalPresentation,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer state
-SDL_SetRenderVSync,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer state
-SDL_TEXTUREACCESS_STREAMING,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
-SDL_UpdateTexture,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer texture
-SDL_WindowSupportsGPUPresentMode,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU API
-SDL_GPUCompareOp,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUMultisampleState,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUPresentMode,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUShaderStage,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUStencilOpState,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUSupportsShaderFormats,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUTextureUsageFlags,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPUVertexInputRate,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_DST_ALPHA,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_DST_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_ONE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_ALPHA,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_SRC_ALPHA,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_SRC_ALPHA_SATURATE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_SRC_COLOR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDFACTOR_ZERO,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDOP_ADD,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDOP_MAX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDOP_MIN,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDOP_REVERSE_SUBTRACT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_BLENDOP_SUBTRACT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COLORCOMPONENT_,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_ALWAYS,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_EQUAL,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_GREATER,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_GREATER_OR_EQUAL,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_LESS,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_LESS_OR_EQUAL,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_NEVER,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_COMPAREOP_NOT_EQUAL,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_CULLMODE_BACK,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_CULLMODE_FRONT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_FILLMODE_LINE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_PRESENTMODE_VSYNC,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_PRIMITIVETYPE_LINELIST,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_PRIMITIVETYPE_LINESTRIP,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_PRIMITIVETYPE_POINTLIST,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_DECREMENT_AND_CLAMP,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_DECREMENT_AND_WRAP,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_INCREMENT_AND_CLAMP,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_INCREMENT_AND_WRAP,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_INVERT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_KEEP,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_REPLACE,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_STENCILOP_ZERO,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_SWAPCHAINCOMPOSITION_SDR,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_B4G4R4A4_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_B5G5R5A1_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_B5G6R5_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R16G16_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R16_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R32G32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GPU_TEXTUREFORMAT_R32_FLOAT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
-SDL_GetGPUSwapchainTextureFormat,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU resource API
-SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_SHADERCROSS_SHADERSTAGE_VERTEX,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_SetRenderDrawColor,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_Renderer state
-SDL_ShaderCross_CompileGraphicsShaderFromSPIRV,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_ShaderCross_GraphicsShaderMetadata,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_ShaderCross_GraphicsShaderResourceInfo,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_ShaderCross_Init,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_ShaderCross_Quit,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_ShaderCross_ReflectGraphicsSPIRV,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_ShaderCross_SPIRV_Info,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
-SDL_WaitForGPUIdle,sdl-renderer-specific,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU API
+SDL_gpu,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,138,18,SDL header include
+SDL_GPUTextureFormat,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,137,2,SDL_GPU renderer API
+SDL_GPUGraphicsPipeline,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,112,2,SDL_GPU renderer API
+SDL_GPUTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,76,4,SDL_GPU renderer API
+SDL_GPUSampleCount,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,69,3,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_INVALID,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,61,2,SDL_GPU renderer API
+SDL_GPUCommandBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,60,2,SDL_GPU renderer API
+SDL_GPUShader,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,58,5,SDL_GPU renderer API
+SDL_GPUBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,55,2,SDL_GPU renderer API
+SDL_GPURenderPass,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,49,2,SDL_GPU renderer API
+SDL_ReleaseGPUTransferBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,49,1,SDL_GPU resource API
+SDL_GPUPrimitiveType,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,42,2,SDL_GPU renderer API
+SDL_GPU_SHADERFORMAT_SPIRV,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,39,2,SDL_GPU renderer API
+SDL_GPUShaderCreateInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,35,3,SDL_GPU renderer API
+SDL_GPUDevice,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,32,5,SDL_GPU renderer API
+SDL_GPU_SAMPLECOUNT_1,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,32,3,SDL_GPU renderer API
+SDL_GPUVertexAttribute,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,30,6,SDL_GPU renderer API
+SDL_PushGPUVertexUniformData,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,29,3,SDL_GPU command/pass API
+SDL_GPU_TEXTURETYPE_2D,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,26,3,SDL_GPU renderer API
+SDL_PushGPUFragmentUniformData,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,26,1,SDL_GPU command/pass API
+SDL_GPUShaderFormat,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,23,4,SDL_GPU renderer API
+SDL_AcquireGPUCommandBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,22,1,SDL_GPU command/pass API
+SDL_GPUColorTargetDescription,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,20,2,SDL_GPU renderer API
+SDL_GPU_TEXTUREUSAGE_SAMPLER,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,20,1,SDL_GPU renderer API
+SDL_MapGPUTransferBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,20,1,SDL_GPU command/pass API
+SDL_GPUBufferBinding,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
+SDL_GPUCopyPass,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
+SDL_GPUSampler,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,2,SDL_GPU renderer API
+SDL_GPUTextureSamplerBinding,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,1,SDL_GPU renderer API
+SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,2,SDL_GPU renderer API
+SDL_ReleaseGPUTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,19,3,SDL_GPU resource API
+SDL_GPUGraphicsPipelineCreateInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,18,3,SDL_GPU renderer API
+SDL_GPUTransferBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,18,2,SDL_GPU renderer API
+SDL_GPU_SHADERSTAGE_VERTEX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,18,1,SDL_GPU renderer API
+SDL_CreateGPUTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,17,2,SDL_GPU resource API
+SDL_GPUColorTargetInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,17,7,SDL_GPU renderer API
+SDL_GPU_LOADOP_CLEAR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,17,2,SDL_GPU renderer API
+SDL_BeginGPUCopyPass,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,16,1,SDL_GPU command/pass API
+SDL_BindGPUFragmentSamplers,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,16,4,SDL_GPU command/pass API
+SDL_GPUTextureCreateInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,16,1,SDL_GPU renderer API
+SDL_CreateGPUTransferBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,1,SDL_GPU resource API
+SDL_GPUTextureRegion,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
+SDL_GPUTextureSupportsFormat,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
+SDL_GPUTransferBufferCreateInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,2,SDL_GPU renderer API
+SDL_UnmapGPUTransferBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,15,1,SDL_GPU command/pass API
+SDL_BindGPUGraphicsPipeline,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,14,1,SDL_GPU command/pass API
+SDL_GPUVertexBufferDescription,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,14,4,SDL_GPU renderer API
+SDL_SetGPUStencilReference,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,14,2,SDL_GPU resource API
+SDL_GPU_FILTER_LINEAR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,1,SDL_GPU renderer API
+SDL_SubmitGPUCommandBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,2,SDL_GPU command/pass API
+SDL_shadercross,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,13,3,SDL_shadercross shader compilation
+SDL_GPUTextureTransferInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,12,1,SDL_GPU renderer API
+SDL_GPU_LOADOP_LOAD,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,12,2,SDL_GPU renderer API
+SDL_GPU_TEXTURETYPE_CUBE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,12,4,SDL_GPU renderer API
+SDL_EndGPUCopyPass,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU command/pass API
+SDL_GPU_FILTER_NEAREST,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
+SDL_GPU_SHADERSTAGE_FRAGMENT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
+SDL_GPU_STOREOP_STORE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,1,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,3,SDL_GPU renderer API
+SDL_GPU_VERTEXINPUTRATE_VERTEX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,3,SDL_GPU renderer API
+SDL_SetGPUScissor,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,11,4,SDL_GPU resource API
+SDL_BindGPUIndexBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
+SDL_DownloadFromGPUTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,2,SDL_GPU API
+SDL_GPURasterizerState,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,2,SDL_GPU renderer API
+SDL_GPU_INDEXELEMENTSIZE_16BIT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
+SDL_GPU_INDEXELEMENTSIZE_32BIT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU renderer API
+SDL_SubmitGPUCommandBufferAndAcquireFence,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,1,SDL_GPU command/pass API
+SDL_UploadToGPUTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,10,3,SDL_GPU API
+SDL_BeginGPURenderPass,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,4,SDL_GPU command/pass API
+SDL_BindGPUVertexBuffers,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,1,SDL_GPU command/pass API
+SDL_GPU_BUFFERUSAGE_VERTEX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
+SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,1,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,3,SDL_GPU renderer API
+SDL_Renderer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,6,SDL_Renderer object/API
+SDL_SetGPUViewport,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,9,3,SDL_GPU resource API
+SDL_GPU_STOREOP_RESOLVE_AND_STORE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,3,SDL_GPU renderer API
+SDL_ReleaseGPUBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,1,SDL_GPU resource API
+SDL_ReleaseGPUShader,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,8,1,SDL_GPU resource API
+SDL_ClaimWindowForGPUDevice,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,7,3,SDL_GPU API
+SDL_DrawGPUIndexedPrimitives,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,7,2,SDL_GPU command/pass API
+SDL_GPUSamplerCreateInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,7,2,SDL_GPU renderer API
+SDL_CreateGPUDevice,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,2,SDL_GPU resource API
+SDL_CreateGPUGraphicsPipeline,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU resource API
+SDL_DrawGPUPrimitives,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU command/pass API
+SDL_GPUBufferUsageFlags,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
+SDL_GPU_LOADOP_DONT_CARE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
+SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,2,SDL_GPU renderer API
+SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,1,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,3,SDL_GPU renderer API
+SDL_SetGPUBlendConstants,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,3,SDL_GPU resource API
+SDL_UploadToGPUBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,6,3,SDL_GPU API
+SDL_CreateGPUBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
+SDL_CreateGPUShader,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,4,SDL_GPU resource API
+SDL_DestroyTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,2,SDL_Renderer texture
+SDL_GPUBufferCreateInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
+SDL_GPUFence,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
+SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
+SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
+SDL_GPU_SHADERFORMAT_MSL,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
+SDL_GPU_STOREOP_RESOLVE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,2,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_D32_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,3,SDL_GPU renderer API
+SDL_ReleaseGPUFence,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU resource API
+SDL_ReleaseGPUGraphicsPipeline,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,2,SDL_GPU resource API
+SDL_WaitAndAcquireGPUSwapchainTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,3,SDL_GPU API
+SDL_WaitForGPUFences,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,5,1,SDL_GPU API
+SDL_BlitGPUTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU command/pass API
+SDL_GPUBufferRegion,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPUDepthStencilState,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
+SDL_GPUTextureLocation,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPUTransferBufferLocation,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPUViewport,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPU_CULLMODE_NONE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
+SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPU_SAMPLECOUNT_4,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_GPU_VERTEXINPUTRATE_INSTANCE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,1,SDL_GPU renderer API
+SDL_ReleaseWindowFromGPUDevice,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,2,SDL_GPU API
+SDL_Texture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,4,3,SDL_Renderer texture
+SDL_BindGPUVertexSamplers,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU command/pass API
+SDL_CalculateGPUTextureFormatSize,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU API
+SDL_DestroyGPUDevice,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU resource API
+SDL_GPUBlitInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPUColorTargetBlendState,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU renderer API
+SDL_GPUDepthStencilTargetInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPUFilter,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPUVertexElementFormat,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_CONSTANT_COLOR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU renderer API
+SDL_GPU_BUFFERUSAGE_INDEX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_FILLMODE_FILL,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_SAMPLECOUNT_2,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_SAMPLECOUNT_8,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_SHADERFORMAT_DXIL,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_D16_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_D24_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_GPU renderer API
+SDL_GPU_TEXTURETYPE_3D,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_HALF2,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_HALF4,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_SHORT2,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_SHORT4,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,3,SDL_GPU renderer API
+SDL_GenerateMipmapsForGPUTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU API
+SDL_GetGPUDeviceDriver,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_GPU resource API
+SDL_GetRenderer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_Renderer object/API
+SDL_SetTextureScaleMode,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,2,SDL_Renderer texture
+SDL_ShaderCross_GetSPIRVShaderFormats,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,3,1,SDL_shadercross shader compilation
+SDL_CancelGPUCommandBuffer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU command/pass API
+SDL_CopyGPUTextureToTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
+SDL_CreateGPUSampler,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
+SDL_CreateRenderer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer object/API
+SDL_CreateTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer texture
+SDL_DestroyRenderer,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer object/API
+SDL_EndGPURenderPass,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
+SDL_GPUBlendFactor,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPUBlendOp,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPUCullMode,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPUSamplerAddressMode,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPUSamplerMipmapMode,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPUStencilOp,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPUTextureSupportsSampleCount,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU renderer API
+SDL_GPU_PRESENTMODE_IMMEDIATE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_PRESENTMODE_MAILBOX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_SAMPLERADDRESSMODE_REPEAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_SHADERFORMAT_DXBC,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_STOREOP_DONT_CARE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_BC1_RGBA_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_BC2_RGBA_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R8G8B8A8_SNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU renderer API
+SDL_GenerateMipmapsForGPU,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU API
+SDL_GetGPUShaderFormats,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU resource API
+SDL_GetRenderOutputSize,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer state
+SDL_InsertGPUDebugLabel,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_GPU command/pass API
+SDL_LOGICAL_PRESENTATION_DISABLED,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
+SDL_LOGICAL_PRESENTATION_LETTERBOX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
+SDL_LOGICAL_PRESENTATION_OVERSCAN,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
+SDL_LOGICAL_PRESENTATION_STRETCH,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
+SDL_RENDERER_VSYNC_DISABLED,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
+SDL_ReleaseGPUSampler,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
+SDL_RenderClear,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer draw call
+SDL_RenderPresent,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer draw call
+SDL_RenderTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer draw call
+SDL_RendererLogicalPresentation,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer object/API
+SDL_SetGPUSwapchainParameters,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU resource API
+SDL_SetRenderLogicalPresentation,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer state
+SDL_SetRenderVSync,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer state
+SDL_TEXTUREACCESS_STREAMING,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer constant
+SDL_UpdateTexture,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,2,SDL_Renderer texture
+SDL_WindowSupportsGPUPresentMode,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,2,1,SDL_GPU API
+SDL_GPUCompareOp,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUMultisampleState,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUPresentMode,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUShaderStage,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUStencilOpState,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUSupportsShaderFormats,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUTextureUsageFlags,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPUVertexInputRate,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_DST_ALPHA,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_DST_COLOR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_ONE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_ALPHA,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_COLOR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_SRC_ALPHA,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_SRC_ALPHA_SATURATE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_SRC_COLOR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDFACTOR_ZERO,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDOP_ADD,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDOP_MAX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDOP_MIN,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDOP_REVERSE_SUBTRACT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_BLENDOP_SUBTRACT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COLORCOMPONENT_,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_ALWAYS,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_EQUAL,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_GREATER,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_GREATER_OR_EQUAL,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_LESS,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_LESS_OR_EQUAL,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_NEVER,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_COMPAREOP_NOT_EQUAL,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_CULLMODE_BACK,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_CULLMODE_FRONT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_FILLMODE_LINE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_PRESENTMODE_VSYNC,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_PRIMITIVETYPE_LINELIST,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_PRIMITIVETYPE_LINESTRIP,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_PRIMITIVETYPE_POINTLIST,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_DECREMENT_AND_CLAMP,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_DECREMENT_AND_WRAP,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_INCREMENT_AND_CLAMP,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_INCREMENT_AND_WRAP,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_INVERT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_KEEP,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_REPLACE,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_STENCILOP_ZERO,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_SWAPCHAINCOMPOSITION_SDR,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_B4G4R4A4_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_B5G5R5A1_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_B5G6R5_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R16G16_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R16_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R32G32_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GPU_TEXTUREFORMAT_R32_FLOAT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU renderer API
+SDL_GetGPUSwapchainTextureFormat,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU resource API
+SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_SHADERCROSS_SHADERSTAGE_VERTEX,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_SetRenderDrawColor,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_Renderer state
+SDL_ShaderCross_CompileGraphicsShaderFromSPIRV,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_ShaderCross_GraphicsShaderMetadata,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_ShaderCross_GraphicsShaderResourceInfo,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_ShaderCross_Init,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_ShaderCross_Quit,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_ShaderCross_ReflectGraphicsSPIRV,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_ShaderCross_SPIRV_Info,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_shadercross shader compilation
+SDL_WaitForGPUIdle,renderer-sdl-api,"allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",PLAT-3/PLAT-76,1,1,SDL_GPU API
 SDL_HINT_JOYSTICK_LINUX_CLASSIC,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,9,2,SDL hint (becomes CNA configuration)
 SDL_SetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,9,5,SDL hint (becomes CNA configuration)
 SDL_GetHint,system-service,IPlatformDialogs/Clipboard/Tray/Camera/Power/Locale/SystemInfo/UrlLauncher,PLAT-25/PLAT-100..107,8,4,SDL hint (becomes CNA configuration)

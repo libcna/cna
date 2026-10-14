@@ -116,7 +116,7 @@ AREAS: dict[str, tuple[str, str, str]] = {
         "PLAT-22/PLAT-23/PLAT-41/PLAT-42",
         "GL context creation.",
     ),
-    "sdl-renderer-specific": (
+    "renderer-sdl-api": (
         "allowlisted renderers (SDL_GPU, FNA3D) and the CPU-frame surface presenter",
         "PLAT-3/PLAT-76",
         "Legitimately SDL3-bound: these renderers *are* an SDL3 API. Never on the common interface.",
@@ -151,14 +151,14 @@ AREAS: dict[str, tuple[str, str, str]] = {
 RULES: list[tuple[str, str, str]] = [
     # SDL_GPU is a whole renderer API. It must precede every generic rule below, or its texture,
     # buffer, shader and pass names would scatter into pixel-format/native-handle/etc.
-    (r"^SDL_GPU", "sdl-renderer-specific", "SDL_GPU renderer API"),
-    (r"^SDL_(Acquire|Submit|Cancel|Wait|Push|Bind|Draw|Dispatch|Begin|End|Map|Unmap|Blit|Generate|Verify|Insert)GPU", "sdl-renderer-specific", "SDL_GPU command/pass API"),
-    (r"^SDL_(Create|Release|Destroy|Set|Get|Query|Claim|Upload|Download|Copy)GPU", "sdl-renderer-specific", "SDL_GPU resource API"),
-    (r"^SDL_GPU_", "sdl-renderer-specific", "SDL_GPU constant"),
+    (r"^SDL_GPU", "renderer-sdl-api", "SDL_GPU renderer API"),
+    (r"^SDL_(Acquire|Submit|Cancel|Wait|Push|Bind|Draw|Dispatch|Begin|End|Map|Unmap|Blit|Generate|Verify|Insert)GPU", "renderer-sdl-api", "SDL_GPU command/pass API"),
+    (r"^SDL_(Create|Release|Destroy|Set|Get|Query|Claim|Upload|Download|Copy)GPU", "renderer-sdl-api", "SDL_GPU resource API"),
+    (r"^SDL_GPU_", "renderer-sdl-api", "SDL_GPU constant"),
     # Catch-all for the GPU API: SDL's naming puts "GPU" in the middle as often as at the front
     # (ClaimWindowForGPUDevice, UploadToGPUTexture, WaitAndAcquireGPUSwapchainTexture,
     # GenerateMipmapsForGPUTexture). Anchoring on the infix is what makes this area complete.
-    (r"^SDL_\w*GPU", "sdl-renderer-specific", "SDL_GPU API"),
+    (r"^SDL_\w*GPU", "renderer-sdl-api", "SDL_GPU API"),
 
     # SDL_shadercross is the companion library the SDL_GPU renderer compiles its shaders with
     # (SDL_shadercross.h). It carries no "GPU" in its names, so the infix catch-all above misses
@@ -166,15 +166,15 @@ RULES: list[tuple[str, str, str]] = [
     # IPlatform service. The one pattern covers both the API (SDL_ShaderCross_Init) and the bare
     # header token (SDL_shadercross), and the SDL_SHADERCROSS_* constants, which is why the
     # group is case-insensitive rather than three spellings written out.
-    (r"^SDL_(?i:shadercross)", "sdl-renderer-specific", "SDL_shadercross shader compilation"),
+    (r"^SDL_(?i:shadercross)", "renderer-sdl-api", "SDL_shadercross shader compilation"),
 
     # SDL_Renderer (the 2D renderer). Also before the generic window/texture rules.
-    (r"^SDL_Render[A-Z]", "sdl-renderer-specific", "SDL_Renderer draw call"),
-    (r"^SDL_(RENDERER|LOGICAL_PRESENTATION|TEXTUREACCESS|SOFTWARE_RENDERER)", "sdl-renderer-specific", "SDL_Renderer constant"),
-    (r"^SDL_(Create|Destroy|Get|Set|Flush|Update|Lock|Unlock|Convert|Add)?Renderer", "sdl-renderer-specific", "SDL_Renderer object/API"),
-    (r"^SDL_(Create|Destroy|Update|Lock|Unlock|Set|Get)?Texture", "sdl-renderer-specific", "SDL_Renderer texture"),
-    (r"^SDL_(Set|Get)Render", "sdl-renderer-specific", "SDL_Renderer state"),
-    (r"^SDL_(CreateTextureFrom|CreateSoftwareRenderer|GetNumRenderDrivers|ConvertEventToRenderCoordinates|RenderCoordinatesFrom|RenderCoordinatesTo)", "sdl-renderer-specific", "SDL_Renderer surface API"),
+    (r"^SDL_Render[A-Z]", "renderer-sdl-api", "SDL_Renderer draw call"),
+    (r"^SDL_(RENDERER|LOGICAL_PRESENTATION|TEXTUREACCESS|SOFTWARE_RENDERER)", "renderer-sdl-api", "SDL_Renderer constant"),
+    (r"^SDL_(Create|Destroy|Get|Set|Flush|Update|Lock|Unlock|Convert|Add)?Renderer", "renderer-sdl-api", "SDL_Renderer object/API"),
+    (r"^SDL_(Create|Destroy|Update|Lock|Unlock|Set|Get)?Texture", "renderer-sdl-api", "SDL_Renderer texture"),
+    (r"^SDL_(Set|Get)Render", "renderer-sdl-api", "SDL_Renderer state"),
+    (r"^SDL_(CreateTextureFrom|CreateSoftwareRenderer|GetNumRenderDrivers|ConvertEventToRenderCoordinates|RenderCoordinatesFrom|RenderCoordinatesTo)", "renderer-sdl-api", "SDL_Renderer surface API"),
 
     # Native handle extraction must precede the generic window rule: SDL_GetWindowProperties is
     # how a renderer reaches HWND/X11/Wayland, not window management.
@@ -290,7 +290,7 @@ RULES: list[tuple[str, str, str]] = [
     # SDL header basenames, seen as include paths (`#include <SDL3/SDL_gpu.h>`). The include is
     # itself the coupling, and it disappears when the subsystem it names is migrated, so each is
     # classified to that subsystem rather than dismissed as "not an API call".
-    (r"^SDL_(gpu|render)$", "sdl-renderer-specific", "SDL header include"),
+    (r"^SDL_(gpu|render)$", "renderer-sdl-api", "SDL header include"),
     (r"^SDL_(audio|audiocvt|sysaudio|wave|mixer)$", "audio", "SDL header include"),
     (r"^SDL_(opengl|opengl_glext|opengles|opengles2)$", "gl-context", "SDL header include"),
     (r"^SDL_(video|cocoavideo)$", "window", "SDL header include"),

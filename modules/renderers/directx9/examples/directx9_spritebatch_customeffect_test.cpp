@@ -3,10 +3,11 @@
 // D3D11 renderer's DX-71 Check AA exactly (a runtime-compiled custom HLSL pair replaces the stock
 // SpriteEffect shaders for the whole batch, driving a deliberate RGB color inversion), adapted to
 // D3D9's own real SM2/SM3 HLSL syntax and its existing stride-24 SpriteVertex contract (POSITION0
-// FLOAT3, COLOR0 UBYTE4N, TEXCOORD0 FLOAT2) rather than the D3D11 renderer's Sprite2DVertex shape
-// -- D9-111's own design note explicitly left vertex-declaration management to this task, since
-// this renderer reuses the SAME declaration the stock path already has (D3D9's vertex declaration
-// is a decoupled device state, not baked into the shader like D3D11's InputLayout).
+// FLOAT3, COLOR0 UBYTE4N, TEXCOORD0 FLOAT2) rather than the retired D3D11 renderer's
+// Sprite2DVertex shape -- D9-111's own design note explicitly left vertex-declaration management
+// to this task, since this renderer reuses the SAME declaration the stock path already has
+// (D3D9's vertex declaration is a decoupled device state, not baked into the shader like D3D11's
+// InputLayout).
 //
 // Check A -- ShaderEffect compiles for real (vs_2_0/ps_2_0 under Reach).
 // Check B -- SpriteBatch::Begin(..., &invertEffect) draws sprites through the custom shader

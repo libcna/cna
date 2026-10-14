@@ -85,9 +85,11 @@ planned.
 (`OPENGLES3` default with `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`)
 11,313 tests, 5 failed, 197 skipped; `cmake-build-sdlgpu` (with the C API) 11,024, 21 failed;
 `cmake-build-webgpu` 10,854, 7 failed; `cmake-build-headless` 8,633, 3 failed;
-`cmake-build-software` 10,843, 4 failed. Every failure is a §5.1 entry (items 6, 7, 8 and 17),
-except SOFTWARE's three C API inventory gates, which measured another session's uncommitted header
-change and pass on the committed tree. CI: `general-tests-ci.yml` runs the unfiltered suite for `OPENGLES3` and fails on a dirty
+`cmake-build-software` 10,843, 4 failed; `cmake-build-fna3d` 10,664, 23 failed; the Release
+multi-renderer tree (`build-probe`) 11,316, 5 failed. Every failure is a §5.1 entry (items 4, 6, 7,
+8, 17 and 18), except SOFTWARE's three C API
+inventory gates, which measured another session's uncommitted header change and pass on the
+committed tree. CI: `general-tests-ci.yml` runs the unfiltered suite for `OPENGLES3` and fails on a dirty
 checkout; the other workflows are subsystem- or platform-specific.
 
 ## 3. Where current information lives
@@ -288,9 +290,20 @@ The single authoritative list. Every entry below was checked against the code on
     leave a game alive segfault. The C API's static `RuntimeState` destroys the game during
     `exit()`, `SdlGpuRenderer`'s destructor calls `SDL_ReleaseWindowFromGPUDevice`, and SDL's
     `VULKAN_Wait` calls into `libVkLayer_khronos_validation.so`, which has already been finalised.
-    The validation layer is loaded because Debug builds create the device in debug mode; Release is
-    not measured. Every other C API case passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with
-    the extension layer.
+    The validation layer is loaded because Debug builds create the device in debug mode: with
+    `SDL_GPU` selected at run time the same case segfaults in the Debug multi-renderer tree and all
+    seven teardown cases pass in the Release one (`build-probe`, 2026-10-14). Every other C API case
+    passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with the extension layer.
+18. **The `FNA3D`-default tree fails 21 shared cases besides item 4's two** (first full run of
+    `cmake-build-fna3d`, FNA3D's OpenGL driver as its CTest environment forces, 2026-10-14). 17
+    `CnaTests` cases that create a second device or game in one process segfault in
+    `MOJOSHADER_glDeleteShader` while the second device's stock effects are disposed -- the
+    multi-device case `docs/fna3d-renderer.md` lists as not claimed (MojoShader's GL context is
+    process-wide). A multisampled render target reads back 0:
+    `RenderTargetSemantics.TargetsWithDifferentSampleCountsBothRenderInOneRun` (unchanged by the
+    retirement) and the cube-face case RRC-030 made renderer-neutral,
+    `PluralCubeFacesResolveMsaaAndRegenerateMips`. Two content-pipeline cases failed only under the
+    parallel run and pass alone (item 7's load-dependent kind).
 
 ### 5.2 Limitations
 
