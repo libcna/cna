@@ -135,12 +135,13 @@ The single authoritative list. Every entry below was checked against the code on
    and `WaveBankTests.cpp` wait with fixed 50 ms sleeps; under parallel load a rotating subset fails
    (`misc/known_bugs.md` §5). They pass on an idle machine.
 4. **`FNA3D` does not saturate the stock effects' `COLOR0` output**, which Direct3D 9 (and so XNA)
-   clamps to [0, 1] before interpolation — the rule `AM4-106` gave WebGPU. Three
-   `CnaTests` pixel checks fail with `FNA3D` as the renderer (measured 2026-10-10, SDL_GPU Vulkan
-   driver, AMD RADV): `BasicEffectVertexLightingSaturationTest.ALitSumAboveOneIsSaturatedBeforeTheTexel`,
-   `.TheVertexColourScalesTheLitSumBeforeItIsSaturated`, and
-   `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` (line 536: a
-   negative diffuse colour times a negative texel gives 128 instead of 0).
+   clamps to [0, 1] before interpolation — the rule `AM4-106` gave WebGPU. Two `CnaTests` pixel
+   checks fail on both of FNA3D's drivers (rechecked 2026-10-14, AMD Radeon 780M):
+   `BasicEffectVertexLightingSaturationTest.ALitSumAboveOneIsSaturatedBeforeTheTexel` and
+   `.TheVertexColourScalesTheLitSumBeforeItIsSaturated`. A third,
+   `ClassicTextureFormat.PointSamplingExpandsChannelsAndPreservesDeclaredRanges` (line 496: a
+   negative diffuse colour times a negative texel gives 128 instead of 0), fails on the SDL_GPU
+   driver only and passes on the OpenGL driver that the `cmake-build-fna3d` CTest run forces.
 5. **`SendDataOptions` is not a flags enum, so `Chat` cannot be combined** (checked 2026-10-11;
    found by `GS-AUDIT-016`). XNA declares it `[Flags]` and documents `Chat` combined with
    `Reliable` and/or `InOrder`, with ordered chat packets ordered only among themselves
