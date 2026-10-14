@@ -123,7 +123,9 @@ UDP port is machine-wide. CI: `general-tests-ci.yml` runs the unfiltered suite f
 
 ## 5. Known bugs and limitations
 
-The single authoritative list. Every entry below was checked against the code on 2026-10-10.
+The single authoritative list. Every entry below was checked against the code between 2026-10-10
+and 2026-10-14; an entry measured or re-measured after 2026-10-10 says when (the renderer
+retirement and its close-out, RRC-030..RRC-052, added and re-measured several on 2026-10-13/14).
 
 ### 5.1 Defects
 
