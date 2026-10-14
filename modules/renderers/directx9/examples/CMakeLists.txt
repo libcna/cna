@@ -546,7 +546,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rendertarget_pass_boundary_cmd}
         TIMEOUT 90 LABELS "DIRECTX9")
 
-    # REMED-GFX-129: cross-renderer control for Vulkan's ordered-Clear correction.
+    # REMED-GFX-129: the ordered-Clear contract, first a cross-renderer control for the since-retired
+    # Vulkan renderer's correction.
     cna_directx9_test(cna_test_directx9_ordered_clear
                   ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_directx9_ctest_command(_directx9_ordered_clear_cmd cna_test_directx9_ordered_clear)

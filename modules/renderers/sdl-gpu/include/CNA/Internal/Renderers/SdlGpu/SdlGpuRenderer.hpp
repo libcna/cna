@@ -1885,7 +1885,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         };
 
         /**
-         * @brief plans/plan_street_sdlgpu.md STREETS-0004: `GraphicsDevice.SamplerStates[0..3]` as a
+         * @brief STREETS-0004: `GraphicsDevice.SamplerStates[0..3]` as a
          *        custom effect's texture units saw them when its draw was queued.
          *
          * XNA samples texture unit N through `SamplerStates[N]`. The retired Vulkan renderer did
@@ -2097,7 +2097,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         };
 
         /**
-         * @brief plans/plan_street_sdlgpu.md STREETS-0001: the per-instance world matrix of an
+         * @brief STREETS-0001: the per-instance world matrix of an
          *        instanced draw on a family whose vertex record is fixed (SkinnedEffect, PbrEffect).
          *
          * The declaration-resolved families carry the four matrix columns inside their resolved
@@ -2917,7 +2917,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // ---- capability answers and limits ----
 
         /**
-         * @brief plans/plan_street_sdlgpu.md STREETS-0003: whether a half-float colour texture can
+         * @brief STREETS-0003: whether a half-float colour texture can
          *        be sampled with a linear filter here.
          *
          * SDL_gpu has no filterability query, so this cannot ask the way the retired Vulkan
@@ -2954,7 +2954,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override { return true; }
 
         /**
-         * @brief plans/plan_street_sdlgpu.md STREETS-0002: the PBR shader really does consume an
+         * @brief STREETS-0002: the PBR shader really does consume an
          *        `ImageBasedLightEXT` -- the split-sum term EasyGL and WebGPU evaluate.
          *
          * @return True while a device exists.

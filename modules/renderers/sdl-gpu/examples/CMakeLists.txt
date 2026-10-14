@@ -1335,7 +1335,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_PassBoundary COMMAND cna_test_sdlgpu_rendertarget_pass_boundary
         TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-129: cross-renderer control for Vulkan's ordered-Clear correction.
+    # REMED-GFX-129: the ordered-Clear contract, first a cross-renderer control for the since-retired
+    # Vulkan renderer's correction.
     cna_sdlgpu_test(cna_test_sdlgpu_ordered_clear
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_GraphicsDevice_OrderedClear COMMAND cna_test_sdlgpu_ordered_clear

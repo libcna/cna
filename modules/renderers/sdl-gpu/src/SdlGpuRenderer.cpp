@@ -10978,7 +10978,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 
-        // plans/plan_street_sdlgpu.md STREETS-0001: an instanced stock draw keeps its effect's
+        // STREETS-0001: an instanced stock draw keeps its effect's
         // family. It used to take the position-only instanced3d module whatever effect was
         // applied, so every instanced PbrEffect prop in cna-street was a flat white silhouette.
         // The family is chosen by the same DispatchStockDrawEXT the ordinary route uses, so the

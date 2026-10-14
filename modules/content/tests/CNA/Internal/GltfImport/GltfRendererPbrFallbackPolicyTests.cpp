@@ -306,7 +306,7 @@ namespace
            "texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(\" + mrUv + \",2),uRtFlipV.z))",
            "texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(\" + emissiveUv + \",3),uRtFlipV.w))",
            "texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(\" + occlusionUv + \",4),uRtFlipVHi.x))"}}, 2},
-        // plans/plan_street_sdlgpu.md STREETS-0006: the LOD biases moved into PbrParams (SMG-0032).
+        // STREETS-0006: the LOD biases moved into PbrParams (SMG-0032).
         {"sdl-gpu",
          "p.pbrTextureTransformRows[row][component]",
          "pbrp.textureTransformRows[slot * 2 + 1].xyz",
@@ -488,7 +488,7 @@ namespace
          "p.prog.set_uniform_matrix4(p.loc_world, params.worldColMajor)",
          "gl_Position=uWVP*cnaPos",
          "gl_Position=uWVP*cnaPos"},
-        // plans/plan_street_sdlgpu.md STREETS-0001: SDL_GPU compiles its PBR vertex shaders twice
+        // STREETS-0001: SDL_GPU compiles its PBR vertex shaders twice
         // from one source, the per-instance transform spelled CNA_INSTANCE_POSITION() (VULKAN-232's
         // scheme); same evidence, current spelling.
         {"sdl-gpu",
@@ -1100,7 +1100,7 @@ TEST(GltfRendererPbrFallbackPolicy, SdlGpuSamplesBothKhrMaterialsSpecularTexture
              "params.pbrSpecularColorMap, \"PbrEffect.SpecularColorMapEXT\"",
              "command.specularSampler = samplerSlots_[5]",
              "command.specularColorSampler = samplerSlots_[6]",
-             // plans/plan_street_sdlgpu.md STREETS-0006: the two maps' own binding slots, rather
+             // STREETS-0006: the two maps' own binding slots, rather
              // than the module's total sampler count, which SMG-0032 and STREETS-0002 each grew.
              "samplerBindings[5].sampler = specularSampler",
              "samplerBindings[6].sampler = specularColorSampler",
@@ -1382,7 +1382,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
         {"easygl",
          "aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness",
          "*cnaDirectionHandedness(skinDirectionMat)"},
-        // plans/plan_street_sdlgpu.md STREETS-0001: the instance matrix is folded into World, so the
+        // STREETS-0001: the instance matrix is folded into World, so the
         // determinant covers a mirroring instance too (VULKAN-232's reasoning).
         {"sdl-gpu",
          "inTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(lp.world)))",

@@ -224,7 +224,7 @@ protected:
             check(dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
                   "MSAA is reported after the renderer's live color/depth format query");
 
-            // plans/plan_street_sdlgpu.md STREETS-0007: RLGL-040 made the public MRT answer a profile
+            // STREETS-0007: RLGL-040 made the public MRT answer a profile
             // fact as well as a renderer one, and this game runs XNA's default Reach profile, which
             // has a single render target. The renderer's own promise and the public answer are two
             // checks, so neither can hide the other.
@@ -258,7 +258,7 @@ protected:
                       dev.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets) ==
                       dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable),
                   "float render-target capabilities agree with exact live format support");
-            // plans/plan_street_sdlgpu.md STREETS-0003: filtering is reported exactly where an
+            // STREETS-0003: filtering is reported exactly where an
             // RGBA16F render target -- the only half-float surface this renderer makes -- exists.
             check(dev.SupportsCapability(
                       CNA::GraphicsCapability::HalfFloatTextureLinearFiltering) ==
