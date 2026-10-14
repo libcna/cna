@@ -17,6 +17,7 @@
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = skipped (no display).
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -25,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -42,6 +44,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 class Fna3dStateTest : public CNA::Examples::PixelTestGame
 {
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
     std::unique_ptr<BasicEffect> basic_;
 
     void DrawQuad(const Color& color)
@@ -59,6 +62,14 @@ class Fna3dStateTest : public CNA::Examples::PixelTestGame
     }
 
 public:
+    Fna3dStateTest()
+    {
+        // Check G stamps the stencil buffer, and XNA's default backbuffer format, Depth24, has
+        // none; ask for the format that does, as an XNA game would.
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
+    }
+
     void RunTest() override
     {
         auto& device = getGraphicsDeviceProperty();

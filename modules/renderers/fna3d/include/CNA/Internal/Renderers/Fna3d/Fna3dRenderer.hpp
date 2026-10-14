@@ -972,7 +972,12 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
 
         /**
-         * @brief Reports the depth/stencil format FNA3D actually created.
+         * @brief Reports the depth/stencil format FNA3D creates for a request.
+         *
+         * The request the back buffer was last made for is answered with what FNA3D reports it
+         * created (OpenGL's window may carry more than was asked for); any other request is about
+         * to reach UpdatePresentationFormatEXT, and FNA3D's ResetBackbuffer allocates exactly it.
+         *
          * @param requestedFormat Requested `DepthFormat` ordinal.
          * @return The applied ordinal.
          */
@@ -1626,6 +1631,8 @@ namespace CNA::Internal::Renderers::Fna3d
         std::shared_ptr<Fna3dDeviceState> deviceState_ = std::make_shared<Fna3dDeviceState>();
         FNA3D_Device* device_ = nullptr;
         FNA3D_PresentationParameters presentation_{};
+        /// The `DepthFormat` ordinal the game last asked for; presentation_ may hold a substitute.
+        int requestedDepthStencilFormat_ = 0;
         PresentationLayout layout_{};
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
 

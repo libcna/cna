@@ -174,6 +174,7 @@ namespace CNA::Internal::Renderers::Fna3d
         presentation_.depthStencilFormat =
             args.depthStencilFormat == 0 ? FNA3D_DEPTHFORMAT_D24S8
                                          : ToFna3dDepthFormat(args.depthStencilFormat);
+        requestedDepthStencilFormat_ = args.depthStencilFormat;
         presentation_.presentationInterval = ToPresentInterval(args.swapInterval);
         presentation_.displayOrientation = FNA3D_DISPLAYORIENTATION_DEFAULT;
         presentation_.renderTargetUsage = FNA3D_RENDERTARGETUSAGE_DISCARDCONTENTS;
@@ -688,6 +689,7 @@ namespace CNA::Internal::Renderers::Fna3d
         const FNA3D_SurfaceFormat newColor = ToFna3dSurfaceFormat(backBufferFormat);
         const FNA3D_DepthFormat newDepth = ToFna3dDepthFormat(depthStencilFormat);
         const uint8_t newFullScreen = isFullScreen ? 1 : 0;
+        requestedDepthStencilFormat_ = depthStencilFormat;
 
         if (newColor == presentation_.backBufferFormat &&
             newDepth == presentation_.depthStencilFormat &&
@@ -707,8 +709,17 @@ namespace CNA::Internal::Renderers::Fna3d
         return static_cast<int>(FNA3D_GetBackbufferSurfaceFormat(device_));
     }
 
-    int Fna3dRenderer::GetAppliedDepthStencilFormatEXT(int /*requestedFormat*/) const
+    int Fna3dRenderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
     {
+        // GraphicsDevice::Reset asks this before it hands the request to
+        // UpdatePresentationFormatEXT. Answering a new request with the current format turned it
+        // into the current one, so a GraphicsDeviceManager preference (Depth24Stencil8 over the
+        // implicit Depth24) never reached FNA3D, and its SDL_GPU driver kept a back buffer with no
+        // stencil plane.
+        if (requestedFormat != requestedDepthStencilFormat_)
+        {
+            return requestedFormat;
+        }
         return static_cast<int>(FNA3D_GetBackbufferDepthFormat(device_));
     }
 
