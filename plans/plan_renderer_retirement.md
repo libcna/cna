@@ -33,6 +33,7 @@ finish it; none restores a retired renderer, option or constant.
 | RRC-041 | Remove `ISpriteBatchRenderer::SetSamplerAddressModeWEXT` and its fan-out call (its only implementor was VULKAN); AddressW keeps reaching DIRECTX9 through `SetSamplerAddressW` and the complete-hook renderers through `SetSamplerState`, pinned by `SpriteBatchTests` | done |
 | RRC-042 | Remove `GraphicsRendererDescriptor::wantsHighDpi`: only the retired METAL descriptor set it, so it was permanently false; pixel density stays a platform request (`WindowDescription::highDpi`), documented as an Apple known gap | done |
 | RRC-043 | `SDL_GPU` implements `RendererFeature::BaseInstanceDrawing` (its three implementors were retired, so both `InstancedDrawRangeTest` base-instance cases skipped everywhere): every host-expanded per-instance stream starts at `firstInstance`. An instanced draw with no per-instance stream now draws `instanceCount` copies on `SDL_GPU` and `WEBGPU`, as XNA does (both drew one), pinned by a new shared case | done |
+| RRC-044 | Remove the two empty `CheckValidationClean()` stubs left by the Vulkan validation gate; the shared stock-effect sampler contract tags failures by effect family, not by the retired renderer's descriptor-set names | done |
 
 ## Final report
 

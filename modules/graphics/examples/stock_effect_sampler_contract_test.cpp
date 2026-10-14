@@ -55,9 +55,9 @@
 //                              renderer that ignores the sampler and happens to filter linearly...
 //                              which is exactly the pre-fix state, and is why P alone is not enough
 //   W   PointWrap vs PointClamp with UVs to 2.0: the two images must DIFFER
-//   K   descriptor-cache key   two draws, ONE frame, SAME texture, different samplers -> the two
+//   K   sampler-identity key   two draws, ONE frame, SAME texture, different samplers -> the two
 //                              halves must differ. This is the check a sampler-blind cache key
-//                              fails even after the descriptor write is corrected
+//                              fails even after each draw's own sampler is applied correctly
 //   S   deferred snapshot      set PointClamp, queue draw A; set LinearClamp, queue draw B; render
 //                              once -> A is block-uniform and B is not
 //   M   multi-slot             slot 0 and slot 1 given different samplers, then swapped
@@ -595,9 +595,6 @@ class StockEffectSamplerContractTest : public Game
     {
         const char* name;
         void (StockEffectSamplerContractTest::*draw)(GraphicsDevice&, float);
-        /// The descriptor builder this family routed to on the retired VULKAN renderer, where the
-        /// defect lived; kept in every failure tag.
-        const char* descriptorPath;
         /// True when the effect's modulation is the identity, so the exact stored texel is asserted.
         bool identityModulation;
     };
@@ -652,26 +649,18 @@ protected:
         }
 
         static const Family kFamilies[] = {
-            {"BasicEffect(plain textured)", &StockEffectSamplerContractTest::DrawBasicPlain,
-             "fogTex3DDescSet",     true},
-            {"BasicEffect(lit textured)",   &StockEffectSamplerContractTest::DrawBasicLit,
-             "litTexturedDescSet",  false},
-            {"AlphaTestEffect",             &StockEffectSamplerContractTest::DrawAlphaTest,
-             "descSet (already correct)", true},
-            {"DualTextureEffect slot0",     &StockEffectSamplerContractTest::DrawDualTexture,
-             "dualTexDescSet (already correct)", false},
-            {"EnvironmentMapEffect base",   &StockEffectSamplerContractTest::DrawEnvMapBase,
-             "envMapDescSet",       false},
-            {"SkinnedEffect",               &StockEffectSamplerContractTest::DrawSkinned,
-             "skinnedDescSet",      false},
-            {"PbrEffect",                   &StockEffectSamplerContractTest::DrawPbr,
-             "pbrDescSet",          false},
-            {"SkinnedPbrEffect",            &StockEffectSamplerContractTest::DrawPbrSkinned,
-             "pbrDescSet(skinned)", false},
+            {"BasicEffect(plain textured)", &StockEffectSamplerContractTest::DrawBasicPlain, true},
+            {"BasicEffect(lit textured)",   &StockEffectSamplerContractTest::DrawBasicLit, false},
+            {"AlphaTestEffect",             &StockEffectSamplerContractTest::DrawAlphaTest, true},
+            {"DualTextureEffect slot0",     &StockEffectSamplerContractTest::DrawDualTexture, false},
+            {"EnvironmentMapEffect base",   &StockEffectSamplerContractTest::DrawEnvMapBase, false},
+            {"SkinnedEffect",               &StockEffectSamplerContractTest::DrawSkinned, false},
+            {"PbrEffect",                   &StockEffectSamplerContractTest::DrawPbr, false},
+            {"SkinnedPbrEffect",            &StockEffectSamplerContractTest::DrawPbrSkinned, false},
         };
 
         for (const Family& f : kFamilies) RunFamily(dev, f);
-        RunK_DescriptorCacheKey(dev);
+        RunK_SamplerIdentityKey(dev);
         RunS_DeferredSnapshot(dev);
         RunM_MultiSlot(dev);
         Finish();
@@ -687,7 +676,7 @@ private:
 
     void RunFamily(GraphicsDevice& dev, const Family& f)
     {
-        const std::string tag = std::string(f.name) + " [" + f.descriptorPath + "]";
+        const std::string tag = f.name;
 
         // P -- PointClamp must produce exact 4x4 blocks.
         SetSlot(dev, 0, TextureFilter::Point, TextureAddressMode::Clamp);
@@ -772,9 +761,9 @@ private:
         SetSlot(dev, 1, TextureFilter::Linear, TextureAddressMode::Wrap);
     }
 
-    /// The descriptor-cache-key check: two draws, ONE frame, SAME texture, different samplers.
-    /// A cache keyed only on the image view hands the second draw the first one's descriptor.
-    void RunK_DescriptorCacheKey(GraphicsDevice& dev)
+    /// The sampler-identity check: two draws, ONE frame, SAME texture, different samplers. A
+    /// renderer-side cache keyed only on the texture hands the second draw the first one's sampler.
+    void RunK_SamplerIdentityKey(GraphicsDevice& dev)
     {
         RenderTarget2D rt(dev, kRT, kRT, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);

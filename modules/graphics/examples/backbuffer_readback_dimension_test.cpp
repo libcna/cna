@@ -543,19 +543,8 @@ class BackbufferReadbackDimensionTest : public Game
         Finish();
     }
 
-    /**
-     * @brief VULKAN-404 -- the Khronos validation layer's verdict on everything this leg just did.
-     *
-     * Only the retired VULKAN renderer asserted it (per leg, because the defect it guarded was
-     * reachable from leg G1 alone), so the body is empty on every surviving renderer.
-     */
-    void CheckValidationClean()
-    {
-    }
-
     void Finish()
     {
-        CheckValidationClean();
         std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;

@@ -984,17 +984,6 @@ class CubeVolumeSetDataContractTest : public Game
         }
     }
 
-    /**
-     * @brief VULKAN-406 -- the Khronos validation layer's verdict on every cube, volume and
-     *        cube-target subresource this fixture just touched.
-     *
-     * Only the retired VULKAN renderer asserted it, so the body is empty on every surviving
-     * renderer.
-     */
-    void CheckValidationClean()
-    {
-    }
-
     // =====================================================================
     // Volume checks
     // =====================================================================
@@ -1355,7 +1344,6 @@ protected:
         }
         RunRenderTargetCubeCheck(dev);
         RunVolumeChecks(dev);
-        CheckValidationClean();
 
         std::printf("%d/%d checks passed on %s\n", passCount_, totalCount_, kContract.name);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
