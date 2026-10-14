@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
 
 using Microsoft::Xna::Framework::TitleContainer;
@@ -128,7 +129,7 @@ TEST(TitleContainerTest, OpenStreamThrowsForMissingFile)
 
     EXPECT_THROW(
         (void)TitleContainer::OpenStream("nonexistent_file_xyz.dat"),
-        std::runtime_error
+        System::IO::FileNotFoundException
     );
 
     std::filesystem::remove_all(tmpDir);

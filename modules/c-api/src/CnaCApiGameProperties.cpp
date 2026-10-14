@@ -346,7 +346,7 @@ namespace {
     std::unique_ptr<System::IO::Stream> stream;
     try {
         stream = TitleContainer::OpenStream(path);
-    } catch (const std::runtime_error& exception) {
+    } catch (const std::exception& exception) {
         return IoError(exception.what());
     }
     if (!stream) {

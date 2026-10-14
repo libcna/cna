@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         if(!picturePath_.empty()) {
             try{return Microsoft::Xna::Framework::TitleContainer::OpenStream(picturePath_).release();}
-            catch(const std::runtime_error&){throw GamerServicesNotAvailableException("The achievement picture could not be read.");}
+            catch(const std::exception&){throw GamerServicesNotAvailableException("The achievement picture could not be read.");}
         }
         if(pictureHash_.empty())throw GamerServicesNotAvailableException("No achievement picture is configured.");
         const auto bytes=CNA::Internal::GamerServices::backend()->asset(pictureHash_);

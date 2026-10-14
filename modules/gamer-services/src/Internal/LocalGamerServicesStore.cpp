@@ -580,7 +580,7 @@ namespace CNA::Internal::GamerServices
         {
             stream = Microsoft::Xna::Framework::TitleContainer::OpenStream(OfflineAchievementCatalogPath);
         }
-        catch (const std::runtime_error&)
+        catch (const std::exception&)
         {
             catalog.emplace();
             return *catalog;

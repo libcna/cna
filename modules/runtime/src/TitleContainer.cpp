@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -65,7 +66,8 @@ namespace Microsoft::Xna::Framework
         }
 #endif
 
-        throw std::runtime_error("[TitleContainer] Failed to open stream: " + realName);
+        // XNA documents FileNotFoundException for a title file that is not there (it was a plain runtime_error here).
+        throw System::IO::FileNotFoundException("Could not find file '" + realName + "'.", realName);
     }
 
     void* TitleContainer::ReadToPointer(const std::string& name, IntPtr& size)
