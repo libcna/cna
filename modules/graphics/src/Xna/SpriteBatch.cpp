@@ -923,7 +923,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Mirrors FNA's SpriteBatch.DrawString axis-direction tables, indexed by (int)effects
         // (None=0, FlipHorizontally=1, FlipVertically=2, FlipHorizontally|FlipVertically=3 --
         // SpriteEffects is a composable [Flags] enum, so the 4th, combined value is real and
-        // reachable; REMED-GFX-003: these tables were previously sized for 3 entries, an OOB
+        // reachable; these tables were previously sized for 3 entries, an OOB
         // stack read for effIdx=3). When effects != None, the whole string is measured up front
         // and `origin` is shifted by the measured size on the mirrored axis, so the flip pivots
         // around the correct edge of the text block -- otherwise each glyph would individually

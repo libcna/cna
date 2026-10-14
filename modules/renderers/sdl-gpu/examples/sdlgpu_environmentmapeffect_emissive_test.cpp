@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-007 (SdlGpu slice): EnvironmentMapEffect's fragment shader must add EmissiveColor
+// (SdlGpu slice): EnvironmentMapEffect's fragment shader must add EmissiveColor
 // UNSCALED (FNA Lighting.fxh: litRGB = lightSum*DiffuseColor + EmissiveColor), NOT
 // (EmissiveColor + lightSum)*DiffuseColor. The wrong form re-multiplies the already-ambient-folded
 // emissive by DiffuseColor a second time.
@@ -13,8 +13,8 @@
 // so `(emissiveColor + lightSum) * fragTint.rgb` produces emissive*DiffuseColor*Alpha^2 and
 // ambient*DiffuseColor^2*Alpha^2 terms that must not exist. Fixing the one line
 // (litRGB = lightSum * fragTint.rgb + pc.emissiveAmount.xyz) removes the emissive re-multiply AND
-// the alpha-squaring together. The Alpha=0.5 sub-check below fails pre-fix specifically because of
-// the Alpha^2 term and passes post-fix.
+// The alpha-squaring together. The Alpha=0.5 sub-check below fails pre-fix specifically because of
+// The Alpha^2 term and passes post-fix.
 //
 // SdlGpu renders into a RenderTarget2D (SurfaceFormat::Color = RGBA8 UNORM, linear -- confirmed by
 // examples/sdlgpu_envmap_test.cpp's own gray-cube 128->128 readback), so the expected pixel values
@@ -195,7 +195,7 @@ protected:
               alphaHalf, Color(50, 25, 13, 128));
 
         // (3) WHITE-DIFFUSE control -- proves both formulas coincide when Diffuse=white (the reason
-        // the pre-existing sdlgpu_envmap_test.cpp could never catch this). Passes pre- and post-fix.
+        // The pre-existing sdlgpu_envmap_test.cpp could never catch this). Passes pre- and post-fix.
         //   both -> litRGB = 0.5 -> pixel = tex*0.5 = (100,50,25)
         Color whiteDiffuse = RenderEmissive(dev, tex, *cube, Vector3(1.0f, 1.0f, 1.0f),
                                             Vector3(0.5f, 0.5f, 0.5f), 1.0f, quad);

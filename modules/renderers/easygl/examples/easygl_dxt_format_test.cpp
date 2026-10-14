@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-244: the three block-compressed SurfaceFormats GraphicsProfile.Reach permits --
+// The three block-compressed SurfaceFormats GraphicsProfile.Reach permits --
 // Dxt1, Dxt3 and Dxt5 -- uploaded as raw 4x4 blocks and SAMPLED in a real draw.
 //
 // Two blocks side by side rather than one. A single block would still look right if the renderer

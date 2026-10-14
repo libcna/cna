@@ -88,7 +88,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
             TIMEOUT 300 LABELS "DIRECTX9;CompiledEffects")
     endif()
 
-    # REMED-GFX-092: deterministic, renderer-instance-local HRESULT injection for D3D9 state,
+    # Deterministic, renderer-instance-local HRESULT injection for D3D9 state,
     # target/depth binding, depth allocation, retry, rollback, and lost-device mapping.  The
     # native success path is still exercised by DirectX9_Smoke and this test's setup/retry operations.
     cna_directx9_test(cna_test_directx9_hresult directx9_hresult_test.cpp)
@@ -96,7 +96,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME D3D9_HResultHandling COMMAND ${_directx9_hresult_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-089: renderer-neutral public GraphicsDevice/DepthStencilState contract.
+    # Renderer-neutral public GraphicsDevice/DepthStencilState contract.
     # A(Default)->B(DepthRead)->C(None)->A on the backbuffer, using only BasicEffect and the
     # normal public draw API. The smoke test independently covers the offscreen native surface.
     cna_directx9_test(cna_test_directx9_depth_contract ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_depth_contract_test.cpp)
@@ -112,7 +112,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Draw COMMAND ${_directx9_draw_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-077 runtime verification for D3D9 lives inside cna_test_directx9_smoke (Check GFX077):
+    # Runtime verification for D3D9 lives inside cna_test_directx9_smoke (Check GFX077):
     # ColorWriteChannels (-> D3DRS_COLORWRITEENABLE) + MultiSampleMask (-> D3DRS_MULTISAMPLEMASK) are
     # verified through an off-screen D3D9RenderTargetRenderer + GetData readback, alongside the smoke
     # test's other real-device checks (D9-53), rather than the RT-readback Game harness the native
@@ -124,7 +124,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_DrawEx COMMAND ${_directx9_drawex_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-061: public stock-effect fog contract. The shared transformed-camera fixture
+    # Public stock-effect fog contract. The shared transformed-camera fixture
     # discriminates FNA's CPU-prepared view-space FogVector from the obsolete scalar/object-space
     # model, including post-skin position handling. The focused family fixtures cover the other
     # XNA fog-capable stock effects through reachable public effect state.
@@ -159,9 +159,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Instanced COMMAND ${_directx9_instanced_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-060: non-zero draw-offset regressions -- every effect-aware D3D9 draw path honors
+    # Non-zero draw-offset regressions -- every effect-aware D3D9 draw path honors
     # DrawPrimitives(vertexStart)/DrawIndexedPrimitives(baseVertex,startIndex) instead of hardcoding
-    # 0 into DrawPrimitive/DrawIndexedPrimitive (the D3D9 counterpart of REMED-GFX-020's D3D11 fix).
+    # 0 into DrawPrimitive/DrawIndexedPrimitive (the D3D9 counterpart of the D3D11 fix).
     cna_directx9_test(cna_test_directx9_drawoffset directx9_drawoffset_test.cpp)
     cna_directx9_ctest_command(_directx9_drawoffset_cmd cna_test_directx9_drawoffset)
     cna_register_renderer_test(NAME DirectX9_DrawOffset COMMAND ${_directx9_drawoffset_cmd}
@@ -288,7 +288,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # Never creates a D3D9 device (D3DCompile()/D3DDisassemble() are pure compiler-library
     # calls), so it legitimately never prints a "DXVK: <version>" line -- same reasoning as
     # DirectX9_Common's own ENVIRONMENT override. CNA_D3D9_WINEPREFIX pins this specific test to
-    # the real-compiler prefix regardless of whatever prefix the ambient shell/CI environment
+    # The real-compiler prefix regardless of whatever prefix the ambient shell/CI environment
     # might otherwise have set for the rest of the D3D9 suite.
     cna_register_renderer_test(NAME DirectX9_ConstantTable COMMAND ${_directx9_constanttable_cmd}
         TIMEOUT 30 LABELS "DIRECTX9"
@@ -318,7 +318,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
             TIMEOUT 60 LABELS "DIRECTX9" ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
     endif()
 
-    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # Every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
     # fallback zero-initialized its own scratch buffer, handed it to ITextureRenderer::GetData (whose
     # interface default did nothing) and converted it for the caller regardless, so a renderer with no
@@ -330,7 +330,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_texture2d_getdata_contract_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # (and the GetData startIndex contract, the same expression): the exact XNA-compatible
     # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
     # DESTINATION element offset and elementCount is the destination capacity available from it;
     # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
@@ -342,7 +342,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_texture2d_getdata_transfer_range_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
+    # A RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-renderer control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's
     # colour texture stores the image bottom-up and sampling did not compensate even though GetData
@@ -357,7 +357,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
 
 
 
-    # REMED-GFX-169 cross-renderer control: every stock 3D effect must sample through the public
+    # Cross-renderer control: every stock 3D effect must sample through the public
     # GraphicsDevice.SamplerStates[slot]. The defect was Vulkan-local (six stock descriptor builders
     # took no sampler parameter, so all 15 of their bindings used a hardcoded default and the
     # sampler was absent from their cache keys); this run establishes that this renderer already
@@ -369,13 +369,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_stock_effect_sampler_cmd}
         TIMEOUT 300 LABELS "DIRECTX9")
 
-    # REMED-GFX-150 cross-renderer control: TextureFilter::Point must select exactly ONE texel and
+    # Cross-renderer control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
     # path alike. The defect was Software-local (its ApplySamplerState named none of its parameters
     # and one bilinear function served every textured fragment, so every draw was LinearClamp); this
     # run is what establishes that this renderer already honoured the contract rather than being made
     # to.
-    # REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification, a separate
+    # Every public TextureFilter ordinal names a SEPARATE magnification, a separate
     # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
     # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
@@ -390,7 +390,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_texture_filter_ordinal_cmd}
         TIMEOUT 300 LABELS "DIRECTX9")
 
-    # REMED-GFX-173 cross-renderer control: EnvironmentMapEffect samples TWO independent
+    # Cross-renderer control: EnvironmentMapEffect samples TWO independent
     # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
     # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
     # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
@@ -404,7 +404,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_envmap_cube_sampler_cmd}
         TIMEOUT 600 LABELS "DIRECTX9")
 
-    # REMED-GFX-172 cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
+    # Cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
     # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
     # DECLARE_TEXTURE(Texture2, 1). D9-127 translates the fixture's real dual-UV public declaration,
     # including the stride-32 vertex-colour variant, rather than inferring either from byte stride.
@@ -415,7 +415,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_dualtexture_slot_sampler_cmd}
         TIMEOUT 600 LABELS "DIRECTX9")
 
-    # REMED-GFX-175 cross-renderer control: the MIPMAP component of a TextureFilter ordinal.
+    # Cross-renderer control: the MIPMAP component of a TextureFilter ordinal.
     cna_directx9_test(cna_test_directx9_texture_filter_mip_contract
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/texture_filter_mip_contract_test.cpp)
     cna_directx9_ctest_command(_directx9_texture_filter_mip_cmd cna_test_directx9_texture_filter_mip_contract)
@@ -423,7 +423,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_texture_filter_mip_cmd}
         TIMEOUT 300 LABELS "DIRECTX9")
 
-    # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
+    # Cross-renderer control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
     # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
     # were alive. Every draw here is checked against a self-identifying oracle that decodes back to an
@@ -443,7 +443,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_point_sampling_cmd}
         TIMEOUT 300 LABELS "DIRECTX9")
 
-    # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
+    # Cross-renderer control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
     # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
     # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
@@ -456,7 +456,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rt_producer_consumer_cmd}
         TIMEOUT 120 LABELS "DIRECTX9")
 
-    # REMED-GFX-152 cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
+    # Cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
     # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
     # stock-effect paths static_cast an ITextureRenderer* to the unrelated sibling
     # SdlGpuTextureRenderer, fabricating an SDL_GPUTexture* out of a render target's own fields); this
@@ -468,7 +468,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rt_effect_source_cmd}
         TIMEOUT 300 LABELS "DIRECTX9")
 
-    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
+    # The TextureCube/Texture3D half of the finding. Both public cube and
     # volume GetData paths converted their own zero-initialized scratch buffer for the caller
     # regardless of whether the renderer read anything back. The volume half needs a
     # GraphicsProfile::HiDef device (D9-100: Reach does not support volume textures at all), which
@@ -480,10 +480,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_cube_volume_getdata_contract_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
-    # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
+    # `RenderTargetCube::GetData` must return the face that was really rendered or
+    # reject the request deterministically. the honest TextureCube/Texture3D readback contract made the reporting honest but left the
     # readback itself implemented on only two renderers, so a rendered cube face had no byte-exact
-    # public oracle anywhere else. Drawn geometry (never Clear -- see REMED-GFX-129) paints an
+    # public oracle anywhere else. Drawn geometry (never Clear -- paints an
     # asymmetric five-region pattern whose colours rotate per face, so a flip, a rotation, a wrong
     # array layer/subresource, a stale face or an unresolved multisample surface all fail.
     cna_directx9_test(cna_test_directx9_rendertargetcube_getdata_contract
@@ -493,10 +493,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rendertargetcube_getdata_contract_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
+    # IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
     # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
-    # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
+    # The asymmetric face producer, then rebinds and draws only a small marker: "the
     # marker landed" is what a discarding renderer also achieves, so it can never pass for
     # preservation.
     cna_directx9_test(cna_test_directx9_rendertargetcube_usage
@@ -506,7 +506,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rendertargetcube_usage_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-141: a MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
+    # A MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
     # across all six faces on EasyGL, Vulkan and SdlGpu, so a PreserveContents face reloaded whichever
     # face was rendered last instead of its own samples. Renders face A, then face B, then rebinds A for
     # a small partial update -- with no readback, Present or flush in between -- and reads the whole of
@@ -519,7 +519,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rendertargetcube_msaa_face_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
+    # RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
     # bind clears all three (Target|DepthBuffer|Stencil, MaxDepth, 0) -- so the enum governs depth and
     # stencil, not colour alone. Renders an occluder, unbinds, rebinds WITHOUT clearing and draws behind
@@ -532,11 +532,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rendertarget_depthstencil_usage_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
+    # Every public render-target bind/unbind cycle must be its own logical pass.
     # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
     # one target within a single flush window shared one load action. The decisive checks all use
-    # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
+    # DiscardContents -- collapsing is invisible on a preserving target, which is why the RenderTargetUsage propagation fix
     # needed an artificial readback barrier to see it -- and nothing between two cycles ever forces a
     # flush.
     cna_directx9_test(cna_test_directx9_rendertarget_pass_boundary
@@ -546,7 +546,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_rendertarget_pass_boundary_cmd}
         TIMEOUT 90 LABELS "DIRECTX9")
 
-    # REMED-GFX-129: the ordered-Clear contract, first a cross-renderer control for the since-retired
+    # The ordered-Clear contract, first a cross-renderer control for the since-retired
     # Vulkan renderer's correction.
     cna_directx9_test(cna_test_directx9_ordered_clear
                   ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
@@ -555,8 +555,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_ordered_clear_cmd}
         TIMEOUT 120 LABELS "DIRECTX9")
 
-    # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
-    # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
+    # Backbuffer work and render-target work must replay in ONE ordered stream.
+    # (Vulkan) and the per-bind-cycle render pass fix (SdlGpu) gave every render-target bind cycle its own
     # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every
     # backbuffer draw of a frame was replayed after every target pass regardless of when it was
     # issued. A frame that samples a target onto the backbuffer and then renders into that target
@@ -569,7 +569,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_backbuffer_pass_order_cmd}
         TIMEOUT 120 LABELS "DIRECTX9")
 
-    # REMED-GFX-116 cross-renderer control: every deferred draw must execute under the
+    # Cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it
     # recorded the pass; this file is the same public fixture, so a renderer that regresses
     # the contract is caught here rather than assumed correct.
@@ -580,7 +580,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_deferred_viewport_cmd}
         TIMEOUT 120 LABELS "DIRECTX9")
 
-    # REMED-GFX-146 cross-renderer control: every deferred draw must execute under the
+    # Cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own
     # public call. WebGPU resolved both live when it recorded the pass; this file is the same
     # public fixture, so a renderer that regresses the contract is caught here rather than
@@ -592,8 +592,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         COMMAND ${_directx9_deferred_scissor_cmd}
         TIMEOUT 120 LABELS "DIRECTX9")
 
-    # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
-    # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
+    # The WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
+    # kept the pre-the honest Texture2D::GetData contract shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
     cna_directx9_test(cna_test_directx9_cube_volume_setdata_contract
                   ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
@@ -601,7 +601,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_CubeVolume_SetDataContract
         COMMAND ${_directx9_cube_volume_setdata_contract_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
-    # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
+    # The control: a RenderTarget2D constructed during a public frame must be usable in
     # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
     # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
     # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer

@@ -67,7 +67,7 @@ namespace CNA::Internal::Renderers
     using VertexElementFormat = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 
     /**
-     * @brief Renderer-neutral BlendState output-merger write state (REMED-GFX-077).
+     * @brief Renderer-neutral BlendState output-merger write state.
      *
      * Carries the two BlendState fields that are NOT expressible through the six blend
      * factor/function ordinals of ApplyBlendState: the four per-render-target colour write
@@ -230,7 +230,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Uploads format-native texels into a sub-rectangle of a single cube face.
          *
-         * REMED-GFX-135, the write-side counterpart of `GetData`'s contract below. Returns **true
+         * The write-side counterpart of `GetData`'s contract below. Returns **true
          * only when the COMPLETE requested region was stored**, and false when this renderer stored
          * nothing. There is no third state: an implementation that cannot store the region, or that
          * fails part-way through, must return false rather than reporting a partial write as
@@ -338,7 +338,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Reads back format-native texels from a sub-rectangle of a single cube face.
          *
-         * REMED-GFX-130, extending REMED-GFX-127's contract to this interface. Returns **true only
+         * Extends `Texture2D`'s honest-readback contract to this interface. Returns **true only
          * when the complete requested region was written into @p data**, and false when this
          * renderer performed no readback at all. There is no third state: an implementation that
          * fails part-way through, or that cannot complete the transfer, must return false rather
@@ -429,7 +429,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Uploads format-native voxels into a sub-volume of the given mip level.
          *
-         * REMED-GFX-135. Identical contract to `ITextureCubeRenderer::SetData` -- see its
+         * Identical contract to `ITextureCubeRenderer::SetData` -- see its
          * documentation for why there is no default body. `data` holds the requested box slice by
          * slice (front to back), each slice as tightly packed rows in the texture's SurfaceFormat.
          *
@@ -475,7 +475,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Reads back format-native voxels from a sub-volume of the given mip level.
          *
-         * REMED-GFX-130. Identical contract to `ITextureCubeRenderer::GetData` above -- see its
+         * Identical contract to `ITextureCubeRenderer::GetData` above -- see its
          * documentation for why the default is `false` rather than a silent no-op. `data` receives
          * the requested box slice by slice (front to back), each slice as tightly packed rows in
          * the texture's SurfaceFormat.
@@ -577,7 +577,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Reads back format-native texels from a sub-rectangle of the given mip level.
          *
-         * REMED-GFX-127. Returns **true only when the complete requested region was written into
+         * Returns **true only when the complete requested region was written into
          * @p data**, and false when this renderer performed no readback at all. There is no third
          * state: an implementation that fails part-way through, or that cannot complete the
          * transfer, must return false rather than reporting a partially written buffer as success.
@@ -725,7 +725,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Reports that this renderer cannot upload CPU pixels into a rendered cube face.
          *
-         * REMED-GFX-135. This body used to be `{}` -- an empty override that made
+         * This body used to be `{}` -- an empty override that made
          * `RenderTargetCube::SetData` (inherited from `TextureCube`) return normally on every
          * renderer while storing nothing, which is exactly the accept-and-discard this finding
          * removes, reached through inheritance instead of a null renderer. `false` makes the shared
@@ -746,16 +746,16 @@ namespace CNA::Internal::Renderers
         // ITextureCubeRenderer::GetData is deliberately NOT re-declared here: a render-target cube
         // inherits the same `return false` default, which means "this renderer cannot read a
         // rendered cube face back to the CPU" and makes `TextureCube::GetData` raise
-        // System::NotSupportedException (REMED-GFX-130).
+        // System::NotSupportedException.
         //
-        // REMED-GFX-134 implemented it on every renderer that owned a rendered cube resource at
+        // Implemented it on every renderer that owned a rendered cube resource at
         // the time (Bgfx and D3D12, named below, were retired on 2026-09-17 and 2026-10-06,
         // Vulkan and D3D11 on 2026-10-13):
         // EasyGL, Vulkan, Bgfx, D3D9, D3D11 and D3D12 joined SdlGpu and WebGPU, each reusing the
         // mechanism its plain-TextureCube sibling already uses in the same file plus that
-        // renderer's own rendered-face specifics -- REMED-GFX-067's `originBottomLeft` row
+        // renderer's own rendered-face specifics -- the `originBottomLeft` row
         // normalization on GL and bgfx, the MSAA resolve, and the deferred-draw flush a
-        // still-bound or not-yet-presented target needs (REMED-GFX-074/075). The public row order
+        // still-bound or not-yet-presented target needs. The public row order
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and a renderer
@@ -768,7 +768,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief Renderer-neutral description of one normalized render-target attachment.
      *
-     * REMED-GFX-096 replaces the former plural handoff (`IRenderTargetRenderer*[]`), which could
+     * Replaces the former plural handoff (`IRenderTargetRenderer*[]`), which could
      * express only RenderTarget2D and therefore discarded both RenderTargetCube type and face.
      * This value keeps one slot's resource kind, concrete renderer, selected subresource, extent,
      * and applied sample count together so slot alignment cannot be lost through parallel arrays.
@@ -1134,7 +1134,7 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief REMED-GFX-201: one bound vertex stream, captured by value for the duration of a draw.
+     * @brief One bound vertex stream, captured by value for the duration of a draw.
      *
      * XNA's `GraphicsDevice.SetVertexBuffers` binds up to 16 `VertexBufferBinding`s, and a
      * `VertexDeclaration` may split a single vertex's elements across several of them. FNA hands
@@ -1176,7 +1176,7 @@ namespace CNA::Internal::Renderers
         /// This stream's `VertexBufferBinding.VertexOffset`, in vertex elements, **less the shared
         /// base already folded into `vertexStart`/`baseVertex`** (see `GpuDrawParams::vertexStart`).
         /// Always >= 0, and always 0 for a single-stream draw, which is what keeps the
-        /// single-stream native binding byte-identical to its pre-REMED-GFX-201 form.
+        /// single-stream native binding byte-identical to its earlier form.
         int vertexOffset = 0;
 
         /// `VertexBufferBinding.InstanceFrequency`; 0 means a per-vertex stream.
@@ -1368,7 +1368,7 @@ namespace CNA::Internal::Renderers
         bool  fogEnabled      = false;
         /// BasicEffect fog: RGB blend colour.
         float fogColor[3]     = {0, 0, 0};
-        /// REMED-GFX-010: FNA stock-effect fog vector (EffectHelpers.SetFogVector). Dotting this
+        /// FNA stock-effect fog vector (EffectHelpers.SetFogVector). Dotting this
         /// with the object-space (or, for SkinnedEffect, the post-skin) vertex position `float4(p,1)`
         /// yields FNA's `fogFactor = saturate(dot(pos, fogVector))` — a true *view-space* Z fog term,
         /// because the vector bakes in the third column of `World*View`
@@ -1396,11 +1396,11 @@ namespace CNA::Internal::Renderers
         /// plans/plan_modern.md MOD-2232: first logical instance for the capability-gated
         /// base-instance route. The XNA draw path and every older renderer see zero.
         int firstInstance = 0;
-        /// REMED-GFX-201/202: every active declared `VertexBufferBinding`, in public slot order,
+        /// Every active declared `VertexBufferBinding`, in public slot order,
         /// captured by value -- per-vertex and per-instance alike, on every draw route.
         /// `vertexStreams[0]` is always the stream `Draw*PrimitivesEx`'s own `vb` argument refers
         /// to, so a renderer that reads only `vb` still sees exactly what it saw before this field
-        /// existed. REMED-GFX-233's one legacy empty-declaration buffer is the sole public-binding
+        /// existed. the one legacy empty-declaration buffer is the sole public-binding
         /// exception and deliberately leaves this array empty (see `vertexStreamCount`). Entries
         /// at or past `vertexStreamCount` are unset and must not be read.
         ///
@@ -1411,7 +1411,7 @@ namespace CNA::Internal::Renderers
         /// of "the instance buffer" anywhere.
         std::array<GpuVertexStreamBinding, kMaxVertexStreams> vertexStreams{};
         /// Active entries in `vertexStreams`. 0 on internal routes that bind no public buffer
-        /// (SpriteBatch, `DrawUser*`) and on REMED-GFX-233's legacy ordinary single-buffer route
+        /// (SpriteBatch, `DrawUser*`) and on the legacy ordinary single-buffer route
         /// whose intentionally empty VertexDeclaration has no stride to describe; that route uses
         /// the Draw*PrimitivesEx `vb` argument and its renderer upload stride. 1 for every declared
         /// single-stream draw. Nonzero declared streams, instanced submission, and multi-stream
@@ -1424,20 +1424,20 @@ namespace CNA::Internal::Renderers
         /// unchanged. 0 when `vertexStreamCount == 0`.
         int combinedVertexStride = 0;
         /// First vertex index for non-indexed draws (maps to glDrawArrays `first` / vkCmdDraw `firstVertex`).
-        /// REMED-GFX-201: on the ORDINARY routes this already includes the smallest per-vertex
+        /// On the ORDINARY routes this already includes the smallest per-vertex
         /// binding offset of the draw (`GraphicsDevice::FoldedVertexStreamOffset`), which is why
         /// every `vertexStreams[k].vertexOffset` is a non-negative remainder there and a
-        /// single-stream draw carries its whole public offset here exactly as REMED-GFX-200
+        /// single-stream draw carries its whole public offset here exactly as it did before multi-stream support
         /// established. The instanced route folds nothing (see `baseVertex`).
         int vertexStart = 0;
         /// First index in the IBO for indexed draws (maps to glDrawElements byte offset / vkCmdDrawIndexed `firstIndex`).
         int startIndex  = 0;
         /// Value added to each index before vertex fetch (maps to glDrawElementsBaseVertex / vkCmdDrawIndexed `vertexOffset`).
-        /// REMED-GFX-201: on the ordinary routes, like `vertexStart` above, this already includes
+        /// On the ordinary routes, like `vertexStart` above, this already includes
         /// the draw's folded per-vertex binding offset, and it advances **every** per-vertex stream
         /// by that many of that stream's own elements.
         ///
-        /// REMED-GFX-202: the INSTANCED route folds nothing into it -- every stream there carries
+        /// The INSTANCED route folds nothing into it -- every stream there carries
         /// its whole public `VertexOffset` in `vertexStreams[k].vertexOffset`, which is exactly
         /// FNA3D's own D3D11 driver (`offset = binding.vertexOffset * stride` per binding, with
         /// `BaseVertexLocation = baseVertex` passed separately to `DrawIndexedInstanced`). This
@@ -1650,7 +1650,7 @@ namespace CNA::Internal::Renderers
     }
 
     /**
-     * @brief REMED-GFX-201: where one element of the combined vertex layout actually lives.
+     * @brief Where one element of the combined vertex layout actually lives.
      *
      * CNA's renderers describe a vertex layout by its byte stride, so their element tables use
      * offsets measured inside the *combined* vertex. A multi-stream draw stores those same bytes
@@ -1669,12 +1669,12 @@ namespace CNA::Internal::Renderers
     /**
      * @brief The byte stride a renderer must select its input layout and shader variant with.
      *
-     * REMED-GFX-201: for a bound-buffer draw this is the sum of the per-vertex streams' strides,
+     * For a bound-buffer draw this is the sum of the per-vertex streams' strides,
      * which equals the one stream's own stride whenever a single buffer is bound. The internal
      * routes that stage their own temporary buffer -- `DrawUser*`, SpriteBatch,
      * `DrawColoredPrimitives` -- bind no public `VertexBufferBinding` at all and leave
      * `vertexStreamCount` at 0; they keep dispatching on @p fallbackStride, the stride of the one
-     * buffer they built, so their behaviour is untouched by this feature. REMED-GFX-233's legacy
+     * buffer they built, so their behaviour is untouched by this feature. the legacy
      * empty-declaration single-buffer route likewise leaves the count at 0 because only the
      * renderer resource knows its typed-upload stride; @p fallbackStride is authoritative there.
      *
@@ -1734,7 +1734,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief How many bound streams advance per instance (`instanceFrequency > 0`).
      *
-     * REMED-GFX-202: XNA places no limit on this -- `InstanceFrequency` is a property of each
+     * XNA places no limit on this -- `InstanceFrequency` is a property of each
      * binding, so any subset of the 16 slots may be per-instance, at any frequencies. Every CNA
      * renderer that implements instancing at all currently binds exactly one, so more than one is
      * gated by `GraphicsCapability::MultiStreamVertexInput` and rejected before submission rather
@@ -1774,7 +1774,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief The lowest-slot per-instance stream, or null when this is not an instanced draw.
      *
-     * REMED-GFX-202: the direct replacement for the removed `GpuDrawParams::instanceVb` /
+     * The direct replacement for the removed `GpuDrawParams::instanceVb` /
      * `instanceVertexOffset` / `instanceFrequency` trio. `stream->vertexOffset` is the public
      * `VertexBufferBinding.VertexOffset` in vertex ELEMENTS (never bytes) and
      * `stream->instanceFrequency` is the step rate / divisor.
@@ -1811,7 +1811,7 @@ namespace CNA::Internal::Renderers
      * @brief The stream `Draw*PrimitivesEx`'s own `vb` argument names, or null on the internal
      *        routes that bind no public buffer at all.
      *
-     * REMED-GFX-202: the direct replacement for the removed `GpuDrawParams::vertexBufferOffset` --
+     * The direct replacement for the removed `GpuDrawParams::vertexBufferOffset` --
      * read `FirstPerVertexStream(params)->vertexOffset`.
      */
     [[nodiscard]] inline const GpuVertexStreamBinding* FirstPerVertexStream(
@@ -1824,7 +1824,7 @@ namespace CNA::Internal::Renderers
      * @brief Whether this draw needs more than the one stream `Draw*PrimitivesEx` names directly.
      *
      * The single-stream fast path every renderer already implements stays selected by this being
-     * false, which it is for every draw CNA issued before REMED-GFX-201.
+     * false, which it is for every draw CNA issued before multi-stream support existed.
      */
     [[nodiscard]] inline bool HasMultipleVertexStreams(const GpuDrawParams& params)
     {
@@ -1835,7 +1835,7 @@ namespace CNA::Internal::Renderers
      * @brief Whether this draw binds more per-instance streams than the single one every
      *        instancing renderer already handles.
      *
-     * REMED-GFX-202: the instanced fast path stays selected by this being false, which it is for
+     * The instanced fast path stays selected by this being false, which it is for
      * every instanced draw CNA issued before this task.
      */
     [[nodiscard]] inline bool HasMultipleInstanceStreams(const GpuDrawParams& params)
@@ -1844,7 +1844,7 @@ namespace CNA::Internal::Renderers
     }
 
     /**
-     * @brief REMED-GFX-202: fills the classic one-per-vertex + one-per-instance stream pair.
+     * @brief Fills the classic one-per-vertex + one-per-instance stream pair.
      *
      * `GraphicsDevice` builds `vertexStreams` from the public `VertexBufferBinding` array; this is
      * for the renderer harnesses and examples that drive `DrawInstancedPrimitivesEx` directly with a
@@ -1891,7 +1891,7 @@ namespace CNA::Internal::Renderers
     }
 
     /**
-     * @brief REMED-GFX-202: the deterministic rejection a renderer that binds exactly one stream of
+     * @brief The deterministic rejection a renderer that binds exactly one stream of
      *        each input rate performs instead of silently rendering from a subset of the array.
      *
      * `GraphicsDevice` already rejects both shapes for a renderer that does not report
@@ -2076,7 +2076,7 @@ namespace CNA::Internal::Renderers
          *
          * A setter with no getter is why `EasyGL_GraphicsDeviceManager_Vsync` could not tell "CNA
          * never forwarded the request" from "the driver declined it", and so skipped wherever vsync
-         * is unavailable while defending nothing (REMED-GFX-243). Reporting the request separates
+         * is unavailable while defending nothing. Reporting the request separates
          * the two: it is CNA's own state, so it is checkable in a headless context.
          *
          * @return The interval last passed to SetSwapInterval, or -1 from a renderer that does not
@@ -2501,7 +2501,7 @@ namespace CNA::Internal::Renderers
         /// Creates a cube-map render target. Returns nullptr on renderers that
         /// do not support cube map render targets. See CreateRenderTarget2D for `depthFormat`/
         /// `mipMap`/`multiSampleCount`.
-        /// `preserveContents` (REMED-GFX-136) carries the public RenderTargetCube's own
+        /// `preserveContents` carries the public RenderTargetCube's own
         /// RenderTargetUsage down here, exactly as CreateRenderTarget2D's identically-placed
         /// parameter does — true means "when a face of this target is bound, load what is already
         /// in it", false means "the previous colour need not survive". Both public targets derive
@@ -2663,7 +2663,7 @@ namespace CNA::Internal::Renderers
         // ---- Graphics state ----
 
         /// Applies a BlendState to the renderer. Default: no-op.
-        /// @param writeState REMED-GFX-077: the four per-MRT-slot colour write masks
+        /// @param writeState the four per-MRT-slot colour write masks
         ///                   (BlendState.ColorWriteChannels/1/2/3) and the coverage sample mask
         ///                   (BlendState.MultiSampleMask). No default argument: the migration
         ///                   deliberately forces every override to make an explicit decision
@@ -2934,7 +2934,7 @@ namespace CNA::Internal::Renderers
          * @brief Effect-aware draw — selects the shader variant based on
          *        vertex layout (derived from stride) and @p params.
          *
-         * REMED-GFX-201: @p vb is `params.vertexStreams[0].buffer`, kept as a named argument so
+         * @p vb is `params.vertexStreams[0].buffer`, kept as a named argument so
          * the single-stream path is unchanged. The complete set of bound per-vertex streams is
          * `params.vertexStreams[0 .. params.vertexStreamCount)`, and the layout the shader sees
          * spans all of them: select the input layout with `params.combinedVertexStride`, re-slot
@@ -2977,7 +2977,7 @@ namespace CNA::Internal::Renderers
          * renderer without 3D support may opt into WarnAndStub, in which case this is a
          * warning-producing no-op.
          *
-         * REMED-GFX-202: this route takes the SAME complete stream description the two ordinary
+         * This route takes the SAME complete stream description the two ordinary
          * routes take. @p vb is `params.vertexStreams[0].buffer`, kept as a named argument so the
          * classic single-per-vertex-stream path is unchanged; the per-instance streams are the
          * entries whose `instanceFrequency` is greater than zero, reached through
@@ -3057,7 +3057,7 @@ namespace CNA::Internal::Renderers
         {
             if (capability == CNA::GraphicsCapability::StencilBuffer)
                 return SupportsStencilBuffer();
-            // REMED-GFX-201: MultiStreamVertexInput is the one entry whose default is FALSE. A
+            // MultiStreamVertexInput is the one entry whose default is FALSE. A
             // renderer derives its native input elements from a single byte stride, so binding a
             // second per-vertex stream is real work it must opt into by name; defaulting to true
             // would make a renderer that silently renders from stream 0 alone claim otherwise.
@@ -3097,7 +3097,7 @@ namespace CNA::Internal::Renderers
         }
 
         /**
-         * @brief REMED-GFX-201: how many per-vertex `VertexBufferBinding`s this renderer can bind
+         * @brief How many per-vertex `VertexBufferBinding`s this renderer can bind
          *        to one ordinary draw.
          *
          * XNA's public ceiling is `kMaxVertexStreams` (16). A renderer that reports
@@ -3112,7 +3112,7 @@ namespace CNA::Internal::Renderers
             return kMaxVertexStreams;
         }
 
-        /// REMED-CONTENT-001: returns this renderer's real maximum single-axis texture dimension
+        /// Returns this renderer's real maximum single-axis texture dimension
         /// (width or height), used by shared content-reading code to reject an XNB-declared size
         /// before any renderer-specific texture creation is attempted. Default of 16384 matches the
         /// guaranteed ceiling on every native API this project targets (D3D11 feature level

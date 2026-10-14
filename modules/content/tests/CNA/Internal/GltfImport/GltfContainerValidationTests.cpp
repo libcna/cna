@@ -371,7 +371,7 @@ namespace
 
 TEST(GltfContainerValidation, AMisalignedSparseValuesArrayIsRejected)
 {
-    // The real finding behind REMED-NA-016, which the audit recorded as a UBSan-confirmed
+    // The real finding behind the cgltf misalignment finding, which the audit recorded as a UBSan-confirmed
     // misaligned float load inside cgltf. It is neither a cgltf bug nor a CNA decode bug: it is a
     // MALFORMED FILE that CNA accepted. §3.6.2.4 makes an accessor's effective offset a multiple of
     // its component size, cgltf_validate does not check it, and cgltf reads a component with a raw

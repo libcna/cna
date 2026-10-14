@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-160 -- the XNA/FNA front-face winding contract, measured against an explicit oracle.
+// The XNA/FNA front-face winding contract, measured against an explicit oracle.
 //
 // THE AUTHORITATIVE CONTRACT, taken from the FNA source and not from any renderer's behaviour:
 //
@@ -150,7 +150,7 @@ namespace
     /**
      * @brief Whether the FIRST backbuffer readback of the process returns unwritten memory.
      *
-     * REMED-GFX-161, measured by REMED-GFX-157 and still open: on WebGPU the very first
+     * The first-read completion contract, measured by the SpriteBatch/3D draw-order fix and still open: on WebGPU the very first
      * GetBackBufferData of a run leaves part of the caller's buffer untouched while reporting
      * success. That is a readback warm-up defect, not a winding one, so the first backbuffer leg
      * performs one discarded read and this file measures its own subject. Remove when 161 lands.
@@ -165,14 +165,14 @@ namespace
     /**
      * @brief Whether the BACKBUFFER readback rejects on a renderer that rasterizes nothing.
      *
-     * REMED-GFX-127/130 brought the texture and render-target readbacks under a contract that
+     * Brought the texture and render-target readbacks under a contract that
      * REJECTS rather than handing back scratch as a rendered frame; the backbuffer readback was
-     * never brought under it. That gap is REMED-GFX-162, already open and out of this task's scope,
+     * never brought under it. That gap is the Headless back-buffer rejection contract, already open and out of this task's scope,
      * so it is declared here rather than absorbed into a winding assertion.
      */
     constexpr bool kBackbufferReadRejectsWhenNonRasterizing =
 #if defined(CNA_RENDERER_HEADLESS)
-        false;   // REMED-GFX-162, open
+        false;   // the Headless back-buffer rejection contract, open
 #else
         true;
 #endif
@@ -263,7 +263,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-160's public front-face winding contract.
+ * @brief The public front-face winding contract.
  */
 class FrontFaceWindingTest : public Game
 {
@@ -781,7 +781,7 @@ class FrontFaceWindingTest : public Game
         // A destination is only an oracle if it reproduces what was rendered into it at all. When
         // the two NEVER-COVERED quadrants do not even hold the clear colour, the readback is not
         // showing this frame, and scoring the cull modes against it would report a winding defect
-        // that is really a readback one. REMED-GFX-164 originally tripped this guard with stale
+        // that is really a readback one. the bound multisampled render-target alpha contract originally tripped this guard with stale
         // transparent-black resolve storage; retain it so that alpha/readback regression cannot be
         // misreported as a winding failure.
         if (!Same(none.atTR, kClear) || !Same(none.atBL, kClear))
@@ -1134,7 +1134,7 @@ class FrontFaceWindingTest : public Game
         }
 
         // 2 -- a stock 3D triangle wound the SAME way as FNA's sprite triangle must survive the
-        //      state SpriteBatch leaves behind. This is the equivalence REMED-GFX-157 needed.
+        //      state SpriteBatch leaves behind. This is the equivalence the SpriteBatch/3D draw-order fix needed.
         Begin(dev, bb);
         {
             SamplerState point = SamplerState::PointClamp;

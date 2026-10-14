@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-097: canonical SDL_GPU render-pass/pipeline compatibility reproducer.
+// Canonical SDL_GPU render-pass/pipeline compatibility reproducer.
 //
 // A depthless RenderTargetCube face is a valid public SpriteBatch destination. The selected face
 // must receive the opaque draw, every other face must remain unchanged, and the SDL_GPU Vulkan

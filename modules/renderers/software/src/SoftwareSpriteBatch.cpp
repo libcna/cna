@@ -288,7 +288,7 @@ namespace CNA::Internal::Renderers::Software
 
         // SOFTWARE-338: preserve FNA's complete `(x,y,layerDepth,1) * transformMatrix` result.
         // RasterizeSpriteQuad applies the SpriteBatch projection and viewport after homogeneous
-        // clipping, so Viewport.X/Y remain outside the caller's transform (REMED-GFX-073).
+        // clipping, so Viewport.X/Y remain outside the caller's transform.
         const Vector4 c0 = Vector4::Transform(
             Vector3(rawCorners[0].X, rawCorners[0].Y, rawCorners[0].Z), transformMatrix_);
         const Vector4 c1 = Vector4::Transform(

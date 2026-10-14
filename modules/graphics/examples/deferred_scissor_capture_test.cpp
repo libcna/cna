@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-146: every deferred draw must execute under the GraphicsDevice.ScissorRectangle AND
+// Every deferred draw must execute under the GraphicsDevice.ScissorRectangle AND
 // the RasterizerState.ScissorTestEnable that were active at its own public draw call.
 //
 // WebGPU collects a bind cycle's Clear/3D/SpriteBatch work and records ONE native render pass for
@@ -21,7 +21,7 @@
 // ordinary bind cycle ALWAYS ended with the full rectangle live -- which is why the defect reached
 // every render target as well as the backbuffer.
 //
-// This is the scissor counterpart of REMED-GFX-116 (viewport) and shares its shape exactly, so the
+// This is the scissor counterpart of the deferred viewport capture (viewport) and shares its shape exactly, so the
 // two are deliberately structured the same way.
 //
 // Why every check here is falsifiable in both directions
@@ -174,7 +174,7 @@ namespace
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true,
                                  true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_HEADLESS)
-    // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
+    // Headless rasterizes nothing and its readback is the honest Texture2D::GetData contract's deterministic refusal.
     // Every sequence must still be legal. `outOfBoundsScissorRejected` true: this is the renderer
     // whose declared job is to validate, and HEADLESS-23 makes `SetScissorRect` cross-reference the
     // bound target's real size and raise `HeadlessValidationException` for a rectangle that leaves
@@ -1716,7 +1716,7 @@ class DeferredScissorCaptureTest : public Game
     }
 
     // =====================================================================
-    // J -- Viewport interaction (REMED-GFX-116 must stay intact)
+    // J -- Viewport interaction (the deferred viewport capture must stay intact)
     // =====================================================================
 
     /// J1 -- a viewport SMALLER than the rectangle still bounds the draw.

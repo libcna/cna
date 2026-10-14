@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-125: a built-in vertex type's public VertexDeclaration describes the packed GPU
+// A built-in vertex type's public VertexDeclaration describes the packed GPU
 // vertex stream, never the C++ object that carries the same values.
 //
 // XNA's own vertex types are blittable value types, so over there sizeof(T) *is* the stride the

@@ -1688,7 +1688,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the active renderer's real maximum single-axis texture dimension.
          *
-         * REMED-CONTENT-001: query this before creating or accepting a texture of
+         * Query this before creating or accepting a texture of
          * caller-/file-supplied size, instead of trusting the value and letting the native
          * graphics API fail (or, on some renderers, corrupt memory) at creation time.
          *
@@ -1903,20 +1903,20 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
 
-        // REMED-GFX-200: the per-vertex geometry stream's VertexBufferBinding.VertexOffset, in
+        // The per-vertex geometry stream's VertexBufferBinding.VertexOffset, in
         // vertex ELEMENTS. Binding 0 is that stream on every draw route -- SetVertexBuffer() and
         // SetVertexBuffers() both make it so, and Draw*PrimitivesEx hand the renderer exactly one
         // per-vertex stream -- so a later binding never supplies this offset. Returns 0 when no
         // binding describes the bound buffer, which is the only value that leaves a
-        // no-VertexBufferBinding draw byte-identical to its pre-REMED-GFX-200 behavior.
+        // no-VertexBufferBinding draw byte-identical to its earlier behavior.
         [[nodiscard]] int CurrentVertexBufferOffset() const;
 
-        // REMED-GFX-201: the element offset shared by every per-vertex stream of the current
+        // The element offset shared by every per-vertex stream of the current
         // binding set -- the smallest VertexBufferBinding.VertexOffset among them, 0 when none.
         // The ordinary routes fold this into vertexStart/baseVertex, the element-unit channel each
         // renderer already multiplies by *each stream's own* stride exactly once, and hand every
         // stream the non-negative remainder. With one stream the fold is the whole offset and the
-        // remainder is 0, which is byte-for-byte REMED-GFX-200's behaviour; with several it is the
+        // remainder is 0, which is byte-for-byte the behaviour; with several it is the
         // only split that keeps every per-stream native byte offset non-negative while still
         // giving each stream `binding.VertexOffset + vertexStart` of its own elements.
         [[nodiscard]] int FoldedVertexStreamOffset() const;
@@ -1940,18 +1940,18 @@ namespace Microsoft::Xna::Framework::Graphics
         void TransferResourceReference(GraphicsResource* source,
                                        GraphicsResource* destination) noexcept;
 
-        // REMED-GFX-201: copies every active declared VertexBufferBinding into `p.vertexStreams`,
+        // Copies every active declared VertexBufferBinding into `p.vertexStreams`,
         // in public slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted
         // from each per-vertex stream's VertexOffset (see FoldedVertexStreamOffset above). Captured
         // by value: a deferred renderer replays a draw long after currentVertexBuffers_ has been
-        // reassigned. On ordinary draws, REMED-GFX-233's exact one-buffer empty-declaration
+        // reassigned. On ordinary draws, the exact one-buffer empty-declaration
         // compatibility shape leaves the stream list empty so the named renderer buffer's uploaded
         // stride remains authoritative; instanced submission retains its complete stream contract.
         void FillVertexStreamBindings(
             CNA::Internal::Renderers::GpuDrawParams& p, int foldedOffset,
             bool allowLegacyEmptyDeclarationFallback) const;
 
-        // REMED-GFX-201/202: rejects a draw whose binding set is wider than the running renderer can
+        // Rejects a draw whose binding set is wider than the running renderer can
         // express -- more than one per-vertex stream, more than one per-instance stream, or more
         // per-vertex streams than its native input-slot ceiling. Deterministic and before native
         // submission: a renderer that has not been taught to re-slot its stride-derived input
@@ -1974,7 +1974,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /** Clears a selected effect only when the exact resource is being disposed. */
         void ClearCurrentEffectIf(const Effect* effect) noexcept;
 
-        // REMED-GFX-202: REMED-GFX-118's instance-range gate widened from the first per-instance
+        // The instance-range gate widened from the first per-instance
         // binding to EVERY one of them. `instanceCount` instances consume
         // `1 + (firstInstance + instanceCount - 1) / InstanceFrequency` records of each
         // per-instance stream, beginning at that stream's own VertexOffset -- all in vertex

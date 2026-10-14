@@ -20,8 +20,8 @@ namespace CNA::Internal::Xnb
      * attacker-controlled dimensions. Widening each factor to @c int64_t before multiplying is not
      * sufficient on its own: two dimensions near `INT32_MAX` multiply to a value still
      * representable in @c int64_t, but a further `* 4` (or a third/fourth dimension factor) can
-     * overflow @c int64_t itself -- confirmed by UBSan (`REMED-CONTENT-009`) inside
-     * `Texture2DContentTypeReader.cpp`'s own `REMED-CONTENT-001` fix. This helper checks each
+     * overflow @c int64_t itself -- confirmed by UBSan inside
+     * `Texture2DContentTypeReader.cpp`'s own overflow fix. This helper checks each
      * multiplication via division *before* performing it (`product > INT64_MAX / factor`), so an
      * overflowing input is rejected as a clean exception rather than the overflow ever occurring.
      *

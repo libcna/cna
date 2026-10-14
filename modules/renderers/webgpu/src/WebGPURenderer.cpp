@@ -166,7 +166,7 @@ namespace CNA::Internal::Renderers::WebGPU
                    format == WGPUTextureFormat_RGBA8Snorm;
         }
 
-        // REMED-GFX-105: WebGPU enables primitive restart for indexed strip pipelines through
+        // WebGPU enables primitive restart for indexed strip pipelines through
         // WGPUPrimitiveState::stripIndexFormat. It must match the format passed to
         // SetIndexBuffer for indexed line/triangle strips, and must remain Undefined for
         // non-indexed strips and every list/point topology. Both inputs come from the same
@@ -202,7 +202,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /// over the same vertices -- `FillMode::WireFrame`, produced without any polygon-mode state.
         ///
         /// This is the reference renderer's own mechanism (`EasyGLRenderer::DrawWireframe`,
-        /// REMED-GFX-219): each triangle's three edges become three two-index lines in a 32-bit
+        /// Its wireframe emulation): each triangle's three edges become three two-index lines in a 32-bit
         /// index buffer, and the draw is submitted as a line list. It is chosen over
         /// `WGPUPrimitiveStateExtras::polygonMode` -- which the pinned wgpu-native does expose,
         /// behind the native-only `WGPUNativeFeature_PolygonModeLine` -- because index expansion is
@@ -321,7 +321,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief The non-sRGB counterpart of an 8-bit colour format, or the format unchanged.
          *
-         * REMED-GFX-131: CNA's SurfaceFormat::Color is a plain UNORM byte format, so every colour
+         * CNA's SurfaceFormat::Color is a plain UNORM byte format, so every colour
          * attachment this renderer renders into must use the linear variant. Channel order is
          * deliberately preserved -- only the transfer function is dropped -- so the readback
          * swizzle that keys on BGRA-ness stays correct either way.
@@ -432,7 +432,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // "unbound" by every Render*Draws() call site's existing null check) for a null input or
         // a texture from an incompatible concrete type, instead of the unchecked static_cast this
         // replaces everywhere.
-        // REMED-GFX-167: resolves to a VALUE, not a pointer, and does it here at the public draw
+        // Resolves to a VALUE, not a pointer, and does it here at the public draw
         // call while the resource is unambiguously alive. A queued command therefore never
         // dereferences a wrapper at replay time, and carries the native reference that keeps its
         // view valid even when that wrapper is gone by then.
@@ -589,7 +589,7 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
-        // REMED-GFX-170: the public TextureFilter ordinal's own name, for CNA_WEBGPU_SAMPLER_TRACE.
+        // The public TextureFilter ordinal's own name, for CNA_WEBGPU_SAMPLER_TRACE.
         // Anything outside the enum is reported as such rather than silently printed as a number,
         // because an out-of-range ordinal is exactly the input the pre-fix expression turned into
         // Point without saying so.
@@ -636,9 +636,9 @@ namespace CNA::Internal::Renderers::WebGPU
             return enabled;
         }
 
-        /// REMED-GFX-172: the multi-texture families' own binding trace. Separate from
+        /// The multi-texture families' own binding trace. Separate from
         /// SamplerTraceEnabled() above because that one reports the public->native translation of
-        /// ONE sampler state (REMED-GFX-170's question) and this one reports which native sampler
+        /// ONE sampler state (the question) and this one reports which native sampler
         /// each SAMPLED RESOURCE of a two-texture draw was actually bound with -- the question a
         /// shared sampler makes unanswerable from filter ordinals alone.
         [[nodiscard]] bool MultiTextureSamplerTraceEnabled()
@@ -648,7 +648,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
 
         /**
-         * @brief Emits one row of the REMED-GFX-172 multi-texture sampler binding trace.
+         * @brief Emits one row of the multi-texture sampler binding trace.
          *
          * Reports, for a single two-texture draw, both sampled resources' view identities, both
          * CAPTURED public sampler states, both NATIVE sampler handles, the layout/pipeline-layout
@@ -716,7 +716,7 @@ namespace CNA::Internal::Renderers::WebGPU
                          static_cast<void*>(bindGroup), entryCount);
         }
 
-        // REMED-GFX-170: XNA's SamplerState.MaxAnisotropy default. ISpriteBatchRenderer carries the
+        // XNA's SamplerState.MaxAnisotropy default. ISpriteBatchRenderer carries the
         // filter ordinal and the two address modes and nothing else, so a sprite cannot express a
         // non-default anisotropy on ANY renderer; this is the value SpriteBatch's own
         // SamplerState.LinearClamp/PointClamp/AnisotropicClamp all carry anyway.
@@ -783,7 +783,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // the signed area in FRAMEBUFFER space, whose Y points down -- so this renderer's front face
         // is the counter-clockwise-AS-DISPLAYED one and its back face the clockwise one.
         //
-        // REMED-GFX-160: each XNA enum names the face it CULLS, and clockwise-as-displayed is XNA's
+        // Each XNA enum names the face it CULLS, and clockwise-as-displayed is XNA's
         // FRONT face (FNA's SpriteBatch emits TL->TR->BL and BR->BL->TR, both clockwise as
         // displayed, and they must survive the RasterizerState.CullCounterClockwise that
         // SpriteBatch.Begin itself defaults to). So CullClockwiseFace has to remove the clockwise
@@ -838,8 +838,8 @@ namespace CNA::Internal::Renderers::WebGPU
         inline constexpr std::uint64_t kNeutralVertexRecordBytes =
             sizeof(float) * CNA::Internal::Graphics::kNeutralVertexRecordEXT.size();
 
-        // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. This renderer selects its
-        // WGPUVertexBufferLayout from the stride (REMED-GFX-217), so a declaration that layout
+        // The declaration-fidelity boundary. This renderer selects its
+        // WGPUVertexBufferLayout from the stride, so a declaration that layout
         // cannot represent is refused before a pipeline is created or a command queued. The
         // ordinary route leaves an unlisted stride to its own established rejection
         // (DrawColoredPrimitives refuses anything but stride 16); the Instanced3D module is
@@ -856,7 +856,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 "WebGPU", route);
         }
 
-        // REMED-GFX-212: whether this per-vertex stride's established packed layout carries a
+        // Whether this per-vertex stride's established packed layout carries a
         // COLOR0 element, and at which byte offset. The ordinary route's own pipelines derive
         // their Unorm8x4 colour attribute from exactly this table -- colored3d.wgsl's stride-16
         // ColoredVertex and the stride-24 colored+textured layout, both at offset 12 -- so reading
@@ -1018,7 +1018,7 @@ namespace CNA::Internal::Renderers::WebGPU
             const std::array<WGPUTextureFormat, 4>& mrtColorFormats = kNoMrtColorFormatsEXT)
         {
             std::uint64_t key = static_cast<std::uint64_t>(topology);
-            // REMED-GFX-105: RequiredStripIndexFormat() canonicalizes this to Undefined for
+            // RequiredStripIndexFormat() canonicalizes this to Undefined for
             // list/point topologies and non-indexed strips, so only WebGPU-incompatible strip
             // formats create distinct pipeline variants. Buffer identity never participates.
             key = key * 31u + static_cast<std::uint64_t>(stripIndexFormat);
@@ -1044,7 +1044,7 @@ namespace CNA::Internal::Renderers::WebGPU
             key = key * 1000003u + static_cast<std::uint64_t>(std::bit_cast<std::uint32_t>(depthBias));
             key = key * 1000003u + static_cast<std::uint64_t>(std::bit_cast<std::uint32_t>(slopeScaleDepthBias));
             key = key * 1000003u + salt;
-            // REMED-GFX-077: colour write mask + sample mask are static wgpu-native pipeline state.
+            // Colour write mask + sample mask are static wgpu-native pipeline state.
             key = key * 31u + static_cast<std::uint64_t>(colorWriteMask & 0xF);
             key = key * 31u + static_cast<std::uint64_t>(sampleMask);
             // WEBGPU-86 MRT: a pipeline built for an N-attachment pass is NOT compatible with a
@@ -1264,7 +1264,7 @@ namespace CNA::Internal::Renderers::WebGPU
             out[19] = p.fresnelEnabled ? 1.0f : 0.0f;
             out[20] = p.envMapSpecular[0]; out[21] = p.envMapSpecular[1]; out[22] = p.envMapSpecular[2];
             out[23] = p.fresnelFactor;
-            // REMED-GFX-100: the CPU-prepared FNA view-space fog vector is the only fog
+            // The CPU-prepared FNA view-space fog vector is the only fog
             // representation uploaded here. `fogColor.w` remains explicit UBO padding.
             out[24] = p.fogColor[0]; out[25] = p.fogColor[1]; out[26] = p.fogColor[2]; out[27] = 0.0f;
             out[28] = p.fogVector[0]; out[29] = p.fogVector[1];
@@ -1425,7 +1425,7 @@ namespace CNA::Internal::Renderers::WebGPU
         }
     }
 
-    // REMED-GFX-167: see WebGPUSampledResourceEXT's own doc comment (the header). Both handles are
+    // See WebGPUSampledResourceEXT's own doc comment (the header). Both handles are
     // referenced here and released exactly once, when the last queued command carrying this object
     // is gone -- so a resource sampled by a still-queued draw stays valid without the wrapper.
     WebGPUSampledResourceEXT::WebGPUSampledResourceEXT(WGPUTexture texture, WGPUTextureView view)
@@ -1524,7 +1524,7 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPUTextureRenderer::ReleaseDeviceObjectsEXT()
     {
         // The sampled_ handle is a shared_ptr a queued command may still hold; dropping this
-        // object's reference is right, and REMED-GFX-167 keeps the last one alive as long as a
+        // object's reference is right, and the keep-alive keeps the last one alive as long as a
         // command needs it. The device is going anyway, and DiscardQueuedCommands has already run.
         sampled_.reset();
         if (view_ != nullptr) { wgpuTextureViewRelease(view_); view_ = nullptr; }
@@ -1696,7 +1696,7 @@ namespace CNA::Internal::Renderers::WebGPU
     bool WebGPUTextureRenderer::GetData(int level, int x, int y, int w, int h,
                                         void* data, int dataLength) const
     {
-        // REMED-GFX-127: nothing is written on these paths, so they must not be reported as a
+        // Nothing is written on these paths, so they must not be reported as a
         // completed readback -- the shared layer would otherwise convert its own zeroed scratch.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
             return false;
@@ -1796,7 +1796,7 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
-        // REMED-GFX-127: an unmappable buffer or an undersized destination used to memset the
+        // An unmappable buffer or an undersized destination used to memset the
         // caller's memory to zero and return as if the read had succeeded -- exactly the fabricated
         // transparent-black frame this finding removes. Report the failure instead, leaving the
         // destination untouched.
@@ -1929,7 +1929,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
         // encoded that still read the old contents.
         if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
-        // REMED-GFX-135: these were `throw std::out_of_range`/`std::invalid_argument` from inside a
+        // These were `throw std::out_of_range`/`std::invalid_argument` from inside a
         // renderer, so a request this renderer cannot store escaped the public API as a raw std
         // exception rather than the shared layer's own deterministic System::NotSupportedException.
         // Returning false routes every such case through the one contract.
@@ -1971,7 +1971,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (level == 0 && mipLevels_ > 1)
             owner_->GenerateMipsCubeFace(texture_, face, size_, mipLevels_);
         // wgpuQueueWriteTexture copies out of `data` before it returns, so nothing here still
-        // depends on caller memory once this call completes (REMED-GFX-135).
+        // depends on caller memory once this call completes.
         return true;
     }
 
@@ -2079,7 +2079,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                      static_cast<std::size_t>(regionBlockRows) * blockBytes;
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
         // A face that was never uploaded has no blocks to return, and zero-filling the caller's
-        // destination is the fabrication REMED-GFX-130 removed from the sibling readback.
+        // destination is the fabrication removed from the sibling readback.
         if (blocks.size() < static_cast<std::size_t>(levelBlockColumns) *
                                 static_cast<std::size_t>((levelSize + 3) / 4) * blockBytes)
             return false;
@@ -2102,7 +2102,7 @@ namespace CNA::Internal::Renderers::WebGPU
     bool WebGPUTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
-        // REMED-GFX-130: this guard used to be a silent `return`, which the shared layer turned
+        // This guard used to be a silent `return`, which the shared layer turned
         // into a complete transparent-black face instead of a refusal.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
             return false;
@@ -2226,7 +2226,7 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
-        // REMED-GFX-130: this branch used to memset the caller's destination to zero and return as
+        // This branch used to memset the caller's destination to zero and return as
         // if the readback had succeeded -- the same fabrication the shared layer was doing, one
         // level down. Report the failure instead; the caller's buffer is left exactly as it was.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
@@ -2299,7 +2299,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // every GetOrCreatePipeline*3D() hardcodes `target.format = surfaceFormat_`, so a 3D draw
         // into a cube face must match that format to stay pipeline-compatible.
         //
-        // REMED-GFX-131: surfaceFormat_ is guaranteed non-sRGB, so a cube face carries the same
+        // SurfaceFormat_ is guaranteed non-sRGB, so a cube face carries the same
         // byte-exact SurfaceFormat::Color semantics as a RenderTarget2D and a plain TextureCube.
         // WEBGPU-198: the requested SurfaceFormat's own native format when it has one, and the
         // renderer's swap-chain format for Color -- the same rule the 2D sibling follows.
@@ -2415,7 +2415,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // count into every pipeline, so a face pass must match it). SIX separate single-layer
         // multisampled textures (WebGPU forbids a multisampled ARRAY texture) so a
         // PreserveContents face loads its OWN samples rather than whichever face rendered last --
-        // the per-face choice EasyGL settled on (REMED-GFX-141).
+        // the per-face choice EasyGL settled on.
         // texture_/faceViews_ stay single-sample and become the resolve destinations.
         // WEBGPU-165: THIS cube's own applied count, decided above, not the renderer's global.
         if (appliedMultiSampleCount_ > 1)
@@ -2521,7 +2521,7 @@ namespace CNA::Internal::Renderers::WebGPU
     bool WebGPURenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
-        // REMED-GFX-130: as above -- a silent `return` was converted into a fabricated face.
+        // As above -- a silent `return` was converted into a fabricated face.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
             return false;
         if (face < 0 || face >= 6)
@@ -2530,14 +2530,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // out-of-range level is a capability boundary, not an argument error: reporting it as
         // `false` is what turns it into the shared layer's own deterministic
         // System::NotSupportedException with the caller's destination untouched (the same contract
-        // REMED-GFX-134/135 established, which previously refused every level > 0).
+        // Established, which previously refused every level > 0).
         if (level < 0 || level >= levelCount_)
             return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
             return false;
 
-        // REMED-GFX-134: flush ONLY when there is something queued. This face's render pass always
+        // Flush ONLY when there is something queued. This face's render pass always
         // clears (see RenderPendingDrawsToRenderTargetCubeFace's own comment), so flushing
         // unconditionally made a GetData on a still-bound face WIPE the very face it was asked to
         // read and then return the clear colour as content. `framePending_` is set by every Clear()
@@ -2606,7 +2606,7 @@ namespace CNA::Internal::Renderers::WebGPU
                              colorFormat_ == WGPUTextureFormat_BGRA8UnormSrgb);
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
-        // REMED-GFX-130: this branch used to memset the caller's destination to zero and return as
+        // This branch used to memset the caller's destination to zero and return as
         // if the readback had succeeded. Report the failure instead.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength ||
             x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
@@ -2690,7 +2690,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPUPERF-0006: a queue write lands before the next submission, ahead of passes already
         // encoded that still read the old contents.
         if (owner_ != nullptr) owner_->OrderExternalQueueWorkEXT();
-        // REMED-GFX-135: see WebGPUTextureCubeRenderer::SetData for why these are results, not
+        // See WebGPUTextureCubeRenderer::SetData for why these are results, not
         // throws.
         if (level < 0 || level >= mipLevels_) return false;
         if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
@@ -2727,7 +2727,7 @@ namespace CNA::Internal::Renderers::WebGPU
                                           int w, int h, int depth,
                                           void* data, int dataLength) const
     {
-        // REMED-GFX-130: as above -- a silent `return` was converted into a fabricated volume.
+        // As above -- a silent `return` was converted into a fabricated volume.
         if (owner_ == nullptr || w <= 0 || h <= 0 || depth <= 0 || data == nullptr)
             return false;
         if (level < 0 || level >= mipLevels_)
@@ -2794,7 +2794,7 @@ namespace CNA::Internal::Renderers::WebGPU
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength =
             static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * static_cast<std::size_t>(depth) * 4u;
-        // REMED-GFX-130: this branch used to memset the caller's destination to zero and return as
+        // This branch used to memset the caller's destination to zero and return as
         // if the readback had succeeded. Report the failure instead; likewise a box that reaches
         // outside the level is refused rather than padded with zeros.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength ||
@@ -2887,7 +2887,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // BasicEffect.Texture) is unaffected by this choice -- WGSL texture_2d<f32> sampling does
         // not care about the exact underlying texture format.
         //
-        // REMED-GFX-131: surfaceFormat_ is guaranteed non-sRGB (see its own declaration), so this
+        // SurfaceFormat_ is guaranteed non-sRGB (see its own declaration), so this
         // inheritance no longer imports a hardware gamma encode into a resource whose bytes
         // RenderTarget2D::GetData hands straight to game code. It is the same format the plain
         // Texture2D path uses, which is what makes ordinary textures and render targets share one
@@ -3176,7 +3176,7 @@ namespace CNA::Internal::Renderers::WebGPU
     bool WebGPURenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
-        // REMED-GFX-127: see WebGPUTextureRenderer::GetData -- nothing written means false, never a
+        // See WebGPUTextureRenderer::GetData -- nothing written means false, never a
         // silently successful return.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
             return false;
@@ -3273,7 +3273,7 @@ namespace CNA::Internal::Renderers::WebGPU
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
                                            static_cast<std::size_t>(texelBytes);
-        // REMED-GFX-127: was a memset-to-zero-and-return-as-success path; report the failure and
+        // Was a memset-to-zero-and-return-as-success path; report the failure and
         // leave the destination alone instead.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
         {
@@ -4256,7 +4256,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // also nulled so the ordinary lazy re-creation paths rebuild it on next use -- which is what
         // lets the destructor and a device recreate share this one function.
         //
-        // DiscardQueuedCommands FIRST, for REMED-GFX-167's reason: a queued command holds a
+        // DiscardQueuedCommands FIRST, for the reason: a queued command holds a
         // shared_ptr to the texture it samples, and dropping the commands is what releases those
         // before the native handles underneath them go.
         DiscardQueuedCommands();
@@ -4435,7 +4435,7 @@ namespace CNA::Internal::Renderers::WebGPU
     WebGPURenderer::~WebGPURenderer()
     {
         IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
-        // REMED-GFX-167: FIRST, before any native handle below is released. A queued command holds
+        // FIRST, before any native handle below is released. A queued command holds
         // a reference to the texture it samples, and these vectors are members -- destroyed after
         // this body, i.e. after device_/adapter_/instance_ are gone. A frame abandoned rather than
         // presented (surface acquisition failure) is the path that can still hold commands here.
@@ -4685,7 +4685,7 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to query surface capabilities");
         }
 
-        // REMED-GFX-131: prefer a NON-sRGB surface format, because
+        // Prefer a NON-sRGB surface format, because
         // XNA's SurfaceFormat.Color -- the default backbuffer format, and the only format the
         // IGraphicsRenderer render-target entry points can even express -- is a plain 8-bit UNORM
         // byte format, while SurfaceFormat.ColorSrgbEXT is the separate gamma-encoded one. An sRGB
@@ -4949,7 +4949,7 @@ namespace CNA::Internal::Renderers::WebGPU
         pipelineLayoutDescriptor.bindGroupLayouts = &spriteBindGroupLayout_;
         spritePipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
 
-        // REMED-GFX-102: pipelines are now created lazily once per complete STATIC compatibility
+        // Pipelines are now created lazily once per complete STATIC compatibility
         // key by GetOrCreateSpritePipeline(). This function creates only the shared shader/layout
         // resources; there are no longer two fixed opaque/straight-alpha pipelines.
         if (spriteShader_ == nullptr || spriteBindGroupLayout_ == nullptr ||
@@ -5486,7 +5486,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (needsEnvMap && hasNormal && hasUv) return StockVertexShapeEXT::EnvMapped;
 
         // Skinned and PBR draws are NOT converted by this task: they keep the stride-derived
-        // attribute arrays and the REMED-GFX-DECL-GUARD refusal that makes reading a declaration
+        // attribute arrays and the declaration-fidelity refusal that makes reading a declaration
         // those arrays cannot represent impossible rather than silent (WEBGPU-172/177 own their
         // conversion). The condition matches the ladder this function replaced exactly: a skinned
         // draw never reached the unlit/lit families, and a PBR draw only bypassed them once its
@@ -5500,7 +5500,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // PreferPerPixelLighting=false, so a lit draw is Gouraud unless it asks otherwise. Only
         // meaningfully distinct while lighting is actually on.
         const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
-        // SAMPLE-002 / REMED-GFX-234: a declaration that names a Normal is a lit vertex at ANY
+        // SAMPLE-002: a declaration that names a Normal is a lit vertex at ANY
         // stride, and one that does not is not a lit vertex at any stride either. Whether it also
         // carries a UV or a colour changes which attributes are bound, not which family it is.
         if (hasNormal)
@@ -6958,7 +6958,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // Ported from the retired VULKAN renderer's dual_texture3d.{vert,frag}.glsl.
         // DualTextureEffect has no lighting and no alpha test, so group 0 reuses
         // coloredBindGroupLayout_/the primary Uniforms layout unchanged. Group 1 carries FOUR
-        // bindings: one sampler and one texture per public sampler slot. REMED-GFX-172: the two
+        // bindings: one sampler and one texture per public sampler slot. The two
         // layers do NOT share a TextureFilter/AddressMode -- FNA's DualTextureEffect.fx declares
         // DECLARE_TEXTURE(Texture, 0) and DECLARE_TEXTURE(Texture2, 1), so Texture reads
         // GraphicsDevice.SamplerStates[0] and Texture2 reads SamplerStates[1]. One WGSL sampler for
@@ -6997,7 +6997,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (dualTextureColoredShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create DualTextureColored3D shader");
 
-        // REMED-GFX-172: one sampler binding per public sampler slot. Binding 3 is the second
+        // One sampler binding per public sampler slot. Binding 3 is the second
         // sampler rather than a renumbering of 1/2, so the two texture views keep the binding
         // numbers every other WebGPU 3D family uses.
         std::array<WGPUBindGroupLayoutEntry, 4> layoutEntries{};
@@ -7175,7 +7175,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         uboLayoutDescriptor.entries = uboLayoutEntries.data();
         envMapBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
 
-        // REMED-GFX-172: one sampler binding per public sampler slot -- binding 0 for the base 2D
+        // One sampler binding per public sampler slot -- binding 0 for the base 2D
         // texture (SamplerStates[0]) and binding 3 for the reflection cube (SamplerStates[1]).
         std::array<WGPUBindGroupLayoutEntry, 4> texLayoutEntries{};
         texLayoutEntries[0].binding = 0;
@@ -7299,10 +7299,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -7323,7 +7323,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.addressW = slotSamplers_[0].addressW;  // WEBGPU-160
         command.maxMipLevel = slotSamplers_[0].maxMipLevel;  // WEBGPU-161
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
-        // REMED-GFX-172: and the reflection cube's own slot, captured here for the same reason.
+        // And the reflection cube's own slot, captured here for the same reason.
         command.envMapFilter = slotSamplers_[1].filter;
         command.envMapAddressU = slotSamplers_[1].addressU;
         command.envMapAddressV = slotSamplers_[1].addressV;
@@ -7363,7 +7363,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         envMapDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::EnvMap, envMapDrawCommands_.size() - 1);
     }
 
@@ -7401,7 +7401,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const WebGPUSampledTextureEXT cube = command.envMap ? command.envMap : ClassicNullCubeEXT();
         const WGPUTextureView texView = texture.View();
         const WGPUTextureView cubeView = cube.View();
-        // REMED-GFX-172: the reflection cube's own SamplerStates[1], from the description captured
+        // The reflection cube's own SamplerStates[1], from the description captured
         // at this draw's public call. The fallback 1x1 white cube is filtered by the same slot --
         // a missing resource does not change WHICH sampler slot owns that binding.
         WGPUSampler cubeSampler = GetOrCreateSlotSampler(command.envMapFilter, command.envMapAddressU,
@@ -7448,9 +7448,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                               command.depthBias, command.slopeScaleDepthBias, command.stencil,
                                                               command.vertexLayout,
                                                               command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -7502,7 +7502,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         instancedPipelines_.clear();
         if (instancedShader_ != nullptr) wgpuShaderModuleRelease(instancedShader_);
         instancedShader_ = nullptr;
-        // REMED-GFX-212: the colour-capable sibling shares this cache and this lifetime exactly.
+        // The colour-capable sibling shares this cache and this lifetime exactly.
         if (instancedColoredShader_ != nullptr) wgpuShaderModuleRelease(instancedColoredShader_);
         instancedColoredShader_ = nullptr;
     }
@@ -7517,7 +7517,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // position (binding 0, per-vertex) is consumed by THIS module -- it is the variant selected
         // for a geometry stride whose packed layout carries no COLOR0 element at all (20
         // VertexPositionTexture, 32 VertexPositionNormalTexture, and any stride the table does not
-        // recognise). REMED-GFX-212 added the position+colour sibling below for the strides that do
+        // recognise). The position+colour sibling was added below for the strides that do
         // carry one. The per-instance mat4 world transform (binding 1, WGPUVertexStepMode_Instance)
         // replaces the caller's own World matrix entirely: [0..15] of the Uniforms block below is
         // View*Projection (not a full MVP), matching FillInstancedPushConst()'s identical choice.
@@ -7533,7 +7533,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (instancedShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Instanced3D shader");
 
-        // REMED-GFX-212: the position+colour sibling. BasicEffect's shader index has no instancing
+        // The position+colour sibling. BasicEffect's shader index has no instancing
         // term (FNA BasicEffect.cs:490-511) and every vertex-colour permutation of BasicEffect.fx
         // multiplies `vout.Diffuse *= vin.Color`, so an instanced draw owes exactly the mixing
         // colored3d.wgsl above already performs -- the expression below is character-for-character
@@ -7582,7 +7582,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // alike -- the step mode of each comes from that stream's own InstanceFrequency. The
         // classic instanced draw resolves to exactly two streams and therefore produces exactly the
         // binding pair this family has always built by hand: geometry at slot 0 with position at
-        // location 0 (and REMED-GFX-212's COLOR0 at location 1 when a stream declares one), and the
+        // location 0 (and COLOR0 at location 1 when a stream declares one), and the
         // world matrix at slot 1 as four Float32x4 columns at locations 4-7. The 2/3 gap is
         // instanced3d.wgsl's own, which is why the geometry colour can never collide with it.
         StockVertexStateEXT vertexState;
@@ -7645,9 +7645,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                                  command.blend, command.blendParams,
                                                                  command.cullMode, command.wireframe,
                                                                  command.depthBias, command.slopeScaleDepthBias, command.stencil);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -7706,7 +7706,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // target could be part of an MRT set, which is what this task made possible.
         WGPUColorTargetState target{};
         target.format = format;
-        // REMED-GFX-077: internal mipmap-blit utility pipeline — not a game draw, so it is
+        // Internal mipmap-blit utility pipeline — not a game draw, so it is
         // intentionally unaffected by the game's BlendState.ColorWriteChannels/MultiSampleMask.
         target.writeMask = WGPUColorWriteMask_All; // internal mip-blit
         WGPUFragmentState fragment{};
@@ -7728,7 +7728,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // (a RenderTargetCube resolves its MSAA into level 0 first, then this downsamples that
         // resolved single-sample level), regardless of the renderer's own global sampleCount_.
         pipeline.multisample.count = 1;
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max(); // REMED-GFX-077: internal mip-blit (see above)
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max(); // internal mip-blit (see above)
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
         // No depthStencil: this is its own dedicated colour-only render pass, not sharing the
@@ -7876,7 +7876,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
             ++renderPassCount_;
             // Internal mip-blit pass: nothing public is queued into it, so it neither reads nor
-            // needs a captured Viewport. It is still counted (REMED-GFX-116's diagnostics measure
+            // needs a captured Viewport. It is still counted (the diagnostics measure
             // every native pass/setViewport this renderer issues, not a filtered subset).
             wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(dstW), static_cast<float>(dstH), 0.0f, 1.0f);
             ++setViewportCallCount_;
@@ -7981,7 +7981,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
             return;
-        // REMED-GFX-019: a SpriteBatch destination rectangle is expressed in the CURRENTLY-BOUND
+        // A SpriteBatch destination rectangle is expressed in the CURRENTLY-BOUND
         // render target's own pixel coordinate system (XNA/FNA semantics), never the backbuffer's.
         // The backbuffer's virtual-resolution letterbox/presentation-mode scaling
         // (ComputeLogicalViewport()) is a backbuffer-only concept, so while a RenderTarget2D or a
@@ -8018,7 +8018,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         // WEBGPU-162: is this the DEFAULT viewport, i.e. the presentation rectangle itself?
         //
-        // REMED-GFX-072 asked "does it differ from the target EXTENT" and WEBGPU-141(A) added a
+        // Asked "does it differ from the target EXTENT" and WEBGPU-141(A) added a
         // containment guard on top, because a letterboxed backbuffer's default viewport IS a
         // centred sub-rectangle and looked like a caller-set sub-region to that test. Asking about
         // the presentation rectangle instead answers the question directly, and the guard stays
@@ -8113,7 +8113,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (activeSpriteCustomEffectObject_ != nullptr) activeSpriteCustomEffectObject_->Apply();
 
         SpriteCommand command{};
-        // REMED-GFX-167: the resolved view plus its keep-alive, never `&samplable` -- a SpriteBatch
+        // The resolved view plus its keep-alive, never `&samplable` -- a SpriteBatch
         // draw is replayed at Present too, by which time a short-lived Texture2D may be gone.
         command.texture = samplable.Sampled();
         command.textureFilter = textureFilter;
@@ -8129,14 +8129,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // scissor are -- a RasterizerState set after the batch but before the flush must not
         // reclassify an already-queued draw.
         command.wireframe = fillModeWireframe_;
-        // REMED-GFX-116: capture the Viewport for EVERY sprite, not only a sub-region one.
+        // Capture the Viewport for EVERY sprite, not only a sub-region one.
         // GFX-072 captured only the custom case, so a target-relative sprite still inherited
         // whatever viewport the pass resolved live at flush time -- setting a sub-Viewport after
         // the batch but before the flush squeezed it into that sub-region. The two fields are
         // The snapshot decides where the rasterizer puts the sprite; the NDC above is already
         // viewport-local, so the two are one mechanism rather than two.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -8205,7 +8205,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         else if (activeSpriteCustomEffect_ != nullptr)
             command.customUniforms = activeSpriteCustomEffect_->uniformStaging_;
         spriteCommands_.push_back(command);
-        // REMED-GFX-159: the public position of this sprite, the only thing replay orders by.
+        // The public position of this sprite, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Sprite, spriteCommands_.size() - 1);
         framePending_ = true;
     }
@@ -8216,7 +8216,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         spriteVertexOffsetEXT_ = 0;
         if (spriteCommands_.empty())
             return;
-        // REMED-GFX-159: every sprite of the cycle still goes into ONE buffer in ONE write, exactly
+        // Every sprite of the cycle still goes into ONE buffer in ONE write, exactly
         // as before -- interleaving changes when each sprite is DRAWN, not how its vertices are
         // staged, so a sprite's vertices stay at offset i*6 and there is still no per-sprite
         // allocation.
@@ -8462,7 +8462,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 "CNA WebGPU: queued SpriteBatch target compatibility changed before replay");
         }
 
-        // REMED-GFX-159: vertex slot 0 is shared with every 3D family, each of which binds its own
+        // Vertex slot 0 is shared with every 3D family, each of which binds its own
         // buffer there, so the sprite buffer is rebound whenever a 3D draw has intervened -- once
         // per sprite RUN, not once per sprite.
         if (!state.spriteVerticesBound)
@@ -8482,11 +8482,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return;
         }
 
-        // REMED-GFX-102: cache lookup happens per static-state transition; native pipeline
+        // Cache lookup happens per static-state transition; native pipeline
         // creation happens only on a cache miss for a previously unseen complete key. It is
         // never unconditional/per-sprite creation, and the dynamic BlendFactor RGBA value is
         // intentionally absent from GetOrCreateSpritePipeline's key.
-        // REMED-GFX-159: the redundant-bind skip is tracked across ALL families now, so it cannot
+        // The redundant-bind skip is tracked across ALL families now, so it cannot
         // skip a rebind after a 3D draw bound a pipeline of its own.
         const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command.blend, command.wireframe);
         if (pipeline != state.boundPipeline)
@@ -8501,14 +8501,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         state.blendConstantIsPassDefault = false;
 
-        // REMED-GFX-072/116: this sprite's OWN captured Viewport. A sub-region sprite was
+        // This sprite's OWN captured Viewport. A sub-region sprite was
         // baked viewport-local at enqueue and lands at Viewport.X/Y from here; a target-
         // relative sprite's snapshot IS the whole target by construction, so it resets the
         // rasterizer after a preceding sub-region draw and can no longer inherit a viewport
         // that was set after it was queued. Sprites no longer run last in the pass, but every
         // family drives the same per-draw state, so neither can disturb the other.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // plans/plan_webgpu_perf.md WEBGPUPERF-0007: the 16-byte sampler block, in the uniform arena
         // once per distinct bias/format pair per flush -- every sprite used to write its own, and
@@ -8519,7 +8519,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         std::array<WGPUBindGroupEntry, 3> entries{};
         entries[0].binding = 0;
-        // REMED-GFX-170: the SAME authoritative translation the 3D families use. This path used to
+        // The SAME authoritative translation the 3D families use. This path used to
         // resolve its own sampler with `textureFilter == 0 ? Linear : Nearest`, which is correct
         // only for Linear(0) and Point(1) and turned Anisotropic(2), LinearMipPoint(3),
         // MinPointMagLinearMipLinear(7) and MinPointMagLinearMipPoint(8) into a POINT
@@ -8613,8 +8613,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::Begin3DDrawState(WGPURenderPassEncoder pass, ReplayState& state)
     {
-        // REMED-GFX-159: a sprite sets the blend constant from its own captured BlendState
-        // (REMED-GFX-102). Before interleaving, every 3D draw was guaranteed the pass-level value
+        // A sprite sets the blend constant from its own captured BlendState
+        //. Before interleaving, every 3D draw was guaranteed the pass-level value
         // because sprites could only ever run after them; now one can precede a 3D draw, so the
         // pass-level value is restored rather than inherited. What a 3D draw sees is therefore
         // byte-identical to what it saw before this change.
@@ -8638,7 +8638,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     }
 
     /**
-     * @brief REMED-GFX-159: name of a deferred draw family, for the order trace below.
+     * @brief Name of a deferred draw family, for the order trace below.
      *
      * A family is exactly one shader/pipeline family here, so this doubles as the program identity
      * the trace reports, and (family, slot) names one queued command -- and therefore its geometry
@@ -8666,7 +8666,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     }
 
     /**
-     * @brief REMED-GFX-159: whether the draw-order trace is switched on for this process.
+     * @brief Whether the draw-order trace is switched on for this process.
      *
      * Off unless `CNA_WEBGPU_TRACE_DRAW_ORDER` is set in the environment, read exactly once. This
      * exists so an ordering claim can be checked against what the renderer actually recorded rather
@@ -8944,7 +8944,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             ++renderPassCount_;
 
             // Nothing survives the end of a render pass, so every segment reopens the whole pass
-            // state: the viewport and scissor bookkeeping REMED-GFX-116/146 install at the target
+            // state: the viewport and scissor bookkeeping the deferred capture installs at the target
             // extents, plus the two genuinely dynamic pass values. Each draw then reapplies its own
             // captured viewport/scissor/blend constant on top, exactly as within one pass.
             BeginPassViewport(pass, destination.width, destination.height);
@@ -9054,9 +9054,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         pendingTextureViewReleasesEXT_.clear();
     }
 
-    // REMED-GFX-159 keeps the ordered stream and all eleven family vectors alive for the whole
+    // Keeps the ordered stream and all eleven family vectors alive for the whole
     // walk, so they are dropped together, here, and never part-way through it.
-    // REMED-GFX-167: this is also what the destructor calls before releasing the device. A command
+    // This is also what the destructor calls before releasing the device. A command
     // now carries a native reference to the texture it samples, so a vector left populated would
     // release those handles when it is destroyed as a MEMBER -- which happens after the destructor
     // BODY has already released the queue, device, adapter and instance. Draining the queue first
@@ -11520,7 +11520,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             }
 
             for (int c = 0; c < 4; ++c) state.drawBlend[c] = entry.blendFactor[c];
-            // REMED-GFX-172, trace only: both positions the multi-texture sampler trace reports.
+            // Trace only: both positions the multi-texture sampler trace reports.
             state.publicOrder = entry.order;
             state.replayPosition = issued;
             ++issued;
@@ -11593,7 +11593,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                 int colorBlendFunc, int alphaBlendFunc,
                                                 const BlendWriteState& writeState)
     {
-        // REMED-GFX-102 normalization: blending is disabled only for the complete Opaque identity
+        // Normalization: blending is disabled only for the complete Opaque identity
         // (One/Zero/Add independently for colour and alpha). Looking only at the factors would
         // incorrectly erase a custom ReverseSubtract/Min/Max equation that happens to retain
         // Opaque's factors.
@@ -11606,7 +11606,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         blendParams_.alphaDst  = alphaDstBlend;
         blendParams_.colorFunc = colorBlendFunc;
         blendParams_.alphaFunc = alphaBlendFunc;
-        // REMED-GFX-077/GFX-102: both are STATIC wgpu-native pipeline state. The generic 3D caches
+        // GFX-102: both are STATIC wgpu-native pipeline state. The generic 3D caches
         // and the keyed SpriteBatch cache include the slot-0 mask.
         colorWriteMask_ = writeState.colorWriteChannels[0];
         sampleMask_ = writeState.multiSampleMask;
@@ -12051,7 +12051,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         viewportSet_ = true;
     }
 
-    // REMED-GFX-116: these three functions are the whole viewport-capture mechanism. Everything
+    // These three functions are the whole viewport-capture mechanism. Everything
     // above stores the LIVE GraphicsDevice.Viewport; CaptureViewport() copies it into a queued
     // command at the public draw call, and ApplyDrawViewport() is the only thing that turns a
     // captured value back into native pass state. No Render*Draws() may read viewportX_ and
@@ -12098,7 +12098,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (viewportWidth <= 0 || viewportHeight <= 0)
             return Matrix::getIdentityProperty();
 
-        // REMED-GFX-235's rule, for REMED-GFX-235's reason, and the reason both other renderers
+        // The rule, for the reason, and the reason both other renderers
         // state: at one sample the correction decides which side of the fill edge the pixel CENTRE
         // lands on and the sub-half-pixel margin keeps it covered; at four samples the outer
         // sample positions sit a quarter of a pixel out, inside that margin, so the same
@@ -12198,8 +12198,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         passViewport_.maxDepth = maxDepth;
     }
 
-    // REMED-GFX-146: these three functions are the whole scissor-capture mechanism, and they are
-    // deliberately the exact shape of REMED-GFX-116's viewport trio. SetScissorRect() and
+    // These three functions are the whole scissor-capture mechanism, and they are
+    // deliberately the exact shape of the viewport trio. SetScissorRect() and
     // ApplyRasterizerState() store the LIVE state; CaptureScissor() copies both halves of it into a
     // queued command at the public draw call, and ApplyDrawScissor() is the only thing that turns a
     // captured value back into native pass state. No Render*Draws() may read scissorEnabled_ or
@@ -12282,7 +12282,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         passScissor_.height = nh;
     }
 
-    // REMED-GFX-170: releases every native sampler this renderer owns. The 18-entry SpriteBatch-only
+    // Releases every native sampler this renderer owns. The 18-entry SpriteBatch-only
     // array this replaces WAS released here; slotSamplerCache_ never was, so consolidating the two
     // caches without this would have turned a pre-existing leak of the 3D samplers into the only
     // leak. Both are one cache now, and it is released exactly once.
@@ -12340,7 +12340,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 throw std::runtime_error("CNA WebGPU: failed to create per-slot SamplerState sampler");
             slotSamplerCache_[key] = sampler;
         }
-        // REMED-GFX-170: the whole public->native translation on one line, so a wrong ordinal
+        // The whole public->native translation on one line, so a wrong ordinal
         // mapping is readable directly instead of being inferred from pixels.
         if (SamplerTraceEnabled())
         {
@@ -12362,9 +12362,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         return sampler;
     }
 
-    // REMED-GFX-156: every entry point below records ONE ordered clear command carrying exactly the
+    // Every entry point below records ONE ordered clear command carrying exactly the
     // aspects its ClearOptions mask named, at its public call position in the same stream the eleven
-    // draw families use (REMED-GFX-159). The clearXPending_ flags are kept and still decide the
+    // draw families use. The clearXPending_ flags are kept and still decide the
     // FIRST segment's load actions, because they carry a second, unrelated meaning -- "this
     // attachment was just recreated and holds undefined bytes, force a real clear" (see
     // ApplyMultiSampleCount) -- which is a property of the bind cycle, not of a public command.
@@ -12491,7 +12491,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // stays Store (not Discard) on the multisampled attachment so a future frame's
         // WGPULoadOp_Load (when no Clear() was queued that frame) still observes real content,
         // exactly like the pre-MSAA behaviour of Load-ing straight from the swapchain texture.
-        // REMED-GFX-131: created explicitly in surfaceFormat_ (CNA's non-sRGB SurfaceFormat::Color
+        // Created explicitly in surfaceFormat_ (CNA's non-sRGB SurfaceFormat::Color
         // mapping) rather than with a null descriptor, which would inherit the surface texture's
         // own configured format. The two differ only on a surface that offers no non-sRGB format at
         // all, where ConfigureSurface() listed this format in viewFormats precisely so this view is
@@ -12512,23 +12512,23 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPU-29/30: the blend constant and the reference stencil are genuinely dynamic
         // wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias, which are baked
         // per-pipeline above) and are applied once per PASS from whatever is currently stored.
-        // REMED-GFX-116: the VIEWPORT is no longer in that list. It used to be applied here from
+        // The VIEWPORT is no longer in that list. It used to be applied here from
         // the live viewport*_ members, which handed every already-queued draw whatever viewport
         // happened to be current at flush time; BeginPassViewport() now installs the whole target
         // and each draw applies the Viewport captured at its own public call.
-        // REMED-GFX-146: neither is the SCISSOR, for exactly the same reason. It used to be
+        // Neither is the SCISSOR, for exactly the same reason. It used to be
         // computed here from the live scissorEnabled_/scissorX_/scissorY_/scissorW_/scissorH_
         // members, so several rectangles in one bind cycle collapsed last-wins and the full-target
         // rectangle SetRenderTarget installs on every bind unclipped every already-queued draw.
         // BeginPassScissor() opens the pass at the whole target and ApplyDrawScissor() replays each
         // command's own captured state -- including its ScissorTestEnable, since WebGPU has no
         // separate scissor-test toggle and "disabled" therefore means "rect == the whole target".
-        // REMED-GFX-159: ONE ordered replay across all eleven deferred families. This used
+        // ONE ordered replay across all eleven deferred families. This used
         // to be a fixed list of per-family loops ending in the sprites, justified as "3D first,
         // 2D SpriteBatch/UI on top -- matches typical XNA game draw order". A typical order is
         // not a contract: it made the source order of those calls, rather than the game's, decide
         // what executed first, so a game drawing its HUD before its world got the two swapped.
-        // REMED-GFX-156: and Clear() is in that same stream now, so the cycle may become several
+        // And Clear() is in that same stream now, so the cycle may become several
         // native passes -- ReplayOrderedSegments owns the whole loop, including the per-pass state
         // above, which no longer survives from one segment to the next.
         PassDestination destination;
@@ -12581,7 +12581,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // default) -- a real, documented imprecision.
         // WEBGPU-53/54/8/9: this target's own real Depth24PlusStencil8 attachment is always
         // present -- see WebGPURenderTargetRenderer's constructor comment.
-        // REMED-GFX-159/156: ONE ordered replay across all eleven deferred families AND the
+        // ONE ordered replay across all eleven deferred families AND the
         // ordered Clear()s between them, which may cut this bind cycle into several native passes.
         // The per-family loops this replaced meant the source order of those calls -- not the
         // game's -- decided what executed first.
@@ -12632,7 +12632,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         regenerate(target);
         for (WebGPURenderTargetRenderer* extra : mrtExtraTargets_) regenerate(extra);
 
-        // REMED-GFX-159: ReplayDrawsInOrder() clears the ordered stream and all eleven family
+        // ReplayDrawsInOrder() clears the ordered stream and all eleven family
         // vectors together at its own tail -- the vectors have to outlive the whole walk now, so
         // no family may drop its own commands part-way through it.
         clearColorPending_ = false;
@@ -12653,7 +12653,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // above -- near-identical structure, with one difference: the colour attachment is one face's
     // own single-layer 2D view (no MSAA/resolveTarget -- this class does not implement MSAA at
     // all, see its own doc comment).
-    // REMED-GFX-136: the second difference is gone. This function used to set
+    // The second difference is gone. This function used to set
     // `loadOp = WGPULoadOp_Clear` unconditionally -- RenderTargetUsage::DiscardContents behaviour
     // on every bind cycle whatever the game asked for -- because
     // IGraphicsRenderer::CreateRenderTargetCube had no preserveContents parameter to thread a
@@ -12664,11 +12664,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPUPERF-0006: into the frame's encoder, like the 2D sibling above.
         WGPUCommandEncoder encoder = BeginReplayEXT();
 
-        // REMED-GFX-136: `discard` is read from the target THIS pass is being created for, at the
+        // `discard` is read from the target THIS pass is being created for, at the
         // moment the pass descriptor is built, and preserveContents_ is immutable after
         // construction -- so an A -> B -> A sequence can never apply target B's policy to target A,
         // whichever order the flushes happen in.
-        // REMED-GFX-142: depth/stencil now follows the same rule as the 2D sibling above, which is
+        // Depth/stencil now follows the same rule as the 2D sibling above, which is
         // also FNA3D's own (its native GPU driver loads both aspects unless a clear is pending, and
         // its GL and D3D11 drivers preserve them because an FBO attachment and a DSV simply
         // persist). This used to clear unconditionally on the reasoning that RenderTargetUsage is
@@ -12677,7 +12677,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // storing the "color/depth/stencil" contents, and FNA's RenderTargetCube allocates exactly
         // ONE glDepthStencilBuffer for the whole cube, so face A seeing face B's depth IS the
         // reference behaviour rather than a hazard to design around.
-        // REMED-GFX-159/156: ONE ordered replay across all eleven deferred families and the
+        // ONE ordered replay across all eleven deferred families and the
         // ordered Clear()s between them. `discard` is read from the target THIS cycle is being
         // recorded for, so an A -> B -> A sequence can never apply target B's policy to target A.
         // WEBGPU-114: at 1x this face's single-sample 2D view is the colour attachment with no
@@ -13454,7 +13454,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         // WEBGPU-165: honoured, like its 2D sibling -- see CreateRenderTarget2D for why it used to
         // be discarded and what changed.
-        // REMED-GFX-136: preserveContents is the public RenderTargetUsage, reaching a cube target
+        // PreserveContents is the public RenderTargetUsage, reaching a cube target
         // for the first time -- see RenderPendingDrawsToRenderTargetCubeFace().
         return std::make_unique<WebGPURenderTargetCubeRenderer>(*this, size, depthFormat,
                                                               preserveContents, mipMap,
@@ -13572,10 +13572,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -13626,7 +13626,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params != nullptr ? params->startIndex : 0);
 
         coloredDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Colored, coloredDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -13648,7 +13648,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
     }
 
-    // REMED-GFX-DECL-GUARD lives at the top of each of the three routes below; see the anonymous
+    // Lives at the top of each of the three routes below; see the anonymous
     // namespace helper of the same name. WEBGPU-115's fill-mode guard sits beside it, on these
     // three plus the two DrawColoredPrimitives routes above -- the five public 3D draw entry
     // points, which together are the narrowest boundary every Queue*Draw() family passes through.
@@ -13730,7 +13730,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return;
         }
 
-        // REMED-GFX-DECL-GUARD: the skinned and PBR families still select their attribute arrays
+        // The skinned and PBR families still select their attribute arrays
         // from the byte stride, so the PBR family still needs the guard that refuses a declaration
         // those arrays would silently reinterpret. WEBGPU-155 deliberately did not convert it; the
         // check is here rather than at the top of the entry points so a converted family is
@@ -13854,7 +13854,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                   params, instanceCount);
             return;
         }
-        // REMED-GFX-202: the per-instance stream is the lowest-slot entry of the shared
+        // The per-instance stream is the lowest-slot entry of the shared
         // GpuVertexStreamBinding array whose InstanceFrequency is greater than zero.
         const auto* instanceStream = FirstInstanceStream(params);
         if (instanceStream == nullptr)
@@ -13908,8 +13908,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             static_cast<const WebGPUVertexBufferRenderer&>(*instanceStream->buffer);
 
         // WEBGPU-172: every bound stream of BOTH rates, resolved by semantic like the ordinary
-        // families. This replaces two things at once -- REMED-GFX-202's "one stream of each rate"
-        // refusal, and the REMED-GFX-DECL-GUARD stride guard that existed because this route's
+        // families. This replaces two things at once -- the "one stream of each rate"
+        // refusal, and the declaration-fidelity stride guard that existed because this route's
         // attribute array was hand-built from `pvStride`. Neither is needed once the layout comes
         // from the declarations themselves.
         DrawVertexStreamsEXT streams;
@@ -13930,7 +13930,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         const int instCountClamped = std::max(1, instanceCount);
 
-        // REMED-GFX-211/213: the shared layer validates these before dispatch
+        // The shared layer validates these before dispatch
         // (ValidateVertexStreamRanges / ValidateInstanceStreamRanges), so none can fire for a draw
         // that arrived through GraphicsDevice. They exist because Draw*PrimitivesEx is a public
         // interface method a harness may call with a hand-built GpuDrawParams, and because an
@@ -13982,10 +13982,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -14016,7 +14016,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         CaptureIndicesEXT(command, webgpuIb);
         command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
         command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
-        // REMED-GFX-211 / WEBGPU-172: the caller's baseVertex alone. Each per-vertex stream's own
+        // WEBGPU-172: the caller's baseVertex alone. Each per-vertex stream's own
         // VertexOffset is applied once, by where its captured copy starts, so the fetched element
         // is still `VertexOffset + baseVertex + index` -- the same value, now reached in a way that
         // works for several streams at once instead of only one. Captured by value here, so a later
@@ -14044,7 +14044,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                &webgpuIb, params.startIndex);
 
         instancedDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Instanced, instancedDrawCommands_.size() - 1);
     }
 
@@ -14080,9 +14080,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                                command.depthBias, command.slopeScaleDepthBias,
                                                                command.stencil,
                                                                command.vertexLayout);  // WEBGPU-83
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic state; the ops/masks are in the
         // pipeline above). A gate draw and a stamp draw can carry different references in one pass.
@@ -14174,9 +14174,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                             command.depthBias, command.slopeScaleDepthBias, command.stencil,
                                             command.vertexLayout,
                                             command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -14282,9 +14282,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                 command.depthBias, command.slopeScaleDepthBias, command.stencil,
                                                 command.vertexLayout,
                                                 command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -14367,10 +14367,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -14436,7 +14436,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         litTexturedDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::LitTextured, litTexturedDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -14490,9 +14490,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                                  command.depthBias, command.slopeScaleDepthBias, command.stencil,
                                                                  command.vertexLayout,
                                                                  command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -14577,10 +14577,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -14635,7 +14635,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         alphaTestDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::AlphaTest, alphaTestDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -14666,8 +14666,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.addressW, command.maxMipLevel, command.maxAnisotropy,
                                                      "DualTexture3D");
-        // REMED-GFX-172: Texture2's own SamplerStates[1], from the description captured at this
-        // draw's public call. Resolved through the same REMED-GFX-170 sampler cache -- an identical
+        // Texture2's own SamplerStates[1], from the description captured at this
+        // draw's public call. Resolved through the same sampler cache -- an identical
         // pair of slots is one cache hit, not a second native sampler.
         WGPUSampler sampler1 = GetOrCreateSlotSampler(command.texture1Filter, command.texture1AddressU,
                                                       command.texture1AddressV, command.texture1AddressW, command.texture1MaxMipLevel,
@@ -14712,9 +14712,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                                    command.depthBias, command.slopeScaleDepthBias, command.stencil,
                                                                    command.vertexLayout,
                                                                    command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -14796,10 +14796,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -14824,7 +14824,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.texture1 = params.texture1 != nullptr
             ? ResolveSamplable(params.texture1)
             : ClassicNullTextureEXT();
-        // REMED-GFX-172: and the SECOND layer's own slot, captured here for the same reason. Both
+        // And the SECOND layer's own slot, captured here for the same reason. Both
         // descriptions travel with the command, so replay never reads live sampler state.
         command.texture1Filter = slotSamplers_[1].filter;
         command.texture1AddressU = slotSamplers_[1].addressU;
@@ -14862,7 +14862,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         dualTextureDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::DualTexture, dualTextureDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -14908,10 +14908,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -14966,7 +14966,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
         texturedDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Textured, texturedDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -15439,7 +15439,7 @@ namespace
             const std::array<std::uint8_t, 4> blackPixel{0, 0, 0, 255};
             for (int face = 0; face < 6; ++face)
             {
-                // REMED-GFX-135's rule, for the same reason the white cube beside it states: a
+                // The rule, for the same reason the white cube beside it states: a
                 // face that failed to upload would silently change what every such draw samples.
                 if (!classicNullCube_->SetData(face, 0, 0, 0, 1, 1, blackPixel.data(),
                                                static_cast<int>(blackPixel.size())))
@@ -15512,10 +15512,10 @@ namespace
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -15597,7 +15597,7 @@ namespace
         // WMG-0022: and this draw's image-based lighting, for exactly the same reason.
         command.ibl = CaptureIblStateEXT(params);
         pbrDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Pbr, pbrDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -15646,9 +15646,9 @@ namespace
                                                            command.cullMode, command.wireframe,
                                                            command.depthBias, command.slopeScaleDepthBias, command.stencil,
                                                            command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -16206,10 +16206,10 @@ namespace
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -16276,7 +16276,7 @@ namespace
         // reason its pipeline state is.
         command.shadow = CaptureShadowStateEXT(params);
         skinnedDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Skinned, skinnedDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -16330,9 +16330,9 @@ namespace
                                                                 command.cullMode, command.wireframe,
                                                                 command.depthBias, command.slopeScaleDepthBias, command.stencil,
             command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.
@@ -16426,7 +16426,7 @@ namespace
             return;
 
         // Vertex stage: skinned3d.wgsl's bone-palette transform (skinMatrix()), extended to also
-        // skin Tangent, feeding pbr3d.wgsl's own pbrLight()/fs_main BRDF unchanged. REMED-GFX-006:
+        // skin Tangent, feeding pbr3d.wgsl's own pbrLight()/fs_main BRDF unchanged.
         // the normal now uses the inverse-transpose world normal matrix (lp.normalMatrixCol*), the
         // same one pbr3d.wgsl's own unskinned vertex shader uses -- the previous raw-World
         // (mat3(uWorld)*(skinMat3*normal)) path was audit Variant B, correct only for rotation and
@@ -16673,10 +16673,10 @@ namespace
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
-        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // Captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
-        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
@@ -16759,7 +16759,7 @@ namespace
         // WMG-0022: and this draw's image-based lighting, for exactly the same reason.
         command.ibl = CaptureIblStateEXT(params);
         skinnedPbrDrawCommands_.push_back(std::move(command));
-        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        // The public position of this draw, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::SkinnedPbr, skinnedPbrDrawCommands_.size() - 1);
         framePending_ = true;
     }
@@ -16808,9 +16808,9 @@ namespace
                                                                   command.cullMode, command.wireframe,
                                                                   command.depthBias, command.slopeScaleDepthBias, command.stencil,
             command.instance.enabled);
-        // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
+        // This draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
-        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        // And this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
         // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
         // the pipeline above). A gate and a stamp can carry different references in one pass.

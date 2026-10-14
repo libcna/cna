@@ -158,7 +158,7 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 }
 
 // -----------------------------------------------------------------------
-// RenderTargetCube::SetData — REMED-GFX-135
+// RenderTargetCube::SetData
 //
 // RenderTargetCube IS a TextureCube, so it inherits SetData. Every renderer except EasyGL leaves
 // IRenderTargetCubeRenderer::SetData at its interface body, which used to be `{}` -- the same
@@ -199,8 +199,8 @@ namespace
     ///   EasyGL / Magnum -- SetData is a real glTexSubImage2D upload into the shared cube texture
     ///     (Magnum expresses the same upload through CubeMapTexture::setSubImage), so the
     ///     framebuffer's colour attachment IS an ordinary GL cube texture and an upload reaches it
-    ///     directly. REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
-    ///     REMED-GFX-134), so this suite can only assert that the upload is accepted -- the
+    ///     directly. the honest TextureCube/Texture3D readback contract left RenderTargetCube READBACK unimplemented here (tracked as
+    ///     The RenderTargetCube readback contract), so this suite can only assert that the upload is accepted -- the
     ///     byte-exact content assertion for the identical `set_sub_image_2d` path lives on the
     ///     plain cube in
     ///     modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp.
@@ -217,7 +217,7 @@ namespace
         // which is what this test forbids. Without the entry an IGL build asserted a refusal the
         // renderer deliberately does not make.
         // SOFTWARE-119 writes into the same CPU face/mip storage its rasterizer and GetData use;
-        // the shared set-data contract asserts the exact round trip rather than mere acceptance.
+        // The shared set-data contract asserts the exact round trip rather than mere acceptance.
         // plans/plan_apple_m4.md AM4-092: SDL_GPU's RenderTargetCube uploads the face too
         // (SdlGpuRenderTargetCubeRenderer::SetData -> UploadTargetRegion).
         return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, SdlGpu);

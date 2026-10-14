@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-173: EnvironmentMapEffect samples TWO independently observable resources -- an ordinary
+// EnvironmentMapEffect samples TWO independently observable resources -- an ordinary
 // 2D texture and a reflection cube -- and each must be filtered by the sampler assigned to ITS OWN
 // public GraphicsDevice.SamplerStates slot.
 //
@@ -27,7 +27,7 @@
 //
 // THE ORACLE is byte-exact for every Point mode and strictly differential for every Linear mode,
 // and it never depends on where a particular texel lands on screen -- so cube-face orientation
-// conventions, which differ across renderers and are settled elsewhere (REMED-GFX-134), cannot make
+// conventions, which differ across renderers and are settled elsewhere, cannot make
 // it pass or fail.
 //
 //   * A PALETTE built at start-up guarantees, and CHECKS, two properties: every entry is at least
@@ -56,7 +56,7 @@
 // LEGS (each answers one question, so a failure names the layer):
 //
 //   A  slot 1 is consulted at all          the red-first check: Point on the cube must be exact
-//   B  slot 0 still works                  REMED-GFX-176's result, re-asserted as a regression gate
+// B  slot 0 still works                  the result, re-asserted as a regression gate
 //   C  independence                        one slot fixed, the other changed, byte-identical or not
 //   D  filter ordinals 0..8 on the cube    the complete public enum, magnification partition
 //   E  cache identity                      same cube two samplers; two cubes one sampler; one frame
@@ -250,7 +250,7 @@ namespace
     }
 
     /// The public enum's magnification component, from TextureFilter.hpp's own table (the
-    /// authoritative translation REMED-GFX-170 established; NOT a second copy of a mapping).
+    /// authoritative translation the nine-value TextureFilter contract established; NOT a second copy of a mapping).
     bool MagnifiesByPoint(int ordinal)
     {
         return ordinal == 1 || ordinal == 4 || ordinal == 5 || ordinal == 6;
@@ -356,7 +356,7 @@ class EnvMapCubeSamplerContractTest : public Game
     const Color& BaseTexel(int i) const { return palette_[static_cast<std::size_t>(kCubeColors + i)]; }
     /// level is 0..5. EVERY level of the mipmapped cube is a flat per-(face, level) colour, so the
     /// MINIFICATION filter is invisible inside a level at every lambda and only the ordinal's
-    /// MIPMAP component can change the answer -- the same isolation REMED-GFX-175's fixture uses.
+    /// MIPMAP component can change the answer -- the same isolation the fixture uses.
     const Color& MipMarker(int face, int level) const
     {
         return palette_[static_cast<std::size_t>(kCubeColors + kBaseColors + face * 6 + level)];
@@ -590,7 +590,7 @@ class EnvMapCubeSamplerContractTest : public Game
             case Path::StaticIndexedRange:
             {
                 // Two decoy vertices in front and three decoy indices in front, so the draw is only
-                // correct when BOTH baseVertex and startIndex are honoured (REMED-GFX-117).
+                // correct when BOTH baseVertex and startIndex are honoured.
                 VtxPNT decoy = quad[0];
                 decoy.px = decoy.py = 0.0f;
                 std::vector<VtxPNT> verts = { decoy, decoy, quad[0], quad[1], quad[2], quad[5] };
@@ -899,7 +899,7 @@ class EnvMapCubeSamplerContractTest : public Game
         // Every one-level texture makes the minification and mipmap components unobservable, so the
         // four Point-magnifying ordinals must agree byte-for-byte, and so must the linear ones --
         // EXCEPT Anisotropic(2), whose tap pattern is a per-GPU choice and is a declared boundary
-        // (the same one REMED-GFX-170 declared).
+        // (the same one the nine-value TextureFilter contract declared).
         int pointDiff = 0, linearDiff = 0;
         const std::vector<Color>* firstPoint = nullptr;
         const std::vector<Color>* firstLinear = nullptr;
@@ -1445,7 +1445,7 @@ protected:
         for (int i = 0; i < kTex * kTex; ++i) basePattern.push_back(BaseTexel(i));
         base_ = Texture2D::CreateFromPixels(dev, kTex, kTex, Bytes(basePattern));
 
-        // A non-rasterizing renderer rejects cube uploads by REMED-GFX-130/135's contract; the run
+        // A non-rasterizing renderer rejects cube uploads by the honest TextureCube/Texture3D readback contract's contract; the run
         // must still reach its honest-rejection leg rather than abort in LoadContent.
         try
         {

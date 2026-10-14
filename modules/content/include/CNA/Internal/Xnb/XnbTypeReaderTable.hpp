@@ -40,7 +40,7 @@ namespace CNA::Internal::Xnb
      *         protocol used by XNB-16's root/object dispatch).
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the encoded count is
      *         negative or exceeds @p limits.maxTypeReaderCount, an entry's raw name exceeds
-     *         @p limits.maxStringBytes (REMED-CONTENT-006), or an entry's name is not a
+     *         @p limits.maxStringBytes, or an entry's name is not a
      *         well-formed (possibly generic) .NET type name (plans/plan_xnb.md XNB-43) -- matching every
      *         other malformed-input case in this pipeline, a caller only ever needs to catch this
      *         one exception type for "this .xnb file is malformed", never
@@ -67,7 +67,7 @@ namespace CNA::Internal::Xnb
         {
             XnbTypeReaderTableEntry entry;
             entry.rawName = reader.ReadString();
-            // REMED-CONTENT-006: BinaryReader::ReadString() has no cap of its own -- only its
+            // BinaryReader::ReadString() has no cap of its own -- only its
             // coarse whole-stream limit applies (up to limits.maxFileSize), not the much tighter
             // limits.maxStringBytes this field is specifically meant to enforce. Checked after the
             // read (BinaryReader::ReadString() has no way to pass a cap in), which still rejects

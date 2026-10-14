@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-CONTENT-002: StorageDevice::DeleteContainer(titleName) built its target path via
+// StorageDevice::DeleteContainer(titleName) built its target path via
 // fs::path(storageRoot) / titleName with no containment check -- an absolute titleName (or one
 // escaping via "..") resolved outside the storage root and was recursively deleted. No prior test
 // coverage existed for DeleteContainer at all.

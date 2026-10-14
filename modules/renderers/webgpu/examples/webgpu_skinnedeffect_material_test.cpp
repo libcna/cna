@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-090: WebGPU SkinnedEffect must consume the CPU-pre-folded material exactly like
+// WebGPU SkinnedEffect must consume the CPU-pre-folded material exactly like
 // FNA/XNA and CNA's correct renderers:
 //
 //   DiffuseShader.rgb = DiffuseColor * Alpha

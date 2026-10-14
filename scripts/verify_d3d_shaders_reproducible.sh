@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# REMED-BUILD-014 / REMED-GFX-005/006/007/010 D3D unblocker:
+# REMED-BUILD-014/006/007/010 D3D unblocker:
 # Prove the committed D3D shader bytecode is BYTE-REPRODUCIBLE in this environment, so a shader
 # *source* edit can be trusted to regenerate its bytecode deterministically (the precondition the
 # GRAPHICS shader campaign recorded as "BYTECODE-BLOCKED" for every D3D slice).

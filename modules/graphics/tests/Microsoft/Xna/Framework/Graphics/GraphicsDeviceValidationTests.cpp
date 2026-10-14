@@ -526,7 +526,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
 
 TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOverloadRejection)
 {
-    // REMED-GFX-PGL-AUDIT: SetRenderTarget(RenderTarget2D*) used to call renderer_->SetRenderTarget2D()
+    // SetRenderTarget(RenderTarget2D*) used to call renderer_->SetRenderTarget2D()
     // directly with `renderTarget ? renderTarget->GetRenderTargetRenderer() : nullptr`. On a renderer
     // that keeps IGraphicsRenderer's nullptr CreateRenderTarget2D() default (Stub),
     // GetRenderTargetRenderer() is itself null, so that ternary collapsed to the exact nullptr the

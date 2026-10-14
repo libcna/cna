@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-172: DualTextureEffect samples TWO independently observable resources -- an ordinary
+// DualTextureEffect samples TWO independently observable resources -- an ordinary
 // 2D texture and a second 2D overlay layer -- and each must be filtered by the sampler assigned to
 // ITS OWN public GraphicsDevice.SamplerStates slot.
 //
@@ -15,7 +15,7 @@
 // An unset slot uses the documented device default (`SamplerState::LinearWrap`).
 //
 // THE DEFECT this reproduces is WebGPU-local, and it is a SHADER and BIND-GROUP-LAYOUT shape rather
-// than a filter-ordinal mapping (which is REMED-GFX-170, already correct here). `dual_texture3d.wgsl`
+// than a filter-ordinal mapping (which is the nine-value TextureFilter contract, already correct here). `dual_texture3d.wgsl`
 // declares ONE `@group(1) @binding(0) var texSampler: sampler` and calls `textureSample(tex0,
 // texSampler, uv)` AND `textureSample(tex1, texSampler, uv)` through it; `dualTextureBindGroupLayout_`
 // has three entries (one sampler, two texture views); and `DualTextureDrawCommand` carries ONE
@@ -23,7 +23,7 @@
 // inexpressible at THREE layers at once and slot 1 silently inherits slot 0's sampler. All three must
 // change together: a capture without a binding has nowhere to go, a binding without a shader
 // declaration fails bind-group-layout validation, and a shader change without a capture would read
-// live state at replay and break the deferred-snapshot contract REMED-GFX-116/146/159 established.
+// live state at replay and break the deferred-snapshot contract the deferred viewport capture established.
 //
 // THE ORACLE never needs the two contributions separated by configuration -- it observes BOTH IN THE
 // SAME IMAGE, which is what makes "changing one sampler affects only its own resource" a direct
@@ -258,7 +258,7 @@ namespace
     }
 
     /// The public enum's magnification component, from TextureFilter.hpp's own table (the
-    /// authoritative translation REMED-GFX-170 established; NOT a second copy of a mapping).
+    /// authoritative translation the nine-value TextureFilter contract established; NOT a second copy of a mapping).
     bool MagnifiesByPoint(int ordinal)
     {
         return ordinal == 1 || ordinal == 4 || ordinal == 5 || ordinal == 6;
@@ -597,7 +597,7 @@ class DualTextureSlotSamplerContractTest : public Game
 
         // Two flat-per-level chains. Every level is one colour, so the MINIFICATION filter is
         // invisible inside a level at every lambda and only the ordinal's MIPMAP component can
-        // change the answer -- the isolation REMED-GFX-175's fixture uses.
+        // change the answer -- the isolation the fixture uses.
         mipA_ = std::make_unique<Texture2D>(dev, kMipTex, kMipTex, true, SurfaceFormat::Color);
         mipB_ = std::make_unique<Texture2D>(dev, kMipTex, kMipTex, true, SurfaceFormat::Color);
         mipLevels_ = mipA_->getLevelCountProperty();
@@ -804,7 +804,7 @@ class DualTextureSlotSamplerContractTest : public Game
             case Path::StaticIndexedRange:
             {
                 // Two decoy vertices in front and three decoy indices in front, so the draw is only
-                // correct when BOTH baseVertex and startIndex are honoured (REMED-GFX-117).
+                // correct when BOTH baseVertex and startIndex are honoured.
                 VtxDualPT decoy = quad[0];
                 decoy.px = decoy.py = 0.0f;
                 std::vector<VtxDualPT> verts = { decoy, decoy, quad[0], quad[1], quad[2], quad[5] };

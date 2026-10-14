@@ -24,7 +24,7 @@ layout(location = 1) out vec3  fragNormal;
 layout(location = 2) out vec3  fragTangent;
 layout(location = 3) out float fragBitangentSign;
 layout(location = 4) out vec3  fragWorldPos;
-layout(location = 5) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
+layout(location = 5) out vec4 fragFog;    // xyz=FogColor, w=keep-factor
 layout(location = 6) out vec4  fragColor0;
 
 // Same 288x1 RGBA32F palette as skinned3d.vert.glsl: four column texels per matrix. It preserves
@@ -60,12 +60,12 @@ layout(set = 1, binding = 1) uniform SkinnedLightParams {
     vec4 specularColorPower;
 } lp;
 
-// REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
+// Fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
 // the retired VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
+    vec4 fogVector;        // FNA fog vector (dot with object/skin pos)
 } fog;
 
 vec3 cnaSkinNormal(mat3 m, vec3 n) {
@@ -107,7 +107,7 @@ void main() {
     fragColor0 = vec4(1.0);
     #endif
 
-    // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix
+    // (Variant B): the normal takes the inverse-transpose world matrix
     // transpose(inverse(mat3(world))), not raw mat3(lp.world). Raw World is correct only for
     // rotation and uniform scale and diverges from FNA's mul(normal, WorldInverseTranspose) under
     // non-uniform scale; it also contradicted this renderer's own unskinned pbr3d.vert.glsl and the
@@ -120,9 +120,9 @@ void main() {
     fragBitangentSign = inTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(lp.world)))
                                    * cnaDirectionHandedness(skinNormalMat);
     fragWorldPos = (lp.world * skinnedPos).xyz;
-    // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
+    // Keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (as Vulkan did).
-    float fogKeep = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    float fogKeep = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), fog.fogVector), 0.0, 1.0); // FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

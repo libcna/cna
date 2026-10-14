@@ -77,7 +77,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 // -----------------------------------------------------------------------
-// REMED-GFX-130: does THIS build's renderer actually read a cube face back?
+// Does THIS build's renderer actually read a cube face back?
 //
 // TextureCube::GetData now has exactly two outcomes -- the resource's real content, or a
 // deterministic System::NotSupportedException with the caller's destination untouched. Before that
@@ -90,7 +90,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // Software only at level 0, since it stores no cube mip levels.
 // -----------------------------------------------------------------------
 //
-// REMED-GFX-135 adds the write-side half of the same question. `TextureCube::SetData` now has
+// Adds the write-side half of the same question. `TextureCube::SetData` now has
 // exactly two outcomes too -- the complete requested region is stored, or it throws -- so the
 // "does not throw" tests below became false-positive-capable in the opposite direction: on a
 // renderer with no cube storage they used to pass for a call that discarded the data. Storage
@@ -141,7 +141,7 @@ namespace
     return CubeLevel0ReadbackSupported();
 }
 
-/// Runs one TextureCube::SetData call and asserts REMED-GFX-135's contract for this renderer:
+/// Runs one TextureCube::SetData call and asserts the contract for this renderer:
 /// it either completes, or it refuses with System::NotSupportedException. Never both, never
 /// neither.
 template <typename Fn>
@@ -641,7 +641,7 @@ TEST_F(TextureCubeTest, DisposedStatePrecedesNullAndEveryOtherCopyArgument)
     });
 }
 
-// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped
+// Both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped
 // the upload passed just as easily as one that stored it. They now assert the real outcome, and
 // the readback proves the second (startIndex) overload really stored ITS OWN data rather than
 // leaving the first call's behind.
@@ -875,7 +875,7 @@ TEST_F(TextureCubeTest, SetDataRectOutOfBoundsThrowsArgumentException)
                  System::ArgumentException);
 }
 
-// REMED-GFX-135: was a bare EXPECT_NO_THROW. It now asserts the outcome, and -- where the renderer
+// Was a bare EXPECT_NO_THROW. It now asserts the outcome, and -- where the renderer
 // can read back -- that the 1x1 write landed on exactly one texel and left the other three alone.
 TEST_F(TextureCubeTest, SetDataRectWithinBoundsStoresOnlyThatTexel)
 {
@@ -917,7 +917,7 @@ TEST_F(TextureCubeTest, SetDataRectElementCountLessThanRegionThrowsArgumentExcep
 TEST_F(TextureCubeTest, SetDataNullRectAtMipLevelUsesReducedSize)
 {
     // size=4, mipMap=true -> levels 4x4, 2x2, 1x1. Level 1 is 2x2 = 4 elements.
-    // REMED-GFX-135: every renderer that stores cube faces at all now stores the whole declared mip
+    // Every renderer that stores cube faces at all now stores the whole declared mip
     // chain (Software was the last one allocating level 0 only), so this level-1 write is either a
     // real store or a deterministic refusal -- never the silent drop it used to be.
     TextureCube tex(gd, 4, true, SurfaceFormat::Color);
@@ -1018,7 +1018,7 @@ TEST_F(TextureCubeTest, GetDataRectOutOfBoundsThrowsArgumentException)
                  System::ArgumentException);
 }
 
-// REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
+// False-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
 // nothing about what GetData produced -- a renderer that read nothing and a renderer that read the
 // texel correctly both passed it. It now asserts the real outcome: the uploaded texel on a renderer
 // with cube readback, and a deterministic rejection that leaves the destination untouched on one
@@ -1117,7 +1117,7 @@ TEST_F(TextureCubeTest, GetDataRectInvalidFaceThrowsInvalidOperation)
                  System::InvalidOperationException);
 }
 
-// REMED-GFX-135: uploading the SAME colour to all six faces could not distinguish them, so this
+// Uploading the SAME colour to all six faces could not distinguish them, so this
 // used to pass on a renderer that stored one face, all six, or none. Each face now gets its own
 // colour and is read back independently.
 TEST_F(TextureCubeTest, SetDataAllSixValidFacesStoreIndependently)
@@ -1154,7 +1154,7 @@ TEST_F(TextureCubeTest, SetDataAllSixValidFacesStoreIndependently)
     }
 }
 
-// REMED-GFX-135: a source array with padding on both sides of the uploaded window. Whatever the
+// A source array with padding on both sides of the uploaded window. Whatever the
 // renderer stores, the padding must never reach the resource -- that is what proves startIndex is
 // applied exactly once and that the call reads only elementCount elements from it.
 TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
@@ -1182,7 +1182,7 @@ TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
     }
 }
 
-// REMED-GFX-135: a mipmapped cube declares LevelCount mip levels; every one of them must have real
+// A mipmapped cube declares LevelCount mip levels; every one of them must have real
 // storage behind it. Software was the last renderer allocating level 0 only, so this walked the
 // whole declared chain and passed on a resource that kept just the first level.
 TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
@@ -1227,7 +1227,7 @@ TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
     }
 }
 
-// REMED-GFX-135: SetData after Dispose() used to be a silent no-op, while GetData already threw --
+// SetData after Dispose() used to be a silent no-op, while GetData already threw --
 // so a caller could be told the resource was gone on read and never on write.
 TEST_F(TextureCubeTest, SetDataAfterDisposeThrowsObjectDisposed)
 {
@@ -1461,7 +1461,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesSizeFormatAndLevelCount)
     std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, colors);
     System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
 
-    // REMED-GFX-135: DDSFromStreamEXT decodes on the CPU and then uploads every face through
+    // DDSFromStreamEXT decodes on the CPU and then uploads every face through
     // SetData, which on a renderer with no cube storage is now a deterministic refusal instead of a
     // silent discard -- so the whole load fails rather than returning a TextureCube holding nothing.
     if (!CubeStorageSupported())
@@ -1491,7 +1491,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
     std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, expected);
     System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
 
-    // REMED-GFX-135: see the sibling test above -- a renderer that cannot store a cube face now
+    // See the sibling test above -- a renderer that cannot store a cube face now
     // fails the load outright rather than handing back an empty resource.
     if (!CubeStorageSupported())
     {
@@ -1512,7 +1512,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
         // elementCount must match width*height, same contract as SetData's identical overload —
         // it is not an arbitrary partial-read count), so read all 4x4=16 texels and just check
         // the first (every texel is the same solid colour by construction).
-        // REMED-GFX-130 false-positive audit: the readback used to be issued unconditionally and
+        // False-positive audit: the readback used to be issued unconditionally and
         // only asserted on three named renderers, so every other renderer ran a call whose result was
         // never checked -- including the ones that answered with a fabricated transparent-black
         // face. Both halves are now asserted: the decoded colour where the renderer really reads a

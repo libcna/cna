@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-186 -- reading a NONZERO MIP LEVEL of a mipmapped MULTISAMPLED `RenderTarget2D` must
+// Reading a NONZERO MIP LEVEL of a mipmapped MULTISAMPLED `RenderTarget2D` must
 // return that level's generated content, and must never kill the process.
 //
 // THE DEFECT
@@ -17,7 +17,7 @@
 //
 // died by an UNCATCHABLE signal, so a game could not degrade gracefully. Level 0 of the very same
 // target read back exactly first, which is what makes this the MIP-LEVEL route rather than the
-// multisample resolve (REMED-GFX-154) or the transfer window (REMED-GFX-149).
+// multisample resolve or the transfer window.
 //
 // THE PUBLIC CONTRACT THIS FILE ENCODES
 // -------------------------------------
@@ -147,7 +147,7 @@ namespace
      * @brief Whether this renderer can read a render target's colour attachment back at all.
      *
      * False on HEADLESS, which rasterizes nothing and therefore owns no colour to return. Its
-     * `GetData` is REMED-GFX-127/130's deterministic public REFUSAL, and that refusal is what this
+     * `GetData` is the honest Texture2D::GetData contract's deterministic public REFUSAL, and that refusal is what this
      * file asserts there: it must throw, and it must leave the destination completely untouched.
      * A refusal that quietly wrote zeroes would be indistinguishable from a fabricated read.
      */
@@ -358,7 +358,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-186's contract: reading a generated mip level of a multisampled render target.
+ * @brief The contract: reading a generated mip level of a multisampled render target.
  */
 class RenderTargetMsaaMipReadbackTest : public Game
 {
@@ -692,7 +692,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         for (const Color& c : buf)
             if (!Exact(c, kSentinel)) { untouched = false; break; }
 
-        // REMED-GFX-189 CLOSED (2026-07-31): Vulkan used to answer an out-of-range level with
+        // CLOSED (2026-07-31): Vulkan used to answer an out-of-range level with
         // fabricated level-0 content instead of refusing, so this file carried a
         // `kOutOfRangeLevelRejected` carve-out asserting that defect. The carve-out is DELETED
         // rather than flipped, so every renderer now runs the same unconditional assertion here and
@@ -1045,7 +1045,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         if (!kTargetMipReadbackSupported)
         {
             // Same declared boundary as every other nonzero-level read here; the oversized-window
-            // contract is exercised at level 0 by REMED-GFX-149's own fixture on this renderer.
+            // contract is exercised at level 0 by the fixture on this renderer.
             ReadLevelRect(*rt, 1, 0, 0, kRT / 2, kRT / 2, kRT, kRT, "F6 level 1");
             return;
         }
@@ -1278,16 +1278,16 @@ class RenderTargetMsaaMipReadbackTest : public Game
 
     // The same three UNEVEN chains without multisampling at all. REMED-GFX-187 is a property of
     // mip-generation arithmetic, not resolve, so matching H4/H5/H6 proves the corrected contract
-    // on both routes while keeping REMED-GFX-186's resolve subject independently covered.
+    // on both routes while keeping the resolve subject independently covered.
     void LegH7()  { ChainLeg("H7",  5,  3, 0); }
     void LegH8()  { ChainLeg("H8",  8,  4, 0); }
     void LegH9()  { ChainLeg("H9", 13,  7, 0); }
-    // REMED-GFX-193: `mipMap=true` means the FNA-calculated chain, not "there must be a
+    // `mipMap=true` means the FNA-calculated chain, not "there must be a
     // generated descendant".  A 1x1 target therefore has one public/native level whether or
     // not MSAA applies.  H1 above is the MSAA route; this is its non-MSAA counterpart.
     void LegH10() { ChainLeg("H10", 1, 1, 0); }
 
-    // REMED-GFX-187: the axes that reach one first are covered in BOTH orientations and on both
+    // The axes that reach one first are covered in BOTH orientations and on both
     // the real-MSAA-resolve and non-MSAA routes. Every ChainLeg reads every intermediate level,
     // the final 1x1 level, and then proves that LevelCount itself is not a fabricated level.
     void LegH11() { ChainLeg("H11",  1, 13, 4); }
@@ -1368,7 +1368,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
     }
 
     /**
-     * @brief I2 -- a mipmapped MULTISAMPLED RenderTargetCube, re-armed for REMED-GFX-188.
+     * @brief I2 -- a mipmapped MULTISAMPLED RenderTargetCube, re-armed for the resolved-face mip regeneration fix.
      *
      * GFX-186 originally classified the SDL_GPU cube as a separate, safely refusing route. GFX-188
      * now requires its resolved cube to own and populate every public level, so the SDL_GPU branch

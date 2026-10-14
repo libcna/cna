@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-103 / SOFTWARE-204 / SOFTWARE-290: public vertex-buffer copy contract.
+// SOFTWARE-204 / SOFTWARE-290: public vertex-buffer copy contract.
 //
 // XNA requires both a positive logical capacity and a positive classic-copy element count. A null
 // array is rejected even for count zero; a non-null zero-element classic copy is rejected as an

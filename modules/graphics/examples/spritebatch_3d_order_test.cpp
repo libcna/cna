@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-157: a SpriteBatch draw and a stock 3D draw issued inside ONE render-target bind cycle
+// A SpriteBatch draw and a stock 3D draw issued inside ONE render-target bind cycle
 // must execute in the order the game issued them.
 //
 //     SpriteBatch.Begin(...); SpriteBatch.Draw(...); SpriteBatch.End();
 //     effect.Apply();  GraphicsDevice.DrawPrimitives(...)      // <-- must land ON TOP
 //
-// REMED-GFX-155's leg I0 measured that the second draw does not reach the target at all on BGFX,
+// The leg I0 measured that the second draw does not reach the target at all on BGFX,
 // VULKAN, SOFTWARE and EASYGL, while WEBGPU renders it: the region it drew into still holds the
 // bind cycle's clear colour. It reproduces with ORDINARY Texture2D sources and on both the
 // backbuffer and a RenderTarget2D, so it is neither a render-target ordering question nor a
-// producer/consumer dependency. REMED-GFX-143's check O3 named the "two queues" subject but only
+// producer/consumer dependency. the check O3 named the "two queues" subject but only
 // ever measured 3D -> SpriteBatch -- the direction that already works -- so the defect survived it.
 //
 // WHAT THIS FILE MEASURES, AND WHY EVERY CHECK IS FALSIFIABLE IN BOTH DIRECTIONS
@@ -31,7 +31,7 @@
 // render-target sampling is Y-flipped (REMED-GFX-067/147/153 are not this file's subject). The
 // palette is 0/255-only, an exact fixed point of sRGB encoding, so every comparison is byte-exact
 // on sRGB renderers too. Clip-space stripe coordinates are used for the 3D family, so this file
-// cannot accidentally exercise the viewport-segmentation machinery (REMED-GFX-063/065) instead of
+// cannot accidentally exercise the viewport-segmentation machinery instead of
 // the ordering under test.
 //
 // Two confounds are separated rather than assumed away:
@@ -39,7 +39,7 @@
 //   * EFFECT AND BUFFER LIFETIME. Leg A-F hold their Effect, VertexBuffer and IndexBuffer objects
 //     as long-lived members, so a deferred renderer replaying after they died cannot be blamed. Leg
 //     L then repeats the canonical sequence with a scope-LOCAL effect and local buffers, exactly as
-//     REMED-GFX-155's leg I0 wrote it, so lifetime is measured on its own.
+// The leg I0 wrote it, so lifetime is measured on its own.
 //   * WHAT THE EFFECT ACTUALLY SHADES. Legs G/H use a PARITY oracle: the identical 3D draw is
 //     issued once as the FIRST thing in a cycle (control) and once AFTER a SpriteBatch (subject),
 //     and the two readbacks must be byte-identical. That is exact for every stock effect and every
@@ -66,8 +66,8 @@
 //   I  state does not leak between families      depth, blend, rasterizer, cull, scissor, viewport
 //   J  clears between families                   before, between and after the two families, both
 //                                                orders, alternating Clear/draw runs, and two
-//                                                consecutive Clears (REMED-GFX-156)
-//   P  every family ACROSS a Clear boundary      REMED-GFX-156: a renderer that splits its bind
+// consecutive Clears
+//   P  every family ACROSS a Clear boundary      the ordered mid-cycle Clear fix: a renderer that splits its bind
 //                                                cycle into two native passes at the Clear must
 //                                                rebuild all pass state for the second one; parity
 //                                                against the same draw at the head of a fresh pass
@@ -139,7 +139,7 @@ namespace
     /**
      * @brief Whether this renderer rasterizes at all.
      *
-     * HEADLESS performs no rasterization, so REMED-GFX-127/130's contract makes every readback
+     * HEADLESS performs no rasterization, so the honest Texture2D::GetData contract's contract makes every readback
      * reject deterministically. There is no ordering result to observe there; the legs assert that
      * the sequences remain legal and that the rejection happens, not a pixel value.
      */
@@ -167,7 +167,7 @@ namespace
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDLGPU-68's backbuffer proxy makes the public readback exact, so the backbuffer legs carry
-    // the same ordering contract as the render-target controls instead of silently skipping it.
+    // The same ordering contract as the render-target controls instead of silently skipping it.
     constexpr bool kRasterizes = true;
     constexpr bool kReadsBackbuffer = true;
     constexpr bool kDraws3D = true;
@@ -196,7 +196,7 @@ namespace
      * displayed. The quads here are TL -> BL -> BR, the OPPOSITE winding, i.e. counter-clockwise
      * as displayed and therefore XNA BACK faces. So CullCounterClockwise must REMOVE them
      * everywhere, and the four renderers that did so were correct all along; WEBGPU, which kept
-     * them, was the one inverted renderer (REMED-GFX-160, fixed).
+     * them, was the one inverted renderer (fixed).
      *
      * The contract itself is now measured directly, on both windings and every cull mode, by
      * examples/frontface_winding_test.cpp. Leg M5 below asserts it unconditionally.
@@ -220,8 +220,8 @@ namespace
      *
      * WEBGPU replayed all of a cycle's 3D draws and then all of its sprites, so `SpriteBatch -> 3D`
      * came out inverted while `3D -> SpriteBatch` looked correct. That was the same root cause
-     * REMED-GFX-157 corrected on Vulkan and bgfx (which grouped the other way round), and
-     * REMED-GFX-159 has now corrected it here: every renderer owes public order, so this constant is
+     * Corrected on Vulkan and bgfx (which grouped the other way round), and
+     * Has now corrected it here: every renderer owes public order, so this constant is
      * `PublicOrder` everywhere and the enum is kept only so a regression names the shape it
      * regressed to instead of merely reporting permuted stripes.
      */
@@ -230,10 +230,10 @@ namespace
     /** @brief True when this renderer honours public order between the two families. */
     constexpr bool kPublicFamilyOrder = (kReplay == Replay::PublicOrder);
 
-    // REMED-GFX-161 (RESOLVED, 2026-07-30): the discarded first-read warm-up this file used to carry
+    // (RESOLVED, 2026-07-30): the discarded first-read warm-up this file used to carry
     // for WEBGPU is gone. The measured symptom -- the very first GetBackBufferData of a run left part
     // of the caller's buffer holding its poison prefill while later reads were correct -- was the
-    // pre-REMED-GFX-165 rectangle-less dimension source: GraphicsDevice::GetBackBufferData sized the
+    // pre-the back-buffer dimension contract rectangle-less dimension source: GraphicsDevice::GetBackBufferData sized the
     // region from renderer_->GetViewportSize() evaluated BEFORE the read's own EnsureFrameRendered
     // realised the surface, so on the first frame WebGPU's aspect-scaled viewport (53x32 for a 64x32
     // backbuffer) undersized the region and a trailing block stayed poison. GFX-165 sizes the region
@@ -244,18 +244,18 @@ namespace
      * @brief Whether a `Clear()` issued AFTER a draw in the SAME bind cycle wipes that draw.
      *
      * False on a renderer whose only clear mechanism for a pass is its load action, which
-     * necessarily runs before every draw of that pass. REMED-GFX-143's fixture declares the same
+     * necessarily runs before every draw of that pass. the fixture declares the same
      * property per renderer under the name `clearAfterDrawWinsOnBackbuffer`; leg J measures it on a
      * PreserveContents render target and is not this task's subject either way -- it is declared so
      * that a clear-ordering regression cannot hide inside a family-ordering fixture.
      *
-     * WEBGPU joined SDL_GPU here when REMED-GFX-159 landed, and the two facts are independent: leg
+     * WEBGPU joined SDL_GPU here when the WebGPU draw-order fix landed, and the two facts are independent: leg
      * J had been skipping behind the family-order gate above, so turning that gate over is what
      * first RAN it. Measured then: a `Clear()` between the two families left the earlier sprite
      * standing and a `Clear()` after both left both standing, because `clearColorPending_` only
      * ever selected `WGPULoadOp_Clear` for the whole pass.
      *
-     * REMED-GFX-156 fixed both: each cuts its bind cycle into one native render pass per observable
+     * Fixed both: each cuts its bind cycle into one native render pass per observable
      * Clear, so the declaration is unconditional and leg J -- which was SKIPPED, not failing, on
      * exactly those two renderers, and is this file's only Clear coverage -- now runs everywhere.
      */
@@ -264,8 +264,8 @@ namespace
     /**
      * @brief Whether `GetBackBufferData` rejects on a renderer that rasterizes nothing.
      *
-     * REMED-GFX-127/130 made the texture and render-target readbacks reject rather than return a
-     * fabricated image. REMED-GFX-162 brought HEADLESS's BACKBUFFER readback under the same
+     * Made the texture and render-target readbacks reject rather than return a
+     * fabricated image. the Headless back-buffer rejection contract brought HEADLESS's BACKBUFFER readback under the same
      * contract: it formerly returned successfully and FILLED the caller's buffer with the last
      * Clear() colour (a caller could not distinguish a non-rasterizing device from a rendered
      * frame), and now raises `System::NotSupportedException` instead. So every renderer -- rasterizing
@@ -360,7 +360,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-157's public ordering contract between SpriteBatch and stock 3D draws.
+ * @brief The public ordering contract between SpriteBatch and stock 3D draws.
  */
 class SpriteBatch3DOrderTest : public Game
 {
@@ -848,7 +848,7 @@ class SpriteBatch3DOrderTest : public Game
         case Draw3D::BufferIndexedRange:
         {
             // The wanted quad is vertices 4..7, reached through indices 6..11 with baseVertex 4,
-            // so both nonzero range arguments must be honoured (REMED-GFX-107/110/117).
+            // so both nonzero range arguments must be honoured.
             VertexPositionTexture q[8];
             QuadVPTIndexed(0, 0, q);       // degenerate
             QuadVPTIndexed(from, to, q + 4);
@@ -1035,7 +1035,7 @@ class SpriteBatch3DOrderTest : public Game
         if (!kRasterizes)
         {
             // A non-rasterizing renderer has no ordering result to observe, but the sequence must
-            // still be legal and REMED-GFX-127/130's contract must still reject the readback
+            // still be legal and the honest Texture2D::GetData contract's contract must still reject the readback
             // deterministically rather than fabricating a frame. That is what is asserted here.
             bool threw = false;
             try
@@ -1060,9 +1060,9 @@ class SpriteBatch3DOrderTest : public Game
                  (!r.ok() ? "rejected"
                   : stillPoison ? "left the caller's buffer completely untouched"
                                 : "filled the caller's buffer"));
-            // REMED-GFX-127/130 established that a renderer which rasterizes nothing must REJECT a
+            // Established that a renderer which rasterizes nothing must REJECT a
             // readback rather than hand back scratch as if it were a rendered frame. That contract
-            // was established for the TEXTURE and RENDER-TARGET readbacks; REMED-GFX-162 extended it
+            // was established for the TEXTURE and RENDER-TARGET readbacks; the Headless back-buffer rejection contract extended it
             // to `GraphicsDevice.GetBackBufferData` on HEADLESS, which formerly filled the caller's
             // buffer with the last Clear() colour and now rejects deterministically. The dedicated
             // overload/precedence/destination-integrity oracle lives in
@@ -1080,7 +1080,7 @@ class SpriteBatch3DOrderTest : public Game
                  "; legs B and C carry the whole contract");
             return;
         }
-        // REMED-GFX-161 (RESOLVED): no discarded first-read warm-up here any more -- the first public
+        // (RESOLVED): no discarded first-read warm-up here any more -- the first public
         // backbuffer read of the process is now the measured one and must be complete.
         CanonicalSequences(dev, bb, "A");
     }
@@ -1499,7 +1499,7 @@ class SpriteBatch3DOrderTest : public Game
                       ColorText(StripeColor(r, 1)) + ")");
         }
 
-        // J4 REMED-GFX-156's shape F: Clear, draw, Clear, draw, Clear -- alternating families, and
+        // J4 the shape F: Clear, draw, Clear, draw, Clear -- alternating families, and
         // the trailing Clear must win over everything before it.
         {
             Begin(dev, d);
@@ -1520,7 +1520,7 @@ class SpriteBatch3DOrderTest : public Game
             }
         }
 
-        // J5 REMED-GFX-156's shape D: two ordered Clears with one family between each pair, so the
+        // J5 the shape D: two ordered Clears with one family between each pair, so the
         // surviving image spells the sequence rather than any one command.
         {
             Begin(dev, d);
@@ -1558,7 +1558,7 @@ class SpriteBatch3DOrderTest : public Game
     }
 
     /**
-     * @brief REMED-GFX-156: every draw entry point and every stock effect ACROSS a Clear boundary.
+     * @brief Every draw entry point and every stock effect ACROSS a Clear boundary.
      *
      * A renderer that delivers an ordered mid-cycle Clear by cutting its bind cycle into two native
      * render passes has to rebuild, in the second pass, everything the first pass's end discarded:
@@ -1702,7 +1702,7 @@ class SpriteBatch3DOrderTest : public Game
                           RenderTargetUsage::DiscardContents);
         Dest d{ &rt, kRTW, kRTH, "render target" };
 
-        // L1 exactly REMED-GFX-155 leg I0's shape: the BasicEffect is a local, destroyed before the
+        // L1 exactly the same-frame render-target consumer fix leg I0's shape: the BasicEffect is a local, destroyed before the
         // readback and therefore before any deferred replay.
         {
             Begin(dev, d);
@@ -1731,7 +1731,7 @@ class SpriteBatch3DOrderTest : public Game
         }
 
         // L2 the same with a scope-local VertexBuffer, so buffer lifetime is measured too
-        // (REMED-GFX-109's contract, restated inside a mixed-family cycle).
+        // (the contract, restated inside a mixed-family cycle).
         {
             Begin(dev, d);
             SpriteStripes(d, 0, 2, kRed);
@@ -1760,7 +1760,7 @@ class SpriteBatch3DOrderTest : public Game
     }
 
     /**
-     * @brief M -- REMED-GFX-155 leg I0's exact shape, with a map of where the draw actually went.
+     * @brief M -- the same-frame render-target consumer fix leg I0's exact shape, with a map of where the draw actually went.
      *
      * Leg I0 draws a SMALL, non-full-height quad into an 8x4 slot and compares the sampled 8x4
      * pattern byte for byte. Every other leg in this file uses full-height stripes and solid
@@ -1865,7 +1865,7 @@ class SpriteBatch3DOrderTest : public Game
               (underCcw ? "keeps" : "removes") + ", CullClockwise " +
               (underCw ? "keeps" : "removes"));
 
-        // M1 -- REMED-GFX-155 leg I0's exact sequence.
+        // M1 -- the same-frame render-target consumer fix leg I0's exact sequence.
         Begin(dev, bb);
         drawSpriteCell(patTex_, 0);
         draw3DCell(altPatTex_, 1);            // the draw leg I0 reports as LOST
@@ -1959,7 +1959,7 @@ class SpriteBatch3DOrderTest : public Game
      *
      * Every leg above puts one sequence's 3D steps through one stock effect, so a renderer keeping
      * one deferred queue per effect can replay those steps in issue order and still be reordering
-     * everything else. REMED-GFX-159's ticket names only the SpriteBatch-against-3D direction, but
+     * everything else. the ticket names only the SpriteBatch-against-3D direction, but
      * on a renderer whose replay is a fixed list of per-family loops the ten 3D families are ordered
      * against each other by exactly the same mechanism, and a game mixing a textured BasicEffect
      * with a vertex-colour one inside a cycle sees it without a SpriteBatch anywhere.
@@ -2041,7 +2041,7 @@ protected:
             solid_.push_back(std::move(t));
         }
 
-        // REMED-GFX-155's own 8x4 patterns: every texel unique in (R, G), so a stale, zero, mirrored
+        // The 8x4 patterns: every texel unique in (R, G), so a stale, zero, mirrored
         // or rotated image fails distinguishably. Leg M needs exactly these to replay leg I0.
         pattern_.assign(32, Color(0, 0, 0, 0));
         altPattern_.assign(32, Color(0, 0, 0, 0));

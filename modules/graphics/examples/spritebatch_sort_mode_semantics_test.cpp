@@ -99,7 +99,7 @@ class SortModeSemanticsTest final : public Game
     /// `SetDataRGBA` is used rather than `SetData(const Color*)` deliberately, and the difference
     /// is the whole reason this test can discriminate anything. A full-level `SetData` builds a
     /// FRESH renderer texture and detaches the wrapper from the old one (Texture2D.cpp, and
-    /// REMED-GFX-223 explains why: a ContentManager-cached texture must not publish an upload to
+    /// Explains why: a ContentManager-cached texture must not publish an upload to
     /// every other holder). A sprite already queued holds a share of the OLD resource, so it keeps
     /// the old pixels -- on EVERY renderer, in EVERY sort mode. Measured on both EasyGL and Vulkan:
     /// identical results, so that route cannot tell Immediate from Deferred.

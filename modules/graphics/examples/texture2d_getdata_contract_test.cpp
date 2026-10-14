@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-127: every public Texture2D::GetData call must have exactly ONE honest outcome --
+// Every public Texture2D::GetData call must have exactly ONE honest outcome --
 // it returns the resource's real content, or it rejects the request deterministically. It must
 // never fabricate content out of the shared layer's own scratch memory.
 //
@@ -393,7 +393,7 @@ class Texture2DGetDataContractTest : public Game
         // A4: nonzero destination offset into an oversized destination -- the surrounding sentinels
         // must survive untouched. `startIndex` is a DESTINATION element offset on BOTH overloads;
         // when this check was written the whole-level overload applied it to the SOURCE instead,
-        // which is why the note here used to exempt it (REMED-GFX-128 / REMED-GFX-149, both now
+        // which is why the note here used to exempt it (the GetData startIndex contract, both now
         // closed -- A4b below asserts the whole-level overload through the same oracle).
         {
             const Rectangle rect(3, 1, 5, 2);
@@ -429,7 +429,7 @@ class Texture2DGetDataContractTest : public Game
                       (trailing ? "" : " [trailing margin overwritten]"));
         }
 
-        // A4b: REMED-GFX-149 -- the SAME guarantee through the whole-level overload, which used to
+        // A4b: the GetData element-range contract -- the SAME guarantee through the whole-level overload, which used to
         // reject every non-zero startIndex on a render target and, on a plain texture, apply it to
         // the source instead. The excess capacity beyond the region must also stay untouched.
         {

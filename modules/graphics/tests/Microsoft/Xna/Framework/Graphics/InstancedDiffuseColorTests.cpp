@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-215 -- `BasicEffect.DiffuseColor` AND `BasicEffect.VertexColorEnabled` on the
+// `BasicEffect.DiffuseColor` AND `BasicEffect.VertexColorEnabled` on the
 // instanced draw route.
 //
 // THE AUTHORITATIVE CONTRACT, cited from the reference rather than summarised:
@@ -29,7 +29,7 @@
 //
 // WHY THIS FILE EXISTS SEPARATELY FROM InstancedVertexColorTests.cpp. That file's oracle already
 // separates "COLOR0 applied" from "COLOR0 dropped". It cannot separate "DiffuseColor applied" from
-// "DiffuseColor dropped" on a renderer that consumes COLOR0, because REMED-GFX-212's own checkpoint
+// "DiffuseColor dropped" on a renderer that consumes COLOR0, because the checkpoint
 // triage used a WHITE DiffuseColor -- and under white,
 //
 //                        COLOR0 * white  ==  COLOR0
@@ -142,7 +142,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 //
 // UNLIKE InstancedVertexColorTests.cpp, this file grants NO renderer an exemption: every measured
 // renderer is asserted against the CONTRACT above, never against its own measured behaviour. That is
-// what makes it red-first -- it failed on bgfx before REMED-GFX-215 and passes after.
+// what makes it red-first -- it failed on bgfx before the instanced DiffuseColor/VertexColorEnabled fix and passes after.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
@@ -190,7 +190,7 @@ namespace
     constexpr float kDiffuseG = 0.35f;
     constexpr float kDiffuseB = 0.55f;
 
-    /// The degenerate value REMED-GFX-212's triage used. Under it, `COLOR0 * D == COLOR0`, which is
+    /// The degenerate value the triage used. Under it, `COLOR0 * D == COLOR0`, which is
     /// precisely why that triage certified bgfx correct while its shader emitted the raw COLOR0.
     constexpr float kNeutral = 1.0f;
 
@@ -860,7 +860,7 @@ TEST_F(InstancedDiffuseColorTest, VertexColorDisabledYieldsDiffuseColorOnBothRou
 }
 
 // ---------------------------------------------------------------------------
-// The false positive itself. This leg asserts the DEGENERACY, so the mistake REMED-GFX-212's
+// The false positive itself. This leg asserts the DEGENERACY, so the mistake the instanced VertexColorEnabled fix's
 // triage made can never be reconstructed by accident: with a neutral DiffuseColor the correct
 // answer and the raw COLOR0 are the same bytes, and only the non-neutral legs above can tell them
 // apart.
@@ -1138,7 +1138,7 @@ TEST_F(InstancedDiffuseColorTest, TwoDrawsInOneFrameKeepTheirOwnColorState)
 
 // ---------------------------------------------------------------------------
 // Declarations and semantics. The stride-24 COLOR0-bearing sibling, a nonzero geometry
-// VertexOffset (REMED-GFX-211) and an instance divisor above one (REMED-GFX-213) must all keep the
+// VertexOffset and an instance divisor above one must all keep the
 // full colour contract, not just the vertex-colour half of it.
 // ---------------------------------------------------------------------------
 
@@ -1200,7 +1200,7 @@ TEST_F(InstancedDiffuseColorTest, GeometryVertexOffsetKeepsTheFullContract)
 
     BasicEffect effect(device);
     RenderTarget2D target = MakeTarget();
-    // REMED-GFX-211: VertexOffset skips the decoy quad, so a colour taken from the wrong record
+    // VertexOffset skips the decoy quad, so a colour taken from the wrong record
     // reads as the decoy's pure green -- which no product of a live column with either DiffuseColor
     // can produce.
     device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, kDecoyVertexCount, 0),
@@ -1242,7 +1242,7 @@ TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 
     BasicEffect effect(device);
 
-    // REMED-GFX-213: frequencies 1, 2 and 3, each with as many instances as the divisor needs.
+    // Frequencies 1, 2 and 3, each with as many instances as the divisor needs.
     for (int frequency = 1; frequency <= 3; ++frequency)
     {
         const int instanceCount = frequency * 2;
@@ -1279,13 +1279,13 @@ TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 // appear anywhere in the frame is the plain DiffuseColor -- never a byte read from the vertex.
 //
 // This leg reads the WHOLE target rather than per-column boxes, because WHAT colour was written and
-// WHERE it was written are separable questions here, and only the first belongs to REMED-GFX-215.
+// WHERE it was written are separable questions here, and only the first belongs to the instanced DiffuseColor/VertexColorEnabled fix.
 // bgfx derives its native vertex layout from the buffer STRIDE, not from the VertexDeclaration
 // (`MakeBgfxLayout`, called from `BgfxVertexBufferRenderer::SetData` before any draw route is
 // chosen): a stride of 12 is not in its table, so the fallback adds Position + Color0 and produces
 // a 16-byte native layout over a 12-byte buffer. The geometry is consequently strided wrongly --
 // which is a DIFFERENT defect from this ticket's, is route-independent, and is recorded as
-// REMED-GFX-216 rather than folded in here. The two routes are measured against each other below
+// Rather than folded in here. The two routes are measured against each other below
 // so that classification rests on evidence rather than on reading `MakeBgfxLayout`.
 // ---------------------------------------------------------------------------
 
@@ -1379,9 +1379,9 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 
         // A rejection must be LOUD and it must name the reason. WebGPU declines a stride its
         // DrawColoredPrimitives cannot express and says so -- the same stride-16 requirement
-        // REMED-GFX-214 already tracks on its ordinary route, reached here with stride 12 instead of
+        // Already tracks on its ordinary route, reached here with stride 12 instead of
         // 24. That is a boundary, not a defect of this ticket: no WebGPU production is touched here and
-        // REMED-GFX-214 stays open and uninvestigated. What matters for REMED-GFX-215 is that the draw
+        // Stays open and uninvestigated. What matters for the instanced DiffuseColor/VertexColorEnabled fix is that the draw
         // is refused rather than silently miscoloured.
         const auto expectLoudRejection = [](const RouteResult& r, const char* leg) {
             if (r.rendered)
@@ -1393,7 +1393,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
         expectLoudRejection(ordinary, "positionOnly/ordinary");
         expectLoudRejection(instanced, "positionOnly/instanced");
 
-        // REMED-GFX-215's own guarantee, and the whole of it: on any route that DID render, with the
+        // The guarantee, and the whole of it: on any route that DID render, with the
         // property disabled, the plain DiffuseColor is the ONLY colour that may reach the target. This
         // holds no matter how the renderer derives its native layout, because a disabled COLOR0 is never
         // consumed at all.
@@ -1423,7 +1423,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 
         // The COVERAGE half is a separate question from the colour one. When both routes rendered they
         // must agree exactly, because a vertex layout derived before either route is chosen cannot
-        // differ between them -- and REMED-GFX-215 changed neither.
+        // differ between them -- and the instanced DiffuseColor/VertexColorEnabled fix changed neither.
         if (ordinary.rendered && instanced.rendered)
         {
             EXPECT_EQ(coverageOrdinary, coverageInstanced)
@@ -1453,7 +1453,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 }
 
 // ---------------------------------------------------------------------------
-// Program and cache identity. REMED-GFX-215 supplies two uniforms to an EXISTING program instead of
+// Program and cache identity. the instanced DiffuseColor/VertexColorEnabled fix supplies two uniforms to an EXISTING program instead of
 // selecting a new one, so the whole colour matrix must be served by exactly the programs that
 // already existed -- no variant per DiffuseColor value, none per VertexColorEnabled setting, none
 // per buffer identity, and no growth at all across repeated and returning states.

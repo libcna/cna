@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-162 -- Headless GraphicsDevice.GetBackBufferData must REJECT, not fabricate.
+// Headless GraphicsDevice.GetBackBufferData must REJECT, not fabricate.
 //
 // Headless rasterizes nothing and owns no backbuffer pixel storage. It formerly filled the caller's
 // buffer with the last Clear() colour and returned success, so a caller could not tell a
 // non-rasterizing device from a real black (or last-cleared) frame -- exactly the
-// fabricate-rather-than-refuse behaviour REMED-GFX-127/130 removed from the Texture and
+// fabricate-rather-than-refuse behaviour the honest Texture2D::GetData contract removed from the Texture and
 // render-target readbacks. This fixture pins the backbuffer counterpart of that contract:
 //
 //   * on HEADLESS every VALID GetBackBufferData request raises System::NotSupportedException and
@@ -21,8 +21,8 @@
 // Each leg runs in its own process (fork+exec) so its first read is genuinely first and a crash or
 // hang is a distinct, attributable result; a leg's exit code is the only PASS/FAIL signal.
 //
-// Scope: this is the CAPABILITY-rejection contract, distinct from REMED-GFX-165 (dimension source),
-// REMED-GFX-161 (first-read completion) and REMED-GFX-149 (startIndex/element-count asymmetry). The
+// Scope: this is the CAPABILITY-rejection contract, distinct from the back-buffer dimension contract (dimension source),
+// (first-read completion) and the GetData element-range contract (startIndex/element-count asymmetry). The
 // non-zero-startIndex leg uses a non-zero startIndex ONLY as a destination guard; GFX-149 stays
 // separate. GetBackBufferData is Color-only (no templated element type), so there is no per-type
 // matrix -- the same capability boundary governs the one supported element type.
@@ -89,11 +89,11 @@ namespace
 #endif
 
     // BGFX honours only a full-surface backbuffer read; a sub-rectangle reads back zeros (a
-    // pre-existing gap declared by REMED-GFX-165). The sub-rectangle success legs declare it as a
+    // pre-existing gap declared by the back-buffer dimension contract). The sub-rectangle success legs declare it as a
     // boundary rather than failing it. It has no bearing on the Headless rejection contract.
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
 
-    // Odd, non-square, not a common default -- matches REMED-GFX-165/161's canonical size.
+    // Odd, non-square, not a common default -- matches the back-buffer dimension contract's canonical size.
     constexpr int kW = 37;
     constexpr int kH = 23;
 
@@ -145,7 +145,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-162's Headless backbuffer-rejection contract, one leg per process.
+ * @brief The Headless backbuffer-rejection contract, one leg per process.
  */
 class BackbufferHeadlessRejectTest : public Game
 {

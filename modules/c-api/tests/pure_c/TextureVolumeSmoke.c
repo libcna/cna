@@ -445,7 +445,7 @@ static int validate_render_target_cube(const CNA_Handle device)
 
 /*
  * plans/plan_apple_m4.md AM4-206: a device without 3D refuses cube storage at
- * construction under the default Unsupported3DGraphicsCallBehavior::Throw (REMED-GFX-130). The
+ * construction under the default Unsupported3DGraphicsCallBehavior::Throw. The
  * claim on such a device is that the refusal is by name and leaves no handle behind, for a cube
  * and a DDS-decoded cube alike. A RenderTargetCube keeps its own contract there -- constructed, with
  * the face binding refused -- so stage 4 runs unchanged on every device.

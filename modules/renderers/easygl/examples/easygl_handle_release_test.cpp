@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 215 / REMED-GFX-004: Renderer GPU handles are released exactly once.
+// Task 215: Renderer GPU handles are released exactly once.
 //
 // For each resource type (VertexBuffer, IndexBuffer, Texture2D, RenderTarget2D):
 //   1. HasRenderer() == true  before Dispose()

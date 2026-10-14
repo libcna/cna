@@ -68,7 +68,7 @@ namespace
         }
     };
 
-    // REMED-CONTENT-006: a self-referential node type, used to drive InnerReadObject<T>()'s own
+    // A self-referential node type, used to drive InnerReadObject<T>()'s own
     // recursion (each node's Read() may call input.ReadObject<T>() again for a "child") -- the
     // same class of unbounded recursion as XnbTypeName::ParseOne()'s (see that file's own fix),
     // just triggered by nested object dispatch instead of nested generic-argument brackets.
@@ -250,7 +250,7 @@ TEST_F(ContentReaderTest, OutOfRangeRootIndexThrowsContentLoadException)
     EXPECT_THROW(reader.ReadAsset<TestPayload>(), ContentLoadException);
 }
 
-// REMED-CONTENT-006: InnerReadObject<T>() previously recursed with no depth limit whenever a type
+// InnerReadObject<T>() previously recursed with no depth limit whenever a type
 // reader called back into ReadObject<U>() for a nested member -- the same unbounded-recursion
 // class as XnbTypeName::ParseOne()'s. A tiny custom limit keeps this test fast and deterministic
 // rather than constructing thousands of real nested dispatch calls.

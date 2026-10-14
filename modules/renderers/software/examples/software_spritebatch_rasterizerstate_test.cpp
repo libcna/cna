@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-081: SpriteBatch.Begin must APPLY the RasterizerState it is handed, exactly like it
+// SpriteBatch.Begin must APPLY the RasterizerState it is handed, exactly like it
 // already applies BlendState / DepthStencilState / SamplerState. The canonical 7-arg Begin
 // previously named the parameter `/*rasterizerState*/` and dropped it on the floor, so a
 // RasterizerState supplied to Begin (e.g. one with ScissorTestEnable=true) never reached the device

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-131: SurfaceFormat::Color is an ordinary 8-bit UNORM byte format. A byte a game writes
+// SurfaceFormat::Color is an ordinary 8-bit UNORM byte format. A byte a game writes
 // through Clear(), through a vertex colour, or through a sampled texture must come back out of
 // GetData() as that same byte -- on a plain Texture2D, on a RenderTarget2D, and on a
 // RenderTargetCube face alike.
@@ -98,7 +98,7 @@ namespace
      * @brief What this renderer's render-target colour readback is required to do.
      *
      * `Exact` -- GetData must return the stored bytes verbatim.
-     * `Unsupported` -- GetData must throw System::NotSupportedException (REMED-GFX-127's contract),
+     * `Unsupported` -- GetData must throw System::NotSupportedException (the contract),
      * reserved for renderers that perform no rasterization at all.
      */
     enum class RtContract
@@ -113,11 +113,11 @@ namespace
      * `TopDown` -- texel (x, y) of the target is sampled at (x, y). What every renderer does.
      * `BottomUp` -- the sampled image arrives vertically flipped.
      *
-     * REMED-GFX-147 was measured here: EasyGL's leg D (sampling a plain Texture2D) was exactly
+     * Was measured here: EasyGL's leg D (sampling a plain Texture2D) was exactly
      * top-down while its leg E (sampling a render target) was not, so the asymmetry was in
      * render-target sampling alone. Declaring it per renderer is what kept every COLOUR assertion
      * in this file at full strength while the orientation defect was open, and is what made
-     * fixing it show up HERE as a failure rather than passing silently. REMED-GFX-147 is now
+     * fixing it show up HERE as a failure rather than passing silently. the render-target sampling orientation fix is now
      * closed and no renderer declares `BottomUp`; the enum stays because that is the property this
      * file must keep pinning.
      */
@@ -132,7 +132,7 @@ namespace
      *
      * `SourcePlusDestination` -- XNA's own SourceAlpha/One equation.
      * `SourceOnly` -- the destination term is dropped, as if ColorDestinationBlend were Zero.
-     * REMED-GFX-148 originally measured the latter on Software; SOFTWARE-169 repaired it and the
+     * Originally measured the latter on Software; SOFTWARE-169 repaired it and the
      * declaration below now keeps the corrected equation under test.
      */
     enum class AdditiveContract
@@ -156,7 +156,7 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
-    // REMED-GFX-147 fixed: EasyGL now samples a render target in the same logical orientation as
+    // Fixed: EasyGL now samples a render target in the same logical orientation as
     // an ordinary Texture2D holding identical bytes.
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
@@ -677,9 +677,9 @@ class ColorSpaceMidToneContractTest : public Game
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         ResetState(dev);
         Readback r = ReadWhole(second, kW, kH);
-        // REMED-GFX-147: on a renderer that DECLARES it samples a render target bottom-up, undo
+        // On a renderer that DECLARES it samples a render target bottom-up, undo
         // ONLY the row order before comparing, so every colour comparison below stays byte-exact --
-        // which is what this file is for. No renderer declares that any more (REMED-GFX-147 is
+        // which is what this file is for. No renderer declares that any more (the render-target sampling orientation fix is
         // fixed), so this is inert; it stays because the declaration is what makes an orientation
         // change in either direction fail here instead of passing silently. The dedicated
         // orientation contract lives in rendertarget_sampling_orientation_test.cpp.
@@ -914,7 +914,7 @@ class ColorSpaceMidToneContractTest : public Game
             {
                 const Color& got = r.pixels[static_cast<std::size_t>(kH / 2) * kW + kW / 2];
                 // BlendState::Additive is SourceAlpha/One; the source alpha is 255 here. On a
-                // renderer declared SourceOnly the destination term is dropped (REMED-GFX-148),
+                // renderer declared SourceOnly the destination term is dropped,
                 // which is asserted as such so the divergence is pinned, not tolerated -- the
                 // mid-tone source bytes are still required to arrive exactly.
                 const bool addsDst = kAdditiveContract == AdditiveContract::SourcePlusDestination;
@@ -977,7 +977,7 @@ protected:
         LegI(dev);
 
 #if defined(CNA_RENDERER_WEBGPU)
-        // REMED-GFX-131 changes a resource format and adds a view-format reinterpretation, both of
+        // Changes a resource format and adds a view-format reinterpretation, both of
         // which wgpu-native validates. Nothing above may have produced a validation error: an
         // unsupported renderable format, an illegal base/view format pair, a copy-format mismatch
         // or a bad row pitch would all surface here rather than being silently tolerated.

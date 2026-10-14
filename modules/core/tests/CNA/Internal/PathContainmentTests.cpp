@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-CONTENT-002/-007/-008: unit tests for the shared containment helpers.
+// Unit tests for the shared containment helpers.
 
 #include <filesystem>
 #include <fstream>

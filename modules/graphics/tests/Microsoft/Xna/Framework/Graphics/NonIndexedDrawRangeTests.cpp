@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-113: the public non-indexed draw-range contract.
+// The public non-indexed draw-range contract.
 //
 // XNA/FNA define GraphicsDevice.DrawPrimitives(primitiveType, vertexStart, primitiveCount) as
 // "renders primitiveCount primitives from the currently bound vertex buffer, beginning at vertex
@@ -493,7 +493,7 @@ namespace
         FrameSnapshot snapshot;
         snapshot.width = width;
         snapshot.height = height;
-        // REMED-GFX-124: NOT Color::Transparent. A renderer whose render-target readback does
+        // NOT Color::Transparent. A renderer whose render-target readback does
         // nothing still returns a fully written all-zero frame, because Texture2D::GetData hands
         // the renderer a scratch buffer it zero-initialized itself -- so a transparent-black
         // pre-fill is byte-identical to that fabricated result, and the exclusivity assertions
@@ -904,7 +904,7 @@ TEST_F(NonIndexedDrawRangeTest, DeferredNonIndexedRangesAtoBtoAKeepTheirOwnRange
 }
 
 // A later SetData must not retroactively change an already-queued draw's data, and each queued
-// draw must still keep its own range across the buffer-version change (REMED-GFX-109).
+// draw must still keep its own range across the buffer-version change.
 TEST_F(NonIndexedDrawRangeTest, DeferredRangesSurviveBufferVersionChangesBetweenDraws)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
@@ -1055,7 +1055,7 @@ TEST_F(NonIndexedDrawRangeTest, DrawUserPrimitivesKeepsItsCopiedExactRange)
 // DrawColoredPrimitives entry point, which takes no vertexStart at all. It owes the same result
 // through a different mechanism: the temporary buffer it uploads holds exactly
 // PrimitiveVerts(type, primitiveCount) vertices copied from vertexOffset, so binding that whole
-// buffer already is the exact range. This is why REMED-GFX-113 left that path untouched.
+// buffer already is the exact range. This is why the non-indexed range fix left that path untouched.
 TEST_F(NonIndexedDrawRangeTest, UntypedDrawUserPrimitivesUploadsOnlyTheRequestedRange)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
@@ -1378,9 +1378,9 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 }
 
 
-// REMED-GFX-119. Software raster's non-indexed paths address the bound buffer with the raw loop
+// Software raster's non-indexed paths address the bound buffer with the raw loop
 // ordinal, so `vertexStart` never selects the first consumed vertex. The three tests below separate
-// the two halves of the public contract from each other and from every render state that could
+// The two halves of the public contract from each other and from every render state that could
 // plausibly produce the same picture, so the classification does not rest on the finding's title.
 
 // The offset half of the contract, isolated per case. The first two cases request vertexStart 0, so
@@ -1452,7 +1452,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedDrawConsumesExactlyTheRequeste
 // picture: both cull modes against a fixed winding, depth testing on and off, an explicitly
 // restated full viewport and scissor, and a readback from a render target instead of the
 // backbuffer. Software raster's own regressions own these individually (REMED-GFX-030 depth,
-// REMED-GFX-079 viewport, REMED-GFX-080 scissor, REMED-GFX-082 fill mode); here they exist only to
+// Viewport, REMED-GFX-080 scissor, REMED-GFX-082 fill mode); here they exist only to
 // rule every one of them out as the cause of the consumed range.
 TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStateAndTarget)
 {
@@ -1739,7 +1739,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartScalesByTheDeclared
             << "stride 32 (VertexPositionNormalTexture) consumed a different element range";
     }
 
-    // The explicit-VertexDeclaration DrawUserPrimitives overload (REMED-GFX-043) reaches the same
+    // The explicit-VertexDeclaration DrawUserPrimitives overload reaches the same
     // renderer entry point with a rebased copy and vertexStart 0, so it must light the same slots
     // from the same source offset -- the double-apply guard at a non-16-byte stride.
     //
@@ -1749,7 +1749,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartScalesByTheDeclared
     // therefore its static VertexDeclaration's VertexStride -- is larger than the 24-byte GPU
     // layout. The persistent VertexBuffer cases above are unaffected because VertexBuffer::SetData
     // repacks into the GPU layout and uploads its own stride. That mismatch is its own finding
-    // (REMED-GFX-125), not a draw-range question.
+    //, not a draw-range question.
     struct PackedPositionColorTexture
     {
         float x, y, z;

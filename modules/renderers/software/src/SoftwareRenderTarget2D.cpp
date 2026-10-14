@@ -84,7 +84,7 @@ namespace CNA::Internal::Renderers::Software
         if (rgba == nullptr) return;
         const std::size_t rowBytes = static_cast<std::size_t>(framebuffer_.width) *
                                      framebuffer_.DeclaredColorTexelSize();
-        // REMED-GFX-230: RenderTarget2D uploads used to ignore the supplied pitch and read one
+        // RenderTarget2D uploads used to ignore the supplied pitch and read one
         // tight height*width*4 span. That ingested padding into later rows and skipped the real
         // source pixels. Validate before changing storage, then copy only each row's RGBA bytes.
         if (stride > 0 && static_cast<std::size_t>(stride) < rowBytes)

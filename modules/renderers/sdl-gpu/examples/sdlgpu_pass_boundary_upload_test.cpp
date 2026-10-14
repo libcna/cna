@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-145: the SDL_GPU-specific half of "every public bind cycle is its own logical pass".
+// The SDL_GPU-specific half of "every public bind cycle is its own logical pass".
 //
 // The shared oracle `examples/rendertarget_pass_boundary_test.cpp` proves the boundary itself, on
 // every renderer, using SpriteBatch only. Three things it deliberately cannot ask are asked here,
@@ -12,7 +12,7 @@
 //     `ResolveIndexedRange`. A segment filter that worked for sprites and not for those would be
 //     invisible to the oracle.
 //
-//  2. Transient upload storage. REMED-GFX-140 found Vulkan restarting a SHARED per-frame vertex
+//  2. Transient upload storage. the per-bind-cycle render pass fix found Vulkan restarting a SHARED per-frame vertex
 //     arena cursor at 0 for every pass, so a later pass overwrote the exact bytes an earlier pass
 //     had bound and the earlier pass drew the LATER pass's geometry -- invisible to every fixture
 //     that draws identical rectangles and varies only the texture. The analogous question has to
@@ -22,7 +22,7 @@
 //
 //  3. Depth and stencil load actions. The shared oracle scopes itself to colour (depth has its own
 //     contract and its own oracle, `examples/rendertarget_depthstencil_usage_test`, established by
-//     REMED-GFX-142), so nothing there can see a depth clear attached to the wrong bind cycle --
+//     The render-target depth/stencil lifetime contract), so nothing there can see a depth clear attached to the wrong bind cycle --
 //     and the depth attachment's load op is chosen by exactly the same per-segment code as the
 //     colour one.
 //
@@ -315,7 +315,7 @@ class SdlGpuPassBoundaryUploadTest : public Game
     }
 
     /**
-     * @brief U3 -- REMED-GFX-117's startIndex/baseVertex, one range per bind cycle.
+     * @brief U3 -- the startIndex/baseVertex, one range per bind cycle.
      *
      * Cycle 1 draws index elements 0..5 (the LEFT quad, red). Cycle 2 draws elements 6..11 (the
      * RIGHT quad, green) -- a non-zero `startIndex` issued inside a second logical pass. If the

@@ -150,7 +150,7 @@ class WebGpuMsaaTest : public Game
         const auto& vp = device.getViewportProperty();
         const auto& pp = device.getPresentationParametersProperty();
         // Read within the AUTHORITATIVE backbuffer, not the viewport: under FixedHeightDynamicWidth the
-        // logical viewport width is aspect-scaled and can exceed the backbuffer, and REMED-GFX-165's
+        // logical viewport width is aspect-scaled and can exceed the backbuffer, and the back-buffer dimension contract's
         // GetBackBufferData now (correctly) rejects a rectangle that runs past the backbuffer bounds.
         const int W = std::min(vp.getWidthProperty(), pp.getBackBufferWidthProperty());
         const int H = std::min(vp.getHeightProperty(), pp.getBackBufferHeightProperty());

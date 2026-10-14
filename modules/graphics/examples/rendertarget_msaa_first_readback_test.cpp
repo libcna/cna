@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-154 -- the FIRST `GetData` of a MULTISAMPLED `RenderTarget2D` must return the complete
+// The FIRST `GetData` of a MULTISAMPLED `RenderTarget2D` must return the complete
 // resolved image, with no priming read, no extra public frame, no `Present`, no dummy target bind,
 // no sleep and no retry.
 //
@@ -28,20 +28,20 @@
 // `RendererContextGL::submit`, which runs while the producer's framebuffer is still current and
 // still unresolved -- so `glCopyImageSubData` copies the resolve texture that nothing has written
 // yet. That texture is freshly created and zeroed, so the readback SUCCEEDS over untouched memory:
-// exactly the fabricated transparent-black frame REMED-GFX-127/130 exist to forbid.
+// exactly the fabricated transparent-black frame the honest Texture2D::GetData contract exist to forbid.
 //
 // The CUBE path already carried `CompleteFrameForResolveEXT()` for precisely this reason
-// (REMED-GFX-134); its 2D sibling never learned it -- the same "the fix exists one screen away"
-// shape REMED-GFX-163 had just closed on the attachment-creation side of the same class.
+//; its 2D sibling never learned it -- the same "the fix exists one screen away"
+// shape the depth-backed multisampled render-target contract had just closed on the attachment-creation side of the same class.
 //
-// RELATIONSHIP TO REMED-GFX-164
+// RELATIONSHIP TO the bound multisampled render-target alpha contract
 // -----------------------------
 // GFX-164 originally recorded all-zero MSAA readback on EasyGL AND Bgfx. The Bgfx half is this
 // ticket: same unbound public sequence, same target, same all-zero result, same source handle, and
 // the two are NOT independently reproducible. GFX-154 is canonical for Bgfx. GFX-164 retained the
 // distinct EasyGL sequence in which GetData reads the target while it is still bound; that active
 // producer required its own resolve correction. This fixture remains the cross-renderer control for
-// the unbound first-read contract and fully asserts EasyGL content as well as transfer boundaries.
+// The unbound first-read contract and fully asserts EasyGL content as well as transfer boundaries.
 //
 // THE ORACLE
 // ----------
@@ -134,13 +134,13 @@ namespace
      *
      * TRUE EVERYWHERE, INCLUDING EASYGL -- and that is a measurement, not an assumption.
      *
-     * This started as an EasyGL boundary, because REMED-GFX-164 recorded an all-zero multisampled
-     * readback there and REMED-GFX-154 changes Bgfx production only. The boundary was written to
+     * This started as an EasyGL boundary, because the bound multisampled render-target alpha contract recorded an all-zero multisampled
+     * readback there and the multisampled readback contract changes Bgfx production only. The boundary was written to
      * PRINT the texels it measured rather than skip silently, exactly so a stale declaration would
      * be visible -- and it was: EasyGL measured **0/256 all-zero texels with the centre reading the
      * correct (250,25,15,255)**. Asserting the content there instead gives **34/34 legs and 145/145
      * checks**, so EasyGL's multisampled readback is byte-exact through THIS public sequence.
-     * REMED-GFX-164 subsequently proved that its own failure required the distinct active-target
+     * Subsequently proved that its own failure required the distinct active-target
      * sequence: the unresolved public texture lagged the live multisample renderbuffer until
      * unbind. The active resolve correction leaves this unbound cross-renderer contract unchanged.
      */
@@ -150,7 +150,7 @@ namespace
      * @brief Whether this renderer can read a render target's colour attachment back at all.
      *
      * False on HEADLESS, which rasterizes nothing and therefore owns no colour to return. Its
-     * `GetData` is REMED-GFX-127/130's deterministic public REFUSAL --
+     * `GetData` is the honest Texture2D::GetData contract's deterministic public REFUSAL --
      * `System::NotSupportedException` -- rather than a fabricated transparent-black frame, and that
      * refusal is exactly what this file asserts there: it must throw, and it must leave the
      * caller's destination completely untouched. A refusal that quietly wrote zeroes would be
@@ -170,9 +170,9 @@ namespace
      *
      * This was false on SDL_GPU, which SEGFAULTED on `GetData(1, rect, ...)` of a
      * `RenderTarget2D(16,16,mipMap=true,MSAA=4)` while level 0 of the very same target read back
-     * exactly. REMED-GFX-154 isolated that, recorded it as **REMED-GFX-186** and declared it here
+     * exactly. the multisampled readback contract isolated that, recorded it as **and declared it here
      * rather than issuing an uncatchable signal from a fixture scoped to Bgfx production.
-     * REMED-GFX-186 has since fixed it -- SDL_GPU's multisampled target now carries the full
+     * Has since fixed it -- SDL_GPU's multisampled target now carries the full
      * declared mip chain on its resolved single-sample texture, and an out-of-range level is a
      * catchable public exception -- so the carve-out is gone and leg G1 issues the read on every
      * renderer again.
@@ -261,7 +261,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-154's contract: the first synchronous readback of a multisampled render target.
+ * @brief The contract: the first synchronous readback of a multisampled render target.
  */
 class RenderTargetMsaaFirstReadbackTest : public Game
 {
@@ -370,7 +370,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
      *
      * On a renderer that cannot read a render target back, the ONLY correct behaviour is a public
      * exception that writes nothing -- so that is what gets asserted, using the same sentinel
-     * buffer. A refusal that silently wrote zeroes would look exactly like REMED-GFX-154 itself.
+     * buffer. A refusal that silently wrote zeroes would look exactly like the multisampled readback contract itself.
      *
      * @return true when the read really happened and @p buf may be inspected.
      */
@@ -637,7 +637,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
     /**
      * @brief A7 -- A -> backbuffer -> A, then read A.
      *
-     * A same-frame rebind routes the second bind cycle onto a fresh ordered view (REMED-GFX-018/065)
+     * A same-frame rebind routes the second bind cycle onto a fresh ordered view
      * and puts a backbuffer batch between the two, so this is the sequence most likely to make a
      * readback observe the WRONG bind cycle's state.
      *

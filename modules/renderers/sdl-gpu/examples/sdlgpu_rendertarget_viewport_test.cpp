@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-064: SdlGpu GraphicsDevice.Viewport must be honored for GPU rasterization — the
+// SdlGpu GraphicsDevice.Viewport must be honored for GPU rasterization — the
 // SdlGpu renderer never overrode the no-op base IGraphicsRenderer::SetViewport and never called
 // SDL_SetGPUViewport, so a custom sub-region Viewport was a total no-op (backbuffer AND render
 // target).

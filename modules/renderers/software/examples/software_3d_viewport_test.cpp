@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-079: the Software (CPU-raster) renderer's 3D draw path (DrawColoredPrimitives /
+// The Software (CPU-raster) renderer's 3D draw path (DrawColoredPrimitives /
 // DrawIndexedColoredPrimitives / DrawPrimitivesEx / DrawIndexedPrimitivesEx) must honor a custom
 // GraphicsDevice.Viewport, exactly like the GPU renderers and like the SpriteBatch path fixed by
 // REMED-GFX-073.

@@ -1016,7 +1016,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         catch (...)
         {
-            // REMED-GFX-029: a renderer resize is a failed Reset, not a partially successful one.
+            // A renderer resize is a failed Reset, not a partially successful one.
             // Restore all public presentation bookkeeping before rethrowing the original native
             // diagnostic. Viewport/scissor, active target, and depth state have not been touched
             // yet at this point. The DIRECTX3 transaction guarantees its native A surface set is still
@@ -1562,12 +1562,12 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexStreamCount = 0;
         p.combinedVertexStride = 0;
 
-        // REMED-GFX-233: the CNAEXT VertexBuffer(device, count) convenience constructor has an
+        // The CNAEXT VertexBuffer(device, count) convenience constructor has an
         // intentionally empty declaration. Its typed SetData overload still uploads a real,
         // renderer-known packed stride, but there is no declared stride to put in a stream tuple.
         // Describing that one legacy buffer as a zero-stride stream makes a stream-aware CPU
         // reader fetch record zero for every vertex, producing a degenerate triangle. Keep this
-        // exact single, per-vertex, empty-declaration shape on the pre-REMED-GFX-201 contract: the
+        // exact single, per-vertex, empty-declaration shape on the pre-multi-stream contract: the
         // Draw*PrimitivesEx `vb` argument is authoritative and vertexStreamCount==0 selects its
         // renderer upload stride. FoldedVertexStreamOffset() has already carried any binding offset
         // through vertexStart/baseVertex. Nonzero declarations and every multi-stream shape keep
@@ -1616,7 +1616,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<int>(currentVertexBuffers_.size()),
             CNA::Internal::Renderers::kMaxVertexStreams);
         int combinedByteBase = 0;
-        // REMED-GFX-201/SOFTWARE-320: XNA composes the bound declarations by semantic. FNA3D's
+        // SOFTWARE-320: XNA composes the bound declarations by semantic. FNA3D's
         // drivers walk every element in binding order and move a repeated (usage, usageIndex) pair
         // to the first free index of that same usage. Preserve that effective index explicitly:
         // a stock shader may ignore the remapped duplicate while still consuming another unique
@@ -1664,7 +1664,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 buffer->getVertexDeclarationProperty().getVertexStrideProperty();
             stream.instanceFrequency = binding.getInstanceFrequencyProperty();
             stream.vertexCount = buffer->getVertexCountProperty();  // plans/plan_fx.md FX-131, see above
-            // REMED-GFX-202: one usage table covers per-vertex and per-instance streams, exactly as
+            // One usage table covers per-vertex and per-instance streams, exactly as
             // FNA3D's native drivers do. Keep every stream: even a fully colliding declaration can
             // become usage indices 1..15 and be consumed by the active shader.
             const auto& elements =
@@ -1723,7 +1723,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (!renderer_->SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput))
         {
-            // REMED-GFX-202: one capability, one message, whichever rate is over-wide -- both are
+            // One capability, one message, whichever rate is over-wide -- both are
             // the same native gap (the renderer derives its input elements from a single byte
             // stride and binds one per-instance buffer), and both would otherwise be rendered from
             // a subset of the bound streams.
@@ -1761,7 +1761,7 @@ namespace Microsoft::Xna::Framework::Graphics
             const auto& stream = p.vertexStreams[static_cast<std::size_t>(i)];
             if (stream.instanceFrequency <= 0 || !stream.vertexShaderInputUsed)
                 continue;
-            // REMED-GFX-118's arithmetic, per stream: one record is consumed for each complete
+            // The arithmetic, per stream: one record is consumed for each complete
             // frequency-sized group of instances, and the first instance starts at record
             // `VertexOffset` -- D3D11's StartInstanceLocation is 0 in FNA3D's own driver and
             // OpenGL has no start-instance term at all. Every term is an element count of THIS
@@ -1834,16 +1834,16 @@ namespace Microsoft::Xna::Framework::Graphics
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
-        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts a stream's base, and vertexStart
+        // VertexBufferBinding.VertexOffset shifts a stream's base, and vertexStart
         // indexes that stream -- both in vertex elements, against that stream's own declaration
         // stride. Their sum is the first record fetched, so carrying the shared part in vertexStart
         // delivers it through the element-unit channel every renderer already converts to bytes
         // exactly once with the stream's own stride, and applies each of the two exactly once.
         // p.vertexBufferOffset is deliberately left at 0 here: it is the instanced route's separate
-        // per-stream channel (REMED-GFX-122/123), and populating it as well would double the offset.
-        // REMED-GFX-201: with several streams bound, "the shared part" is the smallest of their
+        // per-stream channel, and populating it as well would double the offset.
+        // With several streams bound, "the shared part" is the smallest of their
         // offsets and each stream carries the rest itself; with one it is the whole offset and the
-        // remainder is 0, which is exactly what REMED-GFX-200 measured.
+        // remainder is 0, which is the measured XNA behaviour.
         const int foldedOffset = FoldedVertexStreamOffset();
         // An invalid native range is forwarded rather than rejected, but folding CNA's binding
         // offset into the 32-bit renderer channel must not itself invoke signed-overflow UB.
@@ -1924,14 +1924,14 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Renderers::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         p.startIndex = startIndex;
-        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts a stream's base and baseVertex is
+        // VertexBufferBinding.VertexOffset shifts a stream's base and baseVertex is
         // added to every decoded index -- both in vertex elements, against that stream's own
         // declaration stride. Their sum is what each decoded index is displaced by, so carrying the
         // shared part in baseVertex delivers it through the element-unit channel every renderer
         // already converts to bytes exactly once with the stream's own stride, and applies each of
         // the two exactly once. startIndex is untouched: it selects index elements, which a binding
         // offset never displaces. p.vertexBufferOffset stays 0 here -- see DrawPrimitives above.
-        // REMED-GFX-201: baseVertex advances EVERY per-vertex stream, each by that many of its own
+        // BaseVertex advances EVERY per-vertex stream, each by that many of its own
         // elements, which is FNA3D's `vertexStride * (vertexOffset + baseVertex)` per binding.
         const int foldedOffset = FoldedVertexStreamOffset();
         p.baseVertex = SaturatingDrawOffsetAdd(baseVertex, foldedOffset);
@@ -2059,14 +2059,14 @@ namespace Microsoft::Xna::Framework::Graphics
         p.baseVertex    = baseVertex;
         p.minVertexIndex = minVertexIndex;
         p.numVertices    = numVertices;
-        // REMED-GFX-202: the SAME complete stream description the two ordinary routes build, from
+        // The SAME complete stream description the two ordinary routes build, from
         // the same helper -- FNA prepares one binding array for all three draw routes and an
         // instance stream is simply an entry whose InstanceFrequency is greater than zero.
         //
         // The fold is 0 here, unlike the ordinary routes. Those fold because their renderers have
         // no per-binding native offset channel at all and must deliver the offset through
-        // vertexStart/baseVertex (REMED-GFX-200); this route's renderers do have one -- that is what
-        // REMED-GFX-122/123 built -- so every stream carries its whole public VertexOffset and
+        // vertexStart/baseVertex; this route's renderers do have one -- that is what
+        // Built -- so every stream carries its whole public VertexOffset and
         // baseVertex stays exactly the caller's value. That is also FNA3D's own D3D11 driver:
         // `offset = binding.vertexOffset * stride` per binding, with `BaseVertexLocation`
         // passed separately to DrawIndexedInstanced. Folding here would additionally be wrong,
@@ -4725,7 +4725,7 @@ namespace Microsoft::Xna::Framework::Graphics
         value.BindForUse(this);
         if (renderer_)
         {
-            // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
+            // The four per-MRT colour write masks + the coverage sample mask travel
             // alongside the six blend factor/function ordinals (previously dropped here entirely).
             CNA::Internal::Renderers::BlendWriteState writeState;
             writeState.colorWriteChannels[0] = (int)value.getColorWriteChannelsProperty();
@@ -4986,7 +4986,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The back buffer cannot be read while a render target is active.");
         }
 
-        // REMED-GFX-165: the read region is derived from the AUTHORITATIVE backbuffer description --
+        // The read region is derived from the AUTHORITATIVE backbuffer description --
         // PresentationParameters -- never from the renderer's live viewport. A rectangle-less call
         // addresses the COMPLETE logical backbuffer (W x H pixels), independent of any sub-viewport,
         // scissor, previously bound render target or aspect-scaled/stale drawable size the renderer may
@@ -5126,7 +5126,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetRenderTarget(RenderTarget2D* renderTarget)
     {
-        // REMED-GFX-PGL-AUDIT: this single-target overload used to call renderer_->SetRenderTarget2D()
+        // This single-target overload used to call renderer_->SetRenderTarget2D()
         // directly instead of routing through SetRenderTargets(). That skipped the null-renderer
         // check SetRenderTargets() already performs (RenderTarget2D::GetRenderTargetRenderer() is
         // null on a renderer that keeps IGraphicsRenderer's nullptr CreateRenderTarget2D() default,
@@ -5215,7 +5215,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        // REMED-GFX-096: normalize each public binding into one slot-aligned renderer-neutral
+        // Normalize each public binding into one slot-aligned renderer-neutral
         // descriptor. The old vector<IRenderTargetRenderer*> dynamic-cast every entry only to
         // RenderTarget2D, turning every cube into nullptr and discarding its selected face.
         std::vector<RenderTargetBindingDescriptor> descriptors;
@@ -5324,7 +5324,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 ? firstDescriptor.GetRenderTarget2D()->HasRealStencilBuffer(stencilFormatRequested)
                 : firstDescriptor.GetRenderTargetCube()->HasRealStencilBuffer(
                     stencilFormatRequested);
-            // REMED-GFX-142: see the singular overload's identical Stencil rationale.
+            // See the singular overload's identical Stencil rationale.
             ClearOptions discardOptions = ClearOptions::Target;
             if (hasDepthBuffer)
                 discardOptions |= ClearOptions::DepthBuffer;

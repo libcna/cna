@@ -7,7 +7,7 @@
 // wireframe: a draw that was dropped, culled or refused produces the same empty interior. The Solid
 // column is the control that separates them, and it is asserted as hard as the wireframe column.
 //
-// THE TRIANGLE IS ASYMMETRIC ON PURPOSE, following REMED-GFX-209's oracle: no two edges share a
+// THE TRIANGLE IS ASYMMETRIC ON PURPOSE, following the oracle: no two edges share a
 // slope, none is axis-aligned, and the three edge probes are mutually disjoint and each contains
 // exactly one edge -- so a single missing edge drives a KNOWN probe to zero instead of merely
 // changing a total. A symmetric triangle would let one dropped edge hide behind the other two.

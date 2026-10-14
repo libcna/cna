@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-010 (SdlGpu slice): transformed-camera stock-effect fog conformance.
+// (SdlGpu slice): transformed-camera stock-effect fog conformance.
 //
 // Proves SdlGpu fog is driven by VIEW-SPACE Z (FNA EffectHelpers.SetFogVector), not raw object-space
 // Z. Every discriminating scene keeps the object-space Z of the sampled vertex fixed while moving the

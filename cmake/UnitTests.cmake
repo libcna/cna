@@ -193,7 +193,7 @@ if(CNA_BUILD_TESTS)
     # against a from-scratch full CnaTests build before. Excluded the same way the WIN32/
     # EMSCRIPTEN/ANDROID-specific files just below already are.
     if(NOT CNA_ENABLE_NET)
-        # REMED-BUILD-019: NET=OFF omits CNA_Net, so every test whose implementation lives there
+        # NET=OFF omits CNA_Net, so every test whose implementation lives there
         # must also leave CnaTests. This exact root-based boundary includes direct and transitive
         # ENet-header consumers without suppressing any test outside the disabled module.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/.*\\.cpp$")
@@ -707,7 +707,7 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
     endif()
 
-    # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
+    # The WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
     # plans/plan_runtimerenderer.md RTR-P10-12: FNA3D's suites include mojoshader.h, and that header
@@ -1089,7 +1089,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     include(GoogleTest)
-    # REMED-BUILD-001: without WORKING_DIRECTORY, CMake defaults every discovered case's cwd to
+    # Without WORKING_DIRECTORY, CMake defaults every discovered case's cwd to
     # CnaTests' own runtime output directory, not the repo root where tests/assets/** lives --
     # CTest runs then fail to find fixture files that the same binary finds fine when run
     # directly from the repo root. Mirrors the already-correct pattern in

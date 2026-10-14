@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-040: public Model-family collection index regressions.
+// Public Model-family collection index regressions.
 
 #include <cstdint>
 

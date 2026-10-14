@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-164 / SOFTWARE-246 -- multisampled RenderTarget2D alpha and resolve coverage.
+// SOFTWARE-246 -- multisampled RenderTarget2D alpha and resolve coverage.
 // Microsoft XNA refuses GetData while the resource is an active render target; unbinding is the
 // public resolve boundary. This fixture proves exact RGBA delivery after that boundary and proves
 // that rejected active reads preserve both the destination and the active producer binding.

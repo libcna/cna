@@ -55,7 +55,7 @@ namespace
 
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
 
-    /// REMED-GFX-150: point sampling returns a STORED texel, so its probes are byte-exact rather
+    /// Point sampling returns a STORED texel, so its probes are byte-exact rather
     /// than tolerant -- a tolerance is exactly what let a blended value pass for a selected one.
     bool Exactly(const Color& c, int r, int g, int b)
     {
@@ -93,7 +93,7 @@ protected:
                 0, 0, 255, 255,    255, 255, 255, 255, // row 1: Blue, White
             };
             Texture2D checker = Texture2D::CreateFromPixels(dev, 2, 2, checkerPixels);
-            // REMED-GFX-150: this check is titled "nearest-neighbor texture sampling", so it must
+            // This check is titled "nearest-neighbor texture sampling", so it must
             // SELECT nearest-neighbor sampling. It used to leave SamplerState implicit, which means
             // the device default -- SamplerState.LinearWrap -- and passed only because the renderer
             // discarded the filter and the address mode alike. Two of the three probes below are
@@ -126,7 +126,7 @@ protected:
             Check(Exactly(nearTopLeft, 255, 0, 0) && Exactly(nearBottomRight, 255, 255, 255),
                   "textured quad samples the correct texel near opposite corners (top-left=Red, bottom-right=White)");
 
-            // REMED-GFX-150: the probe that can actually fail. Pixel (31,31) is the last pixel of
+            // The probe that can actually fail. Pixel (31,31) is the last pixel of
             // the texture's top-left cell, so point sampling owes exactly Red -- while bilinear
             // filtering there is a near-even blend of all four texels, which is what this renderer
             // used to return whatever SamplerState was selected. (2,2) and (61,61) above sit where
@@ -262,7 +262,7 @@ protected:
                   "SpriteBatch::Draw() renders a solid-color texture at the exact requested screen position");
         }
 
-        // REMED-GFX-150 added two checks to Check A: the interior point probe that can
+        // Added two checks to Check A: the interior point probe that can
         // actually fail, and its LinearClamp differential.
         std::printf("=== %d/%d PASS ===\n", g_passCount, 7);
         result_ = (g_passCount == 7) ? 0 : 1;

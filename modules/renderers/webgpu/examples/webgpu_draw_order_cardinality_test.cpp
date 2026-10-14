@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-159's STRUCTURAL half: interleaving the two draw families in public order must cost
+// The STRUCTURAL half: interleaving the two draw families in public order must cost
 // nothing but the interleaving.
 //
 // `spritebatch_3d_order_test.cpp` proves the ORDER is right, by pixels, on every renderer. It cannot
@@ -10,8 +10,8 @@
 // captured state for every draw. Each of those is a correct-looking regression that this file
 // fails and that one cannot see.
 //
-// The measured quantities are the renderer's own native counters (the same ones REMED-GFX-116 and
-// REMED-GFX-146 already gate on), sampled INSIDE a bind cycle so that binding the target -- itself
+// The measured quantities are the renderer's own native counters (the same ones the deferred viewport capture and
+// Already gate on), sampled INSIDE a bind cycle so that binding the target -- itself
 // a flush on this renderer -- is never counted as part of the sequence under test:
 //
 //   * render passes begun          -- must be exactly 1 for one bind cycle, whatever the mix
@@ -24,7 +24,7 @@
 //                                     in the order is not part of any pipeline or cache key
 //   * native setViewport calls     -- must stay at the one pass-opening call when every draw
 //   * native setScissorRect calls    shares the state, so interleaving did not defeat the
-//                                     per-draw redundant-call skips REMED-GFX-116/146 rely on
+//                                     per-draw redundant-call skips the deferred viewport capture rely on
 //   * uncaptured validation errors -- must stay 0 across every transition
 //
 // D3 is the one that would have caught the pre-fix code doing the right thing for the wrong reason:
@@ -85,7 +85,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-159's cost contract for ordered cross-family replay on WebGPU.
+ * @brief The cost contract for ordered cross-family replay on WebGPU.
  */
 class WebGpuDrawOrderCardinalityTest : public Game
 {
@@ -308,7 +308,7 @@ class WebGpuDrawOrderCardinalityTest : public Game
         // backbuffer and RenderTarget2D; the cube-face recorder is WebGPU-shaped and lives here,
         // so its ordering is measured here rather than left as "the same code path, presumed
         // covered". Both directions are run: a fixed replay list renders one of the two correctly
-        // by accident, which is exactly how this defect survived REMED-GFX-143's check O3.
+        // by accident, which is exactly how this defect survived the check O3.
         {
             RenderTargetCube cube(dev, kRT, false, SurfaceFormat::Color, DepthFormat::Depth24Stencil8,
                                   0, RenderTargetUsage::DiscardContents);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-180: the public render-target -> Present lifecycle contract, and the exact causal chain
+// The public render-target -> Present lifecycle contract, and the exact causal chain
 // behind `SdlGpu_RenderState`'s abort.
 //
 // THE AUTHORITATIVE CONTRACT is FNA's, read from
@@ -46,7 +46,7 @@
 //   A7  cube face                   RenderTargetCube face -> backbuffer -> Present
 //   A8  MRT                         multi-target set -> backbuffer -> Present
 //   A9  MSAA                        multisampled target -> unbind -> Present
-//   A10 mid-cycle Clear             REMED-GFX-156's ordered Clear inside one bind cycle
+// A10 mid-cycle Clear             the ordered Clear inside one bind cycle
 //   A11 backbuffer readback         readback then Present, and Present then readback
 //   A12 reset                       GraphicsDevice::Reset() then Present
 //   A13 two frames                  Present on frame 1 and again on frame 2
@@ -157,7 +157,7 @@ namespace
     /**
      * @brief Whether a multisampled render target may be given a real DepthFormat here.
      *
-     * True on every renderer. This was false on BGFX while REMED-GFX-163 was open: a depth-backed
+     * True on every renderer. This was false on BGFX while the depth-backed multisampled render-target contract was open: a depth-backed
      * multisampled target aborted the PROCESS by SIGTRAP inside `bgfx::createFrameBuffer`, so leg A9
      * had to drop the depth attachment THERE and declare the boundary rather than measure it. That
      * defect is fixed -- `BgfxDepthAttachmentFlags` now gives a multisampled depth attachment
@@ -195,7 +195,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-180's public contract: what a frame may and may not do with a bound render target
+ * @brief The public contract: what a frame may and may not do with a bound render target
  *        before the framework presents it.
  */
 class PresentLifecycleContractTest : public Game
@@ -538,7 +538,7 @@ class PresentLifecycleContractTest : public Game
     void LegA9(GraphicsDevice& dev)
     {
         std::unique_ptr<RenderTarget2D> a;
-        // REMED-GFX-163 re-armed this: BGFX used to abort the process here, so this leg dropped the
+        // Re-armed this: BGFX used to abort the process here, so this leg dropped the
         // depth attachment on that renderer alone. It no longer does, and every renderer now measures
         // the resolve-on-unbind-then-Present transition with a real depth attachment attached.
         const DepthFormat msaaDepth =
@@ -567,7 +567,7 @@ class PresentLifecycleContractTest : public Game
     }
 
     /**
-     * @brief Leg A10 (matrix 13) -- REMED-GFX-156's ordered mid-cycle Clear before the unbind.
+     * @brief Leg A10 (matrix 13) -- the ordered mid-cycle Clear before the unbind.
      *
      * The Clear lands BETWEEN two draws inside a single bind cycle, so a renderer that batches the
      * cycle into one pass has to segment it. This leg's job here is only that segmenting a cycle does
@@ -593,7 +593,7 @@ class PresentLifecycleContractTest : public Game
     /**
      * @brief Leg A11 (matrix 14/15) -- a backbuffer readback on either side of a Present.
      *
-     * SDL_GPU serves this through REMED-GFX-165's lazily created proxy, which changes the present
+     * SDL_GPU serves this through the lazily created proxy, which changes the present
      * path the first time it is asked for. This leg exists to prove that turning that path on does
      * not make the device unpresentable, and that a read before a Present and a read after one are
      * both legal.
@@ -640,7 +640,7 @@ class PresentLifecycleContractTest : public Game
         check(BoundCount(dev) == 0, "A12 a Reset leaves zero render targets bound");
         RequirePresentSucceeds(dev, "A12 Present succeeds after a Reset");
         // A PHYSICAL surface resize is not exercisable here: SDL_SetWindowSize is a no-op under the
-        // headless X server these runs use, which REMED-GFX-165 already measured and declared. This
+        // headless X server these runs use, which the back-buffer dimension contract already measured and declared. This
         // leg therefore asserts the reset-then-present transition only, not a changed extent.
         boundary("A12: a physical surface resize is not exercisable under a headless X server -- the "
                  "reset-then-Present transition is what is asserted");
@@ -669,7 +669,7 @@ class PresentLifecycleContractTest : public Game
         }
         if (!limitWhat.empty())
         {
-            // BGFX allocates ordered view ids from a fixed per-frame range (REMED-GFX-065, and
+            // BGFX allocates ordered view ids from a fixed per-frame range (and
             // GFX-018/GFX-155 before it), so a frame has a documented ceiling on how many bind
             // cycles it can hold. It reports that as a clear exception rather than corrupting
             // anything, which is the behaviour this leg accepts and records. The tail of the leg is
@@ -726,7 +726,7 @@ class PresentLifecycleContractTest : public Game
     /**
      * @brief Leg B2 (matrix 8) -- the refusal is decided from the public binding, not the object.
      *
-     * REMED-GFX-168's leg P1 owns this contract in depth; it is restated here because GFX-180's whole
+     * The leg P1 owns this contract in depth; it is restated here because GFX-180's whole
      * chain depends on the refusal being a thrown exception rather than a dereference of whatever the
      * binding used to point at.
      */

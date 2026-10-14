@@ -99,7 +99,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * The handles share one texture until a full-level SetData through either of them: that
          * gives the writing handle a texture of its own and leaves the other with the pixels it
          * had, so a ContentManager's cached texture is not changed through a loaded copy
-         * (REMED-GFX-223). A SetData of a rectangle updates the shared texture in place.
+         *. A SetData of a rectangle updates the shared texture in place.
          *
          * @param other Texture wrapper whose resource is shared.
          */
@@ -753,7 +753,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /// It is NOT a synonym for "was built by the protected constructor below".
         /// ReconstructFromCache() borrows that constructor to wrap an already-created renderer and
         /// clears this flag again: a cache hit is an ordinary content texture whose CPU shadow is
-        /// authoritative and whose shared renderer must never be written through (REMED-GFX-223).
+        /// authoritative and whose shared renderer must never be written through.
         bool gpuOnlyContent_ = false;
 
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.

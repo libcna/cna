@@ -267,7 +267,7 @@ namespace Microsoft::Xna::Framework
             );
         }
 
-        // REMED-CORE-007: applyToExistingRenderer() below calls GraphicsDevice::Reset(), which
+        // ApplyToExistingRenderer() below calls GraphicsDevice::Reset(), which
         // raises the device's own DeviceResetting/DeviceReset. CreateDevice() subscribes this
         // manager to those events and forwards them via OnDeviceResetting()/OnDeviceReset(), so
         // this method must not raise them a second time itself (matches FNA's own ApplyChanges(),
@@ -343,7 +343,7 @@ namespace Microsoft::Xna::Framework
 
         applyToExistingRenderer(gdi);
 
-        // REMED-CORE-007: FNA's IGraphicsDeviceManager.CreateDevice() wires
+        // FNA's IGraphicsDeviceManager.CreateDevice() wires
         // graphicsDevice.DeviceResetting += OnDeviceResetting; graphicsDevice.DeviceReset +=
         // OnDeviceReset; so a real renderer-detected device-lost/reset (raised directly on
         // GraphicsDevice's own events, e.g. by GraphicsDevice's deviceEventCallback) reaches this
@@ -432,12 +432,12 @@ namespace Microsoft::Xna::Framework
 
         if (disposing && graphicsDevice_ != nullptr)
         {
-            // REMED-CORE-014: this raise must not be gated on ownsGraphicsDevice_. CNA's Game
+            // This raise must not be gated on ownsGraphicsDevice_. CNA's Game
             // always pre-owns its GraphicsDevice_ (unlike FNA, where GraphicsDeviceManager always
             // owns the device it manages), so ownsGraphicsDevice_ is correctly false for every
             // Game-attached manager -- gating the raise on it left DeviceDisposing permanently
             // dead for the one configuration this whole codebase actually constructs, which in
-            // turn left REMED-CORE-006's Game::Initialize() subscription with nothing to ever
+            // turn left the Game::Initialize() subscription with nothing to ever
             // invoke. Only the actual delete below stays ownsGraphicsDevice_-gated: graphicsDevice_
             // may point at a Game-owned value member, and deleting a non-heap object is memory
             // corruption.
@@ -501,7 +501,7 @@ namespace Microsoft::Xna::Framework
         // rather than forwarding the passed-in sender (unlike OnDeviceCreated, which does forward
         // it) -- an asymmetry in the real FNA source, preserved here rather than "cleaned up".
         // Previously invisible in CNA because every prior call site already passed `this`; now
-        // observable once REMED-CORE-007's device-event forwarding calls these with the managed
+        // observable once the device-event forwarding calls these with the managed
         // GraphicsDevice as sender.
         (void)sender;
         DeviceDisposing.Raise(this, args);

@@ -13,7 +13,7 @@
 // query, not a CNA-internal accessor, so this proves the value genuinely reached the driver, not
 // just that CNA's own PresentationParameters field was updated.
 //
-// REMED-GFX-243: the driver query alone made this whole case defend NOTHING wherever vsync is
+// The driver query alone made this whole case defend NOTHING wherever vsync is
 // unavailable. Check A passes vacuously there -- with the forwarding deleted the interval simply
 // stays 0, which is exactly what A expects -- and B skips, so deleting the very fix this file was
 // written to guard left it reporting PASS and SKIP. Measured, not supposed: the forward was removed
@@ -112,7 +112,7 @@ protected:
 
         if (intervalOn == 0)
         {
-            // REMED-BUILD-014: a virtual framebuffer (Xvfb + a software GL rasterizer) has no real
+            // A virtual framebuffer (Xvfb + a software GL rasterizer) has no real
             // vertical-retrace signal to synchronize to -- SDL/the GL driver can silently refuse to
             // engage vsync there for reasons entirely outside CNA's own code. Before concluding this
             // is a regression in GraphicsDeviceManager/GraphicsDevice::Reset()'s own forwarding

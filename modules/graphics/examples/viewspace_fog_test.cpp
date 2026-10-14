@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-010: transformed-camera stock-effect fog conformance.
+// Transformed-camera stock-effect fog conformance.
 //
 // Proves CNA fog is driven by VIEW-SPACE Z (FNA EffectHelpers.SetFogVector), not raw object-space Z.
 // Every scene here keeps the object-space Z of the sampled vertex FIXED while moving the camera /

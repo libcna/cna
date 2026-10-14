@@ -47,7 +47,7 @@ namespace CNA::Internal::Renderers::DirectX9
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
-        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        /// The declaration this buffer carries, for the fidelity check.
         [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& GetDeclarationEXT() const
         {
             return declaration_;
@@ -85,7 +85,7 @@ namespace CNA::Internal::Renderers::DirectX9
     };
 
 
-    /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` unless @p vb's declaration can
+    /// Throws `System::NotSupportedException` unless @p vb's declaration can
     /// be represented faithfully by the instanced route's fixed stride layout.
     /// Pure: creates nothing, queues nothing and leaves no partial native object behind, so a
     /// rejected draw cannot poison the device. Ordinary draws translate the declaration directly

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-080: the Software (CPU-raster) renderer must honor GraphicsDevice.ScissorRectangle when
+// The Software (CPU-raster) renderer must honor GraphicsDevice.ScissorRectangle when
 // RasterizerState.ScissorTestEnable is true -- for both the 2D SpriteBatch path and the 3D raster
 // path -- exactly like the GPU renderers corrected by REMED-GFX-013 (the retired VULKAN renderer) /
 // GFX-068 (SdlGpu) etc.
@@ -99,7 +99,7 @@ class SoftwareScissorTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     Texture2D whiteTex_;
     Texture2D greenTex_;
-    // REMED-GFX-081: the current scissor RasterizerState, passed THROUGH SpriteBatch.Begin (now that
+    // The current scissor RasterizerState, passed THROUGH SpriteBatch.Begin (now that
     // Begin honors its rasterizerState argument) for the 2D checks, and also assigned to the device
     // (SetScissorEnabled) so the 3D DrawPrimitives checks, which read GraphicsDevice.RasterizerState
     // directly, see the same state.
@@ -131,7 +131,7 @@ class SoftwareScissorTest : public Game
         dev.setViewportProperty(Viewport(x, y, w, h));
     }
 
-    // REMED-GFX-080/081: build the scissor RasterizerState (CullNone so the raster geometry is
+    // Build the scissor RasterizerState (CullNone so the raster geometry is
     // winding-agnostic and the check isolates scissor clipping) and BOTH store it for DrawSprite to
     // pass through SpriteBatch.Begin (REMED-GFX-081 made Begin honor its rasterizerState argument)
     // AND assign it to the device so the 3D DrawPrimitives checks (which read

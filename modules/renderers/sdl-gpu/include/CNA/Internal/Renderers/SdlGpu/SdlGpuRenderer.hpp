@@ -341,7 +341,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     /**
-     * @brief The one bindable form of a sampled texture in this renderer (REMED-GFX-152). CNAEXT.
+     * @brief The one bindable form of a sampled texture in this renderer. CNAEXT.
      *
      * A public `Texture2D` and a public `RenderTarget2D` arrive at every draw as the SAME static
      * type, `const ITextureRenderer*`, but their concrete renderers — `SdlGpuTextureRenderer` and
@@ -393,7 +393,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     // SdlGpuRenderTarget2DState exists (see its own doc comment): draws are replayed at Present,
     // long after a short-lived public texture may have been destroyed, so the native handle has to
     // outlive the wrapper and its release has to be deferred until the command buffer that samples
-    // it has been submitted (REMED-GFX-152). Render targets keep their own richer state struct;
+    // it has been submitted. Render targets keep their own richer state struct;
     // this is the minimal one for resources that are nothing but a sampleable texture.
     struct SdlGpuSampledTextureState
     {
@@ -406,7 +406,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief `SDL_gpu`-backed `Texture2D`. Plain 2D, `SAMPLER` usage only, with its declared chain.
      *
-     * REMED-GFX-176: one native `SDL_GPUTexture` holding **every level `ImageData::mipLevels`
+     * One native `SDL_GPUTexture` holding **every level `ImageData::mipLevels`
      * declares**, not the single level this class used to hardcode. Allocation is all construction
      * does: a level's content arrives only through `UpdatePixels` (level 0) or `UpdatePixelsLevel`
      * (any level), exactly as the caller supplies it. Nothing here derives, resamples or generates
@@ -433,7 +433,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
-        /// REMED-GFX-176: uploads exactly @p level, sized by that level's own dimensions. An
+        /// Uploads exactly @p level, sized by that level's own dimensions. An
         /// out-of-range level or a null source is ignored, the established convention for this
         /// void-returning interface method.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
@@ -455,7 +455,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Returns the underlying `SDL_GPUTexture`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
         /**
-         * @brief Returns the number of mip levels SDL really allocated. CNAEXT — REMED-GFX-176.
+         * @brief Returns the number of mip levels SDL really allocated. CNAEXT.
          *
          * @return The native `num_levels` this texture was created with; never below one.
          */
@@ -480,7 +480,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
-        /// The one upload path both public entry points share (REMED-GFX-176/SDLGPU-69). @p stride
+        /// The one upload path both public entry points share (SDLGPU-69). @p stride
         /// is the logical XNA-format source row pitch; the destination is all of @p level.
         void UploadLevel(int level, const uint8_t* pixels, int levelW, int levelH, int stride);
 
@@ -490,7 +490,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::shared_ptr<SdlGpuSampledTextureState> state_;
         int width_ = 0;
         int height_ = 0;
-        /// Mip levels SDL really allocated for this texture (REMED-GFX-176).
+        /// Mip levels SDL really allocated for this texture.
         int levelCount_ = 1;
         /// Public XNA SurfaceFormat ordinal retained independently from the chosen native fallback.
         int surfaceFormat_ = 0;
@@ -524,7 +524,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuTexture3DRenderer(const SdlGpuTexture3DRenderer&) = delete;
         SdlGpuTexture3DRenderer& operator=(const SdlGpuTexture3DRenderer&) = delete;
 
-        /// REMED-GFX-135: true only once the upload command buffer has been submitted with the
+        /// True only once the upload command buffer has been submitted with the
         /// whole requested box copied into a transfer buffer this call owns; false for an
         /// out-of-range level or box, a null source, or a source buffer too small for the box. A
         /// genuine SDL API failure still throws -- that is a broken device, not an unsupported
@@ -532,7 +532,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// retained past it.
         [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
                                    const void* data, int dataLength) override;
-        /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
+        /// True only once the download fence has signalled and the whole requested
         /// box has been copied out of the transfer buffer; false for an empty request. Every other
         /// failure already throws, and the shared layer converts false into a deterministic
         /// System::NotSupportedException rather than fabricating a volume.
@@ -556,7 +556,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuRenderer* owner_ = nullptr;
         std::shared_ptr<SdlGpuSampledTextureState> state_;
         int width_ = 0, height_ = 0, depth_ = 0;
-        /// Mip levels SDL really allocated for this volume (REMED-GFX-135).
+        /// Mip levels SDL really allocated for this volume.
         int levelCount_ = 1;
         int surfaceFormat_ = 0;
     };
@@ -614,7 +614,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // only ever sees this GPU-state struct via DrawTarget, not the (possibly already-destroyed)
         // wrapper -- see this struct's own doc comment above.
         SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
-        // REMED-GFX-145: FIRST-USE clear state only, NOT "a Clear() is queued".
+        // FIRST-USE clear state only, NOT "a Clear() is queued".
         //
         // These say "no render pass has ever written this resource, so a LOAD would read
         // uninitialized GPU memory" -- the very first segment that records this target therefore
@@ -716,7 +716,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * Always the single-sample colour texture, never `MsaaTexture()`: the multisample
          * attachment is created `COLOR_TARGET`-only and resolves INTO the colour texture at
-         * render-pass end, so it is not a legal sampler binding at all (REMED-GFX-152).
+         * render-pass end, so it is not a legal sampler binding at all.
          *
          * @return The resolved native handle paired with the shared state that keeps it alive.
          */
@@ -740,7 +740,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * the swapchain-download segfault documented in `plans/plan_sdlgpu.md`'s `SDLGPU-39` row.
          * Flushes any pending frame first so the read reflects this frame's draws.
          *
-         * REMED-GFX-127: returns true only once the downloaded transfer buffer has been copied into
+         * Returns true only once the downloaded transfer buffer has been copied into
          * @p data in full. An empty region returns false rather than reporting success on a
          * destination it never wrote, and every real failure (transfer buffer, command buffer,
          * fence, map) still throws before any byte is copied.
@@ -752,7 +752,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * primary `rts[0]` bind just opened (SDLGPU-37: an "extra" MRT target — a real simultaneous
          * attachment of that ONE pass, but stock single-output draws still write attachment 0 only).
          *
-         * REMED-GFX-145: the attachment set belongs to the bind CYCLE, not to the target, so it is
+         * The attachment set belongs to the bind CYCLE, not to the target, so it is
          * recorded on the segment rather than on either target's shared state — `{a,b}` followed by
          * `{a,c}` leaves `b` an attachment of the first segment instead of silently dropping it.
          * CNAEXT — internal use only.
@@ -765,7 +765,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuRenderer* owner_ = nullptr;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
-        // REMED-GFX-186: what SDL really allocated on colorTexture, so GetData can refuse a level
+        // What SDL really allocated on colorTexture, so GetData can refuse a level
         // with no storage instead of handing SDL a mip index the resource does not own. Mirrors
         // SdlGpuRenderTargetCubeState's own levelCount, which is why the cube route answered this
         // question with a deterministic refusal while its 2D sibling segfaulted.
@@ -790,13 +790,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         int depthBits = 0;
         bool hasStencil = false;
         bool mipMap = false;
-        /// REMED-GFX-188: native `num_levels` on the resolved, single-sample cube texture.
+        /// Native `num_levels` on the resolved, single-sample cube texture.
         /// Pass finalization owns only this shared state, so allocation, mip generation and
         /// readback all consult the same fact even after the public wrapper has been destroyed.
         int levelCount = 1;
         SDL_GPUTexture* cubeTexture = nullptr;
         /**
-         * REMED-GFX-141: SIX single-layer `SDL_GPU_TEXTURETYPE_2D` multisample textures, one per
+         * SIX single-layer `SDL_GPU_TEXTURETYPE_2D` multisample textures, one per
          * cube face, where there used to be ONE shared by whichever face was currently active.
          *
          * They stay six separate textures rather than a six-layer array because SDL_gpu's own debug
@@ -820,13 +820,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUTexture* depthTexture = nullptr;
         /// Same rationale as SdlGpuRenderTarget2DState::sampleCount.
         SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
-        /// REMED-GFX-141: this target's public RenderTargetUsage, collapsed by
+        /// This target's public RenderTargetUsage, collapsed by
         /// `RenderTargetUsagePreservesContentsEXT()`. It decides whether a multisampled face's pass
         /// keeps its own samples (`RESOLVE_AND_STORE`) or throws them away once resolved
         /// (`RESOLVE`) -- the single-sample path never needed it, because SDL_gpu's LOAD op on the
         /// cube texture itself already preserved a face by construction.
         bool preserveContents = false;
-        /// REMED-GFX-145: per-face FIRST-USE clear state only — same meaning (and same reason) as
+        /// Per-face FIRST-USE clear state only — same meaning (and same reason) as
         /// SdlGpuRenderTarget2DState's own clear fields. An explicit Clear() belongs to the bind
         /// cycle that issued it and lives on SdlGpuRenderer::PassSegment instead.
         std::array<bool, 6> clearColorPending{true, true, true, true, true, true};
@@ -849,7 +849,7 @@ namespace CNA::Internal::Renderers::SdlGpu
      * resolve step needed, unlike D3D11/D3D12).
      * The multisampled attachments are six independent, level-zero-only 2D textures because
      * `SDL_GPU_TEXTURETYPE_CUBE` has no multisampled variant and SDL_GPU forbids multisampled
-     * arrays. REMED-GFX-188 regenerates only the resolved face's complete chain through clamped
+     * arrays. The resolve regenerates only the resolved face's complete chain through clamped
      * per-level GPU blits immediately after that face's pass ends, so later passes can sample its
      * finalized mips. The actual GPU state lives in a separate, shared_ptr-owned
      * `SdlGpuRenderTargetCubeState` (see that struct's own doc comment, and
@@ -858,8 +858,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuRenderTargetCubeRenderer final : public IRenderTargetCubeRenderer
     {
     public:
-        /// REMED-GFX-141: `preserveContents` is this target's public RenderTargetUsage. It reached
-        /// `SdlGpuRenderer::CreateRenderTargetCube` under REMED-GFX-136 and was deliberately
+        /// `preserveContents` is this target's public RenderTargetUsage. It reached
+        /// `SdlGpuRenderer::CreateRenderTargetCube` with the usage parameter and was deliberately
         /// unused there, because a single-sample face was preserved by construction and a
         /// multisampled one could not be preserved at all. Now that each face owns its own
         /// multisample texture it selects that texture's store op.
@@ -896,9 +896,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * segfaulted; see that row's notes in `plans/plan_sdlgpu.md`). Flushes any pending frame first so
          * the read reflects this frame's draws, not stale/uninitialized GPU memory.
          */
-        /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
+        /// True only once the download fence has signalled and the whole requested
         /// face rectangle has been copied out of the transfer buffer; false for an empty request.
-        /// REMED-GFX-134: also false for a mip level or rectangle this target never allocated --
+        /// Also false for a mip level or rectangle this target never allocated --
         /// `SDL_DownloadFromGPUTexture` accepts an out-of-range `mip_level` without complaint and
         /// fills the transfer buffer with whatever it finds, so the guard has to be here.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -936,7 +936,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * Always the single-sample cube texture that the per-face multisample attachments resolve
          * INTO, never one of those attachments — they are `COLOR_TARGET`-only and are not legal
          * sampler bindings, and a cube sampler needs the cube-typed resource in any case
-         * (REMED-GFX-152).
+         *.
          *
          * @return The resolved native handle paired with the shared state that keeps it alive.
          */
@@ -944,7 +944,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Returns one cube face's own multisample render texture. CNAEXT.
          *
-         * REMED-GFX-141: there are six, one per face, where this used to return the single texture
+         * There are six, one per face, where this used to return the single texture
          * every face shared.
          *
          * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
@@ -1006,7 +1006,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuTextureCubeRenderer(const SdlGpuTextureCubeRenderer&) = delete;
         SdlGpuTextureCubeRenderer& operator=(const SdlGpuTextureCubeRenderer&) = delete;
 
-        /// REMED-GFX-135: same explicit completion contract as SdlGpuTexture3DRenderer::SetData.
+        /// Same explicit completion contract as SdlGpuTexture3DRenderer::SetData.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
         /**
@@ -1044,7 +1044,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool GetCompressedDataEXT(int face, int level, int x, int y,
                                                 int w, int h, void* data,
                                                 int dataLength) const override;
-        /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
+        /// True only once the download fence has signalled and the whole requested
         /// face rectangle has been copied out of the transfer buffer; false for an empty request.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
@@ -1076,7 +1076,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::shared_ptr<SdlGpuSampledTextureState> state_;
         int size_ = 0;
         bool mipMap_ = false;
-        /// Mip levels SDL really allocated for this cube (REMED-GFX-135).
+        /// Mip levels SDL really allocated for this cube.
         int levelCount_ = 1;
         int surfaceFormat_ = 0;
         SDL_GPUTextureFormat nativeFormat_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -1090,7 +1090,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief Resolves any public 2D texture resource to its bindable native form. CNAEXT.
      *
-     * REMED-GFX-152: the ONE place this renderer is allowed to decide what a `const ITextureRenderer*`
+     * The ONE place this renderer is allowed to decide what a `const ITextureRenderer*`
      * really is. Every SpriteBatch and stock/custom 3D binding route goes through here, so a
      * `RenderTarget2D` can never again reach a route that assumed `SdlGpuTextureRenderer`. The
      * decision is made by `dynamic_cast` — enforced by the object itself — not by a static
@@ -1428,9 +1428,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * fragment shader (the only kind of shader in this codebase that can genuinely write more
          * than one attachment) really render simultaneous MRT. @p depthStencilFormat is
          * `SDL_GPU_TEXTUREFORMAT_INVALID` when the active pass is genuinely depthless; it is part
-         * of pipeline compatibility and cache identity (REMED-GFX-097). @p depthBias and
+         * of pipeline compatibility and cache identity. @p depthBias and
          * @p slopeScaleDepthBias are the queued sprite's by-value rasterizer snapshot and are
-         * pipeline-static identity/state (REMED-GFX-051). Null if `CompileProgram()` did not
+         * pipeline-static identity/state. Null if `CompileProgram()` did not
          * succeed. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(
                                                                           const std::array<SDL_GPUColorTargetDescription, 4>& colorTargets,
@@ -1468,7 +1468,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             const SDL_GPUDepthStencilState& depthStencilState, std::size_t cacheKey);
 
         /** @brief Number of cached custom-effect pipelines. Test-only cache-identity
-         * introspection for REMED-GFX-051. CNAEXT. */
+         * introspection for the depth-bias tests. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t GetPipelineCacheSizeEXT() const
         {
             return pipelines_.size();
@@ -1649,7 +1649,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         friend struct SdlGpuRenderTarget2DState;
         friend struct SdlGpuRenderTargetCubeState;
         friend class SdlGpuCompiledEffect;
-        // REMED-GFX-152: ordinary uploaded textures defer their native release through the same
+        // Ordinary uploaded textures defer their native release through the same
         // QueueTextureRelease path render targets already used.
         friend struct SdlGpuSampledTextureState;
         friend class SdlGpuEffectRenderer;
@@ -1663,11 +1663,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         };
 
         /**
-         * @brief The "no segment has ever been opened" id. REMED-GFX-145/143.
+         * @brief The "no segment has ever been opened" id.
          *
          * Real segment ids start at 1. This used to be the id every draw issued with no render
          * target bound carried, because the swapchain had no bind cycles of its own and its single
-         * trailing pass asked for this value to mean "no segment filter at all". REMED-GFX-143
+         * trailing pass asked for this value to mean "no segment filter at all". The ordered-replay fix
          * gave the backbuffer real segments, so a backbuffer draw now carries the id of the cycle
          * it was issued in and this value survives only as the pre-first-cycle sentinel.
          */
@@ -1697,7 +1697,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         };
 
         /**
-         * @brief REMED-GFX-145: ONE public render-target bind/unbind cycle, i.e. exactly one
+         * @brief ONE public render-target bind/unbind cycle, i.e. exactly one
          * native `SDL_BeginGPURenderPass`/`SDL_EndGPURenderPass` pair.
          *
          * The deferred queues used to carry only a `DrawTarget`, and `EnsureFrameRendered` gave
@@ -1713,7 +1713,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             std::uint64_t id = 0;
             /**
-             * At most one of `rt` / `cube` is set; `cube` also carries `face`. REMED-GFX-143: with
+             * At most one of `rt` / `cube` is set; `cube` also carries `face`. With
              * NEITHER set the segment is a BACKBUFFER bind cycle. The backbuffer used to have no
              * segment at all -- `currentSegment_` simply held `kSwapchainSegment` while no target
              * was bound, and `EnsureFrameRendered` recorded every backbuffer draw of the frame in
@@ -1726,7 +1726,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> extraAttachments;
             /// An explicit GraphicsDevice.Clear() issued while this cycle was bound. Within one
             /// segment the last Clear() still wins, because SDL_gpu delivers the colour through the
-            /// pass load op and a pass has exactly one. REMED-GFX-156: which is why a Clear() that
+            /// pass load op and a pass has exactly one, which is why a Clear() that
             /// FOLLOWS a draw of this segment no longer lands here at all -- it opens a new segment
             /// (see SegmentForOrderedClear), so several Clear()s of one bind cycle only ever share
             /// a segment while nothing observable separates them.
@@ -1737,7 +1737,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             float clearDepth = 1.0f;
             Uint8 clearStencil = 0;
             /**
-             * @brief REMED-GFX-156: has any draw been queued into this segment yet?
+             * @brief Has any draw been queued into this segment yet?
              *
              * Set by PushDrawOrder, the one choke point every queued draw and sprite routes
              * through, and read only by SegmentForOrderedClear to decide whether the next Clear()
@@ -1746,7 +1746,7 @@ namespace CNA::Internal::Renderers::SdlGpu
              */
             bool hasDraws = false;
             /**
-             * @brief REMED-GFX-156: this segment was opened by an ordered Clear(), not by a bind.
+             * @brief This segment was opened by an ordered Clear(), not by a bind.
              *
              * Purely descriptive -- it exists so the native order trace can distinguish a public
              * bind cycle from the pass segments one cycle was split into, and so the pass-count
@@ -1773,7 +1773,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             DrawKind kind;
             std::size_t index;
-            // REMED-GFX-145: the logical render-pass segment (one public bind/unbind cycle) this
+            // The logical render-pass segment (one public bind/unbind cycle) this
             // draw was issued inside; 0 = the swapchain. Target IDENTITY is not enough to group
             // draws into passes -- two bind cycles of ONE target are two passes with two load
             // actions, two clear states and two viewport/scissor regimes, and grouping by
@@ -1781,13 +1781,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             // currentSegment_, the single choke point every Queue*Draw()/QueueSprite() already
             // routes through.
             std::uint64_t segment = 0;
-            // REMED-GFX-064: the GraphicsDevice.Viewport live when this draw was queued, captured
+            // The GraphicsDevice.Viewport live when this draw was queued, captured
             // per-draw (PushDrawOrder) and replayed via SDL_SetGPUViewport in RenderQueuedDraws.
             // viewportSet=false (or a zero-size rect) => the pass's full render-target extents.
             bool viewportSet = false;
             int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
             float viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
-            // REMED-GFX-068: the RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle
+            // The RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle
             // live when this draw was queued, captured per-draw (PushDrawOrder) and replayed via
             // SDL_SetGPUScissor in RenderQueuedDraws (ApplyScissorForRef). Per-draw for the same
             // deferred-model reason as the viewport: SetRenderTarget resets ScissorRectangle to the
@@ -1797,7 +1797,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // (no clip), matching RasterizerState.ScissorTestEnable=false.
             bool scissorEnabled = false;
             int scissorX = 0, scissorY = 0, scissorW = 0, scissorH = 0;
-            // REMED-GFX-069: the GraphicsDevice.BlendFactor (constant blend color) live when this
+            // The GraphicsDevice.BlendFactor (constant blend color) live when this
             // draw was queued, captured per-draw (PushDrawOrder) and replayed via
             // SDL_SetGPUBlendConstants in RenderQueuedDraws (ApplyBlendFactorForRef). Per-draw for
             // the same deferred-model reason as viewport/scissor: this renderer replays draws at
@@ -1832,7 +1832,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             int readMask = 0xFF, writeMask = 0xFF;
         };
 
-        // SDLGPU-18/19/20 + REMED-GFX-051: snapshot of BlendState/the stencil half of
+        // SDLGPU-18/19/20: snapshot of BlendState/the stencil half of
         // DepthStencilState/RasterizerState's pipeline-static fields, captured at Queue*Draw time
         // -- mirrors DrawTarget's
         // own "one shared struct field per DrawCommand" precedent. depthTest/depthWrite/depthFunc
@@ -1840,15 +1840,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         // predate this and are already correctly threaded through; this struct only carries the
         // dimensions added by those remediations. ScissorTestEnable is deliberately NOT here:
         // its rect+enable are per-draw pass state carried in QueuedDrawRef instead
-        // (REMED-GFX-068, applied via SDL_SetGPUScissor in ApplyScissorForRef, exactly like the
+        // (applied via SDL_SetGPUScissor in ApplyScissorForRef, exactly like the
         // viewport), not baked into the pipeline. SDL_GPU depth bias has no dynamic setter, so
         // both public bias floats must live here and be replayed into the pipeline selected for
-        // this exact queued draw (REMED-GFX-051).
+        // this exact queued draw.
         struct RenderStateSnapshot
         {
             bool blendEnabled = false;
             BlendKeyParams blend;
-            // REMED-GFX-077/-098: slot-aligned XNA ColorWriteChannels (bit0=R..bit3=A), baked
+            // Slot-aligned XNA ColorWriteChannels (bit0=R..bit3=A), baked
             // into the corresponding SDL_GPU target description and cache identity. 15 = All.
             std::array<int, 4> colorWriteMasks{{15, 15, 15, 15}};
             int cullMode = 0;   // XNA CullMode ordinal; 0 = None
@@ -1859,7 +1859,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // SDL_gpu exposes this as a genuine per-draw dynamic value (SDL_SetGPUStencilReference),
             // not a pipeline-baked one -- captured per-command like the rest of this snapshot. (The
             // scissor is likewise per-draw dynamic via SDL_SetGPUScissor, but it lives in
-            // QueuedDrawRef with the viewport rather than here -- REMED-GFX-068.)
+            // QueuedDrawRef with the viewport rather than here.)
             int stencilReference = 0;
         };
 
@@ -1989,7 +1989,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         struct SpriteCommand
         {
-            // REMED-GFX-152: the same resolved, lifetime-owning value every 3D binding route now
+            // The same resolved, lifetime-owning value every 3D binding route now
             // carries, so SpriteBatch and the effects share one texture-resolution contract. It
             // replaces a bare SDL_GPUTexture*, which was correct about the TYPE question (a sprite
             // source may be a plain Texture2D or a rendered-into target, unrelated classes both) but
@@ -2063,7 +2063,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         };
 
         /**
-         * @brief REMED-GFX-117: the native arguments one indexed draw submits.
+         * @brief The native arguments one indexed draw submits.
          *
          * Resolved once from the public XNA draw parameters and then carried by value on the draw
          * command, so a deferred draw keeps its own range. All three are in SDL_GPU's own units:
@@ -2229,13 +2229,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
             std::array<float, 32> uniforms{};  ///< 128-byte per-draw uniform layout
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
@@ -2263,22 +2263,22 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
             std::array<float, 32> uniforms{};
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
+            SdlGpuSampledTextureEXT texture;  ///< resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
-            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// Captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
             int maxMipLevel = 0;
@@ -2307,24 +2307,24 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
             std::array<float, 32> uniforms{};
             std::array<float, 56> lightUniforms{};  ///< LitLightParams: 10 vec4 + 1 mat4 = 224 bytes
             ShadowReceptionEXT shadow;  ///< SMG-0032
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
+            SdlGpuSampledTextureEXT texture;  ///< resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
-            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// Captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
             int maxMipLevel = 0;
@@ -2352,22 +2352,22 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
             std::array<float, 32> uniforms{};  ///< [20..23]=alphaTest params, [24]=vertexColorEnabled (no lighting/ambient slots needed)
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
+            SdlGpuSampledTextureEXT texture;  ///< resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
-            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// Captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
             int maxMipLevel = 0;
@@ -2398,31 +2398,31 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
             std::array<float, 32> uniforms{};
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            SdlGpuSampledTextureEXT texture0;  ///< REMED-GFX-152: resolved once, at queue time
-            SdlGpuSampledTextureEXT texture1;  ///< REMED-GFX-152: resolved once, at queue time
+            SdlGpuSampledTextureEXT texture0;  ///< resolved once, at queue time
+            SdlGpuSampledTextureEXT texture1;  ///< resolved once, at queue time
             ///@{ SDLGPU-21: independent per-slot sampler state (GraphicsDevice.SamplerStates[0]/[1]).
             int texture0Filter = 0;
             int texture0AddressU = 0;
             int texture0AddressV = 0;
-            int texture0MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
+            int texture0MaxAnisotropy = 4;  ///< captured with the filter
             int texture0MaxMipLevel = 0;
             float texture0LodBias = 0.0f;
             int texture0AddressW = 1;
             int texture1Filter = 0;
             int texture1AddressU = 0;
             int texture1AddressV = 0;
-            int texture1MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
+            int texture1MaxAnisotropy = 4;  ///< captured with the filter
             int texture1MaxMipLevel = 0;
             float texture1LodBias = 0.0f;
             int texture1AddressW = 1;
@@ -2453,32 +2453,32 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
             std::array<float, 24> uniforms{};       ///< PC: mvp(16) + diffuseColor(4) + emissiveAmount(4)
             std::array<float, 48> envMapUniforms{}; ///< EnvMapParams: world(16) + 8 vec4 (32) = 48 floats
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
-            SdlGpuSampledTextureEXT envMapTexture;  ///< REMED-GFX-152: resolved once, at queue time
-            ///@{ REMED-GFX-173: the base 2D texture's own GraphicsDevice.SamplerStates[0].
+            SdlGpuSampledTextureEXT texture;  ///< resolved once, at queue time
+            SdlGpuSampledTextureEXT envMapTexture;  ///< resolved once, at queue time
+            ///@{ the base 2D texture's own GraphicsDevice.SamplerStates[0].
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
-            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// Captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             int addressW = 1;
             ///@}
-            ///@{ REMED-GFX-173: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
+            ///@{ the reflection cube's own GraphicsDevice.SamplerStates[1], captured
             /// independently of slot 0 and by value -- exactly the shape DualTextureDrawCommand
             /// already uses for its second texture. Without these fields the cube's sampler could
             /// not survive to replay at all, whatever IssueEnvMapDraw bound.
@@ -2523,8 +2523,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
@@ -2534,16 +2534,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 72 * 16> boneUniforms{}; ///< 72 column-major mat4 values uploaded as a 288x1 RGBA32F vertex texture
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
             ShadowReceptionEXT shadow;  ///< SMG-0032
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
+            SdlGpuSampledTextureEXT texture;  ///< resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
-            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// Captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
             int maxMipLevel = 0;
@@ -2576,8 +2576,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             /** @brief STREETS-0001: instances to draw; 1 for an ordinary draw. */
             Uint32 instanceCount = 1;
@@ -2591,7 +2591,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// plans/plan_gltf.md GLTF-462/GLTF-463: the record carries a packed COLOR_0 (stride 60 or 80).
             bool colored = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2606,7 +2606,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
-            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// Captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
             int maxMipLevel = 0;
@@ -2659,8 +2659,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
-            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
-            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
+            Uint32 firstIndex = 0;    ///< public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             Uint32 vertexStride = 0;
             Uint32 instanceCount = 1;
@@ -2981,7 +2981,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Returns the physical drawable rectangle used for logical presentation. */
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         /**
-         * @brief Reads a region of the backbuffer into a tightly packed RGBA8 buffer (REMED-GFX-165).
+         * @brief Reads a region of the backbuffer into a tightly packed RGBA8 buffer.
          *
          * @param x       Left edge of the region, in backbuffer pixels.
          * @param y       Top edge of the region, in backbuffer pixels.
@@ -3196,10 +3196,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Real `RasterizerState` mapping (`SDLGPU-20`) -- `cullMode`/`fillMode` are baked
          * into every 3D/sprite pipeline's `SDL_GPURasterizerState`; `scissorTestEnable` is captured
-         * per draw and applied via `SDL_SetGPUScissor` (`REMED-GFX-068`, see `SetScissorRect()`).
+         * per draw and applied via `SDL_SetGPUScissor` (see `SetScissorRect()`).
          * `depthBias`/`slopeScaleDepthBias` are captured per queued draw and baked into
          * `SDL_GPURasterizerState` because SDL 3.5 exposes no dynamic depth-bias command
-         * (REMED-GFX-051). Zero/signed-zero and non-polygon topologies normalize to disabled
+         *. Zero/signed-zero and non-polygon topologies normalize to disabled
          * native bias; triangle pipelines key the explicit enable bit and both factor values.
          */
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -3207,11 +3207,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Stores `GraphicsDevice.BlendFactor` (the constant blend color used by the
          * `Blend::BlendFactor`/`Blend::InverseBlendFactor` modes), independent of a full
          * `BlendState` re-application -- matches `IGraphicsRenderer::SetBlendFactor`'s standalone
-         * contract (`REMED-GFX-069`). The r/g/b/a are already normalized to `[0,1]` linear factors
+         * contract. The r/g/b/a are already normalized to `[0,1]` linear factors
          * by `GraphicsDevice::setBlendFactorProperty`. Store-only: captured PER DRAW into each
          * `QueuedDrawRef` at `Queue*Draw()`/`QueueSprite()` time (`PushDrawOrder`) and applied via
          * `SDL_SetGPUBlendConstants` per draw in `RenderQueuedDraws` (`ApplyBlendFactorForRef`).
-         * Per-draw (like the viewport `REMED-GFX-064` and scissor `REMED-GFX-068`) because this
+         * Per-draw (like the viewport and the scissor) because this
          * deferred renderer replays draws at Present, so a live-member read there would give every
          * queued draw the last BlendFactor set that frame -- the same deferred-model reasoning as
          * viewport/scissor, and the reason a per-pass read would be wrong. */
@@ -3229,15 +3229,15 @@ namespace CNA::Internal::Renderers::SdlGpu
          * (`ApplyScissorForRef`), gated on `ApplyRasterizerState`'s own `scissorTestEnable` flag (a
          * disabled scissor test uses the full render-target extents instead of this rect, matching
          * "no clipping"). Per-draw (not per-pass) for the same deferred-model reason as the viewport
-         * (`REMED-GFX-068`, see `SetViewport()`): `SetRenderTarget` resets `ScissorRectangle` on
+         * (see `SetViewport()`): `SetRenderTarget` resets `ScissorRectangle` on
          * bind/unbind, so a per-pass read of the live scissor at Present would be the post-unbind
          * full-backbuffer rect, not the sub-rect an RT draw was issued under. */
         void SetScissorRect(int x, int y, int w, int h) override;
         /**
-         * @brief Real `GraphicsDevice.Viewport` mapping (`REMED-GFX-064`) -- stores the sub-region
+         * @brief Real `GraphicsDevice.Viewport` mapping -- stores the sub-region
          * viewport rect + depth range; captured PER DRAW into each `QueuedDrawRef` at
          * `Queue*Draw()`/`QueueSprite()` time and applied via `SDL_SetGPUViewport` per draw in
-         * `RenderQueuedDraws`. Per-draw (like the scissor, `REMED-GFX-068`) because this deferred
+         * `RenderQueuedDraws`. Per-draw (like the scissor) because this deferred
          * renderer replays draws at Present and `SetRenderTarget` resets the frame-global viewport
          * on bind/unbind, so a per-pass read of the live viewport would be wrong -- the same
          * deferred-model reasoning the retired Vulkan renderer used (GFX-062). An unset or
@@ -3251,7 +3251,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * already had its own separate path before this. Stores into `samplerSlots_[slot]`, read
          * directly into each `DrawCommand`'s own `textureFilter`/`addressU`/`addressV` fields at
          * the next `Queue*Draw()` call (slot 0 for every single-texture family; slots 0 and 1
-         * independently for `DualTextureEffect`'s two texture units). `REMED-GFX-170`: since that
+         * independently for `DualTextureEffect`'s two texture units). Since that
          * task, `maxAnisotropy` is captured into the command alongside the filter and genuinely
          * reaches `SDL_GPUSamplerCreateInfo::max_anisotropy` (only `TextureFilter::Anisotropic`
          * enables it), and it participates in the sampler cache key.
@@ -3460,7 +3460,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] bool IsDebugModeEnabledEXT() const { return debugModeEnabled_; }
         /** @brief Number of cached stock SpriteBatch pipelines. Test-only compatibility/cache
-         * cardinality introspection for REMED-GFX-097; target object and cube-face identity must
+         * cardinality introspection for the depth-attachment compatibility tests; target object and cube-face identity must
          * not increase this count. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t GetSpritePipelineCacheSizeEXT() const
         {
@@ -3476,7 +3476,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return samplerCache_.size();
         }
         /** @brief Number of cached stock colored-3D pipelines. Test-only pipeline-static
-         * rasterizer-state introspection for REMED-GFX-051. CNAEXT. */
+         * rasterizer-state introspection for the depth-bias tests. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t GetColoredPipelineCacheSizeEXT() const
         {
             return coloredPipelines_.size();
@@ -3597,9 +3597,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // sprite2d pipeline: shader modules, compatibility-keyed pipelines, and the renderer-wide
         // sampler cache, keyed by the COMPLETE description (filter, addressU, addressV,
-        // maxAnisotropy) since REMED-GFX-170.
+        // maxAnisotropy).
         // DepthStencilState.None disables tests/writes but does NOT erase pipeline target
-        // metadata: REMED-GFX-097 therefore passes the active pass's actual depth format (or
+        // metadata: the renderer therefore passes the active pass's actual depth format (or
         // INVALID for no attachment) into creation and cache selection.
         static void CreateSpriteResources(ConstructionResources& resources);
         void DestroySpriteResources();
@@ -3612,7 +3612,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Resolves one complete public `SamplerState` to a cached native `SDL_GPUSampler*`.
          *
-         * REMED-GFX-170: this is the renderer's ONE sampler translation, used by SpriteBatch and by
+         * This is the renderer's ONE sampler translation, used by SpriteBatch and by
          * every 3D family alike. It used to resolve `textureFilter == 0 ? LINEAR : NEAREST` and to
          * key an 18-entry array on `filter == 0 ? 0 : 1`, so both the descriptor and the cache key
          * collapsed all eight non-`Linear` ordinals onto Point.
@@ -4142,7 +4142,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // loops used to skip it -- only the ORDER changed, not the readiness rules. boundPipeline
         // is now tracked globally across every kind, not just within one family, so consecutive
         // same-pipeline draws of DIFFERENT kinds also skip a redundant rebind.
-        // REMED-GFX-145/143: @p segment restricts the replay to the ONE bind cycle this pass
+        // @p segment restricts the replay to the ONE bind cycle this pass
         // represents, and that now includes a backbuffer cycle. The old "replay every draw whose
         // DrawTarget is the swapchain, whichever cycle it was issued in" escape is gone with the
         // single trailing swapchain pass it existed for.
@@ -4158,7 +4158,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
 
-        // REMED-GFX-117: the single place the public indexed draw range becomes native
+        // The single place the public indexed draw range becomes native
         // SDL_DrawGPUIndexedPrimitives arguments. Every one of this renderer's eight indexed
         // pipeline families routes through it, so no family can silently fall back to a
         // default-zero offset again. Validates the requested range against the bound buffers and
@@ -4203,24 +4203,24 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // Phase SDLGPU-8: renders ONE off-screen render-target segment's own pass (the draws and
         // sprites queued inside that one bind cycle, across every shader family) and regenerates
-        // its mip chain afterward if requested. REMED-GFX-145: called once per SEGMENT, not once
+        // its mip chain afterward if requested. Called once per SEGMENT, not once
         // per distinct target -- all before the swapchain pass itself.
-        // REMED-GFX-156: @p colorLoadedLater says a later segment of this frame loads this
+        // @p colorLoadedLater says a later segment of this frame loads this
         // resource's colour again, which upgrades a multisampled RESOLVE to RESOLVE_AND_STORE.
         void RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
                             bool colorLoadedLater);
         // Phase SDLGPU-8 (SDLGPU-36): renders ONE RenderTargetCube-face segment's own pass.
-        // REMED-GFX-145: once per bind cycle of that face, not once per distinct (cube, face).
+        // Once per bind cycle of that face, not once per distinct (cube, face).
         void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
                                     bool colorLoadedLater);
-        // REMED-GFX-145: opens a new logical render-pass segment for whatever was just bound, and
+        // Opens a new logical render-pass segment for whatever was just bound, and
         // makes it the segment every subsequent Queue*Draw()/QueueSprite()/Clear() belongs to.
         // Called from EVERY bind site, including a rebind of the target that is already current --
         // that is precisely the case the old target-identity grouping could not represent.
         void BeginRenderTargetSegment(const std::shared_ptr<SdlGpuRenderTarget2DState>& rt);
         void BeginCubeFaceSegment(const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face);
         /**
-         * @brief REMED-GFX-143: opens a BACKBUFFER bind cycle.
+         * @brief Opens a BACKBUFFER bind cycle.
          *
          * Called wherever the backbuffer becomes the active target -- at construction, on every
          * unbind of a render target or cube face, and when a mid-frame flush rebuilds the segment
@@ -4241,19 +4241,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         void RenderToSwapchain(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
                                SDL_GPUTexture* swapchainTexture, bool isFirstBackbuffer);
         /**
-         * @brief REMED-GFX-165: (re)creates the readback proxy at @p width x @p height in the current
+         * @brief (re)creates the readback proxy at @p width x @p height in the current
          *        swapchain format when it does not already match, returning true when a usable proxy
          *        exists afterwards.
          */
         bool EnsureBackbufferProxy(Uint32 width, Uint32 height);
-        /// REMED-GFX-165: copies the readback proxy into the acquired swapchain texture for present.
+        /// Copies the readback proxy into the acquired swapchain texture for present.
         void BlitBackbufferProxyToSwapchain(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchainTexture);
         /// Closes the open segment; subsequent work belongs to the swapchain until the next bind.
         void EndRenderTargetSegment();
         /// The open segment, or null when the swapchain is current.
         [[nodiscard]] PassSegment* CurrentSegment();
         /**
-         * @brief REMED-GFX-156: the segment one public Clear() must be recorded into.
+         * @brief The segment one public Clear() must be recorded into.
          *
          * SDL_gpu delivers a clear only through SDL_GPUColorTargetInfo.load_op / the depth-stencil
          * target's load ops, and a render pass has exactly one set of those, so a Clear() recorded
@@ -4269,28 +4269,28 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         [[nodiscard]] PassSegment* SegmentForOrderedClear();
         /**
-         * @brief REMED-GFX-156: does a LATER segment of this frame render into @p segment's colour
+         * @brief Does a LATER segment of this frame render into @p segment's colour
          *        resource again?
          *
          * Only interesting while that resource is multisampled: SDL_GPU_STOREOP_RESOLVE explicitly
          * leaves the multisample contents undefined, so a following segment that LOADs them (a
          * depth-only or stencil-only ordered Clear, which must preserve colour) would read garbage.
          * The answer selects SDL_GPU_STOREOP_RESOLVE_AND_STORE for exactly those segments, which is
-         * the same correction REMED-GFX-141 already applied to preserving cube faces.
+         * the same correction already applied to preserving cube faces.
          *
          * @param index Position of the segment in @ref passSegments_.
          * @return True when some later segment names the same 2D target or the same cube face.
          */
         [[nodiscard]] bool SegmentColorLoadedLater(std::size_t index) const;
         /**
-         * @brief REMED-GFX-156: names @p segment's destination for the native order trace.
+         * @brief Names @p segment's destination for the native order trace.
          *
          * @param segment The segment to name.
          * @return "backbuffer", "rendertarget2d" or "rendertargetcube-faceN", owned by the renderer.
          */
         [[nodiscard]] static const char* SegmentDestinationName(const PassSegment& segment);
         /**
-         * @brief REMED-GFX-156: writes one native order-trace line for a recorded pass.
+         * @brief Writes one native order-trace line for a recorded pass.
          *
          * The trace exists because a final image cannot tell an ordered clear apart from a load-op
          * clear that happened to land on the same pixels: it reports the public command stream, the
@@ -4325,7 +4325,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // ApplyDepthStencilState calls never retroactively change an already-queued draw's baked
         // pipeline (mirrors every other per-command uniform snapshot already established here).
         [[nodiscard]] RenderStateSnapshot CaptureRenderState() const;
-        // REMED-GFX-068: appends a QueuedDrawRef, snapshotting the current GraphicsDevice.Viewport
+        // Appends a QueuedDrawRef, snapshotting the current GraphicsDevice.Viewport
         // (viewportSet_/viewportX_/...) AND the current RasterizerState.ScissorTestEnable +
         // GraphicsDevice.ScissorRectangle (scissorEnabled_/scissorX_/...) into it, so each queued
         // draw carries the viewport and scissor it was issued under (per-draw capture, needed for
@@ -4339,18 +4339,18 @@ namespace CNA::Internal::Renderers::SdlGpu
          *         for a multisampled destination or a degenerate viewport.
          */
         [[nodiscard]] Matrix ApplyXnaPixelCenter(const Matrix& wvp) const;
-        // REMED-GFX-064: applies SDL_SetGPUViewport for one queued draw, using the ref's captured
+        // Applies SDL_SetGPUViewport for one queued draw, using the ref's captured
         // viewport if set, otherwise the pass's full render-target extents (byte-identical to the
         // pre-fix implicit full-target viewport). Called per draw from RenderQueuedDraws.
         void ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
                                  int targetWidth, int targetHeight) const;
-        // REMED-GFX-068: applies SDL_SetGPUScissor for one queued draw, using the ref's captured
+        // Applies SDL_SetGPUScissor for one queued draw, using the ref's captured
         // scissor rect (clamped to the target's physical extent) if the scissor test was enabled,
         // otherwise the pass's full render-target extents (no clip). Called per draw from
         // RenderQueuedDraws, mirroring ApplyViewportForRef.
         void ApplyScissorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
                                 int targetWidth, int targetHeight) const;
-        // REMED-GFX-069: applies SDL_SetGPUBlendConstants for one queued draw, using the ref's
+        // Applies SDL_SetGPUBlendConstants for one queued draw, using the ref's
         // captured GraphicsDevice.BlendFactor. Applied unconditionally (like the viewport/scissor):
         // it is inert for pipelines that don't reference CONSTANT_COLOR/ONE_MINUS_CONSTANT_COLOR, so
         // no gating is needed. No target extents needed (a color factor, not a rect). Called per
@@ -4385,7 +4385,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         int backbufferMultiSampleCount_ = 0;
         SDL_GPUTextureFormat backbufferFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
 
-        // REMED-GFX-165: the swapchain texture is write-only by permanent SDL contract
+        // The swapchain texture is write-only by permanent SDL contract
         // (SDL_WaitAndAcquireGPUSwapchainTexture cannot be a sampler/copy/blit SOURCE), so the
         // backbuffer cannot be read back directly. Once GetBackBufferData is first called, the
         // backbuffer pass renders into this self-owned SAMPLER|COLOR_TARGET proxy instead of straight
@@ -4417,7 +4417,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUSampler* sampler = nullptr;
             std::uint64_t lastUse = 0;
         };
-        /// REMED-GFX-170 / FX-091: complete immutable-sampler identity. SDLGPU-126 adds bounded
+        /// FX-091: complete immutable-sampler identity. SDLGPU-126 adds bounded
         /// cross-frame LRU retention: arbitrary ordinary SamplerState values must not retain one
         /// native object each until GraphicsDevice destruction.
         std::unordered_map<SamplerCacheKeyEXT, CachedSamplerEXT, SamplerCacheKeyHashEXT> samplerCache_;
@@ -4575,7 +4575,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 
-        // Phase SDLGPU-8: nullptr = the swapchain is the active target. REMED-GFX-145: which pass a
+        // Phase SDLGPU-8: nullptr = the swapchain is the active target. Which pass a
         // draw belongs to is decided by its SEGMENT (passSegments_ below), not by this pointer --
         // this only answers "what is bound right now" for CurrentDrawTarget()/Clear() routing.
         SdlGpuRenderTargetRenderer* currentRenderTarget_ = nullptr;
@@ -4618,14 +4618,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuRenderTargetCubeRenderer* currentRenderTargetCube_ = nullptr;
         int currentActiveCubeFace_ = -1;
 
-        // REMED-GFX-145: every public render-target bind cycle of this frame, in the exact order
+        // Every public render-target bind cycle of this frame, in the exact order
         // the cycles were opened. Holds the owning shared_ptr, so a target's GPU state stays alive
         // for its own pending Clear()/draws even if the wrapper is destroyed before Present() (see
         // SdlGpuRenderTarget2DState's own doc comment). Cleared, like every other queue, right
         // after a successful submit.
         std::vector<PassSegment> passSegments_;
         /**
-         * The open segment's id. REMED-GFX-143: never `kSwapchainSegment` in ordinary operation --
+         * The open segment's id. Never `kSwapchainSegment` in ordinary operation --
          * the backbuffer owns real segments too, so a draw issued with no render target bound
          * carries the id of the backbuffer cycle it was issued in and is replayed in exactly that
          * cycle's pass. The sentinel survives only as the "no segment has ever been opened" value.
@@ -4634,7 +4634,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// Monotonically increasing; never reused within a frame, never a cache key.
         std::uint64_t nextSegmentId_ = 1;
         /**
-         * @brief REMED-GFX-156: native render passes recorded so far in the frame being flushed.
+         * @brief Native render passes recorded so far in the frame being flushed.
          *
          * Reset at the start of each flush and incremented by every SDL_BeginGPURenderPass this
          * renderer issues, so the order trace can state which native pass a logical segment became
@@ -4670,7 +4670,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // a live pipeline-state-object mechanism. Captured into a
         // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
         BlendKeyParams blendParams_;
-        std::array<int, 4> colorWriteMasks_{{15, 15, 15, 15}};  ///< REMED-GFX-077/-098: current per-MRT-slot masks
+        std::array<int, 4> colorWriteMasks_{{15, 15, 15, 15}};  ///< current per-MRT-slot masks
         /**
          * @brief Slot-aligned formats of the native render pass currently being recorded.
          *
@@ -4688,7 +4688,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool fillModeWireframe_ = false;
         StencilKeyParams stencilParams_;  ///< readMask/writeMask live here now, see StencilKeyParams's own doc comment
         int referenceStencil_ = 0;  ///< real render-pass-time state (SDL_SetGPUStencilReference), not baked into any pipeline
-        // REMED-GFX-069: current GraphicsDevice.BlendFactor (normalized [0,1] linear factors), set by
+        // Current GraphicsDevice.BlendFactor (normalized [0,1] linear factors), set by
         // SetBlendFactor() and snapshotted into each QueuedDrawRef at Queue*Draw()/QueueSprite() time
         // (PushDrawOrder), then applied via SDL_SetGPUBlendConstants per draw (ApplyBlendFactorForRef).
         // Default 1,1,1,1 = XNA's GraphicsDevice.BlendFactor default (Color::White); this differs from
@@ -4703,7 +4703,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         int scissorY_ = 0;
         int scissorW_ = 0;
         int scissorH_ = 0;
-        // REMED-GFX-064: current GraphicsDevice.Viewport, set by SetViewport() and snapshotted into
+        // Current GraphicsDevice.Viewport, set by SetViewport() and snapshotted into
         // each QueuedDrawRef at Queue*Draw()/QueueSprite() time (PushDrawOrder). viewportSet_ stays
         // false until the game/GraphicsDevice pushes a viewport, so pre-viewport draws fall back to
         // the pass's full render-target extents (SDL's own default), byte-identical to pre-fix.
@@ -4714,7 +4714,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         int viewportH_ = 0;
         float viewportMinDepth_ = 0.0f;
         float viewportMaxDepth_ = 1.0f;
-        // REMED-GFX-051: captured by value into RenderStateSnapshot for deferred replay.
+        // Captured by value into RenderStateSnapshot for deferred replay.
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
 
@@ -4723,7 +4723,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // each DrawCommand's own textureFilter/addressU/addressV fields at Queue*Draw() time.
         std::array<SamplerSlotState, 16> samplerSlots_;
 
-        ///@{ REMED-GFX-173: monotonic counters for CNA_SDLGPU_ENVMAP_TRACE only -- never read by
+        ///@{ monotonic counters for CNA_SDLGPU_ENVMAP_TRACE only -- never read by
         /// any rendering decision. Per-device rather than process-global so two devices in one
         /// process each number their own draws.
         std::uint32_t envMapTraceQueueIndex_ = 0;

@@ -131,7 +131,7 @@ TEST_F(ContentReaderExternalReferenceTest, PathEscapingContentRootThrowsContentL
     EXPECT_THROW(reader.ReadExternalReference<Texture2D>(), ContentLoadException);
 }
 
-// REMED-CONTENT-002: this method's own doc comment already promised an absolute reference is
+// This method's own doc comment already promised an absolute reference is
 // "rejected outright," but only the "..''-escaping case was actually enforced -- an absolute
 // reference passed straight through unchanged, since fs::path::operator/ silently discards the
 // base directory for an absolute right-hand operand. Neither BuildAssetPath() nor anything else

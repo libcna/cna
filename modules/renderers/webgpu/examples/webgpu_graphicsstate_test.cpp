@@ -8,7 +8,7 @@
 // Check A1/A2 -- CullMode.CullClockwiseFace removes the CLOCKWISE-as-displayed quad and KEEPS the
 //   counter-clockwise one.
 // Check B1/B2 -- CullMode.CullCounterClockwiseFace is the exact complement of that.
-//   (REMED-GFX-160: these four together prove real, direction-correct cull-mode wiring. They used
+// (these four together prove real, direction-correct cull-mode wiring. They used
 //   to be two checks over ONE quad whose winding was labelled by a hand derivation that came out
 //   backwards, which is how this renderer's cull mapping ended up inverted -- see the comment above
 //   DrawWindingQuad(). Both windings are now drawn so no single label can invert it again.)
@@ -100,7 +100,7 @@ namespace
     // A full-screen quad (clip-space -1..1), built from 2 triangles that share the SAME winding
     // (both share the top-left/bottom-right diagonal).
     //
-    // REMED-GFX-160 -- THE WINDING OF THIS QUAD, AND THE DERIVATION THAT USED TO BE HERE.
+    // THE WINDING OF THIS QUAD, AND THE DERIVATION THAT USED TO BE HERE.
     // The vertex order below is TL -> BL -> BR, whose NDC (Y-up) signed area is +4, i.e. CCW in
     // NDC. The old comment then argued that raster space mirrors NDC across the X axis, so the
     // triangle is "CLOCKWISE in raster space", and concluded it was "a real, ordinary XNA
@@ -172,7 +172,7 @@ protected:
         dev.setBlendStateProperty(BlendState::Opaque);
 
         // ---- Checks A1/A2: CullClockwiseFace removes the CLOCKWISE-as-displayed quad and keeps
-        //      the counter-clockwise one. REMED-GFX-160: each enum names the face it CULLS. ----
+        //      The counter-clockwise one. the front-face winding contract: each enum names the face it CULLS. ----
         {
             RasterizerState rs;
             rs.setCullModeProperty(CullMode::CullClockwiseFace);
@@ -267,7 +267,7 @@ protected:
         }
 
         // ---- Check H: TWO ScissorRectangles in one bind cycle, read once at the end. ----
-        // REMED-GFX-146 false-positive audit. Check E above uses exactly ONE rectangle and reads
+        // False-positive audit. Check E above uses exactly ONE rectangle and reads
         // it back BEFORE restoring, so the live rectangle at flush time is still the one the draw
         // was issued under -- it passes whether the renderer captures the rectangle per draw or
         // resolves it when it records the pass, and it therefore could not see this renderer's

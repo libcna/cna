@@ -244,7 +244,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             // FogParams.w carries WeightsPerVertex for the skinned variant (PbrSkinned3D.hlsl's
             // own register layout, matching SkinnedVertexColor3D.hlsl's identical packing choice).
-            // REMED-GFX-010: fog moved to its own FogVector register (the FNA view-space fog vector),
+            // Fog moved to its own FogVector register (the FNA view-space fog vector),
             // dotted with the POST-skin position in the VS; FogParams.xyz are now unused.
             const float fogParams[4] = {
                 0.0f, 0.0f, 0.0f, static_cast<float>(params.weightsPerVertex)};
@@ -258,7 +258,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
             UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "NormalMatrix", worldInverseTranspose);
-            // REMED-GFX-010: Pbr3D (non-skinned) has no WeightsPerVertex, so FogParams carries the
+            // Pbr3D (non-skinned) has no WeightsPerVertex, so FogParams carries the
             // FNA view-space fog vector directly (dotted with the object position in the VS).
             const float fogParams[4] = {
                 params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3]};
@@ -333,7 +333,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
+            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
             // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
             device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
@@ -342,7 +342,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            // REMED-GFX-060: honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
+            // Honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
             device_->DrawPrimitive(ToD3D9Topology(primitive), static_cast<UINT>(params.vertexStart),
                                    static_cast<UINT>(primitiveCount));
         }

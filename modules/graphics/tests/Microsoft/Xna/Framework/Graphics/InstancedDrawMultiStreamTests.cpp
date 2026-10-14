@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-202: the public multi-stream contract on the INSTANCED draw route.
+// The public multi-stream contract on the INSTANCED draw route.
 //
 // XNA 4.0 and FNA have exactly ONE vertex-binding model. `GraphicsDevice.DrawPrimitives`,
 // `DrawIndexedPrimitives` and `DrawInstancedPrimitives` all call the same
@@ -24,14 +24,14 @@
 //       per-instance streams included
 //
 // Fixture geometry -- a FOUR-axis oracle, one axis per bound stream. The target is divided into
-// `kSlotCount` equal-width columns and `kBandCount` equal-height bands, as REMED-GFX-200/201 do:
+// `kSlotCount` equal-width columns and `kBandCount` equal-height bands, as the ordinary-route VertexOffset fix do:
 //
 //   * the COLUMN axis says which record the PER-INSTANCE stream at slot 2 supplied
 //   * the BAND   axis says which record the PER-INSTANCE stream at slot 3 supplied
 //   * the base cell each instance is measured from says which records slot 0 (POSITION) supplied
 //   * the COLOUR says which records slot 1 (COLOR) supplied
 //
-// The two per-vertex streams are the REMED-GFX-201 arrangement: slot 0 is POSITION ONLY (12 bytes)
+// The two per-vertex streams are the ordinary multi-stream fix arrangement: slot 0 is POSITION ONLY (12 bytes)
 // and slot 1 is COLOUR ONLY (4 bytes), so their concatenation is the packed 16-byte
 // position+colour vertex every renderer already recognizes but neither stream alone is a layout any
 // renderer has. The two per-instance streams split the 4x4 world matrix the stock instanced shader
@@ -148,7 +148,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers whose stock instanced path actually rasterizes and whose RenderTarget2D::GetData
-// reads the result back -- REMED-GFX-118's own permanent suite set. A renderer outside it has no
+// reads the result back -- the permanent suite set. A renderer outside it has no
 // instanced draw implementation at all (`IGraphicsRenderer::DrawInstancedPrimitivesEx`'s default
 // throws), which remains a capability boundary for any renderer outside this set. SOFTWARE-129
 // adds Software only after its independent CPU route passes the complete shared oracle.
@@ -160,8 +160,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
-// InstanceFrequency -- EasyGL (REMED-GFX-122), WebGPU (REMED-GFX-211/213) and Software
-// (SOFTWARE-129), and the since-retired D3D11/D3D12 (REMED-GFX-123), Vulkan and bgfx.
+// InstanceFrequency -- EasyGL, WebGPU and Software
+// (SOFTWARE-129), and the since-retired D3D11/D3D12, Vulkan and bgfx.
 // InstancedDrawRangeTests.cpp uses this set for the same reason.
 //
 // This is now every renderer that rasterizes an instanced draw at all EXCEPT D3D9, so the triage
@@ -809,7 +809,7 @@ namespace
     };
 }
 
-/// REMED-GFX-202: a DECLARED boundary, not a silent skip. A renderer that has not yet been taught to
+/// A DECLARED boundary, not a silent skip. A renderer that has not yet been taught to
 /// re-slot its stride-derived input elements across several bindings reports the capability as
 /// false and is rejected deterministically by GraphicsDevice;
 /// UnsupportedRendererRejectsMixedStreamInstancingDeterministically below asserts exactly that on
@@ -1224,7 +1224,7 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepThe
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 6 and the REMED-GFX-201/SOFTWARE-320 semantic-composition rule on the instanced
+// Coverage item 6 and the SOFTWARE-320 semantic-composition rule on the instanced
 // route. Slots 1 and 3 repeat an earlier per-vertex stream's complete (usage, usageIndex) set, so
 // FNA remaps them to the next free indices. BasicEffect does not consume those remapped inputs, but
 // the later instance streams must still keep their own public slots and rates.
@@ -1372,15 +1372,15 @@ TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFr
 // EVERY instancing renderer rather than a restatement of open findings:
 //
 //   * the per-instance VertexOffset is 0 here. Vulkan, bgfx and WebGPU ignored a nonzero one --
-//     REMED-GFX-122/123 corrected only EasyGL and D3D11/D3D12 -- which was recorded as
-//     REMED-GFX-211 and is asserted separately below on the renderers that do honour it.
+// Corrected only EasyGL and D3D11/D3D12 -- which was recorded as
+// And is asserted separately below on the renderers that do honour it.
 //   * the colour axis is not asserted here -- the since-retired D3D11/D3D12 were the last
 //     renderers identified as colouring the instanced route from DiffuseColor, and neither could
-//     be measured (REMED-GFX-212; see
+//     be measured (the instanced VertexColorEnabled fix; see
 //     ExpectExactlyTheseCellsIgnoringColour, and InstancedVertexColorTests.cpp for the direct
 //     per-renderer measurement).
 //   * the instance frequency is 1. bgfx implements no per-instance divisor at all
-//     (REMED-GFX-213).
+//.
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamIsUnchanged)
 {
@@ -1560,11 +1560,11 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowt
 }
 
 // ---------------------------------------------------------------------------
-// The same classic shape WITH a nonzero per-instance VertexOffset, on the renderers REMED-GFX-122,
-// REMED-GFX-123 and REMED-GFX-211 corrected. A prefix decoy record displacing five columns and
+// The same classic shape WITH a nonzero per-instance VertexOffset, on the renderers the EasyGL instanced offset fix,
+// Corrected. A prefix decoy record displacing five columns and
 // three bands sits in front of the live records, so a dropped instance offset lights column 5
 // band 3 and loses the last live record -- which is exactly what Vulkan, bgfx and WebGPU each did
-// until REMED-GFX-211 corrected them (A/B-proven byte-identical on the pre-REMED-GFX-202
+// until the instanced VertexOffset fix corrected them (A/B-proven byte-identical on the pre
 // production tree, and measured at pixel level by the triage group below).
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOffset)
@@ -1639,7 +1639,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOff
 }
 
 // ===========================================================================
-// The CHECKPOINT TRIAGE group (REMED-GFX-211, REMED-GFX-213).
+// The CHECKPOINT TRIAGE group.
 //
 // The legs above are gated to the renderers already known to honour the contract they assert. These
 // four run on EVERY renderer that rasterizes an instanced draw at all -- the three that were never
@@ -1828,7 +1828,7 @@ namespace
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-211 leg A: the PER-INSTANCE stream's own VertexOffset, on the classic 1+1 shape, with
+// Leg A: the PER-INSTANCE stream's own VertexOffset, on the classic 1+1 shape, with
 // the per-vertex offset held at zero so nothing else can move the geometry. One decoy record sits
 // in front of the four live ones, so dropping the offset lights the decoy's own cell (5, 3) and
 // loses the last live record's (3, 1).
@@ -1905,7 +1905,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-211 leg B: the PER-VERTEX side of the same classic route, isolated. The per-instance
+// Leg B: the PER-VERTEX side of the same classic route, isolated. The per-instance
 // offset is zero and the geometry stream carries the decoy, so this leg answers -- independently of
 // leg A -- whether the geometry binding's own offset survives. The ticket asserts "the per-vertex
 // side is equally affected"; nothing in the record measured it.
@@ -1983,7 +1983,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-211 leg C: BOTH offsets nonzero and DIFFERENT (3 vertices, 1 instance record), so the
+// Leg C: BOTH offsets nonzero and DIFFERENT (3 vertices, 1 instance record), so the
 // three failures legs A and B cannot see are separated too -- one binding's offset applied to both
 // streams, the instance offset applied twice, and both offsets lost together. Two tail records past
 // the live four give the double-application reading somewhere real to land.
@@ -2073,7 +2073,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-213: the per-instance DIVISOR on the classic 1+1 shape. Six instances at
+// The per-instance DIVISOR on the classic 1+1 shape. Six instances at
 // InstanceFrequency 2 must consume records 0,0,1,1,2,2; a renderer that has no divisor consumes
 // 0,1,2,3,4,5 and one that collapses the stream consumes 0 six times, and the three light three
 // visibly different cell sets. The instance buffer holds SIX records -- twice the three a correct
@@ -2181,7 +2181,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-212: what `BasicEffect.VertexColorEnabled` means on the instanced route, measured
+// What `BasicEffect.VertexColorEnabled` means on the instanced route, measured
 // against the ONE thing that needs no reference at all -- the same renderer's own ordinary route,
 // same effect state, same buffer, same triangle, same cell.
 //
@@ -2194,7 +2194,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
 // disagrees with the reference AND with itself.
 //
 // One instance, an identity per-instance record and VertexOffset zero everywhere: nothing this leg
-// measures can be confused with REMED-GFX-211's offset defect.
+// measures can be confused with the offset defect.
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColorEnabled)
 {
@@ -2269,7 +2269,7 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
 
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU))
     {
-        // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
+        // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by the instanced VertexColorEnabled fix, which
         // is why the measured-defect arm this leg used to carry for those two is gone. It carried one
         // for as long as either renderer was known to substitute DiffuseColor for the bound COLOR0
         // stream on this route, asserting that pixel measurement until the correction landed and made
@@ -2555,7 +2555,7 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
     else
     {
         // A THIRD, measured outcome, not a silent skip: this renderer claims MultiStreamVertexInput
-        // (REMED-GFX-201 taught it ordinary multi-stream input) but overrides no
+        // (the ordinary multi-stream fix taught it ordinary multi-stream input) but overrides no
         // DrawInstancedPrimitivesEx at all, so every instanced draw -- one stream or four -- reaches
         // IGraphicsRenderer's own default. The mixed-stream array must reach that SAME declared
         // boundary and not some other failure; this arm fails the moment such a renderer gains an
@@ -2634,7 +2634,7 @@ TEST_F(InstancedDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnOffsetAndFreq
 }
 
 // ===========================================================================
-// REMED-GFX-211 / REMED-GFX-213 permanent matrices, on the CLASSIC 1+1 shape.
+// The instanced VertexOffset fix permanent matrices, on the CLASSIC 1+1 shape.
 //
 // The triage group above answers "does this renderer read the two offsets and the divisor at all",
 // which is the question that classified the tickets. These legs answer the questions a correction
@@ -2646,7 +2646,7 @@ TEST_F(InstancedDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnOffsetAndFreq
 // The shape stays the classic one-per-vertex + one-per-instance pair throughout, so nothing here
 // depends on multi-stream input and every leg runs on every renderer that has been taught the
 // contract. Colour is deliberately not asserted: CNA's stock instanced shader takes DiffuseColor
-// on several renderers (REMED-GFX-212, open), and WHICH RECORDS each stream supplied -- which is
+// on several renderers (open), and WHICH RECORDS each stream supplied -- which is
 // the whole question here -- is already carried by the cell positions.
 // ===========================================================================
 namespace
@@ -2830,7 +2830,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldUnderStartIndexOnBoth
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-213 beyond the frequency the triage happened to measure. Frequency 3 must group in
+// Beyond the frequency the triage happened to measure. Frequency 3 must group in
 // threes, a frequency LARGER than the instance count must collapse every instance onto the first
 // record it owns, and both must respect the instance binding's own VertexOffset -- which together
 // rule out a divisor implemented as a special case for two.
@@ -3033,8 +3033,8 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsReturnToZeroAndBackAroundOrdi
     device.SetIndexBuffer(&indexBuffer);
 
     /// One frame: an optional ordinary indexed draw of the mesh's own decoy group, then one
-    /// instanced draw under the requested offsets. The ordinary draw is the route REMED-GFX-200
-    /// and REMED-GFX-201 own -- running it between the instanced ones proves neither route leaves
+    /// instanced draw under the requested offsets. The ordinary draw is the route the ordinary-route VertexOffset fix
+    /// and the ordinary multi-stream fix own -- running it between the instanced ones proves neither route leaves
     /// state the other reads.
     const auto renderFrame = [&](int perVertexOffset, int instanceOffset, bool withOrdinaryDraw) {
         RenderTarget2D target = MakeTarget();

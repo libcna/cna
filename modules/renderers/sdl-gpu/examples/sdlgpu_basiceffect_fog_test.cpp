@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-009 (SdlGpu slice): stock-effect fog, entirely unimplemented on this renderer until this
+// (SdlGpu slice): stock-effect fog, entirely unimplemented on this renderer until this
 // task (grep of every .glsl + SdlGpuRenderer.cpp for any fog identifier returned zero).
 //
 // This file covers the four BasicEffect shader families:
@@ -20,7 +20,7 @@
 // A fog-DISABLED control at Z=0.45 must stay pure blue (proves FogEnabled=false is a true no-op).
 //
 // Pre-fix (no fog on SdlGpu at all) every Z renders pure blue, so the half/full-fog checks FAIL and
-// the fog-disabled + no-fog checks coincidentally PASS. Post-fix all pass.
+// The fog-disabled + no-fog checks coincidentally PASS. Post-fix all pass.
 //
 // SdlGpu renders into a RenderTarget2D (SurfaceFormat::Color = RGBA8 UNORM, linear -- see
 // sdlgpu_environmentmapeffect_emissive_test.cpp / sdlgpu_envmap_test.cpp) whose GetData readback is

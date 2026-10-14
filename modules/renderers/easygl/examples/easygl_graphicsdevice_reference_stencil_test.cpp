@@ -28,7 +28,7 @@
 // IGraphicsRenderer::SetReferenceStencil (a defaulted no-op on the interface, so a renderer that
 // never implements it fails this test rather than failing to build), GraphicsDevice forwards to it,
 // and 26 renderers implement it. EasyGL was the one that did not, which is what this test was
-// still reporting -- REMED-GFX-236. A note that says "expect this to fail" outlives the reason and
+// still reporting. A note that says "expect this to fail" outlives the reason and
 // turns a real signal into background noise, so it is replaced rather than amended.
 //
 // Exit code 0 = PASS (correct override behavior), 1 = FAIL (confirms Task 872).
@@ -165,7 +165,7 @@ protected:
                         "       compare still used the state's own baked-in ReferenceStencil.\n");
         }
 
-        // REMED-GFX-236 leg B: the same override with TwoSidedStencilMode on. GL binds the
+        // Leg B: the same override with TwoSidedStencilMode on. GL binds the
         // reference PER FACE (glStencilFuncSeparate), so reissuing only one face would leave the
         // other comparing against the state's own value. Both windings are drawn because one quad
         // reaches one face only -- verified by removing each face's reissue in turn: with only one

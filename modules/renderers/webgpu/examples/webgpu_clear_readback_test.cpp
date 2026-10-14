@@ -25,7 +25,7 @@
 //   EasyGL and SOFTWARE all honour the device BlendState and agree). An earlier version of this check
 //   used the default Begin() and expected partway, which asserted non-FNA behaviour; it passed only
 //   while WEBGPU-132 hardcoded a straight sprite blend, and correctly began failing once
-//   REMED-GFX-102 made WebGPU honour the BlendState. The exact partway value depends on linear-vs-sRGB
+// Made WebGPU honour the BlendState. The exact partway value depends on linear-vs-sRGB
 //   swapchain blending, so this asserts direction and magnitude, not an exact value.
 //
 // Checks H/I/J (WEBGPU-92's remaining scope) -- sampler address-mode (Wrap/Clamp/Mirror) pixel

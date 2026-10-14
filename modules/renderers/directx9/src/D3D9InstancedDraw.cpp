@@ -97,9 +97,9 @@ namespace CNA::Internal::Renderers::DirectX9
             return;
         }
 #endif
-        // REMED-GFX-202: one stream of each rate (REMED-GFX-208 tracks widening it).
+        // One stream of each rate (widening it to several streams per rate is not implemented).
         RejectUnsupportedStreamCombination(params, "The D3D9 renderer");
-        // REMED-GFX-DECL-GUARD: the geometry stream's declaration, same stride table.
+        // The geometry stream's declaration, same stride table.
         RequireFaithfulDeclarationEXT(vb, "instanced");
         const auto& d3dInstVb =
             static_cast<const D3D9VertexBufferRenderer&>(*instanceStream->buffer);
@@ -143,7 +143,7 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | static_cast<UINT>(instanceCount));
         device_->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1);
 
-        // REMED-GFX-060: honor DrawInstancedPrimitives baseVertex/startIndex (was hardcoded
+        // Honor DrawInstancedPrimitives baseVertex/startIndex (was hardcoded
         // BaseVertexIndex=0/StartIndex=0). These index the PER-VERTEX geometry stream (stream 0);
         // the per-instance stream 1's own offset stays 0 (SetStreamSource above) -- the two are
         // independent. NumVertices is stream 0's vertex-buffer remainder from baseVertex.

@@ -18,7 +18,7 @@
 // (this renderer has no oracle harness) -- the check is that dispatch genuinely selects a
 // different, real shader per the flag, matching the same discriminating-scene technique already
 // proven on other renderers, not that the numeric result matches another renderer's raw value:
-// REMED-GFX-131 made this renderer's readback directly comparable to EasyGL's: its render
+// Made this renderer's readback directly comparable to EasyGL's: its render
 // targets and backbuffer now use a non-sRGB format, matching SurfaceFormat::Color's plain UNORM
 // byte semantics, so the values asserted below are the SAME linear numbers EasyGL reads
 // for this identical scene rather than their gamma-encoded counterparts.
@@ -169,7 +169,7 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        // REMED-GFX-131: the expected values are now the raw linear ~127/~152 that EasyGL reads
+        // The expected values are now the raw linear ~127/~152 that EasyGL reads
         // for this identical scene. They used to be 187/203 -- the sRGB encode of exactly those
         // numbers -- because this renderer rendered into an *UnormSrgb attachment. Measured
         // post-fix as 127/152, so this renderer and EasyGL agree on the same shader math.

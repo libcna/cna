@@ -347,7 +347,7 @@ TEST(GraphicsDeviceCapabilityTest, AnisotropicFilteringQueryDoesNotThrow)
         EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::AnisotropicFiltering));
 }
 
-// REMED-CONTENT-001: GetMaxTextureDimension() must report a real, positive, sane ceiling -- shared
+// GetMaxTextureDimension() must report a real, positive, sane ceiling -- shared
 // content-reading code (Texture2DContentTypeReader) relies on this to reject malformed/adversarial
 // XNB dimensions before any renderer-specific texture creation is attempted.
 TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValue)
@@ -362,7 +362,7 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 }
 
 // ============================================================================
-// REMED-GFX-209 -- the FillMode::WireFrame contract is per renderer, not universal.
+// The FillMode::WireFrame contract is per renderer, not universal.
 //
 // WHAT WAS HERE BEFORE. A single test, `DoesNotSupportWireFrame`, asserting
 //

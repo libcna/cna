@@ -81,7 +81,7 @@ namespace
         { 0.1f,  0.1f, 0.0f},
         {-0.1f,  0.1f, 0.0f},
     };
-    // REMED-GFX-160: wound CLOCKWISE as displayed, i.e. an ordinary XNA FRONT face, so this test
+    // Wound CLOCKWISE as displayed, i.e. an ordinary XNA FRONT face, so this test
     // survives the device's own default RasterizerState.CullCounterClockwise -- which it never
     // sets, and therefore relies on. Over the vertices above, {0,1,2}/{0,2,3} is the
     // counter-clockwise (BACK-facing) order; it used to be that, and passed only because this
@@ -149,7 +149,7 @@ protected:
             instVb->SetData(instances, 3, sizeof(InstanceColumns));
 
             GpuDrawParams params;
-            // REMED-GFX-202: the classic two-stream instanced binding set.
+            // The classic two-stream instanced binding set.
             SetInstancedVertexStreamsEXT(params, *vb, *instVb, /*instanceFrequency=*/1,
                                          static_cast<int>(sizeof(VP)), 0,
                                          static_cast<int>(sizeof(InstanceColumns)), 0);

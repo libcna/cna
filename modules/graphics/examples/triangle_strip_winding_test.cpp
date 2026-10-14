@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-183 -- triangle-strip parity and culling, measured against the XNA/FNA oracle.
+// Triangle-strip parity and culling, measured against the XNA/FNA oracle.
 //
 // GFX-160 established the source convention independently from FNA SpriteBatch: clockwise as
 // displayed is XNA's front face, CullClockwiseFace removes it, and CullCounterClockwiseFace removes

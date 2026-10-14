@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-019: WebGPU SpriteBatch clip-space mapping must be derived from the CURRENTLY-BOUND
+// WebGPU SpriteBatch clip-space mapping must be derived from the CURRENTLY-BOUND
 // render target's own pixel dimensions, NOT the backbuffer's.
 //
 // Pre-fix defect (independently confirmed against production source and self-disclosed by

@@ -12,7 +12,7 @@
 // render pass whose clear ran before ALL of them regardless of where Clear() sat in the public call
 // order, so a same-frame "stamp, then Clear(), then compare" would always have seen the stamp win.
 //
-// REMED-GFX-129 CORRECTED THAT CLAIM rather than working around it: a Clear() became an ordered
+// CORRECTED THAT CLAIM rather than working around it: a Clear() became an ordered
 // command at its exact public call position on Vulkan too. The frame split is kept for A and B --
 // it is valid everywhere and they are Task 871's original regression -- and check C below makes the
 // same measurement WITHIN ONE FRAME, which is the shape the old note asserted could never work.
@@ -34,11 +34,11 @@
 //   overload, which always implies stencil=0) so a broken dispatch that leaves the stencil clear
 //   value at its uninitialized/leftover-default 0 cannot coincidentally still match the expected
 //   value and mask the bug.
-// Check C -- REMED-GFX-129: the whole stamp / ClearOptions::Stencil / compare sequence inside ONE
+// Check C -- the ordered Clear fix: the whole stamp / ClearOptions::Stencil / compare sequence inside ONE
 //   frame, with nothing between the three steps. A renderer that delivers a stencil clear only
 //   through the render-pass load action runs it before the stamp, so the buffer still holds the
 //   stamped 0x05 and the Equal-0x0c test draw finds nothing -- BACKGROUND. Measured red on Vulkan
-//   before REMED-GFX-129 and green after; values distinct from A and B so a leftover clear value
+//   before the ordered Clear fix and green after; values distinct from A and B so a leftover clear value
 //   from an earlier frame cannot make it pass.
 //
 // Exit code 0 = all three checks PASS, 1 = any FAILs.
@@ -114,7 +114,7 @@ namespace
         DrawQuad(dev, kBackground);
     }
 
-    /// REMED-GFX-237: does a stencil clear put the WRITE mask back?
+    /// Does a stencil clear put the WRITE mask back?
     ///
     /// XNA's Clear ignores `StencilWriteMask`; `glClear` obeys it, so the clear has to force the
     /// mask open. Leaving it open is the defect: the next draw then writes stencil bits the active
@@ -227,7 +227,7 @@ protected:
         }
         case 4:
         {
-            // Frame 5: Check C -- REMED-GFX-129. Stamp, clear and compare with NOTHING between
+            // Frame 5: Check C. Stamp, clear and compare with NOTHING between
             // them, so a clear that is really the pass load action cannot pass by running first.
             StampStencil(dev, 0x05);
             const bool okC = ClearThenTestStencilEquals(dev, ClearOptions::Stencil, 0x0c, 0x0c);

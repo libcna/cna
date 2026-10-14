@@ -132,7 +132,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # SDLGPU-85: the shared fixture proves construction-time EasyGL parity. SDL GPU also supports
-    # the XNA/FNA Reset contract which EasyGL still lacks, so run the exact same source in its
+    # The XNA/FNA Reset contract which EasyGL still lacks, so run the exact same source in its
     # optional A (4x) -> B (0x) -> A (4x) mode as a second, renderer-specific invocation.
     cna_register_renderer_test(NAME SdlGpu_Parity_backbuffer_msaa_Reset
         COMMAND cna_test_sdlgpu_parity_backbuffer_msaa --reset
@@ -325,7 +325,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_DrawLineTopology PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
+    # Every real constructor acquisition is transactional, failed objects never
     # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain
     # retryable. Resource callbacks make leaks/double-destruction observable independently of
     # whether the selected failure point throws.
@@ -459,7 +459,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         SdlGpu_EasyGLOracle_rendertargetcube_depthformat
         PROPERTIES FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-188: mipMap and MSAA are independent on RenderTargetCube. The resolved cube owns
+    # MipMap and MSAA are independent on RenderTargetCube. The resolved cube owns
     # every public level, each one-level face attachment resolves before that face's chain is
     # generated, and a later pass in the same frame can sample the generated levels. All native
     # validation diagnostics are fatal in addition to the pixel/count/lifecycle matrix.
@@ -472,7 +472,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_RenderTargetCube_MsaaMip PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-096: renderer-neutral singular/plural cube-face binding parity.
+    # Renderer-neutral singular/plural cube-face binding parity.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_plural_binding
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_plural_binding_test.cpp)
     target_compile_definitions(cna_test_sdlgpu_rendertargetcube_plural_binding
@@ -484,7 +484,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_RenderTargetCube_PluralBinding PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-097: a depthless cube-face SpriteBatch draw must use a graphics pipeline whose
+    # A depthless cube-face SpriteBatch draw must use a graphics pipeline whose
     # target info also has no depth/stencil target. Pixel checks prove exact face selection; make
     # the Vulkan compatibility VUID independently fatal so validation-cleanliness cannot be hidden
     # by otherwise-correct pixels.
@@ -503,7 +503,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         "${CMAKE_SOURCE_DIR}/tests/support")
     cna_register_renderer_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    # REMED-GFX-098: pixels alone were always correct; a color-attachment render-pass
+    # Pixels alone were always correct; a color-attachment render-pass
     # compatibility VUID is fatal for this regression.
     set_tests_properties(SdlGpu_MRT PROPERTIES
         FAIL_REGULAR_EXPRESSION "VUID-vkCmdDraw-renderPass-02684")
@@ -520,7 +520,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_Texture3D COMMAND cna_test_sdlgpu_texture3d
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-099: the first invalid event occurs while constructing a mipmapped Texture3D,
+    # The first invalid event occurs while constructing a mipmapped Texture3D,
     # before upload/readback. Keep the create-only discriminator separate from the larger data
     # contract and make both the six exact original VUIDs and any new validation category fatal.
     cna_sdlgpu_test(cna_test_sdlgpu_texture3d_validity
@@ -560,7 +560,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_EnvMap COMMAND cna_test_sdlgpu_envmap
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-007: EnvironmentMapEffect must add EmissiveColor UNSCALED (FNA Lighting.fxh), not
+    # EnvironmentMapEffect must add EmissiveColor UNSCALED (FNA Lighting.fxh), not
     # (Emissive+lightSum)*Diffuse -- which also squares Alpha (both operands are CPU-prefolded).
     # Discriminating non-white-Diffuse / non-zero-Emissive / Alpha=0.5 cases; linear RT readback.
     cna_sdlgpu_test(cna_test_sdlgpu_envmap_emissive sdlgpu_environmentmapeffect_emissive_test.cpp)
@@ -646,7 +646,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffectVertexColor COMMAND cna_test_sdlgpu_skinnedeffect_vertexcolor
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-006: SkinnedEffect world-space normal transform under non-identity World (rotation,
+    # SkinnedEffect world-space normal transform under non-identity World (rotation,
     # non-uniform scale, and both) -- the cases every existing skinned test, all of which use
     # World = Identity, structurally cannot detect. RenderTarget2D readback (swapchain download
     # segfaults on this renderer, SDLGPU-39).
@@ -654,7 +654,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffect_WorldNormal COMMAND cna_test_sdlgpu_skinnedeffect_world_normal
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-009: stock-effect fog (previously a total absence on this renderer). Blue geometry +
+    # Stock-effect fog (previously a total absence on this renderer). Blue geometry +
     # red fog, FogStart=0/FogEnd=-0.9 -> keep=1/0.5/0 at Z=0/0.45/0.9; linear RT readback. One file
     # per effect group covering all 13 fog-capable shader families.
     cna_sdlgpu_test(cna_test_sdlgpu_basiceffect_fog sdlgpu_basiceffect_fog_test.cpp)
@@ -669,7 +669,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffect_Fog COMMAND cna_test_sdlgpu_skinnedeffect_fog
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-010: transformed-camera view-space fog conformance (fails pre-fix).
+    # Transformed-camera view-space fog conformance (fails pre-fix).
     cna_sdlgpu_test(cna_test_sdlgpu_viewspace_fog sdlgpu_viewspace_fog_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_ViewSpace_Fog COMMAND cna_test_sdlgpu_viewspace_fog
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -688,7 +688,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderState COMMAND cna_test_sdlgpu_renderstate
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-051: RasterizerState.DepthBias/SlopeScaleDepthBias are pipeline-static in SDL 3.5.
+    # RasterizerState.DepthBias/SlopeScaleDepthBias are pipeline-static in SDL 3.5.
     # Exact/near-coplanar flat+sloped triangles prove both signs and combined bias through stock
     # effects, indexed/non-indexed draws, SpriteBatch, RT/backbuffer, deferred A->B->A state, and
     # target-independent cache identity. Any Vulkan validation category is fatal.
@@ -865,14 +865,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-064: GraphicsDevice.Viewport honored per-draw in RenderTarget2D passes.
+    # GraphicsDevice.Viewport honored per-draw in RenderTarget2D passes.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_viewport sdlgpu_rendertarget_viewport_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetViewport COMMAND cna_test_sdlgpu_rt_viewport
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     set_tests_properties(SdlGpu_RenderTargetViewport PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-068: GraphicsDevice.ScissorRectangle honored per-draw in RenderTarget2D passes
+    # GraphicsDevice.ScissorRectangle honored per-draw in RenderTarget2D passes
     # (deferred-model analog of Vulkan GFX-013; scissor was applied once per pass from the live
     # post-unbind full-backbuffer state, so an RT-bound scissor no longer clipped at replay).
     cna_sdlgpu_test(cna_test_sdlgpu_rt_scissor sdlgpu_rendertarget_scissor_test.cpp)
@@ -881,14 +881,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_RenderTargetScissor PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-069: GraphicsDevice.BlendFactor (constant blend color) reaches the GPU per-draw in
+    # GraphicsDevice.BlendFactor (constant blend color) reaches the GPU per-draw in
     # RenderTarget2D passes (blend-constant analog of GFX-064/068; SdlGpu never overrode the base
     # SetBlendFactor / called SDL_SetGPUBlendConstants, so constant-color blends used SDL's (0,0,0,0)).
     cna_sdlgpu_test(cna_test_sdlgpu_rt_blendfactor sdlgpu_rendertarget_blendfactor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetBlendFactor COMMAND cna_test_sdlgpu_rt_blendfactor
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
+    # SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
     # (Viewport.Width/Height), not the full target -- the sprite2d viewportSize uniform was fed the
     # full target dims while ApplyViewportForRef (GFX-064) mapped NDC into the sub-region, squishing
     # the sprite. The per-QueuedDrawRef viewport must also drive the sprite NDC divide. SdlGpu does
@@ -901,27 +901,27 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_SpriteBatch_CustomViewport PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-081: SpriteBatch.Begin must apply its RasterizerState argument (shared fix in
+    # SpriteBatch.Begin must apply its RasterizerState argument (shared fix in
     # SpriteBatch.cpp). Deferred-renderer control: the scissor state must reach the QueuedDrawRef
     # through Begin, not only via a direct GraphicsDevice.RasterizerState assignment.
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_begin_rasterizerstate ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SpriteBatch_BeginRasterizerState COMMAND cna_test_sdlgpu_spritebatch_begin_rasterizerstate
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-077: BlendState.ColorWriteChannels (RT0) via SDL_GPUColorTargetBlendState
+    # BlendState.ColorWriteChannels (RT0) via SDL_GPUColorTargetBlendState
     # .color_write_mask (pipeline cache key). MultiSampleMask is NOT compiled in: SDL 3.5.0 reserves
-    # SDL_GPUMultisampleState::sample_mask as non-functional (REMED-GFX-086). Generic 3D path.
+    # SDL_GPUMultisampleState::sample_mask as non-functional. Generic 3D path.
     cna_sdlgpu_test(cna_test_sdlgpu_colorwritechannels ${CNA_GRAPHICS_EXAMPLES_DIR}/gfx077_colorwritechannels_3d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_ColorWriteChannels COMMAND cna_test_sdlgpu_colorwritechannels
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # Every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
     # fallback zero-initialized its own scratch buffer, handed it to ITextureRenderer::GetData (whose
     # interface default did nothing) and converted it for the caller regardless, so a renderer with no
     # readback returned a complete, uniformly transparent-black frame that satisfied both "the
     # destination was overwritten" and any transparent-black content expectation.
-    # REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format, so a mid-tone channel
+    # SurfaceFormat::Color is a plain 8-bit UNORM byte format, so a mid-tone channel
     # must survive Clear/draw/sample/readback unchanged. Registered here as a cross-renderer control:
     # the defect was WebGPU-local (its render targets used the swapchain's *UnormSrgb format), and
     # these runs are what establish that byte-exact identity is CNA's existing behaviour everywhere
@@ -937,7 +937,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_additive_blend_contract
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
+    # A RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-renderer control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's
     # colour texture stores the image bottom-up and sampling did not compensate even though GetData
@@ -948,7 +948,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_SamplingOrientation COMMAND cna_test_sdlgpu_rt_sampling_orientation
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-153 cross-renderer source-selection and render-target-destination control. Since
+    # Cross-renderer source-selection and render-target-destination control. Since
     # SDLGPU-68 the same fixture also exercises the exact swapchain-proxy readback route.
     cna_sdlgpu_test(cna_test_sdlgpu_gfx153_source_rectangle
         ${CNA_GRAPHICS_EXAMPLES_DIR}/source_rectangle_orientation_test.cpp)
@@ -960,7 +960,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
 
 
 
-    # REMED-GFX-169: every stock 3D effect must sample its textures through the public
+    # Every stock 3D effect must sample its textures through the public
     # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. On the retired
     # Vulkan renderer, ApplySamplerState was correct and SpriteBatch read slotSamplers_[0], but six
     # stock 3D descriptor builders took NO sampler parameter at all, so all 15 of their
@@ -974,13 +974,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_StockEffectSamplerContract PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-150 cross-renderer control: TextureFilter::Point must select exactly ONE texel and
+    # Cross-renderer control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
     # path alike. The defect was Software-local (its ApplySamplerState named none of its parameters
     # and one bilinear function served every textured fragment, so every draw was LinearClamp); this
     # run is what establishes that this renderer already honoured the contract rather than being made
     # to.
-    # REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification, a separate
+    # Every public TextureFilter ordinal names a SEPARATE magnification, a separate
     # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
     # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
@@ -993,7 +993,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_TextureFilterOrdinalContract COMMAND cna_test_sdlgpu_texture_filter_ordinal
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-175 cross-renderer control: the MIPMAP component of a TextureFilter ordinal.
+    # Cross-renderer control: the MIPMAP component of a TextureFilter ordinal.
     # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
     # mip pipeline at all; this fixture measures what every other renderer does with a chain
     # whose levels name themselves, so a divergence is classified rather than assumed.
@@ -1002,7 +1002,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_TextureFilterMipContract COMMAND cna_test_sdlgpu_texture_filter_mip_contract
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-176: the question UNDERNEATH the filter contract above. SdlGpuTextureRenderer
+    # The question UNDERNEATH the filter contract above. SdlGpuTextureRenderer
     # hardcoded num_levels = 1 and declared no UpdatePixelsLevel override, so a mipMap=true
     # Texture2D reported a LevelCount its GPU resource did not have and every SetData above level 0
     # was silently discarded. This fixture asserts allocation and upload against the NATIVE texture
@@ -1012,7 +1012,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_Texture2DMipStorage COMMAND cna_test_sdlgpu_texture2d_mip_storage
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-173: EnvironmentMapEffect samples TWO independent resources -- the ordinary 2D
+    # EnvironmentMapEffect samples TWO independent resources -- the ordinary 2D
     # texture through GraphicsDevice.SamplerStates[0] and the reflection cube through
     # SamplerStates[1]. SdlGpuRenderer::IssueEnvMapDraw bound a literal LinearClamp for the
     # cube and QueueEnvMapDraw captured only slot 0, so EnvMapDrawCommand had no field in which
@@ -1025,7 +1025,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_EnvMapCubeSamplerContract COMMAND cna_test_sdlgpu_envmap_cube_sampler
         TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-172 cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
+    # Cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
     # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
     # DECLARE_TEXTURE(Texture2, 1). WebGPU declared ONE WGSL sampler for both texture views, so
     # SamplerStates[1] was inexpressible and slot 1 inherited slot 0's. This fixture observes both
@@ -1039,18 +1039,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_DualTextureSlotSamplerContract PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-182 cross-renderer control: the slot-1 sampler questions the fixture above does not
+    # Cross-renderer control: the slot-1 sampler questions the fixture above does not
     # ask -- returning to a previous sampler, interleaving with an unrelated effect, sweeping either
     # slot with the other fixed, the magnification partition of the public enum, create/sample/
     # destroy lifetime and a degenerate reflection direction. The defect is Software-local; SDL_GPU
-    # is REMED-GFX-173's own corrected renderer and a DEFERRED one, so it is where "a later sampler
+    # is the corrected renderer and a DEFERRED one, so it is where "a later sampler
     # change must not reach back into a queued draw" has teeth.
     cna_sdlgpu_test(cna_test_sdlgpu_envmap_cube_sampler_state
         ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EnvMapCubeSamplerState COMMAND cna_test_sdlgpu_envmap_cube_sampler_state
         TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
+    # Cross-renderer control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
     # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
     # were alive. Every draw here is checked against a self-identifying oracle that decodes back to an
@@ -1070,7 +1070,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_PointSamplingContract PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
+    # Cross-renderer control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
     # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
     # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
@@ -1081,7 +1081,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_ProducerConsumer COMMAND cna_test_sdlgpu_rt_producer_consumer
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-155 cross-renderer control: a render target produced and unbound earlier in a public
+    # Cross-renderer control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
     # defaults to the numeric view id, and its backbuffer owns the lowest id -- so a backbuffer
@@ -1092,7 +1092,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_BackbufferConsumer COMMAND cna_test_sdlgpu_rt_backbuffer_consumer
         TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
+    # The control: a RenderTarget2D constructed during a public frame must be usable in
     # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
     # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
     # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
@@ -1103,7 +1103,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_FirstUse COMMAND cna_test_sdlgpu_rt_first_use
         TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-152: a RenderTarget2D handed to a stock or custom 3D effect as its Texture must be
+    # A RenderTarget2D handed to a stock or custom 3D effect as its Texture must be
     # sampled, not reinterpreted. The defect was SDL_GPU-local and fatal -- thirteen sites
     # static_cast an ITextureRenderer* to the unrelated sibling SdlGpuTextureRenderer, fabricating an
     # SDL_GPUTexture* out of a render target's mipMap_/padding/multiSampleCount_ bytes -- so this
@@ -1114,7 +1114,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_EffectSource COMMAND cna_test_sdlgpu_rt_effect_source
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-167 deferred-source lifetime: a resource sampled by a draw that has only been
+    # Deferred-source lifetime: a resource sampled by a draw that has only been
     # QUEUED must stay bindable until that draw actually renders, and destroying the public wrapper
     # first must never terminate the process. The defect was WebGPU-local -- every deferred command
     # stored a raw pointer to the resource's RENDERER OBJECT and called a VIRTUAL method on it at
@@ -1129,7 +1129,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_DeferredSourceLifetime PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-168 cross-renderer control: destroying a RenderTarget2D that is STILL the bound
+    # Cross-renderer control: destroying a RenderTarget2D that is STILL the bound
     # render target must never make the next SetRenderTarget transition unsafe, and must leave the
     # next target and the backbuffer exactly correct. The defect was EasyGL-local -- it remembered
     # the bound destination as a raw IRenderTargetRenderer* and the next transition called
@@ -1160,7 +1160,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endif()
 
-    # REMED-GFX-180/SOFTWARE-322: Present refuses while a target is bound independently of whether
+    # SOFTWARE-322: Present refuses while a target is bound independently of whether
     # the preceding native buffered range was forwarded or stopped by this renderer's compatibility
     # safety guard. C1 proves explicit-unbind recovery and C2 proves the refusal is SIGABRT.
     cna_sdlgpu_test(cna_test_sdlgpu_present_lifecycle
@@ -1191,7 +1191,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endif()
 
-    # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
+    # Cross-renderer control: the same public depth-backed MULTISAMPLED
     # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
     # production changed; this renderer is registered to show the construction was always legal
     # and to keep it that way.
@@ -1200,7 +1200,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_MsaaDepthContract COMMAND cna_test_sdlgpu_msaa_depth_contract
         TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-154 cross-renderer control: the same PUBLIC first-readback contract on this
+    # Cross-renderer control: the same PUBLIC first-readback contract on this
     # renderer. The defect was Bgfx-only and only Bgfx production changed; running the identical
     # fixture here is what makes that claim falsifiable rather than asserted.
     cna_sdlgpu_test(cna_test_sdlgpu_msaa_first_readback
@@ -1208,24 +1208,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_MsaaFirstReadback COMMAND cna_test_sdlgpu_msaa_first_readback
         TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-186: reading a NONZERO MIP LEVEL of a mipmapped MULTISAMPLED RenderTarget2D.
+    # Reading a NONZERO MIP LEVEL of a mipmapped MULTISAMPLED RenderTarget2D.
     # Level 0 of the same target read back exactly while GetData(1, ...) died by SIGSEGV, so this
-    # is the mip-level route, not the resolve (REMED-GFX-154) and not the transfer window
-    # (REMED-GFX-149). Every leg runs in its own process because that signal is uncatchable.
+    # is the mip-level route, not the resolve and not the transfer window
+    #. Every leg runs in its own process because that signal is uncatchable.
     cna_sdlgpu_test(cna_test_sdlgpu_msaa_mip_readback
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_MsaaMipReadback COMMAND cna_test_sdlgpu_msaa_mip_readback
         TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    # REMED-GFX-189 cross-renderer control: the same PUBLIC invalid-mip-level contract on this
+    # Cross-renderer control: the same PUBLIC invalid-mip-level contract on this
     # renderer. The fabrication was Vulkan-only and only Vulkan production changed; this renderer
-    # adopted the identical guard in REMED-GFX-186, so running the same fixture here is what keeps
+    # adopted the identical guard in the generated-mip readback contract, so running the same fixture here is what keeps
     # both claims falsifiable.
     cna_sdlgpu_test(cna_test_sdlgpu_invalid_mip_level
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_invalid_mip_level_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_InvalidMipLevel COMMAND cna_test_sdlgpu_invalid_mip_level
         TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
-    # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
-    # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
+    # A stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
+    # must execute after it rather than be dropped. the leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
     # WEBGPU clean, using ordinary Texture2D sources on both destinations. The oracle is a staircase
     # -- step i covers stripes [0, N-i), so one readback proves every draw happened AND that they
@@ -1237,17 +1237,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_SpriteBatch3DOrder PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch emits
+    # The XNA/FNA front-face winding contract. FNA's SpriteBatch emits
     # CLOCKWISE-as-displayed triangles and they must survive RasterizerState.CullCounterClockwise --
     # the state SpriteBatch.Begin itself defaults to -- so clockwise-as-displayed is XNA's FRONT face
     # and each enum names the face it CULLS. SDLGPU-68's proxy now lets the backbuffer legs carry
-    # the same pixel contract as the render-target controls.
+    # The same pixel contract as the render-target controls.
     cna_sdlgpu_test(cna_test_sdlgpu_frontface_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/frontface_winding_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_FrontFaceWinding COMMAND cna_test_sdlgpu_frontface_winding
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-183 cross-renderer control: the complete TriangleStrip parity/culling matrix.
+    # Cross-renderer control: the complete TriangleStrip parity/culling matrix.
     cna_sdlgpu_test(cna_test_sdlgpu_triangle_strip_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/triangle_strip_winding_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_TriangleStripWinding
@@ -1259,7 +1259,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_Texture2D_GetDataContract COMMAND cna_test_sdlgpu_texture2d_getdata_contract
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # (and the GetData startIndex contract, the same expression): the exact XNA-compatible
     # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
     # DESTINATION element offset and elementCount is the destination capacity available from it;
     # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
@@ -1270,7 +1270,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_Texture2D_GetDataTransferRange COMMAND cna_test_sdlgpu_texture2d_getdata_transfer_range
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
+    # The TextureCube/Texture3D half of the finding. Both public cube and
     # volume GetData paths converted their own zero-initialized scratch buffer for the caller
     # regardless of whether the renderer read anything back, so an unimplemented readback returned a
     # complete, uniformly transparent-black face/volume instead of rejecting the request.
@@ -1279,10 +1279,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_CubeVolume_GetDataContract COMMAND cna_test_sdlgpu_cube_volume_getdata_contract
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
-    # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
+    # `RenderTargetCube::GetData` must return the face that was really rendered or
+    # reject the request deterministically. the honest TextureCube/Texture3D readback contract made the reporting honest but left the
     # readback itself implemented on only two renderers, so a rendered cube face had no byte-exact
-    # public oracle anywhere else. Drawn geometry (never Clear -- see REMED-GFX-129) paints an
+    # public oracle anywhere else. Drawn geometry (never Clear -- paints an
     # asymmetric five-region pattern whose colours rotate per face, so a flip, a rotation, a wrong
     # array layer/subresource, a stale face or an unresolved multisample surface all fail.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_getdata_contract
@@ -1290,10 +1290,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_GetDataContract COMMAND cna_test_sdlgpu_rendertargetcube_getdata_contract
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
+    # IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
     # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
-    # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
+    # The asymmetric face producer, then rebinds and draws only a small marker: "the
     # marker landed" is what a discarding renderer also achieves, so it can never pass for
     # preservation.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_usage
@@ -1301,7 +1301,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_Usage COMMAND cna_test_sdlgpu_rendertargetcube_usage
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-141: a MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
+    # A MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
     # across all six faces on EasyGL, Vulkan and SdlGpu, so a PreserveContents face reloaded whichever
     # face was rendered last instead of its own samples. Renders face A, then face B, then rebinds A for
     # a small partial update -- with no readback, Present or flush in between -- and reads the whole of
@@ -1312,7 +1312,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_MsaaFace COMMAND cna_test_sdlgpu_rendertargetcube_msaa_face
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
+    # RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
     # bind clears all three (Target|DepthBuffer|Stencil, MaxDepth, 0) -- so the enum governs depth and
     # stencil, not colour alone. Renders an occluder, unbinds, rebinds WITHOUT clearing and draws behind
@@ -1323,11 +1323,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_DepthStencilUsage COMMAND cna_test_sdlgpu_rendertarget_depthstencil_usage
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
+    # Every public render-target bind/unbind cycle must be its own logical pass.
     # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
     # one target within a single flush window shared one load action. The decisive checks all use
-    # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
+    # DiscardContents -- collapsing is invisible on a preserving target, which is why the RenderTargetUsage propagation fix
     # needed an artificial readback barrier to see it -- and nothing between two cycles ever forces a
     # flush.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertarget_pass_boundary
@@ -1335,7 +1335,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_RenderTarget_PassBoundary COMMAND cna_test_sdlgpu_rendertarget_pass_boundary
         TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-129: the ordered-Clear contract, first a cross-renderer control for the since-retired
+    # The ordered-Clear contract, first a cross-renderer control for the since-retired
     # Vulkan renderer's correction.
     cna_sdlgpu_test(cna_test_sdlgpu_ordered_clear
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
@@ -1344,8 +1344,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_GraphicsDevice_OrderedClear PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
-    # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
+    # Backbuffer work and render-target work must replay in ONE ordered stream.
+    # (Vulkan) and the per-bind-cycle render pass fix (SdlGpu) gave every render-target bind cycle its own
     # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every
     # backbuffer draw of a frame was replayed after every target pass regardless of when it was
     # issued. A frame that samples a target onto the backbuffer and then renders into that target
@@ -1358,7 +1358,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Backbuffer_PassOrder PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-116 cross-renderer control: every deferred draw must execute under the
+    # Cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it
     # recorded the pass; this file is the same public fixture, so a renderer that regresses the
     # contract is caught here rather than assumed correct.
@@ -1369,7 +1369,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Deferred_Viewport PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
-    # REMED-GFX-146 cross-renderer control: every deferred draw must execute under the
+    # Cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own
     # public call. WebGPU resolved both live when it recorded the pass; this file is the same
     # public fixture, so a renderer that regresses the contract is caught here rather than
@@ -1408,27 +1408,27 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
-    # REMED-GFX-145: the SDL_GPU-specific half of the same contract. The shared oracle above drives
+    # The SDL_GPU-specific half of the same contract. The shared oracle above drives
     # SpriteBatch only and scopes itself to colour, so it cannot see a segment filter that works for
     # `DrawKind::Sprite` and not for the eight 3D families, a transient upload arena aliasing
     # between passes (its producer draws identical rectangles and varies only the texture), or a
     # depth/stencil load action attached to the wrong bind cycle. This one asks all three, with
-    # geometry that differs left-from-right and with REMED-GFX-117's startIndex/baseVertex issued
+    # geometry that differs left-from-right and with the startIndex/baseVertex issued
     # inside a SECOND logical pass.
     cna_sdlgpu_test(cna_test_sdlgpu_pass_boundary_upload
                     sdlgpu_pass_boundary_upload_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_PassBoundary_Upload COMMAND cna_test_sdlgpu_pass_boundary_upload
         TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
-    # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
+    # The WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
+    # kept the pre-the honest Texture2D::GetData contract shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
     cna_sdlgpu_test(cna_test_sdlgpu_cube_volume_setdata_contract
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_CubeVolume_SetDataContract COMMAND cna_test_sdlgpu_cube_volume_setdata_contract
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # REMED-GFX-165: a rectangle-less GetBackBufferData must address the whole logical backbuffer
+    # A rectangle-less GetBackBufferData must address the whole logical backbuffer
     # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
     # trip and no extra Present. SDL_GPU had no backbuffer readback at all (the swapchain texture is
     # write-only by permanent SDL contract), and its rectangle-less size check tripped on the same
@@ -1457,7 +1457,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endif()
 
-    # REMED-GFX-161: cross-renderer control for the first-read completion contract (preserves the
+    # Cross-renderer control for the first-read completion contract (preserves the
     # GFX-165 lazy-proxy backbuffer read; no SDL_GPU production change here).
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_first_read
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_first_read_test.cpp)
@@ -1478,7 +1478,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endif()
 
-    # REMED-GFX-162 cross-renderer control: SdlGpu's lazy-proxy GetBackBufferData (GFX-165) SUCCEEDS
+    # Cross-renderer control: SdlGpu's lazy-proxy GetBackBufferData (GFX-165) SUCCEEDS
     # and fully writes the requested range, so the Headless rejection is specific, not universal.
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_reject
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)

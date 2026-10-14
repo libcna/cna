@@ -677,7 +677,7 @@ protected:
         // masked-out == "None"/clear baseline). MultiSampleMask (D3DRS_MULTISAMPLEMASK) is NOT
         // pixel-discriminated here: it only affects genuinely multisampled targets (a no-op on this
         // single-sample RT), so it is compile-verified + render-state-set-verified only -- see the
-        // REMED-GFX-077 support matrix. ----
+        // Support matrix. ----
         {
             struct Px { uint8_t r, g, b, a; };
             auto rt = renderer.CreateRenderTarget2D(64, 64, static_cast<int>(DepthFormat::Depth24Stencil8),
@@ -738,7 +738,7 @@ protected:
             check(eqp(a1, masked(dcw, scw, 1)) && eqp(bG, masked(dcw, scw, 2)) && eqp(a2, masked(dcw, scw, 1)),
                   "GFX077-7 (D3D9): A(Red)->B(Green)->A(Red) each applies its own D3DRS_COLORWRITEENABLE");
 
-            // REMED-GFX-087: D3DRS_COLORWRITEENABLE is sticky device state and the loop above leaves
+            // D3DRS_COLORWRITEENABLE is sticky device state and the loop above leaves
             // it on the last mask applied (Red only). Restore the All-channels default so later
             // direct-DrawPrimitivesEx checks (the SetDepthTestEnabled block) don't silently inherit a
             // partial write mask (which zeroed G/B and made their exact-colour assertions fail).
@@ -1058,7 +1058,7 @@ protected:
                   "D9-63: an out-of-range sampler slot is silently ignored (does not throw), as XNA's sampler-slot setters do");
         }
 
-        // Check Z (D9-64 / REMED-GFX-089) -- the helper setters change exactly one field of the
+        // Check Z (D9-64) -- the helper setters change exactly one field of the
         // CURRENT depth state. The old fixture did not establish that current state: GFX077's
         // direct-renderer renderMask() left ZFUNC=D3DCMP_ALWAYS, then this block changed only
         // ZENABLE/ZWRITEENABLE and incorrectly expected DepthStencilState.Default behavior. That

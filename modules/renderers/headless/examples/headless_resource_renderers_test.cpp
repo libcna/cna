@@ -6,9 +6,9 @@
 //
 // Check A -- TextureCube construction + SetData()/GetData() on 2 different faces: what this
 //   renderer really produces (a transparent-black overwrite of the caller's destination) is pinned,
-//   not blessed -- see the check's own comment (REMED-GFX-127 false-positive audit).
+//   not blessed -- see the check's own comment (the honest Texture2D::GetData contract false-positive audit).
 // Check B -- Texture3D construction is REJECTED (this renderer reports no
-//   GraphicsCapability::Texture3D, REMED-CONTENT-004).
+// GraphicsCapability::Texture3D).
 // Check C -- RenderTarget2D: SetRenderTarget()/SetRenderTarget(nullptr) doesn't throw, and
 //   GetViewportSize() genuinely reflects the bound target's own size while it's active.
 // Check D -- RenderTargetCube: SetRenderTarget() for 2 different faces doesn't throw.
@@ -75,7 +75,7 @@ protected:
             TextureCube cube(dev, 4, false, SurfaceFormat::Color);
             std::vector<Color> posX(16, Color::Red);
             std::vector<Color> negX(16, Color::Blue);
-            // REMED-GFX-135: these two uploads used to be issued bare, as if they had stored
+            // These two uploads used to be issued bare, as if they had stored
             // something. They never did -- this renderer's cube SetData validates its arguments,
             // records a trace entry and keeps no pixels -- and the shared layer had no way to say
             // so. Both are now deterministic rejections, asserted here rather than assumed.
@@ -90,14 +90,14 @@ protected:
                   "TextureCube: SetData() on two independent faces throws a deterministic "
                   "System::NotSupportedException -- this renderer stores no pixel data, so it "
                   "refuses the upload rather than accepting and discarding it (REMED-GFX-135)");
-            // REMED-GFX-127 false-positive audit: these two checks used to be `check(true, ...)`
+            // False-positive audit: these two checks used to be `check(true, ...)`
             // -- they asserted nothing at all about what GetData produced, so any behaviour
             // whatsoever passed them. They were then strengthened to PIN what the Headless cube
             // renderer actually did: SetData recorded but not stored, and GetData overwriting the
-            // caller's whole destination with zeros -- the same fabrication REMED-GFX-127 removed
+            // caller's whole destination with zeros -- the same fabrication the honest Texture2D::GetData contract removed
             // from the Texture2D path, surviving on the separate ITextureCubeRenderer interface.
             //
-            // REMED-GFX-130 has now closed that: this renderer stores no pixel data by design, so
+            // Has now closed that: this renderer stores no pixel data by design, so
             // its cube readback refuses instead of inventing one. The sentinel pre-fill stays --
             // it is what proves the rejection leaves the caller's destination byte-for-byte
             // untouched, which "an exception was thrown" alone would not.
@@ -128,11 +128,11 @@ protected:
         // Check B: Texture3D construction is REJECTED on this renderer.
         //
         // This check used to construct a Texture3D and `check(true, ...)` the SetData/GetData pair.
-        // REMED-CONTENT-004 since made Texture3D's constructor throw when the device does not
+        // Since made Texture3D's constructor throw when the device does not
         // report GraphicsCapability::Texture3D, which Headless does not -- so the old body aborted
         // the whole executable on an uncaught System::NotSupportedException before any later check
         // ran, and this test has been failing for that reason independently of what it asserts.
-        // Verified by A/B: the unmodified pre-REMED-GFX-127 file aborts identically. The honest
+        // Verified by A/B: the unmodified pre-the honest Texture2D::GetData contract file aborts identically. The honest
         // assertion is the documented rejection itself.
         {
             bool threw = false;
@@ -216,7 +216,7 @@ protected:
             const bool countsOk =
                 stats.textureCubesCreated == baseline.textureCubesCreated + 1 &&
                 // Check B's Texture3D is now rejected before any renderer resource is created
-                // (REMED-CONTENT-004), so this counter must NOT move.
+                //, so this counter must NOT move.
                 stats.textures3DCreated == baseline.textures3DCreated &&
                 stats.renderTargetsCreated == baseline.renderTargetsCreated + 1 &&
                 stats.renderTargetCubesCreated == baseline.renderTargetCubesCreated + 1 &&
@@ -224,7 +224,7 @@ protected:
             check(countsOk, "resource-creation counters increment by exactly one for each type created above");
         }
 
-        // REMED-GFX-135 added the cube SetData rejection check to Check A.
+        // Added the cube SetData rejection check to Check A.
         std::printf("=== %d/%d PASS ===\n", passCount_, 10);
         result_ = (passCount_ == 10) ? 0 : 1;
         Exit();

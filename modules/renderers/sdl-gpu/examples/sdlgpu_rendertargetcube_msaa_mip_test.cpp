@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-188 -- RenderTargetCube(mipMap=true, multiSampleCount>1) owns the complete
+// RenderTargetCube(mipMap=true, multiSampleCount>1) owns the complete
 // single-sample cube mip chain on SDL_GPU. The six multisample attachments remain one-level 2D
 // render resources; each pass resolves into level 0 of its selected cube face, and that face's
 // lower levels are generated before a later pass can sample them.
@@ -121,7 +121,7 @@ namespace
         float nz;
     };
 
-    // EnvironmentMapEffect's reflection-vector convention, already pinned by REMED-GFX-173.
+    // EnvironmentMapEffect's reflection-vector convention, already pinned by the EnvironmentMapEffect cube sampler fix.
     const std::array<FaceAim, 6> kFaceAims = {{
         { 1.0f,  0.0f, 1.0f}, // +X
         {-1.0f,  0.0f, 1.0f}, // -X
@@ -183,7 +183,7 @@ namespace
     }
 }
 
-/** @brief Runs REMED-GFX-188's resolved-cube mip allocation and finalization matrix. */
+/** @brief Runs the resolved-cube mip allocation and finalization matrix. */
 class SdlGpuRenderTargetCubeMsaaMipTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;

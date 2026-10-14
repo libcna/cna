@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // GraphicsDevice.Clear affects exactly the buffers its ClearOptions mask names, on every target
-// type. Moved from the retired VULKAN suite (REMED-GFX-018 / REMED-GFX-129).
+// type. Moved from the retired VULKAN suite.
 //
 // A clear must affect exactly the requested buffers:
 //   0                              -> no-op

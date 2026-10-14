@@ -76,7 +76,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * XNA decides texture-format legality by GraphicsProfile; CNA had decided it by renderer
          * capability alone, so a renderer able to carry a HiDef-only format offered it to a Reach
-         * game too (REMED-GFX-242). This is the profile half of the answer and says nothing about
+         * game too. This is the profile half of the answer and says nothing about
          * whether the active renderer can carry the format -- both must agree.
          *
          * The tables are measured on the real XNA 4.0 runtime rather than transcribed from
@@ -97,7 +97,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * The cube list is the Texture2D list minus the two signed-normalized byte formats, which
          * XNA refuses for a cube at BOTH profiles -- measured, not derived: HiDef still refuses
          * them on a device that carries them happily as a Texture2D. See
-         * spikes/xna-pixel-center-spike/ leg LEG-G, and REMED-GFX-245.
+         * spikes/xna-pixel-center-spike/ leg LEG-G.
          *
          * @param profile The profile the device was created with.
          * @param fmt The SurfaceFormat to test.
@@ -126,7 +126,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * which nothing can render into. Note what this does NOT say: XNA does not REFUSE a render
          * target whose format the profile excludes, it silently SUBSTITUTES `Color`. Callers that
          * need to know before committing should ask rather than catch. Measured in
-         * spikes/xna-pixel-center-spike/ leg LEG-H; see REMED-GFX-245.
+         * spikes/xna-pixel-center-spike/ leg LEG-H;
          *
          * @param profile The profile the device was created with.
          * @param fmt The SurfaceFormat to test.

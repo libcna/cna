@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-141: every face of a MULTISAMPLED RenderTargetCube must own its multisample colour
+// Every face of a MULTISAMPLED RenderTargetCube must own its multisample colour
 // state, so a PreserveContents face reloads ITS OWN samples and resolves into ITS OWN cube layer.
 //
-// REMED-GFX-136 gave RenderTargetCube a real RenderTargetUsage and then measured the one place it
+// Gave RenderTargetCube a real RenderTargetUsage and then measured the one place it
 // still could not be honoured: three renderers allocated exactly ONE multisample colour attachment
 // per cube target and pointed all six faces at it, because only one face is ever rendered at a time.
 //
@@ -19,7 +19,7 @@
 // another face has been rendered. The retired DIRECTX11 renderer, whose multisampled cube resource
 // was a real six-slice array with one per-slice view, preserved exactly.
 //
-// This file is the oracle for that. It reuses REMED-GFX-134/136's asymmetric five-region face
+// This file is the oracle for that. It reuses the RenderTargetCube readback contract's asymmetric five-region face
 // producer verbatim -- drawn geometry, never Clear(), a 0/255-only palette that is an exact fixed
 // point of sRGB encoding so every comparison is byte-exact -- and adds the shape the shared
 // attachment cannot survive:
@@ -34,13 +34,13 @@
 // landed" and fails everything else.
 //
 // Nothing forces a flush between the producer and the rebind: no Settle(), no Present, no
-// intermediate GetData, no wait. REMED-GFX-140 (the retired VULKAN renderer) and REMED-GFX-145
+// intermediate GetData, no wait. the per-bind-cycle render pass fix (the retired VULKAN renderer) and the per-bind-cycle render pass fix
 // (SdlGpu) made every public bind cycle its own native pass, so the whole public sequence is
 // queued first and read once at the end. A readback barrier in the middle would hide exactly the
 // resolve-ordering half of this finding.
 //
 // Boundaries this file does NOT cross:
-//   * Depth/stencil preservation is REMED-GFX-142's. Here depth only has to not corrupt colour.
+//   * Depth/stencil preservation is the render-target depth/stencil lifetime contract's. Here depth only has to not corrupt colour.
 //   * Only mip level 0 is asserted (REMED-GFX-138/139 own cube mip storage).
 //   * Cube SAMPLING orientation is untouched; the resolved bytes GetData returns are the subject.
 //
@@ -93,7 +93,7 @@ namespace
      *
      * `Exact` -- GetData returns the resolved face byte for byte.
      * `Unsupported` -- GetData raises System::NotSupportedException with the caller's destination
-     * untouched (REMED-GFX-127/130's contract).
+     * untouched (the honest Texture2D::GetData contract's contract).
      */
     enum class Support
     {
@@ -120,7 +120,7 @@ namespace
         /**
          * GetData on a MULTISAMPLED cube target, and therefore this file's whole claim about it:
          * where this is `Exact`, every multisampled preservation check below REQUIRES exact
-         * content -- that is REMED-GFX-141's post-fix contract, stated as one falsifiable value per
+         * content -- that is the post-fix contract, stated as one falsifiable value per
          * renderer rather than per check. `Unsupported` remains the honest no-content outcome on
          * other routes.
          */
@@ -137,7 +137,7 @@ namespace
 
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it owns no face colour at all and its readback stays
-    // REMED-GFX-130's deterministic refusal. The whole public sequence must still be legal.
+    // The deterministic refusal. The whole public sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true,
                                  Support::Unsupported, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
@@ -468,7 +468,7 @@ class RenderTargetCubeMsaaFaceTest : public Game
     }
 
     /**
-     * @brief The canonical REMED-GFX-141 reproduction: A, then B, then a partial update of A.
+     * @brief The canonical the per-face multisample attachment fix reproduction: A, then B, then a partial update of A.
      *
      * Queued with nothing in between -- no readback, no Present, no flush -- and read only at the
      * end. Both faces are checked: A must be its own pattern plus its own marker, and B must be
@@ -544,7 +544,7 @@ class RenderTargetCubeMsaaFaceTest : public Game
     }
 
     /// F5 -- the sample-count-one control. The same sequence at samples=0 must be exact, and stays
-    /// exact whatever REMED-GFX-141 changed about the multisample path.
+    /// exact whatever the per-face multisample attachment fix changed about the multisample path.
     void RunSingleSampleControl(GraphicsDevice& dev)
     {
         auto cube = MakeCube(dev, RenderTargetUsage::PreserveContents, 0);
@@ -703,7 +703,7 @@ class RenderTargetCubeMsaaFaceTest : public Game
     }
 
     /// F14/F15/F16 -- every public depth format must leave the preserved COLOUR independent.
-    /// REMED-GFX-142 owns
+    /// Owns
     /// depth preservation itself; nothing is claimed about depth here.
     void RunDepthBackedControls(GraphicsDevice& dev)
     {
@@ -793,7 +793,7 @@ protected:
         if (done_) { Exit(); return; }
         // Frame 0 is a deliberate warm-up: bgfx copies every createTexture payload at bgfx::frame(),
         // so without it the 1x1 producer sources would still be unuploaded during the very first
-        // Draw and the whole battery would measure black. Same warm-up REMED-GFX-134/136 use.
+        // Draw and the whole battery would measure black. Same warm-up the RenderTargetCube readback contract use.
         if (!warmedUp_)
         {
             warmedUp_ = true;

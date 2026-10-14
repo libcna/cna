@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-129: GraphicsDevice::Clear() is an ORDERED command at its exact public call position.
+// GraphicsDevice::Clear() is an ORDERED command at its exact public call position.
 //
 // XNA/FNA scope RenderTargetUsage to what happens when a target is SET. Clear() is a separate
 // contract: it overwrites the selected attachments at the point in the command stream where it was
@@ -23,7 +23,7 @@
 //   * a depth or stencil clear could not be issued without also taking the colour load action the
 //     target's usage had already chosen.
 //
-// REMED-GFX-140 (per-bind-cycle segmentation) and REMED-GFX-143 (backbuffer/off-screen interleaving)
+// (per-bind-cycle segmentation) and the backbuffer/render-target command-order fix (backbuffer/off-screen interleaving)
 // do not reach any of that, which is why this is its own finding: check `O1` below has ONE bind
 // cycle, so there is nothing to segment.
 //
@@ -42,7 +42,7 @@
 //
 // The clear rectangle
 // -------------------
-// REMED-GFX-018 established this project's cross-renderer contract on Bgfx: "each clear is a
+// Established this project's cross-renderer contract on Bgfx: "each clear is a
 // full-target ordered operation ... viewport and scissor do not restrict Clear". Checks `V1`/`V2`
 // assert exactly that and are declared per renderer, so a renderer that genuinely scopes Clear to the
 // viewport is recorded rather than silently standardised away.
@@ -133,7 +133,7 @@ namespace
         bool depthBuffer3D;        ///< A depth-tested 3D draw is gated by the stored depth.
         bool stencilBuffer3D;      ///< A stencil-gated 3D draw is gated by the stored stencil.
         /**
-         * REMED-GFX-129's subject. True when Clear() is an ordered command: a Clear() issued after
+         * The subject. True when Clear() is an ordered command: a Clear() issued after
          * a draw wipes that draw, a Clear() on a PreserveContents target is honoured, two Clear()s
          * in one bind cycle both happen, and a depth-only or stencil-only Clear() reaches the
          * buffer it names. False is a declared defect whose whole cause is that the renderer's only
@@ -147,7 +147,7 @@ namespace
          */
         bool clearOnPreserveTarget;
         /**
-         * Clear covers the whole target regardless of the current Viewport (REMED-GFX-018's
+         * Clear covers the whole target regardless of the current Viewport (the ClearOptions fix's
          * cross-renderer contract: "each clear is a full-target ordered operation ... viewport and
          * scissor do not restrict Clear"). False records a renderer that scopes it to the viewport.
          */
@@ -172,7 +172,7 @@ namespace
                                  true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, and a render pass
-    // has exactly one. REMED-GFX-156 made the LOGICAL SEGMENT the unit that owns a load action
+    // has exactly one. the ordered mid-cycle Clear fix made the LOGICAL SEGMENT the unit that owns a load action
     // instead of the bind cycle: an observable Clear() closes the open segment and opens another one
     // over the same destination, so the clear is the new pass's load action and everything issued
     // after it joins that pass. `orderedClear` is therefore true and the whole declaration is
@@ -186,8 +186,8 @@ namespace
                                  true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_WEBGPU)
     // wgpu delivers a clear only through the pass load op, exactly as SDL_gpu does, and a
-    // WGPURenderPassDescriptor has exactly one set of them. REMED-GFX-156 put Clear() into the same
-    // ordered stream REMED-GFX-159 built for the eleven draw families and cuts that stream into one
+    // WGPURenderPassDescriptor has exactly one set of them. the ordered mid-cycle Clear fix put Clear() into the same
+    // ordered stream the WebGPU draw-order fix built for the eleven draw families and cuts that stream into one
     // native pass per observable Clear, so `orderedClear` is true here too.
     // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
     // HiDef, and under Reach this test died on a profile refusal before its first check.
@@ -486,7 +486,7 @@ class OrderedClearTest : public Game
      * @brief O1 -- draw, then Clear, in the ONLY bind cycle of a PreserveContents target.
      *
      * The whole finding in one shape. One cycle means there is nothing to segment, so a failure
-     * here cannot be attributed to REMED-GFX-140 or REMED-GFX-143.
+     * here cannot be attributed to the per-bind-cycle render pass fix or the backbuffer/render-target command-order fix.
      */
     void RunDrawThenClearSingleCycle(GraphicsDevice& dev)
     {
@@ -1315,7 +1315,7 @@ class OrderedClearTest : public Game
     // =====================================================================
 
     // =====================================================================
-    // P -- REMED-GFX-156: pass state must survive an ordered Clear boundary
+    // P -- the ordered mid-cycle Clear fix: pass state must survive an ordered Clear boundary
     // =====================================================================
 
     /**
@@ -1461,7 +1461,7 @@ class OrderedClearTest : public Game
     }
 
     // =====================================================================
-    // T -- REMED-GFX-156: destination transitions around ordered Clears
+    // T -- the ordered mid-cycle Clear fix: destination transitions around ordered Clears
     // =====================================================================
 
     /// T1 -- backbuffer -> target -> backbuffer, each cycle drawing then clearing.
@@ -1742,7 +1742,7 @@ protected:
         RunDepthClearUnderScissor(dev);
         RunStencilClearUnderScissor(dev);
         RunMsaaOrderedClear(dev);
-        // REMED-GFX-156: pass state across the boundary an ordered Clear creates, and the
+        // Pass state across the boundary an ordered Clear creates, and the
         // destination arrangements that boundary has to stay correct in.
         RunViewportAcrossClearBoundary(dev);
         RunScissorAcrossClearBoundary(dev);

@@ -18,7 +18,7 @@
 #include <cstddef>
 #include <string>
 
-// REMED-GFX-147: the one GLSL declaration every fragment shader that samples a sampler2D shares.
+// The one GLSL declaration every fragment shader that samples a sampler2D shares.
 //
 // An OpenGL framebuffer's origin is bottom-left, so a render target's colour texture stores the
 // logical image BOTTOM-UP: its texel row v=0 is the LAST logical row. Readback already compensates
@@ -32,7 +32,7 @@
 // time, per bound source -- nothing is copied, read back or re-uploaded, and no shader variant is
 // created, because the flag is a uniform rather than a compile-time switch. Kept as one macro so
 // the eleven shaders cannot drift apart; the same per-slot shape bgfx uses for u_rtFlipV
-// (REMED-GFX-067/078).
+//.
 #define CNA_GL_RT_SAMPLE_UV_DECL \
 "uniform vec4 uRtFlipV;\n" \
 "vec2 cnaSampleUV(vec2 uv,float flip){return vec2(uv.x,mix(uv.y,1.0-uv.y,flip));}\n"
@@ -41,7 +41,7 @@
 /// first stored row at its top (+Y side), like an uploaded one: sampled by direction, a rendered face comes out upside
 /// down. `flip` is 1 for such a cube; the direction is then mirrored across the plane that turns each face's rows over
 /// (y for the four side faces, z for +Y/-Y), which selects the texel the Direct3D orientation would have read.
-/// Same idea as cnaSampleUV for 2D render targets (REMED-GFX-137).
+/// Same idea as cnaSampleUV for 2D render targets.
 #define CNA_GL_CUBE_SAMPLE_DECL \
 "uniform float uEnvCubeFlip;\n" \
 "vec3 cnaCubeDir(vec3 d,float flip){\n" \
@@ -50,7 +50,7 @@
 "    return (a.y>=a.x&&a.y>=a.z)?vec3(d.x,d.y,-d.z):vec3(d.x,-d.y,d.z);\n" \
 "}\n"
 
-/// REMED-GFX-147: units 4-6, declared only by the shaders that reach that far (PbrEffect).
+/// Units 4-6, declared only by the shaders that reach that far (PbrEffect).
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
 
@@ -87,7 +87,7 @@
 "    return (det<0.0)?-1.0:1.0;\n" \
 "}\n"
 
-// REMED-GFX-122: stock EasyGL effects share one optional per-instance world matrix input. Locations
+// Stock EasyGL effects share one optional per-instance world matrix input. Locations
 // 12-15 reserve the final four slots of GLES 3's guaranteed 16-attribute floor. That leaves the
 // complete XNA profile budget (12 per-vertex elements + 4 matrix columns) available instead of
 // colliding with an otherwise-legal extended mesh declaration. uCnaInstanced keeps the same
@@ -388,7 +388,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // SOFTWARE-153: XNA's stock Common.fxh writes material*vertex colour to D3D9 COLOR0. That
 // semantic is saturated at the vertex boundary, before interpolation and texture sampling.
 "    vColor=clamp(((uVertexColorEnabled>0.5)?aColor:vec4(1.0))*uDiffuseColor,0.0,1.0);\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -437,7 +437,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
 "    vDiffuse=clamp(uDiffuseColor,0.0,1.0);\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -491,7 +491,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    gl_Position=uWVP*cnaPos;\n"
 "    vColor=clamp(((uVertexColorEnabled>0.5)?aColor:vec4(1.0))*uDiffuseColor,0.0,1.0);\n"
 "    vUV=aUV;\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -559,7 +559,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vNormal=uNormalMatrix*cnaInstanceDirection(aNormal);\n"
 "    vUV=aUV;\n"
 "    vColor=aColor;\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -718,7 +718,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vUV=aUV;\n"
 
 
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -810,7 +810,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vUV=aUV;\n"
 "    vUV1=aUV1;\n"
 "    vDiffuse=clamp(uDiffuseColor,0.0,1.0);\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -871,7 +871,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vColor=clamp(((uVertexColorEnabled>0.5)?aColor:vec4(1.0))*uDiffuseColor,0.0,1.0);\n"
 "    vUV=aUV;\n"
 "    vUV1=aUV1;\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -959,7 +959,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "    vFresnel=clamp((uFresnelEnabled>0.5)\n"
 "        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
 "        : uEnvMapAmount, 0.0, 1.0);\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -1073,7 +1073,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
-// REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+// Compose the bone-skin normal with the outer world normal matrix
 // (uNormalMatrix = transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams() exactly as
 // every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx establishes the
 // direct-bone then inverse-transpose-World composition order. This shader also used to drop the
@@ -1083,7 +1083,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vColor=aColor;\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -1234,7 +1234,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
 "    vColor=aColor;\n"
-// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
 // "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -1249,7 +1249,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
-// REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =
+// Compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =
 // transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams()). This vertex-lit sibling had
 // the identical missing-world-factor defect (audit Variant A) as EnsureSkinnedProgram; unlike that
 // per-pixel program (whose fragment stage re-normalizes vNormal), lighting here is evaluated in
@@ -1607,7 +1607,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
 "    mat3 skinDirectionMat=mat3(skinMat);\n"
-// REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix (uNormalMatrix),
+// (Variant B): the normal takes the inverse-transpose world matrix (uNormalMatrix),
 // not raw mat3(uWorld). Raw World is only correct for rotation and uniform scale and diverges from
 // FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it also contradicted this
 // file's own unskinned EnsurePbrProgram, which already uses uNormalMatrix. The tangent stays on

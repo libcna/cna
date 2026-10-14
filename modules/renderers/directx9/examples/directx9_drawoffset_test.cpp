@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-060: D3D9 non-zero draw-offset regressions. Proves every effect-aware D3D9 draw path
+// D3D9 non-zero draw-offset regressions. Proves every effect-aware D3D9 draw path
 // honors the XNA DrawPrimitives(vertexStart) / DrawIndexedPrimitives(baseVertex, startIndex)
 // offsets carried by GpuDrawParams::vertexStart/startIndex/baseVertex, rather than hardcoding 0 into
 // the underlying IDirect3DDevice9::DrawPrimitive(StartVertex) /
@@ -15,7 +15,7 @@
 // out in the vertex buffer so that the LEFT triangle covers only the LEFT probe pixel (12,32) and
 // the RIGHT triangle covers only the RIGHT probe pixel (52,32). Each check requests the offset that
 // should select the RIGHT triangle. Post-fix the RIGHT probe is painted and the LEFT probe stays at
-// the blue clear color; pre-fix (offset dropped, draw starts at vertex/index 0) the LEFT triangle is
+// The blue clear color; pre-fix (offset dropped, draw starts at vertex/index 0) the LEFT triangle is
 // drawn instead, so the RIGHT probe stays blue and the LEFT probe is painted -- the check fails.
 // This distinguishes "correct offset" from "silently drew from zero" from "drew nothing", exactly
 // the failure modes the task requires.
@@ -156,7 +156,7 @@ class D3D9DrawOffsetTest : public Game
 
     void CommonState(DirectX9Renderer& renderer)
     {
-        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // default write state
         renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
         renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
@@ -327,7 +327,7 @@ protected:
             instVb->SetData(instances, 1, sizeof(InstanceRow));
 
             GpuDrawParams p;
-            // REMED-GFX-202: the classic two-stream instanced binding set.
+            // The classic two-stream instanced binding set.
             SetInstancedVertexStreamsEXT(p, *vb, *instVb, /*instanceFrequency=*/1,
                                          static_cast<int>(sizeof(VP)), 0,
                                          static_cast<int>(sizeof(InstanceRow)), 0);

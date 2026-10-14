@@ -29,7 +29,7 @@
 float4x4 WorldViewProj : register(c0); // c0-c3
 float4x4 World         : register(c4); // c4-c7
 float3x3 NormalMatrix  : register(c8); // c8-c10 (WorldInverseTranspose, upper 3x3)
-float4   FogParams     : register(c11); // REMED-GFX-010: FNA view-space fog vector (was FogEnabled/Start/End)
+float4   FogParams     : register(c11); // FNA view-space fog vector (was FogEnabled/Start/End)
 
 struct VSInput
 {
@@ -91,7 +91,7 @@ VSOutput VSPbr3DBody(float3 position, float3 normal, float4 tangent, float2 uv, 
                             vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(vin.Position, 1.0), World).xyz;
-    // REMED-GFX-010: FNA view-space fog. FogParams now carries EffectHelpers.SetFogVector
+    // FNA view-space fog. FogParams now carries EffectHelpers.SetFogVector
     // (World*View 3rd column); keep = 1 - saturate(dot(objectPos, fogVector)) is true eye-space-Z
     // fog, not object-space. Zero vector (fog disabled) -> dot 0 -> keep 1 (no fog).
     vout.FogFactor = 1.0 - saturate(dot(float4(vin.Position, 1.0), FogParams));

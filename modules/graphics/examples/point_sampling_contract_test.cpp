@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-150: TextureFilter::Point must select exactly ONE texel, and TextureAddressMode must
+// TextureFilter::Point must select exactly ONE texel, and TextureAddressMode must
 // decide which one, on every textured draw path.
 //
 // THE PUBLIC CONTRACT, stated as the arithmetic a conforming renderer performs. A destination pixel
@@ -714,7 +714,7 @@ class PointSamplingContractTest : public Game
         ResetState(dev, rtW, rtH);
         // A raw DrawUserPrimitives runs under whatever device state is current, and the previous
         // SpriteBatch::Begin left CullCounterClockwise behind -- which culls this quad's winding
-        // (REMED-GFX-160: XNA's front face is clockwise AS DISPLAYED). Without this the leg would
+        // (XNA's front face is clockwise AS DISPLAYED). Without this the leg would
         // draw nothing and its "no interpolated colour" companion check would pass vacuously.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.setDepthStencilStateProperty(DepthStencilState::None);
@@ -779,7 +779,7 @@ class PointSamplingContractTest : public Game
                 // CNA's sprite path reproduces that. Both were measured on the real XNA 4.0
                 // runtime at this exact magnification: the 3D quad agrees with integer centres
                 // 100/100 and with half-integer 81/100, and SpriteBatch agrees the other way
-                // round, also 100/100. See spikes/xna-pixel-center-spike/ and REMED-GFX-238.
+                // round, also 100/100. See spikes/xna-pixel-center-spike/ and the XNA pixel-centre contract.
                 //
                 // Do not "simplify" this back to (x + 0.5): that is the OpenGL/Direct3D 10
                 // convention, it is what this leg used to assert, and asserting it here marks
@@ -818,7 +818,7 @@ class PointSamplingContractTest : public Game
         {
             // Asserted rather than merely reported: if the sample point is ever moved back to the
             // half-integer (OpenGL) convention this drops to zero, so the leg notices the reversion
-            // instead of quietly continuing to pass. REMED-GFX-238.
+            // instead of quietly continuing to pass. the XNA pixel-centre contract.
             check(ties > 0, label + ": TIE GUARD -- an integer magnification is structurally tied "
                             "under XNA's integer pixel centres, and this leg checks the tie resolves "
                             "to an admissible texel (ties=" + std::to_string(ties) + ")");
@@ -909,7 +909,7 @@ protected:
 private:
     void RunNonRasterizing(GraphicsDevice& dev)
     {
-        // HEADLESS performs no rasterization, so REMED-GFX-127's contract makes the readback reject
+        // HEADLESS performs no rasterization, so the contract makes the readback reject
         // deterministically. There is no sampled pixel to measure; the honest assertion is that the
         // request is refused rather than fabricated.
         RenderTarget2D rt(dev, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,

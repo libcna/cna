@@ -112,7 +112,7 @@ namespace
     }
 }
 
-// REMED-CONTENT-006: ParseOne() previously recursed once per nesting level with no limit at all --
+// ParseOne() previously recursed once per nesting level with no limit at all --
 // confirmed empirically (before this fix) to segfault the process via C++ call-stack exhaustion on
 // a crafted, well-under-1MB type name. Reproduces that shape at the default limit's own boundary,
 // proving it now throws cleanly instead of crashing.

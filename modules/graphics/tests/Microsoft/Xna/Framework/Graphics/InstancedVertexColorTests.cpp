@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-212 -- `BasicEffect.VertexColorEnabled` on the instanced draw route.
+// `BasicEffect.VertexColorEnabled` on the instanced draw route.
 //
 // The authoritative contract is draw-call-independent, and the reference says so three times over:
 //
@@ -129,17 +129,17 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
-// Vulkan and WebGPU were corrected by REMED-GFX-212, bgfx by REMED-GFX-215, and Software gained
+// Vulkan and WebGPU were corrected by the instanced VertexColorEnabled fix, bgfx by the instanced DiffuseColor/VertexColorEnabled fix, and Software gained
 // its independent CPU route in SOFTWARE-129.
 //
-// bgfx was outside this set until REMED-GFX-215. Its instanced route consumed COLOR0 -- which is
-// what REMED-GFX-212's own triage measured, with a WHITE DiffuseColor that cannot tell "COLOR0
+// bgfx was outside this set until the instanced DiffuseColor/VertexColorEnabled fix. Its instanced route consumed COLOR0 -- which is
+// what the triage measured, with a WHITE DiffuseColor that cannot tell "COLOR0
 // times DiffuseColor" apart from "COLOR0 alone" -- but a non-white DiffuseColor separated them and
 // showed bgfx emitting the RAW vertex colour, ignoring DiffuseColor AND VertexColorEnabled in both
 // settings: `vs_instanced3d.sc`'s whole colour body was `v_color0 = a_color0;` and it declared no
 // diffuse uniform, so neither term had anywhere to arrive. That was the exact mirror image of
-// REMED-GFX-212 -- Vulkan and WebGPU kept DiffuseColor and dropped COLOR0, bgfx kept COLOR0 and
-// dropped DiffuseColor -- so it was tracked separately as REMED-GFX-215 and fixed there. The arm
+// Vulkan and WebGPU kept DiffuseColor and dropped COLOR0, bgfx kept COLOR0 and
+// dropped DiffuseColor -- so it was tracked separately as the instanced DiffuseColor/VertexColorEnabled fix and fixed there. The arm
 // that asserted bgfx's measured defect did what it was written to do: it failed the moment bgfx was
 // corrected and forced its own removal. `InstancedDiffuseColorTests.cpp` is that ticket's permanent
 // non-neutral-DiffuseColor oracle, and it is what keeps this file's white-DiffuseColor blind spot
@@ -253,7 +253,7 @@ namespace
 
     /// What THIS renderer is asserted to produce. Every measured renderer is now held to the public
     /// contract on both routes: the bgfx instanced exemption this function used to carry was
-    /// removed when REMED-GFX-215 fixed the defect it recorded.
+    /// removed when the instanced DiffuseColor/VertexColorEnabled fix fixed the defect it recorded.
     Rgba AssertedColor(const Rgba& color0, bool vertexColorEnabled, Route route)
     {
         (void)route;
@@ -780,7 +780,7 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledFalseIgnoresGeometryColorOnBo
 // (VertexPositionColor) vertex buffer". That is an ordinary-route defect of a different class --
 // a supported public call that throws rather than one that renders the wrong colour -- it
 // reproduces identically on unfixed HEAD, and it is recorded as REMED-GFX-214, not fixed here.
-// The instanced half of this leg is REMED-GFX-212's own and is asserted unconditionally; the
+// The instanced half of this leg is the and is asserted unconditionally; the
 // route-agreement half is asserted only where the ordinary route actually rendered, and the
 // rejection text is printed when it did not.
 // ---------------------------------------------------------------------------
@@ -841,7 +841,7 @@ TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOn
     const FrameSnapshot ordinary = render(false);
     const FrameSnapshot instanced = render(true);
 
-    // REMED-GFX-212's own half. The instanced route must produce the analytic product for this
+    // The half. The instanced route must produce the analytic product for this
     // declaration too, whatever the ordinary route does with it.
     ExpectColumns(instanced, true, Route::Instanced, "stride24/instanced-route");
     if (ordinaryRejection.empty())
@@ -897,7 +897,7 @@ TEST_F(InstancedVertexColorTest, ThirtyTwoBitIndicesConsumeGeometryColorOnTheIns
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-211 and REMED-GFX-213 compose with the colour: a nonzero geometry VertexOffset must
+// Compose with the colour: a nonzero geometry VertexOffset must
 // skip the decoy quad AND the surviving quads must keep their own COLOR0 records, and an instance
 // divisor greater than one must repeat a record without touching the colour.
 // ---------------------------------------------------------------------------

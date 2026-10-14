@@ -39,9 +39,9 @@
 
 float4x4 WorldViewProj                : register(c0); // c0-c3
 float4x4 World                         : register(c4); // c4-c7
-float4   FogParams                     : register(c8); // REMED-GFX-010: only .w = WeightsPerVertex now (xyz unused)
+float4   FogParams                     : register(c8); // only .w = WeightsPerVertex now (xyz unused)
 float4x3 Bones[PBR_SKINNED_MAX_BONES]  : register(c9); // c9..c224 (216 registers)
-float4   FogVector                     : register(c225); // REMED-GFX-010: FNA view-space fog vector (SetFogVector)
+float4   FogVector                     : register(c225); // FNA view-space fog vector (SetFogVector)
 
 struct VSInput
 {
@@ -79,7 +79,7 @@ struct VSOutput
     float4 Color     : COLOR0;
 };
 
-// REMED-GFX-006: transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
+// Transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
 // no built-in inverse(); vs_3_0 has ample instruction budget for this. Matches Pbr3D.hlsl's own
 // CPU-supplied NormalMatrix and the retired VULKAN renderer's corrected pbr3d_skinned.vert.glsl.
 float3x3 InverseTranspose3x3(float3x3 m)
@@ -127,7 +127,7 @@ VSOutput VSPbrSkinned3DBody(VSInput vin, float4 color)
     float3 skinnedTangent = mul(vin.Tangent.xyz, skinNormalMat);
 
     vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj);
-    // GLTF-264/REMED-GFX-006: inverse-transpose both the blended joint matrix and World. Tangent
+    // GLTF-264: inverse-transpose both the blended joint matrix and World. Tangent
     // stays on their raw direction matrices.
     float3x3 worldDirectionMat = (float3x3)World;
     vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3(worldDirectionMat)));
@@ -136,7 +136,7 @@ VSOutput VSPbrSkinned3DBody(VSInput vin, float4 color)
                                 * CnaDirectionHandedness(skinNormalMat));
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;
-    // REMED-GFX-010: FNA view-space fog on the POST-skin position (FNA Skin() mutates vin.Position
+    // FNA view-space fog on the POST-skin position (FNA Skin() mutates vin.Position
     // before ComputeFogFactor). keep = 1 - saturate(dot(skinPos, fogVector)); zero vector = no fog.
     vout.FogFactor = 1.0 - saturate(dot(float4(skinnedPos, 1.0), FogVector));
 

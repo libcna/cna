@@ -273,7 +273,7 @@ namespace CNA::Internal
      * untrustedString` can resolve to anywhere on disk -- and against any `..`-escaping relative
      * path (see IsDisallowedAbsolutePath() for the absolute/drive-letter/UNC half of the check).
      *
-     * Used directly by two of the three sites sharing this root cause (plan REMED-CONTENT-002):
+     * Used directly by two of the three sites sharing this root cause:
      * `StorageDevice::DeleteContainer` and `PlaylistParser::Parse`, where the natural containment
      * root (storage root; the playlist's own directory) is the same directory the untrusted string
      * is joined onto. The third site, `ContentReader::ReadExternalReference` (via

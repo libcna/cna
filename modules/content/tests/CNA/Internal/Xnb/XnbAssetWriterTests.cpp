@@ -280,7 +280,7 @@ TEST(XnbAssetWriterTest, ASpriteFontRoundTripsWithEveryGlyphList)
     source.spacing = 1.5f;
     source.kerning = {Vector3{0.0f, 2.0f, 0.5f}, Vector3{-1.0f, 2.0f, 1.0f}};
     // In the character table on purpose: SpriteFont::setDefaultCharacterProperty rejects a
-    // fallback the font cannot render (REMED-GFX-002), so U+003F here would have produced an
+    // fallback the font cannot render, so U+003F here would have produced an
     // .xnb that CNA's own runtime refuses to load. The writer now refuses it instead
     // (plans/plan_xnapipeline.md XNAP-45).
     source.defaultCharacter = u'A';

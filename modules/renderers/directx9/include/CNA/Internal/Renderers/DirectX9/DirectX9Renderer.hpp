@@ -38,7 +38,7 @@ namespace CNA::Internal::Renderers::DirectX9
     struct D3D9MojoShaderContextEXT;
 #endif
 
-    /// Narrow operation list for REMED-GFX-092's checked D3D9 state/target/depth path.  This is
+    /// Narrow operation list for the checked D3D9 state/target/depth path.  This is
     /// deliberately not a general D3D9 interception layer: it exists both to centralize the
     /// release-build HRESULT policy and to give the D3D9 smoke shard deterministic, per-renderer
     /// fault injection without mocking IDirect3DDevice9.
@@ -241,7 +241,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// SetRenderTarget2D(nullptr) and by a D3D9RenderTargetRenderer/D3D9RenderTargetCubeRenderer's
         /// own UnbindAsRenderTarget(). CNAEXT.
         void RestoreBackBufferRenderTargetEXT();
-        /// REMED-GFX-092: atomically switches all active D3D9 render-target slots, the depth
+        /// Atomically switches all active D3D9 render-target slots, the depth
         /// surface, and viewport.  A failed transition restores the captured native binding when
         /// possible; if rollback cannot be proven, rendering is blocked until a later successful
         /// target transition.  Used only by the D3D9 render-target implementations.
@@ -249,7 +249,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                          IDirect3DSurface9* depthStencilSurface,
                                          int depthStencilFormat, int width, int height,
                                          const char* context);
-        /// REMED-GFX-092: checked creation wrapper used only for render-target depth surfaces.
+        /// Checked creation wrapper used only for render-target depth surfaces.
         /// It guarantees a failed call leaves the supplied output slot null and maps device-lost
         /// results through this renderer's established lost-device lifecycle.
         void CreateDepthStencilSurfaceEXT(UINT width, UINT height, D3DFORMAT format,
@@ -293,7 +293,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// per-instance-aware Stock Effect vertex shader at all, so this is not effect-aware and
         /// does not dispatch through `DrawPrimitivesExImpl()`. Falls back to
         /// `DrawIndexedPrimitivesEx()` when the bound set has no per-instance stream
-        /// (REMED-GFX-202: `FirstInstanceStream(params) == nullptr`). Defined in
+        /// (`FirstInstanceStream(params) == nullptr`). Defined in
         /// `D3D9InstancedDraw.cpp`.
         void DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
                                        const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -437,7 +437,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// transition) makes rendering available again.
         void EnsureRenderReadyEXT() const;
 
-        /// Test-only control surface for the narrow REMED-GFX-092 wrappers.  Injection is
+        /// Test-only control surface for the narrow checked-HRESULT wrappers.  Injection is
         /// instance-local, one-shot, and is consumed before the real native call, so it cannot
         /// perturb other tests or a later renderer instance.
         void InjectNextNativeFailureEXT(D3D9NativeOperationEXT operation, HRESULT result);
@@ -695,7 +695,7 @@ namespace CNA::Internal::Renderers::DirectX9
         bool deviceLost_ = false;
         /** @brief Keeps an injected loss unavailable until DebugRestoreContext is called. */
         bool simulatedDeviceLoss_ = false;
-        /// REMED-GFX-092: per-category safety bits, not a cache of requested XNA state.  D3D9
+        /// Per-category safety bits, not a cache of requested XNA state.  D3D9
         /// still sends every native state call; these bits only prevent a caught native failure
         /// from being followed by a draw/clear before the relevant complete application succeeds.
         unsigned int unsafeRenderStateMask_ = 0;

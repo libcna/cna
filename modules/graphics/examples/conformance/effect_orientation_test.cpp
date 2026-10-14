@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Geometry in the +X/+Y quadrant of clip space appears TOP-RIGHT, for every effect family and on
 // both destinations: XNA's clip space is +Y up, and both GetBackBufferData and RenderTarget2D.
-// GetData return rows top first. Moved from the retired VULKAN suite (REMED-GFX-011:
+// GetData return rows top first. Moved from the retired VULKAN suite (
 // vulkan_orientation_calibration/effects/rendertarget_test), where four effect families had lost
 // their Y flip; one program now covers what the three did.
 //

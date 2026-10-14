@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // An issued draw is consumed when the public call returns: disposing the custom Effect or the
 // OcclusionQuery it used before the renderer flushes must neither crash nor change the draw.
-// Moved from the retired VULKAN suite (REMED-GFX-075, scenes S4/S5/S8); the texture, render-target,
+// Moved from the retired VULKAN suite (scenes S4/S5/S8); the texture, render-target,
 // cube and SpriteBatch source legs of that file already live in deferred_source_lifetime_test.
 //
 // XNA 4.0 submits each draw to Direct3D 9 at the call, so a game may dispose an effect right after

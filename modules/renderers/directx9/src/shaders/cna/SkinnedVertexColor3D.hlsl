@@ -43,7 +43,7 @@
 //       (`vNormal=normalize(mat3(uWorld)*(skinNormalMat*aNormal));`) -- i.e. EnsureSkinnedProgram()
 //       looks like the outlier between EasyGL's own two skinned-lighting functions, not the
 //       intentional convention.
-// REMED-GFX-006: applies the World INVERSE-TRANSPOSE (computed in-shader via InverseTranspose3x3)
+// Applies the World INVERSE-TRANSPOSE (computed in-shader via InverseTranspose3x3)
 //       after the skin-local rotation, not raw (float3x3)World. This is correct under non-uniform
 //       World scale as well as rotation, matching SkinnedEffect.fx's own WorldInverseTranspose and
 //       the corrected skinned shaders of EasyGL, SDL_GPU and the since-retired Vulkan and bgfx
@@ -56,9 +56,9 @@
 
 float4x4 WorldViewProj : register(c0); // c0-c3
 float4x4 World          : register(c4); // c4-c7
-float4   FogParams      : register(c8); // REMED-GFX-010: only .w = WeightsPerVertex now (xyz unused)
+float4   FogParams      : register(c8); // only .w = WeightsPerVertex now (xyz unused)
 float4x3 Bones[72]      : register(c9); // c9..c224 (216 registers)
-float4   FogVector      : register(c225); // REMED-GFX-010: FNA view-space fog vector (SetFogVector)
+float4   FogVector      : register(c225); // FNA view-space fog vector (SetFogVector)
 
 struct VSInput
 {
@@ -80,7 +80,7 @@ struct VSOutput
     float4 Color     : COLOR0;
 };
 
-// REMED-GFX-006: transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
+// Transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
 // no built-in inverse(); vs_3_0 has ample instruction budget. Matches the corrected cross-renderer
 // skinned normal transform.
 float3x3 InverseTranspose3x3(float3x3 m)
@@ -108,12 +108,12 @@ VSOutput VSSkinnedVertexColor3D(VSInput vin)
     float3 skinnedNormal = mul(vin.Normal, (float3x3)skinning);
 
     vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj);
-    // REMED-GFX-006: World inverse-transpose (not raw World) -- see header Deviation note.
+    // World inverse-transpose (not raw World) -- see header Deviation note.
     vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)World)));
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;
     vout.Color = vin.Color;
-    // REMED-GFX-010: FNA view-space fog on the POST-skin position (FNA Skin() mutates vin.Position
+    // FNA view-space fog on the POST-skin position (FNA Skin() mutates vin.Position
     // before ComputeFogFactor). keep = 1 - saturate(dot(skinPos, fogVector)); zero vector = no fog.
     vout.FogFactor = 1.0 - saturate(dot(float4(skinnedPos, 1.0), FogVector));
 
@@ -166,7 +166,7 @@ float4 PSSkinnedVertexColor3D(PSInput pin) : SV_Target0
     float NdotL2 = max(dotL2, 0.0);
 
     float3 lightSum = Light0Diffuse * NdotL0 + Light1Diffuse * NdotL1 + Light2Diffuse * NdotL2;
-    // REMED-GFX-008: FNA composes lit = lightSum*DiffuseColor + EmissiveColor -- emissive is added
+    // FNA composes lit = lightSum*DiffuseColor + EmissiveColor -- emissive is added
     // OUTSIDE the diffuse multiply (EmissiveColor already pre-folds (emissive + ambient*diffuse)*alpha
     // at the C++ level). The prior (EmissiveColor + lightSum)*DiffuseColor wrongly scaled the folded
     // emissive/ambient by DiffuseColor again.

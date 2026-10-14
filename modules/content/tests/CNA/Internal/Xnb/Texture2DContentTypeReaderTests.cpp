@@ -468,7 +468,7 @@ TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowContentLoadEx
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-// REMED-CONTENT-001: reproduces the fuzz-discovered shape exactly -- one axis huge enough to
+// Reproduces the fuzz-discovered shape exactly -- one axis huge enough to
 // exceed any real device's maximum texture dimension, but with the OTHER axis small enough that
 // the width*height*4 product stays comfortably under CheckDecodedByteSize's own 256MB ceiling
 // (confirmed: 500000*1*4 = 2,000,000 bytes). Before this task's fix, this shape reached
@@ -496,7 +496,7 @@ TEST_F(Texture2DContentTypeReaderTest, SingleAxisExceedingMaxTextureDimensionThr
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-// REMED-CONTENT-001: reproduces the fuzz-discovered "mipLevels=25 against a 15-level maximum"
+// Reproduces the fuzz-discovered "mipLevels=25 against a 15-level maximum"
 // shape -- a declared levelCount exceeding what a real width x height texture can ever have. Before
 // this task's fix, the read loop below would call Texture2D::SetData() for mip levels the actual
 // constructed texture never allocated, the confirmed root cause of the Vulkan/WebGPU crashes.

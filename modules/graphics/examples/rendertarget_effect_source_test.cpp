@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-152: a RenderTarget2D handed to a stock or custom 3D effect as its TEXTURE must be
+// A RenderTarget2D handed to a stock or custom 3D effect as its TEXTURE must be
 // sampled, not reinterpreted.
 //
 //     SetRenderTarget(A)                  // producer
@@ -90,7 +90,7 @@
 //                                   cycles; handle reuse; interleaved lifetimes
 //   N1 earlier-frame control        a producer from a previous frame, consumed later
 //   O1 honest failure               an unsupported texture must throw, deterministically
-//   P1 ordered Clear interaction    REMED-GFX-156's ordered Clear must not erase a producer
+// P1 ordered Clear interaction    the ordered Clear must not erase a producer
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL or CRASH.
 
@@ -194,7 +194,7 @@ namespace
      * SDL_GPU routes a custom effect through `SpriteBatch` only (`SetCustomEffect` lives on its
      * sprite renderer and the pipeline override is carried on `SpriteCommand`); its stock 3D paths
      * have no custom-shader slot at all. That is a real, pre-existing capability boundary of the
-     * renderer, not something REMED-GFX-152 introduced or should paper over — so leg C1 exercises a
+     * renderer, not something the render-target-as-effect-texture fix introduced or should paper over — so leg C1 exercises a
      * custom effect on the route that HAS one, and says so rather than skipping silently.
      */
     constexpr bool kCustomEffectIn3D =
@@ -315,7 +315,7 @@ namespace
      * @brief The PACKED stream form of VertexPositionTexture -- 20 bytes, what the GPU reads.
      *
      * `sizeof(VertexPositionTexture)` is 32, not 20: the type derives from the polymorphic
-     * `IVertexType`, so it carries a vptr and tail padding (REMED-GFX-125's finding). Handing that
+     * `IVertexType`, so it carries a vptr and tail padding (the finding). Handing that
      * to `VertexBuffer::SetDataRaw`, whose stride argument is the GPU stream stride, would declare
      * a 32-byte stream that some renderers then read as VertexPositionNormalTexture. This struct is
      * the stream layout itself, so stride and contents agree on every renderer.
@@ -437,7 +437,7 @@ void main() {
 }
 
 /**
- * @brief REMED-GFX-152's public "a render target is an ordinary sampler source" contract.
+ * @brief The public "a render target is an ordinary sampler source" contract.
  */
 class RenderTargetEffectSourceTest : public Game
 {
@@ -998,7 +998,7 @@ class RenderTargetEffectSourceTest : public Game
     /**
      * @brief CheckConsumer, with the render-target source DESTROYED before the frame renders.
      *
-     * REMED-GFX-166. Identical to CheckConsumer except for one thing: side 0's source render target
+     * Identical to CheckConsumer except for one thing: side 0's source render target
      * is destroyed while the destination is STILL BOUND, so no flush can have consumed the queued
      * work yet on any renderer. Side 1 keeps its ordinary Texture2D alive, exactly as before, so the
      * comparison isolates the disposal and nothing else -- whatever a family's shading does to the
@@ -1108,7 +1108,7 @@ class RenderTargetEffectSourceTest : public Game
                           DrawMode::UserIndexedPrimitives, patternTex_);
         if (wants("A3"))
         {
-            // REMED-GFX-167: this leg used to be a declared boundary on WEBGPU -- "passes this
+            // This leg used to be a declared boundary on WEBGPU -- "passes this
             // sequence but then dies during process teardown". It was never teardown: the source
             // `a` below is destroyed while its consumer draw is still only QUEUED for the
             // backbuffer, and WebGPU replayed that command through the freed object's vtable at the
@@ -1716,8 +1716,8 @@ class RenderTargetEffectSourceTest : public Game
         {
             // Not a failure: a device may decline multisampling entirely (llvmpipe here reports
             // "MSAA up to 4x" yet applies 0). There is then no resolve to get wrong, so the
-            // sub-leg is declared rather than asserted -- the same reading REMED-GFX-151's own E0
-            // check takes. Whether a renderer SHOULD apply the requested count is REMED-GFX-154's
+            // sub-leg is declared rather than asserted -- the same reading the E0
+            // check takes. Whether a renderer SHOULD apply the requested count is the multisampled readback contract's
             // question, not this one's.
             boundary(std::string("K1 ") + kRendererName + " applied multisample count " +
                      std::to_string(applied) + " for a requested 4, so there is no MSAA resolve to "
@@ -2052,7 +2052,7 @@ class RenderTargetEffectSourceTest : public Game
     void LegN(GraphicsDevice& dev)
     {
         // earlierFrameTarget_ was produced during frame 1 (see Draw); this runs in frame 2. It is
-        // the control for the same-frame legs: if this failed too, the finding would not be about
+        // The control for the same-frame legs: if this failed too, the finding would not be about
         // same-frame ordering at all.
         if (earlierFrameTarget_ == nullptr)
         {
@@ -2112,7 +2112,7 @@ class RenderTargetEffectSourceTest : public Game
                         (what.empty() ? std::string() : std::string(" (threw: ") + what + ")"));
     }
 
-    /** @brief Leg P1 -- REMED-GFX-156's ordered Clear must not erase a producer. */
+    /** @brief Leg P1 -- the ordered Clear must not erase a producer. */
     void LegP(GraphicsDevice& dev)
     {
         // Produce A, then issue an ordered Clear on a DIFFERENT destination, then consume A. The

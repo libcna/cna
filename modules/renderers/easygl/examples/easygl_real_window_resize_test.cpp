@@ -56,7 +56,7 @@ namespace
 {
     constexpr int kMaxWaitFrames = 300;
 
-    // REMED-BUILD-010: under a real desktop compositor a window that isn't focused/mapped the way
+    // Under a real desktop compositor a window that isn't focused/mapped the way
     // an isolated Xvfb server is can have its frame rate throttled arbitrarily (observed: this
     // test's own frame_ counter still advances, just slowly, rather than the process being
     // genuinely blocked in a syscall) -- kMaxWaitFrames alone can then take far longer in wall-clock

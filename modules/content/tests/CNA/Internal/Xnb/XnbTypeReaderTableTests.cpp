@@ -112,7 +112,7 @@ TEST(XnbTypeReaderTableTest, RealMonoGameFixturePreservesRawNameAlongsideNormali
 // plans/plan_xnb.md XNB-43: a malformed generic-argument name (XnbTypeName's own std::invalid_argument)
 // must surface as this pipeline's one consistent malformed-input error type, not leak the
 // lower-level exception a caller catching ContentLoadException around Load<T>() would miss.
-// REMED-CONTENT-006: maxStringBytes previously had zero consumers anywhere -- only
+// MaxStringBytes previously had zero consumers anywhere -- only
 // BinaryReader::ReadString()'s own much coarser whole-stream clamp (up to maxFileSize) applied to
 // this field. Uses a deliberately tiny limit so the test itself stays fast and deterministic
 // rather than constructing a real 1MB+ string.
@@ -134,7 +134,7 @@ TEST(XnbTypeReaderTableTest, RawNameExceedingMaxStringBytesThrowsContentLoadExce
     EXPECT_THROW(ParseXnbTypeReaderTable(reader, "test.xnb", tinyLimits), ContentLoadException);
 }
 
-// REMED-CONTENT-006: confirms the maxObjectNestingDepth limit propagates all the way from
+// Confirms the maxObjectNestingDepth limit propagates all the way from
 // ParseXnbTypeReaderTable's own `limits` parameter through to XnbTypeName::ParseOne(), not just
 // when ParseXnbTypeName() is called directly (see XnbTypeNameTests.cpp for that half).
 TEST(XnbTypeReaderTableTest, NestingDepthExceedingLimitThrowsContentLoadException)

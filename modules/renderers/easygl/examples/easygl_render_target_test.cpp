@@ -5,7 +5,7 @@
 // as a texture to fill the default framebuffer, reads back the centre pixel,
 // and asserts G=255, R=0, B=0.
 //
-// REMED-GFX-147 strengthened this file. Its original single check — a SOLID clear colour sampled
+// Strengthened this file. Its original single check — a SOLID clear colour sampled
 // at the CENTRE pixel — exercised precisely the defective path (a RenderTarget2D used as a
 // SpriteBatch texture) and could not fail for any orientation, because a uniform image is
 // identical under every flip and the centre pixel is a fixed point of a vertical mirror. It
@@ -102,7 +102,7 @@ protected:
                         pixel.getBProperty(), pixel.getAProperty());
         }
 
-        // --- REMED-GFX-147: the same blit, with an image that is not the same under a flip ---
+        // --- The same blit, with an image that is not the same under a flip ---
         const Color topLeft(255, 0, 0, 255), topRight(0, 0, 255, 255);
         const Color bottomLeft(255, 255, 0, 255), bottomRight(255, 0, 255, 255);
         const int half = kRTSize / 2;

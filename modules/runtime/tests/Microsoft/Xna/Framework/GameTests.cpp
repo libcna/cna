@@ -469,12 +469,12 @@ TEST(GameTest, MobileLifecycleEventsSuspendResumeAndTerminateTheLoop)
     EXPECT_FALSE(game.RunApplication);
 }
 
-// REMED-CORE-006 (fixed): Game::Initialize() now subscribes graphicsDeviceService.DeviceDisposing
+// (fixed): Game::Initialize() now subscribes graphicsDeviceService.DeviceDisposing
 // += (o,e) => UnloadContent(), matching FNA (Game.cs:649-662). Disposing the game's registered
 // IGraphicsDeviceService (the GraphicsDeviceManager here) invokes UnloadContent() exactly once via
 // the real public disposal path: Game::Dispose() -> Dispose(true) -> disposes
 // graphicsDeviceService_ -> GraphicsDeviceManager::Dispose(true) -> OnDeviceDisposing()
-// (REMED-CORE-014's fix: no longer gated on ownsGraphicsDevice_, which is always false for a
+// (the fix: no longer gated on ownsGraphicsDevice_, which is always false for a
 // Game-attached manager).
 TEST(GameTest, DisposingDeviceInvokesUnloadContent)
 {
@@ -535,7 +535,7 @@ TEST(GameTest, UnloadContentWorksAcrossRepeatedGameInstancesInOneProcess)
     }
 }
 
-// REMED-CORE-006 full-fidelity branch: FNA's Initialize() also subscribes
+// Full-fidelity branch: FNA's Initialize() also subscribes
 // graphicsDeviceService.DeviceCreated += (o,e) => LoadContent(); when the registered service's
 // device is not yet available at Initialize() time, deferring LoadContent() rather than skipping
 // it. Exercised directly against a minimal IGraphicsDeviceService double (no GraphicsDeviceManager

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-008: analytic SkinnedEffect ambient/emissive lighting conformance harness.
+// Analytic SkinnedEffect ambient/emissive lighting conformance harness.
 //
 // Renderer-agnostic (registered per renderer by the CMake test files). Isolates each individual
 // lighting term of FNA's SkinnedEffect lighting model so an incorrect ambient/emissive

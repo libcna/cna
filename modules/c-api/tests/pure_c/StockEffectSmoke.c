@@ -389,7 +389,7 @@ static int validate_environment_map(
 
     /*
      * plans/plan_apple_m4.md AM4-206: a device without 3D refuses the cube at
-     * construction under the default Unsupported3DGraphicsCallBehavior::Throw (REMED-GFX-130), by
+     * construction under the default Unsupported3DGraphicsCallBehavior::Throw, by
      * name; the effect itself, its Texture2D and its clone work the same either way, and an unset
      * environment map reads back as unset.
      */

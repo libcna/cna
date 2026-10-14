@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-DECL-GUARD -- the declaration-fidelity rule itself.
+// The declaration-fidelity rule itself.
 //
 // The rendering oracle in VertexDeclarationLayoutTests.cpp proves the OUTCOME on whichever renderer
 // this build selected. This file proves the DECISION, on every build, without a device: the
 // predicate is a pure header-only function over a declaration and a description of the native
-// layout a renderer actually programs, so the whole matrix REMED-GFX-217 and REMED-GFX-218 care
+// layout a renderer actually programs, so the whole matrix the vertex-declaration fidelity guard and REMED-GFX-218 care
 // about can be asserted directly rather than inferred from pixels.
 //
 // WHY THE RULE IS ASYMMETRIC. The exit triage rejected "the declaration must equal the stride
@@ -184,7 +184,7 @@ TEST(VertexDeclarationFidelityTest, ARendererThatRefusesTheStrideKeepsItsOwnReje
 }
 
 // ---------------------------------------------------------------------------
-// The collisions. Same stride, different composition -- the shapes REMED-GFX-217 measured
+// The collisions. Same stride, different composition -- the shapes the vertex-declaration fidelity guard measured
 // rendering silently wrong on all seven renderers.
 // ---------------------------------------------------------------------------
 
@@ -356,7 +356,7 @@ TEST(VertexDeclarationFidelityTest, RememberingIsIdempotentAndRecoversAfterAReje
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-218's rule: an ordered attribute-location comparison, not a stride table. Its
+// The rule: an ordered attribute-location comparison, not a stride table. Its
 // asymmetry is different -- a declaration shorter than the program's input list leaves the
 // remaining inputs unbound, which is a missing input rather than a reinterpretation.
 // ---------------------------------------------------------------------------

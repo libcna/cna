@@ -115,10 +115,10 @@ namespace CNA::Internal::Xnb
          *        the end of @p s or at the first top-level `,`/`]` that isn't part of this
          *        type's own generic-argument list.
          *
-         * REMED-CONTENT-006: recurses once per nested generic-argument level with no limit of its
-         * own -- @p nestingDepth/@p maxDepth close that (a crafted type name costs ~4 bytes per
-         * nesting level, so a sub-1MB file previously exhausted the C++ call stack; confirmed
-         * empirically before this fix, see REMEDIATION_PROGRESS.md).
+         * Recurses once per nested generic-argument level, so @p nestingDepth/@p maxDepth bound
+         * it: a crafted type name costs ~4 bytes per nesting level, and without the limit a
+         * sub-1MB file exhausted the C++ call stack (confirmed empirically before the limit
+         * existed).
          *
          * @param nestingDepth Current nesting depth (0 at the top-level call). Deliberately not
          *                     named `depth` -- this function already has an unrelated local
@@ -219,8 +219,8 @@ namespace CNA::Internal::Xnb
      *
      * @param rawTypeName The type-reader name exactly as read from a `.xnb` type-reader table
      *                    entry (or an already-bare name; the parser tolerates both).
-     * @param limits      Bounds the generic-argument nesting depth (REMED-CONTENT-006,
-     *                    plans/plan_xnb.md XNB-43); defaults to @ref DefaultXnbReadLimits().
+     * @param limits      Bounds the generic-argument nesting depth (plans/plan_xnb.md
+     *                    XNB-43); defaults to @ref DefaultXnbReadLimits().
      * @return The parsed name, ready for ToCanonicalString() or direct field inspection.
      * @throws std::invalid_argument if @p rawTypeName has unbalanced or malformed brackets, or
      *         nests generic arguments deeper than @p limits.maxObjectNestingDepth.

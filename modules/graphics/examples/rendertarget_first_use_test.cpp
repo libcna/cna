@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-158: a RenderTarget2D constructed during a public frame must be usable IMMEDIATELY,
+// A RenderTarget2D constructed during a public frame must be usable IMMEDIATELY,
 // in that same frame, with no warm-up of any kind.
 //
 //     RenderTarget2D a(device, w, h);      // constructed now
@@ -54,7 +54,7 @@
 // can observe it. Leg order is therefore load-bearing here in a way it is not in other fixtures, and
 // `--leg=<id>` runs one leg on its own so that leg is the first thing the process does. The CMake
 // registration uses that to put five different legs in first position in five separate processes;
-// the four RenderTarget2D ones are red pre-fix and green after, and the cube leg covers the second
+// The four RenderTarget2D ones are red pre-fix and green after, and the cube leg covers the second
 // registration path (BindAsRenderTargetFace) through the same reset.
 //
 // THE PATTERN is 8x4 -- deliberately NON-SQUARE, so a transpose cannot masquerade as a pass -- and
@@ -76,7 +76,7 @@
 //   H   MSAA target, consumed by sampling        resolve must not need a warm-up
 //   I   mipmapped target                         level 0 of a brand-new mip chain
 //   J   stock 3D is the cycle's first operation  not a SpriteBatch-only contract
-//   K   SpriteBatch and 3D in one first cycle    REMED-GFX-157 order preserved
+//   K   SpriteBatch and 3D in one first cycle    the SpriteBatch/3D draw-order fix order preserved
 //   L   dispose and recreate                     same frame, repeatedly, address reuse
 //   M   cardinality                              many new targets per frame, many frames
 //   N   a brand-new RenderTargetCube face       a second registration path through the reset
@@ -126,7 +126,7 @@ namespace
     /**
      * @brief Whether this renderer rasterizes at all.
      *
-     * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes every readback reject
+     * HEADLESS performs no rasterization, so the contract makes every readback reject
      * deterministically. There is no produced content to observe there; the legs below assert the
      * rejection instead of a value.
      */
@@ -155,7 +155,7 @@ namespace
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
      *
-     * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
+     * CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
      * It used to read false on SDL_GPU, whose stock-effect paths cast a RenderTarget2D's renderer to
      * the unrelated `SdlGpuTextureRenderer` sibling and died.
@@ -259,7 +259,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-158's public contract: a render target is usable the instant it is constructed.
+ * @brief The public contract: a render target is usable the instant it is constructed.
  */
 class RenderTargetFirstUseTest : public Game
 {
@@ -385,7 +385,7 @@ class RenderTargetFirstUseTest : public Game
     }
 
     /// Draws @p source 1:1 into the FULL extent of whatever is currently bound, point-sampled.
-    /// REMED-GFX-157: the depth and rasterizer states are passed explicitly -- a null means
+    /// The depth and rasterizer states are passed explicitly -- a null means
     /// `RasterizerState.CullCounterClockwise`, which FNA's PrepRenderState leaves on the device.
     void DrawFull(GraphicsDevice& dev, const Texture2D& source)
     {
@@ -427,7 +427,7 @@ class RenderTargetFirstUseTest : public Game
     /// Draws @p source over the FULL extent of whatever is bound through BasicEffect, so a leg can
     /// state the contract for the stock 3D path and not only for SpriteBatch. The quad is expressed
     /// directly in clip space, so this cannot accidentally exercise viewport segmentation
-    /// (REMED-GFX-063/065) instead of the first use under test. v runs 1 -> 0 up the screen, which
+    /// instead of the first use under test. v runs 1 -> 0 up the screen, which
     /// is what makes a clip-space quad agree with SpriteBatch's top-left texel order.
     void Draw3DFull(GraphicsDevice& dev, Texture2D& source)
     {
@@ -570,7 +570,7 @@ class RenderTargetFirstUseTest : public Game
 
     /// Constructs a target, binds it, and makes @p source its content with the draw as the bind
     /// cycle's FIRST public operation -- no explicit Clear, no warm-up, nothing before it. This is
-    /// the exact shape REMED-GFX-158 loses: the operation that lands on the target's own base view.
+    /// The exact shape the first-use render-target contract loses: the operation that lands on the target's own base view.
     void ProduceFirstOp(GraphicsDevice& dev, RenderTarget2D& rt, const Texture2D& source)
     {
         dev.SetRenderTarget(&rt);
@@ -801,7 +801,7 @@ class RenderTargetFirstUseTest : public Game
     }
 
     /// H -- a brand-new MSAA target. It is consumed by SAMPLING, never by reading it back:
-    /// REMED-GFX-154/164 own multisampled readback and this leg must not measure them.
+    /// Own multisampled readback and this leg must not measure them.
     void LegH(GraphicsDevice& dev)
     {
         RenderTarget2D msaa(dev, kPW, kPH, /*mipMap=*/false, SurfaceFormat::Color,
@@ -870,7 +870,7 @@ class RenderTargetFirstUseTest : public Game
     }
 
     /// K -- both draw families inside one brand-new target's first bind cycle, drawn into disjoint
-    /// halves so this measures first use rather than REMED-GFX-157's intra-cycle ordering.
+    /// halves so this measures first use rather than the intra-cycle ordering.
     void LegK(GraphicsDevice& dev)
     {
         RenderTarget2D a(dev, kPW * 2, kPH, /*mipMap=*/false, SurfaceFormat::Color,

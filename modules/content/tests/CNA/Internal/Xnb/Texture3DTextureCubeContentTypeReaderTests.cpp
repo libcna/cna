@@ -53,10 +53,10 @@ using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 
 // -----------------------------------------------------------------------
-// REMED-GFX-130: does THIS build's renderer actually read a cube face back? See the identical
+// Does THIS build's renderer actually read a cube face back? See the identical
 // constant (and its full rationale) in tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // -----------------------------------------------------------------------
-// REMED-GFX-135 additionally makes the UPLOAD side of this fixture load-bearing: a renderer that
+// Additionally makes the UPLOAD side of this fixture load-bearing: a renderer that
 // cannot store a cube face now throws System::NotSupportedException out of TextureCubeReader's own
 // SetData call, so the whole ContentManager::Load fails instead of quietly returning an empty cube.
 // Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
@@ -187,10 +187,10 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
     cm.setGraphicsDevice(gd);
 
-    // REMED-GFX-135: on a renderer with no cube storage, TextureCubeReader's own SetData call now
+    // On a renderer with no cube storage, TextureCubeReader's own SetData call now
     // throws instead of silently discarding all 42 face/level uploads, so the load fails as a whole
     // rather than handing back a TextureCube that reports LevelCount 7 and holds nothing. That is
-    // the content-pipeline consequence of the finding, asserted here rather than worked around.
+    // The content-pipeline consequence of the finding, asserted here rather than worked around.
     if (!CubeStorageSupported())
     {
         EXPECT_THROW((void)cm.Load<TextureCube>("SampleCube64DXT1Mips"),
@@ -213,7 +213,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     // plausible non-degenerate image) -- spot-check level 0 (64x64) and the smallest levels (the
     // sub-4x4 DXT1 block-rounding edge cases, 2x2 and 1x1, each still exactly one 8-byte block).
     //
-    // REMED-GFX-130: the readback half of this test is only meaningful where the renderer really
+    // The readback half of this test is only meaningful where the renderer really
     // reads a cube face back. It used to be issued unconditionally, and the smallest-level check
     // was a bare EXPECT_NO_THROW that asserted nothing at all -- a renderer answering with the
     // shared layer's fabricated transparent-black face passed it. Both halves now assert the real
@@ -271,7 +271,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
         EXPECT_TRUE(sawNonUniform) << "level 0 should not decode to a uniformly flat image";
 
         // The smallest mip level (1x1) is the sub-4x4 DXT1 block-rounding edge case. Every renderer
-        // that stores cube faces at all now stores the whole declared chain (REMED-GFX-135 gave
+        // that stores cube faces at all now stores the whole declared chain (the cube/volume upload contract gave
         // Software the per-mip storage it was the last to be missing).
         if (CubeMipReadbackSupported())
         {
@@ -441,7 +441,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, ContentManagerStronglyCachesTe
     EXPECT_NE(originalRenderer.get(), &reloaded.GetRenderer());
 }
 
-// REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
+// Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
 // (plans/plan_software.md Boundaries). On a renderer that doesn't support it, reading now throws a clean
 // System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
@@ -602,7 +602,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest,
     }
 }
 
-// REMED-CONTENT-003: TextureCubeReader was the one sibling among the three XNB texture readers
+// TextureCubeReader was the one sibling among the three XNB texture readers
 // missing this check -- a crafted declared byteCount undersized relative to faceSize*faceSize*4
 // previously reached the unchecked pixel-unpacking loop, an out-of-bounds heap read. Ported
 // verbatim from Texture2DReader's own identical, already-tested check.
@@ -634,7 +634,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderRejectsByteCo
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-// REMED-CONTENT-009: Texture3DReader's own decoded-byte-size check has one more factor than
+// Texture3DReader's own decoded-byte-size check has one more factor than
 // Texture2DReader's (width*height*depth*4 vs width*height*4), found to share the identical
 // signed-int64-overflow UB shape during that task's root-cause sweep. This is the exact adversarial
 // shape confirmed by UBSan pre-fix.
@@ -710,7 +710,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderZeroDepthThrows
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-// REMED-CONTENT-009: TextureCubeReader's own decoded-byte-size check (size*size*4) shares the
+// TextureCubeReader's own decoded-byte-size check (size*size*4) shares the
 // identical signed-int64-overflow UB shape as Texture2DReader's -- confirmed during that task's
 // root-cause sweep.
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderAbsurdlyLargeSizeThrowsContentLoadExceptionNotBadAlloc)

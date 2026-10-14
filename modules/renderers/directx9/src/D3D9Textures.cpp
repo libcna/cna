@@ -106,7 +106,7 @@ namespace CNA::Internal::Renderers::DirectX9
     bool D3D9TextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                          const void* data, int dataLength)
     {
-        // REMED-GFX-135: these used to be a silent `return` the shared layer read as a completed
+        // These used to be a silent `return` the shared layer read as a completed
         // upload, and neither the source pointer nor the rectangle was checked at all.
         if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6) return false;
         if (data == nullptr || w <= 0 || h <= 0) return false;
@@ -136,7 +136,7 @@ namespace CNA::Internal::Renderers::DirectX9
     bool D3D9TextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                          void* data, int dataLength) const
     {
-        // REMED-GFX-130: each silent `return` here became a complete transparent-black face once
+        // Each silent `return` here became a complete transparent-black face once
         // the shared layer converted its own zeroed scratch buffer regardless.
         if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
         if (data == nullptr || dataLength < w * h * 4) return false;
@@ -180,7 +180,7 @@ namespace CNA::Internal::Renderers::DirectX9
     bool D3D9Texture3DRenderer::SetData(int level, int x, int y, int z, int w, int h, int depth,
                                        const void* data, int dataLength)
     {
-        // REMED-GFX-135: see D3D9TextureCubeRenderer::SetData -- silent returns looked like writes.
+        // See D3D9TextureCubeRenderer::SetData -- silent returns looked like writes.
         if (level < 0 || level >= mipLevels_) return false;
         if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
         const int levelW = std::max(1, width_ >> level);
@@ -225,7 +225,7 @@ namespace CNA::Internal::Renderers::DirectX9
     bool D3D9Texture3DRenderer::GetData(int level, int x, int y, int z, int w, int h, int depth,
                                        void* data, int dataLength) const
     {
-        // REMED-GFX-130: see D3D9TextureCubeRenderer::GetData above.
+        // See D3D9TextureCubeRenderer::GetData above.
         if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
         if (data == nullptr || dataLength < w * h * depth * 4) return false;
 

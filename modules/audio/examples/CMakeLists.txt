@@ -69,7 +69,7 @@ if(CNA_BUILD_EXAMPLES)
     if(TARGET SDL3::SDL3main)
         target_link_libraries(cna_demo_xact PRIVATE SDL3::SDL3main)
     endif()
-    # REMED-BUILD-002: no POST_BUILD Content copy here, unlike the other demo targets above --
+    # No POST_BUILD Content copy here, unlike the other demo targets above --
     # demo_xact/ has no Content/ directory at all. XactDemo::LoadContent() generates its
     # own XGS/XWB/XSB files at runtime via XactFileGen::GenerateXactFiles() into "Content/Audio"
     # relative to the process's working directory, so there is nothing to copy from source.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-200: the public VertexBufferBinding.VertexOffset contract on the ORDINARY
+// The public VertexBufferBinding.VertexOffset contract on the ORDINARY
 // (non-instanced) draw routes.
 //
 // XNA/FNA define VertexBufferBinding(vertexBuffer, vertexOffset, instanceFrequency) as "bind this
@@ -47,12 +47,12 @@
 //
 // Renderer scope. The render-target group is the portable one: it runs on every renderer that
 // rasterizes 3D triangles and implements RenderTarget2D::GetData, which includes SDL_GPU (whose
-// only exact-pixel oracle that is -- see REMED-GFX-117). The backbuffer group additionally needs
-// GetBackBufferData and therefore carries the renderer set REMED-GFX-113 established. The
+// only exact-pixel oracle that is --. The backbuffer group additionally needs
+// GetBackBufferData and therefore carries the renderer set the non-indexed range fix established. The
 // ordinary -> instanced -> ordinary transition additionally needs a working instanced route, so it
-// carries REMED-GFX-118's instanced suite set, and asserts the instanced leg's OWN binding offset
-// only on the renderers whose instanced path consumes it (EasyGL via REMED-GFX-122) -- whether the
-// others honour it there is REMED-GFX-122/123's question, not this file's.
+// carries the instanced suite set, and asserts the instanced leg's OWN binding offset
+// only on the renderers whose instanced path consumes it (EasyGL via the EasyGL instanced offset fix) -- whether the
+// others honour it there is the EasyGL instanced offset fix's question, not this file's.
 
 #include <algorithm>
 #include <array>
@@ -136,7 +136,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
                             Software, SdlGpu);
 }
 
-// REMED-GFX-113's renderer set: the above, minus the renderers without backbuffer readback.
+// The renderer set: the above, minus the renderers without backbuffer readback.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetBackbuffer()
@@ -145,7 +145,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
                             Software);
 }
 
-// REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry;
+// The instanced suite set: the renderers whose instanced route renders the geometry;
 // SOFTWARE-129 adds the deterministic CPU implementation.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this describes
 /// the ACTIVE renderer rather than the build default.
@@ -244,7 +244,7 @@ namespace
 
     /// The identity: the transition test needs an instance stream that exists and is consumed, not
     /// one that moves geometry. Identity is also its own transpose, so the since-retired bgfx
-    /// renderer's transposed per-instance matrix (REMED-GFX-121) could not perturb this fixture.
+    /// renderer's transposed per-instance matrix could not perturb this fixture.
     InstanceMatrix IdentityInstance()
     {
         return InstanceMatrix{
@@ -1256,7 +1256,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonI
 // parameters independently, so this pins that neither leaks into the other: the instanced leg
 // binds a second stream and a different offset, and the ordinary legs on either side of it must be
 // pixel-identical. The instanced leg's OWN offset is asserted only on the renderers whose instanced
-// path consumes it (REMED-GFX-122/123); elsewhere the leg still runs, because what this test is
+// path consumes it; elsewhere the leg still runs, because what this test is
 // about is whether it corrupts the ordinary route around it.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, OrdinaryInstancedOrdinaryTransitionsKeepEachRoutesOffset)

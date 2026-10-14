@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-006: SkinnedEffect world-space normal transform, WebGPU renderer.
+// SkinnedEffect world-space normal transform, WebGPU renderer.
 //
 // FNA's authoritative path (SkinnedEffect.fx + Lighting.fxh):
 //   Skin():                        vin.Normal = mul(vin.Normal, (float3x3)skinning);
@@ -36,7 +36,7 @@
 //        no-world  (Variant A)                 = norm(1,1,0)   -> N.L = 0.707 -> ~180
 //   4. World = RotationZ(90) * Scale(2,1,1): CPU-derived by the same formula.
 //
-// REMED-GFX-131: the readback byte is now simply round(N.L * 255), exactly as on a renderer like
+// The readback byte is now simply round(N.L * 255), exactly as on a renderer like
 // EasyGL. SurfaceFormat::Color is a plain UNORM byte format, so this renderer's render
 // targets and backbuffer no longer use an *UnormSrgb format that gamma-encoded every stored value
 // (correct scale N.L=0.894 read ~243 instead of 228, un-worlded 0.707 read ~219, raw-World 0.447
@@ -167,7 +167,7 @@ class WebGpuSkinnedEffectWorldNormalTest : public Game
     {
         const Vector3 wn = ExpectedWorldNormal(world, n);
         const float   ndotl = wn.Y > 0.0f ? wn.Y : 0.0f;      // L = (0,1,0)
-        // REMED-GFX-131: the stored byte is the shader's own linear N.L, unencoded.
+        // The stored byte is the shader's own linear N.L, unencoded.
         const int     want  = static_cast<int>(ndotl * 255.0f + 0.5f);
 
         const Color got = Render(dev, world, n, preferPerPixel);

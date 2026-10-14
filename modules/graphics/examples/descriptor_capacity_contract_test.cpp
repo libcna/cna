@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-177: a renderer's descriptor (or view, or binding-slot) bookkeeping must be a function of
+// A renderer's descriptor (or view, or binding-slot) bookkeeping must be a function of
 // what is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a
 // monotonic bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw
-// `CBV/SRV/UAV descriptor heap exhausted` even when six were alive -- REMED-GFX-175's contract
+// `CBV/SRV/UAV descriptor heap exhausted` even when six were alive -- the contract
 // fixture reached exactly 64 checks on D3D12 and aborted, having created and destroyed one
 // RenderTarget2D per measurement.
 //
@@ -176,7 +176,7 @@ namespace
         return id;
     }
 
-    /// Stride-20 VertexPositionTexture stream (REMED-GFX-125: object size is not the stream stride).
+    /// Stride-20 VertexPositionTexture stream (object size is not the stream stride).
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
 
@@ -331,7 +331,7 @@ class DescriptorCapacityContractTest : public Game
     }
 
     /// A preceding SpriteBatch leaves CullCounterClockwise behind, which culls this winding
-    /// (REMED-GFX-160).
+    ///.
     static void ResetDeviceState(GraphicsDevice& dev, int w, int h)
     {
         dev.setViewportProperty(Viewport(0, 0, w, h));
@@ -418,7 +418,7 @@ class DescriptorCapacityContractTest : public Game
     /// pixel's centre falls on texture coordinate 1.0 -- exactly halfway between the texel centres
     /// at 0.5 and 1.5. A magnifying filter that interpolates therefore BLENDS and cannot reproduce
     /// the identity encoding, and the real XNA 4.0 runtime blends three of the four pixels at
-    /// exactly 128. Measured in spikes/xna-pixel-center-spike/; see REMED-GFX-238.
+    /// exactly 128. Measured in spikes/xna-pixel-center-spike/;
     bool MagnifiesLinearly(TextureFilter f)
     {
         return f == TextureFilter::Linear || f == TextureFilter::Anisotropic ||
@@ -637,7 +637,7 @@ class DescriptorCapacityContractTest : public Game
         // The rotation steps the filter by one each iteration and 256 = 28*9 + 4, so the five
         // magnifying-linear filters take 28 turns each plus three more from the {0,1,2,3} tail:
         // 143. One of those, identity 0, encodes four identical texels and so is judged on the
-        // identity like a point draw, leaving 142. See MagnifiesLinearly and REMED-GFX-238.
+        // identity like a point draw, leaving 142. See MagnifiesLinearly and the XNA pixel-centre contract.
         check(wrong == 0 && blending == 142,
               "C1: " + std::to_string(kMaxN) +
                   " live textures each paired with a rotating sampler state -- " +

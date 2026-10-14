@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half.
+// RenderTargetUsage's DEPTH and STENCIL half.
 //
-// REMED-GFX-136 established the usage contract as a COLOUR contract and recorded, as an open
+// Established the usage contract as a COLOUR contract and recorded, as an open
 // question, that the three renderers with a real load action disagree about depth. This file
 // settles the question from the reference rather than from the renderers, and then enforces the
 // answer.
@@ -40,14 +40,14 @@
 //
 // -- a deterministic replacement for all three aspects: colour to the discard colour, depth to
 // `Viewport.MaxDepth` (1.0), stencil to 0. CNA's shared layer already mirrors the colour and depth
-// halves of that; REMED-GFX-142 adds the stencil flag it was missing, so the enum value has one
+// halves of that; the render-target depth/stencil lifetime contract adds the stencil flag it was missing, so the enum value has one
 // meaning instead of two.
 //
 // Cube targets: FNA's `RenderTargetCube` allocates exactly ONE `glDepthStencilBuffer` for the whole
 // cube (`FNA3D_GenDepthStencilRenderbuffer(device, Size, Size, DepthStencilFormat,
 // MultiSampleCount)`), not one per face. Depth/stencil is therefore a PER-TARGET resource that all
 // six faces share -- switching faces neither switches depth buffers nor gives you a fresh one.
-// That is the opposite of REMED-GFX-141's colour conclusion, and it is deliberate: colour lives in
+// That is the opposite of the colour conclusion, and it is deliberate: colour lives in
 // six independent cube-face subresources, depth in one. Check U2 is the discriminator and it
 // REQUIRES the shared answer, so nothing here quietly grows six depth surfaces per cube.
 //
@@ -153,7 +153,7 @@ namespace
      *
      * `Exact` -- GetData returns the rendered surface byte for byte.
      * `Unsupported` -- GetData raises System::NotSupportedException with the caller's destination
-     * untouched (REMED-GFX-127/130's contract).
+     * untouched (the honest Texture2D::GetData contract's contract).
      */
     enum class Support
     {
@@ -181,7 +181,7 @@ namespace
          */
         bool    stencilInRT;
         /**
-         * REMED-GFX-142's subject. `PreserveContents`/`PlatformContents` keep DEPTH across a full
+         * The subject. `PreserveContents`/`PlatformContents` keep DEPTH across a full
          * unbind/rebind cycle, per the FNA3D contract quoted in this file's header. False is a
          * declared defect: pre-fix it was false for the retired VULKAN renderer (LOAD_OP_DONT_CARE
          * for depth in the preserving RT render pass) and for WEBGPU's cube leg (an unconditional
@@ -192,7 +192,7 @@ namespace
         bool    stencilPreserves;
         /**
          * A `Clear()` issued AFTER a draw inside the SAME bind cycle wipes that draw, per XNA's
-         * command order (REMED-GFX-129's subject). False on a renderer whose only clear
+         * command order (the subject). False on a renderer whose only clear
          * mechanism is still the pass load action, so a mid-cycle clear is hoisted to the front of
          * the cycle -- check K7 then asserts the COLLAPSED result, which stays falsifiable in both
          * directions and turns red the day that renderer gains ordered clears.
@@ -202,25 +202,25 @@ namespace
          * A multisampled RenderTarget2D with a real DepthFormat can be created and bound at all.
          * True everywhere now. It was false on bgfx, where `bgfx::isFrameBufferValid` refuses a
          * multisampled depth attachment whose texture lacks `BGFX_TEXTURE_RT_WRITE_ONLY` and ABORTS
-         * the process. REMED-GFX-141 fixed exactly that on the cube leg and recorded the 2D leg as a
-         * separate finding; REMED-GFX-163 closed it, so check D8 builds the target on bgfx again.
+         * The process. the per-face multisample attachment fix fixed exactly that on the cube leg and recorded the 2D leg as a
+         * separate finding; the depth-backed multisampled render-target contract closed it, so check D8 builds the target on bgfx again.
          */
         bool    msaaDepthRT2D;
-        /// The same for a multisampled depth-backed RenderTargetCube (REMED-GFX-141 fixed bgfx's).
+        /// The same for a multisampled depth-backed RenderTargetCube (the per-face multisample attachment fix fixed bgfx's).
         bool    msaaDepthCube;
         /**
          * A multisampled RenderTarget2D/RenderTargetCube reads back its RESOLVED content, so an
          * MSAA depth check can say anything at all. False on bgfx, whose blit from a multisampled
-         * attachment reports success over untouched memory (REMED-GFX-134/138).
+         * attachment reports success over untouched memory.
          */
         bool    msaaReadback;
         /**
          * The same question for a multisampled RenderTargetCube FACE, declared separately because
-         * the two routes diverged. REMED-GFX-154 fixed the RenderTarget2D resolve on bgfx, but a
+         * The two routes diverged. the multisampled readback contract fixed the RenderTarget2D resolve on bgfx, but a
          * multisampled cube face there is still a deterministic REFUSAL rather than a zero read
          * (`BgfxRenderTargetCubeRenderer::GetData` returns false for any multisampled target) --
-         * REMED-GFX-134's separately recorded boundary, on a different helper path, which
-         * REMED-GFX-154 deliberately did not expand into. One field could not describe both once
+         * The separately recorded boundary, on a different helper path, which
+         * Deliberately did not expand into. One field could not describe both once
          * only one of them was fixed, and check U4 turned red saying so.
          */
         bool    msaaCubeReadback;
@@ -228,7 +228,7 @@ namespace
          * A multisampled RenderTarget2D honours `PreserveContents` at all. It was false on the
          * retired VULKAN renderer, whose `VulkanRenderTargetRenderer::GetRenderPass()` handed its
          * MSAA leg a hardcoded `discardContents=true` -- COLOUR and DEPTH alike. That was the
-         * multisampled-RT2D preservation finding REMED-GFX-141 recorded and deliberately did not
+         * multisampled-RT2D preservation finding the per-face multisample attachment fix recorded and deliberately did not
          * fix (its cube sibling passed `!preserveContents_` and was correct), so check D8 asserted
          * the discarding outcome there instead of claiming a depth result the renderer could not
          * give.
@@ -258,7 +258,7 @@ namespace
     //   preferMultiSampling, wantHiDefProfile
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it owns no colour at all and its readback is
-    // REMED-GFX-127/130's deterministic refusal. Every sequence must still be legal.
+    // The honest Texture2D::GetData contract's deterministic refusal. Every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, true, Support::Unsupported,
                                  false, false, false, false, true,
                                  true, true, false, false, true, true, false, false};
@@ -282,7 +282,7 @@ namespace
     // the stamp did not write -- check C2 asserts exactly that. `stencilPreserves` true too: the
     // render target's stencil lives in the same Depth24PlusStencil8 attachment as its depth
     // (`depthPreserves` is true), so it survives a bind cycle the same way.
-    // `orderedClearInCycle` was false while REMED-GFX-156 was open: a mid-cycle Clear was still
+    // `orderedClearInCycle` was false while the ordered mid-cycle Clear fix was open: a mid-cycle Clear was still
     // delivered through the pass load action, so it could not wipe a draw recorded before it
     // (check K7). It cuts the bind cycle into one native pass per observable Clear now, so K7
     // asserts the ordered result here; it was measured red the moment the fix landed.
@@ -292,7 +292,7 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     // Already FNA3D-shaped: every depth/stencil target info uses `clearX ? CLEAR : LOAD` with an
     // unconditional STORE, which is what FNA3D's own SDL_GPU driver does.
-    // `orderedClearInCycle` was false while REMED-GFX-156 was open, the same boundary as WebGPU
+    // `orderedClearInCycle` was false while the ordered mid-cycle Clear fix was open, the same boundary as WebGPU
     // (check K7); both now segment the bind cycle at every observable Clear.
     constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
@@ -388,7 +388,7 @@ namespace
     };
 }
 
-/// REMED-GFX-142's public depth/stencil lifetime oracle.
+/// The public depth/stencil lifetime oracle.
 class RenderTargetDepthStencilUsageTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
@@ -429,7 +429,7 @@ class RenderTargetDepthStencilUsageTest : public Game
      * @brief Fills vertical band @p band (0..2) at clip depth @p z with @p colour.
      *
      * @p band == -1 covers the whole surface. Bands are X-only on purpose: no renderer flips X, so
-     * this file is completely independent of the Y-orientation question REMED-GFX-134 owns.
+     * this file is completely independent of the Y-orientation question the RenderTargetCube readback contract owns.
      */
     void DrawBand(GraphicsDevice& dev, int band, float z, const Color& colour)
     {
@@ -841,7 +841,7 @@ class RenderTargetDepthStencilUsageTest : public Game
     }
 
     // -----------------------------------------------------------------------------------------
-    // K -- interaction with REMED-GFX-129's ordered explicit Clear
+    // K -- interaction with the ordered explicit Clear
     // -----------------------------------------------------------------------------------------
 
     void RunClearInteraction(GraphicsDevice& dev)
@@ -1071,7 +1071,7 @@ class RenderTargetDepthStencilUsageTest : public Game
                                          "U3 cube face stencil survives an unbind/rebind cycle");
         }
 
-        // U4: multisampled cube depth. REMED-GFX-141 gave every face its own multisample COLOUR
+        // U4: multisampled cube depth. the per-face multisample attachment fix gave every face its own multisample COLOUR
         // storage; depth stays one per-target attachment, and this proves it still survives.
         if (!kContract.msaaDepthCube)
             skip("U4 multisampled cube depth (a multisampled depth-backed RenderTargetCube cannot "
@@ -1208,7 +1208,7 @@ protected:
     {
         if (done_) return;
         auto& dev = getGraphicsDeviceProperty();
-        // Frame 0 is a deliberate warm-up, the same one REMED-GFX-134/136/141 use: bgfx's very
+        // Frame 0 is a deliberate warm-up, the same one the RenderTargetCube readback contract use: bgfx's very
         // first readback of a frame reports black regardless of what was rendered, so the first
         // check in the battery -- which is the capability control everything else is gated on --
         // would measure nothing on that renderer. One throwaway backbuffer frame first, then the

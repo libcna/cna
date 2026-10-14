@@ -1,6 +1,6 @@
 name: 32-bit Arithmetic Coverage
 
-# REMED-MEDIA-001 and the Software renderer's CPU allocation planners: compiles and RUNS
+# And the Software renderer's CPU allocation planners: compiles and RUNS
 # AudioTagParser, SoftwareFramebuffer and SoftwareTexture width-dependent std::size_t bounds
 # checks at a genuine 32-bit width, on a
 # real i386

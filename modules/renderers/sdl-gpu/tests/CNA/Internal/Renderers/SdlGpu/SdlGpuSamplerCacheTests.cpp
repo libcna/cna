@@ -126,7 +126,7 @@ TEST(SdlGpuSamplerCacheKeyTest, EveryFieldParticipatesInIdentity)
     }
 
     // All nine TextureFilter ordinals and all three TextureAddressMode ordinals on each axis are
-    // separate samplers -- REMED-GFX-170's own finding, re-pinned here against the new key.
+    // separate samplers -- the finding, re-pinned here against the new key.
     std::set<std::size_t> hashes;
     std::vector<SamplerCacheKeyEXT> keys;
     for (int filter = 0; filter <= 8; ++filter)

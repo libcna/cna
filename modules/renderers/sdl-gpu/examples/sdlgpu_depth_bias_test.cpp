@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-051: SDL_GPU RasterizerState.DepthBias/SlopeScaleDepthBias regression.
+// SDL_GPU RasterizerState.DepthBias/SlopeScaleDepthBias regression.
 //
 // SDL 3.5 exposes constant factor, clamp, slope factor, and an explicit enable bit only in
 // SDL_GPUGraphicsPipelineCreateInfo::rasterizer_state. Before this remediation CNA captured both

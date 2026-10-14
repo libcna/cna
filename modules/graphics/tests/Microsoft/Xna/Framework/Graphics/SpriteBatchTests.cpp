@@ -1412,7 +1412,7 @@ TEST(SpriteBatchSortModeTest, InvalidNonzeroModeWithEmptyQueueDoesNotSort)
 }
 
 // -----------------------------------------------------------------------
-// REMED-GFX-003: DrawString's axis-direction tables are indexed by (int)effects, and
+// DrawString's axis-direction tables are indexed by (int)effects, and
 // SpriteEffects is a composable [Flags] enum -- FlipHorizontally|FlipVertically (value 3) is a
 // real, reachable value. The pre-fix tables were sized for 3 entries only, an out-of-bounds
 // stack read for the combined value. Verified structurally: combined flip must mirror X the same
@@ -2207,7 +2207,7 @@ TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipDiffersFromNone)
 }
 
 // -----------------------------------------------------------------------
-// REMED-GFX-003: SpriteEffects flag operators (matches GestureType's established convention)
+// SpriteEffects flag operators (matches GestureType's established convention)
 // -----------------------------------------------------------------------
 
 TEST(SpriteEffectsOperatorsTest, OrCombinesFlags)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-182: the SLOT-1 SAMPLER STATE of an EnvironmentMapEffect reflection cube, measured
-// where REMED-GFX-173's contract fixture does not reach.
+// The SLOT-1 SAMPLER STATE of an EnvironmentMapEffect reflection cube, measured
+// where the contract fixture does not reach.
 //
 // THE CONTRACT is the one that fixture pins and this one extends: `SamplerStates[0]` filters the
 // base 2D texture (`EnvironmentMapEffect.Texture`) and `SamplerStates[1]` filters the cube
@@ -11,10 +11,10 @@
 // THE DEFECT this closes is Software-local. `SoftwareRenderer::SampleCubeMap` took no
 // sampler state at all -- after face selection it ended in a single clamped
 // `static_cast<int>(s * size)` fetch of level 0 -- so the cube was point-sampled at level 0 however
-// `SamplerStates[1]` was set. REMED-GFX-150 replaced that shape on the ordinary 2D path and
-// REMED-GFX-175 gave it mip selection; neither reached the cube.
+// `SamplerStates[1]` was set. the point-sampling contract replaced that shape on the ordinary 2D path and
+// Gave it mip selection; neither reached the cube.
 //
-// WHAT THIS FIXTURE ADDS over REMED-GFX-173's. That one answers "is slot 1 consulted, per ordinal,
+// WHAT THIS FIXTURE ADDS over the EnvironmentMapEffect cube sampler fix's. That one answers "is slot 1 consulted, per ordinal,
 // per draw path, per face, per mip level". This one answers the questions a lost sampler state can
 // also fail:
 //
@@ -38,7 +38,7 @@
 //   N8  DECLARED-BUT-UNWRITTEN CHAIN  a mipMap=true cube whose game wrote only level 0, minified.
 //   N9  RenderTargetCube              classified honestly, per renderer.
 //
-// THE ORACLE is byte-exact, and identical in construction to REMED-GFX-173's: a generated palette
+// THE ORACLE is byte-exact, and identical in construction to the EnvironmentMapEffect cube sampler fix's: a generated palette
 // whose entries are at least `kSep` apart in L-inf and whose every pairwise midpoint is at least
 // `kMidSep` from every entry -- both CHECKED, not assumed -- so "this pixel is a stored texel" and
 // "this pixel is an interpolation" are decidable exactly. With `EnvironmentMapAmount = 1`,
@@ -122,7 +122,7 @@ namespace
 
     /// Whether a declared-but-unwritten mip chain has a DEFINED answer on this renderer. Real
     /// XNA/D3D leave the content of a level nobody uploaded undefined, so this is not a public
-    /// contract; REMED-GFX-175 made it a deliberate, conservative Software guarantee (the sampler
+    /// contract; the mip-filter component fix made it a deliberate, conservative Software guarantee (the sampler
     /// bounds itself at the last level that was really supplied) and REMED-GFX-182 extended that
     /// per cube face. Asserted where it is a guarantee, reported everywhere else.
 #if defined(CNA_RENDERER_SOFTWARE)
@@ -147,7 +147,7 @@ namespace
 
     /// 6 faces x 16 texels, then the base texture, then a 16-colour block the lifetime leg gives
     /// its second-generation cubes. That block is reused on all six of those faces -- the leg asks
-    /// "which GENERATION is this pixel from", and face aliasing is REMED-GFX-173 leg I's question,
+    /// "which GENERATION is this pixel from", and face aliasing is the EnvironmentMapEffect cube sampler fix leg I's question,
     /// so 16 disjoint colours are exactly what it needs and 96 would only strain the generator.
     constexpr int kCubeColors = 6 * 16;
     constexpr int kBaseColors = 16;
@@ -223,7 +223,7 @@ namespace
         }
     }
 
-    /// The public enum's magnification component -- REMED-GFX-170's authoritative table, not a
+    /// The public enum's magnification component -- the authoritative table, not a
     /// second copy of a mapping.
     bool MagnifiesByPoint(int ordinal)
     {
@@ -616,7 +616,7 @@ class EnvMapCubeSamplerStateTest : public Game
         {
             // Anisotropic(2) lowers the level a MINIFIED fetch selects by a per-GPU amount; this leg
             // magnifies, where it is a Linear magnifier everywhere, but its group membership is the
-            // one boundary REMED-GFX-170 declared and is reported rather than required.
+            // one boundary the nine-value TextureFilter contract declared and is reported rather than required.
             if (f == 2) continue;
             const std::vector<Color>& pix = byOrdinal[static_cast<std::size_t>(f)];
             if (MagnifiesByPoint(f))

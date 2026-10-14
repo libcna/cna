@@ -8,7 +8,7 @@
 // predicts. See spikes/xna-pixel-center-spike/. OpenGL and Vulkan address pixel corners instead and
 // drop the triangle entirely.
 //
-// REMED-GFX-239 moved this out of the EasyGL example directory. The convention belongs to XNA, so
+// Moved this out of the EasyGL example directory. The convention belongs to XNA, so
 // every renderer owes it, and one that does not implement it should say so by failing here rather
 // than by never being asked -- CNA otherwise gives different pixel coverage depending on the
 // renderer, silently. EasyGL implements it (EasyGLRenderer::xnaPixelCenterScale_).
@@ -16,7 +16,7 @@
 // The larger control triangle stays so a failure cannot be mistaken for a broken BasicEffect or
 // readback path: on a renderer that merely lacks the convention, the control triangle is intact.
 //
-// REMED-GFX-246: a renderer that does not rasterize at all cannot answer this question, and asking
+// A renderer that does not rasterize at all cannot answer this question, and asking
 // it to would be a category error rather than a finding. HEADLESS therefore takes the same arm it
 // takes in the point-sampling contract -- the honest assertion there is that the readback is
 // REFUSED rather than fabricated, which is a real contract of its own and the reason registering

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-147: a RenderTarget2D used as a texture must sample in the SAME logical orientation as
+// A RenderTarget2D used as a texture must sample in the SAME logical orientation as
 // an ordinary Texture2D holding identical bytes.
 //
-// REMED-GFX-151 update: leg G0 -- the canonical render-to-texture sequence with NO readback of the
+// Update: leg G0 -- the canonical render-to-texture sequence with NO readback of the
 // source -- used to be DECLARED broken on Vulkan and is now an ordinary orientation check on every
 // renderer. See its own fixture, examples/rendertarget_producer_consumer_test.cpp.
 //
@@ -22,10 +22,10 @@
 // (it reads with glReadPixels' bottom-left origin and then reverses the rows), which is why the
 // public readback has always been correct. Sampling did not compensate, so texel v=0 -- the first
 // row of GL texture memory -- is the LAST logical row, and a rendered texture arrived upside down
-// while an uploaded one did not. Measured first on EasyGL while building REMED-GFX-131's
+// while an uploaded one did not. Measured first on EasyGL while building the sRGB render-target fix's
 // cross-renderer controls: leg D of that fixture (sample a plain Texture2D into a target) was
 // byte-exact, and leg E (sample a render target into a target) returned the same image with its
-// rows reversed. This is the EasyGL counterpart of REMED-GFX-067's bgfx finding.
+// rows reversed. This is the EasyGL counterpart of the bgfx finding.
 //
 // THE ORACLE. Every orientation claim here is anchored by a side-by-side pair drawn in ONE frame,
 // read back ONCE, with identical source/destination rectangles, sampler and blend state:
@@ -117,7 +117,7 @@ namespace
     /**
      * @brief Whether this renderer rasterizes and can read a render target back at all.
      *
-     * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes its `GetData` reject
+     * HEADLESS performs no rasterization, so the contract makes its `GetData` reject
      * deterministically. There is no orientation to measure there; the legs below assert the
      * rejection instead of a value.
      */
@@ -146,7 +146,7 @@ namespace
     /**
      * @brief Whether a render target that has never been read back can be SAMPLED at all.
      *
-     * REMED-GFX-151 (found here by leg G0, fixed under its own ticket): on Vulkan a RenderTarget2D
+     * (found here by leg G0, fixed under its own ticket): on Vulkan a RenderTarget2D
      * that was rendered, unbound and then used as a texture without an intervening GetData sampled
      * as entirely empty, and inserting one GetData of that target made the identical draw correct --
      * the canonical XNA render-to-texture sequence, reproduced at 0/32 with 14 texels entirely
@@ -160,19 +160,19 @@ namespace
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
      *
-     * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
+     * CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
      * It used to read false on SDL_GPU: thirteen stock-effect sites there did
      * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` while a RenderTarget2D's renderer
      * is the unrelated sibling SdlGpuRenderTargetRenderer, so the cast was undefined behaviour and
-     * the process died -- the SDL_GPU counterpart of REMED-GFX-078's bgfx finding. All thirteen now
+     * The process died -- the SDL_GPU counterpart of the bgfx finding. All thirteen now
      * go through one shared `ResolveSampledTextureEXT`, and this file's CD legs were A/B-proven
      * against the pre-fix renderer: SIGSEGV before, exact pixels after. The constant is kept rather
      * than deleted so a future renderer can declare the boundary again if it genuinely has one.
      */
     constexpr bool kStockEffectRtSourceSupported = true;
 
-    // REMED-GFX-154 is FIXED, so the `kMsaaFirstReadbackWorks` declaration that used to live here --
+    // Is FIXED, so the `kMsaaFirstReadbackWorks` declaration that used to live here --
     // false on BGFX, pinning "the first readback of a multisampled target is entirely empty" -- is
     // gone, together with the dummy-target bind leg L1 used to nudge the resolve into completing.
     // The declaration was written to fail the moment the defect was fixed, and it did exactly that.
@@ -221,7 +221,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-147's public render-target sampling orientation contract.
+ * @brief The public render-target sampling orientation contract.
  */
 class RenderTargetSamplingOrientationTest : public Game
 {
@@ -614,7 +614,7 @@ class RenderTargetSamplingOrientationTest : public Game
 
         if (!kStockEffectRtSourceSupported)
         {
-            // REMED-GFX-152: handing a RenderTarget2D to a stock effect is undefined behaviour on
+            // Handing a RenderTarget2D to a stock effect is undefined behaviour on
             // this renderer and terminates the process, so the pair cannot be drawn at all. The
             // boundary is recorded rather than silently skipped; the SpriteBatch legs above still
             // cover render-target sampling here, and the ordinary-texture control below still
@@ -931,7 +931,7 @@ class RenderTargetSamplingOrientationTest : public Game
         if (Unsupported())
         {
             // A declared non-rasterizing renderer drew nothing, so there is no orientation in the
-            // frame to measure. What it returns instead is REMED-GFX-127's question about the
+            // frame to measure. What it returns instead is the question about the
             // BACKBUFFER, which this task does not own -- recorded, not asserted.
             std::printf("[INFO] F1 GetBackBufferData on a non-rasterizing renderer returned %s at "
                         "(0,0) -- no orientation to measure here\n", ColorText(frame[0]).c_str());
@@ -986,7 +986,7 @@ class RenderTargetSamplingOrientationTest : public Game
             for (std::size_t i = 0; i < after.pixels.size(); ++i)
                 if (!Same(before.pixels[i], after.pixels[i])) { identical = false; break; }
         // This is the permanent guard that the correction lives in SAMPLING and never touched
-        // readback: the very bytes REMED-GFX-127/134 established must be the same before and
+        // readback: the very bytes the honest Texture2D::GetData contract established must be the same before and
         // after the target has been used as a texture.
         check(identical, "I1 RenderTarget2D::GetData is byte-identical before and after the target "
                          "was sampled");
@@ -1219,7 +1219,7 @@ class RenderTargetSamplingOrientationTest : public Game
         }
 
         RenderPatternInto(dev, msaa);
-        // REMED-GFX-154: exactly one read, immediately, with no dummy target bind between the render
+        // Exactly one read, immediately, with no dummy target bind between the render
         // and the read. That sequence is the whole contract now.
         Readback rm = ReadWhole(msaa, kPW, kPH);
         if (!RequireReadable(rm, "L1 MSAA target readback")) return;
@@ -1338,7 +1338,7 @@ class RenderTargetSamplingOrientationTest : public Game
               std::to_string(topDownError) + " < mirrored " + std::to_string(mirroredError) + ")");
     }
 
-    /// Leg N: REMED-GFX-127/134's readback contract, re-asserted here so a sampling fix that
+    /// Leg N: the honest Texture2D::GetData contract's readback contract, re-asserted here so a sampling fix that
     /// "helped" by touching GetData would be caught immediately.
     void LegReadbackContract(GraphicsDevice& dev, RenderTarget2D& a, const Readback& reference)
     {
@@ -1379,7 +1379,7 @@ class RenderTargetSamplingOrientationTest : public Game
         }
 
         // Destination offset, through the rectangle overload -- the one that honours startIndex on
-        // a render target. REMED-GFX-149 (recorded, not owned here): the 3-argument
+        // a render target. the GetData element-range contract (recorded, not owned here): the 3-argument
         // GetData(Color*, startIndex, elementCount) overload gates its render-target renderer
         // fallback on startIndex == 0 and throws std::runtime_error for any other offset, while
         // this rectangle overload accepts the same offset. That asymmetry is in the shared
@@ -1408,7 +1408,7 @@ class RenderTargetSamplingOrientationTest : public Game
                   (guardIntact ? ", guard intact" : ", GUARD OVERWRITTEN") + ")");
         }
 
-        // REMED-GFX-149 was measured here and left as an [INFO] line so this task could not bless
+        // Was measured here and left as an [INFO] line so this task could not bless
         // either behaviour. It is now closed: the whole-level overload applies `startIndex` to the
         // DESTINATION exactly like the rectangle overload above, so N4 asserts the same guarantee
         // through the other entry point instead of merely reporting it.
@@ -1438,7 +1438,7 @@ class RenderTargetSamplingOrientationTest : public Game
         (void)dev;
     }
 
-    /// Leg O: RenderTargetCube is REMED-GFX-137's territory, not this task's. This control only
+    /// Leg O: RenderTargetCube is the territory, not this task's. This control only
     /// records that the cube path still works and that its measured orientation is UNCHANGED --
     /// it deliberately asserts nothing about which orientation is correct.
     void LegCubeBoundary(GraphicsDevice& dev)

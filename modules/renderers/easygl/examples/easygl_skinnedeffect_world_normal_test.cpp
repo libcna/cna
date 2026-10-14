@@ -128,7 +128,7 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
         dev.Clear(Color(0, 0, 0, 255));
         dev.SetDepthTestEnabled(false);
         dev.setBlendStateProperty(BlendState::Opaque);
-        // REMED-GFX-052/011: without CullNone this winding culls to black and the check is vacuous.
+        // Without CullNone this winding culls to black and the check is vacuous.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         SkinnedEffect fx(dev);

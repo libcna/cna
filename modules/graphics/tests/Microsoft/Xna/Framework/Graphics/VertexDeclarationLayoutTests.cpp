@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-216 -- the native vertex layout must be derived from the `VertexDeclaration`, not
+// The native vertex layout must be derived from the `VertexDeclaration`, not
 // guessed from the byte stride.
 //
 // THE CONTRACT. A `VertexDeclaration` states, for every active element, its usage, usage index,
@@ -134,11 +134,11 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software, SdlGpu);
 }
 
-/// REMED-GFX-234: does this renderer derive its native layout from the DECLARATION?
+/// Does this renderer derive its native layout from the DECLARATION?
 ///
 /// One predicate, because the refusal arms below and their translating control are two halves of
 /// the same statement and must never disagree about which renderer is which. bgfx has always
-/// translated (REMED-GFX-216). EasyGL now does too: `ConfigureDeclarationForStockProgramEXT` binds
+/// translated. EasyGL now does too: `ConfigureDeclarationForStockProgramEXT` binds
 /// every stock attribute at the declared element's own `getOffsetProperty()`, so a declaration
 /// whose element ORDER differs from the stock program's input order is read from its own bytes
 /// rather than reinterpreted. All five GL profiles share that one implementation; the reading was
@@ -146,8 +146,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// likewise decodes the declaration's semantic, format, offset and stride directly on the CPU.
 ///
 /// This is not the same as "the stock program is chosen from the declaration". On the GL profiles
-/// it is not -- REMED-GFX-217 is still open there, and the stride cases that can be ambiguous have
-/// to ask the declaration by hand (see REMED-GFX-234's stride-32 case).
+/// it is not -- the vertex-declaration fidelity guard is still open there, and the stride cases that can be ambiguous have
+/// to ask the declaration by hand's stride-32 case).
 ///
 /// plans/plan_webgpu.md WEBGPU-155 added WebGPU, and there it IS both: `SelectStockVertexShapeEXT`
 /// chooses the stock family from the declaration's semantics and
@@ -274,11 +274,11 @@ namespace
         /// True when this declaration deviates from the historical built-in byte-stride layouts.
         /// A declaration-driven renderer must render its own contract; a renderer that still
         /// infers one of those layouts must REFUSE the draw deterministically before native work
-        /// (REMED-GFX-DECL-GUARD), because accepting it would reinterpret the caller's bytes.
+        ///, because accepting it would reinterpret the caller's bytes.
         bool deviatesElsewhere = false;
     };
 
-    /// `Position` alone at stride 12 -- REMED-GFX-216's canonical case. No built-in table entry.
+    /// `Position` alone at stride 12 -- the canonical case. No built-in table entry.
     constexpr DeclarationCase kPositionOnly12{"positionOnly12", 12, false, 0, -1, -1};
     /// `VertexPositionColor`. The one layout the fallback happened to describe correctly.
     constexpr DeclarationCase kPositionColor16{"positionColor16", 16, true, 0, 12, -1};
@@ -553,7 +553,7 @@ protected:
     }
 
     /// Renders the four-column staircase declared by @p c through @p route.
-    /// @p vertexOffset is the geometry binding's own VertexOffset (REMED-GFX-211).
+    /// @p vertexOffset is the geometry binding's own VertexOffset.
     RouteResult Render(const DeclarationCase& c, Route route, bool withDecoy = false,
                        int vertexOffset = 0)
     {
@@ -650,13 +650,13 @@ protected:
 
     /// Asserts the full contract: every column's colour, lit count, top row and flatness.
     ///
-    /// REMED-GFX-216 is scoped to bgfx production, and bgfx must therefore render every entry in
+    /// Is scoped to bgfx production, and bgfx must therefore render every entry in
     /// the matrix. The same oracle run on the other renderers found the SAME class of defect on all
     /// of them, from two different mechanisms:
     ///
     ///   * every renderer except bgfx and EasyGL left `SetVertexDeclaration` an empty override
     ///     (Vulkan, WebGPU, Software, SdlGpu, D3D9, D3D11, D3D12), so the declaration was discarded
-    ///     and a layout selected by stride -- REMED-GFX-217 (since translated by WebGPU, Software
+    ///     and a layout selected by stride -- the vertex-declaration fidelity guard (since translated by WebGPU, Software
     ///     and SDL_GPU, as it was by the since-retired Vulkan and, per DX-221/DX-222, D3D11 -- see
     ///     TranslatesDeclarations());
     ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
@@ -664,7 +664,7 @@ protected:
     ///     differs from the selected stock program's input order binds the wrong attributes --
     ///     REMED-GFX-218.
     ///
-    /// Neither translator may be written here. REMED-GFX-DECL-GUARD instead makes both safe: a
+    /// Neither translator may be written here. the declaration-fidelity guard instead makes both safe: a
     /// declaration those inferred layouts cannot represent faithfully is REFUSED deterministically
     /// before any native layout, command or submission exists. So on every renderer
     /// TranslatesDeclarations() does not name, the three
@@ -818,7 +818,7 @@ TEST_F(VertexDeclarationLayoutTest, EveryRouteBindsTheDeclaredLayout)
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-211's geometry VertexOffset must still address whole records of THIS declaration's
+// The geometry VertexOffset must still address whole records of THIS declaration's
 // stride -- an offset resolved through a guessed 16-byte stride lands mid-record on a 12-byte one.
 // ---------------------------------------------------------------------------
 
@@ -861,7 +861,7 @@ TEST_F(VertexDeclarationLayoutTest, DeclarationTransitionsDoNotReuseAStaleLayout
 }
 
 // ---------------------------------------------------------------------------
-// REMED-GFX-DECL-GUARD. On renderers that still infer layouts, these legs prove the boundary's
+// On renderers that still infer layouts, these legs prove the boundary's
 // contract: refusing costs the caller nothing, happens before anything native is produced, and
 // covers every route into the renderer -- not only the one the collision matrix happens to use.
 //
@@ -1126,7 +1126,7 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 // than a claim that the declarations are invalid.
 TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDeclaration)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6 / REMED-GFX-234: the contract of whichever renderer
+    // plans/plan_runtimerenderer.md RTR-P9-6: the contract of whichever renderer
     // translates, asked at runtime rather than named.
     if (!TranslatesDeclarations())
         GTEST_SKIP() << RendererName() << " refuses colliding declarations rather than translating";
@@ -1152,7 +1152,7 @@ TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDec
 
 
 
-// REMED-GFX-218's control. EasyGL's CUSTOM ShaderEffect path documents its own convention --
+// The control. EasyGL's CUSTOM ShaderEffect path documents its own convention --
 // attribute location N is the Nth element of the declaration, exactly as ApplyLayout binds it --
 // and the checkpoint guard must not touch it. A ShaderEffect written to that convention has to
 // keep rendering the declaration the stock programs now refuse, because for a shader the game owns

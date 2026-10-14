@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-016 / DX-224: renderer-neutral public multiple-render-target contract.
+// DX-224: renderer-neutral public multiple-render-target contract.
 //
 // The historical test used BasicEffect, whose fragment shader has only output location 0, and
 // expected attachment 1's old blue contents to survive an MRT bind. RenderTargetUsage defaults

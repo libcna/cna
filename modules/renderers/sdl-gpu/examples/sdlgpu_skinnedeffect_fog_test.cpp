@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-009 (SdlGpu slice): stock-effect fog for the skinned and PBR shader families (all
+// (SdlGpu slice): stock-effect fog for the skinned and PBR shader families (all
 // previously fog-free on this renderer):
 //
 //   skinned3d          (SkinnedEffect,     VertexPositionNormalTextureSkinned,        stride 52)

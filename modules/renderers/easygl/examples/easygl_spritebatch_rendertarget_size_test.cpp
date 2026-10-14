@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-019 cross-renderer parity: SpriteBatch drawn INTO an off-screen RenderTarget2D whose
+// Cross-renderer parity: SpriteBatch drawn INTO an off-screen RenderTarget2D whose
 // size differs from the backbuffer must map its destination rectangle in the RENDER TARGET's own
 // pixel space. EasyGL already derives its sprite ortho from the bound render target's size
 // (EasyGLRenderer::FlushBatch's GetCurrentRenderTarget2DSize branch), so it is an
@@ -17,7 +17,7 @@
 // pixels (17 x 11 for the 48x32 target, and the identical size for the 64x40 target), NOT on an
 // absolute origin. This is deliberately invariant to EasyGL's GL-bottom-left render-target sampling
 // orientation (which vertically flips the blit -- a separate, pre-existing EasyGL convention, not
-// the REMED-GFX-019 defect) while still discriminating the exact failure mode: the pre-fix
+// The REMED-GFX-019 defect) while still discriminating the exact failure mode: the pre-fix
 // backbuffer-relative mapping would compress the sprite to roughly 8x5 render-target pixels (96/48
 // x-scale, 72/32 y-scale), which these width/height bounds reject. Only Red/Black (gamma-invariant
 // 0/255 channel values) are used.

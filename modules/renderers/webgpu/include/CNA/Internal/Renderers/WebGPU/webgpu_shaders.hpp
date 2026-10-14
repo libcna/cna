@@ -915,7 +915,7 @@ struct VertexOutput {
         ep.emissiveAmount.w,
         pow(max(1.0 - abs(vsViewAngle), 0.0), ep.envMapSpecFresnelF.w) * ep.emissiveAmount.w,
         ep.light0DiffuseFresnelEn.w > 0.5), 0.0, 1.0);
-    // REMED-GFX-100: FNA view-space fog. fogVector is prepared once by the public effect from
+    // FNA view-space fog. fogVector is prepared once by the public effect from
     // World*View; all-zero disables fog and {0,0,0,1} gives the defined full-fog zero range.
     output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), ep.fogVector), 0.0, 1.0);
     return output;
@@ -931,7 +931,7 @@ struct VertexOutput {
     let lightSum = ep.light0DiffuseFresnelEn.xyz * ndotl0
                  + ep.light1Diffuse.xyz * ndotl1
                  + ep.light2Diffuse.xyz * ndotl2;
-    // REMED-GFX-007: FNA Lighting.fxh adds emissive UNSCALED (litRGB = lightSum*Diffuse +
+    // FNA Lighting.fxh adds emissive UNSCALED (litRGB = lightSum*Diffuse +
     // Emissive), not (Emissive + lightSum)*Diffuse -- the latter re-scales the already
     // ambient-folded emissive by DiffuseColor a second time (and, since the CPU layer pre-folds
     // Alpha into both operands, squares Alpha too). emissiveAmount.xyz is the CPU-side pre-folded
@@ -1411,7 +1411,7 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // Compose the bone-skin normal with the outer world normal matrix
     // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
     // FillLitLightUniforms and previously unused). The world factor was missing entirely (audit
     // Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
@@ -1542,7 +1542,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // Compose the bone-skin normal with the outer world normal matrix
     // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
     // FillLitLightUniforms and previously unused). The world factor was missing entirely (audit
     // Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
@@ -1672,7 +1672,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     // skinned3d.vert.glsl).
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // Compose the bone-skin normal with the outer world normal matrix
     // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
     // FillLitLightUniforms and previously unused). This per-vertex-lit sibling had the identical
     // missing-world-factor defect (audit Variant A); lighting is evaluated in this stage, so the
@@ -1797,7 +1797,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     output.color = input.color;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // Compose the bone-skin normal with the outer world normal matrix
     // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
     // FillLitLightUniforms and previously unused). This per-vertex-lit sibling had the identical
     // missing-world-factor defect (audit Variant A); lighting is evaluated in this stage, so the
@@ -1956,7 +1956,7 @@ fn pbrDirectionHandedness(m: mat3x3f) -> f32 {
     output.position = u.mvp * skinnedPos;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     let worldMat3 = mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz);
-    // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix
+    // (Variant B): the normal takes the inverse-transpose world matrix
     // (lp.normalMatrixCol*), not raw worldMat3. Raw World is correct only for rotation and uniform
     // scale and diverges from FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it
     // also contradicted this renderer's own unskinned pbr3d.wgsl, which already uses the inverse

@@ -24,7 +24,7 @@
 //   regardless) -- proves CullMode is no longer hardcoded to None.
 // Check E -- RasterizerState.FillMode: the same triangle drawn Solid (centre pixel filled) vs
 //   WireFrame (centre pixel must stay background -- wireframe never rasterizes a triangle's
-//   interior) -- proves FillMode is no longer hardcoded to Solid. REMED-GFX-180 added the two
+//   interior) -- proves FillMode is no longer hardcoded to Solid. the Present-while-bound refusal added the two
 //   positive halves: WireFrame must still light SOME pixels (its edges), and far fewer than Solid
 //   does, so a draw that was dropped entirely can no longer satisfy the centre-is-background half.
 // Check F -- RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle: a full-screen
@@ -33,7 +33,7 @@
 // Check I -- One/Zero factors with ReverseSubtract must still enable blending for color and alpha;
 //   the factor-only shortcut otherwise silently turns a non-Add XNA equation into a source copy.
 //
-// REMED-GFX-180 (fixture defect, not a renderer one): Check E's triangle buffer holds THREE
+// (fixture defect, not a renderer one): Check E's triangle buffer holds THREE
 // vertices and used to be drawn through a helper that hardcoded two primitives -- a request for six.
 // CNA's renderer-safety range guard rejected it, the rejection unwound past RunFillModeChecks' unbind, and
 // the frame then ended with a render target still bound, which Game::EndDraw's Present rightly
@@ -82,7 +82,7 @@ namespace
 {
     constexpr int kRTSize = 32;
     constexpr int kTotalFrames = 120;
-    /// 16 as originally written, plus REMED-GFX-180's two positive WireFrame checks.
+    /// 16 as originally written, plus the two positive WireFrame checks.
     constexpr int kTotalChecks = 20;
 
     bool CloseTo(int a, int b, int tol) { return std::abs(a - b) <= tol; }
@@ -142,7 +142,7 @@ class SdlGpuRenderStateTest : public Game
     /// The first failure seen in frames 2..120, so a later frame's exception is a FAIL, not an abort.
     std::string laterFrameFailure_;
 
-    // REMED-GFX-180: flushed on every line. stdout is block-buffered to a pipe, so when this fixture
+    // Flushed on every line. stdout is block-buffered to a pipe, so when this fixture
     // still ended in std::terminate its entire check log was discarded with the buffer -- and the
     // resulting empty output was read as "no check was ever reached", which was false. A test whose
     // diagnostics can be lost by the very failure they describe is not diagnosable.
@@ -172,9 +172,9 @@ class SdlGpuRenderStateTest : public Game
         return vb;
     }
 
-    // REMED-GFX-180: the primitive count is a PARAMETER, and every caller states it. It used to be a
+    // The primitive count is a PARAMETER, and every caller states it. It used to be a
     // hardcoded 2 inside a helper called DrawFullQuad, which RunFillModeChecks then handed a
-    // THREE-vertex triangle buffer -- a request for six vertices out of three. REMED-GFX-113's range
+    // THREE-vertex triangle buffer -- a request for six vertices out of three. the range
     // guard in GraphicsDevice::DrawPrimitives rightly rejects that, the rejection unwound past
     // RunFillModeChecks' own SetRenderTarget(nullptr), and the frame then ended with a target still
     // bound, which Game::EndDraw's Present rightly refuses. Both guards are correct; the request was
@@ -402,7 +402,7 @@ class SdlGpuRenderStateTest : public Game
         dev.setRasterizerStateProperty(RasterizerState());
     }
 
-    // REMED-GFX-180: how many pixels of the whole target the draw coloured Green.
+    // How many pixels of the whole target the draw coloured Green.
     //
     // Check E's WireFrame half asserts an ABSENCE -- the triangle's centre must stay background --
     // and an absence alone is satisfied just as well by a draw that never happened. Its Solid half
@@ -423,7 +423,7 @@ class SdlGpuRenderStateTest : public Game
     }
 
     // Check F: RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle. Since
-    // REMED-GFX-068 the scissor is captured PER DRAW at enqueue time (into each QueuedDrawRef) and
+    // The scissor is captured PER DRAW at enqueue time (into each QueuedDrawRef) and
     // applied via SDL_SetGPUScissor at replay (see SdlGpuRenderer::ApplyScissorForRef), so
     // this readback clips correctly even after SetRenderTarget(nullptr) resets ScissorRectangle.
     // It used to read BEFORE the unbind (the pre-GFX-068 requirement), but XNA refuses any data
@@ -474,7 +474,7 @@ class SdlGpuRenderStateTest : public Game
     /**
      * @brief Runs every check group, and guarantees the frame does not end with a target bound.
      *
-     * REMED-GFX-180: each group binds a render target and unbinds it at its own end, so a group that
+     * Each group binds a render target and unbinds it at its own end, so a group that
      * throws part-way skips its unbind. Returning from Draw in that state is exactly what
      * `Game::EndDraw` -> `GraphicsDevice::Present` refuses -- correctly, per FNA -- and with nothing
      * catching that refusal the process died by SIGABRT, replacing a legible failed check with a
@@ -674,7 +674,7 @@ protected:
 
         if (frame_ == kTotalFrames)
         {
-            // REMED-GFX-180: this used to be an unconditional Check(true). Frames 2..120 ran RunAll
+            // This used to be an unconditional Check(true). Frames 2..120 ran RunAll
             // outside any handler, so the only way they could "fail" was by unwinding out of Draw --
             // which ends the process rather than the check. Now a later frame's exception is a
             // recorded FAIL naming the frame it happened in.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-099: SDL_GPU Texture3D transfer/subresource regression.
+// SDL_GPU Texture3D transfer/subresource regression.
 //
 // The public CNA/FNA contract is an explicitly authored mip chain: mipMap=true allocates levels,
 // while SetData chooses which level receives exact texels. Plain Texture3D does not implicitly

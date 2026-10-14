@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077: the Software (CPU-raster) renderer must honor BlendState.ColorWriteChannels
+// The Software (CPU-raster) renderer must honor BlendState.ColorWriteChannels
 // (per-channel colour write mask) and BlendState.MultiSampleMask, now that both are plumbed through
 // IGraphicsRenderer::ApplyBlendState (the interface previously carried only the 6 blend factor/
 // function ordinals, so both were silent no-ops on every renderer).

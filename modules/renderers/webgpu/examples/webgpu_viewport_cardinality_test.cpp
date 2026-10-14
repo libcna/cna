@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-116, structural half: capturing the Viewport per draw must stay DYNAMIC pass state.
+// The deferred viewport capture, structural half: capturing the Viewport per draw must stay DYNAMIC pass state.
 //
 // The pixel fixture (examples/deferred_viewport_capture_test.cpp) proves the captured value is the
 // right one. This file proves the mechanism did not pay for it with resources, because several

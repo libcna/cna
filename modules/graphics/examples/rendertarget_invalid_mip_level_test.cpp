@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-189 / REMED-GFX-192 -- a `RenderTarget2D` mip level OUTSIDE the declared chain must be
+// A `RenderTarget2D` mip level OUTSIDE the declared chain must be
 // REFUSED deterministically in the shared Texture2D layer, before any dimension calculation or
 // native call, with the caller's destination left untouched.
 //
@@ -17,13 +17,13 @@
 // did not throw. `VulkanRenderTargetRenderer::GetData` range-checked nothing, so the request reached
 // `vkCmdCopyImageToBuffer` with `imageSubresource.mipLevel = 5` on a five-level image, the copy
 // executed as undefined behaviour, and the caller was handed a texel that LOOKS like content. That
-// is precisely the invented result REMED-GFX-127 and REMED-GFX-130 exist to forbid: a caller cannot
+// is precisely the invented result the honest Texture2D::GetData contract and the honest TextureCube/Texture3D readback contract exist to forbid: a caller cannot
 // tell it apart from a successful read.
 //
 // Every sibling route on this very renderer already had the guard -- `VulkanTexture3DRenderer`,
 // `VulkanTextureCubeRenderer` and `VulkanRenderTargetCubeRenderer` all test
 // `level < 0 || level >= levelCount_` -- and `VulkanRenderTargetRenderer` was the one route that
-// never learned it. That is the same shape REMED-GFX-186 closed on SDL_GPU, where the symptom was a
+// never learned it. That is the same shape the generated-mip readback contract closed on SDL_GPU, where the symptom was a
 // SIGSEGV instead of fabrication.
 //
 // THE PUBLIC CONTRACT THIS FILE ENCODES
@@ -38,9 +38,9 @@
 //   * no native image view, copy, transition, command buffer, submit or wait is created for it;
 //   * for every VALID level the dimensions come from the public dimensions and that level, the
 //     rectangle is checked against THAT level's dimensions, the destination window follows
-//     REMED-GFX-149, and the complete requested range is written synchronously.
+//     The GetData element-range contract, and the complete requested range is written synchronously.
 //
-// REMED-GFX-192 puts both ends of the range through one shared `Texture2D::GetData` validation path,
+// Puts both ends of the range through one shared `Texture2D::GetData` validation path,
 // before the old `base >> level` dimension calculation. Both ends are asserted here so that path
 // cannot drift back into renderer-specific handling.
 //
@@ -65,7 +65,7 @@
 // PROCESS ISOLATION
 // -----------------
 // Each leg runs in its own child process. The Vulkan symptom was not a signal, but the sibling
-// defect this file generalises (REMED-GFX-186) was, a control renderer may still abort, and "the
+// defect this file generalises was, a control renderer may still abort, and "the
 // FIRST readback of the process" is a property leg G1 asserts -- which only a fresh process can
 // give.
 
@@ -144,7 +144,7 @@ namespace
      * @brief Whether this renderer can read a render target's colour attachment back at all.
      *
      * False on HEADLESS, which rasterizes nothing and owns no colour to return. Its refusal is
-     * REMED-GFX-127/130's deterministic public one, and it is ASSERTED here rather than skipped.
+     * The honest Texture2D::GetData contract's deterministic public one, and it is ASSERTED here rather than skipped.
      * Note that this changes nothing about the INVALID-level legs: a refusal is the required answer
      * there either way, so those legs assert exactly the same contract on every renderer.
      */
@@ -188,7 +188,7 @@ namespace
 
     // ---- the asymmetric pattern -------------------------------------------------------------
     //
-    // Identical to REMED-GFX-186's, deliberately: the two files then agree texel for texel on what a
+    // Identical to the generated-mip readback contract's, deliberately: the two files then agree texel for texel on what a
     // correctly generated level contains, so a disagreement between them is a real difference and
     // never a difference of oracle. Every channel of every colour is nonzero, so a zeroed channel is
     // a visible failure rather than something a tolerance could absorb.
@@ -300,7 +300,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-189's contract: a mip level outside the declared chain must be refused.
+ * @brief The contract: a mip level outside the declared chain must be refused.
  */
 class RenderTargetInvalidMipLevelTest : public Game
 {
@@ -445,7 +445,7 @@ class RenderTargetInvalidMipLevelTest : public Game
      *     does not have to know WHICH wrong answer a renderer would have invented.
      *
      * @param elementCount how many elements the request claims; the window is that wide.
-     * @param startIndex   the destination offset, so REMED-GFX-149's window is exercised too.
+     * @param startIndex   the destination offset, so the window is exercised too.
      */
     void ExpectLevelRejected(RenderTarget2D& rt, int level, const Rectangle* rect,
                              int elementCount, int startIndex, const std::string& label)
@@ -706,7 +706,7 @@ class RenderTargetInvalidMipLevelTest : public Game
             ReadWholeLevel(rt, level, label + " level " + std::to_string(level));
     }
 
-    /** @brief Exercises REMED-GFX-192's shared SetData and CPU mip-buffer path. */
+    /** @brief Exercises the shared SetData and CPU mip-buffer path. */
     void ExercisePlainTextureSetDataContract(GraphicsDevice& dev)
     {
         constexpr int width = 13;
@@ -1096,7 +1096,7 @@ class RenderTargetInvalidMipLevelTest : public Game
     /**
      * @brief E1 -- the nine readback SHAPES of a valid level, so the guard costs none of them.
      *
-     * REMED-GFX-149's destination window is exercised in the same leg: a nonzero start index, an
+     * The destination window is exercised in the same leg: a nonzero start index, an
      * exactly-sized destination and an oversized one whose surplus must stay untouched.
      */
     void LegE1()
@@ -1357,7 +1357,7 @@ class RenderTargetInvalidMipLevelTest : public Game
      *
      * An MRT attachment is an ordinary `RenderTarget2D` read through the very same renderer route,
      * so its invalid-level rejection IS this ticket's subject and is asserted here. Its generated
-     * mip CONTENT is NOT: **REMED-GFX-190** recorded that the retired VULKAN renderer did not
+     * mip CONTENT is NOT: **recorded that the retired VULKAN renderer did not
      * regenerate the PRIMARY MRT attachment's chain, and this file must not claim otherwise, so
      * only level 0 content and the refusal are asserted while level 1 is measured and printed.
      */
@@ -1487,7 +1487,7 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
-        // REMED-GFX-191: a renderer may derive its render-target sample count from the device-wide
+        // A renderer may derive its render-target sample count from the device-wide
         // count, as the retired VULKAN renderer did. F1 must therefore engage multisampling before
         // device creation; target constructor requests alone would all report applied 0 and leave
         // the nominal MSAA matrix on the single-sample path. F1 still requests 0 and 1 as explicit

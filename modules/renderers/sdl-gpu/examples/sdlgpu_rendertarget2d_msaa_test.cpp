@@ -82,7 +82,7 @@ namespace
         return px;
     }
 
-    /// REMED-GFX-186: the same read, at a mip level this target's LevelCount says exists.
+    /// The same read, at a mip level this target's LevelCount says exists.
     Color ReadPixelAtLevel(RenderTarget2D& rt, int level, int x, int y)
     {
         Color px(0, 0, 0, 0);
@@ -106,7 +106,7 @@ class SdlGpuRenderTarget2DMsaaTest : public Game
     std::unique_ptr<SpriteBatch> sb_;
     std::unique_ptr<RenderTarget2D> rtMsaa_;
     std::unique_ptr<RenderTarget2D> rtMsaaDepth_;
-    std::unique_ptr<RenderTarget2D> rtMsaaMip_;   ///< REMED-GFX-186: multisampled AND mipmapped.
+    std::unique_ptr<RenderTarget2D> rtMsaaMip_;   ///< multisampled AND mipmapped.
     std::unique_ptr<VertexBuffer> quadVb_;
     std::unique_ptr<VertexBuffer> farQuadVb_;
     std::unique_ptr<VertexBuffer> nearQuadVb_;
@@ -154,7 +154,7 @@ class SdlGpuRenderTarget2DMsaaTest : public Game
         dev.SetDepthWriteEnabled(false);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        // REMED-GFX-186: the multisampled AND mipmapped target. Green fills the whole surface, so
+        // The multisampled AND mipmapped target. Green fills the whole surface, so
         // every generated level is Green too -- a level that was never generated reads (0,0,0,0)
         // and a level read from the wrong resource cannot be Green either.
         dev.SetRenderTarget(rtMsaaMip_.get());
@@ -192,7 +192,7 @@ protected:
                                                    DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
         rtMsaaDepth_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                                         DepthFormat::Depth24Stencil8, 4, RenderTargetUsage::DiscardContents);
-        // REMED-GFX-186: this file is NAMED for multisampled RenderTarget2D and its own header
+        // This file is NAMED for multisampled RenderTarget2D and its own header
         // advertises "real RenderTarget2D::GetData() pixel readback of the resolved MSAA color"
         // -- yet every target above is mipMap=false and every read above is level 0, so it could
         // not fail when a multisampled target silently lost its mip chain and reading level 1
@@ -259,7 +259,7 @@ protected:
                       std::to_string(gotDepth.getRProperty()) + "," + std::to_string(gotDepth.getGProperty()) +
                       "," + std::to_string(gotDepth.getBProperty()));
 
-                // Checks F/G/H (REMED-GFX-186): multisampling must not shorten the public chain,
+                // Checks F/G/H: multisampling must not shorten the public chain,
                 // and every level it promises must be readable. Pre-fix, F reported 1 instead of 6
                 // and G killed the process with SIGSEGV inside VULKAN_DownloadFromTexture.
                 stage = "RenderTarget2D LevelCount of a mipmapped MULTISAMPLED target";
@@ -304,7 +304,7 @@ protected:
         {
             Check(true, std::to_string(kTotalFrames) + " frames of MSAA RenderTarget2D render/sample render with no exception");
             std::printf("=== %d/9 PASS ===\n", passCount_);
-            // REMED-GFX-186 added checks F, G and H.
+            // Added checks F, G and H.
             result_ = (passCount_ == 9) ? 0 : 1;
             Exit();
         }

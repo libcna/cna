@@ -119,7 +119,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads data to a sub-rectangle of a mip level on the specified cube face.
          *
-         * REMED-GFX-135: this call has exactly two outcomes -- the complete requested region is
+         * This call has exactly two outcomes -- the complete requested region is
          * stored, or it throws. It never returns after storing nothing or only part of the region.
          * Every argument is validated before anything is uploaded, so a rejected call leaves the
          * resource and the source array untouched.
@@ -440,7 +440,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads data from a sub-rectangle of a mip level on the specified cube face.
          *
-         * REMED-GFX-130: every overload above delegates here, so this describes all three. The call
+         * Every overload above delegates here, so this describes all three. The call
          * has exactly two outcomes. It either writes the requested region's real content into
          * @p data starting at @p startIndex, or it throws and leaves @p data byte-for-byte
          * untouched -- there is no partially written or fabricated result. Elements of @p data

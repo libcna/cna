@@ -87,7 +87,7 @@ only the U and V legs -- the 3D ones -- were asserting the wrong convention.
 
 One observation this spike does not explain: at `8x4 -> 21x13` XNA's SpriteBatch matches
 half-integer only 256/273, while CNA matches it 273/273 (leg D2, green). Some second effect appears
-at that magnification. It is not what REMED-GFX-238 is about and was left alone.
+at that magnification. It is not what the XNA pixel-centre contract is about and was left alone.
 
 ## The one real defect
 
@@ -126,7 +126,7 @@ Reach refuses the other eleven with `NotSupportedException`; HiDef refuses none 
 legality in XNA is a **profile** question. CNA makes it a **renderer-capability** question -- its
 profile gate covers texture size only -- which closed `REMED-GFX-241` (a fixture demanded a throw
 for `NormalizedByte2`, which XNA accepts at either profile and the renderer had already stopped
-refusing) and opened `REMED-GFX-242` (`Bgra5551` is refused by CNA and accepted by XNA, and the
+refusing) and opened the profile-based texture-format rule (`Bgra5551` is refused by CNA and accepted by XNA, and the
 eleven HiDef-only formats stay refused even on a HiDef device).
 
 ## Fourth question: the other two resource kinds
@@ -190,5 +190,5 @@ XNA. Leg U2 of the point-sampling contract encodes the OpenGL/Direct3D 10 conven
 does not use, and the six renderers that pass it are passing an expectation XNA never held.
 
 All three tests the correction appeared to break are accounted for: two asserted the wrong
-convention (REMED-GFX-238) and the third asserted a penumbra it could not resolve
-(REMED-GFX-240). None of them was a renderer defect.
+convention and the third asserted a penumbra it could not resolve
+. None of them was a renderer defect.

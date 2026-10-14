@@ -13,9 +13,9 @@
 
 /**
  * @file
- * @brief REMED-GFX-DECL-GUARD -- the declaration-fidelity safety boundary.
+ * @brief The declaration-fidelity safety boundary.
  *
- * REMED-GFX-217 records that the rasterizing renderers then measured (Software, WebGPU, SDL_GPU,
+ * Records that the rasterizing renderers then measured (Software, WebGPU, SDL_GPU,
  * D3D9 and the since-retired Vulkan, D3D11 and D3D12) did not translate a `VertexDeclaration` at
  * all: they select a native input layout from a canonical byte-stride table and discard
  * everything else the declaration states. A stride does not determine element composition, so two
@@ -177,7 +177,7 @@ namespace CNA::Internal::Graphics
     /**
      * @brief One input a stock shader program declares, at its own attribute location.
      *
-     * REMED-GFX-218's mechanism is not the stride table: EasyGL receives the declaration and binds
+     * The mechanism is not the stride table: EasyGL receives the declaration and binds
      * each element at the location matching its INDEX in the element list, while its stock programs
      * assign a different meaning to the same location depending on which program was selected --
      * location 1 is `aColor` at stride 16, `aUV` at 20 and `aNormal` at 32. There is therefore no
@@ -297,7 +297,7 @@ namespace CNA::Internal::Graphics
             return aStart < bStart + bSize && bStart < aStart + aSize;
         }
 
-        // THE CANONICAL STRIDE TABLE. Every renderer in REMED-GFX-217's scope transcribes exactly
+        // THE CANONICAL STRIDE TABLE. Every rasterizing renderer with a fixed native layout transcribes exactly
         // this: EasyGLRenderer's ApplyLayout switch and SoftwareRenderer's BuildGenericClipVertex
         // byte reader, as did the since-retired D3DVertexFormatHelper's kStride16..kStride68
         // arrays and the since-retired VulkanRenderer's per-pipeline attribute arrays. They agree

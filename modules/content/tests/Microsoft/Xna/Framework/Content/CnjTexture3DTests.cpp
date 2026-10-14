@@ -103,7 +103,7 @@ protected:
                       PresentationParameters()};
 };
 
-// REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
+// Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
 // (plans/plan_software.md Boundaries). On a renderer that doesn't support it, loading now fails
 // cleanly -- Texture3D's own constructor throws System::NotSupportedException -- instead of

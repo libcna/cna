@@ -25,11 +25,11 @@
 // here, because Bgfx's ClearDepth() then only stored the new clear value without an immediate
 // EnsureViewState()/touch().
 //
-// REMED-GFX-129 false-positive note: that exemption also meant nothing in this file ever reached
+// False-positive note: that exemption also meant nothing in this file ever reached
 // the retired VULKAN renderer's ClearDepth, which recorded no clear request at all -- so a
 // depth-ONLY Clear() did literally nothing there and both checks below still passed, since both
-// include ClearOptions::Target. Bgfx's own gap was closed by REMED-GFX-018 and Vulkan's by
-// REMED-GFX-129; `examples/graphicsdevice_ordered_clear_test.cpp` (checks D1, D5, D6 and D7) now
+// include ClearOptions::Target. Bgfx's own gap was closed by the ClearOptions fix and Vulkan's by
+// The ordered Clear fix; `examples/graphicsdevice_ordered_clear_test.cpp` (checks D1, D5, D6 and D7) now
 // covers a depth-only clear, its value at both ends of the legal range, and its ordering against
 // draws, on every renderer that has a depth oracle.
 //

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-118: the public instanced indexed draw-range contract.
+// The public instanced indexed draw-range contract.
 //
 // XNA/FNA define
 //   GraphicsDevice.DrawInstancedPrimitives(primitiveType, baseVertex, minVertexIndex,
 //                                          numVertices, startIndex, primitiveCount, instanceCount)
 // as "draws instanceCount instances of the same indexed geometry range". The reconciled CNA
-// contract this file locks down is therefore exactly REMED-GFX-106/107's indexed contract plus one
+// contract this file locks down is therefore exactly the indexed parity reconciliation's indexed contract plus one
 // independent instance axis:
 //
 //   startIndex     is an index-ELEMENT offset, never a byte offset
@@ -34,7 +34,7 @@
 //
 // Renderer scope. The permanent suite runs on the renderers whose stock (non-custom-effect) instanced
 // path consumes the per-instance stream and an exact index range: WebGPU, D3D9 and EasyGL
-// (REMED-GFX-122).
+//.
 
 #include <algorithm>
 #include <array>
@@ -124,11 +124,11 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 using Microsoft::Xna::Framework::Graphics::Viewport;
 
-// REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the renderers whose
+// The binding-offset/InstanceFrequency oracle is asserted only on the renderers whose
 // instanced path has actually been corrected to consume VertexBufferBinding.VertexOffset and
-// InstanceFrequency -- EasyGL (REMED-GFX-122), WebGPU (REMED-GFX-211/213) and Software
-// (SOFTWARE-129), and the since-retired D3D11/D3D12 (REMED-GFX-123), Vulkan and bgfx. D3D9 runs
-// the index-range contract above and nothing here; whether it honours the binding offsets is a
+// InstanceFrequency -- EasyGL, WebGPU and Software
+// (SOFTWARE-129), and the since-retired D3D11/D3D12, Vulkan and bgfx. D3D9 runs
+// The index-range contract above and nothing here; whether it honours the binding offsets is a
 // separate question that belongs to its own measurement, not to this file's compiled expectations,
 // and no D3D display has been reachable to take it.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
@@ -743,7 +743,7 @@ namespace
         // plans/plan_runtimerenderer.md RTR-P9-5: this member is now always defined -- it used to sit
         // behind CNA_INSTANCED_BINDING_OFFSET_ORACLE, but a declaration cannot be guarded by a
         // runtime predicate. The two tests that call it carry the renderer gate instead.
-        /// REMED-GFX-122's binding oracle (REMED-GFX-123 reused it verbatim for the since-retired
+        /// The binding oracle (REMED-GFX-123 reused it verbatim for the since-retired
         /// D3D11/D3D12 route). The mesh and instance buffers both begin with asymmetric decoys.
         /// `VertexOffset=3` and instance `VertexOffset=1` are ELEMENT offsets while every native
         /// binding underneath is expressed in bytes (GL pointers, for one); `InstanceFrequency=2`
@@ -1164,7 +1164,7 @@ TEST_F(InstancedDrawRangeTest, InstanceCountIsIndependentOfTheGeometryRange)
         fixture.instances.data(), kRowCount, static_cast<int>(sizeof(InstanceMatrix)));
 
     BasicEffect effect(device);
-    // REMED-GFX-123: every instance count the four-band fixture can express, 1..4 -- 3 is the one
+    // Every instance count the four-band fixture can express, 1..4 -- 3 is the one
     // that tells an off-by-one in a step-rate or instance-offset conversion apart from a clean
     // power-of-two coincidence.
     for (const int instanceCount : {1, 2, 3, kRowCount})
@@ -1306,7 +1306,7 @@ TEST_F(InstancedDrawRangeTest, InstancedDynamicBuffersHonorRangeAndInstances)
     ExpectInstanceRowsExclusive(pixels, layout, instances, Color::Black, "dynamic buffers");
 }
 
-// A 32-bit index buffer (REMED-GFX-108's public native creation) decodes the same range: startIndex
+// A 32-bit index buffer (the public native creation) decodes the same range: startIndex
 // still counts index ELEMENTS, so the wider element width must not be mistaken for a byte offset.
 TEST_F(InstancedDrawRangeTest, InstancedThirtyTwoBitIndicesHonorTheSameElementRange)
 {
@@ -2033,8 +2033,8 @@ TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex
 }
 
 
-// REMED-GFX-122's EasyGL binding-offset pin, unchanged in name and in what it asserts; its body is
-// now the fixture's shared oracle so REMED-GFX-123's D3D route asserts exactly the same contract.
+// The EasyGL binding-offset pin, unchanged in name and in what it asserts; its body is
+// now the fixture's shared oracle so the D3D route asserts exactly the same contract.
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.

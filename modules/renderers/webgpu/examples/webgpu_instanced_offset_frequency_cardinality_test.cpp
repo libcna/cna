@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-211 / REMED-GFX-213, structural half: honouring both bindings' VertexOffset and every
+// The instanced VertexOffset fix, structural half: honouring both bindings' VertexOffset and every
 // legal InstanceFrequency must cost nothing a caller can observe.
 //
 // The pixel fixture (tests/Microsoft/Xna/Framework/Graphics/InstancedDrawMultiStreamTests.cpp,

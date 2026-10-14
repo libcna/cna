@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-149 (and REMED-GFX-128, which records the same expression): the exact XNA-compatible
+// (and the GetData startIndex contract, which records the same expression): the exact XNA-compatible
 // `startIndex` / `elementCount` contract of every public `Texture2D::GetData` overload.
 //
 // AUTHORITATIVE SEMANTICS -- established, not assumed:
@@ -111,7 +111,7 @@ namespace
      * @brief Whether this renderer can read a render target's colour attachment back to the CPU.
      *
      * Declared per renderer rather than probed, so "this renderer cannot" is a reviewed claim this
-     * file enforces (REMED-GFX-127's contract), not an escape hatch that lets any result pass.
+     * file enforces (the contract), not an escape hatch that lets any result pass.
      */
     enum class RtContract
     {
@@ -137,7 +137,7 @@ namespace
 
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless performs no rasterization at all, so a render target's colour attachment has no
-    // content it could honestly return (REMED-GFX-127 / REMED-GFX-162).
+    // content it could honestly return.
     constexpr RtContract kRtContract = RtContract::Unsupported;
     constexpr const char* kRendererName = "HEADLESS";
     constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
@@ -927,7 +927,7 @@ class Texture2DGetDataTransferRangeTest : public Game
 
         // G4: an undersized capacity must be rejected with the ARGUMENT error, on every renderer --
         //     including the non-rasterizing one, where it must NOT be weakened into the capability
-        //     rejection. This is REMED-GFX-162's precedence, asserted from the texture side.
+        // rejection. This is the precedence, asserted from the texture side.
         {
             auto got = GuardedBuffer(kPrefix + kRtN + kSuffix);
             checkThrew(Attempt([&] { target.GetData(got.data(), kPrefix, kRtN - 1); }), "ArgumentException",

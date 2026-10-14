@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-082: the Software (CPU-raster) renderer must honor RasterizerState.FillMode. Before this
+// The Software (CPU-raster) renderer must honor RasterizerState.FillMode. Before this
 // task SoftwareRenderer::ApplyRasterizerState dropped its fillMode argument and the rasterizer
 // only ever filled solid triangles, so FillMode.WireFrame rendered as a solid fill (no line-raster
 // path existed). This is the Software counterpart of the GPU renderers' wireframe support (e.g. EasyGL
@@ -130,7 +130,7 @@ class SoftwareWireframeTest : public Game
 
     // Assigns a RasterizerState with the given cull/fill/scissor to the device (the 3D draw paths
     // read GraphicsDevice.RasterizerState directly). Returns the state so SpriteBatch checks can pass
-    // the SAME state through Begin (REMED-GFX-081).
+    // the SAME state through Begin.
     RasterizerState MakeRaster(CullMode cull, FillMode fill, bool scissor = false)
     {
         RasterizerState rs;

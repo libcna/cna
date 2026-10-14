@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-073: the Software (CPU-raster) renderer's SpriteBatch must honor a custom
-// GraphicsDevice.Viewport, exactly like the GPU renderers corrected by REMED-GFX-072.
+// The Software (CPU-raster) renderer's SpriteBatch must honor a custom
+// GraphicsDevice.Viewport, exactly like the GPU renderers corrected by the SpriteBatch custom-viewport fix.
 //
 // XNA/FNA contract (FNA SpriteBatch.cs PrepRenderState): the sprite projection is
 // CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0, 0, 1) * transformMatrix, and

@@ -55,7 +55,7 @@ class SurfaceFormatThrowsTest : public Game
 
     /// Two things refuse with System::NotSupportedException. A renderer without real
     /// volume-texture storage refuses EVERY Texture3D construction up front (REMED-CONTENT-004's
-    /// gate), before any format validation runs. And REMED-GFX-242: a format the device's
+    /// gate), before any format validation runs. And the profile-based texture-format rule: a format the device's
     /// GraphicsProfile excludes is refused by the profile, whatever the renderer could carry --
     /// XNA's own exception type for its own restriction, measured on the real 4.0 runtime where
     /// Reach refuses exactly eleven Texture2D formats and HiDef refuses none.
@@ -206,7 +206,7 @@ protected:
         // ── Other unsupported formats must throw ─────────────────────────────
 
 #if 1
-        // REMED-GFX-244: the packed 16-bit formats are ES 3 sized-internal-format storage, so they
+        // The packed 16-bit formats are ES 3 sized-internal-format storage, so they
         // take the same guard the signed-normalized pair does.
         expectPerRendererClaim(dev, "Texture2D Bgra5551", SurfaceFormat::Bgra5551, [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
@@ -249,7 +249,7 @@ protected:
         });
 #endif
 #if 1
-        // REMED-GFX-244: block-compressed content is accepted on EVERY GL profile, unlike the
+        // Block-compressed content is accepted on EVERY GL profile, unlike the
         // packed formats above. Storing the blocks needs the S3TC extension, but decoding them
         // needs nothing, and GraphicsProfile.Reach promises the game these formats work -- so the
         // driver decides how they are stored, never whether they are refused.

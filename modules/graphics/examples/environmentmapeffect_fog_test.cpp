@@ -9,7 +9,7 @@
 // additive specular term, so the pre-fog colour is exactly EmissiveColor and the fog term is
 // isolated from the reflection maths. The quad sets RasterizerState::CullNone: under XNA's default
 // CullCounterClockwiseFace it is back-facing and would be culled to the clear colour
-// (REMED-GFX-011/052).
+//.
 //
 // First written for the retired VULKAN renderer (Task 899); kept as a shared source because
 // DIRECTX9 runs it too.

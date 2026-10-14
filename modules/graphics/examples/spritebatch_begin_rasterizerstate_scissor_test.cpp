@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-081 (cross-renderer): SpriteBatch.Begin must APPLY its RasterizerState argument on every
+// (cross-renderer): SpriteBatch.Begin must APPLY its RasterizerState argument on every
 // renderer. This is a shared-layer test -- the fix lives in SpriteBatch.cpp (setRasterizerStateProperty
 // in Begin), not in any renderer -- so the SAME source is registered against multiple renderers to
 // prove the shared change works across very different architectures (deferred BatchSnapshot on

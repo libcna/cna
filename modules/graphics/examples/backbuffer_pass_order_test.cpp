@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
+// Backbuffer work and render-target work must replay in ONE ordered stream.
 //
-// REMED-GFX-140 (the retired VULKAN renderer) and REMED-GFX-145 (SdlGpu) made every public
+// (the retired VULKAN renderer) and the per-bind-cycle render pass fix (SdlGpu) made every public
 // render-target bind/unbind cycle its own native render pass, recorded in the order the cycles
 // were opened. Both stopped at the same boundary: the BACKBUFFER stayed a single trailing pass at
 // the end of the command buffer. `VulkanRenderer::RecordCommandBuffer` recorded every
@@ -18,7 +18,7 @@
 //     t pass (red) ; t pass (green) ; backbuffer pass (draw t at LEFT, draw t at RIGHT)
 //
 // and BOTH backbuffer draws sampled the final green. The requested result is a red left and a green
-// right. Nothing observable in `t` changes -- REMED-GFX-140's check `S6` covers exactly the
+// right. Nothing observable in `t` changes -- the check `S6` covers exactly the
 // interleaving sequence and passes -- which is why the class survived two segmentation fixes: the
 // ordinary XNA pattern (render into targets, then compose them onto the backbuffer) is already the
 // order a trailing pass produces. What breaks is a frame that consumes a target and then produces
@@ -129,7 +129,7 @@ namespace
         Support rtReadback;          ///< RenderTarget2D::GetData at level 0.
         bool    cubeTargets;         ///< RenderTargetCube can be created AND bound.
         /**
-         * REMED-GFX-143's own subject: backbuffer bind cycles are ordered segments in the same
+         * The subject: backbuffer bind cycles are ordered segments in the same
          * stream as render-target segments. False is a declared, still-open defect on that
          * renderer; check A1 then asserts the COLLAPSED result so the declaration stays falsifiable
          * in both directions, and every other check that can only distinguish the two shapes
@@ -155,7 +155,7 @@ namespace
         /**
          * A SpriteBatch fill on the BACKBUFFER honours a custom sub-Viewport, i.e. sprite
          * coordinates are viewport-local. Declared separately from the render-target answer
-         * REMED-GFX-140 measures: a renderer can honour one and not the other.
+         * Measures: a renderer can honour one and not the other.
          */
         bool    backbufferSpriteViewportIsLocal;
         /// A SpriteBatch fill on the BACKBUFFER honours GraphicsDevice.ScissorRectangle.
@@ -166,7 +166,7 @@ namespace
     };
 
 #if defined(CNA_RENDERER_HEADLESS)
-    // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
+    // Headless rasterizes nothing and its readback is the honest Texture2D::GetData contract's deterministic refusal.
     // Every sequence must still be legal and must not throw.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, true, Support::Unsupported,
                                  true, true, true, true, true, true, true, true, true, false};
@@ -177,27 +177,27 @@ namespace
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_WEBGPU)
-    // `clearAfterDrawWinsOnBackbuffer` was false while REMED-GFX-156 was open: WebGPU delivered a
+    // `clearAfterDrawWinsOnBackbuffer` was false while the ordered mid-cycle Clear fix was open: WebGPU delivered a
     // backbuffer clear colour only through the render-pass load op, the same mechanism
-    // REMED-GFX-140 records for its render targets, so a Clear() after a draw inside ONE cycle
-    // could not wipe that draw. REMED-GFX-156 put Clear into the ordered stream REMED-GFX-159 built
+    // Records for its render targets, so a Clear() after a draw inside ONE cycle
+    // could not wipe that draw. the ordered mid-cycle Clear fix put Clear into the ordered stream the WebGPU draw-order fix built
     // and cuts the cycle into one native pass per observable Clear, so check C4 now asserts the
     // correct behaviour here; it was measured red the moment the fix landed, which is what turned
     // this declaration over.
-    // `backbufferSpriteScissorApplies` was false while REMED-GFX-146 was open, recorded by
-    // REMED-GFX-143 as "a backbuffer SpriteBatch fill is not clipped by ScissorRectangle at all".
+    // `backbufferSpriteScissorApplies` was false while the deferred scissor capture was open, recorded by
+    // As "a backbuffer SpriteBatch fill is not clipped by ScissorRectangle at all".
     // That description was the SYMPTOM, not the cause: the backbuffer pass was never missing its
     // scissor call, it resolved the rectangle from live state when it recorded the pass, and check
     // V2 below restores the full rectangle before its single read -- so every already-queued batch
     // was replayed unclipped. Its RENDER-TARGET scissor looked correct for the same reason in
     // reverse (a target switch IS the flush on this renderer, so live state still matched).
-    // REMED-GFX-146 captures the whole scissor state per draw and this declaration turned over;
+    // Captures the whole scissor state per draw and this declaration turned over;
     // it was measured red the moment the fix landed.
-    // `mixedQueuesKeepPublicOrder` was false from REMED-GFX-157 until REMED-GFX-159. WebGPU grouped
+    // `mixedQueuesKeepPublicOrder` was false from the SpriteBatch/3D draw-order fix until the WebGPU draw-order fix. WebGPU grouped
     // a bind cycle's draws by family too, but the OTHER way round -- all 3D draws, then all sprites
     // -- so `3D -> SpriteBatch` (check O3) looked correct here while `SpriteBatch -> 3D` (check O4)
     // was the one that inverted. That direction is why this declaration was `true` for as long as
-    // O3 was the only mixed-family check in this file. REMED-GFX-159 replaced the fixed list of
+    // O3 was the only mixed-family check in this file. the WebGPU draw-order fix replaced the fixed list of
     // per-family replay loops with one ordered reference stream, and this declaration turned over;
     // both checks were measured red the moment the fix landed.
     // plans/plan_webgpu_modern_graphics.md WMG-0002: wantHiDefProfile is true -- WebGPU supports
@@ -224,18 +224,18 @@ namespace
     /**
      * @brief When `mixedQueuesKeepPublicOrder` is false, which family this renderer replays FIRST.
      *
-     * REMED-GFX-157: "does it keep public order" and "if not, which way does it group" are two
+     * "does it keep public order" and "if not, which way does it group" are two
      * different facts, and O3 alone could only ever see the first. A renderer that replays all
      * sprites and then all 3D draws inverts `3D; sprite`; one that replays all 3D draws and then
      * all sprites inverts `sprite; 3D` instead. Only meaningful when the contract above says the
      * order is not public; checks O3 and O4 derive both of their predictions from the pair, so
      * there is exactly one place to change when a renderer is corrected.
      *
-     * REMED-GFX-159 turned WEBGPU's `mixedQueuesKeepPublicOrder` over, and it was the last renderer
+     * Turned WEBGPU's `mixedQueuesKeepPublicOrder` over, and it was the last renderer
      * declaring anything but public order -- so nothing consults this today. It is kept, rather
      * than deleted along with the branch it feeds, because a renderer that regresses to a grouped
      * replay needs somewhere to say WHICH grouping, and rebuilding that distinction after the fact
-     * is what cost REMED-GFX-157 its first measurement.
+     * is what cost the SpriteBatch/3D draw-order fix its first measurement.
      */
     constexpr bool kMixedGroupingReplays3DFirst = false;
 
@@ -709,7 +709,7 @@ class BackbufferPassOrderTest : public Game
     /**
      * @brief A6 -- an intervening backbuffer cycle must not disturb the targets themselves.
      *
-     * REMED-GFX-140's `S6` measures this from the target side and passes even with a trailing
+     * The `S6` measures this from the target side and passes even with a trailing
      * backbuffer pass; it is repeated here so this task's fix is measured against it rather than
      * credited with it, and so a regression in the other direction is caught.
      */
@@ -1008,7 +1008,7 @@ class BackbufferPassOrderTest : public Game
     /**
      * @brief O4 -- the OTHER direction of the same pair, which O3 alone could never see.
      *
-     * REMED-GFX-157: O3 only ever measured `3D draw; sprite`. A renderer that replays all sprites
+     * O3 only ever measured `3D draw; sprite`. A renderer that replays all sprites
      * and then all 3D draws produces the CORRECT picture for `sprite; 3D draw` by accident, so half
      * of the mixed-queue contract went unmeasured for as long as O3 was the only check -- and a
      * renderer that groups the other way round (all 3D, then all sprites) passed O3 outright while
@@ -1133,7 +1133,7 @@ class BackbufferPassOrderTest : public Game
      *
      * Every deferred renderer copies sprite and 3D vertex data into one per-frame arena while
      * recording, long before the submit that makes the GPU read it. Splitting the backbuffer into
-     * several passes over that one arena is exactly the shape that let REMED-GFX-140's Vulkan
+     * several passes over that one arena is exactly the shape that let the Vulkan
      * arena defect exist: a cursor that restarted per pass made an earlier pass draw a later
      * pass's geometry. Colour alone cannot see it (the tint lives in the vertex data too, but a
      * whole-surface fill looks the same wherever its vertices came from), so each cycle here owns

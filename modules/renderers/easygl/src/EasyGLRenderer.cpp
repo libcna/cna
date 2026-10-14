@@ -478,16 +478,16 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
 
-    // REMED-GFX-147. See the declaration in EasyGLRenderer.hpp.
+    // See the declaration in EasyGLRenderer.hpp.
     bool SampledRowOrderIsBottomUp(const ITextureRenderer* texture)
     {
         return dynamic_cast<const IRenderTargetRenderer*>(texture) != nullptr;
     }
 
-    // --- REMED-GFX-168: render-target ownership trace -------------------------------------------
+    // --- Render-target ownership trace -------------------------------------------
     //
     // Set CNA_EASYGL_TARGET_TRACE=1 to have every render-target ownership transition print one line
-    // to stderr. This exists because the question REMED-GFX-168 had to answer -- is the object gone,
+    // to stderr. This exists because the question the render-target ownership fix had to answer -- is the object gone,
     // are the GL names gone, and which of the two does the next transition touch -- cannot be
     // answered from a crash address alone. Off by default and costs one already-cached bool read
     // per event.
@@ -544,10 +544,10 @@ namespace CNA::Internal::Renderers::EasyGL
                       << " glerr=" << TraceGlErrors() << std::endl;
         }
 
-        // --- REMED-GFX-174: sampler / texture-completeness trace --------------------------------
+        // --- Sampler / texture-completeness trace --------------------------------
         //
         // Set CNA_EASYGL_SAMPLER_TRACE=1 to print one line per public sampler application and one
-        // per stock/custom 3D texture bind. The question REMED-GFX-174 has to answer -- is a wrong
+        // per stock/custom 3D texture bind. The question the sampler-completeness fix has to answer -- is a wrong
         // pixel true bilinear interpolation, an incomplete-texture fetch, a stale sampler object or
         // the wrong texture unit -- cannot be answered from pixels alone, because all four can
         // produce a colour that is in no texel of the source. Every field below is READ BACK FROM
@@ -1159,7 +1159,7 @@ namespace CNA::Internal::Renderers::EasyGL
             levelH = std::max(1, levelH / 2);
             levelD = std::max(1, levelD / 2);
         }
-        // REMED-GFX-174: see EasyGLRenderTargetRenderer's identical clamp. The MinFilter written
+        // See EasyGLRenderTargetRenderer's identical clamp. The MinFilter written
         // below is overridden by whatever sampler object ApplySamplerState binds to this unit, so
         // the level range is what has to make the texture complete.
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::MaxLevel,
@@ -1170,7 +1170,7 @@ namespace CNA::Internal::Renderers::EasyGL
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::WrapT, kTexClampToEdge);
     }
 
-    // REMED-GFX-135: glTexSubImage2D/3D have no return value, so GL's error queue is the only
+    // GlTexSubImage2D/3D have no return value, so GL's error queue is the only
     // completion signal it offers. Drained BEFORE the upload so a stale error left by unrelated code
     // cannot be misread as this call failing, and read AFTER it so an upload the driver rejected is
     // reported as such instead of being returned as a completed write.
@@ -1563,7 +1563,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 levelSize = std::max(1, levelSize / 2);
             }
         }
-        // REMED-GFX-174: see EasyGLRenderTargetRenderer's identical clamp -- a cube sampled through
+        // See EasyGLRenderTargetRenderer's identical clamp -- a cube sampled through
         // EnvironmentMapEffect's slot-1 sampler faces exactly the same completeness rule.
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MaxLevel,
                            levelCount_ - 1);
@@ -1669,7 +1669,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
             format == SurfaceFormat::Dxt5)
             return false;
-        // REMED-GFX-135: the face guard used to be a silent `return`, which the shared layer could
+        // The face guard used to be a silent `return`, which the shared layer could
         // not tell apart from a completed upload.
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
@@ -1824,7 +1824,7 @@ namespace CNA::Internal::Renderers::EasyGL
     bool EasyGLTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
-        // REMED-GFX-130: the face guard used to be a silent `return`, which the shared layer turned
+        // The face guard used to be a silent `return`, which the shared layer turned
         // into a complete transparent-black face rather than a refusal.
         if (face < 0 || face >= 6 || data == nullptr || level < 0 || w <= 0 || h <= 0) return false;
         if (dataLength < w * h * 4) return false;
@@ -2122,7 +2122,7 @@ namespace CNA::Internal::Renderers::EasyGL
         TraceBoundTextureUnit("bind-texture-3d", unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
 
-        // REMED-GFX-147: a custom ShaderEffect's GLSL belongs to the game, so this renderer cannot
+        // A custom ShaderEffect's GLSL belongs to the game, so this renderer cannot
         // rewrite its sampling for it -- but it can tell it what it is sampling. A user shader that
         // declares `uniform vec4 uRtFlipV;` and maps its V through 1-v where the flag is 1 gets the
         // same render-target correction the stock effects get; one that does not declare it pays
@@ -2401,7 +2401,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // what a content pipeline picks for a 2D displacement map, where a third and fourth
         // channel would carry nothing (SAMPLE-032's DisplacementMapProcessor ends with exactly
         // that conversion).
-        // REMED-GFX-244: block-compressed content. Where the driver has S3TC the blocks are stored
+        // Block-compressed content. Where the driver has S3TC the blocks are stored
         // as they arrived, which is the whole point of the format; where it does not, they are
         // decoded to Color rather than refused, because GraphicsProfile.Reach promises a game that
         // Dxt1/3/5 work and a missing extension is not the game's problem. The two paths differ in
@@ -2478,7 +2478,7 @@ namespace CNA::Internal::Renderers::EasyGL
                                   static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
             return;
         }
-        // REMED-GFX-244: the three packed 16-bit formats a Reach-profile XNA game may use.
+        // The three packed 16-bit formats a Reach-profile XNA game may use.
         // Only Bgr565 can be handed to GL as it stands: XNA packs it R:11 G:5 B:0, which is exactly
         // what GL_UNSIGNED_SHORT_5_6_5 reads. The two with alpha do NOT match -- XNA puts alpha in
         // the HIGH bits (A R G B) and GL's 5_5_5_1 and 4_4_4_4 put it in the LOW ones (R G B A) --
@@ -2723,7 +2723,7 @@ namespace CNA::Internal::Renderers::EasyGL
                              levelWidth, levelHeight, pixels);
     }
 
-    // REMED-GFX-175: a Texture2D created with mipMap=true DECLARES a chain, and Task 924 widens
+    // A Texture2D created with mipMap=true DECLARES a chain, and Task 924 widens
     // GL_TEXTURE_MAX_LEVEL to match that declaration. Only level 0 was ever given storage here,
     // though, so until the game happened to call SetData for every remaining level the texture was
     // mipmap-INCOMPLETE -- and an incomplete texture samples as opaque black over its whole surface,
@@ -2781,7 +2781,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 0);
             UploadLevel(0, width, height, blank.data());
         }
-        // REMED-GFX-175: the fresh GL texture object has storage for level 0 only, so a declared
+        // The fresh GL texture object has storage for level 0 only, so a declared
         // chain has to be re-allocated here too or the texture comes back from a context loss
         // mipmap-incomplete and samples black under every mip-filtering ordinal.
         AllocateDeclaredLevels();
@@ -3215,7 +3215,7 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     /**
-     * @brief REMED-GFX-168: leaves the shared binding record naming nothing that is about to be freed.
+     * @brief Leaves the shared binding record naming nothing that is about to be freed.
      *
      * Runs FIRST in the destructor, before any GL handle is released, so there is no instant at which
      * the record names this object while its storage is already partly gone.
@@ -3314,7 +3314,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         ApplyRenderTargetChannelSwizzle(
             colorTex_, ::easygl::TextureTarget::Texture2D, surfaceFormat_);
-        // REMED-GFX-174: clamp GL_TEXTURE_MAX_LEVEL to the real level count, exactly as Task 924
+        // Clamp GL_TEXTURE_MAX_LEVEL to the real level count, exactly as Task 924
         // already does for an ordinary Texture2D. GL evaluates mipmap completeness over
         // [BASE_LEVEL, MAX_LEVEL] and GL's own default MAX_LEVEL is 1000, so a render target with
         // one level was INCOMPLETE under any of the seven ordinals (2..8) whose minification filter
@@ -3329,7 +3329,7 @@ namespace CNA::Internal::Renderers::EasyGL
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
                                 ::easygl::TextureParameterSetter::MaxLevel,
                                 levelCount_ - 1);
-        // REMED-GFX-175: this is the texture object's OWN default min filter, which every draw's
+        // This is the texture object's OWN default min filter, which every draw's
         // sampler object overrides, so it decides nothing about how a game's TextureFilter samples
         // this target -- the level-range clamp above is what keeps it complete under any of them.
         // It is left as a defined starting state for a bind that happens before any sampler is
@@ -3499,7 +3499,7 @@ namespace CNA::Internal::Renderers::EasyGL
             throw std::out_of_range(
                 "EasyGLRenderTargetRenderer::GetData: rectangle out of bounds.");
 
-        // REMED-GFX-164: GetData is legal while this target remains the active producer.  Its
+        // GetData is legal while this target remains the active producer.  Its
         // public texture is the single-sample resolve destination, so reading that texture before
         // the bind changes would otherwise return the preceding resolve (fresh targets commonly
         // expose transparent-black storage).  Resolve exactly when this multisample attachment is
@@ -3707,7 +3707,7 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     /**
-     * @brief REMED-GFX-168: the cube counterpart of `EasyGLRenderTargetRenderer::DetachFromBindingEXT`.
+     * @brief The cube counterpart of `EasyGLRenderTargetRenderer::DetachFromBindingEXT`.
      *
      * A cube is recorded as ONE binding whatever face is active -- the face index lives in the cube's
      * own `lastFace_` -- so detaching the resource detaches every face of it at once, and a face
@@ -3801,7 +3801,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         ApplyRenderTargetChannelSwizzle(
             cubeTex_, ::easygl::TextureTarget::TextureCubeMap, surfaceFormat_);
-        // REMED-GFX-174: see EasyGLRenderTargetRenderer's identical clamp.
+        // See EasyGLRenderTargetRenderer's identical clamp.
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::easygl::TextureParameterSetter::MaxLevel,
                                levelCount_ - 1);
@@ -3834,7 +3834,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         if (multiSampleCount_ > 0)
         {
-            // REMED-GFX-141: one multisample color renderbuffer PER FACE. This used to allocate a
+            // One multisample color renderbuffer PER FACE. This used to allocate a
             // single one for the whole cube, on the reasoning that only one face is ever rendered
             // into at a time -- true for producing a face, but it left a PreserveContents face
             // nothing of its own to load back: a renderbuffer carries no face identity, so rebinding
@@ -3895,7 +3895,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         else
         {
-            // REMED-GFX-141: MSAA re-attaches this face's OWN multisample renderbuffer, the exact
+            // MSAA re-attaches this face's OWN multisample renderbuffer, the exact
             // counterpart of the non-MSAA branch above. GL has no load action, so a face's samples
             // simply survive until something draws over them -- which is all PreserveContents ever
             // needed. A DiscardContents face is still wiped by the Clear()
@@ -4112,7 +4112,7 @@ namespace CNA::Internal::Renderers::EasyGL
         resolveFbo_.reset_handle_no_gl();
         cubeTex_.reset_handle_no_gl();
         depthRbo_.reset_handle_no_gl();
-        // REMED-GFX-141: all six per-face multisample renderbuffers, not one.
+        // All six per-face multisample renderbuffers, not one.
         for (auto& rbo : msaaColorRbos_) rbo.reset_handle_no_gl();
     }
 
@@ -4431,7 +4431,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const bool haveRt = graphicsRenderer_ && graphicsRenderer_->GetCurrentRenderTarget2DSize(rtW, rtH)
                             && rtW > 0 && rtH > 0;
 
-        // REMED-GFX-072: honor a custom GraphicsDevice.Viewport. XNA/FNA build the SpriteBatch ortho
+        // Honor a custom GraphicsDevice.Viewport. XNA/FNA build the SpriteBatch ortho
         // from Viewport.Width/Height (CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height,
         // 0)), so a custom sub-Viewport makes sprite coordinates VIEWPORT-LOCAL. The GL viewport that
         // GraphicsDevice.Viewport set via SetViewport() survives Clear() (Task 880), so read it here:
@@ -4815,7 +4815,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             if (current_texture_ != nullptr) FlushBatch();
             current_texture_ = &texture;
-            // REMED-GFX-147: resolved once per bound source rather than once per sprite -- a
+            // Resolved once per bound source rather than once per sprite -- a
             // batch is by construction one texture, so this is a binding-time decision.
             ResolveCurrentTextureRowOrder();
         }
@@ -4869,7 +4869,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if ((int)effects & (int)SpriteEffects::FlipHorizontally) std::swap(u1, u2);
         if ((int)effects & (int)SpriteEffects::FlipVertically) std::swap(v1, v2);
 
-        // REMED-GFX-147: a render target's GL texel memory is bottom-up (see
+        // A render target's GL texel memory is bottom-up (see
         // SampledRowOrderIsBottomUp), so map each V to its mirror. Applied to the sprite's own
         // CPU-generated quad rather than in the sprite shader, because SpriteBatch::Begin may
         // substitute an arbitrary user ShaderEffect whose GLSL this renderer does not own -- the
@@ -5265,7 +5265,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLRenderer::~EasyGLRenderer()
     {
-        // REMED-GFX-168: nothing to unwind for the binding record here. `bound_` is the record's only
+        // Nothing to unwind for the binding record here. `bound_` is the record's only
         // owner, so its own member destruction is what expires every surviving render target's
         // weak_ptr -- a target that outlives this renderer then detaches from nothing instead of
         // writing into freed storage. Deliberately not reset early either: the record staying valid
@@ -5381,7 +5381,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 // every triangle route. GL_LINES expansion cannot make that promise.
                 return nativeWireframeApi_ != NativeWireframeApi::None;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
-                // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
+                // Implemented -- Draw*PrimitivesEx binds every per-vertex stream
                 // into the VAO at locations continuing after the previous stream's, each with its
                 // own VBO, stride and byte offset, and restores the single-stream layout after.
                 return true;
@@ -5637,12 +5637,12 @@ namespace CNA::Internal::Renderers::EasyGL
         // the viewport, but it is clipped by GL_SCISSOR_TEST, so neutralise only that state.
         const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
-        // REMED-GFX-077: XNA Clear() clears all channels regardless of BlendState.ColorWriteChannels,
+        // XNA Clear() clears all channels regardless of BlendState.ColorWriteChannels,
         // but glClear respects glColorMask — so neutralise a non-default mask across the clear, then
         // restore it. No-op fast path when the mask is the default All.
         const bool maskActive = HasRestrictedActiveColorWriteMask();
         if (maskActive) ForceAllColorWriteMasks();
-        // REMED-GFX-142: COLOUR ONLY. This is the renderer entry point GraphicsDevice::Clear routes
+        // COLOUR ONLY. This is the renderer entry point GraphicsDevice::Clear routes
         // a bare ClearOptions::Target to, and it used to add ClearFlags::Depth -- so asking XNA to
         // clear only the colour target silently wiped the depth buffer with it, on the one renderer
         // that did this. Every clear that is meant to include depth has its own entry point
@@ -5681,7 +5681,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         // Recorded as well as forwarded. Whether the driver HONOURS an interval is the driver's
         // business and a headless GL context routinely refuses to; whether CNA asked for it is
-        // this renderer's, and is the half a test can check anywhere. REMED-GFX-243.
+        // this renderer's, and is the half a test can check anywhere.
         swapInterval_ = interval;
         platformContext_->SetSwapInterval(interval);
     }
@@ -5857,7 +5857,7 @@ namespace CNA::Internal::Renderers::EasyGL
     std::unique_ptr<IRenderTargetRenderer> EasyGLRenderer::CreateRenderTarget2D(int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
         EnsureCallingThreadContext();
-        // REMED-GFX-168: `bound_` is handed over as a weak_ptr so the target can clear its own slot
+        // `bound_` is handed over as a weak_ptr so the target can clear its own slot
         // when it is destroyed while still bound. Weak, not shared: a target must never keep this
         // renderer's binding record alive past the renderer itself.
         return std::make_unique<EasyGLRenderTargetRenderer>(w, h, depthFormat, RegistryPtr(), bound_,
@@ -5897,14 +5897,14 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             return RendererFormatVerdict::Supported;
         }
-        // REMED-GFX-244: the packed 16-bit formats GraphicsProfile.Reach permits, stored as sized
+        // The packed 16-bit formats GraphicsProfile.Reach permits, stored as sized
         // GL_RGB565/GL_RGB5_A1/GL_RGBA4.
         if (format == SurfaceFormat::Bgr565 || format == SurfaceFormat::Bgra5551 ||
             format == SurfaceFormat::Bgra4444)
         {
             return RendererFormatVerdict::Supported;
         }
-        // REMED-GFX-244: block-compressed content is supported on every profile, because the
+        // Block-compressed content is supported on every profile, because the
         // decode fallback needs no extension -- the driver decides only whether the blocks stay
         // compressed.
         if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
@@ -6011,7 +6011,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
-        // REMED-GFX-244: SetData hands this renderer raw 4x4 blocks for these three. That is true
+        // SetData hands this renderer raw 4x4 blocks for these three. That is true
         // whether or not the driver has S3TC -- the decode, when it is needed, happens here rather
         // than making the framework transfer pixels it would have to compress again.
         return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
@@ -6244,17 +6244,17 @@ namespace CNA::Internal::Renderers::EasyGL
     std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         EnsureCallingThreadContext();
-        // REMED-GFX-136: consumed by being deliberately unused, exactly like this renderer's own
+        // Consumed by being deliberately unused, exactly like this renderer's own
         // CreateRenderTarget2D above. A GL framebuffer object's colour attachment IS the cube
         // texture and binding an FBO never touches its contents, so a single-sample face is
         // preserved by construction; the ONLY thing that clears one is an explicit glClear, which
         // is what GraphicsDevice::SetRenderTargets issues (and only issues) for a DiscardContents
-        // target. REMED-GFX-141 makes that true of a MULTISAMPLED cube face too: each face now owns
+        // target. The same is true of a MULTISAMPLED cube face: each face now owns
         // its own multisample colour renderbuffer (EasyGLRenderTargetCubeRenderer::msaaColorRbos_),
         // so binding one still touches nothing and there is still no load action to carry a usage
         // decision.
         (void) preserveContents;
-        // REMED-GFX-168: see CreateRenderTarget2D above for why the binding record is passed weakly.
+        // See CreateRenderTarget2D above for why the binding record is passed weakly.
         return std::make_unique<EasyGLRenderTargetCubeRenderer>(size, depthFormat, RegistryPtr(),
                                                                bound_, mipMap, multiSampleCount);
     }
@@ -6264,7 +6264,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int multiSampleCount, int surfaceFormat)
     {
         EnsureCallingThreadContext();
-        (void)preserveContents;   // REMED-GFX-136: deliberately unused, see CreateRenderTargetCube.
+        (void)preserveContents;   // deliberately unused, see CreateRenderTargetCube.
         if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
         {
             throw std::runtime_error(
@@ -6301,7 +6301,7 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     /**
-     * @brief REMED-GFX-168: the binding record, as pointer VALUES only.
+     * @brief The binding record, as pointer VALUES only.
      *
      * Never dereferences any of them -- the whole point of the trace is that one of these may already
      * be destroyed storage, which is exactly what the pre-fix `set2d.enter` line records.
@@ -6816,7 +6816,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // function call with a new reference. Recorded even when the stencil test is off, because
         // the reference survives a disabled state and applies again when one re-enables it.
         stencilEnabled_   = stencilEnable;
-        stencilWriteMask_  = stencilWriteMask;   // REMED-GFX-237
+        stencilWriteMask_  = stencilWriteMask;
         stencilTwoSided_  = twoSidedStencilMode;
         stencilFunc_      = stencilFunc;
         stencilPass_      = stencilPass;
@@ -7586,7 +7586,7 @@ namespace CNA::Internal::Renderers::EasyGL
         //      PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
         //      MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8
         //
-        // REMED-GFX-175: an ordinal names a MIPMAP component as well as a minification and a
+        // An ordinal names a MIPMAP component as well as a minification and a
         // magnification one, and ordinals 0 and 1 were losing theirs. Linear is min LINEAR, mag
         // LINEAR, mip LINEAR and Point is min POINT, mag POINT, mip POINT -- FNA's own decomposition
         // tables say so and FNA3D's GL driver maps them onto GL_LINEAR_MIPMAP_LINEAR and
@@ -7594,7 +7594,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // the mipmap term entirely, so a texture that really owns a chain never mip-filtered under
         // either -- including under the DEFAULT filter every game gets unless it says otherwise.
         // Every ordinal now carries its mipmap term, which is only safe because the level range of
-        // every sampleable kind is clamped to its real level count (Task 924, REMED-GFX-174) and
+        // every sampleable kind is clamped to its real level count (Task 924) and
         // because a declared chain now allocates every one of its levels (see EasyGLTextureRenderer).
         ::easygl::TextureMinFilter minF;
         ::easygl::TextureMagFilter magF;
@@ -7648,7 +7648,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // the extension genuinely being available; falls back to the plain trilinear filter set
         // above (unchanged) when it isn't, exactly like before this fix.
         //
-        // REMED-GFX-174: anisotropy is a COMPONENT OF THE ORDINAL, so it must be written on every
+        // Anisotropy is a COMPONENT OF THE ORDINAL, so it must be written on every
         // application exactly like min, mag, wrapS and wrapT above -- not only when the ordinal
         // happens to be Anisotropic. samplers_[slot] is ONE long-lived GL sampler object that is
         // mutated in place and reused for every later application on that slot, so a write that
@@ -7681,7 +7681,7 @@ namespace CNA::Internal::Renderers::EasyGL
                               ::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
         // plans/plan_fx.md FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
-        // reused for every later application on that slot -- the same shape that made REMED-GFX-174
+        // reused for every later application on that slot -- the same shape that made the sampler-completeness fix
         // necessary for anisotropy. Every property this call does not write therefore survives from
         // whoever wrote it last, and ApplySamplerMipState (a compiled Effect's own MaxMipLevel and
         // MipMapLevelOfDetailBias) writes three of them. A SpriteBatch flush calls only
@@ -7858,7 +7858,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 levelW = std::max(1, levelW / 2);
                 levelH = std::max(1, levelH / 2);
             }
-            // Same completeness clamp REMED-GFX-174 applies to every other sampleable kind: GL
+            // Same completeness clamp as every other sampleable kind: GL
             // evaluates mipmap completeness over [BASE_LEVEL, MAX_LEVEL] and defaults MAX_LEVEL to
             // 1000, so without this a one-level copy samples black under any mip-using filter.
             copy.texture.set_parameter(::easygl::TextureTarget::Texture2D,
@@ -8136,7 +8136,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
         }
 
-        /// REMED-GFX-201: how many attribute locations the streams before @p streamIndex occupy.
+        /// How many attribute locations the streams before @p streamIndex occupy.
         /// Locations run in binding-slot order across the concatenated declarations, which is the
         /// same "location N == Nth field of the ported HLSL input struct" convention ApplyLayout()
         /// uses for one stream and DrawInstancedPrimitivesEx already uses to append a second one.
@@ -8155,7 +8155,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return location;
         }
 
-        /// REMED-GFX-201: binds every per-vertex stream into @p vao. Stream 0's own attributes are
+        /// Binds every per-vertex stream into @p vao. Stream 0's own attributes are
         /// only rewritten when it carries a residual offset, so the overwhelmingly common
         /// "several streams, binding 0 has the smallest offset" case leaves ApplyLayout()'s work
         /// untouched. Returns false when a bound stream has no declaration, which is the one shape
@@ -8182,7 +8182,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return true;
         }
 
-        /// REMED-GFX-202: the first attribute location the per-instance streams occupy.
+        /// The first attribute location the per-instance streams occupy.
         ///
         /// The stock instanced shaders declare their per-instance world matrix at the fixed
         /// locations 12..15 (`cnaInstanceCol0..3`), chosen so it cannot collide with an extended
@@ -8194,7 +8194,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// The XNA 4.0 profile's vertex-attribute ceiling, and GL ES 3's guaranteed minimum.
         constexpr unsigned int kMaxAttributeLocations = 16u;
 
-        /// REMED-GFX-202: how many attribute locations every per-vertex stream occupies together.
+        /// How many attribute locations every per-vertex stream occupies together.
         unsigned int PerVertexLocationCount(const GpuDrawParams& params)
         {
             unsigned int total = 0;
@@ -8261,7 +8261,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return true;
         }
 
-        /// REMED-GFX-201: undoes ConfigureMultiStreamAttributes so the VAO is left exactly as
+        /// Undoes ConfigureMultiStreamAttributes so the VAO is left exactly as
         /// ApplyLayout() built it. Without this a later single-stream draw through the same buffer
         /// would still have the secondary streams' locations enabled and pointing at a foreign VBO.
         void RestoreSingleStreamAttributes(
@@ -9340,7 +9340,7 @@ namespace CNA::Internal::Renderers::EasyGL
         default_flat_normal_texture_ready_ = true;
     }
 
-    // REMED-GFX-218 / SOFTWARE-130: the ONE place that decides which stock program a draw gets.
+    // SOFTWARE-130: the ONE place that decides which stock program a draw gets.
     // XNA's stock effects select shader variants from effect properties; the declaration only
     // tells the device how to convert bytes into those shader inputs. In particular, an arbitrary
     // Color0 format can have the same byte stride as VertexPositionTexture without turning a
@@ -9427,7 +9427,7 @@ namespace CNA::Internal::Renderers::EasyGL
         return prog_colored_;
     }
 
-    // REMED-GFX-218 / SAMPLE-005 / SOFTWARE-130: what each stock program declares, in
+    // SAMPLE-005 / SOFTWARE-130: what each stock program declares, in
     // attribute-location order. The same location means different things in different programs,
     // so validation and binding select this per-program table, then locate each input by XNA
     // usage/index in the caller's declaration. Every recognized XNA storage format is convertible
@@ -9755,7 +9755,7 @@ namespace CNA::Internal::Renderers::EasyGL
         buffer.ApplyLayout(buffer.GetStride());
     }
 
-    // REMED-GFX-147: resolved for every stock 3D program from one place, right after it links, so
+    // Resolved for every stock 3D program from one place, right after it links, so
     // a program whose fragment shader samples a texture cannot silently miss the correction.
     // Programs that declare neither uniform (the untextured colour-only one) simply keep -1 and
     // BindDrawParams skips them, exactly like every other optional location in Prog3D.
@@ -9820,11 +9820,11 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                                                const Matrix& projection, const GpuDrawParams& params)
     {
-        // REMED-GFX-147: one flag per texture unit, filled in beside each unit's own bind below so
+        // One flag per texture unit, filled in beside each unit's own bind below so
         // the flag and the resource it describes can never disagree, and uploaded once at the end.
         // A render target's GL texel memory is bottom-up; an uploaded texture's is not. Cube maps
         // are not in this array: uEnvMap is sampled with a direction vector, not a UV, so a rendered
-        // cube's flag is the separate uEnvCubeFlip (REMED-GFX-137), uploaded where the cube is bound.
+        // cube's flag is the separate uEnvCubeFlip, uploaded where the cube is bound.
         float rtFlipV[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
         // XNA 4.0's Direct3D 9 coordinates address pixel centers while OpenGL addresses pixel
@@ -9833,7 +9833,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // row-vector WVP by this clip-space translation produces clip.xy += offset * clip.w.
         int viewportX = 0, viewportY = 0, viewportWidth = 0, viewportHeight = 0;
         GetGlViewport(viewportX, viewportY, viewportWidth, viewportHeight);
-        // REMED-GFX-235: not while the destination is multisampled.
+        // Not while the destination is multisampled.
         //
         // The correction above is a GEOMETRY translation, and that is only equivalent to what it
         // means at ONE sample per pixel. There it decides which side of the fill edge the pixel
@@ -10461,7 +10461,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 params.alphaTest[0], params.alphaTest[1],
                 params.alphaTest[2], params.alphaTest[3]);
 
-        // REMED-GFX-010: upload the FNA view-space fog vector (GpuDrawParams.fogVector). It bakes
+        // Upload the FNA view-space fog vector (GpuDrawParams.fogVector). It bakes
         // World*View's third column + fogStart/fogEnd, is zero when fog is disabled, and (0,0,0,1) for
         // the degenerate fogStart==fogEnd case, so no separate start/end/enabled uniforms are needed —
         // the shader computes vFogFactor = 1 - saturate(dot(pos, uFogVector)).
@@ -10472,7 +10472,7 @@ namespace CNA::Internal::Renderers::EasyGL
             p.prog.set_uniform(p.loc_fog_color,
                 params.fogColor[0], params.fogColor[1], params.fogColor[2]);
 
-        // REMED-GFX-147: two uniform writes per draw at most, and only for programs that declare
+        // Two uniform writes per draw at most, and only for programs that declare
         // them. Uploaded unconditionally rather than only when a flag is set, because these are
         // program state that outlives the draw -- leaving a previous draw's render-target flag
         // behind would mirror the next ordinary texture.
@@ -10483,7 +10483,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 p.loc_rt_flip_v_hi, rtFlipV[4], rtFlipV[5], rtFlipV[6], 0.0f);
     }
 
-    /// REMED-GFX-237: puts back what a clear had to override.
+    /// Puts back what a clear had to override.
     ///
     /// XNA's `Clear` ignores the depth and stencil WRITE masks; `glClear` obeys them, so every
     /// clear path forces them open first. Restoring was left to "ApplyDepthStencilState reissues
@@ -10518,7 +10518,7 @@ namespace CNA::Internal::Renderers::EasyGL
         device.set_clear_color(r, g, b, a);
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
-        // REMED-GFX-077: neutralise a non-default BlendState.ColorWriteChannels across the clear
+        // Neutralise a non-default BlendState.ColorWriteChannels across the clear
         // (XNA Clear ignores it, glClear respects glColorMask) — mirrors the set_depth_mask(true)
         // override just above. No-op fast path when the mask is the default All.
         const bool maskActive = HasRestrictedActiveColorWriteMask();
@@ -10565,7 +10565,7 @@ namespace CNA::Internal::Renderers::EasyGL
         device.set_clear_color(r, g, b, a);
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
-        // REMED-GFX-077: XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
+        // XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
         const bool maskActive = HasRestrictedActiveColorWriteMask();
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
@@ -10583,7 +10583,7 @@ namespace CNA::Internal::Renderers::EasyGL
         device.set_clear_stencil(stencil);
         device.set_depth_mask(true);
         device.set_stencil_mask(0xFFFFFFFFu);
-        // REMED-GFX-077: XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
+        // XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
         // (Clear(const Color&) routes here via ClearOptions Target|DepthBuffer|Stencil.)
         const bool maskActive = HasRestrictedActiveColorWriteMask();
         if (maskActive) ForceAllColorWriteMasks();
@@ -10611,7 +10611,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (enabled)
         {
             device.set_depth_func(::easygl::CompareFunc::Lequal);
-            depthWriteEnabled_ = true;   // REMED-GFX-237: this really does install the mask.
+            depthWriteEnabled_ = true;   // this really does install the mask.
             device.set_depth_mask(true);
         }
     }
@@ -10626,7 +10626,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderer::SetDepthWriteEnabled(bool enabled)
     {
-        depthWriteEnabled_ = enabled;   // REMED-GFX-237: what a clear must put back.
+        depthWriteEnabled_ = enabled;   // what a clear must put back.
         device.set_depth_mask(enabled && bound_->depthFormat != 0);
     }
 
@@ -11017,7 +11017,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        // REMED-GFX-234 / WEBGPU-158: a declaration that names no Normal is not a lit vertex at any
+        // WEBGPU-158: a declaration that names no Normal is not a lit vertex at any
         // stride, so a lit BasicEffect draw of one takes the unlit family -- the rule WebGPU and
         // SDL_GPU select their stock programs by. SOFTWARE-130 rightly made
         // the effect flags pick the program variant, and with it this question went unasked: the
@@ -11107,7 +11107,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return;
         }
 #endif
-        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        //: before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.
         if (params.customEffectRenderer == nullptr)
@@ -11117,7 +11117,7 @@ namespace CNA::Internal::Renderers::EasyGL
                     params, static_cast<const EasyGLVertexBufferRenderer&>(vb_in).GetStride()),
                 params);
         const auto& vb  = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
-        // REMED-GFX-201: every bound per-vertex stream is bound into this VAO, at locations
+        // Every bound per-vertex stream is bound into this VAO, at locations
         // continuing after the previous stream's, and each with its own VBO, stride and byte
         // offset. glDrawArrays' `first` then advances all of them by params.vertexStart of their
         // own elements. A single-stream draw takes neither branch and is unchanged.
@@ -11255,7 +11255,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return;
         }
 #endif
-        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        //: before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.
         if (params.customEffectRenderer == nullptr)
@@ -11266,7 +11266,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 params);
         const auto& vb  = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
-        // REMED-GFX-201: see DrawPrimitivesEx above. glDrawElementsBaseVertex's baseVertex plays
+        // See DrawPrimitivesEx above. glDrawElementsBaseVertex's baseVertex plays
         // the role glDrawArrays' `first` plays there -- it advances every bound stream by that
         // many of its own elements.
         const bool multiStream = HasMultipleVertexStreams(params);
@@ -11417,7 +11417,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return;
         }
 #endif
-        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        //: before the VAO is touched, before a program is
         // selected and before any draw is issued. A custom ShaderEffect owns its own
         // element-index attribute convention and is deliberately untouched.
         if (params.customEffectRenderer == nullptr)
@@ -11438,7 +11438,7 @@ namespace CNA::Internal::Renderers::EasyGL
             static_cast<std::uintptr_t>(indexSize));
 
         const auto& meshDecl = vb.GetDeclarationElements();
-        // REMED-GFX-202: the per-vertex side is now exactly what the two ordinary routes do --
+        // The per-vertex side is now exactly what the two ordinary routes do --
         // every bound per-vertex stream at its own locations, with its own VBO, stride and byte
         // offset. Stream 0 is only rewritten when it carries a nonzero offset, which is the
         // condition this route has always used, so a classic zero-offset instanced draw configures
@@ -11454,7 +11454,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 "without a VertexDeclaration.");
         }
 
-        // REMED-GFX-202: every per-instance stream, not just the first, each at its own locations
+        // Every per-instance stream, not just the first, each at its own locations
         // with its own stride, element offset and divisor.
         InstanceStreamPlacements instancePlacements;
         const unsigned int instanceBaseLocation = params.customEffectRenderer != nullptr
@@ -11520,7 +11520,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         else
         {
-            // REMED-GFX-201: the shader sees the CONCATENATION of the per-vertex streams, so the
+            // The shader sees the CONCATENATION of the per-vertex streams, so the
             // program is selected by the combined stride -- which equals the one stream's own
             // stride whenever a single per-vertex buffer is bound.
             Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
@@ -11534,7 +11534,7 @@ namespace CNA::Internal::Renderers::EasyGL
             ib, ToEasyGl(primitive), index_count, idxType, indexOffset,
             params.startIndex, params.baseVertex, true, instanceCount);
 
-        // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later
+        // Every location this draw claimed is released again, in reverse, so a later
         // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.
         for (int i = instancePlacements.count; i-- > 0;)
         {

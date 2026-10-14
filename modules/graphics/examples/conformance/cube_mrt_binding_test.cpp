@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // RenderTargetCube faces bound as simultaneous render targets receive their own pixel-shader
 // outputs, and SetRenderTargets refuses the sets XNA refuses. Moved from the retired VULKAN suite
-// (REMED-GFX-096 / VKPAR-0025).
+// (VKPAR-0025).
 //
 // The writer is an ordinary compiled XNA Effect (the shared synthetic Effect Framework fixture from
 // tests/support) whose pixel shader writes oC0 = Tint, oC1 = Tint.yxzw, oC2 = Tint.zxyw and

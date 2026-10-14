@@ -10,7 +10,7 @@ layout(location = 0) out vec2  fragUV;
 layout(location = 1) out vec3  fragNormal;
 layout(location = 2) out vec4  fragTint;
 layout(location = 3) out vec3  fragWorldPos;
-layout(location = 4) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
+layout(location = 4) out vec4 fragFog;    // xyz=FogColor, w=keep-factor
 layout(location = 5) out vec3 fragVertexLit;
 layout(location = 6) out vec3 fragVertexSpecular;
 
@@ -44,12 +44,12 @@ layout(set = 1, binding = 1) uniform LitLightParams {
     vec4 specularColorPower;
 } lp;
 
-// REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
+// Fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
 // the retired VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
+    vec4 fogVector;        // FNA fog vector (dot with object/skin pos)
 } fog;
 
 vec3 safeNormalize(vec3 v) {
@@ -91,9 +91,9 @@ void main() {
         (spec0 * lp.light0Specular_pad.xyz + spec1 * lp.light1Specular_pad.xyz
          + spec2 * lp.light2Specular_pad.xyz) * lp.specularColorPower.xyz,
         0.0, 1.0);
-    // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
+    // Keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (as Vulkan did).
-    float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

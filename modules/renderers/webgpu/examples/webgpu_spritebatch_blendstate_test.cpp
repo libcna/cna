@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-102: WebGPU SpriteBatch must preserve and apply the BlendState selected by each
+// WebGPU SpriteBatch must preserve and apply the BlendState selected by each
 // Begin()/End() batch. This is a public-API regression: it uses only GraphicsDevice,
 // RenderTarget2D, Texture2D, SpriteBatch, and BlendState, then checks GPU readback.
 //
@@ -9,7 +9,7 @@
 // bit, all enabled states use one hardcoded straight-alpha equation, and blend constants are
 // frame-final rather than per batch.
 //
-// REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format on every renderer, so the
+// SurfaceFormat::Color is a plain 8-bit UNORM byte format on every renderer, so the
 // shader output, the clear value, the native blend result and the byte GetData() returns are all
 // the same value. Expected RGBA values below are therefore analytically blended and converted with
 // one plain UNORM rounding, for colour and alpha alike. This file previously sRGB-encoded its RGB
@@ -69,7 +69,7 @@ namespace
     /**
      * @brief The byte a unit colour component must be stored as.
      *
-     * REMED-GFX-131: this used to apply a linear-to-sRGB encode, because WebGPU gave its render
+     * This used to apply a linear-to-sRGB encode, because WebGPU gave its render
      * targets the swapchain's *UnormSrgb format. SurfaceFormat::Color is a plain 8-bit UNORM byte
      * format, so the shader's linear output IS the stored byte and the encode was reproducing a
      * defect in the oracle. Colour and alpha now share one conversion, as they always should have.

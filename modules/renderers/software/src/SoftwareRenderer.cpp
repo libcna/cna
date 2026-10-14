@@ -100,7 +100,7 @@ namespace CNA::Internal::Renderers::Software
 #endif
         };
 
-        /// REMED-GFX-030: complete public depth state captured for one Software draw. Keeping all
+        /// Complete public depth state captured for one Software draw. Keeping all
         /// three fields together prevents the rasterizer from consulting a later live state and
         /// makes DepthRead (test on, write off) distinct from both Default and None.
         struct RasterDepthState
@@ -110,7 +110,7 @@ namespace CNA::Internal::Renderers::Software
             int compareFunction = 3; // CompareFunction::LessEqual
         };
 
-        /// REMED-GFX-148: one component of an XNA Blend factor vector. SourceColor and
+        /// One component of an XNA Blend factor vector. SourceColor and
         /// DestinationColor naturally select alpha when channel==3; SourceAlphaSaturation's alpha
         /// component is One, matching the public Blend definition and native renderer mappings.
         float BlendFactorComponent(int factor, int channel,
@@ -141,7 +141,7 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        /// REMED-GFX-148: applies the independently selected colour/alpha BlendFunction after
+        /// Applies the independently selected colour/alpha BlendFunction after
         /// both terms have been multiplied by their own factors. Clamping deliberately remains at
         /// the caller, after the function and before the established RGBA8 conversion.
         float ApplyBlendFunction(int function, float sourceTerm, float destinationTerm)
@@ -200,7 +200,7 @@ namespace CNA::Internal::Renderers::Software
             int ccwDepthFailOperation = 0;
         };
 
-        /// REMED-GFX-030: XNA/FNA compares the incoming fragment depth (left operand) with the
+        /// XNA/FNA compares the incoming fragment depth (left operand) with the
         /// currently stored depth (right operand). Every public CompareFunction is mapped explicitly;
         /// an invalid ordinal is rejected instead of silently falling back to a different relation.
         bool DepthComparisonPasses(float incoming, float stored, int compareFunction)
@@ -661,7 +661,7 @@ namespace CNA::Internal::Renderers::Software
             return a.w > 0.0f && b.w > 0.0f;
         }
 
-        /// REMED-GFX-079: the XNA/FNA viewport transform parameters used to map a post-perspective-
+        /// The XNA/FNA viewport transform parameters used to map a post-perspective-
         /// divide NDC position into framebuffer pixel coordinates -- Viewport.X/Y (pixel origin of
         /// the viewport within the active target), Viewport.Width/Height (pixel extent the NDC
         /// [-1,1] range is mapped over), and the MinDepth/MaxDepth depth range. A default full-target
@@ -676,7 +676,7 @@ namespace CNA::Internal::Renderers::Software
 
         /// Converts one clip-space vertex into a screen-space RasterVertex: perspective divide, the
         /// XNA/FNA viewport transform, and premultiplying color/UV by invW for perspective-correct
-        /// barycentric interpolation later. REMED-GFX-079: the viewport transform matches FNA's
+        /// barycentric interpolation later. The viewport transform matches FNA's
         /// Viewport.Project exactly --
         ///   screenX = (ndcX*0.5 + 0.5) * Viewport.Width  + Viewport.X
         ///   screenY = (1 - (ndcY*0.5 + 0.5)) * Viewport.Height + Viewport.Y
@@ -739,7 +739,7 @@ namespace CNA::Internal::Renderers::Software
             // space at pixel + 0.5, so translate geometry by Wine/MonoGame/EasyGL's established
             // 63/128-pixel amount. Staying just below one half selects the XNA side of exact fill
             // edges after finite subpixel precision instead of leaving the result on the tie.
-            // REMED-GFX-235/SOFTWARE-134: the single-sample correction is deliberately absent
+            // SOFTWARE-134: the single-sample correction is deliberately absent
             // from multisampled destinations. Moving four subpixel sample locations by
             // almost half a pixel drops three samples at the outer corner and two on each outer
             // edge. EasyGL established the same distinction against the shared render-target
@@ -812,7 +812,7 @@ namespace CNA::Internal::Renderers::Software
             return slopeScaleDepthBias * maxDepthSlope + depthBias;
         }
 
-        /// REMED-GFX-073/079: an inclusive pixel clip rectangle for the rasterizer. Pre-intersected
+        /// An inclusive pixel clip rectangle for the rasterizer. Pre-intersected
         /// with the framebuffer bounds by its ViewportClip() factory, so RasterizeTriangle /
         /// RasterizeTriangleShaded only have to clamp each triangle's bounding box against it. An
         /// empty rectangle (minX>maxX or minY>maxY) draws nothing -- the raster loops simply do not
@@ -855,7 +855,7 @@ namespace CNA::Internal::Renderers::Software
             return minX <= maxX && minY <= maxY;
         }
 
-        /// REMED-GFX-150: env-gated sampler trace. This is how the point path's "exactly one texel
+        /// Env-gated sampler trace. This is how the point path's "exactly one texel
         /// fetch per sample" claim is MEASURED rather than asserted from reading the code, and how a
         /// single destination pixel's addressing can be dumped when a result is disputed.
         ///
@@ -916,8 +916,8 @@ namespace CNA::Internal::Renderers::Software
         /// sample, with no thread-safe-static guard.
         SamplerTrace g_samplerTrace = MakeSamplerTrace();
 
-        /// REMED-GFX-182: env-gated ENVIRONMENT-MAP CUBE trace. The 2D trace above measures the
-        /// sampler REMED-GFX-150 gave the ordinary texture path; this one measures what reaches the
+        /// Env-gated ENVIRONMENT-MAP CUBE trace. The 2D trace above measures the
+        /// sampler the ordinary texture path uses; this one measures what reaches the
         /// reflection cube, which is a different question and had a different answer.
         ///
         /// It prints, on one line per env-map fragment, BOTH ends of the sampler pipeline: the
@@ -1018,7 +1018,7 @@ namespace CNA::Internal::Renderers::Software
 
         CubeTrace g_cubeTrace = MakeCubeTrace();
 
-        /// REMED-GFX-182: a public (filter, addressU, addressV) triple as one comparable key.
+        /// A public (filter, addressU, addressV) triple as one comparable key.
         std::uint32_t SamplerDescKey(int filter, int addressU, int addressV)
         {
             return (static_cast<std::uint32_t>(filter & 0xFF) << 16) |
@@ -1026,7 +1026,7 @@ namespace CNA::Internal::Renderers::Software
                     static_cast<std::uint32_t>(addressV & 0xFF);
         }
 
-        /// REMED-GFX-182: the address-mode ordinal name, for the trace only.
+        /// The address-mode ordinal name, for the trace only.
         const char* AddressName(int mode)
         {
             switch (mode)
@@ -1038,7 +1038,7 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        /// REMED-GFX-150: the largest magnitude a texel index may reach before the float->int
+        /// The largest magnitude a texel index may reach before the float->int
         /// conversion below stops being representable. A coordinate beyond this is saturated in
         /// FLOAT space first, so the conversion itself is always in range: an out-of-range
         /// float->int cast is undefined behaviour, which the UBSan build's -fsanitize=float-cast-
@@ -1046,7 +1046,7 @@ namespace CNA::Internal::Renderers::Software
         /// (which needs 2*index) cannot overflow either.
         constexpr long long kTexelIndexLimit = 1 << 24;
 
-        /// REMED-GFX-150: floor(value) as a texel index, saturating instead of invoking undefined
+        /// Floor(value) as a texel index, saturating instead of invoking undefined
         /// behaviour. A NaN coordinate lands on the low limit (the `!(f > -limit)` test is false for
         /// NaN), so a non-finite texture coordinate produces a defined, addressable texel rather
         /// than an unpredictable index -- the same "deterministic rather than clever" stance the
@@ -1059,7 +1059,7 @@ namespace CNA::Internal::Renderers::Software
             return static_cast<long long>(f);
         }
 
-        /// REMED-GFX-150: XNA TextureAddressMode applied to an already-floored INTEGER texel index.
+        /// XNA TextureAddressMode applied to an already-floored INTEGER texel index.
         /// The mode transforms the index, not a normalized coordinate -- Clamp reaches the first and
         /// last texel and blends with nothing, Wrap tiles at every integer junction, Mirror tiles and
         /// flips at every integer junction (period 2*size). @p mode is the raw XNA ordinal
@@ -1087,7 +1087,7 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        /// REMED-GFX-150: whether the MAGNIFICATION half of an XNA TextureFilter is Point.
+        /// Whether the MAGNIFICATION half of an XNA TextureFilter is Point.
         /// Ordinals: 0 Linear, 1 Point, 2 Anisotropic, 3 LinearMipPoint, 4 PointMipLinear,
         /// 5 MinLinearMagPointMipLinear, 6 MinLinearMagPointMipPoint,
         /// 7 MinPointMagLinearMipLinear, 8 MinPointMagLinearMipPoint.
@@ -1096,7 +1096,7 @@ namespace CNA::Internal::Renderers::Software
             return filter == 1 || filter == 4 || filter == 5 || filter == 6;
         }
 
-        /// REMED-GFX-150: whether the MINIFICATION half of an XNA TextureFilter is Point.
+        /// Whether the MINIFICATION half of an XNA TextureFilter is Point.
         constexpr bool FilterMinifiesWithPoint(int filter)
         {
             return filter == 1 || filter == 4 || filter == 7 || filter == 8;
@@ -1115,7 +1115,7 @@ namespace CNA::Internal::Renderers::Software
             float majorV = 0.0f;
         };
 
-        /// REMED-GFX-150: the one authoritative texture sample for this renderer. Separates, in
+        /// The one authoritative texture sample for this renderer. Separates, in
         /// order: filter selection (magnification vs minification half of the XNA filter), texel
         /// addressing, address-mode transformation, and format decode. Reads exactly one texel for
         /// a point sample and exactly four for a linear one -- no allocation, no scratch buffer, no
@@ -1136,11 +1136,11 @@ namespace CNA::Internal::Renderers::Software
         /// behaviour; under Wrap/Mirror the neighbour now comes from the tiled/reflected side
         /// instead of being clamped, which is what makes LinearWrap differ from LinearClamp at all.
         ///
-        /// REMED-GFX-124: takes the SoftwareColorSurface capability rather than the concrete
+        /// Takes the SoftwareColorSurface capability rather than the concrete
         /// SoftwareTextureRenderer, so a finished RenderTarget2D samples through this exact path --
         /// same filtering, same addressing, same sampler semantics as any other Software texture.
         ///
-        /// REMED-GFX-175: samples WITHIN one mip level. @p level names the level; @p magnify still
+        /// Samples WITHIN one mip level. @p level names the level; @p magnify still
         /// chooses only between the minification and magnification halves of the filter. Level
         /// SELECTION is the caller's job (SampleTexture below), which is what keeps the three
         /// components of an XNA TextureFilter -- min, mag and mip -- genuinely independent here.
@@ -1161,7 +1161,7 @@ namespace CNA::Internal::Renderers::Software
                 const int y = AddressTexel(FloorToTexelIndex(v * static_cast<float>(texH)),
                                            texH, sampler.addressV);
                 texture.FetchColorTexel(level, x, y, r, g, b, a);
-                // ONE texel, all four channels from it. REMED-GFX-182: counted whenever EITHER trace
+                // ONE texel, all four channels from it. Counted whenever EITHER trace
                 // is on, so the cube trace's fetch cardinality is measured here rather than inferred.
                 if (g_samplerTrace.enabled || g_cubeTrace.enabled) g_samplerTrace.texelFetches += 1;
                 if (g_samplerTrace.enabled)
@@ -1201,7 +1201,7 @@ namespace CNA::Internal::Renderers::Software
             if (!(fx >= 0.0f && fx <= 1.0f)) fx = 0.0f;
             if (!(fy >= 0.0f && fy <= 1.0f)) fy = 0.0f;
 
-            // REMED-GFX-182: written as nested LERPs (`a + (b-a)*t`) rather than as weighted sums
+            // Written as nested LERPs (`a + (b-a)*t`) rather than as weighted sums
             // (`a*(1-t) + b*t`). The two are algebraically identical and cost the same four fetches,
             // but only this form is EXACT when the taps agree: `a + (a-a)*t` is `a` for every t,
             // where the weighted sum can land one ULP below it and cross an RGBA8 quantization
@@ -1253,7 +1253,7 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        /// REMED-GFX-175: whether the MIPMAP half of an XNA TextureFilter is Point -- the third
+        /// Whether the MIPMAP half of an XNA TextureFilter is Point -- the third
         /// component of an ordinal, independent of the min and mag halves above.
         ///
         /// The authoritative decomposition is FNA's own XNAMip table: Linear(0) mip LINEAR,
@@ -1262,14 +1262,14 @@ namespace CNA::Internal::Renderers::Software
         /// MinLinearMagPointMipPoint(6) POINT, MinPointMagLinearMipLinear(7) LINEAR,
         /// MinPointMagLinearMipPoint(8) POINT. Ordinals 0 and 1 are FULL filters that name a mip
         /// component like every other; reading them as "the ordinals without mipmapping" is the
-        /// REMED-GFX-175 defect.
+        /// Defect.
         constexpr bool FilterSelectsMipWithPoint(int filter)
         {
             return filter == 1 || filter == 3 || filter == 6 || filter == 8;
         }
 
-        /// REMED-GFX-175: the one authoritative texture sample for this renderer, now with mip level
-        /// selection in front of the within-level filtering that REMED-GFX-150 established.
+        /// The one authoritative texture sample for this renderer, now with mip level
+        /// selection in front of the within-level filtering established for 2D textures.
         ///
         /// The stages are kept strictly separate and in this order:
         ///   1. the footprint arrives as @p lambda = log2(texels per destination pixel), computed
@@ -1410,7 +1410,7 @@ namespace CNA::Internal::Renderers::Software
             a = sumA * inverseTapCount;
         }
 
-        /// REMED-GFX-150/SOFTWARE-117: the texture-space footprint of one destination pixel.
+        /// SOFTWARE-117: the texture-space footprint of one destination pixel.
         ///
         /// XNA's TextureFilter names a SEPARATE minification and magnification filter for ordinals
         /// 5..8 (MinLinearMagPoint*, MinPointMagLinear*); the other five use one filter for both, so
@@ -1421,7 +1421,7 @@ namespace CNA::Internal::Renderers::Software
         /// per-triangle estimate for perspective geometry. A separate maximum-column rate preserves
         /// the historical isotropic LOD/magnification decision; the principal rates and major-axis
         /// direction are read only by TextureFilter::Anisotropic.
-        /// REMED-GFX-182: the screen-space part of the rate, shared by the 2D and cube paths so
+        /// The screen-space part of the rate, shared by the 2D and cube paths so
         /// there is exactly one footprint formula on this renderer. @p s0..@p t2 are the source
         /// coordinates in TEXELS at the triangle's three vertices; how they were obtained -- a UV
         /// attribute for an ordinary texture, a reflection vector projected onto a cube face for the
@@ -1508,7 +1508,7 @@ namespace CNA::Internal::Renderers::Software
                 t2 / w2 * static_cast<float>(texH), texW, texH);
         }
 
-        /// REMED-GFX-175: the level-of-detail a texel rate implies. rho <= 1 is magnification, which
+        /// The level-of-detail a texel rate implies. rho <= 1 is magnification, which
         /// this reports as 0 -- there is no level above level 0 to select towards.
         float LodFromTexelRate(float rho)
         {
@@ -1786,12 +1786,12 @@ namespace CNA::Internal::Renderers::Software
         /// Projects @p dir onto the named face using the classic OpenGL/D3D per-face UV formula and
         /// reports the face-local coordinate in [0,1]. Returns false when @p dir is not in that
         /// face's hemisphere (the projection would divide by a non-positive major axis), so a caller
-        /// that names the face itself -- REMED-GFX-182's per-triangle LOD estimate -- can reject a
+        /// that names the face itself -- the per-triangle LOD estimate -- can reject a
         /// vertex instead of producing a nonsense coordinate.
         ///
-        /// REMED-GFX-182 factored this out of SampleCubeMap unchanged: face 0/1 are +X/-X with
+        /// Factored this out of SampleCubeMap unchanged: face 0/1 are +X/-X with
         /// u = -+Z and v = -Y, face 2/3 are +Y/-Y with u = X and v = +-Z, face 4/5 are +Z/-Z with
-        /// u = +-X and v = -Y. The convention itself is settled elsewhere (REMED-GFX-134) and is not
+        /// u = +-X and v = -Y. The convention itself is settled elsewhere and is not
         /// touched here.
         bool CubeFaceLocal(const Vector3& dir, int face, float& s, float& t)
         {
@@ -1825,8 +1825,8 @@ namespace CNA::Internal::Renderers::Software
             if (!CubeFaceLocal(dir, face, s, t)) { s = 0.5f; t = 0.5f; }
         }
 
-        /// REMED-GFX-182: one face of a cube, presented as the colour surface REMED-GFX-124
-        /// introduced, so the authoritative REMED-GFX-150/REMED-GFX-175 sampler filters it.
+        /// One face of a cube, presented as the colour surface the render-target readback
+        /// introduced, so the authoritative sampler filters it.
         ///
         /// This is the whole architecture of the fix: the cube path gets no filter code, no ordinal
         /// table and no address logic of its own -- it selects a face, converts the direction to a
@@ -1865,12 +1865,12 @@ namespace CNA::Internal::Renderers::Software
             int face_;
         };
 
-        /// REMED-GFX-182: the ADDRESS half of a cube sampler.
+        /// The ADDRESS half of a cube sampler.
         ///
         /// A cube map is addressed by a DIRECTION: face selection consumes the direction and the
         /// face-local coordinate that comes out is already in [0,1], so U/V/W address modes are
         /// unreachable except exactly at a face edge. Every GPU renderer in this project measures
-        /// Clamp, Wrap and Mirror as rendering a cube IDENTICALLY (REMED-GFX-173 and REMED-GFX-181
+        /// Clamp, Wrap and Mirror as rendering a cube IDENTICALLY (the cube sampler fixes
         /// both report 0 differing pixels for each pair), because cube filtering is seamless there
         /// and the modes never apply. This renderer does not implement cross-face filtering -- an
         /// explicit, long-standing simplification -- so the honest match to that measured behaviour
@@ -1886,7 +1886,7 @@ namespace CNA::Internal::Renderers::Software
             return s;
         }
 
-        /// SOFTWARE-82 / REMED-GFX-182: one environment-map cube sample under the public
+        /// SOFTWARE-82: one environment-map cube sample under the public
         /// `GraphicsDevice.SamplerStates[1]` this draw captured.
         ///
         /// The stages are kept strictly separate and in this order, and only stages 3-6 are new:
@@ -1978,9 +1978,9 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        /// REMED-GFX-182: this triangle's cube texel rate -- the footprint the MIPMAP component of
+        /// This triangle's cube texel rate -- the footprint the MIPMAP component of
         /// `SamplerStates[1]` turns into a level, resolved ONCE per triangle exactly like the 2D
-        /// rate REMED-GFX-175 established, with no per-fragment derivative work.
+        /// rate established for the 2D path, with no per-fragment derivative work.
         ///
         /// The already-prepared EnvironmentMapEffect reflection direction is read at the three
         /// vertices, the face is chosen from their SUM (the triangle's dominant direction,
@@ -2674,7 +2674,7 @@ namespace CNA::Internal::Renderers::Software
         };
 #endif
 
-        /// REMED-GFX-182: one complete cube-sample line, emitted once the effect contribution is
+        /// One complete cube-sample line, emitted once the effect contribution is
         /// known. Every stage of the operation is on it, so a disputed pixel can be classified
         /// without a debugger: which slot state was captured, which face and face-local coordinate
         /// the reflection selected, which level(s) the MIPMAP component chose, which filter ran
@@ -2735,7 +2735,7 @@ namespace CNA::Internal::Renderers::Software
             return area > 0.0f;                                  // CullCounterClockwiseFace (default)
         }
 
-        /// REMED-GFX-082: bit flags selecting which of a triangle's three edges a WireFrame pass
+        /// Bit flags selecting which of a triangle's three edges a WireFrame pass
         /// rasterizes. Edge bit 0 = v0->v1, bit 1 = v1->v2, bit 2 = v2->v0. A whole (unclipped)
         /// triangle draws all three; the 3D near-plane clipper masks the artificial fan diagonal of a
         /// clipped quad so only the real polygon boundary is outlined (see the draw entry points).
@@ -2789,7 +2789,7 @@ namespace CNA::Internal::Renderers::Software
             return c + lambda0 * (a - c) + lambda1 * (b - c);
         }
 
-        /// REMED-GFX-082: Liang-Barsky clip of the parametric segment P(t) = a + t*(b - a), t in
+        /// Liang-Barsky clip of the parametric segment P(t) = a + t*(b - a), t in
         /// [0,1], to the inclusive pixel rectangle [clip.minX,maxX] x [clip.minY,maxY]. Returns the
         /// surviving parameter range [t0,t1] (t0 <= t1) or false if the segment is entirely outside.
         /// Clipping the segment up front keeps a wire edge whose projected endpoints are far off-screen
@@ -2888,7 +2888,7 @@ namespace CNA::Internal::Renderers::Software
             return true;
         }
 
-        /// REMED-GFX-082 / SOFTWARE-344: walks the aliased pixels of a wire edge between two
+        /// SOFTWARE-344: walks the aliased pixels of a wire edge between two
         /// screen-space RasterVertices, invoking `emit(x, y, t)` with the ORIGINAL segment
         /// parameter. D3D9 defines non-antialiased lines by the GDI rule; sampling a ceil/floor DDA
         /// picked adjacent pixels on fractional diagonals and included endpoints which never left
@@ -3037,7 +3037,7 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        /// REMED-GFX-082: writes one already-interpolated colored fragment (the DrawColoredPrimitives
+        /// Writes one already-interpolated colored fragment (the DrawColoredPrimitives
         /// path -- opaque, no texture/blend). `pr..pa` are the perspective-premultiplied color sums
         /// (color * invW), divided by invW here exactly as the fill loop did, so the shared helper is
         /// byte-identical for the Solid fill and reused verbatim by the WireFrame line walk. The clip
@@ -3085,7 +3085,7 @@ namespace CNA::Internal::Renderers::Software
         /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
         /// with a per-sample depth test/write (one sample per pixel without MSAA) and
         /// backface culling per `cullMode` (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
-        /// REMED-GFX-082: when `wireframe`, only the edges selected by `edgeMask` are rasterized
+        /// When `wireframe`, only the edges selected by `edgeMask` are rasterized
         /// (line walk) instead of the interior fill -- culling and the zero-area reject are shared, so
         /// a culled/degenerate triangle emits no wire either.
         void RasterizeTriangle(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
@@ -3106,7 +3106,7 @@ namespace CNA::Internal::Renderers::Software
             const RasterStencilState faceStencil = SelectStencilFace(
                 stencilState, area > 0.0f);
 
-            // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling; a culled
+            // One polygon-offset value for the whole triangle (after culling; a culled
             // triangle emits no fragments, biased or not). hasBias is 0 for the common zero-bias case, so
             // the depth expressions below are byte-identical to pre-GFX-083 then.
             const float biasOffset = ComputeDepthBiasOffset(v0, v1, v2, depthBias, slopeScaleDepthBias);
@@ -3114,7 +3114,7 @@ namespace CNA::Internal::Renderers::Software
 
             if (wireframe)
             {
-                // REMED-GFX-082: rasterize the selected edges as perspective-correct lines, reusing
+                // Rasterize the selected edges as perspective-correct lines, reusing
                 // WriteColoredFragment (the same depth-test/write + clip path as the fill below).
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkRasterLine(fb, multiSampleAntiAlias, clip, A, B,
@@ -3122,7 +3122,7 @@ namespace CNA::Internal::Renderers::Software
                                        const std::array<float, 4>* sampleTs) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
-                        if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                        if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);
                         std::array<float, 4> sampleDepths{};
                         if (sampleTs != nullptr)
                         {
@@ -3155,7 +3155,7 @@ namespace CNA::Internal::Renderers::Software
             const float minYf = std::min({v0.y, v1.y, v2.y});
             const float maxYf = std::max({v0.y, v1.y, v2.y});
 
-            // REMED-GFX-079: clamp the raster bounding box to the clip rectangle (framebuffer ∩
+            // Clamp the raster bounding box to the clip rectangle (framebuffer ∩
             // active Viewport) instead of the raw framebuffer -- pixels outside the Viewport are
             // never touched. A default full-target viewport yields the pre-GFX-079
             // [0,width-1] x [0,height-1] clamp byte-for-byte.
@@ -3228,7 +3228,7 @@ namespace CNA::Internal::Renderers::Software
                     // property), unlike color/UV below.
                     float depth = BarycentricInterpolate(
                         v0.depth, v1.depth, v2.depth, lambda0, lambda1);
-                    if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                    if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);
                     if (fb.HasMultiSampleColor() && !multiSampleAntiAlias)
                         sampleDepths.fill(depth);
                     const float invW = BarycentricInterpolate(
@@ -3953,7 +3953,7 @@ namespace CNA::Internal::Renderers::Software
         /// doesn't affect the eventual texture/diffuse modulation, matching a real Effect's own
         /// VertexColorEnabled=false behavior. Attributes are left un-premultiplied; near-plane
         /// clipping (SOFTWARE-106) happens on ClipVertex, before the perspective divide.
-        /// REMED-GFX-201: reads one combined vertex whose bytes may live in several bound streams.
+        /// Reads one combined vertex whose bytes may live in several bound streams.
         ///
         /// The layout above is expressed in COMBINED byte offsets, and a multi-stream draw stores
         /// those same bytes in separate buffers with separate strides. This resolves each offset to
@@ -4594,7 +4594,7 @@ namespace CNA::Internal::Renderers::Software
             return out;
         }
 
-        /// REMED-GFX-073/079: the raster clip rectangle = the GraphicsDevice.Viewport rectangle
+        /// The raster clip rectangle = the GraphicsDevice.Viewport rectangle
         /// intersected with the framebuffer. Uses a wider intermediate for the right/bottom edge so
         /// a large Viewport.X+Width / Viewport.Y+Height cannot overflow int; a zero/negative-size
         /// viewport collapses to an empty rectangle (nothing drawn).
@@ -4610,7 +4610,7 @@ namespace CNA::Internal::Renderers::Software
             return c;
         }
 
-        /// REMED-GFX-080: intersects a viewport-derived raster clip (framebuffer ∩ Viewport, from
+        /// Intersects a viewport-derived raster clip (framebuffer ∩ Viewport, from
         /// ViewportClip) with the GraphicsDevice.ScissorRectangle when scissor testing is enabled.
         /// The ScissorRectangle is in framebuffer/target space (NOT viewport-local), so it is
         /// intersected DIRECTLY against the base clip -- no Viewport.X/Y offset is added, matching
@@ -4639,12 +4639,12 @@ namespace CNA::Internal::Renderers::Software
             return c;
         }
 
-        /// REMED-GFX-082: the per-triangle shading state resolved once by RasterizeTriangleShaded and
+        /// The per-triangle shading state resolved once by RasterizeTriangleShaded and
         /// shared by every fragment (fill pixel or wire-edge pixel) through WriteShadedFragment.
         struct ShadedContext
         {
             const GpuDrawParams& params;
-            // REMED-GFX-124: resolved through the SoftwareColorSurface capability, so an ordinary
+            // Resolved through the SoftwareColorSurface capability, so an ordinary
             // texture and a finished render target are indistinguishable to every consumer below.
             const SoftwareColorSurface* texture0;
             const SoftwareColorSurface* texture1;
@@ -4654,20 +4654,20 @@ namespace CNA::Internal::Renderers::Software
             bool needUV;
             SoftwareBlendState blendState;
             std::array<float, 4> blendFactor;
-            RasterDepthState depthState; // REMED-GFX-030: per-draw test/write/function snapshot
+            RasterDepthState depthState; // per-draw test/write/function snapshot
             RasterStencilState stencilState; // per-draw 8-bit stencil snapshot
-            int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
-            unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
+            int colorWriteMask;           // raw XNA ColorWriteChannels (bit0=R..bit3=A)
+            unsigned int multiSampleMask; // single-sample ⇒ only bit 0 is meaningful
             /// SOFTWARE-122: query open when this draw was submitted, or null outside Begin/End.
             SoftwareOcclusionQueryRenderer* occlusionQuery;
-            // REMED-GFX-150: the SamplerState of each bound texture slot, resolved once per draw so
+            // The SamplerState of each bound texture slot, resolved once per draw so
             // no fragment can consult a later live state, plus this triangle's magnification
             // classification for each (only XNA filters 5..8 read it).
             SoftwareSamplerState sampler0;
             SoftwareSamplerState sampler1;
             bool magnify0;
             bool magnify1;
-            // REMED-GFX-175: this triangle's level-of-detail for each bound texture, log2 of the
+            // This triangle's level-of-detail for each bound texture, log2 of the
             // texel rate, resolved once per triangle alongside the magnification classification it
             // is derived from. The mip component of the filter turns it into a level; ordinals whose
             // resource has a single stored level never consult it.
@@ -4676,7 +4676,7 @@ namespace CNA::Internal::Renderers::Software
             /// SOFTWARE-117: directional footprint used only by TextureFilter::Anisotropic.
             TextureFootprint footprint0;
             TextureFootprint footprint1;
-            // REMED-GFX-182: the reflection cube's own magnification classification and
+            // The reflection cube's own magnification classification and
             // level-of-detail. The SAMPLER is `sampler1` -- the cube and DualTextureEffect's second
             // texture share slot 1, exactly as they share binding 1 on every GPU renderer -- but the
             // FOOTPRINT cannot be shared: `lambda1` is derived from `texture1`, which an
@@ -4699,7 +4699,7 @@ namespace CNA::Internal::Renderers::Software
             return !(clipWeight < 0.0f);
         }
 
-        /// REMED-GFX-082: writes one already-interpolated shaded fragment -- the whole texture/diffuse/
+        /// Writes one already-interpolated shaded fragment -- the whole texture/diffuse/
         /// dual-texture/env-map/blend pipeline that used to live inline in RasterizeTriangleShaded's
         /// fill loop. `p*` are the perspective-premultiplied attribute sums (attr * invW), divided by
         /// invW here exactly as before, so the Solid fill stays byte-identical and the WireFrame line
@@ -4725,7 +4725,7 @@ namespace CNA::Internal::Renderers::Software
                 ctx.multiSampleMask & coverageMask & availableSamples;
             if (activeSamples == 0u)
                 return;
-            // REMED-GFX-182: the cube trace reports the same destination pixel, so this stamp is
+            // The cube trace reports the same destination pixel, so this stamp is
             // shared by both traces rather than tied to the 2D one.
             if (g_samplerTrace.enabled || g_cubeTrace.enabled)
             { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
@@ -4868,7 +4868,7 @@ namespace CNA::Internal::Renderers::Software
                 const Vector3 reflDir(penvx / invW, penvy / invW, penvz / invW);
                 const float blendFactor = penvBlend / invW;
                 float envR = 0.0f, envG = 0.0f, envB = 0.0f, envA = 1.0f;
-                // REMED-GFX-182: the cube is filtered by the PUBLIC SamplerStates[1] this draw
+                // The cube is filtered by the PUBLIC SamplerStates[1] this draw
                 // captured, through the same sampler every ordinary texture goes through.
                 // SOFTWARE-303: a null XNA cube sampler contributes opaque black, just like the
                 // 2D stock-effect samplers; no invalid resource dereference is required.
@@ -4880,7 +4880,7 @@ namespace CNA::Internal::Renderers::Software
                 g = g * (1.0f - blendFactor) + (envG * a) * blendFactor + ctx.params.envMapSpecular[1] * envA * a;
                 b = b * (1.0f - blendFactor) + (envB * a) * blendFactor + ctx.params.envMapSpecular[2] * envA * a;
 
-                if (g_cubeTrace.enabled) PrintCubeTraceLine(r, g, b);   // REMED-GFX-182
+                if (g_cubeTrace.enabled) PrintCubeTraceLine(r, g, b);
             }
 
             // SOFTWARE-112: FNA computes this factor per vertex from the post-skin object
@@ -4892,7 +4892,7 @@ namespace CNA::Internal::Renderers::Software
             g = ctx.params.fogColor[1] * a * (1.0f - fogKeep) + g * fogKeep;
             b = ctx.params.fogColor[2] * a * (1.0f - fogKeep) + b * fogKeep;
 
-            // REMED-GFX-077: final colour channels (opaque store or exact XNA blend result). Each channel is
+            // Final colour channels (opaque store or exact XNA blend result). Each channel is
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
             // path writes every channel exactly as before.
@@ -5065,7 +5065,7 @@ namespace CNA::Internal::Renderers::Software
             const RasterStencilState faceStencil = SelectStencilFace(
                 stencilState, area > 0.0f);
 
-            // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
+            // The cast target is the colour-storage capability, not a concrete
             // renderer class, so both a SoftwareTextureRenderer and a SoftwareRenderTargetRenderer
             // resolve here. A foreign renderer still resolves to nullptr exactly as before.
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
@@ -5074,11 +5074,11 @@ namespace CNA::Internal::Renderers::Software
             const bool useDualTexture = params.dualTexture;
             const bool useEnvMap = params.envMapping;
             const bool needUV = useDualTexture || useEnvMap || params.textureEnabled;
-            // REMED-GFX-150: classify magnification once per triangle per bound texture. Only XNA
+            // Classify magnification once per triangle per bound texture. Only XNA
             // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
             // Anisotropic; it is computed only when a texture is actually sampled.
-            // REMED-GFX-175: one texel rate per bound texture, resolved once per triangle, feeding
-            // BOTH the magnification classification REMED-GFX-150 established and the level-of-detail
+            // One texel rate per bound texture, resolved once per triangle, feeding
+            // BOTH the magnification classification established for 2D sampling and the level-of-detail
             // the mip component needs. The two can never disagree because they come from one number.
             const TextureFootprint footprint0 = (texture0 != nullptr)
                 ? TriangleTextureFootprint(v0, v1, v2,
@@ -5094,7 +5094,7 @@ namespace CNA::Internal::Renderers::Software
             const float rho1 = footprint1.isotropicRate;
             const bool magnify0 = !(rho0 > 1.0f);
             const bool magnify1 = !(rho1 > 1.0f);
-            // REMED-GFX-182: the cube's own footprint, resolved once per triangle from the SAME
+            // The cube's own footprint, resolved once per triangle from the SAME
             // reflection expression the fragment path uses and only when a cube is actually bound.
             const TextureFootprint footprintCube = useEnvMap && envMap != nullptr
                 ? TriangleCubeTextureFootprint(v0, v1, v2,
@@ -5110,7 +5110,7 @@ namespace CNA::Internal::Renderers::Software
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube), footprintCube};
 
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
-            // REMED-GFX-182: stamp BOTH captured slot descriptions, so the cube trace can print the
+            // Stamp BOTH captured slot descriptions, so the cube trace can print the
             // public state this draw carried beside the description its cube sample really ran under.
             if (g_cubeTrace.enabled)
             {
@@ -5122,14 +5122,14 @@ namespace CNA::Internal::Renderers::Software
                 g_cubeTrace.slot1AddrV = sampler1.addressV;
             }
 
-            // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling). hasBias is
+            // One polygon-offset value for the whole triangle (after culling). hasBias is
             // 0 for the common zero-bias case, so the depth expressions below stay byte-identical then.
             const float biasOffset = ComputeDepthBiasOffset(v0, v1, v2, depthBias, slopeScaleDepthBias);
             const bool hasBias = (biasOffset != 0.0f);
 
             if (wireframe)
             {
-                // REMED-GFX-082: rasterize the selected edges as perspective-correct shaded lines,
+                // Rasterize the selected edges as perspective-correct shaded lines,
                 // reusing WriteShadedFragment (identical texture/diffuse/env-map/blend + depth path).
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkRasterLine(fb, multiSampleAntiAlias, clip, A, B,
@@ -5137,7 +5137,7 @@ namespace CNA::Internal::Renderers::Software
                                        const std::array<float, 4>* sampleTs) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
-                        if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                        if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);
                         std::array<float, 4> sampleDepths{};
                         if (sampleTs != nullptr)
                         {
@@ -5183,7 +5183,7 @@ namespace CNA::Internal::Renderers::Software
             const float minYf = std::min({v0.y, v1.y, v2.y});
             const float maxYf = std::max({v0.y, v1.y, v2.y});
 
-            // REMED-GFX-073: clamp the raster bounding box to the clip rectangle (framebuffer for
+            // Clamp the raster bounding box to the clip rectangle (framebuffer for
             // the 3D path, framebuffer-intersected Viewport for SpriteBatch) instead of the raw
             // framebuffer -- pixels outside the Viewport are never touched.
             int minX = 0, minY = 0, maxX = -1, maxY = -1;
@@ -5256,7 +5256,7 @@ namespace CNA::Internal::Renderers::Software
 
                     float depth = BarycentricInterpolate(
                         v0.depth, v1.depth, v2.depth, lambda0, lambda1);
-                    if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
+                    if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);
                     if (fb.HasMultiSampleColor() && !multiSampleAntiAlias)
                         sampleDepths.fill(depth);
                     const float invW = BarycentricInterpolate(
@@ -5292,10 +5292,10 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        // ---- REMED-GFX-110 / SOFTWARE-322: indexed addressing and safe fallback bounds ----
+        // ---- SOFTWARE-322: indexed addressing and safe fallback bounds ----
         //
         // Shared by the strict renderer-contract/legacy fallback paths so they cannot drift apart.
-        // The address equation reconciled by REMED-GFX-106 is:
+        // The reconciled address equation is:
         //
         //   consumed element  = startIndex + localIndex          (an ELEMENT offset, never bytes)
         //   decoded index     = 16- or 32-bit value at that element, per the buffer's own width
@@ -5392,7 +5392,7 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        // ---- REMED-GFX-119: non-indexed addressing and bounds ----
+        // ---- non-indexed addressing and bounds ----
         //
         // The non-indexed counterpart of the block above, shared by both CPU non-indexed raster
         // paths so they cannot drift apart either. The public contract is:
@@ -5497,7 +5497,7 @@ namespace CNA::Internal::Renderers::Software
     // ---- SoftwareTextureCubeRenderer (SOFTWARE-82) ----
 
 
-    // REMED-GFX-135: mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- cube faces are
+    // Mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- cube faces are
     // square, so the chain length is driven by a single edge.
     static int CalculateCubeMipLevels(int size)
     {
@@ -5564,7 +5564,7 @@ namespace CNA::Internal::Renderers::Software
         }
     }
 
-    // REMED-GFX-182: level 0 counts as supplied from construction (its storage is what every
+    // Level 0 counts as supplied from construction (its storage is what every
     // pre-mip consumer has always read), so a cube nobody wrote still samples exactly as it did.
     int SoftwareTextureCubeRenderer::FaceLevelCount(int face) const
     {
@@ -5594,7 +5594,7 @@ namespace CNA::Internal::Renderers::Software
         const void* data, int dataLength)
     {
         if (SoftwareTextureFormat::IsDxt(surfaceFormat_)) return false;
-        // REMED-GFX-135: `level != 0` used to be a silent early `return` -- the shared layer had no
+        // `level != 0` used to be a silent early `return` -- the shared layer had no
         // way to tell that apart from a completed upload, so a mipmapped cube accepted every level
         // and kept only level 0. Every level TextureCube declares now has real storage, and
         // anything outside the chain is refused rather than swallowed.
@@ -5624,7 +5624,7 @@ namespace CNA::Internal::Renderers::Software
             levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)],
             sampleLevels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)]);
 
-        // REMED-GFX-182: a level becomes selectable only once the FULL face rectangle at that level
+        // A level becomes selectable only once the FULL face rectangle at that level
         // has been written -- a partial upload leaves the rest of the level at the construction
         // zero-fill, and letting the sampler minify into that would fade a draw into transparent
         // black nobody supplied. Recounted from level 1 upward per face, exactly as
@@ -5764,7 +5764,7 @@ namespace CNA::Internal::Renderers::Software
     bool SoftwareTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                              void* data, int dataLength) const
     {
-        // REMED-GFX-130: every rejection below used to be a silent `return`, which the shared layer
+        // Every rejection below used to be a silent `return`, which the shared layer
         // turned into a complete transparent-black face rather than a refusal.
         if (data == nullptr || face < 0 || face > 5)
             return false;
@@ -5955,7 +5955,7 @@ namespace CNA::Internal::Renderers::Software
         const ClipVertex cv2 = makeClipVertex(c2, u2, v2);
         const ClipVertex cv3 = makeClipVertex(c3, u1, v2);
 
-        // REMED-GFX-030: snapshot the complete depth tuple for this submitted sprite draw.
+        // Snapshot the complete depth tuple for this submitted sprite draw.
         const RasterDepthState depthState{IsDepthTestEnabled(),
                                           IsDepthWriteEnabled(), GetDepthCompareFunction()};
         const RasterStencilState stencilState{
@@ -5972,7 +5972,7 @@ namespace CNA::Internal::Renderers::Software
         const SoftwareBlendState blendState = GetBlendState();
         const std::array<float, 4> blendFactor = GetBlendFactor();
         const int cullMode = GetCullMode();
-        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
         int scX = 0, scY = 0, scW = 0, scH = 0;
@@ -5980,7 +5980,7 @@ namespace CNA::Internal::Renderers::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 IsScissorTestEnabled(), scX, scY, scW, scH);
         GpuDrawParams spriteParams;
-        // REMED-GFX-124: hand the sprite's texture on as the plain renderer handle and let
+        // Hand the sprite's texture on as the plain renderer handle and let
         // RasterizeTriangleShaded resolve the colour-storage capability, so this path has no second,
         // narrower notion of "a Software texture" that could reject a finished render target after
         // the shared one already accepted it.
@@ -5992,18 +5992,18 @@ namespace CNA::Internal::Renderers::Software
         if (const auto* colorMatrix =
                 dynamic_cast<const Microsoft::Xna::Framework::Graphics::ColorMatrixEffect*>(customEffect))
             colorMatrix->FillSpriteDrawParams(spriteParams);
-        // REMED-GFX-082: honor RasterizerState.FillMode for the sprite's two quad triangles too. Each
+        // Honor RasterizerState.FillMode for the sprite's two quad triangles too. Each
         // draws ALL THREE of its edges (kEdgeAll), so a wireframe sprite shows its quad outline plus
         // the internal triangle-split diagonal -- real submitted geometry, matching D3D11/FNA (not
         // suppressed like the 3D near-plane clip diagonal). Passed THROUGH SpriteBatch.Begin's
-        // RasterizerState via GraphicsDevice (REMED-GFX-081).
+        // RasterizerState via GraphicsDevice.
         const bool wire = (GetFillMode() == 1);
-        // REMED-GFX-083: SpriteBatch's two quad triangles honor RasterizerState.DepthBias /
+        // SpriteBatch's two quad triangles honor RasterizerState.DepthBias /
         // SlopeScaleDepthBias too (a bias supplied through SpriteBatch.Begin's RasterizerState, GFX-081).
         // A quad is flat (constant layerDepth -> zero depth slope), so only the constant term applies.
         const float depthBias = GetDepthBias();
         const float slopeScaleDepthBias = GetSlopeScaleDepthBias();
-        // REMED-GFX-150: the sprite quad samples through the SamplerState SpriteBatch.Begin
+        // The sprite quad samples through the SamplerState SpriteBatch.Begin
         // resolved for THIS batch, not the device's 3D slot state -- SpriteBatch has its own sampler
         // channel (SetSamplerFilter/SetSamplerAddressMode), exactly as it does on every GPU renderer.
         // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
@@ -6112,7 +6112,7 @@ namespace CNA::Internal::Renderers::Software
     std::unique_ptr<ITextureCubeRenderer> SoftwareRenderer::CreateTextureCube(
         int size, bool mipMap, int surfaceFormat)
     {
-        // REMED-GFX-135: `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
+        // `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
         // LevelCount whose storage did not exist and every mip upload was dropped in silence.
         return std::make_unique<SoftwareTextureCubeRenderer>(size, mipMap, surfaceFormat);
     }
@@ -6185,7 +6185,7 @@ namespace CNA::Internal::Renderers::Software
             throw std::runtime_error(
                 "SoftwareRenderer::DrawColoredPrimitives: unsupported primitive topology");
 
-        // REMED-GFX-119: this entry point carries no GpuDrawParams, so its contract is a complete
+        // This entry point carries no GpuDrawParams, so its contract is a complete
         // buffer draw -- first element zero, no offset. It still validates the exact
         // topology-derived range through the shared helper, in 64-bit, so an extreme
         // primitiveCount is rejected instead of wrapping the old `primitiveCount * 3` product.
@@ -6201,9 +6201,9 @@ namespace CNA::Internal::Renderers::Software
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
-            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // draw snapshot
         const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
-        // REMED-GFX-079: map NDC over the active GraphicsDevice.Viewport (X/Y offset, Width/Height
+        // Map NDC over the active GraphicsDevice.Viewport (X/Y offset, Width/Height
         // sub-scale, MinDepth/MaxDepth range) and clip rasterization to framebuffer ∩ Viewport --
         // a default full-target viewport reduces to the pre-GFX-079 full-framebuffer mapping.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
@@ -6212,7 +6212,7 @@ namespace CNA::Internal::Renderers::Software
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
-        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
         int scX = 0, scY = 0, scW = 0, scH = 0;
@@ -6220,7 +6220,7 @@ namespace CNA::Internal::Renderers::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
-        // REMED-GFX-119: element = vertexStart + local (never a byte offset); the stride multiply
+        // Element = vertexStart + local (never a byte offset); the stride multiply
         // happens only after the element range above was validated.
         const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
             return base + static_cast<std::size_t>(kVertexStart + local) * stride;
@@ -6280,7 +6280,7 @@ namespace CNA::Internal::Renderers::Software
         const std::uint8_t* ibBase = swIb.Data().data();
         const bool thirtyTwoBit = swIb.IsThirtyTwoBit();
 
-        // REMED-GFX-110: this entry point carries no GpuDrawParams, so its contract is a complete
+        // This entry point carries no GpuDrawParams, so its contract is a complete
         // buffer draw -- first element zero, no base addend. It still validates the exact
         // topology-derived range and every decoded vertex address through the shared helper.
         constexpr int kStartIndex = 0;
@@ -6292,16 +6292,16 @@ namespace CNA::Internal::Renderers::Software
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
-            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // draw snapshot
         const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
-        // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
+        // See DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
-        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
         int scX = 0, scY = 0, scW = 0, scH = 0;
@@ -6309,7 +6309,7 @@ namespace CNA::Internal::Renderers::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
-        // REMED-GFX-110: element = startIndex + local (never a byte offset), vertex = decoded
+        // Element = startIndex + local (never a byte offset), vertex = decoded
         // index + baseVertex (added exactly once). Every address below was validated above.
         const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
             const std::int64_t vertexIndex =
@@ -6375,7 +6375,7 @@ namespace CNA::Internal::Renderers::Software
 
         if (g_cubeTrace.enabled) { ++g_cubeTrace.drawId; g_cubeTrace.family = "DrawPrimitives"; }
 
-        // REMED-GFX-119: this path receives the public vertexStart. It was previously dropped, so
+        // This path receives the public vertexStart. It was previously dropped, so
         // every non-indexed draw rendered the element-zero prefix of the bound buffer; only the
         // consumed count was ever right.
         const int vertexStart = params.vertexStart;
@@ -6422,16 +6422,16 @@ namespace CNA::Internal::Renderers::Software
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
-            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // draw snapshot
         const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
-        // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
+        // See DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
-        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
         int scX = 0, scY = 0, scW = 0, scH = 0;
@@ -6439,8 +6439,8 @@ namespace CNA::Internal::Renderers::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
-        // REMED-GFX-119: element = vertexStart + local (never a byte offset).
-        // REMED-GFX-201: every bound per-vertex stream advances by the SAME element count, each
+        // Element = vertexStart + local (never a byte offset).
+        // Every bound per-vertex stream advances by the SAME element count, each
         // multiplied by its OWN stride and shifted by its OWN binding offset -- FNA3D's
         // `vertexStride * (vertexOffset + start)`, per stream.
         const auto fetchVertex = [&](std::int64_t local) -> CombinedVertexReader {
@@ -6471,7 +6471,7 @@ namespace CNA::Internal::Renderers::Software
             }
             return reader;
         };
-        // REMED-GFX-148: snapshot both static BlendState and dynamic BlendFactor once for this
+        // Snapshot both static BlendState and dynamic BlendFactor once for this
         // public draw, beside the depth-state snapshot above.
         const SoftwareBlendState blendState = blendState_;
         const std::array<float, 4> blendFactor = blendFactor_;
@@ -6563,7 +6563,7 @@ namespace CNA::Internal::Renderers::Software
                 rv[static_cast<std::size_t>(k)] =
                     ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
-            // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
+            // Clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
             // coverage gives every internal fan diagonal to exactly one triangle in solid fill.
@@ -6658,7 +6658,7 @@ namespace CNA::Internal::Renderers::Software
         const std::uint8_t* ibBase = swIb.Data().data();
         const bool thirtyTwoBit = swIb.IsThirtyTwoBit();
 
-        // REMED-GFX-110: this path receives the public startIndex/baseVertex. Both were previously
+        // This path receives the public startIndex/baseVertex. Both were previously
         // dropped, so every indexed draw rendered the element-zero prefix of the bound buffers.
         // minVertexIndex/numVertices stay hints -- they are deliberately not consulted here.
         const int startIndex = params.startIndex;
@@ -6677,16 +6677,16 @@ namespace CNA::Internal::Renderers::Software
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         const RasterDepthState depthState{
-            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // draw snapshot
         const RasterStencilState stencilState = SnapshotStencilState(*this); // SOFTWARE-121
-        // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
+        // See DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
         GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
-        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // Effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
         int scX = 0, scY = 0, scW = 0, scH = 0;
@@ -6694,9 +6694,9 @@ namespace CNA::Internal::Renderers::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
-        // REMED-GFX-110: element = startIndex + local (never a byte offset), vertex = decoded
+        // Element = startIndex + local (never a byte offset), vertex = decoded
         // index + baseVertex (added exactly once).
-        // REMED-GFX-201: the decoded index plus baseVertex addresses EVERY bound per-vertex
+        // The decoded index plus baseVertex addresses EVERY bound per-vertex
         // stream, each shifted by its own binding offset and multiplied by its own stride.
         const auto fetchVertex = [&](std::int64_t local) -> CombinedVertexReader {
             const std::int64_t indexElement = static_cast<std::int64_t>(startIndex) + local;
@@ -6734,7 +6734,7 @@ namespace CNA::Internal::Renderers::Software
             }
             return reader;
         };
-        // REMED-GFX-148: one by-value state snapshot for the complete indexed public draw.
+        // One by-value state snapshot for the complete indexed public draw.
         const SoftwareBlendState blendState = blendState_;
         const std::array<float, 4> blendFactor = blendFactor_;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
@@ -6825,7 +6825,7 @@ namespace CNA::Internal::Renderers::Software
                 rv[static_cast<std::size_t>(k)] =
                     ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
-            // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
+            // Clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
             // coverage gives every internal fan diagonal to exactly one triangle in solid fill.

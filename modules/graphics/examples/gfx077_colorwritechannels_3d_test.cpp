@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077 runtime verification (generic 3D path, renderer-agnostic).
+// Runtime verification (generic 3D path, renderer-agnostic).
 //
 // Verifies that BlendState.ColorWriteChannels (RT0 per-channel colour write mask) and
 // BlendState.MultiSampleMask are honoured by the renderer selected at compile time, now that both
-// are plumbed through IGraphicsRenderer::ApplyBlendState (REMED-GFX-077). Unlike the canonical
+// are plumbed through IGraphicsRenderer::ApplyBlendState. Unlike the canonical
 // *_colorwritechannels_test.cpp harnesses (which drive SpriteBatch), this test draws a full-screen
 // coloured quad through the generic 3D pipeline (DrawPrimitives + BasicEffect) into an off-screen
 // RenderTarget2D and reads it back with GetData(). That is deliberate: on some renderers (notably
@@ -166,7 +166,7 @@ class Gfx077ColorWriteChannels3DTest : public Game
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         // Full-texture readback (rect==nullptr, elementCount==total): the portable path that hits
         // every renderer's RenderTarget2D GPU-readback fallback. This comment previously recorded
-        // that a 1x1-rect read "reads back all zeros on D3D11/D3D9" -- that was the REMED-GFX-127
+        // that a 1x1-rect read "reads back all zeros on D3D11/D3D9" -- that was the honest Texture2D::GetData contract
         // fabrication, not a property of the rectangle overload: the rectangle path does reach the
         // renderer, it simply had no readback to reach on those renderers. D3D9 now returns real
         // content; the whole-level read is kept here because it is what this GFX-077 scene asserts.

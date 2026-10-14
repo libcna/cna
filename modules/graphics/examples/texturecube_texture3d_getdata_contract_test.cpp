@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-130: every public TextureCube::GetData and Texture3D::GetData call must have exactly
+// Every public TextureCube::GetData and Texture3D::GetData call must have exactly
 // ONE honest outcome -- it returns the resource's real content, or it rejects the request
 // deterministically. It must never fabricate content out of the shared layer's own scratch memory.
 //
-// This is REMED-GFX-127's finding on the two interfaces that finding deliberately did not cover.
+// This is the finding on the two interfaces that finding deliberately did not cover.
 // The cube defect (shared, renderer-neutral, in TextureCube::GetData itself):
 //
 //     std::vector<uint8_t> rgba(elementCount * 4);            // zero-initialized HERE
@@ -117,7 +117,7 @@ namespace
     // Headless deliberately executes no rasterization and stores no pixel data: it records API
     // usage and resource state for validation/tracing. Its cube SetData is a trace entry, not a
     // write, so there is no content it could honestly return. Texture3D is refused at construction
-    // (REMED-CONTENT-004: it reports no GraphicsCapability::Texture3D).
+    // (it reports no GraphicsCapability::Texture3D).
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
@@ -282,7 +282,7 @@ class CubeVolumeGetDataContractTest : public Game
     /**
      * @brief Uploads the full pattern for one cube mip level, one face at a time.
      *
-     * REMED-GFX-135 gave SetData the same two-outcome contract GetData has, so on a renderer with no
+     * Gave SetData the same two-outcome contract GetData has, so on a renderer with no
      * cube storage this fixture now raises System::NotSupportedException instead of quietly doing
      * nothing. That rejection is the write side's own subject and is asserted in
      * texturecube_texture3d_setdata_contract_test.cpp; here it only means "there is nothing to read
@@ -308,7 +308,7 @@ class CubeVolumeGetDataContractTest : public Game
     }
 
     /// Uploads the full pattern for one Texture3D mip level in a single call. See UploadCubeLevel
-    /// for why an unsupported upload is absorbed here (REMED-GFX-135).
+    /// for why an unsupported upload is absorbed here.
     static void UploadVolumeLevel(Texture3D& vol, int level)
     {
         const int w = MipDim(kVolW, level);
@@ -746,7 +746,7 @@ class CubeVolumeGetDataContractTest : public Game
         {
             TextureCube dead(dev, kCube, false, SurfaceFormat::Color);
             std::vector<Color> flat(static_cast<std::size_t>(kCube) * kCube, Color(200, 100, 50, 25));
-            // REMED-GFX-135: pre-populating the doomed cube is a convenience, not the subject --
+            // Pre-populating the doomed cube is a convenience, not the subject --
             // a renderer with no cube storage now rejects the upload rather than ignoring it.
             try { dead.SetData(CubeMapFace::PositiveX, flat.data(), static_cast<int>(flat.size())); }
             catch (const System::NotSupportedException&) { }

@@ -20,7 +20,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief The single mapping from a public RenderTargetUsage to the renderer's `preserveContents`
      *        flag.
      *
-     * REMED-GFX-136. Every render target that reaches a renderer goes through this one function --
+     * Every render target that reaches a renderer goes through this one function --
      * `RenderTarget2D` and `RenderTargetCube` alike -- so the two cannot drift apart, and a reader
      * has exactly one place to look for what `PlatformContents` means in this project.
      *
@@ -32,7 +32,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * `PlatformContents` and whichever one a given renderer happened to honour decided the result.
      *
      * @par What is preserved
-     * REMED-GFX-142: **colour, depth AND stencil** -- all three, not colour alone. FNA3D's public
+     * **colour, depth AND stencil** -- all three, not colour alone. FNA3D's public
      * header documents the flag this maps to as "Set this to 1 to store the color/depth/stencil
      * contents for future use", and all three of its drivers agree (an OpenGL FBO attachment and a
      * D3D11 DSV simply persist; one GPU driver loads both depth and stencil unless a clear is
@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * action, but the observable result is that deterministic triple.
      *
      * An explicit `Clear()` issued inside a bind cycle is a separate, ordered command that always
-     * wins over the bind-time behaviour (REMED-GFX-129), and it is per-aspect: clearing depth never
+     * wins over the bind-time behaviour, and it is per-aspect: clearing depth never
      * touches stencil or colour, and vice versa.
      *
      * Contents of a target that has never been rendered into are not specified -- a brand-new

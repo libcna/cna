@@ -92,7 +92,7 @@ namespace CNA::Internal::Xnb
             && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(surfaceFormat));
         const SurfaceFormat uploadFormat =
             (IsCompressed(surfaceFormat) && !keepCompressed) ? SurfaceFormat::Color : surfaceFormat;
-        // REMED-CONTENT-001: reject dimensions/mip counts the active renderer cannot actually
+        // Reject dimensions/mip counts the active renderer cannot actually
         // create, before any renderer-specific texture creation is attempted. Neither the native
         // graphics APIs' own validation (Vulkan's validation layer is advisory; wgpu-native
         // validates lazily at submit time) nor CheckDecodedByteSize() above (which only bounds the

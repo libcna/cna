@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-244: the three packed 16-bit SurfaceFormats GraphicsProfile.Reach permits --
+// The three packed 16-bit SurfaceFormats GraphicsProfile.Reach permits --
 // Bgr565, Bgra5551 and Bgra4444 -- uploaded through their typed SetData overloads and then
 // SAMPLED in a real draw, which is the bar IGL-71 set: storage alone is not promotion.
 //

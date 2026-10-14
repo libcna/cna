@@ -206,7 +206,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<DirectX9Renderer&>(dev.GetRenderer());
 
-        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // default write state
         renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
         renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);

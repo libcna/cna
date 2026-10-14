@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-069: SdlGpu GraphicsDevice.BlendFactor (the constant blend color) must reach the GPU
+// SdlGpu GraphicsDevice.BlendFactor (the constant blend color) must reach the GPU
 // for blend modes that use Blend::BlendFactor / Blend::InverseBlendFactor.
 //
 // SdlGpu maps Blend::BlendFactor(10) -> SDL_GPU_BLENDFACTOR_CONSTANT_COLOR and

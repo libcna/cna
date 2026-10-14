@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-100: EnvironmentMapEffect fog is the FNA CPU-prepared World*View fog vector,
+// EnvironmentMapEffect fog is the FNA CPU-prepared World*View fog vector,
 // not a scalar range evaluated from raw object-space Z.
 //
 // This deliberately uses an off-screen Color target.  WebGPU may select an sRGB target and

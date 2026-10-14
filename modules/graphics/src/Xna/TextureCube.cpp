@@ -244,7 +244,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // rule that keeps that finding fixed is no longer "Color only" but "whatever the renderer
         // says it really creates". The cube-specific tri-state verdict permits native APIs to
         // distinguish cube attachment support from otherwise-identical 2D attachment support.
-        // REMED-GFX-245: the profile is asked first, exactly as Texture2D does, and refuses with
+        // The profile is asked first, exactly as Texture2D does, and refuses with
         // XNA's own exception type. The cube list is measured, not inferred from the 2D one -- it
         // excludes NormalizedByte2/4 at BOTH profiles.
         if (!Texture::IsCubeFormatAllowedByProfileEXT(device.getGraphicsProfileProperty(), format))
@@ -543,7 +543,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
 
-        // REMED-GFX-135 (REMED-GFX-127/130's contract, applied to the WRITE direction). Every check
+        // (the honest-readback contract, applied to the WRITE direction). Every check
         // above runs BEFORE anything is converted or handed to a renderer, so a rejected call cannot
         // have changed one texel. A renderer that was never created at all (as on a graphics
         // renderer that keeps IGraphicsRenderer::CreateTextureCube's nullptr default) used to be
@@ -714,7 +714,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
         Texture::ValidateGetDataFormat(format_, 4);
 
-        // REMED-GFX-130 (REMED-GFX-127's contract, applied to ITextureCubeRenderer). `rgba` is
+        // (the contract, applied to ITextureCubeRenderer). `rgba` is
         // scratch memory THIS layer owns and zero-initializes, so converting it unconditionally is
         // not "leaving the caller's buffer untouched" when the renderer has no readback -- it
         // fabricates a complete transparent-black cube face. Conversion happens only when the

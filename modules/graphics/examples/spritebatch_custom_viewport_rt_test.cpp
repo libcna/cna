@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-072 (RenderTarget2D-readback variant): SpriteBatch clip space must be built from the
+// (RenderTarget2D-readback variant): SpriteBatch clip space must be built from the
 // active GraphicsDevice.Viewport (Viewport.Width/Height), NOT the full render-target dimensions.
 //
 // Same XNA/FNA contract and defect as spritebatch_custom_viewport_test.cpp (see that file's header),

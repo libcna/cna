@@ -149,7 +149,7 @@ namespace Microsoft::Xna::Framework::Content
          * equivalent (FNA simply lets the OS fail to find an escaping path), a reference that is
          * itself absolute, or that resolves above the content root's own logical space, is
          * rejected outright rather than attempting to load whatever happens to be there
-         * (REMED-CONTENT-002).
+         *.
          *
          * Returns `std::optional<T>` rather than FNA's literal bare `T`: real FNA callers check
          * the result against C#'s reference-type `null` (`if (texture != null)`) to tell "no
@@ -501,7 +501,7 @@ namespace Microsoft::Xna::Framework::Content
         // no default constructor (e.g. SpriteFont), unlike C#'s free default(T) for reference
         // types. nullopt uniformly represents "no existing instance" regardless of whether T
         // happens to be default-constructible.
-        // REMED-CONTENT-006: InnerReadObject() recurses whenever a type reader's own ReadUntyped()
+        // InnerReadObject() recurses whenever a type reader's own ReadUntyped()
         // calls back into ReadObject<U>() for a nested member (e.g. a Model's meshes, each
         // containing effects, each containing parameters...) with no depth limit -- unbounded
         // recursion driven entirely by attacker-controlled file structure, the same class of bug

@@ -93,7 +93,7 @@ TEST(GraphicsDeviceManagerTest, ApplyChangesRaisesResettingAndResetExactlyOnce)
     EXPECT_EQ(resetCount, 1);
 }
 
-// REMED-CORE-007 (fixed): CreateDevice() now subscribes graphicsDevice_->DeviceResetting/
+// (fixed): CreateDevice() now subscribes graphicsDevice_->DeviceResetting/
 // DeviceReset, forwarding to this manager's own OnDeviceResetting()/OnDeviceReset(), matching FNA's
 // IGraphicsDeviceManager.CreateDevice() (graphicsDevice.DeviceResetting += OnDeviceResetting;
 // graphicsDevice.DeviceReset += OnDeviceReset;). A real renderer-detected device-lost/reset
@@ -133,7 +133,7 @@ TEST(GraphicsDeviceManagerTest, RendererDetectedDeviceLostIsForwardedToManagerLi
 // all re-send with `this` as sender rather than forwarding whatever sender they were called with
 // (an asymmetry present in the real FNA source -- OnDeviceCreated is the one exception, which does
 // forward its sender). This only became observable once forwarding from the managed GraphicsDevice
-// was wired up (REMED-CORE-007) -- previously every call site already passed `this` regardless.
+// was wired up -- previously every call site already passed `this` regardless.
 TEST(GraphicsDeviceManagerTest, ForwardedDeviceEventsReportTheManagerAsSender)
 {
     if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
@@ -160,7 +160,7 @@ TEST(GraphicsDeviceManagerTest, ForwardedDeviceEventsReportTheManagerAsSender)
     EXPECT_EQ(resetSender, static_cast<System::Object*>(&gdm));
 }
 
-// REMED-CORE-014 regression guard: a second explicit Dispose() call must not re-raise
+// Regression guard: a second explicit Dispose() call must not re-raise
 // DeviceDisposing (GraphicsDeviceManager::Dispose(bool)'s disposed_ guard makes the whole method
 // idempotent, independent of ownsGraphicsDevice_).
 TEST(GraphicsDeviceManagerTest, RepeatedDisposeDoesNotReraiseDeviceDisposing)

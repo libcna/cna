@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-028: transactional SDL_GPU renderer construction and lazy-initialization lifetime
+// Transactional SDL_GPU renderer construction and lazy-initialization lifetime
 // regression. Failure injection is per renderer instance and still uses real SDL_GPU resources.
 // Every failed constructor must balance acquisition/release callbacks, leave no window-registry
 // entry, preserve the caller-owned SDL_Window, and permit an immediately succeeding renderer.

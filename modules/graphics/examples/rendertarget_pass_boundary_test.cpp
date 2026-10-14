@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-140: every public render-target bind/unbind cycle is its own logical pass.
+// Every public render-target bind/unbind cycle is its own logical pass.
 //
 // A deferred renderer may delay native submission for as long as it likes, but it must not merge
 // two logically distinct bind cycles into one native pass when the two cycles differ in load
@@ -20,7 +20,7 @@
 // Why this file's decisive checks all use DiscardContents
 // -------------------------------------------------------
 // Collapsing is INVISIBLE on a PreserveContents target: one LOAD pass containing both cycles'
-// draws produces exactly the same pixels as two LOAD passes. That is precisely why REMED-GFX-136
+// draws produces exactly the same pixels as two LOAD passes. That is precisely why the RenderTargetUsage propagation fix
 // needed an artificial readback barrier (`Settle()`) before eleven of its preservation checks
 // could see a discarding renderer at all. The shape that cannot be faked is a target whose SECOND
 // bind is supposed to throw the first bind's content away:
@@ -40,15 +40,15 @@
 //     clears a DiscardContents target to (0,0,0,255) on every bind, mirroring FNA. So "discarded"
 //     is asserted as an exact colour, never as "anything but the old content".
 //   * PreserveContents / PlatformContents -- the colour survives a full unbind/rebind cycle
-//     exactly (REMED-GFX-136's contract, `usage != DiscardContents`).
-//   * Depth/stencil -- its own contract, established by REMED-GFX-142 and enforced by
+// exactly (the contract, `usage != DiscardContents`).
+//   * Depth/stencil -- its own contract, established by the render-target depth/stencil lifetime contract and enforced by
 //     `examples/rendertarget_depthstencil_usage_test`. Nothing here asserts depth.
-//   * An explicit Clear() inside a bind cycle -- REMED-GFX-129 recorded that the retired VULKAN
+//   * An explicit Clear() inside a bind cycle -- the ordered Clear fix recorded that the retired VULKAN
 //     renderer dropped it on a PreserveContents target, because the clear colour was delivered ONLY
 //     through the render pass's load op and there was no vkCmdClearAttachments path. That is a
 //     SEPARATE defect from pass collapsing, so this file declares it per renderer
 //     (`clearOnPreserveTarget`) and asserts the declared behaviour either way -- checks X1/X2 are
-//     the exact GFX-129 reproduction, kept here so GFX-140's fix can be re-measured against it
+//     The exact GFX-129 reproduction, kept here so GFX-140's fix can be re-measured against it
 //     rather than assumed to have covered it.
 //   * Clear ordering inside ONE cycle -- same root cause: a load-op-only clear necessarily runs
 //     before every draw of its pass, so "draw, then Clear, then draw" cannot wipe the first draw.
@@ -110,7 +110,7 @@ namespace
      *
      * `Exact` -- GetData returns the rendered surface byte for byte.
      * `Unsupported` -- GetData raises System::NotSupportedException with the caller's destination
-     * untouched (REMED-GFX-127/130's contract).
+     * untouched (the honest Texture2D::GetData contract's contract).
      */
     enum class Support
     {
@@ -127,7 +127,7 @@ namespace
         bool    cubeTargets;   ///< RenderTargetCube can be created AND bound here.
         Support cubeReadback;  ///< RenderTargetCube::GetData at level 0.
         /**
-         * REMED-GFX-129: an explicit Clear() issued while a PreserveContents target is bound is
+         * An explicit Clear() issued while a PreserveContents target is bound is
          * honoured. False is a declared defect, on a renderer that delivers the clear colour only
          * through the render pass load op, which a preserving pass sets to LOAD.
          */
@@ -147,7 +147,7 @@ namespace
          */
         bool    preferMultiSampling;
         /**
-         * REMED-GFX-140's own subject: every public bind/unbind cycle becomes its own logical pass
+         * The subject: every public bind/unbind cycle becomes its own logical pass
          * here. False is a declared, still-open defect on that renderer (recorded with its own
          * finding); check S1 then asserts the COLLAPSED result, so it stays falsifiable in both
          * directions and turns red the day the renderer is fixed, and every other check that can
@@ -168,7 +168,7 @@ namespace
         /**
          * A multisampled RenderTarget2D reads back its RESOLVED content. False where the readback
          * reports success over untouched memory (bgfx's blit from a multisampled attachment, the
-         * same boundary REMED-GFX-134/138 recorded for cubes), which makes K1/K2 unable to say
+         * same boundary the RenderTargetCube readback contract recorded for cubes), which makes K1/K2 unable to say
          * anything about pass boundaries.
          */
         bool    msaaTargetReadback;
@@ -177,7 +177,7 @@ namespace
 
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it owns no colour to preserve or discard and its readback is
-    // REMED-GFX-127/130's deterministic refusal. Every sequence must still be legal.
+    // The honest Texture2D::GetData contract's deterministic refusal. Every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true, Support::Unsupported,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
@@ -187,20 +187,20 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_WEBGPU)
-    // `clearAfterDrawWins` was false while REMED-GFX-156 was open: wgpu delivers a clear colour
+    // `clearAfterDrawWins` was false while the ordered mid-cycle Clear fix was open: wgpu delivers a clear colour
     // only through the render-pass load op, so a Clear() issued after a draw inside ONE cycle could
-    // not wipe that draw (X3). REMED-GFX-156 put Clear into the ordered stream REMED-GFX-159 built
+    // not wipe that draw (X3). the ordered mid-cycle Clear fix put Clear into the ordered stream the WebGPU draw-order fix built
     // and cuts the cycle into one native pass per observable Clear; X3 was measured red the moment
     // the fix landed, which is what turned this declaration over.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
-    // `segmentsBindCycles` true since REMED-GFX-145. SdlGpu collapsed bind cycles exactly as Vulkan
+    // `segmentsBindCycles` true since the per-bind-cycle render pass fix. SdlGpu collapsed bind cycles exactly as Vulkan
     // did and for the same reason -- `EnsureFrameRendered` gave each DISTINCT `DrawTarget` one
     // `SDL_BeginGPURenderPass` holding every draw ever queued against it that frame -- and declared
-    // false here until it was fixed. `clearAfterDrawWins` was false while REMED-GFX-156 was open:
+    // false here until it was fixed. `clearAfterDrawWins` was false while the ordered mid-cycle Clear fix was open:
     // SDL_gpu delivers a clear colour only through `SDL_GPUColorTargetInfo.load_op`, so a `Clear()`
-    // issued after a draw inside ONE cycle could not wipe that draw (X3). REMED-GFX-156 made the
+    // issued after a draw inside ONE cycle could not wipe that draw (X3). the ordered mid-cycle Clear fix made the
     // logical SEGMENT rather than the bind cycle own a load action, so an observable Clear opens
     // another segment over the same destination and X3 asserts the ordered result; it was measured
     // red the moment the fix landed. `clearOnPreserveTarget` is true, and X2 proves it holds in a
@@ -956,7 +956,7 @@ class RenderTargetPassBoundaryTest : public Game
     }
 
     // =====================================================================
-    // X -- REMED-GFX-129 classification (explicit Clear, not pass boundaries)
+    // X -- the ordered Clear fix classification (explicit Clear, not pass boundaries)
     // =====================================================================
 
     /// X1 -- a Clear() inside the ONLY bind cycle of a PreserveContents target.
@@ -1137,7 +1137,7 @@ class RenderTargetPassBoundaryTest : public Game
         // would land in the wrong corner. P6 makes the same measurement, but only on a renderer
         // that can read its backbuffer -- SdlGpu cannot, so that route skips there and this one,
         // riding the ordinary Present path, is the only place the question gets asked
-        // (REMED-GFX-145's own false-positive audit).
+        // (the false-positive audit).
         pd_ = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         pe_ = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CycleMark(dev, *pd_, 0, 0, kPalette[1]);

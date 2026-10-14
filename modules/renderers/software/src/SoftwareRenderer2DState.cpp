@@ -448,7 +448,7 @@ namespace CNA::Internal::Renderers::Software
                 // shader support.
                 return false;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
-                // REMED-GFX-201: implemented -- the vertex reader resolves each combined-layout
+                // Implemented -- the vertex reader resolves each combined-layout
                 // byte offset to the stream that owns it, so every attribute is fetched from its
                 // own buffer with that buffer's own stride and binding offset, with no interleaved
                 // temporary and no per-vertex allocation.
@@ -641,7 +641,7 @@ namespace CNA::Internal::Renderers::Software
                                                   int colorBlendFunc, int alphaBlendFunc,
                                                   const BlendWriteState& writeState)
     {
-        // REMED-GFX-148: retain the complete state instead of reducing it to Opaque/non-Opaque.
+        // Retain the complete state instead of reducing it to Opaque/non-Opaque.
         // Reject unknown ordinals at state application so no fragment can fail halfway through a
         // draw. Public Blend and BlendFunction currently define exactly 0..12 and 0..4.
         const auto validFactor = [](int value) { return value >= 0 && value <= 12; };
@@ -679,7 +679,7 @@ namespace CNA::Internal::Renderers::Software
                                                          int ccwStencilFunc, int ccwStencilPass,
                                                          int ccwStencilFail, int ccwStencilDepthFail)
     {
-        // REMED-GFX-030: every public CompareFunction has ordinal 0..7. Reject an invalid value at
+        // Every public CompareFunction has ordinal 0..7. Reject an invalid value at
         // state application rather than carrying it into the hot fragment path or approximating it.
         if (depthFunc < 0 || depthFunc > 7)
             throw std::runtime_error(
@@ -728,13 +728,13 @@ namespace CNA::Internal::Renderers::Software
                                                        float depthBias, float slopeScaleDepthBias)
     {
         cullMode_ = cullMode;
-        // REMED-GFX-082: capture FillMode (previously discarded). 0=Solid, 1=WireFrame -- the raster
+        // Capture FillMode (previously discarded). 0=Solid, 1=WireFrame -- the raster
         // paths render only triangle edges when WireFrame. Independent of CullMode/ScissorTestEnable.
         fillMode_ = fillMode;
-        // REMED-GFX-080: capture ScissorTestEnable (previously discarded). Independent of the stored
+        // Capture ScissorTestEnable (previously discarded). Independent of the stored
         // ScissorRectangle -- toggling this on/off enables/disables the same stored rectangle.
         scissorTestEnable_ = scissorTestEnable;
-        // REMED-GFX-083: capture DepthBias / SlopeScaleDepthBias (both previously discarded). Folded into
+        // Capture DepthBias / SlopeScaleDepthBias (both previously discarded). Folded into
         // the post-viewport per-fragment depth by the rasterizer via ComputeDepthBiasOffset; 0/0 (the
         // default) is a byte-identical no-op. Same unscaled units GraphicsDevice forwards to every renderer.
         depthBias_ = depthBias;
@@ -746,7 +746,7 @@ namespace CNA::Internal::Renderers::Software
         multiSampleAntiAlias_ = enabled;
     }
 
-    // REMED-GFX-150: store the SamplerState so the rasterizer's sampler can honor it. Previously
+    // Store the SamplerState so the rasterizer's sampler can honor it. Previously
     // every parameter but `slot` was unnamed and discarded, so TextureFilter and TextureAddressMode
     // never reached a single textured fragment and every draw filtered LinearClamp. SOFTWARE-117
     // additionally retains MaxAnisotropy for the directional CPU footprint sampler.
@@ -778,7 +778,7 @@ namespace CNA::Internal::Renderers::Software
         samplerSlots_[static_cast<std::size_t>(slot)].addressW = addressW;
     }
 
-    // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their
+    // Store the ScissorRectangle so the raster paths can intersect it into their
     // effective clip when scissor testing is enabled (previously a no-op, so ScissorRectangle never
     // clipped anything). GraphicsDevice pushes this on every setScissorRectangleProperty() and
     // resets it to the full target on each RenderTarget transition, so this single field is always
@@ -793,10 +793,10 @@ namespace CNA::Internal::Renderers::Software
         scissorHeight_ = h;
     }
 
-    // REMED-GFX-073: store the viewport so the SpriteBatch path can place its viewport-local quads
+    // Store the viewport so the SpriteBatch path can place its viewport-local quads
     // at (x,y) and clip them to (x,y,w,h). GraphicsDevice pushes this on every setViewportProperty()
     // and resets it to the full target on each RenderTarget transition, so this single field is
-    // always relative to the currently active target. REMED-GFX-079 now consumes the same stored
+    // always relative to the currently active target. The 3D path now consumes the same stored
     // rectangle and depth range in every 3D draw path as well.
     void SoftwareRenderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
@@ -826,7 +826,7 @@ namespace CNA::Internal::Renderers::Software
         h = viewportHeight_;
     }
 
-    // REMED-GFX-080: mirrors GetActiveViewport -- returns the stored ScissorRectangle, or the full
+    // Mirrors GetActiveViewport -- returns the stored ScissorRectangle, or the full
     // current framebuffer when none was set (so enabling scissor testing without an explicit
     // rectangle is an inert clip, matching XNA's default full-target ScissorRectangle).
     void SoftwareRenderer::GetActiveScissor(int& x, int& y, int& w, int& h) const

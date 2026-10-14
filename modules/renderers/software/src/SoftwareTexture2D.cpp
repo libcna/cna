@@ -342,7 +342,7 @@ namespace CNA::Internal::Renderers::Software
         }
         const std::size_t rowBytes = static_cast<std::size_t>(width_)
             * static_cast<std::size_t>(BytesPerTexel(surfaceFormat_));
-        // REMED-GFX-229: a positive pitch smaller than one complete RGBA8 row makes the
+        // A positive pitch smaller than one complete RGBA8 row makes the
         // row-by-row copy overlap the prior row and read past the caller's final row. Validate it
         // before resizing or changing the authoritative texture bytes. Zero/negative retains the
         // existing renderer contract of selecting a tightly packed upload.
@@ -379,7 +379,7 @@ namespace CNA::Internal::Renderers::Software
         }
     }
 
-    // REMED-GFX-175: mip levels above 0 used to be dropped on the floor here, which is why NO
+    // Mip levels above 0 used to be dropped on the floor here, which is why NO
     // TextureFilter ordinal could mip-filter on this renderer -- not merely ordinals 0 and 1. The
     // level a caller supplies is now STORED, exactly as given: nothing is downsampled, nothing is
     // generated, and a level the caller never writes is never invented. SOFTWARE-141 also routes

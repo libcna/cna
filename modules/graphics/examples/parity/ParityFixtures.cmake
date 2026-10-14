@@ -141,11 +141,11 @@ set(CNA_CONFORMANCE_FIXTURES
     # instance; a missing declaration is refused by name, a missing input by location, a
     # negative first instance rejected.
     shader_effect_3d_layout
-    # from vulkan_deferred_resource_lifetime_test.cpp (REMED-GFX-075): a custom effect or query disposed before the flush keeps its draw.
+    # from vulkan_deferred_resource_lifetime_test.cpp: a custom effect or query disposed before the flush keeps its draw.
     deferred_effect_query_lifetime
     # from vulkan_depth_range_contract_test.cpp (VULKAN-098): clip depth is [0,1], near and far planes clip.
     clip_depth_range
-    # from vulkan_graphicsdevice_clearoptions_test.cpp (REMED-GFX-018/129): all eight ClearOptions masks on every target type.
+    # from vulkan_graphicsdevice_clearoptions_test.cpp: all eight ClearOptions masks on every target type.
     clear_options_matrix
     # from vulkan_msaa_runtime_change_test.cpp (VULKAN-095): resources survive live MSAA toggles; edges follow the applied count.
     msaa_runtime_change
@@ -153,9 +153,9 @@ set(CNA_CONFORMANCE_FIXTURES
     occlusion_query_precision
     # from vulkan_occlusionquery_reuse_generation_test.cpp (MSR-026): one query reused for 32 frames reports each generation.
     occlusion_query_reuse
-    # from vulkan_orientation_{calibration,effects,rendertarget}_test.cpp (REMED-GFX-011): +X/+Y lands top-right, backbuffer and RT.
+    # from vulkan_orientation_{calibration,effects,rendertarget}_test.cpp: +X/+Y lands top-right, backbuffer and RT.
     effect_orientation
-    # from vulkan_cube_mrt_binding_test.cpp (REMED-GFX-096): cube faces as MRT slots get their own outputs; XNA's refusals.
+    # from vulkan_cube_mrt_binding_test.cpp: cube faces as MRT slots get their own outputs; XNA's refusals.
     cube_mrt_binding
     # from metal_pbr_vertex_colour_test.cpp (AM4-084): glTF COLOR_0 multiplies PBR base colour (rgb
     # and alpha) only when VertexColorEnabledEXT is on; a renderer without it refuses by name (skip).

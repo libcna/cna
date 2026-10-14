@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
+// SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
 // (Viewport.Width/Height), NOT the full render-target/backbuffer dimensions.
 //
 // XNA/FNA contract (FNA SpriteBatch.cs PrepRenderState, lines ~1433-1457): the sprite projection
@@ -29,9 +29,9 @@
 // Only the binary/full-intensity color Red is used for spatial assertions, so a possible sRGB
 // encoding cannot masquerade as a coordinate error (0/255 channel values are gamma-invariant).
 //
-// REMED-GFX-116 added Check D: the converse of Check A. A FULL-TARGET batch followed by a
+// Added Check D: the converse of Check A. A FULL-TARGET batch followed by a
 // sub-Viewport must stay full-target. Capturing the viewport only for a sub-region batch passes
-// A/B/C and still fails D, which is exactly what WebGPU did between REMED-GFX-072 and this task.
+// A/B/C and still fails D, which is exactly what WebGPU did between the SpriteBatch custom-viewport fix and this task.
 //
 // Scene: backbuffer 96x72, custom Viewport V=(19,11,41,29), sprite VIEWPORT-LOCAL Rectangle(5,4,17,11).
 // Correct (viewport-relative) absolute footprint: x in [24,41), y in [15,26) -- width 17, height 11.
@@ -175,7 +175,7 @@ protected:
         // -------------------------------------------------------------------------------------
         // Check A -- backbuffer, custom Viewport (19,11,41,29). Sprite viewport-local (5,4,17,11).
         // Correct footprint: width 17, height 11, minX 24 (=V.X+5), minY 15 (=V.Y+4), all inside
-        // the viewport rectangle. Pre-fix "squish" gives ~7x4 near (21,13); pre-fix "ignored" gives
+        // The viewport rectangle. Pre-fix "squish" gives ~7x4 near (21,13); pre-fix "ignored" gives
         // the raw 17x11 at minX 5, minY 4.
         // -------------------------------------------------------------------------------------
         {
@@ -260,10 +260,10 @@ protected:
         }
 
         // -------------------------------------------------------------------------------------
-        // Check D (REMED-GFX-116) -- the mirror image of Check A: a FULL-TARGET sprite followed by
+        // Check D -- the mirror image of Check A: a FULL-TARGET sprite followed by
         // a sub-Viewport that no draw ever uses. Check A only proves a SUB-REGION batch is not
         // promoted to the whole target; nothing here proved the converse, and a renderer that
-        // captures the viewport only for the sub-region case (WebGPU after REMED-GFX-072) then
+        // captures the viewport only for the sub-region case (WebGPU after the SpriteBatch custom-viewport fix) then
         // resolved the full-target batch against whatever was live when it recorded the pass --
         // squeezing this sprite into the trailing sub-Viewport. The viewport is deliberately NOT
         // restored before the read: that restore is what would hide the defect.

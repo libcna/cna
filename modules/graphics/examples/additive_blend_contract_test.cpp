@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-148: BlendState::Additive is SourceAlpha/One for colour and alpha, with Add as
+// BlendState::Additive is SourceAlpha/One for colour and alpha, with Add as
 // both functions. The destination is therefore never attenuated:
 //
 //   rgb = clamp(src.rgb * src.a + dst.rgb)
@@ -11,7 +11,7 @@
 // source-only equation cannot hide behind white, and the partial-alpha cases distinguish a second
 // source-alpha multiplication from premultiplied AlphaBlend input.
 //
-// REMED-GFX-233 also makes the persistent Position+Color cases a compatibility oracle for
+// Also makes the persistent Position+Color cases a compatibility oracle for
 // VertexBuffer(device, count): that legacy convenience buffer has an empty public declaration but
 // a real 16-byte typed-upload stride, which ordinary submission must not replace with zero.
 
@@ -391,7 +391,7 @@ class AdditiveBlendContractTest final : public Game
         }
 
         // All effect-aware public primitive entry points share the same blend stage.
-        // REMED-GFX-233: the persistent-buffer pair deliberately uses CNA's legacy convenience
+        // The persistent-buffer pair deliberately uses CNA's legacy convenience
         // constructor, whose public declaration is empty even though typed SetData uploads packed
         // 16-byte Position+Color records. Pin that precondition as well as the rendered pixels so
         // replacing the fixture with an explicit declaration cannot hide a zero-stride regression.

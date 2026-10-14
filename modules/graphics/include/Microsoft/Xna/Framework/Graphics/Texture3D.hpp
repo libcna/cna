@@ -140,7 +140,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads data to a sub-volume of the specified mip level.
          *
-         * REMED-GFX-135: this call has exactly two outcomes -- the complete requested box is
+         * This call has exactly two outcomes -- the complete requested box is
          * stored, or it throws. It never returns after storing nothing or only part of the box.
          * Every argument is validated before anything is uploaded, so a rejected call leaves the
          * resource and the source array untouched.
@@ -292,7 +292,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads raw byte data to a sub-volume using a native pointer.
          *
-         * REMED-GFX-135: shares SetData's completion contract -- it returns only after the whole
+         * Shares SetData's completion contract -- it returns only after the whole
          * box has been stored, and otherwise throws.
          *
          * @param level      Mip level to write.
@@ -331,7 +331,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads data from a sub-volume of the specified mip level.
          *
-         * REMED-GFX-130: both overloads above delegate here, so this describes all three. The call
+         * Both overloads above delegate here, so this describes all three. The call
          * has exactly two outcomes. It either writes the requested box's real content into @p data
          * starting at @p startIndex -- slice by slice front to back, each slice row-major with the
          * top row first -- or it throws and leaves @p data byte-for-byte untouched. There is no

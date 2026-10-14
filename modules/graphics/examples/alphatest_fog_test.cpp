@@ -46,7 +46,7 @@ static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 // Kept inside XNA's clip-space Z range [0,1] (NOT OpenGL's [-1,1] -- World/View/Projection are
 // all Identity here, so raw vertex z IS the clip-space z/w, and a negative z would be near-plane
 // clipped away before the pixel shader ever runs).
-// REMED-GFX-005: FogStart=0, FogEnd=-0.9 is the [0,1]-depth analog of EasyGL's [-1,1]
+// FogStart=0, FogEnd=-0.9 is the [0,1]-depth analog of EasyGL's [-1,1]
 // FogStart=-0.9/FogEnd=0.9 choice. With identity View the corrected FNA formula
 // clamp((z+FogEnd)/(FogEnd-FogStart),0,1) only produces a genuine gradient over the *positive*
 // visible-z range when a fog boundary is negative; positive FogStart/FogEnd collapse to constant.

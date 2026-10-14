@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-165 -- the authoritative-backbuffer-dimension contract for GraphicsDevice.GetBackBufferData.
+// The authoritative-backbuffer-dimension contract for GraphicsDevice.GetBackBufferData.
 //
 // A rectangle-less GetBackBufferData addresses the COMPLETE logical backbuffer: for a Color backbuffer
 // reported by PresentationParameters as W x H, a call passing exactly W*H Color elements must succeed
@@ -87,13 +87,13 @@ namespace
 #error "REMED-GFX-165: this renderer has no declared backbuffer-readback contract."
 #endif
 
-    // REMED-GFX-165 cross-renderer control scope. These are PRE-EXISTING renderer behaviours this task
+    // Cross-renderer control scope. These are PRE-EXISTING renderer behaviours this task
     // must NOT change (only WebGPU/SDL_GPU production changes here); they are recorded as independent
     // findings and declared as boundaries rather than failed:
     //   - BGFX's backbuffer read honours only a full-surface read; a sub-rectangle reads back zeros
     //     (the rectangle-coordinate path through GraphicsDevice::GetBackBufferData is unchanged by this
     //     task, so this is Bgfx's own ReadBackbuffer, not the shared fix).
-    //   - BGFX faults inside a runtime backbuffer resize (its bgfx::reset path, cf. REMED-GFX-158).
+    //   - BGFX faults inside a runtime backbuffer resize (its bgfx::reset path, cf. the first-use render-target contract).
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
     constexpr bool kSupportsRuntimeResize = true;
 
@@ -133,7 +133,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-165's public contract, one leg per process. The backbuffer size is chosen per leg so
+ * @brief The public contract, one leg per process. The backbuffer size is chosen per leg so
  *        every leg's first frame is at a size no other leg warmed up.
  */
 class BackbufferReadbackDimensionTest : public Game
@@ -300,7 +300,7 @@ class BackbufferReadbackDimensionTest : public Game
     {
         if (!kRasterizes)
         {
-            // REMED-GFX-162: a non-rasterizing renderer rasterizes no backbuffer, so a VALID read
+            // A non-rasterizing renderer rasterizes no backbuffer, so a VALID read
             // must reject with NotSupportedException rather than fabricate a correctly-sized frame
             // (it formerly filled the caller's buffer with the last Clear() colour). The dimension
             // oracle is therefore unavailable here; the honest, deterministic rejection is asserted

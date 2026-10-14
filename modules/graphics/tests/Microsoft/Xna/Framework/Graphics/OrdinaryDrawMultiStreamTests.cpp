@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-201: the public multi-stream contract on the ORDINARY (non-instanced) draw routes.
+// The public multi-stream contract on the ORDINARY (non-instanced) draw routes.
 //
 // XNA 4.0's GraphicsDevice.SetVertexBuffers binds up to 16 VertexBufferBindings, and a vertex's
 // elements may be split across several of them -- that is the entire reason the overload takes an
@@ -20,7 +20,7 @@
 //   the streams are independent: changing one binding's offset must not move the other stream
 //
 // Fixture geometry -- a three-axis oracle. The target is divided into `kSlotCount` equal-width
-// vertical slots and `kBandCount` equal-height horizontal bands, exactly as REMED-GFX-200's
+// vertical slots and `kBandCount` equal-height horizontal bands, exactly as the ordinary-route VertexOffset fix's
 // OrdinaryDrawBindingOffsetTests.cpp does, and the two axes carry the same meaning:
 //
 //   * the COLUMN axis says WHICH records STREAM 0 (position) supplied
@@ -57,7 +57,7 @@
 // a code.
 //
 // Renderer scope. The RenderTarget2D group is the portable one: every renderer that rasterizes 3D
-// triangles and implements RenderTarget2D::GetData, which is REMED-GFX-200's own oracle set.
+// triangles and implements RenderTarget2D::GetData, which is the oracle set.
 
 #include <algorithm>
 #include <array>
@@ -136,7 +136,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The portable pixel oracle: rasterizes 3D triangles and implements RenderTarget2D::GetData.
-// REMED-GFX-200's own set, which this file's geometry and readback path are taken from.
+// The set, which this file's geometry and readback path are taken from.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryMultiStream()
@@ -637,7 +637,7 @@ namespace
     };
 }
 
-/// REMED-GFX-201: a DECLARED boundary, not a silent skip. A renderer that has not yet been taught
+/// A DECLARED boundary, not a silent skip. A renderer that has not yet been taught
 /// to re-slot its stride-derived input elements across several bindings reports the capability as
 /// false and is rejected deterministically by GraphicsDevice;
 /// UnsupportedRendererRejectsMultiStreamDeterministically below asserts exactly that on every
@@ -1319,7 +1319,7 @@ TEST_F(OrdinaryDrawMultiStreamTest, ReplacingOnlyStream1AndReturningKeepsEachLeg
 // ---------------------------------------------------------------------------
 // Coverage item 16: interleaving a SINGLE-stream draw between two multi-stream draws. The
 // single-stream leg binds a packed 16-byte buffer through SetVertexBuffer, which is the exact
-// pre-REMED-GFX-201 path, and must both render correctly itself and leave no stale second stream
+// pre-the ordinary multi-stream fix path, and must both render correctly itself and leave no stale second stream
 // bound for the leg after it.
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, MultiStreamSingleStreamMultiStreamEachRendersItsOwnLayout)

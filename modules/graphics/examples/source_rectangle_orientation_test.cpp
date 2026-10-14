@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-153: pixel-exact SpriteBatch source-rectangle orientation contract.
+// Pixel-exact SpriteBatch source-rectangle orientation contract.
 //
 // The oracle keeps three coordinate spaces independent:
 //
@@ -66,7 +66,7 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
     constexpr bool kRasterizes = true;
-    // REMED-GFX-165 supplies SDL_GPU's lazy readback proxy, so its backbuffer is measurable here.
+    // Supplies SDL_GPU's lazy readback proxy, so its backbuffer is measurable here.
     constexpr bool kBackbufferReadbackRequired = true;
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr const char* kRendererName = "SOFTWARE";

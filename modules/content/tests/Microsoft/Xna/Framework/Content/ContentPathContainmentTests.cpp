@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-CONTENT-007/-008: public-caller traversal oracles for XNB Song/Video media references
+// Public-caller traversal oracles for XNB Song/Video media references
 // and ContentManager sidecar fields. The fixtures place valid payloads in a controlled sibling-
 // prefix directory so a pre-fix load proves which outside path was selected instead of merely
 // observing an arbitrary exception.

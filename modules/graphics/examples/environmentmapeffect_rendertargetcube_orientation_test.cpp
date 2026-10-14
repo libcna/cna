@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-137 -- a RenderTargetCube drawn into and then sampled by direction keeps "up" as up.
+// A RenderTargetCube drawn into and then sampled by direction keeps "up" as up.
 //
 // The classic XNA dynamic reflection: render the scene into the six faces of a RenderTargetCube, then hand the
 // cube to EnvironmentMapEffect. Each side face is drawn red above and blue below (+Y all red, -Y all blue),

@@ -1240,7 +1240,7 @@ TEST(GltfToCnjToolTest, OracleDumpIsDeterministicSafeAndMatchesTheFixtureManifes
 // plans/plan_gltf.md GLTF-036: the sparse values bufferView sits at byteOffset 64, not 62 as originally
 // authored. 62 is not a multiple of a float's 4 bytes, and cgltf reads a component with a raw
 // `*(const float*)` cast, so the old fixture made the parser perform a misaligned load -- the
-// undefined behaviour UBSan flagged as REMED-NA-016. The fixture was the defect, not the parser;
+// undefined behaviour UBSan flagged as the cgltf misalignment finding. The fixture was the defect, not the parser;
 // ValidateGltfEXT now refuses such a file, so this document would be rejected unchanged.
 TEST(GltfToCnjToolTest, ResolvesSparseAccessorOverride)
 {

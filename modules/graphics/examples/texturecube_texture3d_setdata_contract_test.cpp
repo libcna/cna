@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-135: every public TextureCube::SetData and Texture3D::SetData call must have exactly
+// Every public TextureCube::SetData and Texture3D::SetData call must have exactly
 // ONE honest outcome -- the complete requested region is stored, or the request is rejected
 // deterministically. It must never return normally after storing nothing, or after storing only
 // part of what was asked for.
 //
-// This is the WRITE half of REMED-GFX-127/REMED-GFX-130. Those findings gave the READ side two
+// This is the WRITE half of the honest Texture2D::GetData contract. Those findings gave the READ side two
 // outcomes; the write side kept the old shape, renderer-neutral, in the shared layer itself:
 //
 //     const auto rgba = colorsToRgba(data, startIndex, elementCount);
@@ -29,7 +29,7 @@
 //   * NO LEVEL -- Software's cube renderer returns early for any `level != 0`, because it allocated
 //     storage for level 0 only while TextureCube still reports the full LevelCount.
 //
-// After REMED-GFX-130 the reachable end state is worse than merely losing the data: a caller can
+// After the honest TextureCube/Texture3D readback contract the reachable end state is worse than merely losing the data: a caller can
 // upload a face, read it back, be told "this renderer cannot read a cube face back to the CPU", and
 // still never learn that the write went nowhere either. Check Z2 below states that exact
 // inconsistency as a runtime-derived invariant -- readback support and write support must agree --
@@ -43,7 +43,7 @@
 //   * SetData on a disposed resource throws System::ObjectDisposedException;
 //   * nothing in between: no silent no-op, no partial store reported as a complete write.
 //
-// Every claimed success is verified through REMED-GFX-130's honest GetData contract, never through
+// Every claimed success is verified through the honest GetData contract, never through
 // "the call returned" -- check Z1 records why that oracle is invalid and enforces the real one.
 //
 // Each renderer's capability is declared here explicitly (kContract) rather than inferred at
@@ -96,19 +96,19 @@ namespace
     /**
      * @brief What one public upload path on this renderer is required to do.
      *
-     * `Exact` -- SetData must store the complete requested region, byte for byte, and REMED-GFX-130's
+     * `Exact` -- SetData must store the complete requested region, byte for byte, and the honest TextureCube/Texture3D readback contract's
      * GetData must then return it.
      * `Unsupported` -- SetData must throw System::NotSupportedException. Reserved for a
      * resource/level this renderer genuinely cannot store, never for one it merely has not been
      * checked on.
-     * `AcceptedRowMirrored` -- SetData stores the complete region and REMED-GFX-134's readback
+     * `AcceptedRowMirrored` -- SetData stores the complete region and the readback
      * returns it, but with the ROWS MIRRORED. Used for exactly one entry -- EasyGL's
      * RenderTargetCube -- and never as a fallback. It is a byte-exact assertion, not a weaker one:
      * this renderer's rasterizer fills a rendered face bottom-up (which is why
      * EasyGLRenderTargetCubeRenderer::GetData normalizes) while glTexSubImage2D writes source row 0
      * into texel row 0 like every other renderer's upload, so the two writers of one face disagree
-     * on row order. REMED-GFX-134's own check W1 records that asymmetry as an enforced fact; this
-     * entry is the write side of the same statement. Before REMED-GFX-134 there was no public
+     * on row order. the check W1 records that asymmetry as an enforced fact; this
+     * entry is the write side of the same statement. Before the RenderTargetCube readback contract there was no public
      * readback of a RenderTargetCube outside SdlGpu/WebGPU, so this entry could only assert "did
      * not throw" -- which a SetData that stored nothing would also have satisfied.
      */
@@ -136,9 +136,9 @@ namespace
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless deliberately executes no rasterization and stores no pixel data: it records API
     // usage and resource state for validation/tracing. Its cube SetData is a trace entry, not a
-    // write -- REMED-GFX-130 already deleted the zero-filled buffers that used to make its GetData
+    // write -- the honest TextureCube/Texture3D readback contract already deleted the zero-filled buffers that used to make its GetData
     // look like a readback -- so accepting an upload here would be accept-and-discard by
-    // definition. Texture3D is refused at construction (REMED-CONTENT-004).
+    // definition. Texture3D is refused at construction.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
@@ -353,7 +353,7 @@ class CubeVolumeSetDataContractTest : public Game
         return p;
     }
 
-    /// REMED-GFX-130's honest readback, used here purely as this file's success oracle.
+    /// The honest readback, used here purely as this file's success oracle.
     static ReadProbe ReadCube(const TextureCube& cube, int face, int level, const Rectangle* rect,
                               int w, int h)
     {
@@ -572,7 +572,7 @@ class CubeVolumeSetDataContractTest : public Game
                   "'the call did not throw' is not accepted as proof the data was stored" +
                   WriteFacts(w) + CompareFacts(c));
 
-            // Z2: the reachable inconsistency REMED-GFX-135 was raised for. Post-REMED-GFX-130 a
+            // Z2: the reachable inconsistency the cube/volume upload contract was raised for. Post-the honest TextureCube/Texture3D readback contract a
             // caller could upload a face, have the readback rejected, and never learn the write
             // was dropped too. Write support and read support must agree.
             check(w.returnedNormally == r.read,
@@ -932,7 +932,7 @@ class CubeVolumeSetDataContractTest : public Game
                   "C29 cube: SetData on a disposed TextureCube throws ObjectDisposedException "
                   "instead of silently doing nothing" + WriteFacts(w));
 
-            dead.Dispose();   // REMED-GFX-039: repeated Dispose stays harmless
+            dead.Dispose();   // repeated Dispose stays harmless
             const WriteProbe w2 = WriteCube(dead, 0, 0, nullptr, flat, 0, static_cast<int>(flat.size()));
             check(w2.threwDisposed && !w2.returnedNormally,
                   "C30 cube: a second Dispose() does not change the refusal" + WriteFacts(w2));
@@ -964,7 +964,7 @@ class CubeVolumeSetDataContractTest : public Game
             return;
         }
 
-        // REMED-GFX-134 gave this resource a public readback, so the upload is now VERIFIED here
+        // Gave this resource a public readback, so the upload is now VERIFIED here
         // rather than merely "did not throw". A uniform colour cannot tell a stored face from a
         // dropped one, so the source carries the same per-texel pattern the plain-cube checks use.
         //

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-CONTENT-009: CheckedMultiplyOrThrow() is the shared overflow-safe-multiplication helper
+// CheckedMultiplyOrThrow() is the shared overflow-safe-multiplication helper
 // extracted while fixing a signed-integer-overflow UB finding (confirmed by UBSan) inside
 // Texture2DContentTypeReader.cpp's own REMED-CONTENT-001 decoded-byte-size validation. These
 // tests exercise the helper directly, independent of any one reader's byte-stream plumbing.

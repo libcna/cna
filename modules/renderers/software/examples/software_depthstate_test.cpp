@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-030: permanent public depth-state regression for the Software CPU rasterizer.
+// Permanent public depth-state regression for the Software CPU rasterizer.
 //
 // This test separates the three independent parts of the public depth contract:
 //   * DepthBufferEnable controls whether the stored depth rejects a fragment.

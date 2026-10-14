@@ -4,7 +4,7 @@
 // functionally identical (tex * tint), only the vertex shader/vertex-input-state differ.
 layout(location = 0) in vec2 fragUV;
 layout(location = 1) in vec4 fragTint;
-layout(location = 2) in vec4 fragFog;    // REMED-GFX-009
+layout(location = 2) in vec4 fragFog;
 layout(location = 0) out vec4 outColor;
 
 // plans/plan_sdlgpu.md: fragment-stage sampled textures live in set 2, fragment-stage uniform buffers
@@ -31,6 +31,6 @@ void main() {
     vec4 tex = (pc.textureEnabled > 0.5)
         ? texture(uTexture, fragUV, samplerLodBias.slots0To3.x) : vec4(1.0);
     outColor = tex * fragTint;
-    // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
+    // Blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
     outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);
 }

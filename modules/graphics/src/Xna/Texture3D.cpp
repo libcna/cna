@@ -165,7 +165,7 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(depth, "depth");
-        // REMED-CONTENT-004: renderers without real volume storage leave CreateTexture3D() at its
+        // Renderers without real volume storage leave CreateTexture3D() at its
         // null shared default. Previously that let every subsequent SetData()/GetData() call
         // silently no-op, so the capability is checked before renderer creation instead. The
         // renderer is asked directly: the device's answer also folds in the profile, which the
@@ -342,7 +342,7 @@ namespace Microsoft::Xna::Framework::Graphics
             "Texture3D::SetData", true, level, left, top, right, bottom, front, back,
             data, startIndex, elementCount, 4);
 
-        // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
+        // See TextureCube::SetData's identical note: converted to the REQUESTED
         // BOX rather than to elementCount, so the call never reads source elements it does not
         // upload and the buffer length always matches the region the renderer is told to write.
         const auto rgba = colorsToRgba(
@@ -367,7 +367,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!data)
             throw std::invalid_argument("Texture3D::SetDataPointerEXT: data must not be null");
 
-        // REMED-GFX-135: `if (renderer_)` used to drop the upload silently. Texture3D's constructor
+        // `if (renderer_)` used to drop the upload silently. Texture3D's constructor
         // already refuses a device that reports no GraphicsCapability::Texture3D, so a null renderer
         // here means the resource has been disposed out from under this call or the renderer failed
         // to allocate -- neither of which is a successful store.
@@ -419,7 +419,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int boxD = back - front;
         Texture::ValidateGetDataFormat(format_, 4);
 
-        // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory
+        // See TextureCube::GetData for the full reasoning. `rgba` is scratch memory
         // this layer zero-initializes, so it is never handed to the caller unless the renderer
         // reports it filled the whole box; otherwise the caller's `data` stays byte-for-byte as it
         // was and the missing capability is raised. A null renderer is the same answer one step

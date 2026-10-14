@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-155: a render target produced earlier in a public frame must be visible to a consumer
+// A render target produced earlier in a public frame must be visible to a consumer
 // that draws on the BACKBUFFER later in that same frame.
 //
 //     SetRenderTarget(A)                  // producer
@@ -9,7 +9,7 @@
 //     draw, sampling A as a texture       // consumer -- on the BACKBUFFER
 //     ... finish the ordinary public frame
 //
-// REMED-GFX-151 established this contract for a render-target consumer. This file is the same
+// Established this contract for a render-target consumer. This file is the same
 // contract for the one destination that fixture could only pin, not assert: the backbuffer.
 //
 // THE DEFECT this file reproduces is bgfx-local, and it is an ORDERING defect, not a visibility,
@@ -19,7 +19,7 @@
 // bgfx renderer partitions ids as backbuffer = 0, render-target base ids in [1, 192), per-frame
 // ordered segments in [192, 255) -- so "execute in ascending id" meant "execute the backbuffer
 // FIRST, then render targets in the order their ids happened to be allocated". Measured, the frame
-// behind REMED-GFX-151's leg D6 used views 1, 192, 0 in public order and executed them 0, 1, 192:
+// behind the leg D6 used views 1, 192, 0 in public order and executed them 0, 1, 192:
 // the backbuffer consumer ran before both of its producer's views and sampled an image nothing had
 // rendered into yet. All 32 texels came back (0,0,0,0).
 //
@@ -53,7 +53,7 @@
 //
 // LEGS (each answers one question, so a failure names the layer):
 //
-//   A  render-target consumer              the known-correct control REMED-GFX-151 left green
+//   A  render-target consumer              the known-correct control the same-frame render-to-texture fix left green
 //   B  backbuffer consumer                 the finding itself, SpriteBatch and stock 3D
 //   C  chains ending on the backbuffer     A -> B -> backbuffer, and backbuffer -> A -> backbuffer
 //   D  ordinary Texture2D on the backbuffer  proves the backbuffer draw path independently
@@ -112,7 +112,7 @@ namespace
     /**
      * @brief Whether this renderer rasterizes at all.
      *
-     * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes every readback reject
+     * HEADLESS performs no rasterization, so the contract makes every readback reject
      * deterministically. There is no consumer result to observe there; the legs below assert the
      * rejection instead of a value.
      */
@@ -141,7 +141,7 @@ namespace
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
      *
-     * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
+     * CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
      * It used to read false on SDL_GPU, whose stock-effect paths
      * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` onto the unrelated sibling
@@ -153,11 +153,11 @@ namespace
     /**
      * @brief Whether a bind cycle's SpriteBatch and stock 3D draws replay in public order.
      *
-     * REMED-GFX-157 corrected Vulkan and bgfx, which grouped a cycle's draws by family. WEBGPU
+     * Corrected Vulkan and bgfx, which grouped a cycle's draws by family. WEBGPU
      * grouped them the other way round -- all 3D draws, then all sprites -- so a SpriteBatch
      * followed by an OVERLAPPING 3D draw came out with the sprite on top there, and only leg I0's
      * overlapping render-target probe could see it: every other leg here draws its two families
-     * into disjoint slots, which any grouping renders correctly. REMED-GFX-159 replaced WebGPU's
+     * into disjoint slots, which any grouping renders correctly. the WebGPU draw-order fix replaced WebGPU's
      * fixed per-family replay list with one ordered reference stream, so every renderer now owes
      * public order and this is asserted unconditionally.
      */
@@ -225,7 +225,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-155's public backbuffer-consumer contract for a same-frame render target.
+ * @brief The public backbuffer-consumer contract for a same-frame render target.
  */
 class RenderTargetBackbufferConsumerTest : public Game
 {
@@ -354,7 +354,7 @@ class RenderTargetBackbufferConsumerTest : public Game
     {
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
-        // REMED-GFX-157: pass the depth and rasterizer states EXPLICITLY. A null means
+        // Pass the depth and rasterizer states EXPLICITLY. A null means
         // "DepthStencilState.None and RasterizerState.CullCounterClockwise" (FNA SpriteBatch.cs:
         // `rasterizerState ?? RasterizerState.CullCounterClockwise`), and FNA's PrepRenderState
         // assigns them to the device and never restores them -- so a null left CullCounterClockwise
@@ -375,7 +375,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
         DepthStencilState noDepth = DepthStencilState::None;
-        RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+        RasterizerState noCull = RasterizerState::CullNone;
         sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
         sb.Draw(a, Slot(slotA), Rectangle(0, 0, kPW, kPH), Color::White);
         sb.Draw(b, Slot(slotB), Rectangle(0, 0, kPW, kPH), Color::White);
@@ -385,7 +385,7 @@ class RenderTargetBackbufferConsumerTest : public Game
     /// Draws @p source into backbuffer slot @p slot through BasicEffect, so the ordering contract is
     /// proven for the stock 3D path and not only for SpriteBatch. The slot is expressed as clip-space
     /// quad coordinates rather than as a Viewport, so this leg cannot accidentally exercise the
-    /// viewport-segmentation machinery (REMED-GFX-063/065) instead of the ordering under test.
+    /// viewport-segmentation machinery instead of the ordering under test.
     void Draw3DSlot(GraphicsDevice& dev, Texture2D& source, int slot)
     {
         const Rectangle d = Slot(slot);
@@ -424,7 +424,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
         DepthStencilState noDepth = DepthStencilState::None;
-        RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157, see DrawSpriteSlot
+        RasterizerState noCull = RasterizerState::CullNone;   // the SpriteBatch/3D draw-order fix, see DrawSpriteSlot
         sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
         sb.Draw(source, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
         sb.End();
@@ -518,7 +518,7 @@ class RenderTargetBackbufferConsumerTest : public Game
     // ================================================================ legs
 
     /**
-     * @brief Leg A -- the render-target consumer REMED-GFX-151 left green, kept as the control.
+     * @brief Leg A -- the render-target consumer the same-frame render-to-texture fix left green, kept as the control.
      *
      * If this ever fails, the ordering fix broke the path that already worked, and every backbuffer
      * result below is uninterpretable. It runs first for exactly that reason.
@@ -538,7 +538,7 @@ class RenderTargetBackbufferConsumerTest : public Game
             SpriteBatch sb(dev);
             SamplerState point = SamplerState::PointClamp;
             DepthStencilState noDepth = DepthStencilState::None;
-            RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+            RasterizerState noCull = RasterizerState::CullNone;
             sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
             sb.Draw(a, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
             sb.End();
@@ -760,7 +760,7 @@ class RenderTargetBackbufferConsumerTest : public Game
                 SpriteBatch sb(dev);
                 SamplerState point = SamplerState::PointClamp;
                 DepthStencilState noDepth = DepthStencilState::None;
-                RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+                RasterizerState noCull = RasterizerState::CullNone;
                 sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
                 sb.Draw(producer, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
                 sb.End();
@@ -839,7 +839,7 @@ class RenderTargetBackbufferConsumerTest : public Game
      * reflection whose result is not byte-comparable to a source pattern. Rather than fake that,
      * this leg asserts the two things that ARE expressible and that an ordering change could break:
      * a backbuffer batch issued after a cube bind cycle is exact, and the cube face still holds what
-     * its producer wrote. REMED-GFX-134's reserved cube view ordering is what this protects.
+     * its producer wrote. the reserved cube view ordering is what this protects.
      */
     void LegCubeFaceProducer(GraphicsDevice& dev)
     {
@@ -878,7 +878,7 @@ class RenderTargetBackbufferConsumerTest : public Game
             SpriteBatch sb(dev);
             SamplerState point = SamplerState::PointClamp;
             DepthStencilState noDepth = DepthStencilState::None;
-            RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+            RasterizerState noCull = RasterizerState::CullNone;
             sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
             sb.Draw(patternTex_, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
             sb.End();
@@ -1001,7 +1001,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         const bool c1Mid  = controlPlaced(c1, 1, AltPatternColor);   // 3D between two sprite batches
         const bool c2Last = controlPlaced(c2, 2, PatternColor);      // 3D after a sprite batch
 
-        // REMED-GFX-157: these two were a DECLARATION here, not a check -- an INFO line reporting
+        // These two were a DECLARATION here, not a check -- an INFO line reporting
         // that this renderer "cannot place a stock 3D draw issued after a SpriteBatch in the same
         // bind cycle", which then restricted the render-target cases below to the positions the
         // renderer was believed able to place. Both halves of that were wrong. The draw was not
@@ -1028,7 +1028,7 @@ class RenderTargetBackbufferConsumerTest : public Game
                 SpriteBatch sb(dev);
                 SamplerState point = SamplerState::PointClamp;
                 DepthStencilState noDepth = DepthStencilState::None;
-                RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+                RasterizerState noCull = RasterizerState::CullNone;
                 sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
                 sb.Draw(altPatternTex_, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH),
                         Color::White);
@@ -1243,7 +1243,7 @@ class RenderTargetBackbufferConsumerTest : public Game
                     SpriteBatch sb(dev);
                     SamplerState point = SamplerState::PointClamp;
                     DepthStencilState noDepth = DepthStencilState::None;
-                    RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+                    RasterizerState noCull = RasterizerState::CullNone;
                     sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
                     sb.Draw(patternTex_, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH),
                             Color::White);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-136: a RenderTargetCube's public RenderTargetUsage must reach the renderer that decides
+// A RenderTargetCube's public RenderTargetUsage must reach the renderer that decides
 // what happens to the face's existing colour when it is bound.
 //
 // `IGraphicsRenderer::CreateRenderTarget2D` has carried a `preserveContents` parameter since the
@@ -12,8 +12,8 @@
 // `colorAttachment.loadOp = WGPULoadOp_Clear` unconditionally, each with a source comment naming
 // the missing parameter. So a `PreserveContents` cube face was wiped on every bind cycle.
 //
-// This file is the oracle for that. It reuses REMED-GFX-134's asymmetric face producer verbatim --
-// drawn geometry, never Clear() (REMED-GFX-129 separately owns an explicit Clear() being dropped on
+// This file is the oracle for that. It reuses the asymmetric face producer verbatim --
+// drawn geometry, never Clear() (the ordered Clear fix separately owns an explicit Clear() being dropped on
 // a preserving target, and a uniform clear colour cannot detect a flip, a wrong face or a stale
 // face anyway), a five-region pattern whose six colours rotate by face index, from a 0/255-only
 // palette that is an exact fixed point of sRGB encoding so every comparison here is byte-exact even
@@ -23,7 +23,7 @@
 // producer itself is proven before anything else is claimed), then rebound and given a marker over
 // a SMALL corner only. Under PreserveContents the whole face must then read back as the original
 // pattern with just that corner replaced. A renderer that discards passes the "the region I drew is
-// correct" half and fails the other half, which is exactly the failure REMED-GFX-134 measured.
+// correct" half and fails the other half, which is exactly the failure the RenderTargetCube readback contract measured.
 //
 // What the public contract is taken to be here, and where each part comes from:
 //   * PreserveContents -- the face's COLOUR survives an unbind/rebind cycle exactly. FNA's
@@ -34,13 +34,13 @@
 //     every bind, mirroring FNA's own `if (clearTarget == DiscardContents) Clear(...)`. So the
 //     replacement colour IS defined by the shared layer and is asserted, per renderer.
 //   * PlatformContents -- CNA maps it to preservation, i.e. FNA's own `usage != DiscardContents`
-//     rule, and REMED-GFX-136 makes that ONE helper both public targets call. Before it, the two
+//     rule, and the RenderTargetUsage propagation fix makes that ONE helper both public targets call. Before it, the two
 //     halves of CNA disagreed: GraphicsDevice::SetRenderTargets only ever cleared a
 //     DiscardContents target (so the shared layer already treated PlatformContents as
 //     non-discarding), while RenderTarget2D passed `usage == PreserveContents` to the renderer (so
 //     the renderer treated it as discarding). Whichever half won was a per-renderer accident.
 //   * Depth/stencil -- a SEPARATE guarantee, not a missing one, and not this file's subject.
-//     REMED-GFX-142 later established from FNA3D's own header ("Set this to 1 to store the
+// Later established from FNA3D's own header ("Set this to 1 to store the
 //     color/depth/stencil contents for future use") that RenderTargetUsage governs all three
 //     aspects, and made every renderer honour that; `examples/rendertarget_depthstencil_usage_test`
 //     is its oracle. What THIS file asserts about depth is only that a depth/stencil attachment
@@ -117,7 +117,7 @@ namespace
         bool    cubeTargetBinds;   ///< CreateRenderTargetCube() returns a real object AND it binds.
         Support readback;          ///< RenderTargetCube::GetData at mip 0.
         /// RenderTargetUsage::PreserveContents keeps a face's colour byte-exact across a full
-        /// unbind/rebind cycle. This is REMED-GFX-136's subject: false is a declared defect, and
+        /// unbind/rebind cycle. This is the subject: false is a declared defect, and
         /// after the fix no supported renderer declares false.
         bool    preserves;
         /// A DiscardContents rebind leaves the texels the new pass did not draw at the shared
@@ -134,7 +134,7 @@ namespace
 
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it has no rendered face to preserve OR to discard and its
-    // readback stays the deterministic refusal REMED-GFX-130 established. The usage parameter is
+    // readback stays the deterministic refusal the honest TextureCube/Texture3D readback contract established. The usage parameter is
     // still required to reach it (a source/compile contract), which is what the C1 property checks
     // and the creation checks cover here.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, false, false,
@@ -146,7 +146,7 @@ namespace
     // `msaaPreserves` was false here, measured: this renderer allocated ONE multisample colour
     // renderbuffer shared by all six faces (the same allocation choice Vulkan and SdlGpu made), so
     // rebinding a multisampled face reloaded whichever face was rendered last, and check M3 proved
-    // it by interleaving a second face. REMED-GFX-141 gave every face its own renderbuffer, so it
+    // it by interleaving a second face. the per-face multisample attachment fix gave every face its own renderbuffer, so it
     // is now true and M2/M3 require exact content -- the boundary this file recorded is closed, and
     // examples/rendertargetcube_msaa_face_test.cpp is the fuller oracle for it.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, true,
@@ -163,7 +163,7 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     // `msaaPreserves` was false here: this renderer's multisampled cube target rendered into ONE
     // shared single-layer scratch texture that had to be cycled on every pass and was resolved away
-    // immediately, so there was nothing per-face to load back. REMED-GFX-141 gave every face its own
+    // immediately, so there was nothing per-face to load back. the per-face multisample attachment fix gave every face its own
     // texture, dropped the cycling and switched a preserving target to
     // SDL_GPU_STOREOP_RESOLVE_AND_STORE, so it is now true and M2/M3 require exact content.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, true,
@@ -171,7 +171,7 @@ namespace
 #elif defined(CNA_RENDERER_DIRECTX9)
     // `mipMapCubeTargets` true only in the sense that construction and level-0 rendering work:
     // D3D9RenderTargetCubeRenderer::Recreate() allocates ONE level whatever mipMap asked for
-    // (REMED-GFX-139). This file only ever asserts level 0, so that boundary is untouched here.
+    //. This file only ever asserts level 0, so that boundary is untouched here.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, true, true,
                                  false, Support::Exact, false, true, true};
 #else
@@ -378,10 +378,10 @@ class RenderTargetCubeUsageTest : public Game
      * and replayed every queued batch for each -- so a producer pass and a later partial pass
      * issued into the same flush window collapsed into a single pass whose one load action ran
      * before BOTH, and the producer's content survived even on a renderer that discards on every
-     * bind. **REMED-GFX-140 fixed that**: Phase 1 was then keyed on the bind cycle, so a rebind was
+     * bind. **fixed that**: Phase 1 was then keyed on the bind cycle, so a rebind was
      * a separate native pass with its own load action. **SdlGpu had the identical defect by a
      * different route** -- `EnsureFrameRendered` gave each unique `DrawTarget` (resource plus cube
-     * face) one `SDL_BeginGPURenderPass` -- **and REMED-GFX-145 fixed it the same way.**
+     * face) one `SDL_BeginGPURenderPass` -- **and the per-bind-cycle render pass fix fixed it the same way.**
      *
      * The barrier stays, and is still required, because it is what makes this file's subject
      * observable at all rather than a workaround for the collapsing: a preservation check has to
@@ -821,8 +821,8 @@ class RenderTargetCubeUsageTest : public Game
      * holding both cycles' draws produces exactly the pixels two LOAD passes would -- so what this
      * asserts is only that the composition is right either way: the producer's pattern with the
      * marker over it. It passes on a discarding renderer too, which is exactly why it is not the
-     * oracle for P3, and it is NOT a licence to collapse: REMED-GFX-140 (the retired VULKAN
-     * renderer) and REMED-GFX-145 (SdlGpu) established that every bind cycle is its own logical
+     * oracle for P3, and it is NOT a licence to collapse: the per-bind-cycle render pass fix (the retired VULKAN
+     * renderer) and the per-bind-cycle render pass fix (SdlGpu) established that every bind cycle is its own logical
      * pass and
      * `examples/rendertarget_pass_boundary_test.cpp` enforces that on a DiscardContents target,
      * where the two shapes differ.
@@ -935,7 +935,7 @@ class RenderTargetCubeUsageTest : public Game
      * CNA has exactly one mapping and it is FNA's own: `usage != DiscardContents` preserves. That
      * is not a new invention here -- `GraphicsDevice::SetRenderTargets` has always cleared ONLY a
      * DiscardContents target, so the shared layer already treated PlatformContents as
-     * non-discarding; REMED-GFX-136 makes the RENDERER flag agree with it instead of contradicting
+     * non-discarding; the RenderTargetUsage propagation fix makes the RENDERER flag agree with it instead of contradicting
      * it. So PlatformContents is asserted exactly as strictly as PreserveContents.
      */
     void RunPlatformContents(GraphicsDevice& dev)
@@ -1079,7 +1079,7 @@ class RenderTargetCubeUsageTest : public Game
 
         // M3: whether the preserved content came from the RESOLVED face or from a multisample
         // scratch surface shared between faces. A renderer whose MSAA attachment is one shared
-        // resource -- which is how EasyGL, Vulkan and SdlGpu all allocated it until REMED-GFX-141 --
+        // resource -- which is how EasyGL, Vulkan and SdlGpu all allocated it until the per-face multisample attachment fix --
         // passes M2 (one face, nothing else in between) while actually reloading the LAST face's
         // samples. Face A -> face B -> face A separates the two, and this is the check that first
         // measured the defect.
@@ -1187,7 +1187,7 @@ protected:
         if (done_) { Exit(); return; }
         // Frame 0 is a deliberate warm-up: bgfx copies every createTexture payload at
         // bgfx::frame(), so without it the 1x1 producer sources would still be unuploaded during
-        // the very first Draw and the whole battery would measure black. See REMED-GFX-134's own
+        // the very first Draw and the whole battery would measure black.'s own
         // identical warm-up.
         if (!warmedUp_)
         {

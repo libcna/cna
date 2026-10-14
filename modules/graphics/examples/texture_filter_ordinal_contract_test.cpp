@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification filter, a
+// Every public TextureFilter ordinal names a SEPARATE magnification filter, a
 // SEPARATE minification filter and a SEPARATE mipmap filter, and a conforming renderer must
 // translate all three, not reduce the ordinal to one boolean.
 //
@@ -59,7 +59,7 @@
 //
 // GFX-172 BOUNDARY. DualTextureEffect is exercised on slot 0 only. WebGPU's DualTexture3D bind
 // group declares one sampler for two texture views, so SamplerStates[1] is inexpressible there;
-// that is REMED-GFX-172, a bind-group-layout and WGSL question, and it is deliberately NOT
+// that is the dual-texture sampler fix, a bind-group-layout and WGSL question, and it is deliberately NOT
 // measured or changed here.
 //
 // LEGS:
@@ -276,7 +276,7 @@ namespace
     // ---------------------------------------------------------------------------------------------
 
     // ---------------------------------------------------------------------------------------------
-    // Raw vertex layouts, matching each stock family's declared GPU stride exactly (REMED-GFX-125:
+    // Raw vertex layouts, matching each stock family's declared GPU stride exactly (
     // the object size of the public vertex types is not the stream stride).
     // ---------------------------------------------------------------------------------------------
 
@@ -441,7 +441,7 @@ class TextureFilterOrdinalContractTest : public Game
     }
 
     /// Puts the device into the state a raw 3D draw needs. A preceding SpriteBatch leaves
-    /// CullCounterClockwise behind, which culls this quad's winding (REMED-GFX-160).
+    /// CullCounterClockwise behind, which culls this quad's winding.
     static void ResetDeviceState(GraphicsDevice& dev, int w, int h)
     {
         dev.setViewportProperty(Viewport(0, 0, w, h));
@@ -845,7 +845,7 @@ class TextureFilterOrdinalContractTest : public Game
     {
         // Texture 2 is a single white texel, so `tex0 * (2 * tex1)` is a uniform scale of texture 0
         // and the filtering question stays a question about slot 0 alone. Slot 1 is left at the
-        // device default in BOTH runs -- REMED-GFX-172 is deliberately not measured here.
+        // device default in BOTH runs -- the dual-texture sampler fix is deliberately not measured here.
         DualTextureEffect fx(dev);
         Matrices(fx);
         fx.setTextureProperty(&tex8x4_);
@@ -1200,7 +1200,7 @@ protected:
         tex4x4_ = Texture2D::CreateFromPixels(dev, p4x4_.w, p4x4_.h, b4);
         white_  = Texture2D::CreateFromPixels(dev, 1, 1,
                       std::vector<std::uint8_t>{255, 255, 255, 255});
-        // A non-rasterizing renderer rejects cube uploads by REMED-GFX-135's contract, and it never
+        // A non-rasterizing renderer rejects cube uploads by the contract, and it never
         // reaches the effect families anyway, so an unavailable cube must not abort the run.
         try
         {

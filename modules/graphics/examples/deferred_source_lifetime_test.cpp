@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-167: a resource sampled by a draw that has only been QUEUED must stay bindable until
+// A resource sampled by a draw that has only been QUEUED must stay bindable until
 // that draw actually renders — and destroying the public wrapper first must never take the process
 // down.
 //
@@ -238,7 +238,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-167's public contract: a queued draw outliving its source is safe and correct.
+ * @brief The public contract: a queued draw outliving its source is safe and correct.
  */
 class DeferredSourceLifetimeTest : public Game
 {
@@ -317,7 +317,7 @@ class DeferredSourceLifetimeTest : public Game
     /**
      * @brief Reads the kBBW x kBBH backbuffer through the rectangle-LESS overload.
      *
-     * REMED-GFX-165 is fixed: a rectangle-less GetBackBufferData now sizes its region from the
+     * Is fixed: a rectangle-less GetBackBufferData now sizes its region from the
      * authoritative PresentationParameters backbuffer, not the renderer's live viewport, so a
      * correctly-sized W*H array reads the whole backbuffer on WebGPU and SDL_GPU too. This used to
      * name an explicit rectangle to avoid that defect; the workaround has been removed now that the

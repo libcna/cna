@@ -10,7 +10,7 @@
 //      throws InvalidOperationException ("Disposing target that is still bound").
 //   5. RenderTarget2D disposed after being unbound → no exception.
 //
-// REMED-GFX-168 strengthening. Sections 4 and 5 above tested only Dispose(), which the public layer
+// Strengthening. Sections 4 and 5 above tested only Dispose(), which the public layer
 // REFUSES while the target is bound — and section 4 then wrote `dev.SetRenderTarget(nullptr); //
 // unbind before leaving scope`, so the DESTRUCTOR never ran while bound. That refusal is exactly what
 // makes the destructor the only route into the case, because ~RenderTarget2D and ~RenderTargetCube
@@ -59,7 +59,7 @@ class BoundResourceDisposeTest : public Game
     void check(bool ok, const char* label)
     {
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
-        // REMED-GFX-168: flushed per check. Sections 6-8's pre-fix outcome is a SIGSEGV, and buffered
+        // Flushed per check. Sections 6-8's pre-fix outcome is a SIGSEGV, and buffered
         // output dies with the process -- without this, the A/B record of which checks had already
         // passed before the fault was lost entirely.
         std::fflush(stdout);
@@ -74,7 +74,7 @@ class BoundResourceDisposeTest : public Game
     }
 
     /**
-     * @brief REMED-GFX-168: a complete fresh bind cycle, as the state oracle after a detach.
+     * @brief A complete fresh bind cycle, as the state oracle after a detach.
      *
      * "It did not crash" is not enough: the transition away from a destroyed target must also leave
      * the device able to bind, clear and unbind a NEW target. Returns false rather than throwing, so
@@ -177,7 +177,7 @@ protected:
             dev.SetRenderTarget(&rt);
             check(throwsInvalidOp(rt),
                   "RenderTarget2D: dispose while bound throws InvalidOperationException");
-            // REMED-GFX-168: this unbind is what kept the destructor out of the bound state, and
+            // This unbind is what kept the destructor out of the bound state, and
             // therefore out of the defect. Section 6 below runs the sequence without it.
             dev.SetRenderTarget(nullptr);   // unbind before leaving scope
         }
@@ -195,7 +195,7 @@ protected:
                   "RenderTarget2D: IsDisposed true after dispose");
         }
 
-        // ── 6. RenderTarget2D DESTROYED while still bound (REMED-GFX-168) ──
+        // ── 6. RenderTarget2D DESTROYED while still bound ──
         {
             {
                 RenderTarget2D rt(dev, 16, 16);
@@ -209,7 +209,7 @@ protected:
                   "RenderTarget2D: a fresh bind cycle works after a destroyed-while-bound target");
         }
 
-        // ── 7. RenderTargetCube face DESTROYED while bound (REMED-GFX-168) ─
+        // ── 7. RenderTargetCube face DESTROYED while bound ─
         {
             {
                 RenderTargetCube cube(dev, 8, false, SurfaceFormat::Color, DepthFormat::None);
@@ -226,7 +226,7 @@ protected:
                   "RenderTargetCube: a fresh bind cycle works after a destroyed-while-bound cube");
         }
 
-        // ── 8. One slot of a bound MRT set DESTROYED (REMED-GFX-168) ───────
+        // ── 8. One slot of a bound MRT set DESTROYED ───────
         // The surviving slot is a live target whose own finalization is still owed, so a detach that
         // abandoned the SET rather than the slot would lose it. Declared rather than asserted when
         // this device cannot bind two targets at once.

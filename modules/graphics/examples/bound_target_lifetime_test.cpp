@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-168: destroying a RenderTarget2D that is STILL the bound render target must never make
+// Destroying a RenderTarget2D that is STILL the bound render target must never make
 // the next SetRenderTarget transition unsafe, and must leave the next target and the backbuffer
 // exactly correct.
 //
@@ -222,7 +222,7 @@ namespace
      * @brief Whether an MSAA render target's RESOLVED colour is publicly readable after an unbind.
      *
      * Leg D1's control half only. This was declared false on BGFX, where the resolved level 0
-     * measured (0,0,0,0) against a flat (70,145,210,255) clear. That gap was REMED-GFX-154 and is
+     * measured (0,0,0,0) against a flat (70,145,210,255) clear. That gap was the multisampled readback contract and is
      * fixed, so the BGFX arm is gone and D1a measures the resolved colour like every other renderer.
      */
     constexpr bool kMsaaResolveReadable = true;
@@ -302,7 +302,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-168's public contract: a render target destroyed WHILE BOUND is safe, and the
+ * @brief The public contract: a render target destroyed WHILE BOUND is safe, and the
  *        next target and the backbuffer stay exactly correct.
  */
 class BoundTargetLifetimeTest : public Game
@@ -412,7 +412,7 @@ class BoundTargetLifetimeTest : public Game
     /**
      * @brief Reads the kBBW x kBBH backbuffer through the rectangle-LESS overload.
      *
-     * REMED-GFX-165 is fixed: a rectangle-less GetBackBufferData now sizes its region from the
+     * Is fixed: a rectangle-less GetBackBufferData now sizes its region from the
      * authoritative PresentationParameters backbuffer rather than the renderer's live viewport, so it
      * reads the whole backbuffer correctly on every renderer. This used to name an explicit rectangle
      * to avoid that defect; the workaround has been removed now that the overload it worked around is
@@ -1242,7 +1242,7 @@ class BoundTargetLifetimeTest : public Game
         constexpr int kRounds = 120;
         /// The fewest rounds that still forces GL/native name reuse many times over. A renderer with a
         /// documented per-FRAME resource cap (bgfx runs out of ordered view-segment ids past ~190
-        /// segments, REMED-GFX-065) cannot reach 120 in one frame; below this many, the leg would not
+        /// segments) cannot reach 120 in one frame; below this many, the leg would not
         /// be measuring repetition at all and is a failure rather than a boundary.
         constexpr int kMinRounds = 8;
         step("M1: 120 rounds of create / bind / draw / destroy-while-bound");

@@ -143,7 +143,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "WorldViewProj", world * view * projection);
         UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "World", world);
-        // FogParams.w carries WeightsPerVertex. REMED-GFX-010: fog moved to its own FogVector
+        // FogParams.w carries WeightsPerVertex. Fog moved to its own FogVector
         // register (the FNA view-space fog vector), dotted with the POST-skin position in the VS;
         // FogParams.xyz are now unused.
         const float fogParams[4] = {
@@ -187,7 +187,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
+            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
             // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
             device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
@@ -196,7 +196,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            // REMED-GFX-060: honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
+            // Honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
             device_->DrawPrimitive(ToD3D9Topology(primitive), static_cast<UINT>(params.vertexStart),
                                    static_cast<UINT>(primitiveCount));
         }

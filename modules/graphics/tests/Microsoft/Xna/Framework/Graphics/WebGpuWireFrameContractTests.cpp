@@ -36,7 +36,7 @@
 // The expansion happens at QUEUE time, so what the replay receives is an ordinary 32-bit indexed
 // line-list command and no Issue* path has a wireframe branch at all.
 //
-// The geometry is REMED-GFX-209's asymmetric triangle, shared through WireFrameTriangleOracle.hpp
+// The geometry is the asymmetric triangle, shared through WireFrameTriangleOracle.hpp
 // rather than copied, so these readings are directly comparable with the per-renderer contract
 // suite's own. What this file adds over that shared suite is the NATIVE cardinality: how many
 // commands, pipelines, passes, submits and validation errors the wireframe request actually costs.

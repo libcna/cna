@@ -102,7 +102,7 @@ namespace CNA::Internal::Renderers::WebGPU
         out[127] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
         out[128] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
 
-        // REMED-GFX-167's rule: resolve to a VALUE here, at the public draw call, while the
+        // The rule: resolve to a VALUE here, at the public draw call, while the
         // resource is unambiguously alive, so the queued command never dereferences a wrapper.
         const auto sampled2D = [](const ITextureRenderer* texture) {
             const auto* samplable =
@@ -226,7 +226,7 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         WebGPUIblStateEXT state;
 
-        // REMED-GFX-167's rule, as CaptureShadowStateEXT above states it: resolve to a VALUE here,
+        // The rule, as CaptureShadowStateEXT above states it: resolve to a VALUE here,
         // at the public draw call, while the resources are unambiguously alive.
         const auto* irradiance = params.iblIrradiance != nullptr
             ? dynamic_cast<const IWebGPUCubeSamplable*>(params.iblIrradiance) : nullptr;

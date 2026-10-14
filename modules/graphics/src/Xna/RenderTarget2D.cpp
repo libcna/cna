@@ -109,7 +109,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // request, e.g. OpenGL1 without GL_ARB_framebuffer_object) returns nullptr here.
         // Construction is deliberately allowed to succeed anyway -- Texture3D/TextureCube
         // establish the same "null-object" convention elsewhere in this file's sibling classes
-        // (REMED-CONTENT-004, Task 774): every operation that actually needs real storage
+        // (Task 774): every operation that actually needs real storage
         // (Texture2D::SetData/GetData, and GraphicsDevice::SetRenderTarget's bind path) checks
         // for a null renderer at its own point of use and throws NotSupportedException there,
         // rather than construction eagerly refusing an object that may never be bound or sampled.
@@ -138,7 +138,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             device, width, height,
                             SelectRenderTargetFormatEXT(device, preferredFormat),
                             preferredDepthFormat,
-                            // REMED-GFX-136: one shared mapping for both public render targets.
+                            // One shared mapping for both public render targets.
                             // The literal `usage == PreserveContents` this replaces contradicted
                             // GraphicsDevice::SetRenderTargets, which only ever clears a
                             // DiscardContents target, so PlatformContents was preserved by the

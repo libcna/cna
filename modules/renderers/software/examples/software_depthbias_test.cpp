@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-083: the Software (CPU-raster) renderer must honor RasterizerState.DepthBias and
+// The Software (CPU-raster) renderer must honor RasterizerState.DepthBias and
 // RasterizerState.SlopeScaleDepthBias. Before this task SoftwareRenderer::ApplyRasterizerState
 // dropped BOTH float arguments (its 4th/5th params were unnamed `float, float`), so the per-fragment
 // depth written by the rasterizer received no polygon offset -- Software behaved as if DepthBias == 0

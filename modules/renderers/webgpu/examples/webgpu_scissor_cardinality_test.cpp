@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-146, structural half: capturing the scissor state per draw must stay DYNAMIC pass
+// The deferred scissor capture, structural half: capturing the scissor state per draw must stay DYNAMIC pass
 // state.
 //
 // The pixel fixture (examples/deferred_scissor_capture_test.cpp) proves the captured value is the
@@ -14,7 +14,7 @@
 //
 // Every count below is read from the live renderer, before and after a known public sequence, so
 // each expectation is an exact number rather than a trend. The viewport counter is read alongside
-// it: REMED-GFX-116's mechanism must be untouched, so a sequence that changes only the rectangle
+// it: the mechanism must be untouched, so a sequence that changes only the rectangle
 // must issue exactly ONE native setViewport (the one that opens the pass). The renderer's
 // uncaptured-error callback count is also reported: WebGPU validation must stay silent through
 // every rectangle used here, including the boundary ones (final row/column, 1x1, degenerate,
@@ -203,7 +203,7 @@ class WebGpuScissorCardinalityTest : public Game
             // One pass-opening call plus one per genuine rectangle transition.
             checkCount(renderer.GetSetScissorCallCountEXT() - ss0, 5,
                        "S1 four rectangles in one cycle: native setScissorRect calls");
-            // REMED-GFX-116 is untouched: the viewport never changed, so only the pass-opening
+            // Is untouched: the viewport never changed, so only the pass-opening
             // call is issued.
             checkCount(renderer.GetSetViewportCallCountEXT() - sv0, 1,
                        "S1 four rectangles in one cycle: native setViewport calls");

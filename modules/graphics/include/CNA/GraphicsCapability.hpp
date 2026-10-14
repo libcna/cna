@@ -56,8 +56,8 @@ namespace CNA
         /**
          * @brief More than one `VertexBufferBinding` of the same input rate, on any draw route --
          * a `VertexDeclaration` whose elements are split across several bound buffers
-         * (REMED-GFX-201), or several per-instance streams at their own frequencies
-         * (REMED-GFX-202).
+         *, or several per-instance streams at their own frequencies
+         *.
          *
          * XNA 4.0 allows both on every draw route, and CNA's shared layer carries the complete
          * binding set to the renderer boundary as `GpuDrawParams::vertexStreams` -- identically for

@@ -71,7 +71,7 @@ static constexpr D3D9ShaderConstantSlot kPbrSkinned3DVS_Registers[] = {
     {"World", 'v', 4, 3},
     {"FogParams", 'v', 8, 1},
     {"Bones", 'v', 9, 216},
-    {"FogVector", 'v', 225, 1}   // REMED-GFX-010: D3DDisassemble-verified (c225, after Bones c9..c224)
+    {"FogVector", 'v', 225, 1}   // D3DDisassemble-verified (c225, after Bones c9..c224)
 };
 static constexpr int kPbrSkinned3DVS_RegistersCount = 5;
 
@@ -106,7 +106,7 @@ static constexpr D3D9ShaderConstantSlot kSkinnedVertexColor3DVS_Registers[] = {
     {"World", 'v', 4, 3},
     {"FogParams", 'v', 8, 1},
     {"Bones", 'v', 9, 216},
-    {"FogVector", 'v', 225, 1}   // REMED-GFX-010: D3DDisassemble-verified (c225, after Bones c9..c224)
+    {"FogVector", 'v', 225, 1}   // D3DDisassemble-verified (c225, after Bones c9..c224)
 };
 static constexpr int kSkinnedVertexColor3DVS_RegistersCount = 5;
 

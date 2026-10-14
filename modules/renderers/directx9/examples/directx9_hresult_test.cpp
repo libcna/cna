@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-092: deterministic first-failure coverage for D3D9 state, render-target, depth-
+// Deterministic first-failure coverage for D3D9 state, render-target, depth-
 // stencil, and depth-surface-allocation HRESULT handling.  This deliberately uses the real
 // Wine/DXVK9 device; the narrow renderer-local one-shot injection only substitutes a single
 // checked HRESULT before that one native call, rather than attempting to destabilize the driver.

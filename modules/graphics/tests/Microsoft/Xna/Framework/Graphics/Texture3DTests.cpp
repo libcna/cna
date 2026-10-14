@@ -133,7 +133,7 @@ void ExpectExactExceptionContaining(TCallable&& callable, const char* text)
 // Constructor / properties
 // -----------------------------------------------------------------------
 
-// REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability. Every test below
+// Texture3D is a documented, renderer-dependent capability. Every test below
 // constructs a real Texture3D, so a renderer without volume storage skips this fixture; the
 // mirror-image unsupported-renderer test below verifies the constructor's exception contract.
 class Texture3DTest : public ::testing::Test
@@ -309,7 +309,7 @@ TEST_F(Texture3DTest, SetDataStartIndexNegativeStartIndexUsesXnaHelperParameterN
         [&] { tex.SetData(buf.data(), -1, 8); }, "dataIndex");
 }
 
-// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped the
+// Both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped the
 // upload passed just as easily as one that stored it. Every renderer reaching this fixture has real
 // volume storage (the SetUp above skips the rest), so the readback is the oracle: it proves the
 // second (startIndex) overload stored ITS OWN data rather than leaving the first call's behind.
@@ -334,7 +334,7 @@ TEST_F(Texture3DTest, SetDataExactElementCountStoresTheWholeVolume)
         EXPECT_EQ(c.getPackedValueProperty(), second[0].getPackedValueProperty());
 }
 
-// REMED-GFX-135: a source array padded on both sides of the uploaded window -- the padding must
+// A source array padded on both sides of the uploaded window -- the padding must
 // never reach the resource, which is what proves startIndex is applied exactly once.
 TEST_F(Texture3DTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
 {
@@ -444,7 +444,7 @@ TEST_F(Texture3DTest, GenericValueTypeStillRequiresAWidthThatDividesTheFormat)
     EXPECT_THROW(texture.GetData(&value, 1), System::ArgumentException);
 }
 
-// REMED-GFX-135: SetData after Dispose() used to be a silent no-op, while GetData already threw.
+// SetData after Dispose() used to be a silent no-op, while GetData already threw.
 TEST_F(Texture3DTest, SetDataAfterDisposeThrowsObjectDisposed)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
@@ -550,7 +550,7 @@ TEST_F(Texture3DTest, SetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
         EXPECT_EQ(color.getPackedValueProperty(), baseline[0].getPackedValueProperty());
 }
 
-// REMED-GFX-135: was a bare EXPECT_NO_THROW. It now proves the sub-box landed on slice 0 only and
+// Was a bare EXPECT_NO_THROW. It now proves the sub-box landed on slice 0 only and
 // left slice 1 untouched -- a write that flattened the volume or duplicated the slice fails.
 TEST_F(Texture3DTest, SetDataBoxWithinBoundsStoresOnlyThatSlice)
 {
@@ -788,7 +788,7 @@ TEST_F(Texture3DTest, GetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
     rejectedBoxWithoutMutation(2, 2, 3, 12);
 }
 
-// REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
+// False-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
 // nothing about what GetData produced -- a renderer that read nothing and a renderer that read the
 // slice correctly both passed it. It now asserts the uploaded content itself.
 TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSlice)
@@ -803,7 +803,7 @@ TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSlice)
     tex.SetData(uploaded, 8);
 
     // Every renderer that reaches this point reports GraphicsCapability::Texture3D (the fixture
-    // skips the ones that do not), and REMED-GFX-130 made that report honest everywhere -- ASCII
+    // skips the ones that do not), and the honest TextureCube/Texture3D readback contract made that report honest everywhere -- ASCII
     // used to answer true from IGraphicsRenderer::SupportsCapability's own default while creating
     // no volume resource at all. So real content is the only acceptable outcome here.
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);

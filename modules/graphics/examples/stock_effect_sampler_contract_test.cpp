@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-169: every stock 3D effect must sample its textures through the public
+// Every stock 3D effect must sample its textures through the public
 // `GraphicsDevice.SamplerStates[slot]`, exactly like SpriteBatch already does.
 //
 // THE CONTRACT. `SamplerStates[slot]` defines filtering and addressing for the texture bound to
@@ -609,7 +609,7 @@ protected:
         tex2_ = Texture2D::CreateFromPixels(dev, kTex, kTex, Bytes(pattern2_));
         white_ = Texture2D::CreateFromPixels(dev, 1, 1,
                      std::vector<std::uint8_t>{255, 255, 255, 255});
-        // A non-rasterizing renderer rejects cube uploads by REMED-GFX-135's contract, and it never
+        // A non-rasterizing renderer rejects cube uploads by the contract, and it never
         // reaches the effect families anyway, so an unavailable cube must not abort the run before
         // the honest-rejection leg gets to assert anything.
         try

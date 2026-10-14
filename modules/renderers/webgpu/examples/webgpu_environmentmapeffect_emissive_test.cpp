@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-007 (WebGPU slice): env_map3d.wgsl's fragment stage must add EmissiveColor UNSCALED
+// (WebGPU slice): env_map3d.wgsl's fragment stage must add EmissiveColor UNSCALED
 // (FNA Lighting.fxh: litRGB = lightSum*DiffuseColor + EmissiveColor), NOT
 // (EmissiveColor + lightSum)*DiffuseColor. The wrong form re-multiplies the already-ambient-folded
 // emissive by DiffuseColor a second time (and, because the CPU layer pre-folds Alpha into both

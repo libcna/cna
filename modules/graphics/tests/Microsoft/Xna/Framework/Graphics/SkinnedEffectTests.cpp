@@ -122,7 +122,7 @@ TEST_F(SkinnedEffectDefaultsTest, SetLightingEnabledTrueDoesNotThrow)
     EXPECT_TRUE(fx.getLightingEnabledProperty());
 }
 
-// REMED-GFX-088: FNA implements SkinnedEffect's LightingEnabled member explicitly
+// FNA implements SkinnedEffect's LightingEnabled member explicitly
 // through IEffectLights. Lock the contract at that same public-interface boundary:
 // unlike BasicEffect, SkinnedEffect has no observable unlit rendering state.
 TEST_F(SkinnedEffectDefaultsTest, LightingEnabledFalseThrowsThroughIEffectLights)
@@ -134,7 +134,7 @@ TEST_F(SkinnedEffectDefaultsTest, LightingEnabledFalseThrowsThroughIEffectLights
     EXPECT_TRUE(lights.getLightingEnabledProperty());
 }
 
-// REMED-GFX-088: direct renderer tests must use the state tuple that the public
+// Direct renderer tests must use the state tuple that the public
 // SkinnedEffect can actually produce. FNA's always-lit material upload is:
 //   DiffuseShader  = DiffuseColor * Alpha
 //   EmissiveShader = (EmissiveColor + AmbientLightColor * DiffuseColor) * Alpha

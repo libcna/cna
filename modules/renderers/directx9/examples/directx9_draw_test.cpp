@@ -145,7 +145,7 @@ protected:
         // Known-safe baseline, matching the retired DirectX11_Smoke's Check P discipline: opaque
         // blend, no depth/stencil, no culling (so this basic check does not depend on D9-21's
         // still-open D3DCULL winding proof).
-        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // default write state
         renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 

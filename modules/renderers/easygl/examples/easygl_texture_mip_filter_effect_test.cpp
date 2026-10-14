@@ -12,14 +12,14 @@
 // across levels) is expected to sample the automatically-selected high mip level -> GREEN,
 // proving real mip-level selection works when a Mip-aware filter is requested.
 //
-// TextureFilter::Point is ALSO tested at the same tiny size, and REMED-GFX-175 changed what it
+// TextureFilter::Point is ALSO tested at the same tiny size, and the mip-filter component fix changed what it
 // owes. This half of the test used to expect RED and said so explicitly: EasyGL mapped Point (and
 // the default Linear) onto a non-mip-aware GL filter, so neither ever selected a level however far
 // the texture was minified, and the check asserted that known-limited behaviour rather than the
 // XNA contract. It named the fix it was waiting for -- clamp the texture's level range to its real
 // level count, then give Point and Linear their mip-aware GL filters back -- and that fix has now
-// landed: Task 924 and REMED-GFX-174 clamp GL_TEXTURE_MAX_LEVEL for every sampleable kind,
-// REMED-GFX-175 gives a declared chain storage for every one of its levels, and ApplySamplerState
+// landed: Task 924 and the EasyGL sampler-completeness fix clamp GL_TEXTURE_MAX_LEVEL for every sampleable kind,
+// Gives a declared chain storage for every one of its levels, and ApplySamplerState
 // maps Point onto GL_NEAREST_MIPMAP_NEAREST and Linear onto GL_LINEAR_MIPMAP_LINEAR exactly as
 // FNA's own XNAMip table and FNA3D's GL driver require.
 //
@@ -146,7 +146,7 @@ protected:
         const Color pointOnly = DrawTinyQuadAndSample(device, TextureFilter::Point, 300.0f, W, H);
 
         const bool mipAwareOk = IsGreen(mipAware);
-        // REMED-GFX-175: Point names a mip component of POINT, so at log2(128/8)=4 it must select a
+        // Point names a mip component of POINT, so at log2(128/8)=4 it must select a
         // level in the GREEN range exactly as LinearMipPoint does.
         const bool pointOnlyOk = IsGreen(pointOnly);
 

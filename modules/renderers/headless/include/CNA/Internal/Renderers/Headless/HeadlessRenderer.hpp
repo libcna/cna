@@ -264,7 +264,7 @@ namespace CNA::Internal::Renderers::Headless
         /**
          * @brief Reports that this renderer cannot read a render target's colour attachment back.
          *
-         * REMED-GFX-127. Stated explicitly rather than inherited, because the answer is a reviewed
+         * Stated explicitly rather than inherited, because the answer is a reviewed
          * capability decision, not an oversight: the Headless renderer deliberately executes no
          * rasterization at all -- it records API usage and resource state for validation/tracing --
          * so a render target's colour content does not exist here in any form it could return.
@@ -337,7 +337,7 @@ namespace CNA::Internal::Renderers::Headless
         /**
          * @brief Validates and traces a cube-face upload, then reports that nothing was stored.
          *
-         * REMED-GFX-135, the write-side counterpart of `GetData` below. This renderer stores no
+         * The write-side counterpart of `GetData` below. This renderer stores no
          * pixel data at all by design, so it has always been unable to keep an upload -- pre-fix it
          * simply had no way to say so, and `TextureCube::SetData` returned normally after the data
          * had been validated, recorded in the trace and dropped. The validation and the trace entry
@@ -351,7 +351,7 @@ namespace CNA::Internal::Renderers::Headless
         /**
          * @brief Reports that this renderer cannot read a cube face back.
          *
-         * REMED-GFX-130. Stated explicitly rather than inherited, for the same reviewed reason
+         * Stated explicitly rather than inherited, for the same reviewed reason
          * `HeadlessRenderTargetRenderer::GetData` states it: this renderer stores no pixel data at
          * all -- `SetData` above validates its arguments and records a trace entry, it does not
          * write anything -- so a cube face's content does not exist here in any form it could
@@ -393,7 +393,7 @@ namespace CNA::Internal::Renderers::Headless
         /**
          * @brief Validates and traces a volume upload, then reports that nothing was stored.
          *
-         * REMED-GFX-135, same reviewed reasoning as `HeadlessTextureCubeRenderer::SetData`.
+         * Same reviewed reasoning as `HeadlessTextureCubeRenderer::SetData`.
          *
          * @return Always false.
          */
@@ -402,8 +402,8 @@ namespace CNA::Internal::Renderers::Headless
         /**
          * @brief Reports that this renderer cannot read a volume texture back.
          *
-         * REMED-GFX-130, same reviewed reasoning as `HeadlessTextureCubeRenderer::GetData`. This
-         * class is additionally unreachable through the public API: REMED-CONTENT-004 made
+         * Same reviewed reasoning as `HeadlessTextureCubeRenderer::GetData`. This
+         * class is additionally unreachable through the public API: the content reader fix made
          * `Texture3D`'s constructor fail on a device that reports no
          * `GraphicsCapability::Texture3D`, which this renderer does not. It states its refusal
          * anyway so the answer does not depend on that one gate staying in place.
@@ -593,10 +593,10 @@ namespace CNA::Internal::Renderers::Headless
          * @brief Backbuffer readback for `GraphicsDevice::GetBackBufferData`. Headless rasterizes
          *        nothing and owns no backbuffer pixel storage, so it cannot honestly return one.
          *
-         * REMED-GFX-162: this raises `System::NotSupportedException` instead of fabricating a frame
+         * This raises `System::NotSupportedException` instead of fabricating a frame
          * (it formerly filled the caller's buffer with the last `Clear()` colour, which a caller
          * could not tell apart from a real black frame). It is the backbuffer counterpart of the
-         * refuse-rather-than-fabricate contract REMED-GFX-127/130 established for the Texture and
+         * refuse-rather-than-fabricate contract established for the Texture and
          * render-target readbacks. The throw happens after `GetBackBufferData`'s own argument
          * validation, so an invalid request still fails with its own exception, and it leaves the
          * caller's destination completely untouched.

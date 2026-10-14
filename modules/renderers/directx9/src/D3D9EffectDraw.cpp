@@ -762,7 +762,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
+            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
             // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
             device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
@@ -771,7 +771,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            // REMED-GFX-060: honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
+            // Honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
             device_->DrawPrimitive(ToD3D9Topology(primitive), static_cast<UINT>(params.vertexStart),
                                    static_cast<UINT>(primitiveCount));
         }
@@ -846,7 +846,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
+            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
             // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
             device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
@@ -855,7 +855,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            // REMED-GFX-060: honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
+            // Honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
             device_->DrawPrimitive(ToD3D9Topology(primitive), static_cast<UINT>(params.vertexStart),
                                    static_cast<UINT>(primitiveCount));
         }
@@ -911,7 +911,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
+            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
             // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
             device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
@@ -920,7 +920,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            // REMED-GFX-060: honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
+            // Honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
             device_->DrawPrimitive(ToD3D9Topology(primitive), static_cast<UINT>(params.vertexStart),
                                    static_cast<UINT>(primitiveCount));
         }
@@ -1016,7 +1016,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
+            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
             // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
             device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
@@ -1025,7 +1025,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            // REMED-GFX-060: honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
+            // Honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
             device_->DrawPrimitive(ToD3D9Topology(primitive), static_cast<UINT>(params.vertexStart),
                                    static_cast<UINT>(primitiveCount));
         }
@@ -1150,7 +1150,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // REMED-GFX-060: honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
+            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
             // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
             // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
             device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
@@ -1159,7 +1159,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            // REMED-GFX-060: honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
+            // Honor DrawPrimitives vertexStart (was hardcoded StartVertex=0).
             device_->DrawPrimitive(ToD3D9Topology(primitive), static_cast<UINT>(params.vertexStart),
                                    static_cast<UINT>(primitiveCount));
         }

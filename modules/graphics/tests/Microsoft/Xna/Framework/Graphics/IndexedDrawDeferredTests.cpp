@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-104/105/106/108/109/112: deferred indexed-draw correctness, native alignment,
+// Deferred indexed-draw correctness, native alignment,
 // native index width, triangle-strip pipeline compatibility, buffer versions, and renderer parity.
 
 #include <algorithm>
@@ -138,7 +138,7 @@ namespace
         float centerX,
         const Color& color)
     {
-        // REMED-GFX-183: clockwise-as-displayed is XNA's front face (GFX-160). A strip must
+        // Clockwise-as-displayed is XNA's front face (GFX-160). A strip must
         // therefore begin TL,TR,BL,BR: fixed-function parity turns its second primitive into
         // BL,TR,BR with the same winding. The former TL,BL,TR,BR order was the reversed,
         // counter-clockwise source and made the GFX-183 culling test assert the opposite oracle.
@@ -440,7 +440,7 @@ namespace
 
 }
 
-// REMED-GFX-110 adds CNA_RENDERER_SOFTWARE: the CPU raster paths owe the same public addressing
+// Adds CNA_RENDERER_SOFTWARE: the CPU raster paths owe the same public addressing
 // contract as the GPU renderers -- startIndex as an index-element offset, baseVertex added exactly
 // once, primitiveCount limiting the consumed range, and hints that never change addressing.
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
@@ -1652,7 +1652,7 @@ TEST_F(IndexedDrawDeferredTest, PublicContractSeparatesRequiredCountsFromNativeI
     EXPECT_EQ(4, GraphicsDevice::PrimitiveVerts(PrimitiveType::LineList, 2));
     EXPECT_EQ(3, GraphicsDevice::PrimitiveVerts(PrimitiveType::LineStrip, 2));
     // PointListEXT's element count is part of the indexed range contract. Its separate Bgfx
-    // topology mapping remains REMED-GFX-111 and is intentionally not asserted as pixels here.
+    // topology mapping remains the PointList topology fix and is intentionally not asserted as pixels here.
     EXPECT_EQ(2, GraphicsDevice::PrimitiveVerts(PrimitiveType::PointListEXT, 2));
 
     const auto triangle = CenterTriangle(Color::White);

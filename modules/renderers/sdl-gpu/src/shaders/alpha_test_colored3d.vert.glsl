@@ -10,7 +10,7 @@ layout(location = 2) in vec2 inUV;
 
 layout(location = 0) out vec2 fragUV;
 layout(location = 1) out vec4 fragTint;
-layout(location = 2) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
+layout(location = 2) out vec4 fragFog;    // xyz=FogColor, w=keep-factor
 
 layout(set = 1, binding = 0) uniform PC {
     mat4  mvp;
@@ -22,12 +22,12 @@ layout(set = 1, binding = 0) uniform PC {
     float vertexColorEnabled;
 } pc;
 
-// REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
+// Fog forwarded to the fragment stage as a varying (the shared PC block is fully
 // packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
 // the retired VulkanRenderer's FogParams shape byte-for-byte.
 layout(set = 1, binding = 1) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
+    vec4 fogVector;        // FNA fog vector (dot with object/skin pos)
 } fog;
 
 void main() {
@@ -39,9 +39,9 @@ void main() {
     // value to `vout.Diffuse : COLOR0`. Clamped here, at the vertex, not after the interpolator.
     fragTint = clamp((pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor
                          : pc.diffuseColor, 0.0, 1.0);
-    // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
+    // Keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (as Vulkan did).
-    float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
+    float fogKeep = 1.0 - clamp(dot(CNA_INSTANCE_POSITION(vec4(inPos, 1.0)), fog.fogVector), 0.0, 1.0); // FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

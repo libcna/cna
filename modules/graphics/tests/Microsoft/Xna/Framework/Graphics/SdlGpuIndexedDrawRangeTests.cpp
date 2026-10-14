@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-117: SDL_GPU indexed draws must propagate the public startIndex/baseVertex arguments
+// SDL_GPU indexed draws must propagate the public startIndex/baseVertex arguments
 // to the native indexed-draw first-index/vertex-offset parameters.
 //
 // SDL_GPU implements no backbuffer readback at all, so RenderTarget2D::GetData is this renderer's
-// exact-pixel oracle (the same control REMED-GFX-111 established). Every test in this file renders
+// exact-pixel oracle (the same control the PointList topology fix established). Every test in this file renders
 // into a render target, unbinds it, and reads the target's own pixels back.
 
 #include <algorithm>
@@ -620,7 +620,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedDrawHonorsOffsetsWithDynamicBuffers)
     ExpectColorAbsent(pixels, Color::Blue, "dynamic based suffix");
 }
 
-// SDL_GPU supports all five CNA topologies natively (REMED-GFX-111 established the mapping), so
+// SDL_GPU supports all five CNA topologies natively (the PointList topology fix established the mapping), so
 // every one of them owes the same addressing contract. Strips and lists differ in how
 // primitiveCount becomes an index count, which is exactly what the resolver derives.
 TEST_F(SdlGpuIndexedDrawRangeTest, IndexedTriangleStripHonorsOffsets)
@@ -718,7 +718,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedLineStripHonorsOffsets)
     ExpectColorAbsent(pixels, Color::Lime, "line strip decoy");
 }
 
-// REMED-GFX-111 gave SDL_GPU real point topology but deliberately left indexed addressing at
+// Gave SDL_GPU real point topology but deliberately left indexed addressing at
 // offset zero because of this task. Points are the sharpest addressing probe available: one
 // consumed index is exactly one lit pixel, so a dropped offset lights a different pixel entirely.
 TEST_F(SdlGpuIndexedDrawRangeTest, IndexedPointListHonorsOffsets)
@@ -1524,7 +1524,7 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedOffsetsAreIndependentOfViewportScissor
     RasterizerState rasterizer;
     rasterizer.setCullModeProperty(CullMode::None);
     rasterizer.setScissorTestEnableProperty(true);
-    rasterizer.setDepthBiasProperty(0.0001f);            // REMED-GFX-051
+    rasterizer.setDepthBiasProperty(0.0001f);
     rasterizer.setSlopeScaleDepthBiasProperty(0.5f);
     device.setRasterizerStateProperty(rasterizer);
     device.setBlendStateProperty(BlendState::Opaque);

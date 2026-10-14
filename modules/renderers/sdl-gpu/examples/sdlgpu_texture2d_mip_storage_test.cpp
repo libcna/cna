@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-176: SDL_GPU's ordinary Texture2D had no mip chain to filter.
+// SDL_GPU's ordinary Texture2D had no mip chain to filter.
 //
-// REMED-GFX-175 settled the CONTRACT a TextureFilter ordinal names and measured SDL_GPU at 55/87 on
+// Settled the CONTRACT a TextureFilter ordinal names and measured SDL_GPU at 55/87 on
 // it, with all nine ordinals sampling level 0 at an exact 2x, 4x and 8x minification. That fixture
 // asks "which level did the sampler choose?" -- and on this renderer the honest answer was "the only
 // one that existed". This fixture asks the question underneath it, which no filter fixture can:
@@ -24,14 +24,14 @@
 //
 // The two are independent: fixing allocation alone gives a chain of undefined levels, and fixing
 // upload alone writes into levels that do not exist. Leg A measures the first directly and leg B
-// the second, so a partial fix cannot look complete.
+// The second, so a partial fix cannot look complete.
 //
 // A THIRD MECHANISM, which only becomes reachable once the first two are fixed and which this
 // fixture is what found: `SDL_UploadToGPUTexture`'s `cycle` argument. The level-0 upload passed
 // `cycle=true`, whose documented meaning is "swap to a fresh internal resource rather than stall",
 // and a fresh resource does not carry the levels this upload is not writing. That is harmless for a
 // one-level texture (the upload replaces the whole resource anyway) and silently destructive for a
-// chain -- exactly the failure SDLGPU-40 measured on the cube path and REMED-GFX-135 on the volume
+// chain -- exactly the failure SDLGPU-40 measured on the cube path and the cube/volume upload contract on the volume
 // path, both of which landed on `cycle=false` for this reason. Leg D uploads levels in several
 // orders specifically to catch it; with `cycle=true` retained for chains, D fails and B still
 // passes, which is why D exists as its own leg.
@@ -235,7 +235,7 @@ namespace
         return static_cast<int>(seen.size());
     }
 
-    /// Stride-20 VertexPositionTexture (REMED-GFX-125: object size is not the stream stride).
+    /// Stride-20 VertexPositionTexture (object size is not the stream stride).
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
     /// Stride-32 VertexPositionNormalTexture.
@@ -375,7 +375,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
     }
 
     /// A preceding SpriteBatch leaves CullCounterClockwise behind, which culls this winding
-    /// (REMED-GFX-160).
+    ///.
     static void ResetDeviceState(GraphicsDevice& dev, int w, int h)
     {
         dev.setViewportProperty(Viewport(0, 0, w, h));
@@ -1069,7 +1069,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
     void DrawDualTexture(GraphicsDevice& dev)
     {
         // Slot 1 is a single white texel, so `tex0 * (2 * tex1)` is a uniform scale of slot 0 and
-        // the level question stays a question about slot 0 alone. REMED-GFX-172 is not measured.
+        // The level question stays a question about slot 0 alone. the dual-texture sampler fix is not measured.
         DualTextureEffect fx(dev);
         Matrices(fx);
         fx.setTextureProperty(chain8_.get());
@@ -1081,7 +1081,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
     void DrawEnvMap(GraphicsDevice& dev)
     {
         // The cube contributes nothing: this leg measures the BASE 2D texture's slot-0 sampler.
-        // REMED-GFX-173 (SDL_GPU's hardcoded cube sampler) is a separate, untouched finding.
+        // (SDL_GPU's hardcoded cube sampler) is a separate, untouched finding.
         EnvironmentMapEffect fx(dev);
         Matrices(fx);
         fx.setTextureProperty(chain8_.get());
@@ -1114,7 +1114,7 @@ class SdlGpuTexture2DMipStorageTest : public Game
     }
 
     // ---------------------------------------------------------------------------------------------
-    // I -- lifetime. REMED-GFX-152's contract, now with a chain behind it.
+    // I -- lifetime. the contract, now with a chain behind it.
     // ---------------------------------------------------------------------------------------------
 
     void LegI(GraphicsDevice& dev)

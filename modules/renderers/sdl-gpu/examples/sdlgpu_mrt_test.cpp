@@ -317,7 +317,7 @@ class SdlGpuMrtTest : public Game
     }
 
     /**
-     * @brief REMED-GFX-145: TWO MRT bind cycles in ONE flush window, with the attachment SET
+     * @brief TWO MRT bind cycles in ONE flush window, with the attachment SET
      *        changing between them and no `GetData` in between.
      *
      * Every other MRT check above ends its bind cycle with a `GetData`, which on this deferred

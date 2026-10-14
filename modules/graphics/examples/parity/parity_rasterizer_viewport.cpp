@@ -118,7 +118,7 @@ protected:
         // --- Row 1 column 1: the same, with a render-target round trip in the middle -----------
         // XNA resets the viewport to the whole target on every bind, so a viewport set BEFORE the
         // round trip must not survive it -- the quad after the trip fills the cell rather than the
-        // quarter the earlier viewport named. That is REMED-GFX-019's rule seen from the other side.
+        // quarter the earlier viewport named. That is the rule seen from the other side.
         {
             device.setViewportProperty(
                 Viewport(1 * kCell + kCell / 4, 1 * kCell + kCell / 4, kCell / 2, kCell / 2));

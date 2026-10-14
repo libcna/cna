@@ -649,7 +649,7 @@ TEST(EffectParameterTest, SetValueFloatArrayWithNaNDoesNotThrow)
     EXPECT_NEAR(got[2], 3.0f, 1e-5f);
 }
 
-// --- Task 187 / REMED-GFX-022: FNA/XNA matrix storage and transpose contract ---
+// --- Task 187: FNA/XNA matrix storage and transpose contract ---
 //
 // SetValue(Matrix) stores column-major effect data:
 //   floatData_ = {M11,M21,M31,M41, M12,M22,...}

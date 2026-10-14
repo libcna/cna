@@ -85,14 +85,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Effects COMMAND cna_test_software_effects
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-089 deterministic shared public GraphicsDevice depth contract. REMED-GFX-030
+    # Deterministic shared public GraphicsDevice depth contract. REMED-GFX-030
     # closes Software's former fixed-LessEqual/write-on-pass boundary, so DepthRead is asserted too.
     cna_software_test(cna_test_software_depth_contract ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_depth_contract_test.cpp)
     cna_register_renderer_test(NAME Software_GraphicsDevice_DepthContract
         COMMAND cna_test_software_depth_contract
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-030: full Software depth-state contract -- test/write disabled combinations, all
+    # Full Software depth-state contract -- test/write disabled combinations, all
     # eight CompareFunction values, strict/inclusive equality, A->B->A capture, complete clears,
     # colored+shaded paths, viewport/bias interaction, and isolated backbuffer/RT depth storage.
     cna_software_test(cna_test_software_depthstate software_depthstate_test.cpp)
@@ -216,20 +216,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-077: BlendState.ColorWriteChannels (per-channel colour write mask) + MultiSampleMask
+    # BlendState.ColorWriteChannels (per-channel colour write mask) + MultiSampleMask
     # must be honored now that both are plumbed through IGraphicsRenderer::ApplyBlendState.
     cna_software_test(cna_test_software_colorwritechannels software_colorwritechannels_test.cpp)
     cna_register_renderer_test(NAME Software_ColorWriteChannels COMMAND cna_test_software_colorwritechannels
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-073: SpriteBatch must honor a custom GraphicsDevice.Viewport (viewport-local
+    # SpriteBatch must honor a custom GraphicsDevice.Viewport (viewport-local
     # coordinates, Viewport.X/Y placement, Width/Height extent, viewport clipping) -- the Software
     # counterpart of the GFX-072 GPU-renderer SpriteBatch viewport campaign.
     cna_software_test(cna_test_software_spritebatch_viewport software_spritebatch_viewport_test.cpp)
     cna_register_renderer_test(NAME Software_SpriteBatch_CustomViewport COMMAND cna_test_software_spritebatch_viewport
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-079: the 3D raster path (DrawColoredPrimitives / DrawIndexedColoredPrimitives /
+    # The 3D raster path (DrawColoredPrimitives / DrawIndexedColoredPrimitives /
     # DrawPrimitivesEx / DrawIndexedPrimitivesEx) must honor a custom GraphicsDevice.Viewport --
     # X/Y offset, Width/Height sub-scale, framebuffer∩Viewport raster clip, and MinDepth/MaxDepth
     # depth-range remap -- the 3D counterpart of the GFX-073 SpriteBatch viewport fix.
@@ -237,7 +237,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_3D_CustomViewport COMMAND cna_test_software_3d_viewport
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-080: GraphicsDevice.ScissorRectangle must clip both the 2D SpriteBatch path and the
+    # GraphicsDevice.ScissorRectangle must clip both the 2D SpriteBatch path and the
     # 3D raster path when RasterizerState.ScissorTestEnable is true, in framebuffer/target space
     # (effective clip = framebuffer ∩ Viewport ∩ Scissor) -- the Software counterpart of the GPU
     # renderers' scissor contract (GFX-013 on the retired VULKAN renderer, GFX-068 SdlGpu). Reuses
@@ -246,7 +246,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Scissor COMMAND cna_test_software_scissor
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-081: SpriteBatch.Begin must APPLY the RasterizerState it is passed (previously the
+    # SpriteBatch.Begin must APPLY the RasterizerState it is passed (previously the
     # canonical 7-arg overload dropped it), matching FNA's PrepRenderState
     # (rasterizerState ?? RasterizerState.CullCounterClockwise). Software is the deterministic
     # CPU-readback oracle; the fix itself is in the shared SpriteBatch.cpp (all renderers).
@@ -254,15 +254,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_SpriteBatch_RasterizerState COMMAND cna_test_software_spritebatch_rasterizerstate
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-082: RasterizerState.FillMode must be honored -- FillMode.WireFrame rasterizes only
+    # RasterizerState.FillMode must be honored -- FillMode.WireFrame rasterizes only
     # triangle EDGES (no interior fill) across all four 3D draw entry points and the SpriteBatch quad
-    # geometry (through Begin, REMED-GFX-081), with culling/viewport/scissor/depth semantics identical
+    # geometry (through Begin), with culling/viewport/scissor/depth semantics identical
     # to Solid. Pre-fix ApplyRasterizerState dropped fillMode, so WireFrame rendered as a solid fill.
     cna_software_test(cna_test_software_wireframe software_wireframe_test.cpp)
     cna_register_renderer_test(NAME Software_Wireframe COMMAND cna_test_software_wireframe
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias must offset the per-fragment depth
+    # RasterizerState.DepthBias / SlopeScaleDepthBias must offset the per-fragment depth
     # -- ApplyRasterizerState previously dropped both floats. Normalized constant bias (DepthBias) and
     # slope bias (SlopeScaleDepthBias * max|dz/dx,dz/dy|) are added to window depth (sign:
     # positive pushes away from the camera), across the colored / shaded / wireframe / RT paths, with
@@ -271,7 +271,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_DepthBias COMMAND cna_test_software_depthbias
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-110: the indexed raster paths must honor the exact public indexed-draw contract --
+    # The indexed raster paths must honor the exact public indexed-draw contract --
     # startIndex as an index-ELEMENT offset, baseVertex added exactly once to every decoded index,
     # primitiveCount deciding the exact topology-derived consumed count, both index widths, static
     # and dynamic buffers, minVertexIndex/numVertices staying hints, and deterministic rejection of
@@ -426,7 +426,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BlendState_Matrix
         COMMAND cna_test_software_blendstate_matrix TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-124: a RenderTarget2D must be readable and sampleable once it is no longer active --
+    # A RenderTarget2D must be readable and sampleable once it is no longer active --
     # GetData returns the rendered colour attachment (full level, rectangle, destination start index)
     # and the finished target samples as an ordinary texture through both SpriteBatch and a textured
     # 3D primitive. Pre-fix SoftwareRenderTargetRenderer overrode no ITextureRenderer::GetData (the
@@ -437,13 +437,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertarget_readback
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # Every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
     # fallback zero-initialized its own scratch buffer, handed it to ITextureRenderer::GetData (whose
     # interface default did nothing) and converted it for the caller regardless, so a renderer with no
     # readback returned a complete, uniformly transparent-black frame that satisfied both "the
     # destination was overwritten" and any transparent-black content expectation.
-    # REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format, so a mid-tone channel
+    # SurfaceFormat::Color is a plain 8-bit UNORM byte format, so a mid-tone channel
     # must survive Clear/draw/sample/readback unchanged. Registered here as a cross-renderer control:
     # the defect was WebGPU-local (its render targets used the swapchain's *UnormSrgb format), and
     # these runs are what establish that byte-exact identity is CNA's existing behaviour everywhere
@@ -453,7 +453,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_ColorSpace_MidTone COMMAND cna_test_software_colorspace_midtone
         TIMEOUT 120 LABELS "Software")
 
-    # REMED-GFX-148: Additive is SourceAlpha/One for both colour and alpha. Pixel-exact matrix over
+    # Additive is SourceAlpha/One for both colour and alpha. Pixel-exact matrix over
     # backbuffer/RT, all effect-aware draw paths, preset/state transitions, repeated draws/frames,
     # deferred state capture, destination loading, clamping, disposal, and teardown.
     cna_software_test(cna_test_software_additive_blend_contract
@@ -462,7 +462,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_additive_blend_contract
         TIMEOUT 120 LABELS "Software")
 
-    # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
+    # A RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-renderer control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's
     # colour texture stores the image bottom-up and sampling did not compensate even though GetData
@@ -473,14 +473,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_RenderTarget_SamplingOrientation COMMAND cna_test_software_rt_sampling_orientation
         TIMEOUT 120 LABELS "Software")
 
-    # REMED-GFX-153 deterministic CPU control for source selection and destination orientation.
+    # Deterministic CPU control for source selection and destination orientation.
     cna_software_test(cna_test_software_gfx153_source_rectangle
         ${CNA_GRAPHICS_EXAMPLES_DIR}/source_rectangle_orientation_test.cpp)
     cna_register_renderer_test(NAME Software_GFX153_SourceRectangleOrientation
         COMMAND cna_test_software_gfx153_source_rectangle
         TIMEOUT 180 LABELS "Software")
 
-    # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
+    # Cross-renderer control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
     # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
     # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
@@ -491,7 +491,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_RenderTarget_ProducerConsumer COMMAND cna_test_software_rt_producer_consumer
         TIMEOUT 120 LABELS "Software")
 
-    # REMED-GFX-152 cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
+    # Cross-renderer control: a RenderTarget2D handed to a stock or custom 3D effect as
     # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
     # stock-effect paths static_cast an ITextureRenderer* to the unrelated sibling
     # SdlGpuTextureRenderer, fabricating an SDL_GPUTexture* out of a render target's own fields); this
@@ -501,7 +501,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_RenderTarget_EffectSource COMMAND cna_test_software_rt_effect_source
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-167 deferred-source lifetime: a resource sampled by a draw that has only been
+    # Deferred-source lifetime: a resource sampled by a draw that has only been
     # QUEUED must stay bindable until that draw actually renders, and destroying the public wrapper
     # first must never terminate the process. The defect was WebGPU-local -- every deferred command
     # stored a raw pointer to the resource's RENDERER OBJECT and called a VIRTUAL method on it at
@@ -514,7 +514,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_DeferredSourceLifetime COMMAND cna_test_software_deferred_source_lifetime
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-168 cross-renderer control: destroying a RenderTarget2D that is STILL the bound
+    # Cross-renderer control: destroying a RenderTarget2D that is STILL the bound
     # render target must never make the next SetRenderTarget transition unsafe, and must leave the
     # next target and the backbuffer exactly correct. The defect was EasyGL-local -- it remembered
     # the bound destination as a raw IRenderTargetRenderer* and the next transition called
@@ -527,7 +527,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BoundTargetLifetime COMMAND cna_test_software_bound_target_lifetime
         TIMEOUT 600 LABELS "Software")
 
-    # REMED-GFX-180/SOFTWARE-322: Present refuses while a target is bound independently of whether
+    # SOFTWARE-322: Present refuses while a target is bound independently of whether
     # the preceding classic buffered draw used an out-of-range native input. Every leg runs in its
     # own process; C1 proves explicit-unbind recovery and C2 proves the unhandled refusal is SIGABRT.
     cna_software_test(cna_test_software_present_lifecycle
@@ -535,7 +535,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_PresentLifecycle COMMAND cna_test_software_present_lifecycle
         TIMEOUT 900 LABELS "Software")
 
-    # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
+    # Cross-renderer control: the same public depth-backed MULTISAMPLED
     # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
     # production changed; this renderer is registered to show the construction was always legal
     # and to keep it that way.
@@ -544,7 +544,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_MsaaDepthContract COMMAND cna_test_software_msaa_depth_contract
         TIMEOUT 900 LABELS "Software")
 
-    # REMED-GFX-154 cross-renderer control: the same PUBLIC first-readback contract on this
+    # Cross-renderer control: the same PUBLIC first-readback contract on this
     # renderer. The defect was Bgfx-only and only Bgfx production changed; running the identical
     # fixture here is what makes that claim falsifiable rather than asserted.
     cna_software_test(cna_test_software_msaa_first_readback
@@ -552,21 +552,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_MsaaFirstReadback COMMAND cna_test_software_msaa_first_readback
         TIMEOUT 900 LABELS "Software")
 
-    # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this
+    # Cross-renderer control: the same PUBLIC generated-mip readback contract on this
     # renderer. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
     # identical fixture here is what makes that claim falsifiable rather than asserted.
     cna_software_test(cna_test_software_msaa_mip_readback
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp)
     cna_register_renderer_test(NAME Software_MsaaMipReadback COMMAND cna_test_software_msaa_mip_readback
         TIMEOUT 1200 LABELS "Software")
-    # REMED-GFX-189 cross-renderer control: the same PUBLIC invalid-mip-level contract on this
+    # Cross-renderer control: the same PUBLIC invalid-mip-level contract on this
     # renderer. The fabrication was Vulkan-only and only Vulkan production changed; running the
     # identical fixture here is what makes that claim falsifiable rather than asserted.
     cna_software_test(cna_test_software_invalid_mip_level
         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_invalid_mip_level_test.cpp)
     cna_register_renderer_test(NAME Software_InvalidMipLevel COMMAND cna_test_software_invalid_mip_level
         TIMEOUT 1200 LABELS "Software")
-    # REMED-GFX-165 cross-renderer control: the authoritative-backbuffer-dimension GetBackBufferData
+    # Cross-renderer control: the authoritative-backbuffer-dimension GetBackBufferData
     # contract. Software's backbuffer is a CPU buffer that genuinely resizes, so it is also where the
     # post-resize pixel oracle is meaningful. Software already honoured the contract (its viewport
     # equals the backbuffer); this run establishes that the shared fix left it byte-unchanged.
@@ -575,20 +575,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BackbufferReadbackDimension COMMAND cna_test_software_backbuffer_readback_dimension
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-161: cross-renderer control for the first-read completion contract.
+    # Cross-renderer control for the first-read completion contract.
     cna_software_test(cna_test_software_backbuffer_first_read
         ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_first_read_test.cpp)
     cna_register_renderer_test(NAME Software_BackbufferFirstRead COMMAND cna_test_software_backbuffer_first_read
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-162 cross-renderer control: a rasterizing renderer's GetBackBufferData SUCCEEDS and
+    # Cross-renderer control: a rasterizing renderer's GetBackBufferData SUCCEEDS and
     # fully writes the requested range, so the Headless rejection is specific, not a universal break.
     cna_software_test(cna_test_software_backbuffer_reject
         ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
     cna_register_renderer_test(NAME Software_BackbufferReject COMMAND cna_test_software_backbuffer_reject
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-155 cross-renderer control: a render target produced and unbound earlier in a public
+    # Cross-renderer control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
     # defaults to the numeric view id, and its backbuffer owns the lowest id -- so a backbuffer
@@ -599,7 +599,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_RenderTarget_BackbufferConsumer COMMAND cna_test_software_rt_backbuffer_consumer
         TIMEOUT 180 LABELS "Software")
 
-    # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
+    # The control: a RenderTarget2D constructed during a public frame must be usable in
     # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
     # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
     # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
@@ -610,8 +610,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_RenderTarget_FirstUse COMMAND cna_test_software_rt_first_use
         TIMEOUT 180 LABELS "Software")
 
-    # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
-    # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
+    # A stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
+    # must execute after it rather than be dropped. the leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
     # WEBGPU clean, using ordinary Texture2D sources on both destinations. The oracle is a staircase
     # -- step i covers stripes [0, N-i), so one readback proves every draw happened AND that they
@@ -622,7 +622,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_spritebatch_3d_order
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch lays its corners
+    # The XNA/FNA front-face winding contract. FNA's SpriteBatch lays its corners
     # out TL, TR, BL, BR and indexes them j,j+1,j+2 / j+3,j+2,j+1, so both of its triangles are
     # CLOCKWISE as displayed, and they must survive RasterizerState.CullCounterClockwise -- the
     # state SpriteBatch.Begin itself defaults to. Clockwise-as-displayed is therefore XNA's FRONT
@@ -634,7 +634,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_frontface_winding
         TIMEOUT 300 LABELS "Software")
 
-    # SOFTWARE-105 promotes REMED-GFX-183's shared control into a required Software contract:
+    # SOFTWARE-105 promotes the shared control into a required Software contract:
     # all six user/buffer, indexed/non-indexed and Uint16/Uint32 paths must preserve alternating
     # strip winding under every CullMode, including nonzero offsets and baseVertex.
     cna_software_test(cna_test_software_triangle_strip_winding
@@ -649,7 +649,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture2d_getdata_contract
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # (and the GetData startIndex contract, the same expression): the exact XNA-compatible
     # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
     # DESTINATION element offset and elementCount is the destination capacity available from it;
     # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
@@ -661,7 +661,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture2d_getdata_transfer_range
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
+    # The TextureCube/Texture3D half of the finding. Both public cube and
     # volume GetData paths converted their own zero-initialized scratch buffer for the caller
     # regardless of whether the renderer read anything back, so an unimplemented readback returned a
     # complete, uniformly transparent-black face/volume instead of rejecting the request.
@@ -671,10 +671,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_cube_volume_getdata_contract
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
-    # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
+    # `RenderTargetCube::GetData` must return the face that was really rendered or
+    # reject the request deterministically. the honest TextureCube/Texture3D readback contract made the reporting honest but left the
     # readback itself implemented on only two renderers, so a rendered cube face had no byte-exact
-    # public oracle anywhere else. Drawn geometry (never Clear -- see REMED-GFX-129) paints an
+    # public oracle anywhere else. Drawn geometry (never Clear -- paints an
     # asymmetric five-region pattern whose colours rotate per face, so a flip, a rotation, a wrong
     # array layer/subresource, a stale face or an unresolved multisample surface all fail.
     cna_software_test(cna_test_software_rendertargetcube_getdata_contract
@@ -683,10 +683,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertargetcube_getdata_contract
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
+    # IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
     # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
     # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
-    # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
+    # The asymmetric face producer, then rebinds and draws only a small marker: "the
     # marker landed" is what a discarding renderer also achieves, so it can never pass for
     # preservation.
     cna_software_test(cna_test_software_rendertargetcube_usage
@@ -695,7 +695,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertargetcube_usage
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-141: a MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
+    # A MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
     # across all six faces on EasyGL, Vulkan and SdlGpu, so a PreserveContents face reloaded whichever
     # face was rendered last instead of its own samples. Renders face A, then face B, then rebinds A for
     # a small partial update -- with no readback, Present or flush in between -- and reads the whole of
@@ -728,7 +728,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertargetcube_plural_binding
         TIMEOUT 60 LABELS "Software")
 
-    # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
+    # RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
     # bind clears all three (Target|DepthBuffer|Stencil, MaxDepth, 0) -- so the enum governs depth and
     # stencil, not colour alone. Renders an occluder, unbinds, rebinds WITHOUT clearing and draws behind
@@ -740,11 +740,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertarget_depthstencil_usage
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
+    # Every public render-target bind/unbind cycle must be its own logical pass.
     # `VulkanRenderer::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
     # one target within a single flush window shared one load action. The decisive checks all use
-    # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
+    # DiscardContents -- collapsing is invisible on a preserving target, which is why the RenderTargetUsage propagation fix
     # needed an artificial readback barrier to see it -- and nothing between two cycles ever forces a
     # flush.
     cna_software_test(cna_test_software_rendertarget_pass_boundary
@@ -753,15 +753,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertarget_pass_boundary
         TIMEOUT 60 LABELS "Software")
 
-    # REMED-GFX-129: Clear() is an ordered command at its exact public call position.
+    # Clear() is an ordered command at its exact public call position.
     cna_software_test(cna_test_software_ordered_clear
                       ${CNA_GRAPHICS_EXAMPLES_DIR}/graphicsdevice_ordered_clear_test.cpp)
     cna_register_renderer_test(NAME Software_GraphicsDevice_OrderedClear
         COMMAND cna_test_software_ordered_clear
         TIMEOUT 120 LABELS "Software")
 
-    # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
-    # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
+    # Backbuffer work and render-target work must replay in ONE ordered stream.
+    # (Vulkan) and the per-bind-cycle render pass fix (SdlGpu) gave every render-target bind cycle its own
     # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every
     # backbuffer draw of a frame was replayed after every target pass regardless of when it was
     # issued. A frame that samples a target onto the backbuffer and then renders into that target
@@ -773,7 +773,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_backbuffer_pass_order
         TIMEOUT 90 LABELS "Software")
 
-    # REMED-GFX-116 cross-renderer control: every deferred draw must execute under the
+    # Cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it
     # recorded the pass; this file is the same public fixture, so a renderer that regresses the
     # contract is caught here rather than assumed correct.
@@ -782,7 +782,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Deferred_Viewport COMMAND cna_test_software_deferred_viewport
         TIMEOUT 90 LABELS "Software")
 
-    # REMED-GFX-146 cross-renderer control: every deferred draw must execute under the
+    # Cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own
     # public call. WebGPU resolved both live when it recorded the pass; this file is the same
     # public fixture, so a renderer that regresses the contract is caught here rather than
@@ -792,8 +792,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_Deferred_Scissor COMMAND cna_test_software_deferred_scissor
         TIMEOUT 90 LABELS "Software")
 
-    # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
-    # kept the pre-REMED-GFX-127 shape -- a `void` renderer method behind `if (renderer_)` -- so an
+    # The WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
+    # kept the pre-the honest Texture2D::GetData contract shape -- a `void` renderer method behind `if (renderer_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
     cna_software_test(cna_test_software_cube_volume_setdata_contract
                       ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_setdata_contract_test.cpp)
@@ -802,7 +802,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         TIMEOUT 30 LABELS "Software")
 
 
-    # REMED-GFX-169: every stock 3D effect must sample its textures through the public
+    # Every stock 3D effect must sample its textures through the public
     # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. The defect lived
     # in the retired VULKAN renderer, whose stock 3D descriptor builders hardcoded one default
     # sampler; this renderer ran the same public fixture as a control.
@@ -811,13 +811,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_StockEffectSamplerContract COMMAND cna_test_software_stock_effect_sampler
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-150: TextureFilter::Point must select exactly ONE texel and TextureAddressMode must
+    # TextureFilter::Point must select exactly ONE texel and TextureAddressMode must
     # decide which one, on SpriteBatch and on the device SamplerStates[0] 3D path alike. The defect
     # was Software-local: ApplySamplerState named none of its parameters, SoftwareSpriteBatchRenderer's
     # textureFilter_/addressU_/addressV_ were dead stores, and one SampleBilinear served every
     # textured fragment -- so every draw was LinearClamp whatever the game selected. Software is the
     # deterministic CPU oracle, so the full exact-pixel matrix runs here.
-    # REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification, a separate
+    # Every public TextureFilter ordinal names a SEPARATE magnification, a separate
     # minification and a separate mipmap filter, so a renderer may not reduce the ordinal to one
     # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
     # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
@@ -831,7 +831,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture_filter_ordinal
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-173 cross-renderer control: EnvironmentMapEffect samples TWO independent
+    # Cross-renderer control: EnvironmentMapEffect samples TWO independent
     # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
     # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
     # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
@@ -844,7 +844,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_envmap_cube_sampler
         TIMEOUT 900 LABELS "Software")
 
-    # REMED-GFX-172 cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
+    # Cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
     # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
     # DECLARE_TEXTURE(Texture2, 1). WebGPU declared ONE WGSL sampler for both texture views, so
     # SamplerStates[1] was inexpressible and slot 1 inherited slot 0's. This fixture observes both
@@ -856,9 +856,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_dualtexture_slot_sampler
         TIMEOUT 900 LABELS "Software")
 
-    # REMED-GFX-182: `SoftwareRenderer::SampleCubeMap` took no sampler state at all, so the
+    # `SoftwareRenderer::SampleCubeMap` took no sampler state at all, so the
     # reflection cube was always point-sampled at level 0 however SamplerStates[1] was set -- the
-    # shape REMED-GFX-150 replaced on the ordinary 2D path and did not reach on the cube path. The
+    # shape the point-sampling contract replaced on the ordinary 2D path and did not reach on the cube path. The
     # fixture above measures "is slot 1 consulted, per ordinal, per draw path, per face, per mip
     # level"; this one measures what a lost sampler state can ALSO fail -- returning to a previous
     # sampler, interleaving with an unrelated effect, sweeping either slot with the other fixed, the
@@ -870,7 +870,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_envmap_cube_sampler_state
         TIMEOUT 900 LABELS "Software")
 
-    # REMED-GFX-174 control: Software is the GFX-150-corrected reference implementation, so it says
+    # Control: Software is the GFX-150-corrected reference implementation, so it says
     # what the order-sensitive sampler-component contract owes independently of any GL behaviour.
     cna_software_test(cna_test_software_sampler_component_isolation
                       ${CNA_GRAPHICS_EXAMPLES_DIR}/sampler_component_isolation_contract_test.cpp)
@@ -887,7 +887,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_anisotropic_filter_contract
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-175: the mip component of a TextureFilter ordinal, measured against a chain whose
+    # The mip component of a TextureFilter ordinal, measured against a chain whose
     # levels name themselves. Software is the CPU reference implementation, so what it does with a
     # real chain settles the contract independently of any GPU driver.
     cna_software_test(cna_test_software_texture_filter_mip_contract
@@ -896,7 +896,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture_filter_mip_contract
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
+    # Cross-renderer control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
     # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
     # were alive. Every draw here is checked against a self-identifying oracle that decodes back to an

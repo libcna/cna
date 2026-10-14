@@ -137,7 +137,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<DirectX9Renderer&>(dev.GetRenderer());
 
-        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // default write state
         renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         renderer.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
         renderer.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
@@ -225,7 +225,7 @@ protected:
             check(threw, "DrawPrimitivesEx (SkinnedVertexColor3D): missing texture0 throws a named error");
         }
 
-        // Check E (REMED-GFX-008): EmissiveColor is ADDED outside the diffuse multiply, not
+        // Check E: EmissiveColor is ADDED outside the diffuse multiply, not
         // multiplied by it. Lights off, DiffuseColor=(0.5), EmissiveColor=(0.8) ->
         // litRGB = lightSum(0)*0.5 + 0.8 = 0.8 -> ~204. The old (EmissiveColor + lightSum)*DiffuseColor
         // bug gave 0.8*0.5 = 0.4 -> ~102, so this discriminates the fix.

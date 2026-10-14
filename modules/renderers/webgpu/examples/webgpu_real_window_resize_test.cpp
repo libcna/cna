@@ -69,7 +69,7 @@ using CNA::Internal::Renderers::WebGPU::WebGPURenderer;
 namespace
 {
     constexpr int kMaxWaitFrames = 300;
-    /// REMED-BUILD-010's reason, kept: a window that is not focused or mapped the way an isolated
+    /// The reason, kept: a window that is not focused or mapped the way an isolated
     /// Xvfb server is can have its frame rate throttled, so a frame count alone can eat the CTest
     /// timeout with no diagnostic. This deadline fails fast with an actionable message instead.
     constexpr auto kWallClockDeadline = std::chrono::seconds(20);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-151: the canonical XNA render-to-texture sequence must work with NO intervening
+// The canonical XNA render-to-texture sequence must work with NO intervening
 // synchronous operation.
 //
 //     SetRenderTarget(A)                 // producer
@@ -113,7 +113,7 @@ namespace
     /**
      * @brief Whether this renderer rasterizes and can read a render target back at all.
      *
-     * HEADLESS performs no rasterization, so REMED-GFX-127's contract makes its `GetData` reject
+     * HEADLESS performs no rasterization, so the contract makes its `GetData` reject
      * deterministically. There is no producer result to observe there; the legs below assert the
      * rejection instead of a value.
      */
@@ -142,7 +142,7 @@ namespace
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
      *
-     * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
+     * CLOSED this (2026-07-29), and the declaration is now unconditionally true.
      *
      * It used to read false on SDL_GPU, whose stock-effect paths
      * `static_cast<const SdlGpuTextureRenderer*>(params.textureN)` onto the unrelated sibling
@@ -158,7 +158,7 @@ namespace
     /**
      * @brief Whether a BACKBUFFER draw can sample a render target that was never read back.
      *
-     * REMED-GFX-155, measured here and FIXED (2026-07-29), so this is now true everywhere. On bgfx
+     * The same-frame render-target consumer fix, measured here and FIXED (2026-07-29), so this is now true everywhere. On bgfx
      * a render target produced and unbound in this frame sampled as entirely empty when the
      * consumer drew to the BACKBUFFER (0/32, all 32 texels (0,0,0,0)), while the identical source
      * sampled into another RENDER TARGET was byte-exact (legs D1-D5) and an ordinary Texture2D
@@ -175,11 +175,11 @@ namespace
     /**
      * @brief Whether a `Clear()` issued AFTER a draw, in the same bind cycle, wins.
      *
-     * REMED-GFX-156 measured this here first: on SDL_GPU **and WebGPU** a producer built as
+     * Measured this here first: on SDL_GPU **and WebGPU** a producer built as
      * `Clear(A); draw pattern; Clear(B)` used to be sampled by its consumer as the PATTERN, not as
      * B -- the trailing clear was lost, so `Clear()` was not an ordered command there. Both
      * reported the identical value (20,25,40,255), i.e. the pattern's own texel (0,0), on all three
-     * RenderTargetUsage values, which is the SDL_GPU/WebGPU counterpart of REMED-GFX-129 (fixed on,
+     * RenderTargetUsage values, which is the SDL_GPU/WebGPU counterpart of the ordered Clear fix (fixed on,
      * and scoped to, the retired VULKAN renderer). Both renderers now cut their bind cycle into one
      * native render pass per observable Clear, so the ordered contract holds everywhere and this
      * declaration is unconditional -- the producer/consumer path being the second, independent
@@ -263,7 +263,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-151's public same-frame render-to-texture producer/consumer contract.
+ * @brief The public same-frame render-to-texture producer/consumer contract.
  */
 class RenderTargetProducerConsumerTest : public Game
 {
@@ -776,7 +776,7 @@ class RenderTargetProducerConsumerTest : public Game
         }
 
         // D5: A -> B -> A. The same target is a producer, then a consumer's destination, then read.
-        // A target rebound after being sampled must open a genuinely new pass (REMED-GFX-140) whose
+        // A target rebound after being sampled must open a genuinely new pass whose
         // content is what the LAST cycle produced.
         {
             RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -871,7 +871,7 @@ class RenderTargetProducerConsumerTest : public Game
      *
      * The DESTINATION is deliberately single-sampled and is the only thing read, so this leg
      * measures the producer's resolve-before-sample ordering and never the separate question of
-     * whether a multisampled target's own first readback works (REMED-GFX-154 on bgfx).
+     * whether a multisampled target's own first readback works (the multisampled readback contract on bgfx).
      *
      * Whether the requested sample count is genuinely APPLIED is measured, not assumed. A renderer
      * may derive a render target's sample count from the device's own, so
@@ -978,7 +978,7 @@ class RenderTargetProducerConsumerTest : public Game
      *        content according to exact public order, whatever built it.
      *
      * Four producer shapes are exercised against each usage: clear only, geometry only, clear then
-     * geometry, and geometry then clear (REMED-GFX-129's ordered Clear -- the clear runs AFTER the
+     * geometry, and geometry then clear (the ordered Clear -- the clear runs AFTER the
      * draw and therefore wins).
      */
     void LegUsageAndClear(GraphicsDevice& dev)
@@ -1039,7 +1039,7 @@ class RenderTargetProducerConsumerTest : public Game
                                 PatternColor);
             }
 
-            // G-c: geometry then Clear() -- REMED-GFX-129's ordered clear runs AFTER the draw, so
+            // G-c: geometry then Clear() -- the ordered clear runs AFTER the draw, so
             // the consumer must see the CLEAR, not the pattern. A renderer that could only deliver a
             // clear through the pass load action would show the pattern here.
             {
@@ -1143,8 +1143,8 @@ class RenderTargetProducerConsumerTest : public Game
      *     bind t; draw; unbind; t.GetData();  // cycle 4 -- an unrelated target, read mid-frame
      *
      * The backbuffer draw sits between u's two cycles and must still show A, not B, even though
-     * the readback of `t` happened after both. This is REMED-GFX-143's ascending-id contract seen
-     * from the readback side, and it is asserted here rather than assumed because REMED-GFX-151's
+     * The readback of `t` happened after both. This is the ascending-id contract seen
+     * from the readback side, and it is asserted here rather than assumed because the same-frame render-to-texture fix's
      * fix is what decides how much of the frame a readback replays.
      */
     void LegBackbufferBoundary(GraphicsDevice& dev)
@@ -1193,7 +1193,7 @@ class RenderTargetProducerConsumerTest : public Game
         r.w = kBBW; r.h = kBBH; r.pixels = frame;
         if (!kBackbufferConsumerSeesNeverReadTarget)
         {
-            // REMED-GFX-155 owns the backbuffer consumer on this renderer, so there is no honest
+            // Owns the backbuffer consumer on this renderer, so there is no honest
             // ordering to measure here until it is fixed -- recorded, not asserted either way.
             std::printf("[INFO] I2 not measurable on %s: REMED-GFX-155 (a never-read target "
                         "reaching a backbuffer consumer) owns this path; got %s\n",

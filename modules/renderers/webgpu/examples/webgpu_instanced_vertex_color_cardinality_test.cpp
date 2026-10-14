@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-212, structural half: making the WebGPU instanced route honour
+// The instanced VertexColorEnabled fix, structural half: making the WebGPU instanced route honour
 // `BasicEffect.VertexColorEnabled` must cost nothing a caller can observe.
 //
 // The pixel fixture (tests/Microsoft/Xna/Framework/Graphics/InstancedVertexColorTests.cpp) proves

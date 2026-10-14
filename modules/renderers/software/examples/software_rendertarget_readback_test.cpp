@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-124: a Software (CPU-raster) RenderTarget2D must be readable and sampleable once it is
+// A Software (CPU-raster) RenderTarget2D must be readable and sampleable once it is
 // no longer the active target -- the ordinary XNA/FNA producer -> unbind -> consumer contract every
 // GPU renderer already honors.
 //
@@ -630,7 +630,7 @@ protected:
             check(Throws<System::InvalidOperationException>(
                       [&] { target.GetData(-1, &whole, buffer.data(), 0, static_cast<int>(total)); }),
                   "E8 negative mip level rejected");
-            // REMED-GFX-198: this public request is an invalid Texture2D argument, not a request
+            // This public request is an invalid Texture2D argument, not a request
             // for a valid level that Software happens not to implement. Before GFX-192, level 1
             // reached SoftwareRenderTargetRenderer::GetData and raised its level-0-only
             // NotSupportedException after the shared layer had allocated scratch storage. The
@@ -731,7 +731,7 @@ protected:
                           softwareRenderer->GetReadbackCallCountEXT() == callsBeforeValid + 1,
                       "E9i the later valid GetData reaches Software production exactly once");
             }
-            // REMED-GFX-149 (REMED-GFX-128's expression). This check used to assert the DEFECT --
+            // (the expression). This check used to assert the DEFECT --
             // that the whole-level overload rejected every non-zero startIndex with
             // std::runtime_error("no CPU-side pixel data available") -- and so pinned the very
             // behaviour that diverged from XNA, from FNA and from this file's own D7/D8 rectangle
@@ -866,7 +866,7 @@ protected:
                   "E23 a supported render target reports SurfaceFormat::Color (4 bytes, RGBA order)");
         }
 
-        // ---- F: the active-target hazard (REMED-GFX-039) ----------------------------------------
+        // ---- F: the active-target hazard ----------------------------------------
         {
             dev.SetRenderTarget(&target);
             check(Throws<System::InvalidOperationException>(

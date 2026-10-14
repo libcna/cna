@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-077: the EasyGL renderer must honor BlendState.ColorWriteChannels via glColorMask (a
+// The EasyGL renderer must honor BlendState.ColorWriteChannels via glColorMask (a
 // global GL device state, GL ES 2.0+), now that the mask is plumbed through
 // IGraphicsRenderer::ApplyBlendState. Previously EasyGL never called glColorMask -> the mask was a
 // silent no-op (always full RGBA).
 //
-// This test covers slot 0 on the backbuffer. REMED-GFX-016's EasyGL MRT regression separately
+// This test covers slot 0 on the backbuffer. the EasyGL MRT regression separately
 // proves ColorWriteChannels0..3 through glColorMaski on profiles that expose indexed masks, while
 // lower profiles reject distinct per-slot masks rather than applying slot 0 globally. MultiSampleMask
 // remains a documented GL/GLES capability gap; the sample mask is proven on Software.

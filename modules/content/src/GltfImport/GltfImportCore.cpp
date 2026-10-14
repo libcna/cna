@@ -4972,7 +4972,7 @@ namespace CNA::Internal::GltfImport
         // raw `*(const uint16_t*)` cast. A file whose index bufferView is oddly offset therefore
         // performed a misaligned 16-bit load *inside the validator that was supposed to protect
         // us*, before this block ever ran. The container fuzz found it -- UBSan, cgltf.h:1566,
-        // reached from cgltf_validate -- which is exactly the class REMED-NA-016 established and
+        // reached from cgltf_validate -- which is exactly the class the cgltf misalignment finding established and
         // exactly what a fuzz under sanitizers is for. Metadata-only checks (this one and the span
         // check below) read offsets and sizes, never buffer contents, so they are safe to run on
         // an unvalidated document and must.

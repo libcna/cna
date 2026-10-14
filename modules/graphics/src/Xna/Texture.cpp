@@ -160,7 +160,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // prefiltered-specular cube is rendered face by face into float storage and "a cube that
         // reported HdrBlendable while holding 8-bit texels would make every IBL product quietly
         // wrong". That collision is the same one MOD-115 settled for RenderTarget2D, and it is the
-        // owner's to reopen, not this gate's to decide. See REMED-GFX-245.
+        // owner's to reopen, not this gate's to decide.
         return fmt != SurfaceFormat::NormalizedByte2 && fmt != SurfaceFormat::NormalizedByte4;
     }
 

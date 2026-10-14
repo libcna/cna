@@ -1,4 +1,4 @@
-# REMED-BUILD-004: the general/default CnaTests suite has never once run in any CI workflow this
+# The general/default CnaTests suite has never once run in any CI workflow this
 # project has had. d3d-windows-ci.yml / devices-tests.yml / input-ci.yml each select a label or
 # --gtest_filter scoped to their own subsystem (a Direct3D renderer, the Devices/Sensors suite, the
 # `input` label) -- none of them ever runs `ctest` unfiltered. Combined with REMED-BUILD-001 (fixed:
@@ -9,7 +9,7 @@
 # once passed in CI at all.
 #
 # This job runs the FULL, unfiltered default suite (no -L, no --gtest_filter) on OPENGLES3, the
-# current public identity for the EasyGL family on Linux. Per REMED-BUILD-004's own
+# current public identity for the EasyGL family on Linux. Per the own
 # "decide explicitly which renderers CI runs the general suite on" requirement: this family only, for now
 # -- deliberately narrower than "all 14 renderers", which remains future work (each other renderer
 # already has its own narrower, renderer-specific CI path or none at all).

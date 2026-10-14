@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-242: which SurfaceFormats a GraphicsProfile permits for a Texture2D.
+// Which SurfaceFormats a GraphicsProfile permits for a Texture2D.
 //
 // CNA used to decide texture-format legality by renderer capability alone, so a renderer able to
 // carry a HiDef-only format offered it to a Reach game as well. XNA decides by profile. These
@@ -96,7 +96,7 @@ TEST(TextureProfileFormat, ACnaExtensionFormatIsNotTheProfilesBusiness)
                                                      SurfaceFormat::Bc7EXT));
 }
 
-// --- REMED-GFX-245 / SOFTWARE-173: the other resource kinds ----------------------------------
+// --- SOFTWARE-173: the other resource kinds ----------------------------------
 
 TEST(TextureProfileFormat, VolumeFormatsAreHiDefOnlyAndMatchXnasExactList)
 {
@@ -141,7 +141,7 @@ TEST(TextureProfileFormat, TheCubeGateIsDeliberatelyNarrowerThanXnasOwnCubeList)
     // XNA's Reach tier also refuses the eleven HiDef-only formats for a cube. CNA does NOT enforce
     // that, because MOD-107 guarantees a float cube on the default profile for image-based
     // lighting. This case exists so the omission is a recorded decision rather than an oversight
-    // someone later "fixes" -- see REMED-GFX-245.
+    // someone later "fixes" --
     EXPECT_TRUE(Texture::IsCubeFormatAllowedByProfileEXT(GraphicsProfile::Reach,
                                                          SurfaceFormat::HdrBlendable));
     EXPECT_TRUE(Texture::IsCubeFormatAllowedByProfileEXT(GraphicsProfile::Reach,

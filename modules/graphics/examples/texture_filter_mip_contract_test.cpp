@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-175: a public TextureFilter ordinal names THREE independent filtering decisions -- how a
+// A public TextureFilter ordinal names THREE independent filtering decisions -- how a
 // minified footprint is filtered WITHIN one level, how a magnified footprint is filtered within one
 // level, and how a level is SELECTED between the mip levels of a chain. The third one is the subject
 // of this fixture, and it is the one that ordinals 0 and 1 were silently dropping.
@@ -17,7 +17,7 @@
 // also the ordinals a game gets by default -- SamplerState::LinearWrap, the device default, is
 // ordinal 0 -- so a renderer that drops their mip term drops mipmapping for almost every real game.
 //
-// WHAT THIS FIXTURE PINS, and why the existing fixtures could not see it. REMED-GFX-174's leg D
+// WHAT THIS FIXTURE PINS, and why the existing fixtures could not see it. the leg D
 // MEASURED this and deliberately declined to assert it (its D4 note), because asserting the
 // then-current behaviour would have pinned the wrong contract. Every other mip test in the tree
 // either uses only the compound ordinals 2..8, or uses a chain whose levels are indistinguishable,
@@ -56,11 +56,11 @@
 // selects one level and fetches one texel, so no leg below weakens a Point check to a tolerance.
 //
 // SINGLE-LEVEL COMPLETENESS IS A PRECONDITION, NOT A CASUALTY. Giving ordinals 0 and 1 a mipmap term
-// makes REMED-GFX-174's level-range clamping load-bearing for the DEFAULT filter too: on GL a
+// makes the level-range clamping load-bearing for the DEFAULT filter too: on GL a
 // mipmap-filtering sampler over a texture whose declared range is wider than its real levels samples
 // as opaque black. Leg F therefore re-asserts, for both sampleable kinds and all nine ordinals, that
 // a one-level resource stays complete and still samples level 0 -- and leg G asserts the harder case
-// REMED-GFX-174 never had to face, a chain that was DECLARED with four levels but only ever had
+// Never had to face, a chain that was DECLARED with four levels but only ever had
 // level 0 written. Nothing here forces a chain onto a texture, generates a missing level, or reads a
 // level that was never written.
 //
@@ -70,7 +70,7 @@
 //   C  Linear, LOD matrix       the chain IS used; exact at integer lambda, bracketed in between
 //   D  all nine ordinals        each ordinal's mip component against the authoritative table
 //   E  within-level + orient.   the pattern chain: min/mag halves and orientation still correct
-//   F  single-level complete    REMED-GFX-174's contract, now under a mip-filtering sampler
+// F  single-level complete    the contract, now under a mip-filtering sampler
 //   G  partial chain            declared 4 levels, only level 0 written -- bounded, never black
 //   H  SpriteBatch              the sprite path selects levels by the same contract
 //   I  transitions              Point then Linear, two chains of different length, recreation
@@ -210,7 +210,7 @@ namespace
                a.getBProperty() == b.getBProperty();
     }
 
-    /// Stride-20 VertexPositionTexture stream (REMED-GFX-125: object size is not the stream stride).
+    /// Stride-20 VertexPositionTexture stream (object size is not the stream stride).
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
 
@@ -296,7 +296,7 @@ class TextureFilterMipContractTest : public Game
     }
 
     /// A preceding SpriteBatch leaves CullCounterClockwise behind, which culls this winding
-    /// (REMED-GFX-160).
+    ///.
     static void ResetDeviceState(GraphicsDevice& dev, int w, int h)
     {
         dev.setViewportProperty(Viewport(0, 0, w, h));
@@ -626,7 +626,7 @@ class TextureFilterMipContractTest : public Game
         }
 
         // C7: the headline regression -- a minifying Linear draw must not return level 0's stored
-        // colour. This is the exact measurement REMED-GFX-174's D4 note reported and declined to
+        // colour. This is the exact measurement the D4 note reported and declined to
         // assert, restated against the authoritative table.
         {
             const std::vector<Color> pix =
@@ -686,7 +686,7 @@ class TextureFilterMipContractTest : public Game
     {
         // E0: Point magnification of the pattern chain is byte-exact against level 0's own texels --
         // an integer 4x magnification puts each destination pixel wholly inside one texel. This is
-        // the min/mag half REMED-GFX-150 and REMED-GFX-170 already own; it must not move.
+        // The min/mag half the point-sampling contract and the nine-value TextureFilter contract already own; it must not move.
         {
             const std::vector<Color> pix =
                 Draw3D(dev, 32, 32, *mipPat_, MakeSampler(TextureFilter::Point));
@@ -739,7 +739,7 @@ class TextureFilterMipContractTest : public Game
     }
 
     // ---------------------------------------------------------------------------------------------
-    // F -- single-level completeness under a mip-filtering sampler (REMED-GFX-174 preserved)
+    // F -- single-level completeness under a mip-filtering sampler (the EasyGL sampler-completeness fix preserved)
     // ---------------------------------------------------------------------------------------------
     void RunF(GraphicsDevice& dev)
     {
@@ -756,7 +756,7 @@ class TextureFilterMipContractTest : public Game
                   ", level0=" + std::to_string(lvl0) + "/256)");
         }
 
-        // The other sampleable kind REMED-GFX-174 corrected: a render target with only level 0.
+        // The other sampleable kind the EasyGL sampler-completeness fix corrected: a render target with only level 0.
         RenderTarget2D src(dev, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
                            RenderTargetUsage::DiscardContents);
         dev.SetRenderTarget(&src);

@@ -2,7 +2,7 @@
 // plans/plan_webgpu.md WEBGPU-158 (harness: WEBGPU-207): a vertex that declares NO Normal renders
 // unlit and keeps its declared colour -- whatever its stride happens to be.
 //
-// This is REMED-GFX-234's shape. Stride 32 is `VertexPositionNormalTexture`'s, so a renderer that
+// This is the shape. Stride 32 is `VertexPositionNormalTexture`'s, so a renderer that
 // reads the layout out of the stride binds a lit program to a Position+Colour record padded to 32
 // bytes: the declared colour has no input to bind to and is silently dropped, and twelve bytes of
 // padding are lit as if they were a normal. The reference renderer asks the declaration instead

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-161 -- the FIRST GraphicsDevice.GetBackBufferData of a process/device must fully and
+// The FIRST GraphicsDevice.GetBackBufferData of a process/device must fully and
 // synchronously write the whole requested destination range.
 //
-// Measured on WEBGPU (REMED-GFX-157): the very first backbuffer readback of a run returned
+// Measured on WEBGPU: the very first backbuffer readback of a run returned
 // successfully while leaving part of the caller's buffer holding its poison prefill; every later
 // read in the same run was correct. A caller could not tell it apart from a rendered frame. This
 // fixture pins that down: every destination element is pre-filled with a sentinel colour that
@@ -14,8 +14,8 @@
 // leg's readback can warm the staging buffer up. A leg's exit code is the only PASS/FAIL signal;
 // a crash or a hang is a distinct, attributable result.
 //
-// Scope: this is a CONTENT/COMPLETION contract, distinct from REMED-GFX-165 (dimension source) and
-// REMED-GFX-149 (startIndex/element-count transfer asymmetry). The canonical legs use startIndex 0
+// Scope: this is a CONTENT/COMPLETION contract, distinct from the back-buffer dimension contract (dimension source) and
+// (startIndex/element-count transfer asymmetry). The canonical legs use startIndex 0
 // to keep GFX-149 separate; the prefix/suffix leg uses a non-zero startIndex ONLY to prove the fix
 // does not disturb the destination outside the requested range.
 
@@ -89,7 +89,7 @@ namespace
 #endif
 
     // BGFX honours only a full-surface backbuffer read; a sub-rectangle reads back zeros (a
-    // pre-existing gap declared by REMED-GFX-165, NOT this task's subject). The rectangle legs
+    // pre-existing gap declared by the back-buffer dimension contract, NOT this task's subject). The rectangle legs
     // declare it as a boundary rather than failing it.
     constexpr bool kSupportsSubRectangleBackbufferRead = true;
 
@@ -105,11 +105,11 @@ namespace
                c.getBProperty() == 0xCD && c.getAProperty() == 0xCD;
     }
 
-    // Odd, non-square, not a common default. 37x23 matches REMED-GFX-165's canonical size.
+    // Odd, non-square, not a common default. 37x23 matches the canonical size.
     constexpr int kW = 37;
     constexpr int kH = 23;
 
-    /** @brief The four asymmetric quadrant colours (REMED-GFX-165's proven-byte-exact palette):
+    /** @brief The four asymmetric quadrant colours (the proven-byte-exact palette):
      *  every corner distinct, top != bottom (an orientation flip is caught), left != right (a mirror
      *  is caught), one mid-tone. None equals the 0xCD sentinel. A piecewise-constant fill is the only
      *  pattern a 1:1 point-clamp blit reproduces byte-exact on EVERY renderer (the Software sprite
@@ -144,7 +144,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-161's first-read completion contract, one leg per process.
+ * @brief The first-read completion contract, one leg per process.
  */
 class BackbufferFirstReadTest : public Game
 {
@@ -269,12 +269,12 @@ class BackbufferFirstReadTest : public Game
     {
         if (!kRasterizes)
         {
-            // REMED-GFX-162: Headless rasterizes nothing, so every backbuffer read must REJECT with
+            // Headless rasterizes nothing, so every backbuffer read must REJECT with
             // NotSupportedException -- it no longer fabricates the last Clear() colour. This was a
             // silent "oracle unavailable" boundary; it is now an asserted rejection so this fixture
             // can no longer pass while Headless quietly hands back a fabricated frame. The full
             // overload/precedence/destination-integrity matrix lives in
-            // backbuffer_headless_reject_test.cpp (REMED-GFX-162).
+            // backbuffer_headless_reject_test.cpp.
             check(r.threwNotSupported,
                   label + ": Headless rejects backbuffer readback with NotSupportedException (GFX-162)");
             return false;
@@ -517,7 +517,7 @@ class BackbufferFirstReadTest : public Game
             CheckFullyWrittenExact(r, id + " row-pitch first read", 0, 0, w, h);
     }
 
-    /// E1 -- the canonical repro at REMED-GFX-157's original 64x32 backbuffer size, first read.
+    /// E1 -- the canonical repro at the original 64x32 backbuffer size, first read.
     void LegCanonicalAt(GraphicsDevice& dev, int w, int h, const std::string& id)
     {
         DrawPattern(dev, w, h);

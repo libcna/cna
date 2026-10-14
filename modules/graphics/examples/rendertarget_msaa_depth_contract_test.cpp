@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-163 -- a depth-backed MULTISAMPLED RenderTarget2D must be constructible, bindable and
+// A depth-backed MULTISAMPLED RenderTarget2D must be constructible, bindable and
 // genuinely depth-tested, and every combination the public API accepts must either work or be
 // refused at a public boundary. It must never abort the process.
 //
@@ -23,7 +23,7 @@
 // layer could turn this into a clean NotSupportedException -- the game simply died.
 //
 // The identical fix already existed one screen further down the same file, on the CUBE path
-// (REMED-GFX-141), which recorded the 2D sibling as a separate finding and left it. This file is
+//, which recorded the 2D sibling as a separate finding and left it. This file is
 // that finding's oracle.
 //
 // WHY NO EXISTING FIXTURE CAUGHT IT
@@ -40,7 +40,7 @@
 // WHY THE ORACLE DOES NOT READ THE MULTISAMPLED TARGET BACK
 // --------------------------------------------------------
 // A multisampled render target on BGFX reports a successful readback over untouched memory
-// (REMED-GFX-134/138, and REMED-GFX-154/164 for the first-readback and MSAA-readback findings).
+// (the RenderTargetCube readback contract, and the multisampled readback contract for the first-readback and MSAA-readback findings).
 // Those are independent, still-open tickets and this file must not depend on them. Every content
 // assertion here is therefore PRODUCER -> CONSUMER: the multisampled target is rendered into, then
 // SAMPLED as a texture onto the ordinary backbuffer, and the BACKBUFFER is what is read. Leg S3
@@ -224,7 +224,7 @@ namespace
 }
 
 /**
- * @brief REMED-GFX-163's contract: the complete colour/depth/MSAA render-target attachment matrix.
+ * @brief The contract: the complete colour/depth/MSAA render-target attachment matrix.
  */
 class RenderTargetMsaaDepthContractTest : public Game
 {
@@ -403,7 +403,7 @@ class RenderTargetMsaaDepthContractTest : public Game
      * alone. bgfx's OpenGL renderer resolves an MSAA render target by blitting its renderbuffer into
      * the texture, which needs `glBlitFramebuffer` -- GL 3.0 / EXT_framebuffer_blit. Under a GL 2.1
      * context there is no such resolve, so a 4x target samples as black however correctly it was
-     * built. That is a property of the active renderer and entirely separate from REMED-GFX-163,
+     * built. That is a property of the active renderer and entirely separate from the depth-backed multisampled render-target contract,
      * whose subject is whether the attachments can be CREATED at all.
      *
      * @return true when a flat Clear on a 4x target survives the producer -> consumer path.
@@ -589,7 +589,7 @@ class RenderTargetMsaaDepthContractTest : public Game
     void LegM04() { MatrixCell(DepthFormat::Depth24Stencil8, 1, 0, false, "M04 Depth24Stencil8/1"); }
     void LegM05() { MatrixCell(DepthFormat::None,            4, 4, false, "M05 None/4"); }
 
-    /// THE canonical REMED-GFX-163 red case, verbatim from the ticket.
+    /// THE canonical the depth-backed multisampled render-target contract red case, verbatim from the ticket.
     void LegM06() { MatrixCell(DepthFormat::Depth24,         4, 4, false, "M06 Depth24/4"); }
 
     void LegM07() { MatrixCell(DepthFormat::Depth16,         4, 4, false, "M07 Depth16/4"); }
@@ -618,7 +618,7 @@ class RenderTargetMsaaDepthContractTest : public Game
             MatrixCell(DepthFormat::Depth24, 4, 4, true, "M14 Depth24/4 +mips");
             return;
         }
-        // The whole point of REMED-GFX-163 is that an unsupported combination must be REFUSED, not
+        // The whole point of the depth-backed multisampled render-target contract is that an unsupported combination must be REFUSED, not
         // fatal. Where mip-mapped targets are not implemented, that refusal is asserted positively:
         // it has to arrive as a catchable std::exception and leave the process alive.
         auto& dev = getGraphicsDeviceProperty();
@@ -740,7 +740,7 @@ class RenderTargetMsaaDepthContractTest : public Game
         check(got[1], "S3 attaching depth does not disturb it (1x, Depth24)");
 
         // Whether a MULTISAMPLED colour attachment resolves into its sampleable handle is a property
-        // of the active renderer, not of REMED-GFX-163. Where it does not, the depth legs say so and
+        // of the active renderer, not of the depth-backed multisampled render-target contract. Where it does not, the depth legs say so and
         // measure depth on a single-sampled depth-backed target instead of inventing a result.
         if (MsaaSamplingWorks())
         {
@@ -1017,10 +1017,10 @@ class RenderTargetMsaaDepthContractTest : public Game
     // ---------------------------------------------------------------- X: the cube regression gate
 
     /**
-     * @brief X1 -- RenderTargetCube with MSAA and depth. Fixed by REMED-GFX-141; must stay fixed.
+     * @brief X1 -- RenderTargetCube with MSAA and depth. Fixed by the per-face multisample attachment fix; must stay fixed.
      *
      * The cube path is where the correct flag construction already lived. This leg exists so the
-     * shared helper introduced by REMED-GFX-163 cannot regress it.
+     * shared helper introduced by the depth-backed multisampled render-target contract cannot regress it.
      */
     void LegX1()
     {
@@ -1141,7 +1141,7 @@ namespace
      * @brief Runs one leg in a child process and classifies the outcome exactly.
      *
      * SIGTRAP is called out by name: that is how a bgfx BX_ASSERT arrives, and it is the signature
-     * of the REMED-GFX-163 defect specifically.
+     * of the depth-backed multisampled render-target contract defect specifically.
      *
      * @param exePath  this binary's own path.
      * @param legId    the leg to run.

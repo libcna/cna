@@ -10,7 +10,7 @@
 // quad's +Z normal (NdotL = 1), a blue DirectionalLight0.DiffuseColor, the default ambient and a
 // white 1x1 texture reduce the lit colour to exactly the light's diffuse colour. The quad sets
 // RasterizerState::CullNone: under XNA's default CullCounterClockwiseFace it is back-facing
-// (REMED-GFX-052).
+//.
 //
 // First written for the retired VULKAN renderer (Task 899); kept as a shared source because
 // DIRECTX9 runs it too.

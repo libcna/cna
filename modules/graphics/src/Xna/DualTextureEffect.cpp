@@ -276,7 +276,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.fogColor[0] = fogColor.X;
         p.fogColor[1] = fogColor.Y;
         p.fogColor[2] = fogColor.Z;
-        // REMED-GFX-010: FNA EffectHelpers.SetFogVector — view-space Z fog dotted with the
+        // FNA EffectHelpers.SetFogVector — view-space Z fog dotted with the
         // object-space vertex position in the shader; the vector bakes World*View's third column.
         Matrix fogWorldView; Matrix::Multiply(world_, view_, fogWorldView);
         if (!fogEnabled_)

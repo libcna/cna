@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-174: a public TextureFilter ordinal names FOUR independent components -- a minification
+// A public TextureFilter ordinal names FOUR independent components -- a minification
 // filter, a magnification filter, a mipmap filter and whether anisotropy is enabled -- and a renderer
 // must write EVERY one of them on EVERY application. Writing a component only when it is "on" is a
 // defect that no single-draw fixture can see, because the wrong state is left behind by the
@@ -16,12 +16,12 @@
 // returns the same wide box average for all nine ordinals and NO Point draw can return a stored
 // texel again.
 //
-// WHY THE EXISTING FIXTURES MISSED IT, measured not assumed. REMED-GFX-170's ordinal fixture DOES
+// WHY THE EXISTING FIXTURES MISSED IT, measured not assumed. the ordinal fixture DOES
 // see it (EasyGL 50/70) but attributes it to two unrelated-looking symptoms. Its SpriteBatch legs
 // all pass, and the reason is ORDERING rather than immunity. EasyGLSpriteBatchRenderer calls
 // ApplySamplerState with a HARDCODED maxAnisotropy of 1, so the sprite path can never RAISE the
 // value; only the 3D path forwards the public SamplerState.MaxAnisotropy (default 4). But because
-// the pre-fix write happened only for ordinal 2, a sprite draw could not LOWER the value either --
+// The pre-fix write happened only for ordinal 2, a sprite draw could not LOWER the value either --
 // so SpriteBatch never causes the contamination and still inherits it. GFX-170's sprite legs run
 // before any 3D leg, which is the whole of why they were green; legs F1..F3 below run them after a
 // 3D Anisotropic draw and they fail pre-fix. "3D interpolates under Point while SpriteBatch is
@@ -191,7 +191,7 @@ namespace
                a.getBProperty() == b.getBProperty();
     }
 
-    /// Stride-20 VertexPositionTexture (REMED-GFX-125: object size is not the stream stride).
+    /// Stride-20 VertexPositionTexture (object size is not the stream stride).
     struct VtxPT { float px, py, pz; float u, v; };
     static_assert(sizeof(VtxPT) == 20, "stride 20");
 
@@ -278,7 +278,7 @@ class SamplerComponentIsolationTest : public Game
     }
 
     /// A preceding SpriteBatch leaves CullCounterClockwise behind, which culls this winding
-    /// (REMED-GFX-160).
+    ///.
     static void ResetDeviceState(GraphicsDevice& dev, int w, int h)
     {
         dev.setViewportProperty(Viewport(0, 0, w, h));
@@ -472,7 +472,7 @@ class SamplerComponentIsolationTest : public Game
         }
 
         // A4: the correction must not turn Anisotropic into nearest -- it is a LINEAR filter, and
-        // that is precisely the half REMED-GFX-170 found SDL_GPU had lost.
+        // that is precisely the half the nine-value TextureFilter contract found SDL_GPU had lost.
         {
             const std::vector<Color> pix = Draw3D(dev, 3, 2, tex8x4_, aniso);
             check(Foreign(pix, p8x4_) > 0,
@@ -630,7 +630,7 @@ class SamplerComponentIsolationTest : public Game
         // D4: MEASURED AND REPORTED, NOT ASSERTED. The public table gives Linear(0) a mip component
         // of Linear and Point(1) a mip component of Point, but EasyGL maps both onto a GL filter
         // with no mipmap term at all, so a texture that DOES own a chain never mip-filters under
-        // either. That is a real divergence from the table and it is NOT the defect REMED-GFX-174
+        // either. That is a real divergence from the table and it is NOT the defect the EasyGL sampler-completeness fix
         // records, so it is reported here with its measurement and carried as its own ticket rather
         // than silently absorbed or asserted to the wrong contract.
         {

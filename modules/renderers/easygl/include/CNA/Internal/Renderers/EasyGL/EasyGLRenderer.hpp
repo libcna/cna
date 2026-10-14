@@ -41,7 +41,7 @@ namespace CNA::Internal::Renderers::EasyGL
     using EasyGLSurfaceState = GlPresentationSurfaceState;
 
     /**
-     * @brief REMED-GFX-168: the one record of which EasyGL render target is currently bound.
+     * @brief The one record of which EasyGL render target is currently bound.
      *
      * This used to be six plain members of `EasyGLRenderer`, three of them raw pointers to
      * render-target RENDERER OBJECTS. Switching destination calls `UnbindAsRenderTarget()` on the
@@ -132,7 +132,7 @@ namespace CNA::Internal::Renderers::EasyGL
     };
 
     /**
-     * @brief REMED-GFX-147: whether sampling @p texture needs a vertical coordinate correction.
+     * @brief Whether sampling @p texture needs a vertical coordinate correction.
      *
      * This is the single source of truth for the question "did this texture's content arrive by
      * being RENDERED rather than uploaded?", and every EasyGL sampling path -- SpriteBatch's
@@ -186,7 +186,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Gives GL storage to every DECLARED mip level above 0, with no pixel data.
          *
-         * REMED-GFX-175. A texture created with `mipMap=true` declares a chain, and Task 924 widens
+         * A texture created with `mipMap=true` declares a chain, and Task 924 widens
          * `GL_TEXTURE_MAX_LEVEL` to match that declaration -- but only level 0 was ever given
          * storage, so until the game happened to write every remaining level the texture was
          * mipmap-incomplete and sampled as opaque black under every ordinal carrying a mipmap term.
@@ -218,7 +218,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param h                Height in pixels.
          * @param depthFormat      Raw `DepthFormat` ordinal; `None` allocates no depth storage.
          * @param registry         Context-loss registry this target registers with, or nullptr.
-         * @param binding          REMED-GFX-168: the creating renderer's shared binding record, so
+         * @param binding          the creating renderer's shared binding record, so
          *                         this target can detach itself from it when destroyed. Held as a
          *                         `weak_ptr`, so a target outliving its graphics renderer detaches
          *                         from nothing instead of touching freed storage.
@@ -266,7 +266,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
-        /// REMED-GFX-127: returns true once glReadPixels has filled the whole requested region.
+        /// Returns true once glReadPixels has filled the whole requested region.
         /// Every invalid request throws; there is no path that returns false having written part of
         /// @p data, so the shared layer can never convert a partially populated buffer.
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
@@ -302,9 +302,9 @@ namespace CNA::Internal::Renderers::EasyGL
                                int levelW, int levelH, int stride);
         /** @brief Resolves this target's multisample colour storage into its public texture. */
         void ResolveColorEXT(const char* traceEvent) const;
-        /// REMED-GFX-168: this target's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
+        /// This target's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
         [[nodiscard]] std::string TraceNativeDetailEXT() const;
-        /// REMED-GFX-168: clears every slot of the shared binding record that names this target.
+        /// Clears every slot of the shared binding record that names this target.
         void DetachFromBindingEXT();
         void AttachColorToMRT(
             ::easygl::Framebuffer& framebuffer,
@@ -324,7 +324,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
-        /// REMED-GFX-168: the creating renderer's binding record, so the destructor can detach.
+        /// The creating renderer's binding record, so the destructor can detach.
         std::weak_ptr<EasyGLBoundTargetEXT> binding_;
     };
 
@@ -339,7 +339,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param size             Edge length of each face in pixels.
          * @param depthFormat      Raw `DepthFormat` ordinal; `None` allocates no depth storage.
          * @param registry         Context-loss registry this target registers with, or nullptr.
-         * @param binding          REMED-GFX-168: the creating renderer's shared binding record. See
+         * @param binding          the creating renderer's shared binding record. See
          *                         `EasyGLRenderTargetRenderer`'s identical parameter.
          * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
          * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
@@ -370,7 +370,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Uploads declared-format texels into a rendered cube face's mip level.
          *
-         * REMED-GFX-135: the only render-target cube in CNA that implements this rather than
+         * The only render-target cube in CNA that implements this rather than
          * inheriting `IRenderTargetCubeRenderer::SetData`'s refusal -- the FBO's colour attachment
          * IS a normal GL cube texture here, so glTexSubImage2D reaches it directly.
          *
@@ -408,7 +408,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Reads a RENDERED cube face's mip level back to the CPU.
          *
-         * REMED-GFX-134. `EasyGLTextureCubeRenderer::GetData`'s mechanism -- attach the requested
+         * `EasyGLTextureCubeRenderer::GetData`'s mechanism -- attach the requested
          * face/level to a temporary FBO and glReadPixels it -- with the one difference a rendered
          * face has: this content came from rasterization, so it is stored bottom-up in the face's
          * texel grid exactly as `EasyGLRenderTargetRenderer::GetData` already documents for a 2D
@@ -476,9 +476,9 @@ namespace CNA::Internal::Renderers::EasyGL
         void UnbindMRTFace(int face);
         /** @brief Resolves one multisampled face into the public cube texture. */
         void ResolveFaceEXT(int face, const char* traceEvent);
-        /// REMED-GFX-168: this cube's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
+        /// This cube's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
         [[nodiscard]] std::string TraceNativeDetailEXT() const;
-        /// REMED-GFX-168: clears the shared binding record if it still names this cube.
+        /// Clears the shared binding record if it still names this cube.
         void DetachFromBindingEXT();
 
         ::easygl::Texture      cubeTex_;
@@ -486,7 +486,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::Framebuffer  resolveFbo_;  ///< MSAA only: blit destination, re-attached per face.
         ::easygl::Renderbuffer depthRbo_;
         /**
-         * REMED-GFX-141: SIX multisample colour renderbuffers, one per cube face, not one shared
+         * SIX multisample colour renderbuffers, one per cube face, not one shared
          * by all six. A renderbuffer is face-agnostic storage, so the single one this used to
          * allocate held whichever face was rendered last -- and a `PreserveContents` face rebound
          * for a partial update loaded THAT instead of its own samples, while the resolved
@@ -505,7 +505,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int  multiSampleCount_ = 0;
         int  lastFace_         = 0;  ///< Most recently bound face, used by UnbindAsRenderTarget's resolve.
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
-        /// REMED-GFX-168: the creating renderer's binding record, so the destructor can detach.
+        /// The creating renderer's binding record, so the destructor can detach.
         std::weak_ptr<EasyGLBoundTargetEXT> binding_;
     };
 
@@ -516,7 +516,7 @@ namespace CNA::Internal::Renderers::EasyGL
         EasyGLTexture3DRenderer(int w, int h, int depth, bool mipMap, int surfaceFormat);
         ~EasyGLTexture3DRenderer() override = default;
 
-        /// REMED-GFX-135: true only once the requested box has been uploaded into a level this
+        /// True only once the requested box has been uploaded into a level this
         /// texture really allocated and GL reported no error; false for an out-of-range level or
         /// box, a source buffer too small for the box, or a driver-rejected upload. glTexSubImage3D
         /// copies out of the caller's memory before returning, so the source is never retained.
@@ -524,7 +524,7 @@ namespace CNA::Internal::Renderers::EasyGL
                                    int w, int h, int depth,
                                    const void* data, int dataLength) override;
 
-        /// REMED-GFX-130: true only once every requested Z slice has been read back through the
+        /// True only once every requested Z slice has been read back through the
         /// temporary FBO below; false when the request is out of range or an FBO attachment for
         /// some slice is not framebuffer-complete, so the shared layer rejects the read instead of
         /// converting its own zeroed scratch buffer into a fabricated volume.
@@ -574,7 +574,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int width_  = 0;
         int height_ = 0;
         int depth_  = 0;
-        /// Mip levels this texture really allocated storage for (REMED-GFX-135).
+        /// Mip levels this texture really allocated storage for.
         int levelCount_ = 1;
         int surfaceFormat_ = 0;
         std::vector<std::vector<std::uint8_t>> rawLevels_;
@@ -590,7 +590,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Releases the GL cube texture. */
         ~EasyGLTextureCubeRenderer() override;
 
-        /// REMED-GFX-135: true only once the requested face/mip rectangle has been uploaded into a
+        /// True only once the requested face/mip rectangle has been uploaded into a
         /// level this texture really allocated and GL reported no error; false for an out-of-range
         /// face/level/rectangle, a source buffer too small for the region, or a driver-rejected
         /// upload. glTexSubImage2D copies out of the caller's memory before returning, so the
@@ -625,7 +625,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int face, int level, int x, int y, int w, int h,
             const void* data, int dataLength) override;
 
-        /// REMED-GFX-130: true only once the requested face/mip rectangle has been read back
+        /// True only once the requested face/mip rectangle has been read back
         /// through the temporary FBO below; false for an out-of-range face or an incomplete
         /// framebuffer, so the shared layer rejects the read instead of fabricating a face.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -677,7 +677,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::Texture tex_;
         int size_ = 0;
         int surfaceFormat_ = 0;
-        /// Mip levels this cube really allocated storage for (REMED-GFX-135).
+        /// Mip levels this cube really allocated storage for.
         int levelCount_ = 1;
         /// Exact face-major DXT blocks, retained because compressed GL images are not FBO-readable.
         std::vector<std::vector<std::uint8_t>> compressedLevels_;
@@ -726,7 +726,7 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         ::easygl::Program program_;
         std::string compileError_;
-        /// REMED-GFX-147: per-texture-unit "the bound source is a render target" flags, mirrored
+        /// Per-texture-unit "the bound source is a render target" flags, mirrored
         /// into this effect's own `uRtFlipV` when its GLSL opts in by declaring that uniform.
         float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         bool  rtFlipVUploaded_ = false;
@@ -807,7 +807,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void ApplyChannelExpansion(::easygl::Program* prog, int surfaceFormat) const;
 
         const ITextureRenderer* current_texture_ = nullptr;
-        /// REMED-GFX-147: cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
+        /// Cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
         /// texture by construction, so the answer is resolved when the source is bound, not once
         /// per sprite. Meaningless while current_texture_ is null.
         ///
@@ -917,7 +917,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *
          * plans/plan_fx.md FX-118. The two routes correct a render target's row order in two
          * different places -- the stock route mirrors V in the sprite's own vertex data
-         * (REMED-GFX-147), the compiled route binds a row-reversed copy of the source per sampler
+         *, the compiled route binds a row-reversed copy of the source per sampler
          * slot (FX-099) -- and applying both to one draw flips the image. The route is fixed for
          * the whole batch, because SetCustomEffect() flushes whenever the effect changes.
          *
@@ -1201,7 +1201,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         // GLB-41: what this renderer last wrote into each samplers_[slot]. GraphicsDevice re-applies
         // all sixteen pixel samplers before every draw, and each application still makes the
-        // object's complete state a function of its own arguments (REMED-GFX-174, FX-092) -- but a
+        // object's complete state a function of its own arguments (FX-092) -- but a
         // write is issued only when the object does not already hold that exact value. The
         // renderer is the only writer and the only binder of these objects, so the record cannot
         // go stale; it is dropped whenever the object is recreated or the context is lost.
@@ -1351,7 +1351,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_bones         = -1;  ///< mat4[72] bone palette (SkinnedEffect)
             int loc_weightsPerVertex = -1;  ///< int 1/2/4 (SkinnedEffect only, Task 895)
             int loc_alphatest     = -1;  ///< vec4 (refVal, tolerance, passW, failW)
-            int loc_fog_vector    = -1;  ///< REMED-GFX-010: vec4 FNA fog vector (dot with object/skin pos)
+            int loc_fog_vector    = -1;  ///< vec4 FNA fog vector (dot with object/skin pos)
             int loc_fog_color     = -1;  ///< vec3 RGB fog colour
             int loc_vertexcolor   = -1;  ///< float 0=ignore vertex color, 1=multiply by it (BasicEffect.VertexColorEnabled)
             int loc_pbr_normalmap  = -1;  ///< sampler2D tangent-space normal map (PbrEffect only)
@@ -1387,9 +1387,9 @@ namespace CNA::Internal::Renderers::EasyGL
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
             /// GLTF-344: two affine rows for each specular texture, kept ABI-separate from slots 0-4.
             std::array<int, 4> loc_pbr_specular_texture_transform_rows{-1, -1, -1, -1};
-            int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
-            int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: units 4-6 in xyz (PbrEffect only)
-            int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate
+            int loc_rt_flip_v       = -1;  ///< vec4 render-target V-flip flags for texture units 0-3
+            int loc_rt_flip_v_hi    = -1;  ///< units 4-6 in xyz (PbrEffect only)
+            int loc_instanced       = -1;  ///< stock-program per-instance matrix gate
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };
 
@@ -1428,7 +1428,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // away from a destination is the only thing that runs its MSAA resolve and mip regeneration
         // (Task 336) — which is why the outgoing target's identity has to be remembered at all.
         //
-        // REMED-GFX-168: separately allocated and SHARED with every render target this renderer
+        // Separately allocated and SHARED with every render target this renderer
         // creates, so a target destroyed while it is still bound clears its own slot here instead of
         // leaving a dangling pointer for the next transition to dispatch through. See
         // EasyGLBoundTargetEXT for why the record is shared rather than owned outright, and why it
@@ -1447,7 +1447,7 @@ namespace CNA::Internal::Renderers::EasyGL
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
 
-        /// REMED-GFX-237: the WRITE masks a clear has to force and then put back. XNA's Clear
+        /// The WRITE masks a clear has to force and then put back. XNA's Clear
         /// ignores both, `glClear` obeys both, so each clear overrides them -- and the next draw
         /// only gets the real values again if the game happens to reassign its DepthStencilState,
         /// which it need not. Initialised to GL's own defaults.
@@ -1466,7 +1466,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int  stencilReadMask_ = 0;
         int  referenceStencil_ = 0;
 
-        /// REMED-GFX-168: the binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
+        /// The binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
         /// Never dereferences a recorded target -- one of them may already be destroyed storage,
         /// which is precisely what the trace exists to record.
         [[nodiscard]] std::string TraceBindingDetailEXT() const;
@@ -1575,7 +1575,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void EnsureDefaultBlackTexture();
         void EnsureDefaultBlackCubeTexture();
         void EnsureDefaultFlatNormalTexture();
-        /// REMED-GFX-218: which stock program a draw gets. SelectProgram(), declaration
+        /// Which stock program a draw gets. SelectProgram(), declaration
         /// conversion validation and semantic attribute binding all read this single cascade.
         enum class StockProgramShape
         {
@@ -1603,7 +1603,7 @@ namespace CNA::Internal::Renderers::EasyGL
         static void RestoreDeclarationLayoutEXT(EasyGLVertexBufferRenderer& buffer);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                             const Matrix& projection, const GpuDrawParams& params);
-        /// REMED-GFX-147: resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.
+        /// Resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
         /// plans/plan_modern.md MOD-836..MOD-839: resolves CNA_GL_SHADOW_DECL's uniforms for a freshly
         /// linked lit program. Every other program leaves them at -1, and BindDrawParams skips
@@ -1832,7 +1832,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * plans/plan_fx.md FX-099. This renderer never flips geometry for a framebuffer object, so a
          * render target's colour texture stores its rows bottom-up relative to an uploaded
          * `Texture2D`. Every shader this renderer authors corrects for that at sample time through
-         * the `uRtFlipV` uniform and the `cnaSampleUV` helper (REMED-GFX-147), and `GetData` mirrors
+         * the `uRtFlipV` uniform and the `cnaSampleUV` helper, and `GetData` mirrors
          * the rows on readback. A compiled Effect's GLSL is generated by MojoShader from Direct3D 9
          * bytecode and contains neither the helper nor the uniform, and there is no way to inject
          * one into it -- so a compiled Effect sampling a render target would see the image upside
@@ -1910,7 +1910,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *
          * True for Dxt1, Dxt3 and Dxt5 on every profile: the blocks arrive as blocks, and this
          * renderer decides afterwards whether the driver can store them that way or they must be
-         * decoded (REMED-GFX-244).
+         * decoded.
          *
          * @param surfaceFormat SurfaceFormat ordinal.
          * @return true when the format transfers as compressed blocks rather than pixels.
@@ -2150,7 +2150,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
         /**
-         * @brief REMED-GFX-237: restores the write masks a clear had to force open.
+         * @brief Restores the write masks a clear had to force open.
          * @param depth Restore the depth write mask.
          * @param stencil Restore the stencil write mask (only while the stencil test is on).
          */

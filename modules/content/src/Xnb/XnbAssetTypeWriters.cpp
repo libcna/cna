@@ -967,7 +967,7 @@ namespace CNA::Internal::Xnb
                 // XNA's SpriteFont binary-searches its character table, so an unsorted one does
                 // not fail: it silently returns the wrong glyph, or none. And CNA's own
                 // SpriteFont rejects a default character the font cannot render
-                // (REMED-GFX-002), so writing one produces an .xnb its own runtime refuses.
+                //, so writing one produces an .xnb its own runtime refuses.
                 // Both are cheap here and impossible to diagnose from rendered output
                 // (plans/plan_xnapipeline.md XNAP-45).
                 for (std::size_t index = 1u; index < value.characters.size(); ++index)

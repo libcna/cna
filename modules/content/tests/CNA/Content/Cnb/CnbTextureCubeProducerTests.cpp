@@ -265,7 +265,7 @@ TEST(CnbTextureCubeProducerTest, ATextureCubeCnbLoadsThroughContentManager)
     GraphicsDevice device;
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(device);
-    // Headless stores no pixels, so it refuses TextureCube::SetData (REMED-GFX-135), and the .cnb
+    // Headless stores no pixels, so it refuses TextureCube::SetData, and the .cnb
     // load passes that through (CNA plans/plan_apple_m4.md AM4-268).
     if (CNA_RENDERER_IS(CNA::Testing::Renderers::Headless))
     {

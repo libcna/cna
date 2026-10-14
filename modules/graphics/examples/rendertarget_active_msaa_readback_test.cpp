@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// Renderer-neutral public replacement for the portable half of REMED-GFX-164. Reading a
+// Renderer-neutral public replacement for the portable half of the bound multisampled render-target alpha contract. Reading a
 // multisampled render target while it is still active may either return the exact current image or
 // reject the operation without touching the destination. Silent stale resolve data is never valid,
 // and either outcome must leave the active render-target set usable by subsequent commands.

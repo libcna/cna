@@ -1016,7 +1016,7 @@ namespace Microsoft::Xna::Framework
 
         if (graphicsDeviceService_ != nullptr)
         {
-            // REMED-CORE-006: FNA's Initialize() (Game.cs:649-662) subscribes
+            // FNA's Initialize() (Game.cs:649-662) subscribes
             // graphicsDeviceService.DeviceDisposing += (o,e) => UnloadContent(); -- CNA never
             // performed this subscription, so the documented UnloadContent() lifecycle hook was
             // dead code under every circumstance.

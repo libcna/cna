@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Content
 
             const std::string normalizedRelativeFile = normalizeSeparators(relativeFile);
 
-            // REMED-CONTENT-002/XNB-35 hardening, no FNA equivalent (FNA just lets the OS fail to
+            // XNB-35 hardening, no FNA equivalent (FNA just lets the OS fail to
             // find an escaping path): reject a reference that is itself absolute outright, rather
             // than attempting to load whatever happens to be there. This method's own doc comment
             // already promised such paths are "rejected outright"; previously only the ".."-

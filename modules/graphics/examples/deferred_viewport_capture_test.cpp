@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-116: every deferred draw must execute under the GraphicsDevice.Viewport that was
+// Every deferred draw must execute under the GraphicsDevice.Viewport that was
 // active at its own public draw call.
 //
 // WebGPU collects a bind cycle's Clear/3D/SpriteBatch work and records ONE native render pass for
@@ -23,7 +23,7 @@
 //   * Nothing between the draws forces a flush: no GetData, no Present, no explicit flush, no
 //     fence, no sleep, no extra frame, no render-target switch. Each sequence is queued whole and
 //     observed exactly once at its end. A fixture that reads or switches targets between viewport
-//     changes cannot see this defect at all -- that is precisely how it survived REMED-GFX-072.
+//     changes cannot see this defect at all -- that is precisely how it survived the SpriteBatch custom-viewport fix.
 //   * The viewport is restored to the full target BEFORE the single observation, so "resolve at
 //     flush time" and "capture at queue time" predict visibly different images rather than the
 //     same one.
@@ -44,7 +44,7 @@
 // (static/dynamic, indexed/non-indexed, 16-/32-bit, DrawUser); H stock effect families;
 // I SpriteBatch interleaved with 3D; J scissor is unaffected (see
 // examples/deferred_scissor_capture_test.cpp for the scissor's own deferral fixture,
-// REMED-GFX-146); K repeated frames.
+// The deferred scissor capture); K repeated frames.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
@@ -147,11 +147,11 @@ namespace
     constexpr Contract kContract{"SDL_GPU", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     // `depthRangeApplies` true: measured, not assumed. The software rasterizer's depth COMPARE is a
-    // fixed LessEqual (REMED-GFX-083's documented boundary), but it does remap the interpolated
+    // fixed LessEqual (the documented boundary), but it does remap the interpolated
     // depth through Viewport.MinDepth/MaxDepth, so checks E1/E2 assert the honoured outcome here.
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_HEADLESS)
-    // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
+    // Headless rasterizes nothing and its readback is the honest Texture2D::GetData contract's deterministic refusal.
     // Every sequence must still be legal and must not throw.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, Support::Unsupported, true, true, true, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
@@ -1368,7 +1368,7 @@ class DeferredViewportCaptureTest : public Game
      * @brief I2 -- a FULL-target SpriteBatch fill followed by a sub-Viewport set before the flush.
      *
      * The sprite was queued with the whole target active, so it must still cover the whole target.
-     * REMED-GFX-072 captured the viewport only for a SUB-REGION sprite, which left exactly this
+     * Captured the viewport only for a SUB-REGION sprite, which left exactly this
      * case resolving live state: the fill was squeezed into the later sub-Viewport.
      */
     void RunFullTargetSpriteThenSubViewport(GraphicsDevice& dev)
@@ -1470,8 +1470,8 @@ class DeferredViewportCaptureTest : public Game
         SetViewport(dev, 0, 0, kRTW, kRTH);
         // The scissor state is reset only AFTER the unbind. That was originally REQUIRED, because
         // WebGPU still resolved the SCISSOR rectangle from live state when it recorded the pass
-        // (recorded here as a separate finding and left untouched by REMED-GFX-116), so resetting
-        // before the flush would have erased the control. REMED-GFX-146 has since captured the
+        // (recorded here as a separate finding and left untouched by the deferred viewport capture), so resetting
+        // before the flush would have erased the control. the deferred scissor capture has since captured the
         // whole scissor state per draw, and the deliberately deferral-sensitive form of this
         // question now lives in examples/deferred_scissor_capture_test.cpp; the order is kept here
         // so this check keeps measuring what it always measured -- that per-draw VIEWPORT capture

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-111: the public PointListEXT topology contract.
+// The public PointListEXT topology contract.
 //
 // XNA/FNA define PointListEXT as "treats each vertex as a single point; vertex n defines point n;
 // N points are drawn". The reconciled CNA contract that this file locks down is therefore:
@@ -19,7 +19,7 @@
 // so they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but
 // implements no backbuffer readback, so it is covered by a separate practical control. The retired
 // VULKAN renderer joined this matrix with plans/plan_gltf.md GLTF-393; the Direct3D disposition
-// closes GLTF-394 / REMED-GFX-114. SOFTWARE-133 reconciled the oracle after the CPU renderer gained
+// closes GLTF-394. SOFTWARE-133 reconciled the oracle after the CPU renderer gained
 // a real point raster path: it now runs the same exact pixel, addressing and graphics-state
 // contract.
 
@@ -431,7 +431,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListRendersEveryRequestedPoint)
     ExpectPointCoverageBudget(pixels, Color::Black, 4, "non-indexed point list");
 }
 
-// The exact case REMED-GFX-106 discovered: one indexed point must produce one point.
+// The exact case the indexed parity reconciliation discovered: one indexed point must produce one point.
 TEST_F(PointListPrimitiveTest, IndexedPointListRendersEveryRequestedPoint)
 {
     RequirePointRendering();
@@ -548,7 +548,7 @@ TEST_F(PointListPrimitiveTest, IndexedPointListHonorsStartIndexBaseVertexAndExac
 }
 
 // The same addressing contract through a public 32-bit index buffer. On Bgfx this also proves that
-// REMED-GFX-108's native BGFX_BUFFER_INDEX32 creation still applies to point topology.
+// The native BGFX_BUFFER_INDEX32 creation still applies to point topology.
 TEST_F(PointListPrimitiveTest, IndexedPointListHonorsThirtyTwoBitIndexElements)
 {
     RequirePointRendering();
@@ -680,7 +680,7 @@ TEST_F(PointListPrimitiveTest, DrawUserPrimitivesPointListHonorsVertexOffsetAndC
     ExpectColorAbsent(pixels, Color::Magenta, "DrawUser decoy points");
     ExpectPointCoverageBudget(pixels, Color::Black, 3, "DrawUser point list");
 
-    // The explicit-VertexDeclaration overload (REMED-GFX-043) reaches the same contract. It reads
+    // The explicit-VertexDeclaration overload reaches the same contract. It reads
     // the caller array at the declaration's own stride, so the source must be exactly packed.
     std::array<CompactPositionColor, 7> compact{};
     for (std::size_t i = 0; i < vertices.size(); ++i)
@@ -1184,11 +1184,11 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 // Non-indexed point addressing: vertexStart selects the first consumed vertex and primitiveCount
 // limits the consumed range to exactly that many points.
 //
-// Bgfx joined this guard with REMED-GFX-113, which replaced its whole-buffer
+// Bgfx joined this guard with the non-indexed range fix, which replaced its whole-buffer
 // bgfx::setVertexBuffer(0, handle) binding with the exact [vertexStart, vertexStart + consumed)
 // range. The general non-indexed range contract for every topology lives in
 // NonIndexedDrawRangeTests.cpp; this case keeps the point-specific coverage alongside the rest of
-// REMED-GFX-111's topology contract.
+// The topology contract.
 TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,

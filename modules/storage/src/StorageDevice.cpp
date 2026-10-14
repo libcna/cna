@@ -273,7 +273,7 @@ namespace Microsoft::Xna::Framework::Storage
         if (titleName.empty())
             throw std::invalid_argument("titleName must not be empty.");
 
-        // REMED-CONTENT-002: titleName is caller-supplied. fs::path::operator/ silently discards
+        // TitleName is caller-supplied. fs::path::operator/ silently discards
         // the storage root for an absolute titleName, and does not reject ".." segments -- either
         // one previously let DeleteContainer("../../../SomeOtherAppData") (or an absolute path)
         // recursively delete anything the process can reach, not just this game's own storage.

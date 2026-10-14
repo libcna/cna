@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// REMED-GFX-209's asymmetric-triangle wireframe oracle, shared by every suite that measures a
+// The asymmetric-triangle wireframe oracle, shared by every suite that measures a
 // renderer's FillMode contract. It lives in a header rather than being copied because two copies of
 // a pixel oracle drift, and the whole point of this one is that the readings taken by different
 // suites are comparable: `GraphicsDeviceCapabilityTests.cpp` measures the per-renderer contract,

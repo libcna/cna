@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-010 — shared transformed-camera fog conformance scenes + FNA reference math.
+// Shared transformed-camera fog conformance scenes + FNA reference math.
 //
 // Purpose: give every renderer's view-space-fog test the SAME canonical scenes and the SAME
 // analytically-derived expected colors, so their numeric results are directly cross-renderer

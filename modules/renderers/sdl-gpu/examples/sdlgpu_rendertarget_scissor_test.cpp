@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-068: SdlGpu GraphicsDevice.ScissorRectangle must clip draws issued while a
+// SdlGpu GraphicsDevice.ScissorRectangle must clip draws issued while a
 // RenderTarget2D is bound — even though the draws are replayed at Present-time.
 //
 // SdlGpu is a DEFERRED renderer: every draw is queued (drawOrder_) and replayed at Present-time

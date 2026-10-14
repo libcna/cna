@@ -338,7 +338,7 @@ public class Probe : Game
         dev.DrawUserPrimitives(PrimitiveType.TriangleList, vertices, 0, 1);
     }
 
-    /// The same sweep for the two resource kinds REMED-GFX-242 did not cover. XNA's profile rules
+    /// The same sweep for the two resource kinds the profile-based texture-format rule did not cover. XNA's profile rules
     /// are not one list: a render target is a far narrower thing than a texture, and guessing which
     /// of the twenty formats each kind allows is exactly what this spike exists to avoid.
     void LegOtherKinds()

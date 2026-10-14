@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# REMED-MEDIA-001 and Software CPU allocation 32-bit CI coverage: a small, deliberately STANDALONE CMake project
+# And Software CPU allocation 32-bit CI coverage: a small, deliberately STANDALONE CMake project
 # (not add_subdirectory()'d into the main build) that compiles and runs width-dependent std::size_t
 # checks at a genuine 32-bit width.
 #

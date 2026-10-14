@@ -105,7 +105,7 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
     EXPECT_EQ(font.getCharactersProperty()[1], u'A');
 }
 
-// REMED-GFX-002: a defaultCharacter absent from the glyph list must be rejected, not silently
+// A defaultCharacter absent from the glyph list must be rejected, not silently
 // accepted and left to invoke UB the first time MeasureString/DrawString needed the fallback.
 //
 // plans/plan_cnb.md CNBF-122 moved the refusal earlier and made it shared. It used to come from

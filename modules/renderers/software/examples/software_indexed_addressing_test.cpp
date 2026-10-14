@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-110: the Software (CPU-raster) renderer's indexed draw paths must honor the exact
-// public indexed-draw contract reconciled by REMED-GFX-106 and already verified on the GPU
+// The Software (CPU-raster) renderer's indexed draw paths must honor the exact
+// public indexed-draw contract reconciled by the indexed parity reconciliation and already verified on the GPU
 // renderers by REMED-GFX-104/105/107/108/109/112:
 //
 //   * `startIndex` selects the first consumed index ELEMENT of the bound index buffer. It is an

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// The one bindable form of a sampled texture in the WebGPU renderer (REMED-GFX-167): a view plus
+// The one bindable form of a sampled texture in the WebGPU renderer: a view plus
 // the reference that keeps its texture alive for every queued draw that captured it.
 
 #pragma once
@@ -20,7 +20,7 @@
 namespace CNA::Internal::Renderers::WebGPU
 {
     /**
-     * @brief One native reference on a sampleable texture and its view (REMED-GFX-167). CNAEXT.
+     * @brief One native reference on a sampleable texture and its view. CNAEXT.
      *
      * This renderer records a whole frame and replays it later — a draw queued now is issued at
      * `SetRenderTarget()`'s flush or, for a backbuffer destination, not until `Present()`. The
@@ -54,7 +54,7 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
-     * @brief The one bindable form of a sampled texture in this renderer (REMED-GFX-167). CNAEXT.
+     * @brief The one bindable form of a sampled texture in this renderer. CNAEXT.
      *
      * Every deferred command stores this by value instead of a pointer to the resource's renderer
      * object. That closes both halves of the same defect at once: the view is resolved once, at

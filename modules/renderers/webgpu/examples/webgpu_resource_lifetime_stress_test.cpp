@@ -3,7 +3,7 @@
 //
 // Why this matters more here than on an immediate renderer. WebGPU queues its draws and replays
 // them at flush time, so a `Texture2D` the game disposes right after `SpriteBatch.End()` is still
-// referenced by a command that has not run yet. `REMED-GFX-167` exists for exactly that -- each
+// referenced by a command that has not run yet. the deferred-source lifetime fix exists for exactly that -- each
 // queued command holds a `shared_ptr<WebGPUSampledResourceEXT>` rather than a raw view -- and
 // nothing stressed it until now. On EasyGL the same sequence is harmless because the draw already
 // happened.
@@ -45,7 +45,7 @@
 //
 // (2) ASan is NOT the instrument that would catch the bug this test defends against, and the
 //     negative control proves it rather than the argument that used to stand here. Clearing
-//     `command.texture.keepAlive` in `QueueSprite` -- removing `REMED-GFX-167` -- does not produce a
+//     `command.texture.keepAlive` in `QueueSprite` -- removing the deferred-source lifetime fix -- does not produce a
 //     heap-use-after-free under ASan. It produces
 //     `TextureView[Id(2,1)] is no longer alive` from `wgpu-core-29.0.3/src/storage.rs`, a generation
 //     -counter assertion that fires BEFORE anything is dereferenced, and then a Rust panic across
@@ -153,7 +153,7 @@ public:
         check(baseline == 0, "the device starts with no uncaptured errors");
 
         // 1 -- a texture disposed AFTER the draw that samples it is queued, and BEFORE the frame is
-        // flushed. This is REMED-GFX-167's own case.
+        // flushed. This is the case.
         {
             device.Clear(kClearColor);
             auto texture = MakeSprite(device);
