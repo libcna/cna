@@ -192,6 +192,32 @@ TEST_F(ResourceContentManagerTest, AnAssetLoadsEndToEndThroughTheResourceFamily)
     EXPECT_EQ(loaded.value, 4321);
 }
 
+TEST_F(ResourceContentManagerTest, TheOrdinaryPublicLoadReadsThroughTheResourceFamily)
+{
+    // XNA's ResourceContentManager is used through the public Load<T>(), not through the protected seams: the
+    // resource family is the manager's only source, so Load<T>() must read it rather than the file system.
+    ResourceFixture fixture(BuildResourceXnb(777));
+    ResourceContentManager manager(nullptr, fixture.manager());
+
+    EXPECT_EQ(manager.Load<ResourceValue>("fixture").value, 777);
+    EXPECT_EQ(manager.Load<ResourceValue>("fixture").value, 777) << "a second Load is answered from the cache";
+}
+
+TEST_F(ResourceContentManagerTest, APublicLoadOfAnAbsentResourceIsAContentLoadException)
+{
+    ResourceFixture fixture(BuildResourceXnb(1));
+    ResourceContentManager manager(nullptr, fixture.manager());
+
+    EXPECT_THROW((void)manager.Load<ResourceValue>("absent"), ContentLoadException);
+}
+
+TEST_F(ResourceContentManagerTest, APublicLoadWithoutAResourceFamilyIsAContentLoadException)
+{
+    ResourceContentManager manager(nullptr);
+
+    EXPECT_THROW((void)manager.Load<ResourceValue>("anything"), ContentLoadException);
+}
+
 TEST_F(ResourceContentManagerTest, AMissingResourceIsReportedAsSuch)
 {
     ResourceFixture fixture(BuildResourceXnb(1));

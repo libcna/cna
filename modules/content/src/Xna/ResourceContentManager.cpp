@@ -15,6 +15,7 @@ namespace Microsoft::Xna::Framework::Content
     ResourceContentManager::ResourceContentManager(System::IServiceProvider* serviceProvider)
         : ContentManager(serviceProvider)
     {
+        RouteLoadsThroughOpenStreamEXT(true);
     }
 
     ResourceContentManager::ResourceContentManager(
@@ -22,6 +23,8 @@ namespace Microsoft::Xna::Framework::Content
         System::Resources::ResourceManager* resourceManager)
         : ContentManager(serviceProvider), resourceManager_(resourceManager)
     {
+        // XNA's public Load<T>() reads through OpenStream(); this one's resource family is its only source.
+        RouteLoadsThroughOpenStreamEXT(true);
         // XNA rejects a null resource manager before storing it, which is the only validation its
         // constructor does.
         if (resourceManager_ == nullptr)

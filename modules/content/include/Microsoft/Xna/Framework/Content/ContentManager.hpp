@@ -57,6 +57,10 @@ namespace Microsoft::Xna::Framework::Content
         Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
         System::IServiceProvider* serviceProvider_ = nullptr;
         bool disposed_ = false;
+        // True for a manager whose assets are not in the content root at all (ResourceContentManager): its Load<T>()
+        // reads through the virtual OpenStream() seam, as XNA's ContentManager does for every load, instead of
+        // climbing CNA's tier ladder over the file system.
+        bool loadsThroughOpenStream_ = false;
 
         // plans/plan_cnj.md CNB-36: keyed by (T's type_index, normalized logical name), not name
         // alone -- otherwise a second Load<T2>() for a logical name a different T1 already
@@ -187,6 +191,18 @@ namespace Microsoft::Xna::Framework::Content
 
     protected:
         /**
+         * @brief Makes Load<T>() read every asset through OpenStream() and ReadAsset<T>().
+         *
+         * CNAEXT. XNA's Load<T>() always reads through the virtual OpenStream() seam, so a manager that
+         * overrides it (embedded resources, a pack file) serves assets through the ordinary public call.
+         * CNA's Load<T>() instead climbs a tier ladder -- .xnb, .cnb, loose files -- over the file system,
+         * which an OpenStream() override never sees. A derived manager whose assets live somewhere else
+         * calls this from its constructor to get XNA's behaviour: the cache still applies, and the other
+         * tiers are skipped. ResourceContentManager does so.
+         */
+        CNAEXT void RouteLoadsThroughOpenStreamEXT(bool enabled) noexcept { loadsThroughOpenStream_ = enabled; }
+
+        /**
          * @brief Releases this manager's assets, optionally only the unmanaged ones.
          *
          * The documented protected disposal hook: `Dispose()` routes here, and a derived manager
@@ -206,8 +222,10 @@ namespace Microsoft::Xna::Framework::Content
          * @brief Opens the stream an asset's compiled data is read from.
          *
          * The documented protected virtual seam. Override it to serve assets from a pack file, an
-         * archive, or embedded resources; every `.xnb` load goes through it, so an override changes
-         * where compiled content comes from without touching anything else.
+         * archive, or embedded resources. ReadAsset<T>() always reads through it; Load<T>() does too for a
+         * manager that asks (RouteLoadsThroughOpenStreamEXT, which ResourceContentManager does), and
+         * otherwise reads the file system first, so an override changes where compiled content comes from
+         * without touching anything else.
          *
          * The base implementation opens `<RootDirectory>/<assetName>.xnb` for reading and reports a
          * failure as a ContentLoadException naming the asset, with the underlying error as its
@@ -528,6 +546,16 @@ namespace Microsoft::Xna::Framework::Content
             // this after the lookup avoids per-frame console traffic in faithful XNA code that
             // calls Content.Load from Draw and relies on ContentManager's cache (SAMPLE-014).
             log::Debug(std::string("Loading asset: ") + assetName);
+
+            // A manager whose assets are not in the content root (ResourceContentManager) reads them through
+            // OpenStream(), exactly as XNA's Load<T>() does for every manager; the file-system tiers below
+            // would never see an override.
+            if (loadsThroughOpenStream_)
+            {
+                T result = ReadAsset<T>(assetName, {});
+                loadedAssets_[cacheKey] = result;
+                return result;
+            }
 
             // The readers of T, registered by the first load that needs them (BuiltinContent).
             detail::BuiltinContent<T>::Register(*this);

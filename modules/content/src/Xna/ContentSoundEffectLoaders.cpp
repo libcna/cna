@@ -192,6 +192,11 @@ namespace Microsoft::Xna::Framework::Content
 
         log::Debug(std::string("Loading asset: ") + assetName);
 
+        // A manager whose assets are not in the content root (ResourceContentManager) reads them through
+        // OpenStream(), as the generic Load<T>() does for such a manager: the tiers below only see files.
+        if (loadsThroughOpenStream_)
+            return ReadAsset<Audio::SoundEffect>(assetName, {});
+
         detail::BuiltinContent<Audio::SoundEffect>::Register(*this);
 
         // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s
