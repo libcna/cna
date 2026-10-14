@@ -6,7 +6,11 @@
 > [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md); current known
 > bugs and limitations are in [`handoff.md`](handoff.md) §5.
 
-> Notes naming Vulkan, Metal, DirectX 11 or SDL_Renderer predate their retirement on 2026-10-13.
+> Notes naming Vulkan, Metal, DirectX 11 or SDL_Renderer predate their retirement on 2026-10-13
+> (Bgfx was retired on 2026-09-17, DirectX 12 and Canvas on 2026-10-06; `docs/removed-renderers.md`).
+> That includes the per-renderer remarks inside the per-class tables: they record how those
+> renderers behaved, not a current capability. The current renderer set is the 10 identities in
+> `cmake/RendererIdentities.cmake`.
 
 > **XACTBUILD-001 / SAMPLE-122 (2026-10-03):** BuildXact now sends genuine `/WINDOWS`/`/XBOX360`
 > switches and shares the effect compiler's Wine path spelling. Three invocation regressions fail

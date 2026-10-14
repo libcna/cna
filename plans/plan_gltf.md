@@ -1,5 +1,12 @@
 # plan_gltf.md — CNA glTF 2.0 Correctness Remediation Campaign
 
+> **Renderer note (2026-10-14).** Most renderers this campaign measured have since been retired
+> (`docs/removed-renderers.md`); renderer counts below ("fourteen renderers", "eight renderers") are
+> counts of their date. Of the **four L7 golden policies** the campaign kept, two survive:
+> EasyGL/OPENGLES3 (`tests/gltf-l7/easygl-policy.json`) and SOFTWARE
+> (`tests/gltf-l7/software-policy.json`). The Vulkan-on-lavapipe and DirectX11 corpora were removed
+> with their renderers on 2026-10-13. Current renderer truth is `cmake/RendererIdentities.cmake`.
+
 
 > **Renderer selection.** This document describes the renderer as a compile-time choice
 > (`-DCNA_GRAPHICS_RENDERER=...`), which remains the default and recommended mode. Since
@@ -114,9 +121,11 @@ adversarial re-audit found violated in 2026-08-17 (flat normals per face, per-mo
 normals, ignoring provided tangents without `NORMAL`, and `COLOR_0` keeping its material).
 
 The evidence is a seven-rung ladder (L0–L7) plus, since `GLTF-472`, a **live draw tier** that no
-static audit can substitute for. **Fourteen renderers** now draw every canonical glTF stride through
-a real device. The conformance corpus is 148 assets / 744 files, byte-identical to its own generator,
-with four independent L7 golden policies.
+static audit can substitute for. **Fourteen renderers** drew every canonical glTF stride through
+a real device as of 2026-08-18 (most since retired). The conformance corpus is 148 assets / 744
+files, byte-identical to its own generator, with four independent L7 golden policies at the time --
+two since 2026-10-13 (EasyGL and SOFTWARE; the Vulkan and DirectX11 policies went with their
+renderers).
 
 ### The rule everything is measured against
 
@@ -2114,9 +2123,9 @@ the white identity cannot produce).
 **How far each renderer's disposition is verified.** Three tiers, and `GLTF-472` added the middle one
 because the gap between the first and the last is where both of its defects lived.
 
-*Pixel-level* for the four L7 policies — EasyGL/OPENGLES3, Vulkan on lavapipe, SOFTWARE, and
-DirectX11 under Wine + DXVK — whose committed goldens carry the authored product for both the rigid
-and the skinned path.
+*Pixel-level* for the four L7 policies of the time — EasyGL/OPENGLES3, Vulkan on lavapipe, SOFTWARE,
+and DirectX11 under Wine + DXVK — whose committed goldens carry the authored product for both the
+rigid and the skinned path. (Since 2026-10-13 only the EasyGL and SOFTWARE policies remain.)
 
 *Live draw* for seven renderers, added by `GLTF-472`: `SOFTWARE`, `OPENGL2`, `OPENGL4`, `SDL_GPU`,
 `MAGNUM`, `LLGL` and `DILIGENT` each drew both colour-carrying corpus fixtures through a real device

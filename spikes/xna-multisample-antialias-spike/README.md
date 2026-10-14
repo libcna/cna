@@ -1,6 +1,7 @@
 # `RasterizerState.MultiSampleAntiAlias` on the real XNA 4.0 runtime
 
-First run for **VULKAN-099**; the result is recorded in `docs/rasterizerstate-support.md` §8.
+First run for **VULKAN-099** (the retired VULKAN renderer's plan, kept in Git history); the result
+is recorded in `docs/rasterizerstate-support.md` §8 and does not depend on that renderer.
 
 ## Why this exists
 

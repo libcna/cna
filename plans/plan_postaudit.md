@@ -1,5 +1,14 @@
 # CNA Post-Audit Development Plan
 
+> **History banner (2026-10-14).** This plan was written on 2026-08-03 against the renderer set of
+> that date. Several backends it schedules or cites have since been retired
+> (`docs/removed-renderers.md`): Bgfx on 2026-09-17, DirectX 12 on 2026-10-06, and Vulkan and
+> DirectX 11 on 2026-10-13 (`plans/plan_renderer_retirement.md`). Their rows here record completed or
+> deferred work at the time; none of them is a current backend, test requirement or open task.
+> `REMED-GFX-204` (Bgfx multi-stream) is withdrawn. The current renderer set is the 10 identities
+> of `cmake/RendererIdentities.cmake`; the live multi-stream tickets are `REMED-GFX-205` (WebGPU),
+> `REMED-GFX-206` (SDL_GPU) and `REMED-GFX-208` (D3D9), whose status of record stays in `remediation/`.
+
 **Created:** 2026-08-03, on `feature/audit`, immediately after `REMED-GFX-202` closed.
 **Owns:** `REMED-GFX-203` … `REMED-GFX-246` and any future finding admitted by the rules below.
 **Does not own:** the remediation campaign. `remediation/REMEDIATION_INDEX.md` and
@@ -923,7 +932,8 @@ pre-existing loud rejection are unchanged.
 
 **Checkpoint blockers of `REMED-GFX-217` and `REMED-GFX-218` are RESOLVED.** Their non-D3D
 translators remain open here alongside `REMED-GFX-203` … `-208`; the D3D11/D3D12 single-stream
-translator was completed by `plans/plan_dx.md` `DX-221` on 2026-09-07. `DX-222` completed the
+translator was completed by `DX-221` on 2026-09-07 (`plans/plan_dx.md`, deleted with `DIRECTX11` on
+2026-10-13 and kept in Git history). `DX-222` completed the
 multi-stream and instanced D3D input work tracked by `REMED-GFX-207` on 2026-09-09.
 
 ### 4.5 `REMED-GFX-209` — **DONE 2026-08-04**
@@ -1038,7 +1048,9 @@ Full record: **`remediation/REMEDIATION_EXIT.md` §3.**
 Six tickets, one per native input-layout model, plus `REMED-GFX-213` where its triage lands on the
 capability side. **All six were narrowed, not widened, by `REMED-GFX-202`**: they no longer need to
 invent a transport, only to teach their backend to consume the array the shared layer already
-delivers. `REMED-GFX-203` completed Vulkan on 2026-09-08; five backend tickets remain. Every
+delivers. `REMED-GFX-203` completed Vulkan on 2026-09-08 and `REMED-GFX-207` the Direct3D 11/12 pair on
+2026-09-09; `REMED-GFX-204` was withdrawn when Bgfx was retired (2026-09-17), and those three
+renderers have since been retired as well. Three backend tickets remain: WebGPU, SDL_GPU and D3D9. Every
 implementation must additionally handle several **per-instance** streams, because
 `MultiStreamVertexInput` gates both rates.
 
@@ -1067,7 +1079,7 @@ implementation must additionally handle several **per-instance** streams, becaus
 | Ticket | Backend | Remaining native work | Scope |
 |---|---|---|---|
 | `REMED-GFX-203` | **Vulkan — DONE 2026-09-08** | The deferred renderer already copied every draw into a host-visible arena. It now interleaves each public stream of the same input rate into that immutable snapshot and synthesizes the combined declaration, so existing one-binding-per-rate pipelines and replay remain unchanged. Actual selected indices define the compact indexed window; per-binding offsets and mixed instance frequencies are applied while packing. Shared conformance: **48/48 Vulkan and 48/48 EasyGL**; custom SPIR-V: **8/8**, zero validation messages. | LARGE — **DONE** |
-| `REMED-GFX-204` | **Bgfx** | One `bgfx::VertexLayout` per byte stride, submitted through `setVertexBuffer(stream 0, …)`. Needs one layout and one stream index per public binding, bgfx's own maximum stream count surfaced through `GetMaxVertexStreams()`, and `REMED-GFX-065`/`-084` view segmentation plus `REMED-GFX-155`/`-157`/`-181` ordering preserved. | MEDIUM |
+| `REMED-GFX-204` | **Bgfx — withdrawn, renderer retired 2026-09-17** | One `bgfx::VertexLayout` per byte stride, submitted through `setVertexBuffer(stream 0, …)`. Needs one layout and one stream index per public binding, bgfx's own maximum stream count surfaced through `GetMaxVertexStreams()`, and `REMED-GFX-065`/`-084` view segmentation plus `REMED-GFX-155`/`-157`/`-181` ordering preserved. | MEDIUM |
 | `REMED-GFX-205` | **WebGPU** | One `WGPUVertexBufferLayout` per pipeline with a single `arrayStride` and combined `shaderLocation` offsets. Needs a layout array, one `wgpuRenderPassEncoderSetVertexBuffer` slot per stream with its own byte offset and size, the pipeline key extended to the combined layout, and `REMED-GFX-116`/`-146`/`-159`/`-167`/`-172` deferred capture and ordering preserved. | MEDIUM |
 | `REMED-GFX-206` | **SDL_GPU** | One vertex buffer description and one `SDL_GPUVertexBufferBinding` per pipeline. Needs per-slot descriptions and bindings with each stream's own pitch and offset, the pipeline cache keyed on the combined layout, and `REMED-GFX-143`/`-145`/`-152`/`-156`/`-173`/`-176` pass segmentation and lifetime preserved **with no extra pass or submit**. | MEDIUM |
 | `REMED-GFX-207` | **D3D11 + D3D12 — DONE 2026-09-09 by `DX-222`** | Every active declaration element is mapped from the combined layout to its stream-local offset and actual native slot. Both renderers bind and explicitly clear all 16 slots with independent stream strides/offsets; instance step rates remain per stream. The D3D11 input-layout and D3D12 PSO keys contain the full slotted layout. The 48-test shared ordinary/instanced multi-stream matrix passes on each backend, including stale-slot, non-contiguous-slot and `REMED-GFX-123` offset/rate regressions. | COMPLETE |
@@ -1086,8 +1098,9 @@ to start any of them now:
    reference for deferred backends that can preserve semantics without multiplying native bindings;
    it is not a requirement that another backend use the same transport.
 2. **WebGPU** and **SDL_GPU** (`-205`, `-206`) — modern explicit APIs; they can proceed in parallel.
-3. **Bgfx** (`-204`) — the abstraction path; its ceiling has to be discovered and surfaced rather than
-   assumed, and it interacts with the most prior ordering tickets.
+3. ~~**Bgfx** (`-204`) — the abstraction path; its ceiling has to be discovered and surfaced rather than
+   assumed, and it interacts with the most prior ordering tickets.~~ **Withdrawn: `BGFX` retired
+   2026-09-17.**
 4. ~~**D3D11 / D3D12** (`-207`) — two backends, two cache models, and the stale-slot rule.~~
    **DONE 2026-09-09 by `DX-222`; D3D12 proof uses the public HeadlessEXT path.**
 5. **D3D9** (`-208`) — the historical path, last, because its declaration model is the least like the
@@ -1363,7 +1376,7 @@ constraints and different scope. `REMED-GFX-203` is retained here as a completed
 | Ticket | Backend / subsystem | Finding class | Current safe behavior | Rec. | PA | CB | IB | Dependencies | Suggested trigger / phase | Scope | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `REMED-GFX-203` | Vulkan — vertex input | Backend capability completion | **DONE 2026-09-08.** `MultiStreamVertexInput = true`; up to 16 public streams are captured by value into one packed snapshot per input rate; shared conformance **48/48** | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202 | **DONE** | LARGE (completed) | Existing pipeline/replay binding model retained; indexed windows use actual selected indices; stock, instanced and custom paths covered |
-| `REMED-GFX-204` | Bgfx — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202 | Modularization, while touching the Bgfx module | MEDIUM | Must surface bgfx's real stream ceiling via `GetMaxVertexStreams()`; preserve GFX-065/084/155/157/181 |
+| `REMED-GFX-204` | Bgfx — vertex input — **withdrawn: `BGFX` retired 2026-09-17** | Backend capability completion | **Moot** — the renderer no longer exists | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202 | Modularization, while touching the Bgfx module | MEDIUM | Must surface bgfx's real stream ceiling via `GetMaxVertexStreams()`; preserve GFX-065/084/155/157/181 |
 | `REMED-GFX-205` | WebGPU — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202; pattern from GFX-203 | Modularization, after Vulkan | MEDIUM | Preserve GFX-116/146/159/167/172 deferred capture and ordering |
 | `REMED-GFX-206` | SDL_GPU — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202; pattern from GFX-203 | Modularization, after Vulkan; parallel with `-205` | MEDIUM | No extra pass or submit; preserve GFX-143/145/152/156/173/176 |
 | `REMED-GFX-207` | **D3D11 + D3D12 — vertex input — DONE 2026-09-09** | Backend capability completion | **Resolved by `DX-222`.** Both report multi-stream support and render the shared 48-test matrix through the public path | MEDIUM / P2 | **DONE** | NO | NO | GFX-201, GFX-202, GFX-123 preserved | `DX-222` | **COMPLETE** | Both cache models include the full slotted layout; stale slots are explicitly cleared; D3D12 uses HeadlessEXT rather than BUILD-012 |
@@ -1615,8 +1628,8 @@ Dependency-aware and **advisory**. This is not an instruction to begin any ticke
 4. **Stabilize the integrated tree** — one principal-suite sweep per backend, every failure classified.
 5. **Begin modularization**, drawing the seam described in §11.
 6. **Implement the remaining backend capability tickets while touching their backend modules** —
-   using completed `REMED-GFX-203` (Vulkan) as a reference: `REMED-GFX-205` / `REMED-GFX-206` (modern explicit APIs) →
-   `REMED-GFX-204` (abstraction path) → ~~`REMED-GFX-207` (D3D11/D3D12)~~ **DONE** → `REMED-GFX-208` (D3D9
+   using completed `REMED-GFX-203` (Vulkan, since retired) as a reference: `REMED-GFX-205` / `REMED-GFX-206` (modern explicit APIs) →
+   ~~`REMED-GFX-204` (abstraction path)~~ withdrawn with `BGFX` → ~~`REMED-GFX-207` (D3D11/D3D12)~~ **DONE** → `REMED-GFX-208` (D3D9
    historical path), plus `REMED-GFX-210` and `REMED-GFX-213`.
 7. **Begin NoXNA extensions on the modular architecture** (§12).
 

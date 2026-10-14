@@ -1,5 +1,27 @@
 # plan_csl.md — CSL, CSIR and the CNA Shader Rosetta Stone (`CNA::Shader`, `CNA_CSL`)
 
+> **Renderer-set boundary (added 2026-10-14).** This plan was written on 2026-09-04 against 49
+> renderer identities over 36 family directories. That renderer world no longer exists: 41
+> identities have been retired (`docs/removed-renderers.md`), the last four -- `VULKAN`,
+> `DIRECTX11`, `METAL` and `SDL_RENDERER` -- on 2026-10-13 (`plans/plan_renderer_retirement.md`).
+> **Current renderer truth comes from `cmake/RendererIdentities.cmake`** (`docs/renderer-registry.md`):
+> 10 public identities over 8 implementation families -- `OPENGLES3`, `OPENGL33`, `WEBGL2` (EasyGL),
+> `WEBGPU`, `HEADLESS`, `SOFTWARE`, `STUB`, `DIRECTX9`, `SDL_GPU`, `FNA3D`. Read this file
+> accordingly:
+>
+> - §0.1 and every count of 49 identities / 36 families is the dated 2026-09-04 measurement that
+>   planned the work -- historical planning input, not a description of today's tree.
+> - Phase 25 rows that target a retired identity, and the rows whose only purpose was to wire a
+>   retired renderer (`CSL-1098`, `CSL-1176`, `CSL-1242`), are ⛔ *withdrawn -- renderer retired*.
+> - Shader **profiles** stay: `spirv-vulkan-*`, `hlsl-*` and `msl-*` are output dialects, and
+>   `SDL_GPU` (whose Vulkan, Direct3D 12 and Metal backends belong to SDL) and `WEBGPU` are the
+>   surviving consumers of SPIR-V/MSL-shaped artifacts. Where an open row names "Vulkan" as a
+>   participant *renderer* (`CSL-1622`, `CSL-1689`, `CSL-1700`, `CSL-2077`, `CSL-2376`, `CSL-2480`,
+>   `CSL-2543`, `CSL-2601`, `CSL-2699`), that participant no longer exists; the row must be
+>   re-pointed at `SDL_GPU` when the plan is approved, not executed as written.
+> - Paths such as `modules/renderers/{vulkan,bgfx,common/d3d}/` quoted below were deleted with
+>   their renderers and survive only in Git history.
+
 > **Base document:** [`misc/csl.md`](../misc/csl.md). That file is the *design proposal*; this file
 > is its *executable task backlog*. Every task below traces back to a `misc/csl.md` section
 > (`→ §12`). Where this plan contradicts `misc/csl.md`, the contradiction is listed in §0.2 and
@@ -36,9 +58,14 @@
 
 ---
 
-## 0. Reality check — what the repository actually contains today
+## 0. Reality check — what the repository contained on 2026-09-04 (historical planning input)
 
 ### 0.1 Verified starting state (checked against the tree on 2026-09-04, not against `misc/csl.md`)
+
+This table is a dated measurement and is **not** maintained. The renderer families it cites
+(`vulkan`, `bgfx`, `common/d3d`, ...) and the 49-identity count have since been retired; see the
+renderer-set boundary at the top of this file and `cmake/RendererIdentities.cmake` for the current
+set.
 
 | Fact | Evidence |
 |---|---|
@@ -52,10 +79,10 @@
 | A detailed, append-only capability model already exists and already has six shader-dialect features | `CNA::RendererFeature` in `modules/graphics/include/CNA/RendererCapabilityProfile.hpp` — `ShaderEffects=7`, `ShaderEffectSourceExecution=8`, `CompiledXnaEffects=14`, `ComputeShaders=18`, `ShaderDialect*=24..29`, `Count=30`, plus `RendererFeatureSupport{Unknown,Unsupported,Supported,Restricted}` and `RendererLimit` |
 | `CustomEffects == true` does **not** mean the renderer runs your source — SOFTWARE/HEADLESS accept and ignore it | CLAUDE.md "Asking a renderer what it will actually do"; `GraphicsDevice::ExecutesShaderEffectSourceEXT()` |
 | One real GLSL **down-level rewriter** exists, hand-written, inside one renderer | `TransformGlslEs300BodyToEs100()`, `modules/renderers/easygl/src/EasyGLRenderer.cpp:1029` (`plan_glbackends.md` GLB-36) — ES 3.00 → ES 1.00, textually |
-| Compiled XNA `.fx` bytecode is a **separate, working, tested** subsystem on four backends via a patched MojoShader | `plans/plan_fx.md`; `CompiledXnaEffects` true on FNA3D, SDL_GPU, the EasyGL family and Vulkan, and false-with-a-named-refusal everywhere else |
+| Compiled XNA `.fx` bytecode is a **separate, working, tested** subsystem on four backends via a patched MojoShader | `plans/plan_fx.md`; `CompiledXnaEffects` true on FNA3D, SDL_GPU, the EasyGL family and Vulkan at the time, and false-with-a-named-refusal everywhere else (the current per-renderer table is `docs/fx-compiled-effects.md` §10) |
 | An `.fx` **source** route exists in the content pipeline and shells out to an external compiler | `modules/content-pipeline/src/{EffectCompilerService,EffectSourceContentPipeline}.cpp`, `tools/content/`, `plans/plan_xnapipeline.md` XNAP-A1…A5 |
 | The engine layer's shaders are hand-written GLSL ES 3.00 (3.10 for compute) with `ShaderEffect` owning the `#version` line | CLAUDE.md "Shader profile"; `plans/plan_modern.md` `MOD-15` |
-| There are **49 renderer identities** and **36 renderer family directories** | CLAUDE.md renderer list; `ls modules/renderers` |
+| There were **49 renderer identities** and **36 renderer family directories** on 2026-09-04 (today: 10 identities over 8 families -- `cmake/RendererIdentities.cmake`) | CLAUDE.md renderer list at the time; `ls modules/renderers` |
 | The repository vendors 7 third-party trees, none of them a shader toolchain | `third_party/{SDL,SDL_image,SDL_mixer,cgltf,draco,enet,stb}`, `vendor/googletest` |
 | **None** of `glslangValidator`, `glslc`, `spirv-val`, `spirv-dis`, `naga`, `tint`, `dxc`, `fxc` is installed on this development machine | `command -v` for each returns nothing; only `libshaderc.so.1` is present, and only as a shared library |
 | There is no `spec/` directory; specifications live in `docs/`, which already nests (`docs/c-api/`) | `ls spec` → no such file or directory |
@@ -147,7 +174,7 @@ A task is ✅ only when all of these hold:
 | 22 | `CSL-1550`–`CSL-1574` | CSP compiled package format | 9, 14 | — |
 | 23 | `CSL-1620`–`CSL-1637` | Content pipeline, CNB and `ContentManager` | 22 | — |
 | 24 | `CSL-1675`–`CSL-1700` | Runtime: `CslEffect` and renderer binding | 22, 23 | — |
-| 25 | `CSL-1760`–`CSL-1819` | Target-profile rollout across all 49 identities | 24 | — |
+| 25 | `CSL-1760`–`CSL-1819` | Target-profile rollout across every public identity (49 when written; 10 today) | 24 | — |
 | 26 | `CSL-1845`–`CSL-1858` | Hot reload | 24 | — |
 | 27 | `CSL-1895`–`CSL-1922` | `cna-shaderc` | 14 | — |
 | 28 | `CSL-1955`–`CSL-1970` | `cna-shader-info` | 22 | — |
@@ -1057,7 +1084,7 @@ one backend. This is the first vertical slice: CSL → CSIR → GLSL → a real 
 | CSL-1095 | Self-validation: every emitted module passes our own reader's structural checks | ⬜ | Header, section order, id bound, referenced-id existence, type consistency; runs on every corpus case with no external tool. |
 | CSL-1096 | Optional `spirv-val` oracle | ⬜ | When present, every corpus artifact is validated at both profile versions; absent → SKIP naming the tool. The row records the pass count from the first run that has it. |
 | CSL-1097 | Optional `libshaderc`/`glslang` differential | ⬜ | Where an equivalent GLSL exists, compile it with the host `libshaderc.so.1` (already present — §0.1) and compare *behaviour* through the interpreter, not bytes; a divergence is a finding recorded in the row. |
-| CSL-1098 | Vulkan renderer end-to-end: a CSL shader draws | ⬜ | The `CSL-99` textured triangle renders under `CNA_GRAPHICS_RENDERER=VULKAN` and reads back within tolerance. **This row is Milestone 2.** |
+| CSL-1098 | Vulkan renderer end-to-end: a CSL shader draws | ⛔ | **Withdrawn -- renderer retired:** `VULKAN` was retired on 2026-10-13, `RRC-031` (`docs/removed-renderers.md`). Original criterion, kept as history: The `CSL-99` textured triangle renders under `CNA_GRAPHICS_RENDERER=VULKAN` and reads back within tolerance. **This row is Milestone 2.** |
 | CSL-1099 | GL vs Vulkan differential over the Core corpus | ⬜ | Every Core case run on `glsles-300` and `spirv-vulkan-1.0`, results compared pixel-wise; every divergence is triaged in the row as a CSL bug, a legalization bug or an accepted UB case. |
 | CSL-1100 | SDL_GPU consumption of the same SPIR-V | ⬜ | The SDL_GPU renderer, which already consumes SPIR-V, loads a CSL artifact unmodified — the first proof of D3 (one backend, several renderers). |
 | CSL-1101 | Golden SPIR-V disassembly for every corpus shader | ⬜ | Committed as text, not binary, so a diff is reviewable. |
@@ -1097,7 +1124,7 @@ real API.
 | CSL-1173 | Golden HLSL for every corpus shader × three profiles | ⬜ | Committed; the primary verification available here. |
 | CSL-1174 | Optional `fxc`/`dxc` oracle | ⬜ | When either is found (`CNA_FXC_EXECUTABLE` already exists as a mechanism, `plan_xnapipeline.md` XNAP-A5), every artifact is compiled and the log reported; absent → SKIP. The row records what the first real run found. |
 | CSL-1175 | Interpreter differential for the HLSL path | ⬜ | Since the generated HLSL cannot run here, the *CSIR* it was generated from is run in the interpreter, and the golden HLSL is reviewed against it by structural assertions (e.g. every `mul()` argument order asserted programmatically from the IR). This is what "verifiable without the API" concretely means. |
-| CSL-1176 | D3D11 renderer consumption path, wired but 🟨 | ⬜ | The renderer declares `hlsl-sm5` and the load path is complete; the row stays 🟨 with "cannot be built or run on this machine" until a Windows CI run exists. **Milestone 3 is reached when this row and `CSL-1177` are ✅ on such a machine.** |
+| CSL-1176 | D3D11 renderer consumption path, wired but 🟨 | ⛔ | **Withdrawn -- renderer retired:** `DIRECTX11` was retired on 2026-10-13, `RRC-032` (`docs/removed-renderers.md`). Original criterion, kept as history: The renderer declares `hlsl-sm5` and the load path is complete; the row stays 🟨 with "cannot be built or run on this machine" until a Windows CI run exists. **Milestone 3 is reached when this row and `CSL-1177` are ✅ on such a machine.** |
 | CSL-1177 | D3D12 renderer consumption path, wired but 🟨 | ⛔ | Withdrawn 2026-10-06: the `DIRECTX12` renderer it was to wire is retired (`docs/removed-renderers.md`). |
 | CSL-1178 | D3D9 (`hlsl-sm2`/`sm3`) is deliberately not a CSL target | ⬜ | ⛔ with the reason: the existing compiled-`.fx`/MojoShader path already serves D3D9 (`plan_fx.md`), and a Shader Model 2 profile would need instruction-count-aware register allocation that this plan does not contain. The FX frontend (Phase 21) is how a D3D9-era effect reaches CSIR, not a `sm2` backend. |
 
@@ -1126,7 +1153,7 @@ real API.
 | CSL-1239 | Reserved-word avoidance for MSL/C++ | ⬜ | From `CSL-936`; MSL is C++-based so the reserved set is large, and the test uses a shader with variables named `class`, `template` and `operator`. |
 | CSL-1240 | Golden MSL for every corpus shader | ⬜ | Committed; the primary verification available here. |
 | CSL-1241 | Optional `metal`/`xcrun` oracle | ⬜ | SKIPs on this machine, named in the message. |
-| CSL-1242 | Metal renderer consumption path, wired but 🟨 | ⬜ | The renderer declares `msl-2.0` and the load path is complete; 🟨 with "no Apple machine here", consistent with how `plan_metal.md` records the same constraint. |
+| CSL-1242 | Metal renderer consumption path, wired but 🟨 | ⛔ | **Withdrawn -- renderer retired:** `METAL` was retired on 2026-10-13, `RRC-034` (`docs/removed-renderers.md`). Original criterion, kept as history: The renderer declares `msl-2.0` and the load path is complete; 🟨 with "no Apple machine here", consistent with how `plan_metal.md` records the same constraint. |
 | CSL-1243 | A syntactic well-formedness check without a Metal compiler | ⬜ | The generated MSL is parsed by a small, deliberately partial C++-subset checker (balanced braces, declaration shapes, known attributes) so a gross emission bug is caught here rather than on a machine nobody has. Its limits are documented so it is not mistaken for a compiler. |
 
 ---
@@ -1391,9 +1418,12 @@ this is **not** a full HLSL implementation (§48 forbids one), it is the XNA-era
 
 ---
 
-## Phase 25 — Target-profile rollout across all 49 renderer identities (`CSL-1760`–`CSL-1819`)
+## Phase 25 — Target-profile rollout across every public renderer identity (`CSL-1760`–`CSL-1819`)
 
-→ §12, §13, and correction C4. Every identity gets a row. **"This renderer consumes no CSL
+→ §12, §13, and correction C4. Written when there were 49 identities; the 27 rows below that name an identity
+retired since (`docs/removed-renderers.md`) are every one ⛔ withdrawn. The live rows are the
+10 identities of `cmake/RendererIdentities.cmake`: `CSL-1766`, `CSL-1767`, `CSL-1770`, `CSL-1781`,
+`CSL-1788`, `CSL-1795`, `CSL-1800`, `CSL-1803`, `CSL-1804`, `CSL-1805`. Every identity gets a row. **"This renderer consumes no CSL
 artifact" is a first-class, correct outcome** (§33) — a renderer with no shader pipeline says so by
 name and is not a gap. No row in this phase may add a compiler to a renderer (D3, `CSL-48`).
 
@@ -1416,58 +1446,58 @@ name and is not a gap. No row in this phase may add a compiler to a renderer (D3
 | CSL-1769 | `OPENGLES2` (EasyGL) | ⛔ | Withdrawn 2026-10-06: the `OPENGLES2` identity is retired (`docs/removed-renderers.md`). |
 | CSL-1770 | `WEBGL2` (EasyGL) | ⬜ | Declares `glsles-300`; Core + Extended under Emscripten, verified in a real browser through the existing browser-test harness or 🟨 with the reason. |
 | CSL-1771 | `WEBGL1` (EasyGL) | ⛔ | Withdrawn 2026-10-06: the `WEBGL1` identity is retired (`docs/removed-renderers.md`). |
-| CSL-1772 | `OPENGL2` | ⬜ | Declares `glsl-120`; Core subset passes; the legalization stack (`CSL-925`–`CSL-928`) gets its hardest real workout here. |
-| CSL-1773 | `OPENGL1` | ⬜ | Expected outcome "none": OpenGL 1.x has no programmable pipeline (§33's own example). The row records that as the answer, with `plan_opengl1.md`'s boundary as the evidence. |
-| CSL-1774 | `OPENGLES1` | ⬜ | Same expected outcome; recorded against `plan_opengles1.md`. |
-| CSL-1775 | `PORTABLEGL` | ⬜ | A CPU OpenGL with shaders as C function pointers — so the honest answer is "none" unless a CSIR→C route exists, and this row decides which, with the reason. |
-| CSL-1776 | `TINYGL` | ⬜ | Fixed-function CPU GL with no shaders of any kind (CLAUDE.md states it); "none", recorded. |
-| CSL-1777 | `MAGNUM` | ⬜ | Desktop GL through Magnum; declares `glsl-330`/`glsl-450`; Core passes or the row records what Magnum's shader wrapper prevents. |
+| CSL-1772 | `OPENGL2` | ⛔ | **Withdrawn -- renderer retired:** `OPENGL2` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Declares `glsl-120`; Core subset passes; the legalization stack (`CSL-925`–`CSL-928`) gets its hardest real workout here. |
+| CSL-1773 | `OPENGL1` | ⛔ | **Withdrawn -- renderer retired:** `OPENGL1` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Expected outcome "none": OpenGL 1.x has no programmable pipeline (§33's own example). The row records that as the answer, with `plan_opengl1.md`'s boundary as the evidence. |
+| CSL-1774 | `OPENGLES1` | ⛔ | **Withdrawn -- renderer retired:** `OPENGLES1` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Same expected outcome; recorded against `plan_opengles1.md`. |
+| CSL-1775 | `PORTABLEGL` | ⛔ | **Withdrawn -- renderer retired:** `PORTABLEGL` was retired on 2026-09-27 (`docs/removed-renderers.md`). Original criterion, kept as history: A CPU OpenGL with shaders as C function pointers — so the honest answer is "none" unless a CSIR→C route exists, and this row decides which, with the reason. |
+| CSL-1776 | `TINYGL` | ⛔ | **Withdrawn -- renderer retired:** `TINYGL` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Fixed-function CPU GL with no shaders of any kind (CLAUDE.md states it); "none", recorded. |
+| CSL-1777 | `MAGNUM` | ⛔ | **Withdrawn -- renderer retired:** `MAGNUM` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Desktop GL through Magnum; declares `glsl-330`/`glsl-450`; Core passes or the row records what Magnum's shader wrapper prevents. |
 
 ### 25.3 SPIR-V-family identities
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| CSL-1780 | `VULKAN` | ⬜ | Declares `spirv-vulkan-1.3`, `spirv-vulkan-1.0`; Core + Extended + Compute pass on this machine's real GPU. |
-| CSL-1781 | `SDL_GPU` | ⬜ | Declares `spirv-vulkan-1.0`; consumes the identical artifact `VULKAN` does (`CSL-1100`), which is the cheapest possible proof of D3. |
-| CSL-1782 | `IGL` | ⬜ | Two backends chosen by `CNA_IGL_BACKEND`: the GL one declares `glsl-450`, the Vulkan one `spirv-vulkan-1.0`. The row must show the *same* `CslEffect` working on both, including the `DeclareUniformBlockEXT` path that IGL's Vulkan backend needs and that `CSL-1683` now fills in automatically. |
-| CSL-1783 | `LLGL` | ⬜ | A portable abstraction: declares whichever profiles its selected backend accepts, discovered at run time rather than at compile time, which is the interesting case for `CSL-915`. |
-| CSL-1784 | `DILIGENT` | ⬜ | The one renderer whose native API is chosen at run time; the profile list must be answered per-device, not per-build, and the row proves the selection algorithm handles that. |
-| CSL-1785 | `WICKED` | ⬜ | Declares what Wicked's own shader path accepts, or "none" with the reason. |
-| CSL-1786 | `SOKOL` | ⬜ | sokol_gfx takes per-backend source; the row records which profiles are declared per sokol backend, or "none" if sokol's own shader-compilation model cannot accept an external artifact. |
-| CSL-1787 | `BGFX` | ⬜ | **Owner decision Q2: out of v1 scope.** bgfx consumes its own compiled format from `shaderc`, so the answer is "none", recorded with the reason and with `CSIR → bgfx binary` named as a legitimate future profile rather than a gap. The existing `bgfx_shaders.hpp` route is untouched. |
+| CSL-1780 | `VULKAN` | ⛔ | **Withdrawn -- renderer retired:** `VULKAN` was retired on 2026-10-13, `RRC-031` (`docs/removed-renderers.md`). Original criterion, kept as history: Declares `spirv-vulkan-1.3`, `spirv-vulkan-1.0`; Core + Extended + Compute pass on this machine's real GPU. |
+| CSL-1781 | `SDL_GPU` | ⬜ | Declares `spirv-vulkan-1.0`; consumes the identical artifact `VULKAN` did (`CSL-1100`), which is the cheapest possible proof of D3. Since `VULKAN`'s retirement (2026-10-13) this is the only CNA renderer that consumes a SPIR-V artifact, so it also inherits `CSL-1098`'s Milestone 2 role. |
+| CSL-1782 | `IGL` | ⛔ | **Withdrawn -- renderer retired:** `IGL` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Two backends chosen by `CNA_IGL_BACKEND`: the GL one declares `glsl-450`, the Vulkan one `spirv-vulkan-1.0`. The row must show the *same* `CslEffect` working on both, including the `DeclareUniformBlockEXT` path that IGL's Vulkan backend needs and that `CSL-1683` now fills in automatically. |
+| CSL-1783 | `LLGL` | ⛔ | **Withdrawn -- renderer retired:** `LLGL` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: A portable abstraction: declares whichever profiles its selected backend accepts, discovered at run time rather than at compile time, which is the interesting case for `CSL-915`. |
+| CSL-1784 | `DILIGENT` | ⛔ | **Withdrawn -- renderer retired:** `DILIGENT` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: The one renderer whose native API is chosen at run time; the profile list must be answered per-device, not per-build, and the row proves the selection algorithm handles that. |
+| CSL-1785 | `WICKED` | ⛔ | **Withdrawn -- renderer retired:** `WICKED` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Declares what Wicked's own shader path accepts, or "none" with the reason. |
+| CSL-1786 | `SOKOL` | ⛔ | **Withdrawn -- renderer retired:** `SOKOL` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: sokol_gfx takes per-backend source; the row records which profiles are declared per sokol backend, or "none" if sokol's own shader-compilation model cannot accept an external artifact. |
+| CSL-1787 | `BGFX` | ⛔ | **Withdrawn -- renderer retired:** `BGFX` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: **Owner decision Q2: out of v1 scope.** bgfx consumes its own compiled format from `shaderc`, so the answer is "none", recorded with the reason and with `CSIR → bgfx binary` named as a legitimate future profile rather than a gap. The existing `bgfx_shaders.hpp` route is untouched. |
 | CSL-1788 | `FNA3D` | ⬜ | FNA3D consumes MojoShader effects; expected "none" for CSL, with the compiled-`.fx` path remaining its route (D4). Recorded, not left blank. |
 
 ### 25.4 HLSL-family identities
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| CSL-1792 | `DIRECTX11` | ⬜ | Declares `hlsl-sm5`; load path complete; 🟨 until a Windows machine runs it (D12), with the exact blocker named. |
+| CSL-1792 | `DIRECTX11` | ⛔ | **Withdrawn -- renderer retired:** `DIRECTX11` was retired on 2026-10-13, `RRC-032` (`docs/removed-renderers.md`). Original criterion, kept as history: Declares `hlsl-sm5`; load path complete; 🟨 until a Windows machine runs it (D12), with the exact blocker named. |
 | CSL-1793 | `DIRECTX12` | ⛔ | Withdrawn 2026-10-06: the `DIRECTX12` identity is retired (`docs/removed-renderers.md`). |
-| CSL-1794 | `DIRECTX10` | ⬜ | Declares `hlsl-sm4`; same. |
+| CSL-1794 | `DIRECTX10` | ⛔ | **Withdrawn -- renderer retired:** `DIRECTX10` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Declares `hlsl-sm4`; same. |
 | CSL-1795 | `DIRECTX9` | ⬜ | "none" for CSL (→ `CSL-1178`); the compiled-`.fx` route stays. Recorded with the reason. |
-| CSL-1796 | `DIRECTX8`, `DIRECTX7`, `DIRECTX6`, `DIRECTX5`, `DIRECTX3`, `DIRECTX2`, `DIRECTX1` | ⬜ | Seven identities, one row: all "none" — these are fixed-function or pre-shader APIs and `plan_dxold.md` already establishes their boundary. The row lists all seven explicitly so none is silently forgotten. |
-| CSL-1797 | `FREEDIRECT` | ⬜ | Answers per whatever D3D level it emulates; the row states which and why. |
+| CSL-1796 | `DIRECTX8`, `DIRECTX7`, `DIRECTX6`, `DIRECTX5`, `DIRECTX3`, `DIRECTX2`, `DIRECTX1` | ⛔ | **Withdrawn -- renderer retired:** `DIRECTX1`…`DIRECTX8` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Seven identities, one row: all "none" — these are fixed-function or pre-shader APIs and `plan_dxold.md` already establishes their boundary. The row lists all seven explicitly so none is silently forgotten. |
+| CSL-1797 | `FREEDIRECT` | ⛔ | **Withdrawn -- renderer retired:** `FREEDIRECT` was retired on 2026-09-27 (`docs/removed-renderers.md`). Original criterion, kept as history: Answers per whatever D3D level it emulates; the row states which and why. |
 
 ### 25.5 Other-language and non-shader identities
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | CSL-1800 | `WEBGPU` | ⬜ | Declares `wgsl-1.0`; Core + Extended + Compute pass on this machine's real GPU (`CSL-1300`), and in a browser or 🟨 with the reason. |
-| CSL-1801 | `PIXIJS` | ⬜ | 2D-only, retained scene graph, no custom `Effect` (CLAUDE.md states it): "none", recorded against `plan_pixijs.md`'s boundary. |
-| CSL-1802 | `METAL` | ⬜ | Declares `msl-2.0`; load path complete; 🟨 with "no Apple machine here", consistent with `plan_metal.md`. |
+| CSL-1801 | `PIXIJS` | ⛔ | **Withdrawn -- renderer retired:** `PIXIJS` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: 2D-only, retained scene graph, no custom `Effect` (CLAUDE.md states it): "none", recorded against `plan_pixijs.md`'s boundary. |
+| CSL-1802 | `METAL` | ⛔ | **Withdrawn -- renderer retired:** `METAL` was retired on 2026-10-13, `RRC-034` (`docs/removed-renderers.md`). Original criterion, kept as history: Declares `msl-2.0`; load path complete; 🟨 with "no Apple machine here", consistent with `plan_metal.md`. |
 | CSL-1803 | `HEADLESS` | ⬜ | Accepts an artifact and executes nothing — but must say so honestly through `ExecutesShaderEffectSourceEXT()`-shaped queries (`CSL-1698`), which is precisely the trap CLAUDE.md warns about. The row's criterion is that a conformance run against HEADLESS **skips**, and never reports a pass. |
 | CSL-1804 | `SOFTWARE` | ⬜ | **Owner decision Q1: no for v1.** SOFTWARE could run CSIR-L through the interpreter and become the first renderer whose shaders are genuinely CSL; the owner decided against it for v1, so it answers "none" and takes the same honest-skip behaviour as `HEADLESS` — a conformance run SKIPs and never reports a pass. The row records the decision and its reason (an interpreter written for correctness is not a rasterizer's shading core until measured otherwise); `CSL-2744` re-decides on the `CSL-1385` number. |
 | CSL-1805 | `STUB` | ⬜ | "none"; the no-op renderer, recorded. |
-| CSL-1806 | `SKIA` | ⬜ | CPU-raster 2D with no custom effects: "none", recorded against `docs/skia-renderer.md`. |
+| CSL-1806 | `SKIA` | ⛔ | **Withdrawn -- renderer retired:** `SKIA` was retired on 2026-08-30 (`docs/removed-renderers.md`). Original criterion, kept as history: CPU-raster 2D with no custom effects: "none", recorded against `docs/skia-renderer.md`. |
 | CSL-1807 | `CANVAS` | ⛔ | Withdrawn 2026-10-06: the `CANVAS` identity is retired (`docs/removed-renderers.md`). |
-| CSL-1808 | `SDL_RENDERER` | ⬜ | SDL's 2D renderer: "none" unless SDL3's own shader hook applies; the row states which. |
-| CSL-1809 | `GLIDE` | ⬜ | Pre-shader 3D API: "none", recorded against `plan_glide.md`. |
+| CSL-1808 | `SDL_RENDERER` | ⛔ | **Withdrawn -- renderer retired:** `SDL_RENDERER` was retired on 2026-10-13, `RRC-035` (`docs/removed-renderers.md`). Original criterion, kept as history: SDL's 2D renderer: "none" unless SDL3's own shader hook applies; the row states which. |
+| CSL-1809 | `GLIDE` | ⛔ | **Withdrawn -- renderer retired:** `GLIDE` was retired on 2026-09-17 (`docs/removed-renderers.md`). Original criterion, kept as history: Pre-shader 3D API: "none", recorded against `plan_glide.md`. |
 
 ### 25.6 Verification of the rollout
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| CSL-1815 | Every one of the 49 identities has a non-blank answer | ⬜ | A ctest enumerates `GraphicsRendererType` and fails if any identity has no matrix entry — the same completeness discipline `CNA::RendererFeature` already has. |
+| CSL-1815 | Every public identity (49 when written, 10 today) has a non-blank answer | ⬜ | A ctest enumerates `GraphicsRendererType` and fails if any identity has no matrix entry — the same completeness discipline `CNA::RendererFeature` already has. |
 | CSL-1816 | No renderer contains a compiler | ⬜ | `CSL-48`'s gate passes over the whole tree after the rollout. |
 | CSL-1817 | The multi-renderer build works with CSL | ⬜ | With `CNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;OPENGLES3"`, profile selection asks the *live* device and gets different answers from two devices in one process — plan_modern.md's D11 rule applied here. |
 | CSL-1818 | Renderer capability answers are truthful, proven by drawing | ⬜ | Following `plan_fx.md`'s hard-won rule: a renderer claiming to execute CSL must prove it with a readback that depends on the shader's source, not with state inspection. A renderer that accepts and ignores is caught by this test. |
@@ -1834,7 +1864,7 @@ them from becoming 10,000 cases that prove nothing.
 | CSL-2595 | `docs/csl/writing-a-conformance-case.md` | ⬜ | The manifest, the determinism rules, and the "no UB, no edge-on-pixel-centre" constraints. |
 | CSL-2596 | `docs/csl/renderer-checklist.md` (`CSL-1760`) is complete and used | ⬜ | Verified by having a renderer row follow it end-to-end and recording how long it took. |
 | CSL-2597 | `docs/csl/limitations.md` | ⬜ | Every refusal in the subsystem, in one list, with its reason — the counterpart of `docs/gltf-limitations.md`. A reader must be able to find out what CSL will not do without reading this plan. |
-| CSL-2598 | `docs/csl/performance.md` | ⬜ | Every measured number this plan produced, with the recipe that produced it, following `docs/cnaext-perf.md`'s discipline. |
+| CSL-2598 | `docs/csl/performance.md` | ⬜ | Every measured number this plan produced, with the recipe that produced it, following `docs/cnaext-perf.md`'s discipline (that document was deleted on 2026-10-11; Git history). |
 | CSL-2599 | Doxygen coverage for the whole subsystem | ⬜ | `CSL_DoxygenGroup` clean; the group page lists every public class. |
 | CSL-2600 | Example: `modules/shader/examples/csl_hello_triangle.cpp` | ⬜ | Builds and runs under `CNA_CSL=ON`; renders the `CSL-99` shader. |
 | CSL-2601 | Example: a CSL post-process effect over `SpriteBatch` | ⬜ | Runs on EasyGL, Vulkan and WebGPU. |
@@ -2007,8 +2037,9 @@ implementing one of these may not quietly re-decide it; reopening one is its own
 | Q5 | Separate `.csle` file, or an `effect { }` block inside `.csl`? | **Separate `.csle` file** — against this plan's own lean. | The largest change of the six. `CSL-1431` now *refuses* the in-`.csl` block by name, and seven rows carry the cost the separate file creates: `CSL-1441` (path references), `CSL-1442` (the dependency edge as one queryable API), `CSL-1443` (diagnostics across the edge), `CSL-1636`/`CSL-1637` (second content-pipeline input type and its incremental-build edge), `CSL-1858` (hot reload follows the edge) and `CSL-1922` (`cna-shaderc --deps`). |
 | Q6 | How much GPU CI is available? | **None. Assume the worst.** | `CSL-2822` adds no CI job and instead writes the consequence down: the interpreter-only run (`CSL-2821`) is the standing gate, GPU runs are manual, and a certification record is a human point-in-time measurement rather than a continuously-enforced property. |
 
-**What Q6 costs, stated plainly.** With no Windows and no macOS runner, `CSL-1176`, `CSL-1177` and
-`CSL-1242` cannot reach ✅ inside this plan — **M3 and the Metal half of M5 stay 🟨 by construction,
+**What Q6 costs, stated plainly** (written before `DIRECTX12`, `DIRECTX11` and `METAL` were
+retired; those three rows are now ⛔ withdrawn rather than 🟨). With no Windows and no macOS runner, `CSL-1176`, `CSL-1177` and
+`CSL-1242` could not reach ✅ inside this plan — **M3 and the Metal half of M5 stay 🟨 by construction,
 not by neglect.** D12 already required that; Q6 makes it permanent rather than provisional. Those
 branches are verified here by golden text, structural assertions against the IR (`CSL-1175`), the
 partial MSL checker (`CSL-1243`) and any oracle that happens to be installed — and by nothing else.
@@ -2023,14 +2054,14 @@ carefully as the work itself, and because a later reader should not have to re-d
 
 **Nothing regresses.** D4 cuts both ways: the plan changes nothing that exists, so declining it
 costs no working behaviour. `ShaderEffect`, the compiled `.fx`/MojoShader path, the stock effects,
-the engine layer's GLSL ES 3.00 and all 49 renderer identities keep working exactly as they do
-today.
+the engine layer's GLSL ES 3.00 and every public renderer identity (49 when this was written, 10
+today) keep working exactly as they do today.
 
 **What stays true** — these are existing costs the plan intended to remove, not new problems:
 
 | | Present state |
 |---|---|
-| Shader toolchains | **Six**, sharing no code: `vulkan/src/shaders/compile_shaders.py` (libshaderc via ctypes), `bgfx/…/compile_shaders.py` (bgfx shaderc), `common/d3d/…/compile_shaders_hlsl.py` (fxc), `sdl-gpu/…/compile_shaders.py`, `directx9/…/compile_shaders_sm2.py` and `compile_pbr_shaders.py`. Renderer 50 means toolchain 7. |
+| Shader toolchains (2026-09-04; the Vulkan, bgfx and D3D ones went with their renderers) | **Six**, sharing no code: `vulkan/src/shaders/compile_shaders.py` (libshaderc via ctypes), `bgfx/…/compile_shaders.py` (bgfx shaderc), `common/d3d/…/compile_shaders_hlsl.py` (fxc), `sdl-gpu/…/compile_shaders.py`, `directx9/…/compile_shaders_sm2.py` and `compile_pbr_shaders.py`. Renderer 50 means toolchain 7. |
 | Cross-renderer agreement | **Eight** hand-written comparison documents (`d3d9-divergence-report.md`, `direct2d-easygl-differential.md`, `fna3d-parity-report.md`, `opengles1-parity-report.md`, `graphics-compatibility-report.md`, `graphics-renderer-feature-matrix.md`, and the two XNA culling/depth audits) against **1,176 possible renderer pairs**. The method does not scale and will not. |
 | `ShaderDialectEXT` | Seven enumerators; **one** renderer answers it. An application targeting Vulkan and GL supplies two shader sources and hand-writes `DeclareUniformBlockEXT` byte offsets. |
 | `CustomEffects == true` | Still means "accepts a shader", not "runs yours". The four `*EXT()` queries document the trap rather than removing it. |
@@ -2101,8 +2132,8 @@ see §3.4 — the two tables are complementary and must be kept consistent when 
 |---|---|---|
 | **M0** | The specification exists and is precise | Phase 1 complete; `CSL-99` shaders are corpus cases |
 | **M1** | CSL → CSIR → GLSL draws a real pixel | `CSL-1000` |
-| **M2** | The same shader runs on Vulkan; first cross-renderer conformance | `CSL-1098`, `CSL-1099` |
-| **M3** | HLSL generation, D3D11/12 wired | `CSL-1176`, `CSL-1177` — **🟨 permanently within this plan** (owner decision Q6: no Windows runner) |
+| **M2** | The same shader runs on Vulkan; first cross-renderer conformance | `CSL-1098` (⛔ withdrawn: `VULKAN` retired 2026-10-13; re-point at `SDL_GPU`, `CSL-1781`), `CSL-1099` |
+| **M3** | HLSL generation, D3D11/12 wired | `CSL-1176`, `CSL-1177` — both ⛔ withdrawn (`DIRECTX12` retired 2026-10-06, `DIRECTX11` 2026-10-13); no surviving CNA renderer consumes CSL HLSL, so M3 is reduced to HLSL generation verified by golden text |
 | **M4** | XNA `.fx` and CSL share one meaning | `CSL-1506` |
-| **M5** | WGSL and MSL; every major shader ecosystem reachable | `CSL-1300` (verified on this machine's real GPU); `CSL-1242` — **🟨 permanently within this plan** (owner decision Q6: no macOS runner) |
+| **M5** | WGSL and MSL; every major shader ecosystem reachable | `CSL-1300` (verified on this machine's real GPU); `CSL-1242` — ⛔ withdrawn (`METAL` retired 2026-10-13); MSL output stays a profile, verified by golden text and `CSL-1243` |
 | **M6** | CPU reference + generative conformance; no GPU is the truth | `CSL-1383`, `CSL-2077` |

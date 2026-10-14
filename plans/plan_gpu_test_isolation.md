@@ -1,5 +1,11 @@
 # GPU test isolation and test-registration hygiene
 
+> **Note (2026-10-14).** The isolation policy and `tools/platform/run_gpu_tests_private.sh` this
+> plan built are current. Its measurements were largely taken on the `VULKAN` renderer
+> (`cmake-build-vulkan`, `Vulkan_*` tests), which was retired on 2026-10-13
+> (`docs/removed-renderers.md`); those numbers are history, and `plans/plan_vulkan_modern_graphics.md`,
+> cited by the second pass, is in Git history only.
+
 A small infrastructure workstream, opened by the owner right after `plans/plan_vulkan_parity.md` was
 integrated (`47d8c4631`). Two lessons from that workstream, both outside Vulkan itself:
 

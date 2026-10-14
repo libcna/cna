@@ -21,14 +21,20 @@
 > created and closed `REMED-CONTENT-011`. This does not rewrite the dated 2026-08-04 judgement:
 > every statement below describing `-007`/`-008` as open is retained as historical phase-1 exit
 > evidence. Current technical detail is in `REMEDIATION_PROGRESS.md`; the separate Batch 5
-> checkpoint retake is recorded in `integration/BATCH_5_STABILIZATION.md`.
+> checkpoint retake was recorded in `integration/BATCH_5_STABILIZATION.md` (deleted on 2026-10-11;
+> Git history).
+>
+> **Post-exit addendum — 2026-10-14:** the `VULKAN` renderer `REMED-GFX-203` completed was retired
+> on 2026-10-13 together with `DIRECTX11`, `METAL` and `SDL_RENDERER` (`docs/removed-renderers.md`);
+> CNA now has 10 public renderer identities. Vulkan rows below are history, not current support.
 >
 > **Post-exit addendum — 2026-09-08:** `REMED-GFX-203` is now **DONE**. Vulkan reports and
 > implements the 16-slot multi-stream contract through immutable per-rate packed snapshots; the
 > shared conformance sources pass 48/48 on Vulkan and 48/48 on EasyGL. The §4/§9/§10 rows below
 > retain their 2026-08-04 boundary and skip counts as historical checkpoint evidence. Current
 > design, verification and status are in `REMEDIATION_PROGRESS.md`, `REMEDIATION_INDEX.md`,
-> `plans/plan_postaudit.md` §5 and `plans/plan_vulkan.md` F-45/§28.4.
+> `plans/plan_postaudit.md` §5 and `plans/plan_vulkan.md` F-45/§28.4 (that plan was deleted with
+> `VULKAN` on 2026-10-13; Git history).
 
 ---
 

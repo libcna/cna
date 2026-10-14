@@ -1,6 +1,6 @@
 # CNJ: a lightweight, JSON-based content format for CNA (alternative to XNB)
 
-> Companion document to [`xnb.md`](xnb.md)/[`plans/plan_xnb.md`](plans/plan_xnb.md), which describe what it
+> Companion document to [`xnb.md`](xnb.md)/[`plans/plan_xnb.md`](../plans/plan_xnb.md), which describe what it
 > would take to make CNA a *consumer* of original binary XNA `.xnb` files. This document describes
 > a **different, permanent strategic choice**: CNA never implements a binary `.xnb` reader at all.
 > Instead, CNA defines its own simple, human-readable `.cnj` (CNA content JSON) sidecar format, and
@@ -778,7 +778,7 @@ already supports them without any CNA core change.
 
 CNA's owner decided `.xnb` should become a real, additional runtime format again — **not** a
 replacement for `.cnj`, which keeps everything described in this document exactly as implemented.
-See [`xnb.md`](xnb.md)'s and [`plans/plan_xnb.md`](plans/plan_xnb.md)'s own status banners for the full
+See [`xnb.md`](xnb.md)'s and [`plans/plan_xnb.md`](../plans/plan_xnb.md)'s own status banners for the full
 decision; summarized here because it changes "The core rule" below:
 
 - `ContentManager`'s resolution order gains a new top tier: `<name>.xnb`, checked **before** even

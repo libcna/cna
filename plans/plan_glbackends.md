@@ -1,5 +1,11 @@
 # GL Backends Restructuring Plan — EasyGL becomes internal, 4 new public backends
 
+> **Note (2026-10-14).** Dated record. EasyGL now serves three public profiles, `OPENGLES3`,
+> `OPENGL33` and `WEBGL2` (`WEBGL1` and `OPENGLES2` were retired on 2026-10-06), and the non-GL
+> renderers this file compares against or names as defaults (`SDL_RENDERER`, `VULKAN`, D3D11) were
+> retired on 2026-10-13 (`docs/removed-renderers.md`). The per-host default is now
+> `cmake/RendererIdentityDefault.cmake`'s.
+
 > **TL;DR for a clean-context morning read (2026-07-20, overnight session):** All 4 public
 > backends (`OPENGLES`, `OPENGL33`, `WEBGL1`, `WEBGL2`) exist, build, and are verified as far as
 > this sandbox allows. `OPENGLES`/`OPENGL33` are real-driver-verified on Linux (Mesa) — `OPENGL33`
@@ -525,7 +531,7 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   used the same program, material and textures; easy-gl's `Program::set_uniform` and
   `Texture::active_bind` keep no record. Two consecutive draws sharing a material therefore cost
   as much as two different ones -- about 9 µs per draw on either GL renderer in cna-street
-  (`plans/plan_street_perf.md`). Proposed: a per-`Prog3D` record of the last value at each uniform
+  (`plans/plan_street_perf.md`, since deleted; Git history). Proposed: a per-`Prog3D` record of the last value at each uniform
   location (sampler-unit uniforms set once at link time) and a per-unit bound-texture record,
   dropped on context loss, texture deletion and relink -- GLB-41's lifecycle -- with real-context
   tests in the style of `EasyGLRedundantStateTests.cpp`. Performance only; no picture is wrong.

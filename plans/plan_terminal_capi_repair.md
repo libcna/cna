@@ -4,8 +4,8 @@ Branch `terminal-capi-repair`, cut from `30389564c` (the renderer-curation tip, 
 `next` at `113be1520`).
 
 This is a **repair** branch, not a design branch. Both workstreams restore intended behaviour that
-already has an architecture; neither invents one. The renderer set stays curated at 25 identities and
-is not reopened.
+already has an architecture; neither invents one. The renderer set stays curated at 25 identities (the count of that
+date; 10 since 2026-10-13) and is not reopened.
 
 Build trees: `cmake-build-debug` (HEADLESS/SDL3, Debug) for the C API and the corpus,
 `build-probe/cfg-TERMINAL-SOFTWARE` for the terminal end-to-end path.

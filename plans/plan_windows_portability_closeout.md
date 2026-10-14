@@ -1,5 +1,14 @@
 # Windows portability — closing pass
 
+> **History banner (2026-10-14).** Closed workstream. Most of the post-closeout rounds below are
+> about the `DIRECTX11` renderer, retired on 2026-10-13 with its `D3DCommon` layer (`RRC-032`,
+> `docs/removed-renderers.md`); `DIRECTX12` was retired on 2026-10-06 and `VULKAN` on 2026-10-13.
+> Their findings and follow-ups are history, not open work. The Windows renderers today are
+> `SDL_GPU` (the Windows default; SDL's Direct3D 12 backend), `DIRECTX9`, `FNA3D`, `OPENGL33`/
+> `OPENGLES3`, `SOFTWARE`, `HEADLESS` and `STUB`. `plans/plan_win32.md` and
+> `plans/plan_win32_native_validation.md`, cited below, were deleted on 2026-10-11 (Git history),
+> and `spikes/d3d11-vsync-spike/` went with `DIRECTX11`.
+
 The Windows workstream (`plans/plan_win32.md`, `plans/plan_win32_native_validation.md`,
 `plans/plan_windows_portability.md`) is finished apart from a small, bounded set of known gaps.
 This file closes them and records the integration into `next`. It is deliberately short: it is a
@@ -748,20 +757,25 @@ now reported as a leak whose owner `--warp` decides.
 
 ## Left for a physical Windows machine, and follow-ups
 
-* **F24** on real hardware, and the `--warp` discriminator above.
-* **DirectX12** is unmeasurable here as it stands: the adapter answers `DXGI_ERROR_UNSUPPORTED`, and
+(2026-10-14: the F24, DirectX12, Vulkan and DirectX11-cube items below are **closed as history** —
+their renderers were retired on 2026-10-06 and 2026-10-13. The remaining items still stand.)
+
+* ~~**F24** on real hardware, and the `--warp` discriminator above.~~ Closed: `DIRECTX11` retired.
+* ~~**DirectX12** is unmeasurable here as it stands:~~ Closed: `DIRECTX12` retired 2026-10-06. Original note: the adapter answers `DXGI_ERROR_UNSUPPORTED`, and
   `DirectX12Renderer` skips software adapters, so it never tries WARP, which implements D3D12 on any
   Windows 10. An opt-in WARP adapter would make it measurable on this VM. It shares the COLOR0 saturation
   and the position-only variant; it still has the white DualTexture fallback, no RenderTargetCube /
   RenderTarget2D SetData hooks audited, no channel expansion, no duplicate-semantic remap, no
   instanced World, no packed-format verification, and very likely the same stale test predicates.
-* **GetBackBufferData coordinate space** disagrees between renderers: DirectX11 returns the logical
-  back buffer, EasyGL/WebGPU/SDL GPU raw physical pixels. One contract should be chosen.
-* **Vulkan** fails `HdrBlendableRasterAndAdditiveBlendRemainInTheFloatDomain` and
-  `FloatTargetPartialAndMipTransfersKeepExactTypedValues` on Linux — Vulkan's own, not touched here.
-* **VBoxSVGA cube defects** (a cube-slice clear clears every slice; an MSAA `R16G16B16A16_UNORM`
+* **GetBackBufferData coordinate space** disagreed between renderers: DirectX11 (retired 2026-10-13)
+  returned the logical back buffer, EasyGL/WebGPU/SDL GPU raw physical pixels. Whether the
+  surviving renderers agree on one contract is still to be confirmed.
+* ~~**Vulkan** fails `HdrBlendableRasterAndAdditiveBlendRemainInTheFloatDomain` and
+  `FloatTargetPartialAndMipTransfersKeepExactTypedValues` on Linux — Vulkan's own, not touched here.~~
+  Closed: `VULKAN` retired 2026-10-13.
+* ~~**VBoxSVGA cube defects** (a cube-slice clear clears every slice; an MSAA `R16G16B16A16_UNORM`
   resolve into a cube reads zeros) keep two DirectX11 cube tests red on the VM; both reproduce with
-  raw D3D11 and need a physical GPU to confirm CNA's side.
+  raw D3D11 and need a physical GPU to confirm CNA's side.~~ Closed: `DIRECTX11` retired.
 * **WINNATIVE-F26**, the case-insensitive path divergence, stays deliberately red.
 * **FreeType and FFmpeg** are not on the VM, so font rasterization and media decoding are covered
   on Linux only; the tests that need them skip by name.

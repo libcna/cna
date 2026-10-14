@@ -18,7 +18,9 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_sdl3free.md`](plan_sdl3free.md) — historical SDL3-independent migration plan; its SDL2
   route was superseded by native backends and retired on 2026-10-04, and those native backends
   were retired in turn on 2026-10-06.
-- [`plan_modern.md`](plan_modern.md) — the `CNA::Graphics` modern engine layer.
+- `plan_modern.md` — the former `CNA::Graphics` modern engine layer; that layer was removed in the
+  2026-09 scope reduction and the plan was deleted on 2026-10-11 (Git history only). The surviving
+  extension module is described in [`../docs/cnaext-engine-layer.md`](../docs/cnaext-engine-layer.md).
 - [`plan_diagnostics.md`](plan_diagnostics.md) — renderer-independent diagnostics, profiling,
   bounded recording, and the Inspector provider boundary.
 - [`plan_inspector.md`](plan_inspector.md) — optional authenticated agent, compact protocol,
@@ -62,13 +64,17 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 ## Graphics backends and renderers
 
 - [`plan_renderer_retirement.md`](plan_renderer_retirement.md) — the 2026-10-13 retirement of
-  `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER`, and its report (`../docs/renderer-registry.md`
-  is the canonical list of the 10 identities that remain).
+  `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` (RRC-030..RRC-039, remediation from RRC-040),
+  and its report. [`../docs/renderer-registry.md`](../docs/renderer-registry.md) is the canonical
+  list of the 10 identities that remain; [`../docs/removed-renderers.md`](../docs/removed-renderers.md)
+  records all 41 retired ones.
+- [`plan_vulkan_parity.md`](plan_vulkan_parity.md) — history only: the Vulkan hardware-parity
+  ledger, kept for its XNA-measured shared contracts after `VULKAN` was retired on 2026-10-13.
 - [`plan_dx9.md`](plan_dx9.md) — Direct3D 9.
 - [`plan_headless.md`](plan_headless.md) — headless rendering.
 - [`plan_sdlgpu.md`](plan_sdlgpu.md) — SDL GPU.
 - [`plan_software.md`](plan_software.md) — CPU software rasterizer.
 - [`plan_stub.md`](plan_stub.md) — no-op stub renderer.
 - [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
-- [`plan_webgpu_perf.md`](plan_webgpu_perf.md) — WebGPU's per-draw CPU cost: the open
-  binding-model redesign (uniform arena with dynamic offsets, cached bind groups, fewer submits).
+- `plan_webgpu_perf.md` — WebGPU's per-draw CPU cost (binding-model redesign); deleted on
+  2026-10-11 and available only in Git history.

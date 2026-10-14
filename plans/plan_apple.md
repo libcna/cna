@@ -1,7 +1,10 @@
 # Apple platform support: macOS and iOS
 
 Support for Apple's two platforms, treated as one build/runtime subsystem below every renderer.
-The renderer question is separate and stays in `plan_metal.md` / `docs/metal-renderer.md`.
+The renderer question is separate. It used to live in `plan_metal.md` / `docs/metal-renderer.md`;
+both were deleted when the native `METAL` renderer was retired on 2026-10-13
+(`docs/removed-renderers.md`). On Apple hosts CNA now defaults to `SDL_GPU`, whose Metal backend
+belongs to SDL; its Apple qualification is open (`handoff.md` §5.2).
 
 The current contract and validation boundary are maintained in
 [`docs/apple-platforms.md`](../docs/apple-platforms.md).
@@ -19,8 +22,8 @@ The current contract and validation boundary are maintained in
    performance evidence. The project's existing habit of separating "compiles" from "works" is
    what this follows.
 
-3. **An allow-list, not a deny-list, for iOS renderers.** CNA has 46 renderer identities and
-   almost all of them are impossible on iOS. Enumerating the impossible ones would rot the
+3. **An allow-list, not a deny-list, for iOS renderers.** CNA had 46 renderer identities when
+   this was decided (10 today), and almost all of them were impossible on iOS. Enumerating the impossible ones would rot the
    moment a renderer is added; enumerating what CNA actually wires up cannot. A renderer outside
    the list fails at configure time with a message naming the platform, instead of failing deep
    inside a third-party dependency that was never configured for an iOS sysroot.
@@ -66,7 +69,7 @@ The current contract and validation boundary are maintained in
 | `APPLE-1` | `cmake/ApplePlatform.cmake`: Apple target detection (macOS / iOS device / iOS simulator), deployment-target defaults, bundle identity options, rejection of tvOS/watchOS/visionOS | Done |
 | `APPLE-2` | `cmake/toolchains/ios.cmake`: device and simulator toolchain, architecture selection, re-rooted find rules | Done |
 | `APPLE-3` | `.app` bundle generation: downstream-safe helper, CNA-owned target sweep, plist templates, macOS dylib embedding/fixup plus bundled-app launch/dependency CI | Done |
-| `APPLE-4` | Conservative iOS renderer allow-list (`SDL_RENDERER` only) + `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` escape hatch | Done |
+| `APPLE-4` | Conservative iOS renderer allow-list (`SDL_RENDERER` only) + `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` escape hatch | Done; since `SDL_RENDERER`'s retirement on 2026-10-13 the allow-list is `SDL_GPU` and `SOFTWARE` |
 | `APPLE-5` | Platform-conditional build surface: deployment/architecture/sysroot-keyed SDL cache, static SDL3/image/mixer, Apple toolchain propagation, FFmpeg off on iOS, multi-process tests excluded | Done |
 | `APPLE-6` | `CNA/TargetPlatform.hpp`: `CNA_TARGET_APPLE`/`_MACOS`/`_IOS` macros, `isApplePlatform()`, `isMobilePlatform()`, `getCurrentPlatformName()` | Done |
 | `APPLE-7` | Mobile application lifecycle in `Game`: suspend/resume timing, termination/low-memory handling, focused event-state test | Done |

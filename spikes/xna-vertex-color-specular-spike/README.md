@@ -4,8 +4,8 @@
 
 ## Why the question needed a probe at all
 
-CNA's Vulkan renderer has two vertex-colour lit paths and they disagree about where the colour
-multiplies:
+CNA's Vulkan renderer (retired 2026-10-13; the probe's XNA answer stands on its own) had two
+vertex-colour lit paths, and they disagreed about where the colour multiplies:
 
 * **BasicEffect** (`VULKAN-200`) follows FNA — `vout.Diffuse *= vin.Color` in the vertex stage,
   inside Direct3D 9's `oD0` saturate, and the pixel stage's `AddSpecular` then adds

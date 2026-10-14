@@ -186,8 +186,9 @@ expect build or runtime failures, and nothing about such a configuration is supp
 ## Mac mini M4 qualification (2026-10-07/08)
 
 `plans/plan_apple_m4.md` (`AM4-*`) is the task-by-task record; this is its summary. It predates the
-2026-10-13 retirement: its `METAL` and `SDL_RENDERER` rows describe renderers CNA no longer has and
-are kept as the measurement they were. Host: Mac mini
+2026-10-13 retirement: its `METAL` and `SDL_RENDERER` rows describe renderers CNA no longer has,
+and `VULKAN` and `DIRECTX11` in its scope rows were retired the same day; all are kept as the
+measurement they were. Host: Mac mini
 M4 (arm64, 16 GB), macOS 27.0.1, Xcode 27.0 / Apple clang 21, CMake 4.4.4, `CNA_PLATFORM=SDL3`
 (SDL's Cocoa and UIKit drivers -- CNA has no Cocoa/AppKit/UIKit backend of its own). Every number
 below was measured on that machine. Statuses: **PASS**, **PASS WITH KNOWN LIMITATION**,
@@ -216,8 +217,8 @@ baseline the qualification started from, its classification, and the full eviden
 | `OPENGLES3` | NOT APPLICABLE | -- | macOS has no native OpenGL ES |
 | `WEBGL2` | NOT TESTED | -- | Emscripten/browser; no emsdk on this host |
 | `HEADLESS`, `STUB` | NOT TESTED | -- | Not part of this campaign's matrix |
-| `VULKAN` (MoltenVK) | OUT OF SCOPE | -- | Excluded on Apple by the campaign brief |
-| `DIRECTX9`, `DIRECTX11` | NOT APPLICABLE | -- | Windows only |
+| `VULKAN` (MoltenVK) | OUT OF SCOPE | -- | Excluded on Apple by the campaign brief; retired 2026-10-13 |
+| `DIRECTX9`, `DIRECTX11` | NOT APPLICABLE | -- | Windows only; `DIRECTX11` retired 2026-10-13 |
 | iOS Simulator, SDL3 + `METAL` | PASS | `cna_ios_pixel_probe` (iOS 27 Simulator, iPhone 17 profile) exact on frame 1 and on the 10 frames after it in 8 of 8 launches at `AM4-120`, `cna_ios_smoke` OK | The all-zero runs seen at `AM4-037` were SDL's UIKit view-frame swap (`AM4-120`): once the window rotated to the landscape-only set, every frame drew into a 1346x0 view. The probe used to stop at the first good frame, which hid it in most launches |
 | iOS device (arm64) | BUILD ONLY | Final-linked `.app` for `iphoneos` (rebuilt at `49bdf63b8`: Mach-O arm64, platform 2, minos 16.3, system frameworks only) | No physical iPhone, signing identity or Apple account available |
 | C API (`modules/c-api`) | PASS | every C API test, 119/119, in the SOFTWARE and `SDL_RENDERER` trees, the documentation gates with Doxygen 1.9.8 through `CNA_C_API_DOXYGEN` (`AM4-160`); `CApi_InstalledConsumer` installs the package and builds and runs `hello_cna` against it, shared and static | Phase 5 (`AM4-209`..`214`): the dylib exports exactly the 3,210 `_cna_*` names (ld64 exported-symbols list), loads its shipped SDL3 through `LC_RPATH @loader_path`, carries Mach-O versions from the ABI version, and has a static archive made with `ld -r -all_load` and `nmedit`; the ABI-baseline and declared-export gates read Mach-O. Homebrew's curl/FFmpeg/Opus/zstd stay system dependencies, and the game must be created on the main thread for a windowed renderer (`docs/c-api/CONSUMING.md`). No CI job builds the C API on macOS yet |

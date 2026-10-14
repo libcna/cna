@@ -1,8 +1,12 @@
 # plan_vulkan_parity.md — Vulkan renderer parity on real Radeon/RADV hardware
 
-**History.** `VULKAN` was retired on 2026-10-13 (`docs/removed-renderers.md`). The XNA-measured
-shared contracts and infrastructure recorded here stay in force; VKPAR-0011's open EasyGL defect
-moved to `handoff.md` §5.1.
+**History — this whole file is a closed record; nothing in it is actionable.** `VULKAN` was retired
+on 2026-10-13 (`RRC-031`, `docs/removed-renderers.md`, `plans/plan_renderer_retirement.md`): the
+renderer, `cmake-build-vulkan/`, its test labels and every Vulkan-only path named below no longer
+exist, and no row here is an open task, a current capability or a test requirement. The file is
+kept, unlike the other 2026-10-13 plans, only because the XNA-measured shared contracts and
+infrastructure it settled (null-texture semantics, facedness, the display-isolation findings) still
+bind the surviving renderers. VKPAR-0011's open EasyGL defect moved to `handoff.md` §5.1.
 
 A hardware-validation workstream for the **existing classic CNA/XNA Graphics contract** on the
 Vulkan renderer. Not a modern-graphics/CNAEXT project, not a performance project, and not a second

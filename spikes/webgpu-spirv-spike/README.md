@@ -1,5 +1,10 @@
 # WebGPU compiled-Effect translation spike — `plans/plan_webgpu.md` `WEBGPU-166` / `WEBGPU-203`
 
+> **Note (2026-10-14).** References below to CNA's Vulkan backend (`VulkanCompiledEffect`,
+> `FX-065`) and to `tools/graphics/mojoshader_vulkan_probe.cpp` describe code that was deleted with
+> the `VULKAN` renderer on 2026-10-13 (`docs/removed-renderers.md`); they are kept as the context
+> this spike was measured in. The SPIR-V findings themselves still apply to `WEBGPU` and `SDL_GPU`.
+
 Can the pinned WebGPU stack run a **compiled XNA Effect**? Measured on **wgpu-native v29.0.1.1**
 (`~/deps/wgpu-native-v29.0.1.1`) against an AMD Radeon 780M (RADV, Mesa 25.0.7) under `Xvfb :131`,
 and against the **emdawnwebgpu** port shipped with the emsdk in this sandbox, on 2026-09-06.

@@ -33,8 +33,8 @@
 > `.xnb` was permanently out of scope. That is no longer CNA's direction: CNA now produces `.xnb`
 > files natively through its own content pipeline. This plan and `plans/plan_xnb.md` continue to
 > own the **reader**; the writer is a separate subsystem with its own plan
-> ([`plans/plan_xnapipeline.md`](plans/plan_xnapipeline.md)) and its own documentation
-> ([`docs/xnb-interoperability.md`](docs/xnb-interoperability.md)). Nothing else in this document
+> ([`plans/plan_xnapipeline.md`](../plans/plan_xnapipeline.md)) and its own documentation
+> ([`docs/xnb-interoperability.md`](../docs/xnb-interoperability.md)). Nothing else in this document
 > changes: the reader remains the authority on how a `.xnb` file is consumed, and the writer treats
 > it as one of its two normative specification sources.
 

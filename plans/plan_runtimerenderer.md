@@ -1,5 +1,13 @@
 # Runtime Graphics Renderer Selection — Implementation Plan
 
+> **Renderer note (2026-10-14).** Most families this plan names as examples (`SKIA`, `BLEND2D`,
+> `DILIGENT`, `OPENGL1`, `VULKAN`, `METAL`, `SDL_RENDERER`, `DIRECTX11`, ...) have since been
+> retired (`docs/removed-renderers.md`), and two descriptor fields designed here went with them:
+> `needsVulkanSurface` (with `VULKAN`, 2026-10-13) and `wantsHighDpi` (only `METAL` set it; removed
+> by `RRC-042`). The descriptor's current shape is
+> `modules/graphics/include/CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp`, and the
+> user-facing description of this mode is `docs/runtime-renderer-selection.md`.
+
 > **Created 2026-08-14** on branch `feature/graphicsruntimedispatch`, at the project owner's
 > request, as a pure analysis pass — no source file was modified to produce it. Every count,
 > line reference and structural claim below was measured against the tree at that point, not

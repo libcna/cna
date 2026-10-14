@@ -1,5 +1,12 @@
 # SDL GPU Graphics Renderer — classic XNA / EasyGL parity plan and execution log
 
+> **Renderer note (2026-10-14).** Since CNA's own `VULKAN`, `DIRECTX11` and `METAL` renderers were
+> retired on 2026-10-13 (`docs/removed-renderers.md`), `SDL_GPU` is CNA's modern native path and
+> the default on Windows, macOS and iOS. "Vulkan", "D3D12" and "Metal" in this file mean SDL's own
+> GPU drivers underneath `SDL_GPU` unless a passage explicitly compares against a CNA renderer of
+> that name; such comparisons, and the historical plan below that lists `SDL_RENDERER`, `BGFX`,
+> `VULKAN`, `D3D11` and `D3D12` as sibling backends, are records of their date.
+
 > **Current verdict (audit opened 2026-09-09; platform re-audit opened 2026-09-10; final sweep
 > 2026-09-11): B. CLASSIC
 > SDL GPU ↔ EASYGL PARITY NOT YET REACHED across the renderer's advertised platforms.** On the

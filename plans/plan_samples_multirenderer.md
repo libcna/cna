@@ -1,5 +1,14 @@
 # Native Sample Multi-Renderer Qualification Plan
 
+> **History banner (2026-10-14).** Every work item below is done; the file is a measured record of
+> 2026-10-04 onward. Its renderer set has since shrunk: `OPENGLES2` and `DIRECTX12` were retired on
+> 2026-10-06 and `VULKAN`, `DIRECTX11`, `METAL` on 2026-10-13 (`docs/removed-renderers.md`). The
+> VULKAN and OPENGLES2 rows of the corpus matrix, the Windows cross-build set with `DIRECTX11` as
+> its default (MSR-030) and the macOS recipe with `METAL` as its default (MSR-033) are history: no
+> current build can select those identities. Today the Linux targets of such a run would be
+> `OPENGLES3`, `OPENGL33`, `WEBGPU`, `SDL_GPU` and `FNA3D`; the per-host defaults are `SDL_GPU` on
+> Windows/macOS/iOS and `OPENGLES3` elsewhere (`cmake/RendererIdentityDefault.cmake`).
+
 **Started:** 2026-10-04 on CNA branch `samples` and cna-samples branch `develop`.
 
 **Scope:** qualify the existing cna-samples gallery corpus with one executable per sample and CNA's
@@ -1037,7 +1046,7 @@ Regression and integration evidence:
   confirmed that the car no longer turns left and drives correctly.  This is interactive gameplay
   evidence; it does not broaden MSR-039's static-frame visual claims.
 
-## Current Linux corpus matrix
+## Linux corpus matrix (measured during this campaign; VULKAN and OPENGLES2 since retired)
 
 The primary corpus has 89 gallery executables and two native-only executables.  Every row below
 uses the same multi-renderer binary for a given sample and verifies the requested active identity

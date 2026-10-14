@@ -95,7 +95,8 @@ Native Microsoft vocabulary intentionally retained:
 - `modules/renderers/common/d3d` (namespace `D3DCommon`, target
   `cna_renderer_d3dcommon`) — real shared Direct3D-native helper code, consumed
   by the directx11/directx12 families; DIRECTX9 and DIRECTX10 remain independent
-  of it (unchanged dependency shape).
+  of it (unchanged dependency shape). Removed with `DIRECTX11` on 2026-10-13;
+  `DIRECTX9` never depended on it.
 - Inside the directx9…directx12 families every class that wraps an actual
   Direct3D API object keeps its `D3D<N>` prefix (`D3D11Buffers`,
   `D3D11SamplerCache`, `D3D11InputLayoutCache`, `D3D12PipelineStateCache`,

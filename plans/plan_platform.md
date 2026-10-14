@@ -1,5 +1,12 @@
 # CNA Platform Abstraction (`IPlatform`) — Implementation Plan
 
+> **Retirement notice (2026-10-13):** the `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER`
+> renderers were retired (`plans/plan_renderer_retirement.md`, `docs/removed-renderers.md`), and
+> with them the platform's Vulkan-surface service (`IPlatformVulkanSurface`, PLAT-23/PLAT-42) and
+> the Metal window intent. The renderer SDL allow-list is now exactly `sdl-gpu` and `fna3d`
+> (`tools/platform/renderer_sdl_audit.py`). Rows below that name those renderers record completed
+> work at the time.
+
 > **Retirement notice (2026-10-06):** the direct `WIN32`, `X11` and `WAYLAND` implementations that
 > later campaigns added are retired (§11c, PLAT-142). SDL3 is CNA's one graphical platform; Windows,
 > X11 and Wayland are reached through SDL's video drivers, and the native handles a renderer needs
@@ -170,14 +177,15 @@ Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatfor
    their own API directly. `Game → GraphicsDevice → Platform → SDL → Renderer` is forbidden; the
    chain stays `Game → GraphicsDevice → Renderer`.
 
-6. **Three renderers are permitted to keep a hard SDL3 dependency**, in two distinct kinds
-   (established by PLAT-3's audit; it counted four until `FREEDIRECT` was retired on 2026-09-27):
-   - *SDL by identity* — `SDL_RENDERER` and `SDL_GPU`. Their rendering path **is** an SDL3 API.
+6. **Two renderers are permitted to keep a hard SDL3 dependency**, in two distinct kinds
+   (established by PLAT-3's audit; it counted four until `FREEDIRECT` was retired on 2026-09-27,
+   and three until `SDL_RENDERER` was retired on 2026-10-13):
+   - *SDL by identity* — `SDL_GPU`. Its rendering path **is** an SDL3 API.
    - *SDL by upstream dependency* — `FNA3D`. CNA's own sources for it are effectively SDL-free
      already; the third-party library it wraps links SDL3 itself. No amount of migrating CNA code
      removes this, which is why it is a separate kind of exception rather than the same one.
 
-   All three are declared `REQUIRES_PLATFORM SDL3` in CMake and excluded from the
+   Both are declared `REQUIRES_PLATFORM SDL3` in CMake and excluded from the
    no-SDL-outside-platform gate by an explicit allowlist, not by accident. Every other renderer
    must end this plan SDL-free.
 
@@ -207,6 +215,11 @@ Renderer families calling `SDL_GL_*` directly, freed as a group by one `IPlatfor
 
 ## 4. Target architecture
 
+The tree below is the target recorded when the plan was written; the current header set is
+`modules/platform/include/CNA/Platform/` (several services were later merged into
+`IPlatformSystemServices.hpp`, and the Vulkan-surface service was removed with `VULKAN` on
+2026-10-13).
+
 ```text
 modules/platform/
 ├── include/CNA/Platform/
@@ -226,8 +239,7 @@ modules/platform/
 │   ├── IPlatformTray.hpp           │
 │   ├── IPlatformCamera.hpp         ┘
 │   ├── IPlatformSurfacePresenter.hpp  present a CPU pixel buffer to a window
-│   ├── IPlatformGlContext.hpp      GL context service (11 renderer families need it)
-│   ├── IPlatformVulkanSurface.hpp  Vulkan surface/extension service
+│   ├── IPlatformGlContext.hpp      GL context service (EasyGL is its one renderer user today)
 │   └── Input/                      keyboard, mouse, gamepad, joystick, haptic, sensor, touch
 ├── src/Sdl3/                       the ONLY real implementation in this plan
 ├── src/Headless/                   no-op implementation; second impl for the conformance suite
@@ -245,7 +257,7 @@ media ────┘
 
 audio ────▶ audio-platform ──▶ SDL3 audio
 renderers ▶ NativeWindowHandle (a struct, no platform call at draw time)
-renderers/{sdl-renderer,sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
+renderers/{sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
 ```
 
 ---
@@ -272,8 +284,9 @@ renderers/{sdl-renderer,sdl-gpu,fna3d} ──▶ SDL3   (allowlisted, by design)
    `plans/plan_renderer_cleanup.md` retired 25 of them (the `ASCII` identity had already been
    withdrawn in favour of a renderer-neutral post-process effect), to 22 when `RRC-012`
    retired `DIRECT2D`, `FREEDIRECT` and `PORTABLEGL`, to 18 when `RRC-015` retired `GDI`,
-   `HTML_DOM`, `SVG_DOM` and `OPENGL4`, and to 14 when `RRC-018` retired `DIRECTX12`, `CANVAS`,
-   `OPENGLES2` and `WEBGL1`. Both numbers are
+   `HTML_DOM`, `SVG_DOM` and `OPENGL4`, to 14 when `RRC-018` retired `DIRECTX12`, `CANVAS`,
+   `OPENGLES2` and `WEBGL1`, and to 10 when `RRC-031`..`RRC-035` retired `VULKAN`, `DIRECTX11`,
+   `METAL` and `SDL_RENDERER` on 2026-10-13. Both numbers are
    checked against the registry by `scripts/check_renderer_identities.py`, which is why they are
    phrased in the exact words it looks for — a count stated in prose is a fact with no owner, and
    this rule read "46" for three identities after the count moved. A renderer added *after* a
@@ -785,7 +798,7 @@ It is selected only by `CNA_PLATFORM=SDL2`; it never aliases SDL3 or uses `sdl2-
 the point is to exercise the contract against SDL2's real API and deployment surface.
 
 Its capability boundary, its consequences for renderers, and its supported build and test commands
-are [`docs/platform-sdl2.md`](../docs/platform-sdl2.md). That document, not this table, is the entry
+are `docs/platform-sdl2.md` (removed with the SDL2 backend; Git history). That document, not this table, is the entry
 point for someone trying to use the backend.
 
 **What the second implementation was worth.** This is the row that pays for Phase 11, and it paid
@@ -803,7 +816,7 @@ SDL2 bugs; SDL2 was the first configuration that asked the questions.
 | PLAT-SDL2-4 | ✅ | `Sdl2Platform::GlContext` creates, binds, swaps and queries real SDL2 GL/ES contexts. The pending Xvfb evidence was produced on 2026-08-17: `cna_demo_2d --smoke 6` runs to completion (exit 0) on an SDL2-created context under Xvfb, logging `EasyGLRenderer initialized with OpenGL OpenGL ES 3.2 Mesa 25.0.7` and a real capability probe (MSAA to 4x, MRT to 4 targets, indexed colour masks, 16x anisotropy). The renderer reaches the context through `IPlatformGlContext` and a `WindowId` — never a native handle — which is what lets a GL renderer run on a backend whose `nativeWindowHandle` capability is false. |
 | PLAT-SDL2-5 | ✅ | The profile advertises multiple windows, high DPI, multiple displays, borderless fullscreen and OpenGL, plus the `exactKeyboardState` quality flag. Every unimplemented service returns null and its capability bit is false. **Corrected 2026-08-17: `multipleDisplays` was advertised while `GetDisplays()` returned null** — precisely the inconsistency PLAT-117's `EveryServiceIsNullExactlyWhenItsCapabilityIsFalse` exists to catch, and invisible only because SDL2 had never been a parameter of the conformance suite. Fixed by implementing the service rather than by lowering the claim: `Sdl2Displays` (`modules/platform/src/Sdl2/Sdl2SystemServices.*`) enumerates displays, bounds, desktop and fullscreen modes, the display a window is on, and the screen saver. Two decisions recorded there: display ids are the SDL2 index **plus one**, because `GraphicsAdapter` reads id 0 as "no display" and SDL2 indexes from zero; and `contentScale` stays 1.0 because `SDL_GetDisplayDPI` reports the panel's physical dot pitch, not the desktop's scaling factor — deriving a scale from it would tell a caller an unscaled 4K desktop is scaled ~1.7x. The genuine high-DPI signal is the per-window drawable-to-logical ratio `Sdl2Window::GetDisplayScale` measures. `TryGetSafeAreaForWindow` returns false: SDL2 has no equivalent of `SDL_GetWindowSafeArea`, and full client bounds would be a guess presented as an answer. |
 | PLAT-SDL2-6 | ✅ | **SDL2 is a real parameter of the implementation-neutral suite**: an `CNA_PLATFORM=SDL2` build of `CnaTests` runs `PlatformConformance` and `PlatformWindowConformance` against SDL2, Headless and Terminal for **87/87 instances passing**, on an Xvfb display rather than the dummy video driver. Getting there required a fix the plan had not anticipated: `CnaTests` linked `SDL3::SDL3` unconditionally, so an SDL2-selected binary contained both SDL generations, which export the same entry points (`SDL_Init`, `SDL_GetError`, `SDL_PollEvent`, …) — the SDL2 backend's calls would bind to whichever library the loader reached first, and a conformance run over such a binary tests neither implementation while reporting success. `cmake/Sdl2OnlyConfiguration.cmake` now publishes `CNA_SDL2_ONLY_CONFIGURATION`, and the test/harness layer consults it; `ldd` on the resulting binary shows `libSDL2-2.0d.so.0` and no SDL3. `CnaSdl2PlatformTests` and `CnaSdl2AudioDeviceTests` remain separate executables (the two suites that include SDL2's own headers), both registered with CTest and both now built and run by the CI cell. |
-| PLAT-SDL2-7 | ✅ | [`docs/platform-sdl2.md`](../docs/platform-sdl2.md): the capability table and what each flag is backed by, the observable consequences of every absent service, the display-id offset, the event translation, the audio limits, a renderer compatibility table, the supported build and test commands, and a section on what building the second implementation exposed. Written as the entry point for someone using the backend, with `plan_platform.md` left as the task log. |
+| PLAT-SDL2-7 | ✅ | `docs/platform-sdl2.md` (removed with the SDL2 backend; Git history): the capability table and what each flag is backed by, the observable consequences of every absent service, the display-id offset, the event translation, the audio limits, a renderer compatibility table, the supported build and test commands, and a section on what building the second implementation exposed. Written as the entry point for someone using the backend, with `plan_platform.md` left as the task log. |
 | PLAT-SDL2-8 | ✅ | `CNA_AUDIO_PLATFORM=SDL2` selects a private SDL2 callback playback device and links `cna_audio` only with `SDL2::SDL2`; non-SDL3 selections exclude both `Sdl3AudioDevice` and the `SDL3_mixer` engine from the archive. `cna_audio_sdl2_tests` passes its dummy-driver lifecycle test. The SDL2-only configuration gate rejects renderers with their own SDL3 edges (`SDL_RENDERER`, `SDL_GPU`, `FNA3D`, `FREEDIRECT`) and accepts OPENGLES3. SDL2 capture is honestly unsupported. High-level XNA sound stays deliberately disabled in this profile: the decoder/mixer is an SDL3_mixer engine, so enabling it would make the binary no longer SDL2-only, and implementing an SDL2_mixer or CNA-native mixer remains **future work recorded in §12** rather than an open part of this task. **What actually building the profile exposed, 2026-08-17: it did not compile at all.** Three pure-XNA math helpers in `SoundEffectInstance.cpp` — `2^pitch`, the FAudio pan crossfeed matrix, the F3DAudio Doppler ratio — sat inside the `SOUND_ENABLED` block while the public `INTERNAL_calculate*` shims that forward to them are compiled unconditionally, so `cna_audio` failed to build under `=SDL2` **and** `=NULL`. `VideoPlayer.cpp` and two test-access headers had the same shape. All are fixed, and the twelve XACT/wave-bank assertions plus twenty decode-dependent content and video cases that had never run outside the SDL3 profile are now either excluded by the existing SDL3-mixer suite list or compiled out case-by-case with the reason stated. None of this was reachable before: the plan's own HEADLESS regression runs kept the default SDL3 audio, and the one CI cell that selects NULL audio builds `CnaTests` without running it. |
 
 ---
@@ -816,8 +829,8 @@ SDL2 bugs; SDL2 was the first configuration that asked the questions.
 A fourth implementation landed after this plan closed: **`CNA_PLATFORM=X11`**, a native backend
 written against Xlib and the X extensions with no SDL in it at all. It is not a step of this
 campaign and does not renumber anything here; its own plan, task ledger and evidence are
-[`plans/plan_x11.md`](plan_x11.md) and its capability boundary is
-[`docs/platform-x11.md`](../docs/platform-x11.md).
+`plans/plan_x11.md` (deleted; Git history) and its capability boundary is
+`docs/platform-x11.md` (deleted; Git history).
 
 Two things about it matter to *this* plan, because they change claims made above:
 
@@ -862,7 +875,7 @@ need its own plan file.
 > because the point of this section is what the contract was *designed* to accommodate — moving a
 > row out once it lands would erase the evidence that the design held. `TerminalPlatform` was
 > promoted into Phase 10 of this plan; `Win32Platform` was implemented by
-> [`plans/plan_win32.md`](plan_win32.md) and needed **no change to any contract header** to fit,
+> `plans/plan_win32.md` (deleted 2026-10-11; Git history) and needed **no change to any contract header** to fit,
 > which is the strongest statement this section can make about the abstraction. It was retired
 > again on 2026-10-06 (§11c) -- not because the contract failed it, but because a second copy of
 > what SDL3 already does on Windows was not worth its upkeep.
@@ -870,7 +883,7 @@ need its own plan file.
 | Candidate | Rationale | Expected capability profile | Status |
 |---|---|---|---|
 | `Sdl12Platform` | Genuinely historical systems. SDL 1.2 is deprecated upstream (last release 1.2.15) and would be CNA-owned indefinitely. | Limited profile: basic window, keyboard/mouse, old joystick API, timing, basic audio, GL or software surface, basic fullscreen. Clipboard, text input, gamepad, HiDPI largely unsupported — declared unsupported, never emulated with unsafe hacks. | Future — not started |
-| `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `DIRECTX*` renderers and CPU `SOFTWARE` presentation. | Windows-only; no cross-platform pretence. | 🗄️ **Implemented, then retired 2026-10-06 (§11c)** — [`plans/plan_win32.md`](plan_win32.md); its capability document `docs/platform-win32.md` is in git history. While it existed, `CNA_PLATFORM=WIN32` was a first-class selection on Windows targets and a loud refusal everywhere else. Built on user32/gdi32/opengl32/ole32/shell32 with zero SDL; joins the conformance suite through `PlatformFactory::GetAvailable()`. It also closed the last place SDL was still CNA's substrate rather than a backend: the root configure no longer *builds* vendored SDL3 for a configuration nothing in which uses it. |
+| `Win32Platform` | A native platform with no SDL at all, pairing naturally with the `DIRECTX*` renderers and CPU `SOFTWARE` presentation. | Windows-only; no cross-platform pretence. | 🗄️ **Implemented, then retired 2026-10-06 (§11c)** — `plans/plan_win32.md` (deleted 2026-10-11; Git history); its capability document `docs/platform-win32.md` is in git history. While it existed, `CNA_PLATFORM=WIN32` was a first-class selection on Windows targets and a loud refusal everywhere else. Built on user32/gdi32/opengl32/ole32/shell32 with zero SDL; joins the conformance suite through `PlatformFactory::GetAvailable()`. It also closed the last place SDL was still CNA's substrate rather than a backend: the root configure no longer *builds* vendored SDL3 for a configuration nothing in which uses it. |
 | `EmscriptenPlatform` | A direct browser platform for the web renderers. | Web-shaped: no multiple windows, no native dialogs. | Future — not started |
 | `TerminalPlatform` | Runs a game in a TTY — over SSH, in CI, in `tmux`, on any machine with no display server. **Not listed here as future work: it was analysed and promoted to Phase 10**, because it is the strongest available proof the contract is not SDL-shaped. | Cells not pixels; mouse at cell granularity; exact keyboard only under the Kitty protocol; no gamepad. | **Analysed — Phase 10** |
 | Separate gamepad module | If a second implementation shows the capability model cannot express the SDL1-joystick vs SDL2-GameController vs SDL3-Gamepad gap (design decision 8), the gamepad seam is split out then — on evidence, not in advance. | — | Future — revisit after a second implementation exists |

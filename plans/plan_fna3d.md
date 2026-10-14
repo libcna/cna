@@ -1,9 +1,12 @@
 # plan_fna3d.md — the FNA3D graphics renderer
 
-Ledger for CNA's **43rd of 46** public renderer identities, `FNA3D`. Companion documents:
+Ledger for the `FNA3D` renderer identity (C ABI value 43, the highest assigned; it was the 43rd of
+46 identities when this ledger began, and is one of the 10 that remain after the retirements
+recorded in `docs/removed-renderers.md`). Direct3D 11, OpenGL and SDL_GPU below are FNA3D's own
+upstream drivers, not CNA renderer identities. Companion documents:
 `docs/fna3d-renderer.md` (capability boundary and validation status),
 `modules/renderers/fna3d/effects/README.md` (stock-effect provenance),
-`fna3d-spike/README.md` (the existence gates).
+`spikes/fna3d-spike/README.md` (the existence gates).
 
 ## Why this renderer
 

@@ -1,5 +1,12 @@
 # WebGPU Backend Implementation Plan
 
+> **Note (2026-10-14).** Comparisons in this file against the `VULKAN` renderer (and its
+> `CNA_VULKAN_COMPILED_EFFECTS` route and `cna_mojoshader_vulkan_probe`), `DIRECTX11` or
+> `SDL_RENDERER` are records of their date: those renderers were retired on 2026-10-13
+> (`docs/removed-renderers.md`). `plans/plan_modern.md`, `NEXT_modern.md` and `misc/CNAEXT.md`,
+> cited as the boundary of the former engine layer, were deleted on 2026-10-11 and survive in Git
+> history; the surviving extension module is `docs/cnaext-engine-layer.md`.
+
 ## Status summary (2026-09-09)
 
 **202 rows — ✅ 201 · 🟨 1 · ⬜ 0** (counted from the row tables by
@@ -488,9 +495,9 @@ profiles are pluggable; `profiles/mojoshader_profile_spirv.h` is the precedent f
 `WEBGPU-203` runs, against what this repository can actually build. What the tree already provides:
 MojoShader is pinned with FNA3D (`cmake/ThirdPartyFNA3D.cmake`, `cna_configure_mojoshader()`) with
 the `SPIRV` profile enabled, five committed patches against it, and `cna_mojoshader_vulkan_probe`
-(`plan_fx.md` `FX-064`) — a working precedent for a CNA-authored nine-function
+(`plan_fx.md` `FX-064`; deleted with `VULKAN` on 2026-10-13) — a working precedent for a CNA-authored nine-function
 `MOJOSHADER_effectShaderContext` backend written straight onto the SPIR-V profile, which is what
-`CNA_VULKAN_COMPILED_EFFECTS` ships. `SupportsCompiledEffects()` may stay permanently false only when
+`CNA_VULKAN_COMPILED_EFFECTS` shipped until `VULKAN` was retired. `SupportsCompiledEffects()` may stay permanently false only when
 a row names the blocker; "no implementation yet" is not one. → `WEBGPU-166` rewritten,
 `WEBGPU-203`/`204`.
 

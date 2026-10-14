@@ -10,8 +10,8 @@
 `VertexColorEnabled`, `vin.Color * DiffuseColor`). `BasicEffect.DiffuseColor` is a `Vector3` with no
 clamp in its setter (`BasicEffect.cs:117`), so a game can hand the shader a value above 1.
 
-Neither CNA renderer clamps it — `colored3d.vert.glsl` and `textured3d.vert.glsl` on Vulkan,
-and EasyGL's `FX-123` fix touched only its two vertex-**lit** programs — so this is CNA-wide rather
+Neither CNA renderer clamped it at the time — `colored3d.vert.glsl` and `textured3d.vert.glsl` on
+Vulkan (renderer retired 2026-10-13), and EasyGL's `FX-123` fix touched only its two vertex-**lit** programs — so this is CNA-wide rather
 than a renderer parity gap, and it needed its own measurement rather than an inherited one.
 
 ## What it does

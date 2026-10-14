@@ -1,5 +1,11 @@
 # Direct3D 9 Graphics Backend — Implementation Plan
 
+> **Renderer note (2026-10-14).** `DIRECTX9` is one of CNA's 10 current renderer identities. The
+> sibling Direct3D renderers this plan keeps referring to are retired: `DIRECTX12` on 2026-10-06,
+> `DIRECTX11` with its `D3DCommon` layer on 2026-10-13 (`docs/removed-renderers.md`), and
+> `plans/plan_dx.md` and `docs/d3d11-backend.md` were deleted with them (Git history only).
+> Mentions of D3D11/D3D12 below are the context this plan was written in, not current peers.
+
 > **Status (2026-07-16): every phase this document authorizes is now closed.** The rest of this
 > banner (2026-07-14) is kept below for its historical record of the D9-0 gate and the divergence
 > findings, but it now reads as "authorization pending" when the real state, per `NEXT.md` (this
@@ -113,8 +119,8 @@ Do not rewrite it from this document's prose.
 | `CHECKLIST.md` | repo root | Binding. The per-file porting checklist `CLAUDE.md` mandates for **every** ported file. Not optional, not deferrable. |
 | **this file** | — | The what and the why. Especially "CNA's divergences from XNA 4.0" and the Boundaries at the end. |
 | `dx9-spike/README.md` | sibling of this file | **The proven Phase D9-0 artifacts.** A working shader compiler, a working `.fxb` verification oracle, a working real-XNA reference app, and the Wine prefixes they need. All of it has actually run. |
-| `plan_dx.md` | repo root | The D3D11/D3D12 plan. **Not your plan** — but the conventions it established (CTest shape, DXVK gating, mutation-verification discipline, `ComPtr`, MinGW cross-build loop) are the ones you inherit. Read its "Design decisions" and its Boundaries. |
-| `docs/d3d11-backend.md` | repo | What a finished backend's docs look like here. |
+| `plan_dx.md` | deleted 2026-10-13 with `DIRECTX11` (Git history) | The D3D11/D3D12 plan. **Not your plan** — but the conventions it established (CTest shape, DXVK gating, mutation-verification discipline, `ComPtr`, MinGW cross-build loop) are the ones you inherit. Read its "Design decisions" and its Boundaries. |
+| `docs/d3d11-backend.md` | deleted 2026-10-13 with `DIRECTX11` (Git history); `docs/directx9-renderer.md` is this backend's own document | What a finished backend's docs look like here. |
 
 **2. The reference sources you will be working against are on disk, not on the internet.**
 

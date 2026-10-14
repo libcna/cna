@@ -60,5 +60,6 @@ duplicated, and no retired name or C ABI value may be reused. Every accepted sel
 reaches its factory or rejects at its documented gate; every retired one is refused by name at
 configure time and at run time. `scripts/check_renderer_identities.py` holds the enum, the CMake
 list, the runtime registry, the C ABI table, the retired-value table and the run-time retired-name
-list to each other. The default is `WEBGL2` under Emscripten, `OPENGLES3` on Linux and Android, and
-`SDL_GPU` elsewhere (Windows, macOS, iOS).
+list to each other. The per-host default (`cmake/RendererIdentityDefault.cmake`) is `WEBGL2` under Emscripten,
+`SDL_GPU` on Windows, macOS (`Darwin`) and iOS, and `OPENGLES3` on every other system -- Linux,
+Android, the BSDs and any host not named above.

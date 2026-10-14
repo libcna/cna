@@ -106,7 +106,7 @@ surface (`plans/plan_runtimerenderer.md`):
       `CNA::Internal::Renderers`. A shared factory symbol is what made multi-renderer builds
       impossible. Enforced by the discipline gate.
 - [ ] The descriptor answers the pre-window questions honestly: `needsWindow`,
-      `needsVideoSubsystem`, `windowKind`, `wantsHighDpi`, `glFramebuffer`, and which platform
+      `needsVideoSubsystem`, `windowKind`, `glFramebuffer`, and which platform
       services the family receives (`needsSurfacePresenter`, `needsGlContext`). These are
       **data**, not hooks — a descriptor never names a windowing library.
 - [ ] `windowKind` set to the kind the renderer's window really is — fallback uses it to decide

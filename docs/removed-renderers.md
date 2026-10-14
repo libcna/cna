@@ -8,9 +8,12 @@ were excellent reconnaissance; what is kept here is the finding, not the code.
 
 **The code is not gone.** Each entry names the commit that removed it; the parent of that commit
 holds the whole implementation (`git show <commit>^:modules/renderers/<family>/...`, or
-`git checkout <commit>^ -- modules/renderers/<family>`). Plans of renderers retired up to
-2026-09-27 stay in `plans/` as history, marked retired; those of the 2026-09-28 and 2026-10-13
-retirements were deleted with their renderers and live only in git history. What git does *not* preserve is the third-party project each renderer
+`git checkout <commit>^ -- modules/renderers/<family>`). The retired renderers'
+own plans have left the tree -- those of the 2026-09-28, 2026-10-06 and 2026-10-13 retirements
+with their renderers, the older ones in the 2026-10-11 documentation cleanup -- and live in git
+history, with one deliberate exception: `plans/plan_vulkan_parity.md` stays, under a History
+banner, because the XNA-measured shared contracts it settled still apply to the surviving
+renderers. What git does *not* preserve is the third-party project each renderer
 wrapped, so every entry records the exact dependency it was pinned to. That pairing — CNA's code in
 git history, the dependency's coordinates here — is the archive.
 
@@ -21,6 +24,16 @@ source if a past result needs to be inspected.
 **A revert is a reference, not a patch.** `IGraphicsRenderer` changes often. Beyond a few months a
 removal commit is a specification to port forward, not a patch to apply. Expect to read it, not
 `git revert` it.
+
+**Each retirement section is a record of its own date.** Its identity counts, its "Coverage that
+remains" column and its validation runs describe the renderer set as it stood that day; several of
+the identities named there as covering a retired renderer (`DIRECTX11`, `DIRECTX12`, `VULKAN`,
+`METAL`, `SDL_RENDERER`, `GDI`, `CANVAS`, `OPENGLES2`, `WEBGL1`, `OPENGL4`, ...) were retired
+themselves later. The current set is the 10 identities in `cmake/RendererIdentities.cmake`
+(`docs/renderer-registry.md`), and the most recent section names what covers each platform today.
+`plans/plan_renderer_cleanup.md`, which the older sections cite for their `RRC-` task records, was
+deleted on 2026-10-11 and survives in Git history; the 2026-10-13 retirement's ledger is
+`plans/plan_renderer_retirement.md`.
 
 ## Retired identity values
 
@@ -86,7 +99,8 @@ The C ABI went to `0.28.0` for the 2026-09-17 retirement, to `0.31.0` for the 20
 ## The 2026-10-13 retirement
 
 An owner decision, final: CNA stops maintaining its own native Vulkan, Direct3D 11 and Metal
-renderers and SDL's 2D renderer (`RRC-030`..`RRC-037`; the ledger and full report are
+renderers and SDL's 2D renderer (`RRC-030`..`RRC-039`, with a remediation series continuing from
+`RRC-040`; the ledger and full report are
 [`plans/plan_renderer_retirement.md`](../plans/plan_renderer_retirement.md)). `SDL_GPU` is CNA's
 modern native path -- CNA maps XNA 4.0 onto SDL_GPU, and SDL owns the Vulkan, Direct3D 12 and Metal
 backends underneath it. None of the four is aliased to `SDL_GPU` or to anything else: each name is
@@ -148,7 +162,7 @@ families; EasyGL implements three of them (`OPENGLES3`, `OPENGL33`, `WEBGL2`).
 
 | Identity | C ABI | Reason | Coverage that remains |
 |---|---:|---|---|
-| `DIRECTX12` | 15 | A second modern Direct3D renderer next to `DIRECTX11`, never validated beyond WARP and vkd3d-proton. | `DIRECTX11` (and `DIRECTX9`) for Windows; `SDL_GPU` and `FNA3D` reach Direct3D 12 through their own drivers. |
+| `DIRECTX12` | 15 | A second modern Direct3D renderer next to `DIRECTX11`, never validated beyond WARP and vkd3d-proton. | At the time `DIRECTX11` (retired 2026-10-13) and `DIRECTX9` for Windows; `SDL_GPU` and `FNA3D` reach Direct3D 12 through their own drivers. |
 | `CANVAS` | 17 | A GPU-free browser 2D path (`canvas.getContext('2d')`), 2D only. | `WEBGL2` and `WEBGPU` in the browser. |
 | `OPENGLES2` | 2 | The GLSL ES 1.00 / ES 2.0 API generation of EasyGL. | `OPENGLES3` and `OPENGL33`. |
 | `WEBGL1` | 5 | The browser form of the same ES 2.0 generation. | `WEBGL2`. |
@@ -306,8 +320,8 @@ and flip-model swap chain only as its host (`plans/plan_direct2d.md`): byte-exac
 `SurfaceFormat::Color` ↔ BGRA conversion, authored `Texture2D` mips, exact Porter-Duff tuples mapped
 to Direct2D composites with every inexact blend refused, device-loss recovery that raised
 `ContentLost`, and a native debug-layer/live-object gate in CI. The renderer-agnostic 2D corpus it
-motivated, `modules/graphics/examples/cross_renderer_2d_corpus.cpp`, stays and is still built by
-EasyGL and Vulkan.
+motivated, `modules/graphics/examples/cross_renderer_2d_corpus.cpp`, stays and is built by EasyGL
+(Vulkan also built it until its own retirement on 2026-10-13).
 
 ### FREEDIRECT
 
@@ -380,9 +394,11 @@ scripts, removed or marked retired in the same workstream.
 | Build was | `-DCNA_GRAPHICS_RENDERER=BGFX` (optional `-DCNA_BGFX_BUILD_SHADERC=ON` to regenerate `bgfx_shaders.hpp`; runtime API via `CNA_BGFX_RENDERER`) |
 
 **What it proved.** One of CNA's earliest renderers (2026-04) and for months the reference for the
-stock-effect, render-target and readback contracts; a large part of today's renderer-agnostic example
-corpus was first written against it. Two of those sources were still registered by the Vulkan
-renderer and moved to `modules/renderers/vulkan/examples/` rather than being lost.
+stock-effect, render-target and readback contracts; a large part of the renderer-agnostic example
+corpus was first written against it. Two of those sources were then registered only by the Vulkan
+renderer and moved to `modules/renderers/vulkan/examples/`; that directory went with `VULKAN` on
+2026-10-13, after its renderer-neutral programs had been carried into the shared conformance set
+(`RRC-030`, `RRC-033`).
 
 ### MAGNUM
 
@@ -440,8 +456,8 @@ retirement and was retired on 2026-09-27.
 | Build was | `-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_GRAPHICS_RENDERER=DIRECTX10` |
 
 **What it proved.** The first programmable-only Direct3D generation under the DXVK route: real
-`vs_4_0`/`ps_4_0` HLSL, state objects and MRT (`plans/plan_d3d10.md`). `DIRECTX11` covers the same
-hardware class.
+`vs_4_0`/`ps_4_0` HLSL, state objects and MRT (`plans/plan_d3d10.md`). `DIRECTX11` covered the same
+hardware class until its own retirement on 2026-10-13; `SDL_GPU` (Direct3D 12) and `DIRECTX9` do now.
 
 ### OPENGLES1
 

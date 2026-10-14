@@ -5,8 +5,12 @@
 > Magnum, Wicked, Sokol, Diligent, Glide, LLGL, IGL, rlgl, TinyGL, NanoVG, PixiJS, OpenVG, Blend2D,
 > Skia, the legacy OpenGL profiles (OPENGL1/OPENGL2/OPENGLES1) and the legacy DirectX series
 > (DIRECTX1-8, DIRECTX10). Twenty-five identities were retired on 2026-09-17 and Skia in 2026-08,
-> leaving **25 public renderer identities over 21 implementation families**
-> (`plans/plan_renderer_cleanup.md`, `docs/removed-renderers.md`). It also predates the physical
+> leaving 25 public renderer identities over 21 implementation families at that point. Later
+> retirements removed `DIRECT2D`, `FREEDIRECT`, `PORTABLEGL` (2026-09-27), `GDI`, `HTML_DOM`,
+> `SVG_DOM`, `OPENGL4` (2026-09-28), `DIRECTX12`, `CANVAS`, `OPENGLES2`, `WEBGL1` (2026-10-06) and
+> `VULKAN`, `DIRECTX11`, `METAL`, `SDL_RENDERER` (2026-10-13), so CNA now has **10 public renderer
+> identities over 8 implementation families** (`docs/removed-renderers.md`,
+> `cmake/RendererIdentities.cmake`; `plans/plan_renderer_cleanup.md` is in Git history). It also predates the physical
 > module layout, so the `src/`, `include/` and `cmake/` paths it names have moved or gone.
 >
 > Nothing here is edited to match today's tree: it is the record of an audit that really ran against
