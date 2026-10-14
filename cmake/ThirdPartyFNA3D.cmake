@@ -185,7 +185,10 @@ function(cna_configure_mojoshader)
         # plans/plan_fna3d.md FNA3D-54: a multisampled render target read back as 0 on OpenGL (its
         # renderbuffer's GL name matched the texture's), and a mipped RenderTargetCube's resolve
         # asked glGenerateMipmap for a face.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-msaa-readback.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-msaa-readback.patch"
+        # FNA3D-51: every OpenGL entry point makes its own device's GL and MojoShader contexts
+        # current, so several live devices on one thread work.
+        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-device-context.patch")
     set(_cna_fna3d_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-patches.cmake")
 
