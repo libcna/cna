@@ -83,7 +83,7 @@ endif()
 # lifetime" gap is real) is isolated from the shared CnaTests binary -- see the harness file's own
 # top-of-file comment / tools/audio/audio_no_hardware_harness.cpp for the same "needs its own
 # process" precedent.
-# REMED-BUILD-005: this harness's source includes AudioMixer.hpp directly, which needs
+# This harness's source includes AudioMixer.hpp directly, which needs
 # <SDL3/SDL.h>/<SDL3_mixer/SDL_mixer.h> -- CNA links SDL3::SDL3 PRIVATE (CnaLibrary.cmake), so that
 # include path does not propagate to CNA's own consumers. Native GCC builds masked this by
 # accident (this dev machine has a system-wide /usr/local/include/SDL3), but it is a hard
@@ -191,7 +191,7 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     target_compile_definitions(cna_strict_xna_api_check PRIVATE CNA_STRICT_XNA_API)
     target_compile_options(cna_strict_xna_api_check PRIVATE -Werror=deprecated-declarations)
     if(MINGW)
-        # REMED-BUILD-013: without this, the .exe links fine but fails to *run* under Wine --
+        # Without this, the .exe links fine but fails to *run* under Wine --
         # "libgcc_s_seh-1.dll/libstdc++-6.dll not found" (status c0000135) -- matching the same
         # MinGW-runtime treatment every cna_directx9_test() executable already gets.
         target_link_options(cna_strict_xna_api_check PRIVATE -static-libgcc -static-libstdc++)
@@ -200,7 +200,7 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
         cna_copy_sdl_runtime(cna_strict_xna_api_check)
     endif()
 
-    # REMED-BUILD-013: this target builds fine under the D3D9 MinGW cross-compile (the
+    # This target builds fine under the D3D9 MinGW cross-compile (the
     # CMAKE_CXX_COMPILER_ID guard above already admits it), but its own add_test() below is a plain
     # Windows PE executable command with no Wine wrapper -- unlike CnaTests (cmake/UnitTests.cmake),
     # cna_strict_xna_api_check never gets a CROSSCOMPILING_EMULATOR target property, so ctest tries
@@ -249,39 +249,6 @@ if(CNA_BUILD_TESTS)
         PRIVATE
         CNA
         SHARP_RUNTIME
-    )
-endif()
-
-# --- SKIA-159: standalone Ganesh/OpenGL artifact probe ---
-# Throwaway (per this project's build-hygiene convention) proof that the separately pinned
-# Ganesh/OpenGL Skia artifact (docs/skia-ganesh-artifact.md) actually links and constructs a real
-# GrDirectContext via GrDirectContexts::MakeGL() over a real SDL GL context. Only built when
-# -DCNA_SKIA_GANESH_BUILD_DIR is explicitly set; the ordinary CNA_GRAPHICS_RENDERER=SKIA (raster)
-# build never sets it, so this target does not exist there and the validated raster artifact/build
-# graph is unaffected. Not wired into CTest: SKIA-160/161 own construction-time mode selection and
-# the real renderer integration; this is strictly a below-the-API artifact-correctness probe,
-# matching this renderer's established "prove it below the API first" sequencing.
-if(CNA_SKIA_GANESH_BUILD_DIR)
-    include(cmake/ThirdPartySkiaGanesh.cmake)
-    cna_configure_skia_ganesh()
-
-    add_executable(cna_skia_ganesh_artifact_probe
-        tools/skia/skia_ganesh_artifact_probe.cpp
-    )
-    # SKIA-161: matches cmake/Tests/SkiaTests.cmake's cna_skia_test() macro's own exception --
-    # the pinned no-RTTI Skia archives cannot provide the typeinfo required by `vptr`, so linking
-    # this target under UBSan fails with "undefined reference to typeinfo for GrDirectContext"
-    # without it. Found by an actual ASan+UBSan build of cmake-build-skia-ganesh-asan, not
-    # reasoned in advance; every other Skia-linked executable already had this exception because
-    # it goes through cna_skia_test(), which this Harnesses.cmake-registered target does not.
-    if(CNA_SANITIZE MATCHES "(^|,)undefined(,|$)"
-       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(cna_skia_ganesh_artifact_probe PRIVATE -fno-sanitize=vptr)
-    endif()
-    target_link_libraries(cna_skia_ganesh_artifact_probe
-        PRIVATE
-        CNA::SkiaGanesh
-        SDL3::SDL3
     )
 endif()
 

@@ -176,16 +176,29 @@ function(cna_configure_instrumentation)
             "(received '${CNA_SANITIZE_OPTIMIZATION}').")
     endif()
 
+    # GCC's `undefined` group leaves float->integer conversion overflow (a NaN or out-of-range
+    # float cast to an integer type) unchecked; it is a separately named check there, whereas
+    # Clang already folds it into `undefined`. Name it explicitly for GCC so an unclamped
+    # `static_cast<int>(someFloat)` is reported instead of passing the UBSan builds silently.
+    set(_cna_sanitize_flag "${CNA_SANITIZE}")
+    list(FIND _cna_sanitizer_list undefined _cna_undefined_sanitizer_index)
+    list(FIND _cna_sanitizer_list float-cast-overflow _cna_float_cast_sanitizer_index)
+    if(_cna_undefined_sanitizer_index GREATER -1
+       AND _cna_float_cast_sanitizer_index EQUAL -1
+       AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        string(APPEND _cna_sanitize_flag ",float-cast-overflow")
+    endif()
+
     target_compile_options(cna_instrumentation INTERFACE
-        "-fsanitize=${CNA_SANITIZE}"
+        "-fsanitize=${_cna_sanitize_flag}"
         -fno-omit-frame-pointer
         -g)
-    target_link_options(cna_instrumentation INTERFACE "-fsanitize=${CNA_SANITIZE}")
+    target_link_options(cna_instrumentation INTERFACE "-fsanitize=${_cna_sanitize_flag}")
     if(NOT _cna_sanitize_optimization STREQUAL "DEFAULT")
         target_compile_options(cna_instrumentation INTERFACE "-${_cna_sanitize_optimization}")
     endif()
     message(STATUS
-        "CNA: sanitizers enabled: ${CNA_SANITIZE} "
+        "CNA: sanitizers enabled: ${_cna_sanitize_flag} "
         "(optimization: ${_cna_sanitize_optimization})")
 endfunction()
 

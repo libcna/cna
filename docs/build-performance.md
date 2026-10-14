@@ -429,6 +429,14 @@ cmake -S . -B cmake-build-asan -G Ninja \
 target applies both compile and final-link options to CNA-owned targets and the enabled Sharp Runtime
 component closure; vendored SDL and ENet sub-builds intentionally remain uninstrumented. Address and
 Thread sanitizers, and Thread and Memory sanitizers, are rejected as incompatible combinations.
+On GCC, `undefined` is widened to `undefined,float-cast-overflow`: GCC's `undefined` group does
+not include the float-to-integer overflow check that Clang's does, and an unclamped
+`static_cast<int>(float)` would otherwise pass the GCC UBSan jobs silently.
+
+LeakSanitizer reports from Mesa's GLX/EGL client libraries (`libGLX_mesa`, `libgallium`, `libEGL`)
+during real GPU setup are driver leaks reproduced without any CNA code; run GL tests under LSan with
+`LSAN_OPTIONS=suppressions=tools/platform/lsan_x11_mesa.supp`, whose entries each name the program
+and byte count that proved them. No CNA production code works around them.
 
 Sanitizer configurations are native GNU/Clang builds only. They are diagnostics, not release
 artifacts, and cannot be combined with `CNA_ENABLE_IPO`.

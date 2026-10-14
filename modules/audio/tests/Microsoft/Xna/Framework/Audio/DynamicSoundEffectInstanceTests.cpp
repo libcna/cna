@@ -40,10 +40,14 @@ namespace
     // Tries to start playback under the SDL "dummy" audio driver so device-dependent
     // behaviour can be exercised headlessly. Returns true if the instance reached a
     // non-Stopped state; otherwise the caller should skip the assertion.
-    bool tryStartHeadless(DynamicSoundEffectInstance& d)
+    // `frames` sizes the one stereo S16 buffer submitted before Play(). The 256-frame default
+    // (~6 ms at 44.1 kHz) is right for tests that only need a Playing instance; a test that
+    // asserts on PendingBufferCount after Play() must pass a buffer the device thread cannot
+    // finish consuming before the test's next statement runs (see the starved-count test).
+    bool tryStartHeadless(DynamicSoundEffectInstance& d, std::size_t frames = 256)
     {
         System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-        std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
+        std::vector<unsigned char> pcm(4 * frames, 0); // `frames` stereo S16 frames of silence
         d.SubmitBuffer(pcm);
         try
         {
@@ -545,10 +549,17 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresWhenStarved)
 // not merely "at least once". tryStartHeadless() submits exactly 1 buffer before Play(), so
 // immediately after (before any real consumption could have happened), PendingBufferCount == 1
 // and MINIMUM_BUFFER_CHECK(3) - 1 == 2 raises are expected.
+//
+// The submitted buffer is one second long, not the helper's 256-frame (~6 ms) default: a chunk
+// stops being pending once the device thread has consumed it whole, and under parallel load
+// (a full `ctest -j4` run) that thread routinely drained a 6 ms chunk between Play() and the
+// Update() below, so PendingBufferCount was 0 and three raises -- correct for a dry stream --
+// failed the assertion for a reason unrelated to the starvation arithmetic. A one-second chunk
+// cannot be consumed in that gap, so the count this test asserts is the one the test set up.
 TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresExactlyTheStarvedCount)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    if (!tryStartHeadless(d))
+    if (!tryStartHeadless(d, 44100))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
