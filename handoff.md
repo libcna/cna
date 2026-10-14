@@ -291,16 +291,24 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
 
 15. **`DIRECTX9` under Wine+DXVK: one shared contract still fails** (re-measured 2026-10-14 after the
     remediation closure; the `DIRECTX9` suite passes 56 of 57). `Backbuffer_PassOrder` fails its
-    3D legs (C5/C6, D1/D2, O1-O4, U2): a `BasicEffect` `DrawPrimitives` issued in one back-buffer
-    cycle is missing or mis-ordered after an intervening render-target cycle, while every sprite,
-    clear, viewport and MRT leg of the same program passes -- undiagnosed. Fixed on the way: the
-    eleven example programs that read the back buffer now request HiDef; a negative `MaxMipLevel`
-    maps to the last level as XNA's unsigned write does (`TextureFilterMipContract` L3/L9); `Clear`
-    lifts the viewport and scissor like XNA (`GraphicsDevice_OrderedClear`); a compiled effect
-    samples the texture set on the device slot after `Apply()` (`CompiledEffects`);
-    `CnaRendererTests.exe` builds. `CnaGraphicsTests.exe` and `CnaContentTests.exe` under Wine were
-    not re-measured. `DirectX9_FrameRecovery` is timing-sensitive under `ctest` (passes when run
-    directly through `scripts/run-wine-dxvk9.sh`).
+    3D legs (C5/C6, D1/D2, O1-O4, U2) while every sprite, clear, viewport and MRT leg passes.
+    Instrumented: after a `SpriteBatch` flush and/or a render-target cycle, a stride-16
+    `BasicEffect` `DrawPrimitives` on the back buffer no longer lands its quads -- the dump shows
+    half-quads in sprite colours instead, i.e. the vertex data fetched is not the bound buffer's,
+    with every render state, viewport, depth format and the vertex declaration identical to the
+    passing legs. `DirectX9_Draw` passes because it never mixes sprites and 3D. Undiagnosed beyond
+    that. Fixed on the way: the eleven example programs that read the back buffer request HiDef;
+    a negative `MaxMipLevel` maps to the last level as XNA's unsigned write does
+    (`TextureFilterMipContract` L3/L9); `Clear` lifts the viewport and scissor like XNA
+    (`GraphicsDevice_OrderedClear`); a compiled effect samples the texture set on the device slot
+    after `Apply()` (`CompiledEffects`); `CnaRendererTests.exe` builds; `DirectX9_FrameRecovery`
+    waits for the retried `Reset` inside a window instead of at one fixed update, so it no longer
+    fails on `ctest` timing. Module gtests under the same Wine (rebuilt 2026-10-14):
+    `CnaGraphicsTests.exe` 34 failures (`DeclarationGuard`, `GenericUserArrayDraw`,
+    `ContextRecovery`, `EffectTest` authentic-FX, `BasicEffectVertexLightingSaturation`,
+    `GraphicsAdapterTest` substitution, instanced colour routes, occlusion lifecycle -- all
+    D3D9-specific behaviour, none diagnosed), `CnaContentTests.exe` 1,705 pass / 1 failure
+    (`RendererStrideConformance`, the unlit stride-32 record).
 16. **A C API game still alive at process exit crashes `SDL_GPU` in a Debug build** (first C API run
     with `SDL_GPU`, `cmake-build-sdlgpu`, 2026-10-14): the five `CApi_TeardownLifetime_*` cases that
     leave a game alive segfault. The C API's static `RuntimeState` destroys the game during
