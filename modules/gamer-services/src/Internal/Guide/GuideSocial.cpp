@@ -589,7 +589,7 @@ public:
     int focus() const override {return list_.focus;}
     void start(const std::shared_ptr<MessagesScreen>& self) {
         if(access(player)!=Access::Account)return;
-        load<ServiceMessagePage>(self,[user=userOf(player)](IGamerServicesBackend& s){return s.messages(user,0,50);},
+        load<ServiceMessagePage>(self,[user=userOf(player)](IGamerServicesBackend& s){return s.messages(user,0,32);},
             [](MessagesScreen& screen,ServiceMessagePage page){screen.messages_=std::move(page.messages);screen.loaded_=true;},
             [](MessagesScreen& screen){screen.failed_=true;});
     }

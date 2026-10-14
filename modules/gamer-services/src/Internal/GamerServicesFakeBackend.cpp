@@ -115,7 +115,10 @@ public:
             message.text=text;message.created=messageSequence_;inbox_[target].insert(inbox_[target].begin(),std::move(message));}
     }
     ServiceMessagePage messages(const std::string& user,int start,int limit) override {
-        require(user);ServiceMessagePage page;page.start=start;const auto& box=inbox_[user];page.total=static_cast<int>(box.size());
+        require(user);
+        // The service's own bounds (protocol v1, messages.list: start 0..100, limit 1..32): a client that asks for more is refused.
+        if(start<0||start>100||limit<1||limit>32)throw ServiceOperationError("INVALID_ARGUMENT");
+        ServiceMessagePage page;page.start=start;const auto& box=inbox_[user];page.total=static_cast<int>(box.size());
         for(const auto& message:box)if(!message.read)++page.unread;
         for(int index=start;index<static_cast<int>(box.size())&&index<start+limit;++index)page.messages.push_back(box[static_cast<std::size_t>(index)]);
         return page;
