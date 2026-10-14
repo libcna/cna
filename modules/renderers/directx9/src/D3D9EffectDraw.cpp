@@ -3,35 +3,16 @@
 // (D9-82c), DualTextureEffect (D9-82d), EnvironmentMapEffect (D9-82e), SkinnedEffect (D9-82f) --
 // a priority cascade (flag-driven effect selection, GpuDrawParams as the only per-draw input).
 //
-// BasicEffect coverage is bounded by which vertex layout this renderer actually supports (D9-22's
-// 5 stride-keyed D3DVERTEXELEMENT9 declarations: 16/20/24/32/52 bytes) -- BasicEffect's 32
-// ShaderIndex values need a VSInput shape (VSInput/VSInputVc/VSInputTx/VSInputTxVc/VSInputNm/
-// VSInputNmVc/VSInputNmTx/VSInputNmTxVc, per Structures.fxh) that not every one of those 5 strides
-// can supply:
-//   - VSInput (Position only, 12 bytes)              -- no matching CNA vertex layout at all.
-//   - VSInputNm (Position+Normal, 24 bytes)           -- collides with the existing 24-byte
-//     Position+Color+TexCoord layout (same byte count, different semantics/offsets) -- no
-//     distinct declaration exists for it.
-//   - VSInputNmVc (Position+Normal+Color, 28 bytes)   -- no 28-byte layout exists.
-//   - VSInputNmTxVc (+TexCoord, 36 bytes)             -- no 36-byte layout exists.
-// Only 4 of BasicEffect's VSInput shapes ARE satisfiable by an existing stride, each mapping to a
-// specific fog/vertex-color/texture/lighting combination (the "natural" one that uses every field
-// the layout declares):
-//   stride 16 (Position+Color)            -> vertexColorEnabled, no texture, no lighting.
-//   stride 20 (Position+TexCoord)         -> textureEnabled, no vertex color, no lighting.
-//   stride 24 (Position+Color+TexCoord)   -> vertexColorEnabled + textureEnabled, no lighting.
-//   stride 32 (Position+Normal+TexCoord)  -> lightingEnabled + textureEnabled, no vertex color.
-// That is 10 of BasicEffect's 32 ShaderIndex values via stride 16/20/24 (2/3/4/5/6/7) plus stride
-// 32's vertex-lit/one-light textured buckets (12/13/20/21) -- every OTHER combination whose
-// VSInput shape has no matching stride still throws a named "no matching CNA vertex layout" error
-// rather than silently drawing with the wrong stride. This is an honest, reported gap, not a
-// corner cut in secret.
-// Stride 32's textured+lit bucket ALSO supplies BasicEffect's pixel-lighting-textured ShaderIndex
-// values (28/29, VSBasicPixelLightingTx also declares a VSInputNmTx parameter, D9-81 item 1,
-// resolved 2026-07-16 below) -- 12 of 32 ShaderIndex values are drawable in total, not 10; the
-// untextured pixel-lighting bucket (24/25, VSBasicPixelLighting takes plain VSInput, Position
-// only) remains blocked by the same missing-vertex-layout gap as the untextured vertex-lit bucket
-// (8/9) above, unrelated to PreferPerPixelLighting itself.
+// BasicEffect: every one of its 32 ShaderIndex values is drawable (2026-10-15). The vertex shaders read a VSInput
+// shape (Position, +Normal, +Color, +TexCoord: Structures.fxh) and D3D9 ignores declaration elements a shader does
+// not read, so a layout is accepted when it SUPPLIES what the chosen shader needs: a Position always, a Normal when
+// lighting is on, a Color with vertex colours, a TexCoord with a texture (DeclarationProvidesEXT, checked against the
+// buffer's own native declaration or the stride-keyed one). Before, the gate allowed exactly one (lighting, colour,
+// texture) combination per stride (16: colour only, 20: texture only, 24: colour+texture, 32: lit+texture), so a stock
+// VertexPositionNormalTexture buffer could not be drawn unlit, nor a lit untextured mesh at all -- the museum found
+// this as ten rooms throwing on DIRECTX9 under Wine. A layout that really lacks an element (a Position+Color buffer
+// drawn lit) still throws a named error. The register tables for all 20 vertex shaders were always generated; the
+// dispatch below now reaches them.
 //
 // PreferPerPixelLighting (plans/plan_dx9.md D9-81, item 1) and EnvironmentMapEffect's specularEnabled
 // (item 4) are RESOLVED 2026-07-16: GpuDrawParams now carries both real fields (see
@@ -161,6 +142,25 @@ namespace CNA::Internal::Renderers::DirectX9
             return light1Zero && light2Zero;
         }
 
+        /// Whether a vertex declaration carries one semantic (stream 0). A vertex shader may be fed a declaration
+        /// with MORE elements than it reads -- D3D9 simply ignores the extras -- so a layout is good for a shader
+        /// when it provides everything the shader's input struct names, whatever else it holds. BasicEffect uses
+        /// this to draw an unlit textured mesh from Position+Normal+TexCoord vertices (the shader reads two of the
+        /// three), where the old stride-keyed gate refused every combination but the "natural" one.
+        bool DeclarationProvidesEXT(IDirect3DVertexDeclaration9* declaration, BYTE usage, BYTE usageIndex)
+        {
+            UINT count = 0;
+            if (declaration == nullptr || FAILED(declaration->GetDeclaration(nullptr, &count)) || count == 0) return false;
+            std::vector<D3DVERTEXELEMENT9> elements(count);
+            if (FAILED(declaration->GetDeclaration(elements.data(), &count))) return false;
+            for (const D3DVERTEXELEMENT9& element : elements)
+            {
+                if (element.Stream == 0xFF) break;   // D3DDECL_END
+                if (element.Stream == 0 && element.Usage == usage && element.UsageIndex == usageIndex) return true;
+            }
+            return false;
+        }
+
         struct BasicEffectRegisterTables
         {
             const Shaders::D3D9ShaderConstantSlot* vs; int vsCount;
@@ -176,6 +176,74 @@ namespace CNA::Internal::Renderers::DirectX9
             using namespace Shaders;
             switch (shaderIndex)
             {
+            // Untextured buckets (every VSInput shape without a TexCoord): plain, vertex-lit, one-light and pixel-lit,
+            // with and without a vertex colour. The register tables were always generated for all 20 vertex shaders;
+            // only the stride-keyed vertex layout gate kept them unreachable.
+            case 0:  return {kBasicEffect_VSBasic_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasic_Registers)),
+                             kBasicEffect_PSBasic_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasic_Registers))};
+            case 1:  return {kBasicEffect_VSBasicNoFog_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicNoFog_Registers)),
+                             nullptr, 0};
+            case 8:  return {kBasicEffect_VSBasicVertexLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicVertexLighting_Registers)),
+                             kBasicEffect_PSBasicVertexLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicVertexLighting_Registers))};
+            case 9:  return {kBasicEffect_VSBasicVertexLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicVertexLighting_Registers)),
+                             nullptr, 0};
+            case 10: return {kBasicEffect_VSBasicVertexLightingVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicVertexLightingVc_Registers)),
+                             kBasicEffect_PSBasicVertexLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicVertexLighting_Registers))};
+            case 11: return {kBasicEffect_VSBasicVertexLightingVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicVertexLightingVc_Registers)),
+                             nullptr, 0};
+            case 14: return {kBasicEffect_VSBasicVertexLightingTxVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicVertexLightingTxVc_Registers)),
+                             kBasicEffect_PSBasicVertexLightingTx_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicVertexLightingTx_Registers))};
+            case 15: return {kBasicEffect_VSBasicVertexLightingTxVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicVertexLightingTxVc_Registers)),
+                             nullptr, 0};
+            case 16: return {kBasicEffect_VSBasicOneLight_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicOneLight_Registers)),
+                             kBasicEffect_PSBasicVertexLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicVertexLighting_Registers))};
+            case 17: return {kBasicEffect_VSBasicOneLight_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicOneLight_Registers)),
+                             nullptr, 0};
+            case 18: return {kBasicEffect_VSBasicOneLightVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicOneLightVc_Registers)),
+                             kBasicEffect_PSBasicVertexLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicVertexLighting_Registers))};
+            case 19: return {kBasicEffect_VSBasicOneLightVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicOneLightVc_Registers)),
+                             nullptr, 0};
+            case 22: return {kBasicEffect_VSBasicOneLightTxVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicOneLightTxVc_Registers)),
+                             kBasicEffect_PSBasicVertexLightingTx_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicVertexLightingTx_Registers))};
+            case 23: return {kBasicEffect_VSBasicOneLightTxVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicOneLightTxVc_Registers)),
+                             nullptr, 0};
+            // The pixel-lit shaders have no separate no-fog variant (see case 28/29 below): both fog settings share one table.
+            case 24: [[fallthrough]];
+            case 25: return {kBasicEffect_VSBasicPixelLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicPixelLighting_Registers)),
+                             kBasicEffect_PSBasicPixelLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicPixelLighting_Registers))};
+            case 26: [[fallthrough]];
+            case 27: return {kBasicEffect_VSBasicPixelLightingVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicPixelLightingVc_Registers)),
+                             kBasicEffect_PSBasicPixelLighting_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicPixelLighting_Registers))};
+            case 30: [[fallthrough]];
+            case 31: return {kBasicEffect_VSBasicPixelLightingTxVc_Registers,
+                             static_cast<int>(std::size(kBasicEffect_VSBasicPixelLightingTxVc_Registers)),
+                             kBasicEffect_PSBasicPixelLightingTx_Registers,
+                             static_cast<int>(std::size(kBasicEffect_PSBasicPixelLightingTx_Registers))};
             case 2:  return {kBasicEffect_VSBasicVc_Registers,
                              static_cast<int>(std::size(kBasicEffect_VSBasicVc_Registers)),
                              kBasicEffect_PSBasic_Registers,
@@ -611,23 +679,23 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        bool comboOk;
-        switch (stride)
-        {
-        case 16: comboOk = !params.lightingEnabled && params.vertexColorEnabled && !params.textureEnabled; break;
-        case 20: comboOk = !params.lightingEnabled && !params.vertexColorEnabled && params.textureEnabled; break;
-        case 24: comboOk = !params.lightingEnabled && params.vertexColorEnabled && params.textureEnabled; break;
-        case 32: comboOk = params.lightingEnabled && !params.vertexColorEnabled && params.textureEnabled; break;
-        default: comboOk = false; break;
-        }
-        if (!comboOk)
+        // The vertex layout must supply what the chosen shader's input struct names: a Position always, a Normal for
+        // lighting, a Color for vertex colours, a TexCoord for a texture. Anything else in the vertex is ignored by
+        // the shader. (The gate used to be one fixed (lighting, colour, texture) combination per stride.)
+        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        std::string missing;
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
+        if (params.lightingEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_NORMAL, 0)) missing += " Normal";
+        if (params.vertexColorEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_COLOR, 0)) missing += " Color";
+        if (params.textureEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord";
+        if (!missing.empty())
         {
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (BasicEffect): stride " + std::to_string(stride) +
                 " with lighting=" + (params.lightingEnabled ? "true" : "false") +
                 " vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
                 " texture=" + (params.textureEnabled ? "true" : "false") +
-                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82b)");
+                " has no matching CNA vertex layout: the vertex declaration has no" + missing + " (plans/plan_dx9.md D9-82b)");
         }
 
         const bool oneLight = ComputeOneLightEXT(params);
@@ -790,21 +858,17 @@ namespace CNA::Internal::Renderers::DirectX9
                 "DirectX9Renderer::DrawPrimitivesEx (AlphaTestEffect): requires a non-null "
                 "texture0 (plans/plan_dx9.md D9-82c)");
 
-        // AlphaTestEffect's only two VSInput shapes map 1:1 onto the existing CNA strides -- no
-        // collision/missing-layout gap like BasicEffect's (see D3D9EffectDraw.cpp's own header
-        // comment for that one).
-        bool comboOk;
-        switch (stride)
-        {
-        case 20: comboOk = !params.vertexColorEnabled; break;
-        case 24: comboOk = params.vertexColorEnabled;  break;
-        default: comboOk = false; break;
-        }
-        if (!comboOk)
+        // AlphaTestEffect's two VSInput shapes are Position+TexCoord and Position+TexCoord+Color. Any vertex layout
+        // that supplies those elements will do (extra Normal bytes are ignored), so a stock VertexPositionNormalTexture
+        // buffer draws; the check used to accept exactly stride 20 and 24.
+        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0) || !DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0) ||
+            (params.vertexColorEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_COLOR, 0)))
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (AlphaTestEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
-                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82c)");
+                " has no matching CNA vertex layout: AlphaTestEffect reads Position and TexCoord" +
+                (params.vertexColorEnabled ? " and Color" : "") + " (plans/plan_dx9.md D9-82c)");
 
         // D9-81's own finding: alphaTest[1] (tolerance) > 0 is a lossless recovery of isEqNe --
         // AlphaTestEffect.cs's own OnApply() sets it to a fixed nonzero constant in EXACTLY the

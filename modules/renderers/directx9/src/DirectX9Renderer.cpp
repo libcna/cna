@@ -1715,9 +1715,17 @@ namespace CNA::Internal::Renderers::DirectX9
         NotYetImplemented("DIRECTX9", "SetContextRecoveryEnabled");
     }
 
-    void DirectX9Renderer::SetStringMarkerEXT(const char*)
+    void DirectX9Renderer::SetStringMarkerEXT(const char* marker)
     {
-        NotYetImplemented("DIRECTX9", "SetStringMarkerEXT");
+        // A label for graphics debuggers (PIX, RenderDoc): Direct3D 9's own D3DPERF_SetMarker. It needs no live frame and
+        // does nothing when no debugger is attached, so it is safe to call from anywhere. It used to throw "not yet
+        // implemented", which turned a debugging aid into a crash in the museum's point-cloud room.
+        if (marker == nullptr) return;
+        const int length = MultiByteToWideChar(CP_UTF8, 0, marker, -1, nullptr, 0);
+        if (length <= 0) return;
+        std::wstring wide(static_cast<std::size_t>(length), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, marker, -1, wide.data(), length);
+        D3DPERF_SetMarker(D3DCOLOR_XRGB(255, 255, 255), wide.c_str());
     }
 
     void DirectX9Renderer::DebugSimulateContextLoss()
