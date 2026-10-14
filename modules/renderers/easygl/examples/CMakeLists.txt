@@ -2604,6 +2604,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_RenderTargetCube_GetDataContract COMMAND cna_test_easygl_rendertargetcube_getdata_contract
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-137 (sampling half): a RenderTargetCube rendered into and then sampled by direction
+        # (EnvironmentMapEffect) must keep "up" as up. GL fills a rendered face bottom-up, so the stock
+        # env-map program mirrors the lookup direction for a rendered cube (uEnvCubeFlip).
+        cna_easygl_test(cna_test_easygl_envmap_rendertargetcube_orientation
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/environmentmapeffect_rendertargetcube_orientation_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_EnvironmentMap_RenderTargetCubeOrientation COMMAND cna_test_easygl_envmap_rendertargetcube_orientation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
         # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
         # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses

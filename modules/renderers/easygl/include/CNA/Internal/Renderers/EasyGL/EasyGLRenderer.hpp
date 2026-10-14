@@ -1341,6 +1341,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_ibl_mipcount   = -1;  ///< float, mips the prefiltered cube was generated with
             int loc_ibl_intensity  = -1;  ///< float, multiplies the whole environment term
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
+            int loc_env_cube_flip = -1;  ///< float: 1 when the environment cube is a RenderTargetCube (rows stored bottom-up)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint
             int loc_fresnel_enabled = -1;  ///< float 0=off 1=on (EnvironmentMapEffect only)

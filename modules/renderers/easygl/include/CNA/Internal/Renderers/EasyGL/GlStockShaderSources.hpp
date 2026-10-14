@@ -37,6 +37,19 @@
 "uniform vec4 uRtFlipV;\n" \
 "vec2 cnaSampleUV(vec2 uv,float flip){return vec2(uv.x,mix(uv.y,1.0-uv.y,flip));}\n"
 
+/// A rendered (RenderTargetCube) face is stored bottom-up by GL's rasterizer, but a cube map is sampled with the face's
+/// first stored row at its top (+Y side), like an uploaded one: sampled by direction, a rendered face comes out upside
+/// down. `flip` is 1 for such a cube; the direction is then mirrored across the plane that turns each face's rows over
+/// (y for the four side faces, z for +Y/-Y), which selects the texel the Direct3D orientation would have read.
+/// Same idea as cnaSampleUV for 2D render targets (REMED-GFX-137).
+#define CNA_GL_CUBE_SAMPLE_DECL \
+"uniform float uEnvCubeFlip;\n" \
+"vec3 cnaCubeDir(vec3 d,float flip){\n" \
+"    if(flip<0.5)return d;\n" \
+"    vec3 a=abs(d);\n" \
+"    return (a.y>=a.x&&a.y>=a.z)?vec3(d.x,d.y,-d.z):vec3(d.x,-d.y,d.z);\n" \
+"}\n"
+
 /// REMED-GFX-147: units 4-6, declared only by the shaders that reach that far (PbrEffect).
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
@@ -964,6 +977,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "in float vFresnel;\n"
 "uniform sampler2D uTexture;\n"
 "uniform samplerCube uEnvMap;\n"
+CNA_GL_CUBE_SAMPLE_DECL
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec3 uLight0Dir;\n"
@@ -990,7 +1004,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec3 reflDir=reflect(-E,N);\n"
-"    vec4 envSample=texture(uEnvMap,reflDir);\n"
+"    vec4 envSample=texture(uEnvMap,cnaCubeDir(reflDir,uEnvCubeFlip));\n"
 "    vec3 baseColor=litRGB*texColor.rgb;\n"
 "    float combinedAlpha=uDiffuseColor.a*texColor.a;\n"
 "    float blendFactor=vFresnel;\n"

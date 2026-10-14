@@ -8999,6 +8999,7 @@ namespace CNA::Internal::Renderers::EasyGL
         p.loc_eyepos        = p.prog.uniform_location("uEyePosition");
         p.loc_texture       = p.prog.uniform_location("uTexture");
         p.loc_envmap        = p.prog.uniform_location("uEnvMap");
+        p.loc_env_cube_flip = p.prog.uniform_location("uEnvCubeFlip");
         p.loc_diffuse       = p.prog.uniform_location("uDiffuseColor");
         p.loc_emissive      = p.prog.uniform_location("uEmissiveColor");
         p.loc_l0dir         = p.prog.uniform_location("uLight0Dir");
@@ -9822,8 +9823,8 @@ namespace CNA::Internal::Renderers::EasyGL
         // REMED-GFX-147: one flag per texture unit, filled in beside each unit's own bind below so
         // the flag and the resource it describes can never disagree, and uploaded once at the end.
         // A render target's GL texel memory is bottom-up; an uploaded texture's is not. Cube maps
-        // are deliberately absent -- REMED-GFX-137 owns rendered cube faces, and uEnvMap is sampled
-        // with a direction vector, not a UV.
+        // are not in this array: uEnvMap is sampled with a direction vector, not a UV, so a rendered
+        // cube's flag is the separate uEnvCubeFlip (REMED-GFX-137), uploaded where the cube is bound.
         float rtFlipV[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
         // XNA 4.0's Direct3D 9 coordinates address pixel centers while OpenGL addresses pixel
@@ -10050,6 +10051,9 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_envmap >= 0)
         {
             p.prog.set_uniform(p.loc_envmap, 1);
+            if (p.loc_env_cube_flip >= 0)
+                p.prog.set_uniform(p.loc_env_cube_flip,
+                                   dynamic_cast<const IRenderTargetCubeRenderer*>(params.envMap) != nullptr ? 1.0f : 0.0f);
             if (params.envMap)
                 params.envMap->BindGL(1);
             else
