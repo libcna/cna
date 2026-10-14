@@ -200,14 +200,12 @@ namespace
                                  true, false, false,
                                  true, true, true, true, false, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
-    // Raw IDirect3DDevice9::Clear is bounded by native raster state, which this backend currently
-    // exposes. This is NOT Microsoft XNA's own behavior: recovered XNA temporarily disables
-    // scissor testing and expands the viewport to the complete target. DirectX9 remains declared
-    // here as the measured backend-specific divergence; SOFTWARE-311 corrects the in-scope
-    // Software/EasyGL pair rather than silently rewriting an unverified Windows backend.
+    // Raw IDirect3DDevice9::Clear is bounded by the viewport and by an enabled scissor rectangle;
+    // the renderer lifts both around every clear, as Microsoft XNA itself does, so Clear covers
+    // the whole target here too.
     constexpr Contract kContract{"DIRECTX9", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, false, false, false, true, true};
+                                 true, true, true, true, false, true, true};
 #else
 #error "this renderer has no declared ordered-Clear contract."
 #endif

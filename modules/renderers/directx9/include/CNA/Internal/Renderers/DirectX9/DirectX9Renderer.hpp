@@ -165,6 +165,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // ---- IGraphicsRenderer: real (Phase D9-3, D9-31) ----
         void Clear(float r, float g, float b, float a) override;
+        /// Clears the whole bound target even while the scissor test is enabled (XNA semantics).
+        HRESULT ClearWholeTargetEXT(DWORD flags, D3DCOLOR color, float depth, DWORD stencil);
         void Present() override;
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

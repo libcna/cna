@@ -27,6 +27,7 @@
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -171,6 +172,8 @@ public:
     D3D9SpriteBatchCustomEffectTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        // GetBackBufferData is a HiDef-only operation in XNA; this program reads the back buffer.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(256);
         gdm_->setPreferredBackBufferHeightProperty(256);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);

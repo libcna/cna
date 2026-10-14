@@ -757,11 +757,40 @@ namespace CNA::Internal::Renderers::DirectX9
         presentationMode_ = mode;
     }
 
+    HRESULT DirectX9Renderer::ClearWholeTargetEXT(DWORD flags, D3DCOLOR color, float depth, DWORD stencil)
+    {
+        // XNA's Clear covers the whole render target; Direct3D 9's is bounded by the viewport and
+        // by an enabled scissor rectangle, so both are lifted for the clear and restored afterwards
+        // (XNA itself expands the viewport and disables scissoring around its Clear).
+        DWORD scissor = FALSE;
+        device_->GetRenderState(D3DRS_SCISSORTESTENABLE, &scissor);
+        if (scissor) device_->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        D3DVIEWPORT9 saved{};
+        bool restoreViewport = false;
+        ComPtr<IDirect3DSurface9> target;
+        D3DSURFACE_DESC desc{};
+        if (SUCCEEDED(device_->GetViewport(&saved)) &&
+            SUCCEEDED(device_->GetRenderTarget(0, target.GetAddressOf())) && target &&
+            SUCCEEDED(target->GetDesc(&desc)) &&
+            (saved.X != 0 || saved.Y != 0 || saved.Width != desc.Width || saved.Height != desc.Height))
+        {
+            D3DVIEWPORT9 whole{};
+            whole.Width = desc.Width;
+            whole.Height = desc.Height;
+            whole.MinZ = 0.0f;
+            whole.MaxZ = 1.0f;
+            restoreViewport = SUCCEEDED(device_->SetViewport(&whole));
+        }
+        const HRESULT hr = device_->Clear(0, nullptr, flags, color, depth, stencil);
+        if (restoreViewport) device_->SetViewport(&saved);
+        if (scissor) device_->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+        return hr;
+    }
+
     void DirectX9Renderer::Clear(float r, float g, float b, float a)
     {
         EnsureRenderReadyEXT();
-        HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_TARGET,
-                                     D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f, 0);
+        HRESULT hr = ClearWholeTargetEXT(D3DCLEAR_TARGET, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 Clear failed, hr=" + FormatHr(hr));
     }
@@ -793,7 +822,7 @@ namespace CNA::Internal::Renderers::DirectX9
         EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
-        HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth, 0);
+        HRESULT hr = ClearWholeTargetEXT(flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearColorAndDepth failed, hr=" + FormatHr(hr));
     }
@@ -802,7 +831,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         EnsureRenderReadyEXT();
         if (!HasDepthBuffer(activeDepthStencilFormatOrdinal_)) return;
-        HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, depth, 0);
+        HRESULT hr = ClearWholeTargetEXT(D3DCLEAR_ZBUFFER, 0, depth, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearDepth failed, hr=" + FormatHr(hr));
     }
@@ -811,8 +840,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         EnsureRenderReadyEXT();
         if (!HasStencilBuffer(activeDepthStencilFormatOrdinal_)) return;
-        HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_STENCIL, 0, 1.0f,
-                                     static_cast<DWORD>(stencil));
+        HRESULT hr = ClearWholeTargetEXT(D3DCLEAR_STENCIL, 0, 1.0f, static_cast<DWORD>(stencil));
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearStencil failed, hr=" + FormatHr(hr));
     }
@@ -823,7 +851,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!HasDepthBuffer(activeDepthStencilFormatOrdinal_)) return;
         DWORD flags = D3DCLEAR_ZBUFFER;
         if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
-        HRESULT hr = device_->Clear(0, nullptr, flags, 0, depth, static_cast<DWORD>(stencil));
+        HRESULT hr = ClearWholeTargetEXT(flags, 0, depth, static_cast<DWORD>(stencil));
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearDepthAndStencil failed, hr=" + FormatHr(hr));
     }
@@ -833,7 +861,7 @@ namespace CNA::Internal::Renderers::DirectX9
         EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
-        HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f,
+        HRESULT hr = ClearWholeTargetEXT(flags, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f,
                                      static_cast<DWORD>(stencil));
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearColorAndStencil failed, hr=" + FormatHr(hr));
@@ -846,7 +874,7 @@ namespace CNA::Internal::Renderers::DirectX9
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
         if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
-        HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth,
+        HRESULT hr = ClearWholeTargetEXT(flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth,
                                      static_cast<DWORD>(stencil));
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearColorDepthAndStencil failed, hr=" + FormatHr(hr));
@@ -1640,8 +1668,10 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         if (slot < 0 || slot >= static_cast<int>(caps_.MaxSimultaneousTextures)) return;
         const DWORD sampler = static_cast<DWORD>(slot);
+        // XNA writes MaxMipLevel as an unsigned DWORD, so a negative value becomes a huge one
+        // that Direct3D clamps to the last level; clamping it to 0 instead would select the base.
         device_->SetSamplerState(sampler, D3DSAMP_MAXMIPLEVEL,
-                                 static_cast<DWORD>(std::max(0, maxMipLevel)));
+                                 static_cast<DWORD>(static_cast<unsigned int>(maxMipLevel)));
         device_->SetSamplerState(sampler, D3DSAMP_MIPMAPLODBIAS, std::bit_cast<DWORD>(lodBias));
     }
 

@@ -410,7 +410,7 @@ namespace CNA::Internal::Renderers::DirectX9
                     "SetSamplerState(MAXANISOTROPY)");
             CheckHr(device->SetSamplerState(
                         slot, D3DSAMP_MAXMIPLEVEL,
-                        static_cast<DWORD>(std::max(0, state.getMaxMipLevelProperty()))),
+                        static_cast<DWORD>(static_cast<unsigned int>(state.getMaxMipLevelProperty()))),
                     "SetSamplerState(MAXMIPLEVEL)");
             CheckHr(device->SetSamplerState(
                         slot, D3DSAMP_MIPMAPLODBIAS,
@@ -942,8 +942,12 @@ namespace CNA::Internal::Renderers::DirectX9
                     selected = {};
                     selected.borrowedTexture2D = spriteBatchSlotZeroTexture;
                 }
-                else if (!selected.IsValid() && !vertexStage && spriteBatchTextures != nullptr)
+                else if (!vertexStage && spriteBatchTextures != nullptr &&
+                         (*spriteBatchTextures)[static_cast<int>(slot)] != nullptr)
                 {
+                    // Apply() publishes the pass's textures to the device slots; a texture the
+                    // game sets on the device slot afterwards is the one XNA samples, so the
+                    // device slot takes precedence over the texture captured by the effect.
                     selected = ResolveTexture(
                         *this, (*spriteBatchTextures)[static_cast<int>(slot)]);
                 }
