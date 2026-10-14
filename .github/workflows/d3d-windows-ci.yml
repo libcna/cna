@@ -1,6 +1,8 @@
 # plan_dx9.md: builds the DIRECTX9 renderer with native MSVC (a completely different compiler from
 # the MinGW-w64 cross-builds this project otherwise uses) and runs its off-screen smoke CTest suite
-# directly against the real Windows D3D9 runtime, with no Wine involved. It is NOT a substitute for
+# directly against the real Windows D3D9 runtime, with no Wine involved. RRC-051 added an SDL_GPU
+# leg: SDL_GPU is the default renderer on Windows, SDL drives Direct3D 12 underneath it, and after
+# the retired DIRECTX11 no CI built it with native MSVC at all. It is NOT a substitute for
 # real swap-chain/device-lost/driver-parity verification on a machine with a display and a GPU
 # driver, which a hosted runner does not reliably provide.
 #
@@ -9,11 +11,15 @@
 # exception to this project's general "no CI automation" stance, scoped to native-MSVC Direct3D
 # verification -- not a precedent for broader automatic-trigger CI elsewhere in this project.
 #
-# It builds only the renderer's own self-contained CTest executables (label DIRECTX9), not
-# CnaTests. The native-Windows SDL_GPU (Direct3D 12) qualification is a separate campaign
-# (handoff.md section 5.2).
+# The DIRECTX9 leg builds only the renderer's own self-contained CTest executables (label
+# DIRECTX9), not CnaTests. The SDL_GPU leg builds and runs the focused smoke set in
+# scripts/ci/run-sdlgpu-smoke.sh -- device, swapchain, drawing and read-back through SDL3's windows
+# video driver and its Direct3D 12 backend, on whatever Direct3D 12 adapter the hosted runner
+# offers -- and fails unless every program exits 0, so a runner on which the device cannot be created
+# fails the leg instead of skipping. It is a smoke set; the full native-Windows SDL_GPU (Direct3D
+# 12) qualification is a separate campaign (handoff.md section 5.2).
 
-name: Windows graphics CI (D3D9, MSVC)
+name: Windows graphics CI (D3D9 + SDL_GPU, MSVC)
 
 on:
   workflow_dispatch: {}
@@ -32,7 +38,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        renderer: [DIRECTX9]
+        include:
+          - renderer: DIRECTX9
+          - renderer: SDL_GPU
     defaults:
       run:
         shell: bash
@@ -96,12 +104,29 @@ jobs:
 
       # Never an unbounded job count, even on a dedicated hosted runner.
       - name: Build CNA + ${{ matrix.renderer }} renderer + CTest executables
+        if: matrix.renderer == 'DIRECTX9'
         working-directory: cna_graphics
         run: cmake --build build --parallel 2
+
+      # The SDL_GPU leg builds only its smoke set: every SDL_GPU example would be ~200 more links.
+      - name: Build CNA + the SDL_GPU smoke set
+        if: matrix.renderer == 'SDL_GPU'
+        working-directory: cna_graphics
+        run: cmake --build build --parallel 2 --target $(bash scripts/ci/run-sdlgpu-smoke.sh --targets)
 
       # CMAKE_CROSSCOMPILING is false here (native MSVC, not the MinGW cross-compile toolchain
       # file), so every renderer's registered CTest executable runs directly against Windows DLLs
       # with no Wine wrapper.
       - name: Run ${{ matrix.renderer }} CTest suite (real Windows, no Wine)
+        if: matrix.renderer == 'DIRECTX9'
         working-directory: cna_graphics
         run: ctest --test-dir build -L ${{ matrix.renderer }} --output-on-failure
+
+      - name: Run the SDL_GPU smoke set on Direct3D 12 (real Windows, no Wine)
+        if: matrix.renderer == 'SDL_GPU'
+        working-directory: cna_graphics
+        env:
+          SDL_VIDEODRIVER: windows
+          SDL_AUDIODRIVER: dummy
+          SDL_GPU_DRIVER: direct3d12
+        run: bash scripts/ci/run-sdlgpu-smoke.sh build

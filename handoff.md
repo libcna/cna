@@ -55,10 +55,10 @@ browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERM
 | Target | What is actually verified |
 |---|---|
 | Linux x86_64 | Everything; this is where the suites run. |
-| Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDL_GPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`; the manual MSVC workflow builds and runs the `DIRECTX9` suite. No real-Windows hardware validation is current (§5.2). |
+| Windows | MinGW-w64 cross builds run under Wine: `DIRECTX9` through DXVK, `SDL_GPU`'s Direct3D 12 backend through vkd3d-proton, `SOFTWARE`; the manual MSVC workflow builds and runs the `DIRECTX9` suite and, since RRC-051, an `SDL_GPU` Direct3D 12 smoke leg (`scripts/ci/run-sdlgpu-smoke.sh`; not run yet, the workflow is manual). No real-Windows hardware validation is current (§5.2). |
 | Web (Emscripten) | `WEBGL2` and `WEBGPU` builds run in Chrome (`docs/web-emscripten-graphics-limitations.md`). |
 | Android | `OPENGLES3`, the default there, on an x86_64 emulator; `SDL_GPU` on Android is not qualified (`docs/android-graphics-limitations.md`). |
-| macOS / iOS | macOS CI builds CNA with `SOFTWARE` and runs the portable platform suites and a bundle smoke app; iOS is a `SOFTWARE` simulator smoke app. `SDL_GPU` is the default on both but is not re-qualified there (§5.2, `docs/apple-platforms.md`). |
+| macOS / iOS | macOS CI builds CNA with `SOFTWARE` and runs the portable platform suites and a bundle smoke app, and (gating, since RRC-051, not run yet) builds `SDL_GPU` and runs its smoke set on SDL's Metal backend; iOS is a `SOFTWARE` simulator smoke app, with non-gating `SDL_GPU` legs. `SDL_GPU` is the default on both but is not re-qualified there (§5.2, `docs/apple-platforms.md`). |
 
 **XNA API surface.** Every public type and every documented member of the Microsoft XNA 4.0 runtime
 reference is represented; the generated census is

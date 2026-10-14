@@ -1,19 +1,26 @@
 name: Apple platforms (macOS + iOS)
 
-# plan_apple.md APPLE-9. Four legs, deliberately unequal in what they claim:
+# plan_apple.md APPLE-9. Five legs, deliberately unequal in what they claim:
 #
 #   apple-cmake-check — Linux, seconds, no Apple hardware: proves the Apple CMake layer still
 #                   parses and that the iOS allow-list accepts/refuses/overrides as documented.
 #   macos-build   — native macOS build + the portable test suites that do not need a GPU.
 #                   This is a real gate: a green run is evidence that CNA builds and its
 #                   platform/storage contracts hold on macOS.
+#   macos-sdlgpu  — the default Apple renderer, SDL_GPU, built for macOS and run on SDL's Metal
+#                   backend: device, swapchain, drawing and read-back through a focused smoke set
+#                   (scripts/ci/run-sdlgpu-smoke.sh). A gate (RRC-051): before it, CI built the
+#                   retired METAL renderer here and SDL_GPU nowhere on Apple. It is a smoke set,
+#                   not the full SDL_GPU Apple qualification (handoff.md section 5.2).
 #   ios-device    — cross-compile and final-link a real arm64 iPhone/iPad application bundle.
 #   ios-simulator — build the same application for arm64 Simulator, install it, launch one CNA
 #                   frame, and require its success marker. See docs/apple-platforms.md for the
 #                   remaining device/rendering evidence boundary.
 #
-# SDL_GPU is the default renderer on Apple platforms, but it is not qualified there yet: its iOS
-# legs are non-gating (continue-on-error) until that campaign lands (handoff.md section 5.2).
+# SDL_GPU is the default renderer on Apple platforms, but it is not qualified there yet. macOS
+# gates its smoke set (macos-sdlgpu); the iOS SDL_GPU legs stay non-gating (continue-on-error):
+# SDL_GPU has never been built for iOS by a recorded run, so whether the simulator pixel probe is
+# deterministic there is unknown, and promoting it on a guess would be a claim nobody measured.
 
 on:
   push:
@@ -55,7 +62,10 @@ on:
       - 'modules/content/src/Xna/ContentManager.cpp'
       - 'modules/storage/src/StorageDevice.cpp'
       - 'scripts/check-apple-platform-cmake.sh'
+      - 'scripts/ci/run-sdlgpu-smoke.sh'
       - 'tests/apple/apple_smoke.cpp'
+      - 'modules/renderers/sdl-gpu/**'
+      - 'modules/graphics/examples/conformance/**'
   pull_request:
     branches: [next, develop, main]
   workflow_dispatch:
@@ -205,6 +215,64 @@ jobs:
           output="$("$executable" 2>&1)"
           echo "$output"
           grep -q 'CNA_APPLE_SMOKE_OK' <<< "$output"
+
+  # RRC-051: SDL_GPU is the default renderer on macOS, and SDL drives Metal underneath it. This
+  # builds it for macOS and runs a focused smoke set that creates a real SDL_GPU device on that
+  # Metal backend, draws and reads pixels back (scripts/ci/run-sdlgpu-smoke.sh). The script, not
+  # ctest, decides the outcome: ctest reports exit 77 as a skip, and a runner on which SDL_GPU
+  # could not create its device must fail this gate rather than pass it.
+  macos-sdlgpu:
+    name: macOS (SDL_GPU on Metal, smoke)
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Choose the sharp-runtime branch
+        id: sharp_runtime_branch
+        run: echo "ref=$(bash cna/scripts/ci/sibling_branch.sh "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: libcna/sharp-runtime
+          ref: ${{ steps.sharp_runtime_branch.outputs.ref }}
+          path: sharp-runtime
+
+      - name: Install build dependencies
+        run: brew install ccache nlohmann-json
+
+      - name: Configure
+        working-directory: cna
+        run: >
+          cmake -S . -B cmake-build-macos-sdlgpu
+          -DCNA_GRAPHICS_RENDERER=SDL_GPU
+          -DCNA_BUILD_TESTS=ON
+          -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_ENABLE_NET=OFF
+          -DCNA_ENABLE_DRACO=OFF
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build the SDL_GPU smoke set
+        working-directory: cna
+        run: cmake --build cmake-build-macos-sdlgpu --parallel 3 --target $(bash scripts/ci/run-sdlgpu-smoke.sh --targets)
+
+      # A hosted macOS runner has a real window server (see macos-build), and SDL's Metal driver
+      # needs the cocoa video driver to create its Metal view, so the video driver is left alone.
+      - name: Run the SDL_GPU smoke set on Metal
+        working-directory: cna
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_GPU_DRIVER: metal
+        run: bash scripts/ci/run-sdlgpu-smoke.sh cmake-build-macos-sdlgpu
 
   ios-build:
     name: iOS ${{ matrix.name }}

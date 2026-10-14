@@ -321,13 +321,20 @@ directory on both Apple platforms, so bundled content works without changes.
   window, lifecycle, storage and desktop-OS suites (dummy audio driver, real video driver). A
   separate build tree enables `.app` bundling, final-links and launches `cna_macos_smoke.app`,
   and rejects dependencies that still point to the SDL build cache or a Homebrew prefix.
+- **`macos-sdlgpu`** — macOS runner, `SDL_GPU` (the Apple default) on SDL's Metal backend. Builds
+  and runs `scripts/ci/run-sdlgpu-smoke.sh`: the SDL_GPU device/swapchain smoke, SpriteBatch
+  drawing and five pixel/contract conformance programs, each required to exit 0, so a runner on
+  which SDL_GPU cannot create its Metal device fails the job instead of skipping. Gating. Added
+  2026-10-14 (RRC-051); it has not run yet, and it is a smoke set, not the SDL_GPU Apple
+  qualification.
 - **`ios-build` (device, simulator)** — builds and final-links `cna_ios_smoke.app` for both
   sysroots with `SOFTWARE`; validates `Info.plist`, Mach-O platform, `_main`/`_SDL_main`, and the
   absence of dynamic SDL/build-machine dependencies. The simulator leg then boots an available
   iPhone, ad-hoc signs and installs the app, launches it, and requires `CNA_APPLE_SMOKE_OK`. Two
   more legs do the same with `SDL_GPU` and also run `cna_ios_pixel_probe`; they are
   `continue-on-error` until the SDL_GPU Apple qualification, so their result is information, not
-  a gate.
+  a gate: `SDL_GPU` has no recorded iOS build, so whether the simulator probe is deterministic is
+  unmeasured. `macos-sdlgpu` is the gating Apple-side `SDL_GPU` GPU evidence meanwhile.
 
 Run [31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) was green with the
 since-retired `SDL_RENDERER`; the `SOFTWARE`/`SDL_GPU` legs have not run yet as of 2026-10-13. CI

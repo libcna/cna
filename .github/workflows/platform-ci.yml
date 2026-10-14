@@ -242,8 +242,9 @@ jobs:
   # from SDL3's windows video driver, and a Direct3D renderer receives the HWND through
   # IPlatformWindow::GetNativeHandle(). This configures CNA for SDL3, builds the platform module's
   # focused suite and the process-exit harness, and runs them with the expectation that the native
-  # handle is an HWND. Windows -> SDL3 -> HWND -> Direct3D itself was covered by the retired
-  # DIRECTX11 renderer's DirectX11_Win32HardwareSmoke.
+  # handle is an HWND. Windows -> SDL3 -> HWND -> Direct3D itself is exercised by the SDL_GPU leg
+  # of d3d-windows-ci.yml (SDL's Direct3D 12 backend on the window SDL3 created), which replaced
+  # the retired DIRECTX11 renderer's DirectX11_Win32HardwareSmoke (RRC-051).
   #
   # workflow_dispatch-only, matching the precedent d3d-windows-ci.yml set and for the same reasons
   # recorded there: Windows runners are slower and more expensive than this project's Linux CI, and
