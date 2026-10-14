@@ -9168,6 +9168,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         occlusionResolvedThisFlush_.erase(
             std::remove(occlusionResolvedThisFlush_.begin(), occlusionResolvedThisFlush_.end(), query),
             occlusionResolvedThisFlush_.end());
+        for (const int extra : query->extraSlots_) FreeOcclusionSlot(extra);
+        query->extraSlots_.clear();
         FreeOcclusionSlot(query->slot_);
     }
 
@@ -9196,7 +9198,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 for (WebGPUOcclusionQueryRenderer* q : occlusionResolvedThisFlush_)
                 {
                     if (q == nullptr || q->slot_ < 0 || q->slot_ >= kMaxOcclusionSlots) continue;
-                    const std::uint64_t c = counts[static_cast<std::size_t>(q->slot_)];
+                    std::uint64_t c = counts[static_cast<std::size_t>(q->slot_)];
+                    for (const int extra : q->extraSlots_)
+                        if (extra >= 0 && extra < kMaxOcclusionSlots)
+                            c += counts[static_cast<std::size_t>(extra)];
                     q->pixelCount_ = static_cast<int>(std::min<std::uint64_t>(
                         c, static_cast<std::uint64_t>(std::numeric_limits<int>::max())));
                     q->complete_ = true;
@@ -9206,7 +9211,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
         // The slots are free to be re-recorded next flush whether or not the map succeeded.
         for (WebGPUOcclusionQueryRenderer* q : occlusionResolvedThisFlush_)
-            if (q != nullptr) q->recordedThisFlush_ = false;
+        {
+            if (q == nullptr) continue;
+            q->recordedThisFlush_ = false;
+            for (const int extra : q->extraSlots_) FreeOcclusionSlot(extra);
+            q->extraSlots_.clear();
+        }
         occlusionResolvedThisFlush_.clear();
     }
 
@@ -11474,9 +11484,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             const std::size_t i = entry.index;
 
             // WEBGPU-84: wrap this query's contiguous run of draws in one BeginOcclusionQuery/
-            // EndOcclusionQuery pair. A run ends when the tagged query changes (including to none);
-            // only a query's FIRST run this flush is recorded, since a query slot may be written just
-            // once per resolve.
+            // EndOcclusionQuery pair. A run ends when the tagged query changes (including to none).
+            // A query slot may be written just once per resolve, so the query's first run this
+            // flush uses its own slot and every later run (a Clear between its draws opens a new
+            // pass) takes a fresh slot; the readback sums them into one count.
             // AM4-108: a draw queued in a run the query has since abandoned (begun again) is drawn
             // but no longer counted, so the new run reports only its own samples.
             WebGPUOcclusionQueryRenderer* drawQuery =
@@ -11490,13 +11501,25 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     wgpuRenderPassEncoderEndOcclusionQuery(pass);
                     openQuery = nullptr;
                 }
-                if (drawQuery != nullptr && drawQuery->slot_ >= 0 && !drawQuery->recordedThisFlush_)
+                if (drawQuery != nullptr && drawQuery->slot_ >= 0)
                 {
-                    wgpuRenderPassEncoderBeginOcclusionQuery(
-                        pass, static_cast<std::uint32_t>(drawQuery->slot_));
-                    drawQuery->recordedThisFlush_ = true;
-                    occlusionResolvedThisFlush_.push_back(drawQuery);
-                    openQuery = drawQuery;
+                    int slot = -1;
+                    if (!drawQuery->recordedThisFlush_)
+                    {
+                        slot = drawQuery->slot_;
+                        drawQuery->recordedThisFlush_ = true;
+                        occlusionResolvedThisFlush_.push_back(drawQuery);
+                    }
+                    else
+                    {
+                        slot = AllocateOcclusionSlot(drawQuery);
+                        if (slot >= 0) drawQuery->extraSlots_.push_back(slot);
+                    }
+                    if (slot >= 0)
+                    {
+                        wgpuRenderPassEncoderBeginOcclusionQuery(pass, static_cast<std::uint32_t>(slot));
+                        openQuery = drawQuery;
+                    }
                 }
             }
             if (trace)

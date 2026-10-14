@@ -852,6 +852,10 @@ namespace CNA::Internal::Renderers::WebGPU
         mutable int pixelCount_ = 0;       ///< The last resolved sample count.
         std::uint32_t runId_ = 0;          ///< AM4-108: incremented by every `Begin()`.
         int drawsThisRun_ = 0;             ///< AM4-108: draws queued while this run was open.
+        /// Slots taken for the query's later contiguous runs in one flush: a Clear between its
+        /// draws splits them across render passes, and a query index may be written only once per
+        /// resolve, so each further run records into its own slot and the readback sums them.
+        std::vector<int> extraSlots_;
     };
 
     /**
