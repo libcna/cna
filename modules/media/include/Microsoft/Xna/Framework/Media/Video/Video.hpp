@@ -60,6 +60,14 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @return Video width.
          */
+        /**
+         * @brief Stops a VideoPlayer that is still playing this video.
+         *
+         * XNA's garbage collector keeps a Video alive for as long as a player holds it; a C++ owner
+         * can destroy it first, and the player must not be left pointing at it.
+         */
+        CNAEXT ~Video() override;
+
         [[nodiscard]] SharpRuntime::intcs getWidthProperty() const;
 
         /**

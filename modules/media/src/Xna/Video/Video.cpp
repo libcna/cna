@@ -54,6 +54,21 @@ namespace Microsoft::Xna::Framework::Media
         }
     }
 
+    Video::~Video()
+    {
+        if (parent_ == nullptr) return;
+        try
+        {
+            // Stop closes the decoder, which clears parent_ and the player's pointer to this video.
+            parent_->Stop();
+        }
+        catch (...)
+        {
+            // A destructor cannot report; the player is being left stopped either way.
+            parent_ = nullptr;
+        }
+    }
+
     Video::Video(std::string fileName, Graphics::GraphicsDevice* device,
                  SharpRuntime::intcs durationMS, SharpRuntime::intcs width,
                  SharpRuntime::intcs height, float framesPerSecond,

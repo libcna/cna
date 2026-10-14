@@ -67,6 +67,22 @@ TEST(VideoPlayerTest, GetVideoPropertyReturnsThePlayedVideoAfterPlay)
     EXPECT_EQ(player.getVideoProperty(), &video);
 }
 
+// Found by the museum simulator: a C++ owner that destroyed the Video before the VideoPlayer playing it
+// left the player's CloseDecoder writing a null into the freed video ("corrupted size vs. prev_size").
+// Destroying the video now stops the player first.
+TEST(VideoPlayerTest, DestroyingThePlayedVideoStopsThePlayer)
+{
+    GraphicsDevice gd;
+    VideoPlayer player;
+    {
+        Video video(kFixture, &gd);
+        player.Play(&video);
+        ASSERT_EQ(player.getVideoProperty(), &video);
+    }
+    EXPECT_EQ(player.getVideoProperty(), nullptr);
+    EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
+}
+
 // plans/plan_media.md MEDIA-43: every public method throws once disposed.
 TEST(VideoPlayerTest, MethodsThrowObjectDisposedExceptionAfterDispose)
 {
