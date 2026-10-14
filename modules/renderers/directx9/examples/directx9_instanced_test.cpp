@@ -177,9 +177,12 @@ protected:
             auto ib = renderer.CreateIndexBuffer16(3);
             ib->SetData16(kSmallTriIdx, 3);
 
-            GpuDrawParams params; // no per-instance stream; textureEnabled false -> BasicEffect combo throws
+            // No per-instance stream; lighting on asks BasicEffect for a Normal the Position+TexCoord buffer does not
+            // have, so the real BasicEffect dispatch refuses it ("no matching CNA vertex layout").
+            GpuDrawParams params;
             params.vertexColorEnabled = false;
-            params.lightingEnabled = false;
+            params.lightingEnabled = true;
+            params.textureEnabled = true;
 
             dev.Clear(Color(0, 0, 255, 255));
             bool threw = false;
@@ -189,10 +192,11 @@ protected:
                                                   Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, 1, params);
             }
             catch (const std::exception&) { threw = true; }
-            // A textureEnabled=false/vertexColorEnabled=false/lightingEnabled=false BasicEffect combo
-            // has no matching CNA vertex layout (D9-82b's own honest gap) -- the fallback correctly
-            // reaches real BasicEffect dispatch code (not a "not yet implemented" stub) and that
-            // dispatch correctly throws for this specific combination, proving the fallback is real.
+            // A lit BasicEffect over a Position+TexCoord buffer has no Normal to read (the dispatch checks that the
+            // vertex declaration supplies what the shader needs) -- the fallback correctly reaches real BasicEffect
+            // dispatch code (not a "not yet implemented" stub) and that dispatch correctly throws for this specific
+            // combination, proving the fallback is real. (Before 2026-10-15 an unlit untextured combo threw here, from
+            // a stricter one-combination-per-stride gate.)
             check(threw, "DrawInstancedPrimitivesEx: no per-instance stream falls back to real "
                          "DrawIndexedPrimitivesEx() dispatch (not a stub)");
         }
