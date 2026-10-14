@@ -225,7 +225,15 @@ The single authoritative list. Every entry below was checked against the code on
       at run time in `cmake-build-multi`.
     - SDL_GPU and WebGPU ignore `SpecularTextureCoordinateSetEXT` (81 instead of 66, measured by
       selecting them at run time against `pbr_texture_slot_mapping_test.cpp` in the EasyGL-default
-      multi-renderer tree).
+      multi-renderer tree; on SDL_GPU registered as `SdlGpu_CrossFamily_PbrTextureSlotMapping` since
+      RRC-046).
+    - SDL_GPU, in programs that had run on EasyGL alone (and on the retired `DIRECTX11`) until
+      RRC-046 gave them SDL_GPU as a second family (`SdlGpu_CrossFamily_*`, measured 2026-10-14;
+      145 of 148 pass): the back buffer's clear colour is gone after switching to two render
+      targets and back (`RenderTarget_Roundtrip`: black, where FNA, EasyGL and `DIRECTX11` keep it;
+      XNA leaves a `DiscardContents` back buffer undefined, FNA preserves it); and a positive
+      `DepthBias` (+3e-4) does not push a primitive behind a coplanar-ish one
+      (`DepthBiasMagnitudeContract`; the two negative sizes pass).
 
 8. **`EasyGL`'s per-pixel `SkinnedEffect` draws a textured, ambient-only quad white.** With a real
     red `Texture2D` bound and `PreferPerPixelLighting=true` the draw reads (255,255,255,255); the

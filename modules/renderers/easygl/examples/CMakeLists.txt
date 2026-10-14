@@ -2723,6 +2723,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             LABELS "Parity;EasyGL"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # RRC-046: programs another single family held alone after the 2026-10-13 retirement get
+        # EasyGL as their independent second family (parity/CrossFamilyPrograms.cmake).
+        include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/CrossFamilyPrograms.cmake)
+        cna_register_cross_family_programs(
+            BUILDER cna_easygl_test
+            FAMILY EASYGL
+            TEST_PREFIX EasyGL
+            LABELS "EasyGL"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # SDLGPU-78 control: a shared public-API source adds the discriminating LineList/LineStrip
         # pixel proof that EasyGL's older enum-only primitive test did not contain.
         cna_easygl_test(cna_test_easygl_draw_line_topology

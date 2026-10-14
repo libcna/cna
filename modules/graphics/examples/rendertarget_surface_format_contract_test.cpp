@@ -38,6 +38,8 @@ namespace
 {
 #if defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
+#elif defined(CNA_RENDERER_SDL_GPU)
+    constexpr const char* kRendererName = "SDL_GPU";
 #else
     constexpr const char* kRendererName = "unknown";
 #endif
@@ -71,30 +73,42 @@ precision highp float;
 out vec4 FragColor;
 void main() { FragColor = vec4(0.25, 0.5, 0.75, 1.0); }
 )";
-#else
-    const char* kVertexShader = R"(
-struct VSIn { float2 pos : POSITION0; float2 uv : TEXCOORD0; float4 color : COLOR0; };
-struct VSOut { float4 pos : SV_Position; };
-cbuffer CB : register(b0) { float4 vpSize; float4 pad1[4]; float4 uColor; float4 uFloat0; };
-VSOut main(VSIn input) {
-    VSOut output;
-    float2 ndc = (input.pos / vpSize.xy) * 2.0 - 1.0;
-    output.pos = float4(ndc.x, -ndc.y, 0.0, 1.0);
-    return output;
+#elif defined(CNA_RENDERER_SDL_GPU)
+    // RRC-046: SDL_GPU compiles Vulkan GLSL to SPIR-V. The sprite custom-effect contract is the one
+    // sdlgpu_mrt_test.cpp uses: vertex inputs 0-2 and the per-draw block at set 1, binding 0.
+    const char* kVertexShader = R"(#version 450
+layout(location = 0) in vec2 inPos;
+layout(location = 1) in vec2 inUV;
+layout(location = 2) in vec4 inColor;
+layout(set = 1, binding = 0) uniform PC {
+    vec4 vpSize_pad;
+    mat4 matrix;
+    vec4 color;
+    vec4 slot0_pad;
+} pc;
+void main() {
+    vec2 ndc = (inPos / pc.vpSize_pad.xy) * 2.0 - 1.0;
+    gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
 }
 )";
 
-    const char* kSinglePixelShader = R"(
-float4 main() : SV_Target { return float4(4.0, 0.0, 0.0, 1.0); }
+    const char* kSinglePixelShader = R"(#version 450
+layout(location = 0) out vec4 FragColor;
+void main() { FragColor = vec4(4.0, 0.0, 0.0, 1.0); }
 )";
 
-    const char* kHalfPixelShader = R"(
-float4 main() : SV_Target { return float4(2.0, -1.0, 0.5, 4.0); }
+    const char* kHalfPixelShader = R"(#version 450
+layout(location = 0) out vec4 FragColor;
+void main() { FragColor = vec4(2.0, -1.0, 0.5, 4.0); }
 )";
 
-    const char* kColorPixelShader = R"(
-float4 main() : SV_Target { return float4(0.25, 0.5, 0.75, 1.0); }
+    const char* kColorPixelShader = R"(#version 450
+layout(location = 0) out vec4 FragColor;
+void main() { FragColor = vec4(0.25, 0.5, 0.75, 1.0); }
 )";
+#else
+    // The HLSL sources the retired DIRECTX11 renderer compiled were removed with it (RRC-046).
+#error "rendertarget_surface_format_contract_test.cpp has ShaderEffect sources for EasyGL and SDL_GPU"
 #endif
 
     bool Near(float actual, float expected, float tolerance = 0.01f)

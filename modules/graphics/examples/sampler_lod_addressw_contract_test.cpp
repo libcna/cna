@@ -99,27 +99,8 @@ void main() {
 }
 )";
 #else
-    const char* kVolumeVertexShader = R"(
-struct VSIn { float2 pos : POSITION0; float2 uv : TEXCOORD0; float4 color : COLOR0; };
-struct VSOut { float4 pos : SV_Position; float4 color : TEXCOORD0; };
-cbuffer CB : register(b0) { float4 vpSize; float4 pad1[4]; float4 uColor; float4 uFloat0; };
-VSOut main(VSIn input) {
-    VSOut output;
-    float2 ndc = (input.pos / vpSize.xy) * 2.0 - 1.0;
-    output.pos = float4(ndc.x, -ndc.y, 0.0, 1.0);
-    output.color = input.color;
-    return output;
-}
-)";
-
-    const char* kVolumePixelShader = R"(
-Texture3D VolumeSampler : register(t0);
-SamplerState VolumeSamplerState : register(s0);
-struct PSIn { float4 pos : SV_Position; float4 color : TEXCOORD0; };
-float4 main(PSIn input) : SV_Target {
-    return VolumeSampler.Sample(VolumeSamplerState, float3(0.5, 1.25, 1.25)) * input.color;
-}
-)";
+    // The HLSL sources the retired DIRECTX11 renderer compiled were removed with it (RRC-046).
+#error "sampler_lod_addressw_contract_test.cpp has ShaderEffect sources for EasyGL only"
 #endif
 
     bool Near(const Color& actual, const Color& expected)

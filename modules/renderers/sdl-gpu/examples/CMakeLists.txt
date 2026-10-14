@@ -119,6 +119,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_property(TEST SdlGpu_Parity_sampler_lod_bias APPEND PROPERTY ENVIRONMENT
         "CNA_SDLGPU_TEST_REJECT_NATIVE_LOD_BIAS=1")
 
+    # RRC-046: programs EasyGL (or DIRECTX9) held alone after the 2026-10-13 retirement -- most of
+    # them the shared corpus DIRECTX11 also ran -- get SDL_GPU as their independent second family
+    # (parity/CrossFamilyPrograms.cmake).
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/CrossFamilyPrograms.cmake)
+    cna_register_cross_family_programs(
+        BUILDER cna_sdlgpu_test
+        FAMILY SDL_GPU
+        TEST_PREFIX SdlGpu
+        LABELS "SdlGpu"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}"
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # SDLGPU-85: the shared fixture proves construction-time EasyGL parity. SDL GPU also supports
     # the XNA/FNA Reset contract which EasyGL still lacks, so run the exact same source in its
     # optional A (4x) -> B (0x) -> A (4x) mode as a second, renderer-specific invocation.
