@@ -119,5 +119,6 @@ int main()
                 "demo's own Raise() calls)\n", leaderboardFireCount);
 
     session->Dispose();
+    delete session;
     return 0;
 }

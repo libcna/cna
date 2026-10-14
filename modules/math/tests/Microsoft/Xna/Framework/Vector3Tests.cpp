@@ -120,6 +120,16 @@ TEST(Vector3Test, GetHashCodeDifferentVectorsTypicallyDiffer)
     EXPECT_NE(a.GetHashCode(), b.GetHashCode());
 }
 
+// Every component carries the sign bit, so the bit-pattern terms are all large negative ints and
+// their signed sum would overflow; the hash is the wrapped unsigned sum (red under UBSan otherwise).
+TEST(Vector3Test, GetHashCodeWithSignBitComponentsIsTheWrappedUnsignedSum)
+{
+    Vector3 v(-1.0f, -2.0f, -3.0f);
+    const std::uint32_t expected = std::bit_cast<std::uint32_t>(-1.0f) + std::bit_cast<std::uint32_t>(-2.0f)
+                                   + std::bit_cast<std::uint32_t>(-3.0f);
+    EXPECT_EQ(v.GetHashCode(), static_cast<int>(expected));
+}
+
 // --- ToString ---
 
 TEST(Vector3Test, ToStringContainsXYZ)

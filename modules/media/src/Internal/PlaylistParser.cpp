@@ -61,7 +61,7 @@ namespace CNA::Internal::Media
                 continue; // blank line or a comment/#EXTINF/#EXTM3U directive
             }
 
-            // REMED-CONTENT-002: standard M3U allows absolute entries and would let one playlist
+            // Standard M3U allows absolute entries and would let one playlist
             // reference songs anywhere on disk -- CNA deliberately tightens this (a security-over-
             // compatibility choice, not FNA/XNA-faithful behavior to preserve, since M3U parsing
             // has no XNA equivalent at all): an untrusted/hostile playlist file must not be able to

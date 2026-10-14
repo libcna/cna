@@ -60,7 +60,10 @@ namespace Microsoft::Xna::Framework
 
     int Quaternion::GetHashCode() const
     {
-        return FloatHash(X) + FloatHash(Y) + FloatHash(Z) + FloatHash(W);
+        // Summed as unsigned so a sign-bit component cannot overflow the signed sum; the value is
+        // unchanged where the signed sum stayed in range.
+        return static_cast<int>(static_cast<unsigned>(FloatHash(X)) + static_cast<unsigned>(FloatHash(Y))
+                                + static_cast<unsigned>(FloatHash(Z)) + static_cast<unsigned>(FloatHash(W)));
     }
 
     float Quaternion::Length() const

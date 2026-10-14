@@ -8,7 +8,7 @@
 
 #include <enet/enet.h>
 
-// REMED-BUILD-013 (discovered while verifying it): on Windows/MinGW, enet.h transitively pulls in
+// (discovered while verifying it): on Windows/MinGW, enet.h transitively pulls in
 // <windows.h> (via its own win32.h), which defines the macro ERROR (wingdi.h) -- colliding with
 // CNA::LogLevel::ERROR / CNA::LogCategory::ERROR wherever this header is included before
 // CNA/Logger.hpp in the same translation unit (e.g. ENetBackend.cpp), breaking their enum

@@ -123,7 +123,13 @@ namespace Microsoft::Xna::Framework
         return X == other.X && Y == other.Y && Z == other.Z && W == other.W;
     }
 
-    int Vector4::GetHashCode() const { return FloatHash(W) + FloatHash(X) + FloatHash(Y) + FloatHash(Z); }
+    int Vector4::GetHashCode() const
+    {
+        // Summed as unsigned so a sign-bit component cannot overflow the signed sum; the value is
+        // unchanged where the signed sum stayed in range.
+        return static_cast<int>(static_cast<unsigned>(FloatHash(W)) + static_cast<unsigned>(FloatHash(X))
+                                + static_cast<unsigned>(FloatHash(Y)) + static_cast<unsigned>(FloatHash(Z)));
+    }
     float Vector4::Length() const { return std::sqrt((X * X) + (Y * Y) + (Z * Z) + (W * W)); }
     float Vector4::LengthSquared() const { return (X * X) + (Y * Y) + (Z * Z) + (W * W); }
 

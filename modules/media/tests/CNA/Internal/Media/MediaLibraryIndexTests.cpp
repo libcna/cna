@@ -132,7 +132,7 @@ TEST(MediaLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
 TEST(MediaLibraryIndexTest, SkipsAnUnreadableSubdirectoryWithoutCrashing)
 {
 #ifdef _WIN32
-    // REMED-BUILD-013 (discovered while verifying it): geteuid() doesn't exist on Windows/MinGW,
+    // (discovered while verifying it): geteuid() doesn't exist on Windows/MinGW,
     // and this test's whole premise -- std::filesystem::perms::none denying traversal -- is a Unix
     // permission-bits mechanism NTFS/MinGW's own std::filesystem::permissions() does not reliably
     // enforce, so there is no equivalent scenario to exercise here.

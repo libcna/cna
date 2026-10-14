@@ -189,6 +189,7 @@ namespace Microsoft::Devices::Sensors
          */
         void Stop() override;
 
+    protected:
         /**
          * @brief Disposes the motion sensor resources.
          *
@@ -196,11 +197,15 @@ namespace Microsoft::Devices::Sensors
          */
         void Dispose(bool disposing) override;
 
+    public:
         /**
          * @brief Brings the base class's no-argument Dispose() into scope.
          *
          * Without this, declaring Dispose(bool) here would hide the
          * inherited public Dispose() override of System::IDisposable.
+         * Dispose(bool) itself stays protected, as in the base class: a
+         * caller that reached it with false would mark the object disposed
+         * without running any cleanup.
          */
         using SensorBase<MotionReading>::Dispose;
 

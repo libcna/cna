@@ -99,6 +99,7 @@ namespace {
         if (port == 0) {
             std::fprintf(stderr, "host: never bound a real ENet port\n");
             session->Dispose();
+            delete session;
             return 2;
         }
         std::printf("PORT=%u\n", static_cast<unsigned>(port));
@@ -109,6 +110,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
             std::fprintf(stderr, "host: timed out waiting for client to join\n");
             session->Dispose();
+            delete session;
             return 1;
         }
 
@@ -116,6 +118,7 @@ namespace {
         if (remote == nullptr) {
             std::fprintf(stderr, "host: joined roster has no remote gamer\n");
             session->Dispose();
+            delete session;
             return 2;
         }
 
@@ -134,11 +137,13 @@ namespace {
             })) {
             std::fprintf(stderr, "host: timed out waiting for client's payload\n");
             session->Dispose();
+            delete session;
             return 1;
         }
         if (!gotPayload) {
             std::fprintf(stderr, "host: received payload had unexpected length\n");
             session->Dispose();
+            delete session;
             return 2;
         }
 
@@ -152,6 +157,8 @@ namespace {
         }
 
         session->Dispose();
+
+        delete session;
         return 0;
     }
 
@@ -179,6 +186,7 @@ namespace {
         if (session->getIsHostProperty() || !rejected || properties.getItem(0).has_value()) {
             std::fprintf(stderr, "client: public Join did not enforce host-only property writes\n");
             session->Dispose();
+            delete session;
             return 70;
         }
 
@@ -187,6 +195,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
             std::fprintf(stderr, "client: timed out waiting to join host\n");
             session->Dispose();
+            delete session;
             return 1;
         }
 
@@ -194,6 +203,7 @@ namespace {
         if (remote == nullptr) {
             std::fprintf(stderr, "client: joined roster has no remote gamer\n");
             session->Dispose();
+            delete session;
             return 2;
         }
 
@@ -215,10 +225,13 @@ namespace {
             })) {
             std::fprintf(stderr, "client: timed out waiting for host's echo\n");
             session->Dispose();
+            delete session;
             return 1;
         }
 
         session->Dispose();
+
+        delete session;
 
         if (!gotReply || received != payload) {
             std::fprintf(stderr, "client: echoed payload did not match what was sent\n");
@@ -269,11 +282,13 @@ namespace {
             std::fprintf(stderr, "find-join-client: joined with %d local gamers, not just %s\n",
                          locals.getCountProperty(), expected->getGamertagProperty().c_str());
             session->Dispose();
+            delete session;
             return 3;
         }
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
             std::fprintf(stderr, "find-join-client: timed out waiting to join host\n");
             session->Dispose();
+            delete session;
             return 1;
         }
         NetworkGamer* remote = FindRemoteGamer(session);
@@ -289,9 +304,11 @@ namespace {
             })) {
             std::fprintf(stderr, "find-join-client: timed out waiting for host's echo\n");
             session->Dispose();
+            delete session;
             return 1;
         }
         session->Dispose();
+        delete session;
         if (received != payload) {
             std::fprintf(stderr, "find-join-client: echoed payload did not match what was sent\n");
             return 2;
@@ -311,6 +328,7 @@ namespace {
         if (port == 0) {
             std::fprintf(stderr, "added-gamer-host: never bound a real ENet port\n");
             session->Dispose();
+            delete session;
             return 2;
         }
         std::printf("PORT=%u\n", static_cast<unsigned>(port));
@@ -320,6 +338,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 3; })) {
             std::fprintf(stderr, "added-gamer-host: timed out waiting for the client's added gamer\n");
             session->Dispose();
+            delete session;
             return 1;
         }
 
@@ -335,6 +354,7 @@ namespace {
             &added->getMachineProperty() == &localGamer->getMachineProperty()) {
             std::fprintf(stderr, "added-gamer-host: the added gamer is not on the client's machine\n");
             session->Dispose();
+            delete session;
             return 2;
         }
 
@@ -348,11 +368,13 @@ namespace {
             })) {
             std::fprintf(stderr, "added-gamer-host: timed out waiting for the added gamer's payload\n");
             session->Dispose();
+            delete session;
             return 1;
         }
         if (sender != added || length != static_cast<int>(sizeof(kMagicPayload))) {
             std::fprintf(stderr, "added-gamer-host: the payload did not come from the added gamer\n");
             session->Dispose();
+            delete session;
             return 2;
         }
 
@@ -363,6 +385,7 @@ namespace {
             std::this_thread::sleep_for(kPollInterval);
         }
         session->Dispose();
+        delete session;
         return 0;
     }
 
@@ -388,6 +411,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
             std::fprintf(stderr, "added-gamer-client: timed out waiting to join host\n");
             session->Dispose();
+            delete session;
             return 1;
         }
         NetworkGamer* host = FindRemoteGamer(session);
@@ -400,6 +424,7 @@ namespace {
         if (host == nullptr || added == nullptr) {
             std::fprintf(stderr, "added-gamer-client: AddLocalGamer did not add the gamer\n");
             session->Dispose();
+            delete session;
             return 2;
         }
 
@@ -416,10 +441,12 @@ namespace {
             })) {
             std::fprintf(stderr, "added-gamer-client: timed out waiting for the host's reply to the added gamer\n");
             session->Dispose();
+            delete session;
             return 1;
         }
         const bool ok = sender == host && received == payload;
         session->Dispose();
+        delete session;
         if (!ok) {
             std::fprintf(stderr, "added-gamer-client: the reply did not match what was sent\n");
             return 2;
@@ -454,6 +481,7 @@ namespace {
         if (port == 0) {
             std::fprintf(stderr, "guest-host: never bound a real ENet port\n");
             session->Dispose();
+            delete session;
             return 2;
         }
         std::printf("PORT=%u\n", static_cast<unsigned>(port));
@@ -470,6 +498,7 @@ namespace {
             if (!PumpUntil(session, deadline, [&] { return GuestMismatch(session, *expected[stage]).empty(); })) {
                 std::fprintf(stderr, "guest-host: after the %s: %s\n", stages[stage], GuestMismatch(session, *expected[stage]).c_str());
                 session->Dispose();
+                delete session;
                 return 1;
             }
         }
@@ -481,6 +510,7 @@ namespace {
         session->getLocalGamersProperty()[0]->SendData(payload, SendDataOptions::Reliable, addedGuest);
         PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() == 2; });
         session->Dispose();
+        delete session;
         return 0;
     }
 
@@ -523,11 +553,13 @@ namespace {
             if (!PumpUntil(session, deadline, [&] { return GuestMismatch(session, joined).empty(); })) {
                 std::fprintf(stderr, "guest-client: round %d: %s\n", round, GuestMismatch(session, joined).c_str());
                 session->Dispose();
+                delete session;
                 return 1;
             }
             if (round == 0) {
                 // Leave; the host must see both of this machine's gamers go before the rejoin.
                 session->Dispose();
+                delete session;
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 continue;
             }
@@ -543,9 +575,11 @@ namespace {
                     return GuestMismatch(session, added).empty() && addedGamer->getIsDataAvailableProperty(); })) {
                 std::fprintf(stderr, "guest-client: added guest: %s\n", GuestMismatch(session, added).c_str());
                 session->Dispose();
+                delete session;
                 return 1;
             }
             session->Dispose();
+            delete session;
         }
         return 0;
     }
@@ -568,6 +602,7 @@ namespace {
         if (port == 0) {
             std::fprintf(stderr, "migration-host: never bound a real ENet port\n");
             session->Dispose();
+            delete session;
             return 2;
         }
         std::printf("PORT=%u\n", static_cast<unsigned>(port));
@@ -577,6 +612,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 3; })) {
             std::fprintf(stderr, "migration-host: timed out waiting for both survivors to join\n");
             session->Dispose();
+            delete session;
             return 1;
         }
 
@@ -595,10 +631,14 @@ namespace {
             return ready.size()==2;
         })) {
             std::fprintf(stderr,"migration-host: timed out waiting for survivor roster acknowledgements\n");
-            session->Dispose();return 1;
+            session->Dispose();
+            delete session;
+            delete session;
+            return 1;
         }
         std::printf("ROSTER_READY=2\n");std::fflush(stdout);
         session->Dispose();
+        delete session;
         return 0;
     }
 
@@ -637,6 +677,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
             std::fprintf(stderr, "%s: timed out waiting to join the host\n", gamertag.c_str());
             session->Dispose();
+            delete session;
             return 1;
         }
         std::printf("JOINED wireid=%d\n", static_cast<int>(session->getLocalGamersProperty()[0]->getIdProperty()));
@@ -645,6 +686,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 3; })) {
             std::fprintf(stderr, "%s: timed out waiting for the full 3-gamer roster to join\n", gamertag.c_str());
             session->Dispose();
+            delete session;
             return 1;
         }
 
@@ -665,11 +707,13 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return hostChanged || sessionEnded; })) {
             std::fprintf(stderr, "%s: timed out waiting for host migration to complete\n", gamertag.c_str());
             session->Dispose();
+            delete session;
             return 1;
         }
         if (sessionEnded) {
             std::fprintf(stderr, "%s: session ended instead of migrating\n", gamertag.c_str());
             session->Dispose();
+            delete session;
             return 2;
         }
 
@@ -682,6 +726,7 @@ namespace {
         if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 2; })) {
             std::fprintf(stderr, "%s: timed out waiting for the other survivor after migration\n", gamertag.c_str());
             session->Dispose();
+            delete session;
             return 1;
         }
 
@@ -689,6 +734,7 @@ namespace {
         if (remote == nullptr) {
             std::fprintf(stderr, "%s: post-migration roster has no remote gamer\n", gamertag.c_str());
             session->Dispose();
+            delete session;
             return 2;
         }
         LocalNetworkGamer* localGamer = session->getLocalGamersProperty()[0];
@@ -707,11 +753,13 @@ namespace {
                 })) {
                 std::fprintf(stderr, "%s: timed out waiting for the other survivor's payload\n", gamertag.c_str());
                 session->Dispose();
+                delete session;
                 return 1;
             }
             if (!gotPayload) {
                 std::fprintf(stderr, "%s: received payload had unexpected length\n", gamertag.c_str());
                 session->Dispose();
+                delete session;
                 return 2;
             }
             localGamer->SendData(received, SendDataOptions::Reliable, remote);
@@ -737,16 +785,20 @@ namespace {
                 })) {
                 std::fprintf(stderr, "%s: timed out waiting for the echo\n", gamertag.c_str());
                 session->Dispose();
+                delete session;
                 return 1;
             }
             if (!gotReply || received != payload) {
                 std::fprintf(stderr, "%s: echoed payload did not match what was sent\n", gamertag.c_str());
                 session->Dispose();
+                delete session;
                 return 2;
             }
         }
 
         session->Dispose();
+
+        delete session;
         return 0;
     }
 
@@ -920,6 +972,7 @@ namespace {
         }
         std::fflush(stdout);
         session->Dispose();
+        delete session;
         setVoiceDevicesForTesting({}, {});
         return result;
     }
@@ -980,6 +1033,7 @@ namespace {
             std::this_thread::sleep_for(kPollInterval);
         }
         session->Dispose();
+        delete session;
         setVoiceDevicesForTesting({}, {});
         if (!heard || !talking) {
             std::fprintf(stderr, "voice: heard=%d talking=%d played=%d\n", heard, talking, voicePlayed.load());

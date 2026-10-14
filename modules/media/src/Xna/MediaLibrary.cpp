@@ -623,11 +623,22 @@ namespace Microsoft::Xna::Framework::Media
         {
             throw System::ArgumentNullException("source");
         }
+        // Stream::Read may return fewer bytes than asked for; keep reading until the advertised
+        // length is in hand or the stream ends early, and save only what actually arrived.
         std::vector<uint8_t> buffer(static_cast<std::size_t>(source->getLengthProperty()));
-        if (!buffer.empty())
+        std::size_t filled = 0;
+        while (filled < buffer.size())
         {
-            source->Read(buffer.data(), 0, static_cast<SharpRuntime::intcs>(buffer.size()));
+            const SharpRuntime::intcs read = source->Read(
+                buffer.data(), static_cast<SharpRuntime::intcs>(filled),
+                static_cast<SharpRuntime::intcs>(buffer.size() - filled));
+            if (read <= 0)
+            {
+                break;
+            }
+            filled += static_cast<std::size_t>(read);
         }
+        buffer.resize(filled);
         return SavePicture(std::move(name), buffer);
     }
 

@@ -130,6 +130,7 @@ void WatchdogGame::AdvanceStateMachine()
             if (session != nullptr)
             {
                 session->Dispose();
+                delete session;
             }
             step_ = Step::WarmupAchievements;
             framesInStep_ = 0;

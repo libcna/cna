@@ -381,6 +381,126 @@ TEST_F(MediaLibrarySavePictureTest, SavePictureFromStreamThrowsArgumentNullExcep
                  System::ArgumentNullException);
 }
 
+namespace
+{
+    // System::IO::Stream::Read may legitimately return fewer bytes than requested; this stream
+    // hands out at most seven per call so a single-Read consumer would save a truncated image.
+    class TrickleStream final : public System::IO::Stream
+    {
+    public:
+        explicit TrickleStream(std::vector<uint8_t> bytes) : bytes_(std::move(bytes)) {}
+
+        SharpRuntime::intcs Read(SharpRuntime::bytecs buffer[], SharpRuntime::intcs offset,
+                                 SharpRuntime::intcs count) override
+        {
+            const std::size_t remaining = bytes_.size() - position_;
+            const std::size_t n = std::min<std::size_t>({static_cast<std::size_t>(count), remaining, 7});
+            std::copy_n(bytes_.data() + position_, n, buffer + offset);
+            position_ += n;
+            ++readCalls_;
+            return static_cast<SharpRuntime::intcs>(n);
+        }
+
+        void Close() override {}
+
+        [[nodiscard]] SharpRuntime::intcs getLengthProperty() const override
+        {
+            return static_cast<SharpRuntime::intcs>(bytes_.size());
+        }
+
+        [[nodiscard]] int readCalls() const { return readCalls_; }
+
+    private:
+        std::vector<uint8_t> bytes_;
+        std::size_t position_ = 0;
+        int readCalls_ = 0;
+    };
+}
+
+TEST_F(MediaLibrarySavePictureTest, SavePictureFromStreamReadsToCompletionWhenReadReturnsPartialChunks)
+{
+    std::ifstream src("tests/assets/media/pictures/Family/portrait.png", std::ios::binary);
+    ASSERT_TRUE(src.is_open());
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+    ASSERT_GT(bytes.size(), 7u);
+
+    TrickleStream stream(bytes);
+    MediaLibrary library;
+    Picture* saved = library.SavePicture("trickled_picture", &stream);
+    ASSERT_NE(saved, nullptr);
+    EXPECT_GT(stream.readCalls(), 1);
+    EXPECT_EQ(saved->getWidthProperty(), 100);
+    EXPECT_EQ(saved->getHeightProperty(), 80);
+
+    // Byte-exact: the saved file is the whole source image, not seven bytes and zero padding.
+    System::IO::Stream* image = saved->GetImage();
+    ASSERT_NE(image, nullptr);
+    std::vector<uint8_t> roundTripped(static_cast<std::size_t>(image->getLengthProperty()));
+    std::size_t got = 0;
+    while (got < roundTripped.size())
+    {
+        const auto n = image->Read(roundTripped.data(), static_cast<SharpRuntime::intcs>(got),
+                                   static_cast<SharpRuntime::intcs>(roundTripped.size() - got));
+        if (n <= 0) break;
+        got += static_cast<std::size_t>(n);
+    }
+    image->Close();
+    delete image;
+    EXPECT_EQ(roundTripped, bytes);
+}
+
+namespace
+{
+    // Both library roots name directories that do not exist, so every scan returns nothing.
+    class MediaLibraryEmptyRootsTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("tests/assets/media/.no_such_music_root");
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("tests/assets/media/.no_such_picture_root");
+        }
+
+        void TearDown() override
+        {
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("");
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("");
+        }
+    };
+}
+
+TEST_F(MediaLibraryEmptyRootsTest, AnEmptyLibraryHasEmptyCollectionsAndAWalkableObjectGraph)
+{
+    MediaLibrary library;
+    EXPECT_EQ(library.getSongsProperty()->getCountProperty(), 0);
+    EXPECT_EQ(library.getAlbumsProperty()->getCountProperty(), 0);
+    EXPECT_EQ(library.getArtistsProperty()->getCountProperty(), 0);
+    EXPECT_EQ(library.getGenresProperty()->getCountProperty(), 0);
+    EXPECT_EQ(library.getPlaylistsProperty()->getCountProperty(), 0);
+    EXPECT_EQ(library.getPicturesProperty()->getCountProperty(), 0);
+    EXPECT_EQ(library.getSavedPicturesProperty()->getCountProperty(), 0);
+
+    // The same edges ObjectGraphIsInternallyConsistent walks, over a library with nothing in it.
+    for (Genre* genre : *library.getGenresProperty())
+    {
+        for (Album* album : *genre->getAlbumsProperty()) EXPECT_NE(album, nullptr);
+        for (Song* song : *genre->getSongsProperty()) EXPECT_NE(song, nullptr);
+    }
+    for (Artist* artist : *library.getArtistsProperty())
+    {
+        for (Song* song : *artist->getSongsProperty()) EXPECT_NE(song, nullptr);
+    }
+    for (Album* album : *library.getAlbumsProperty())
+    {
+        for (Song* song : *album->getSongsProperty()) EXPECT_NE(song, nullptr);
+    }
+    if (PictureAlbum* root = library.getRootPictureAlbumProperty())
+    {
+        EXPECT_EQ(root->getPicturesProperty()->getCountProperty(), 0);
+        for (PictureAlbum* child : *root->getAlbumsProperty()) EXPECT_NE(child, nullptr);
+    }
+}
+
 // plans/plan_media.md MEDIA-174/177/178: Song::Album/Artist/Genre are real XNA 4.0 members that CNA
 // simply did not have until Phase 16 -- FNA's own Song.cs omits them, so every prior audit against
 // FNA (eight adversarial review rounds) structurally could not surface the gap. This asserts the

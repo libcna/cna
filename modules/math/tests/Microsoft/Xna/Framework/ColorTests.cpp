@@ -192,7 +192,7 @@ TEST(ColorTest, LerpClampsAboveOne)
     EXPECT_EQ(result.getRProperty(), 255);
 }
 
-// REMED-CORE-004: MathHelper::Clamp(NaN, 0, 1) faithfully reproduces FNA's own
+// MathHelper::Clamp(NaN, 0, 1) faithfully reproduces FNA's own
 // comparison-based clamp, under which NaN passes through unclamped (matches
 // MathHelper.Clamp's real C# implementation). A NaN `amount` previously reached a bare
 // static_cast<intcs>(NaN) with no guard -- undefined behavior, reachable via this public API.
@@ -237,7 +237,7 @@ TEST(ColorTest, MultiplyOperatorMatchesStaticMethod)
     EXPECT_EQ(a.getAProperty(), b.getAProperty());
 }
 
-// REMED-CORE-004: Multiply shares Lerp's exact same root cause -- an unguarded
+// Multiply shares Lerp's exact same root cause -- an unguarded
 // static_cast<intcs>(component * scale) is undefined behavior whenever `scale` is NaN or
 // produces a huge finite product. Multiply has no upfront clamp on `scale` at all (unlike
 // Lerp's `amount`), so this was reachable for any caller-supplied scale, not just NaN misuse.

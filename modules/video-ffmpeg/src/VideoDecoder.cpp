@@ -622,6 +622,17 @@ namespace CNA::Internal::Media
             int ret = avcodec_receive_frame(videoCtx_, frame_);
             if (ret == 0)
             {
+                // The planar converters size their output and walk the planes by the dimensions
+                // read at open time, so a frame that arrives with a different size (a stream whose
+                // parameter set changes mid-way) would be read past its plane buffers. XNA's
+                // Video has one fixed Width/Height, so such a stream is refused rather than
+                // rescaled.
+                if (frame_->width != width_ || frame_->height != height_)
+                    throw std::runtime_error(
+                        "VideoDecoder: the video changed resolution mid-stream (" +
+                        std::to_string(width_) + "x" + std::to_string(height_) + " -> " +
+                        std::to_string(frame_->width) + "x" + std::to_string(frame_->height) +
+                        "), which Video does not support.");
                 ptsOut = (frame_->best_effort_timestamp != AV_NOPTS_VALUE)
                          ? frame_->best_effort_timestamp * videoTimeBase_
                          : 0.0;

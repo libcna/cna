@@ -128,7 +128,7 @@ TEST(PictureLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
 TEST(PictureLibraryIndexTest, SkipsAnUnreadableSubdirectoryWithoutCrashing)
 {
 #ifdef _WIN32
-    // REMED-BUILD-013 (discovered while verifying it): see MediaLibraryIndexTests.cpp's own
+    // (discovered while verifying it): see MediaLibraryIndexTests.cpp's own
     // sibling test for the full rationale -- geteuid() doesn't exist on Windows/MinGW, and Unix
     // permission bits aren't the enforcement mechanism there either.
     GTEST_SKIP() << "Unix permission-bits scenario does not apply on Windows";

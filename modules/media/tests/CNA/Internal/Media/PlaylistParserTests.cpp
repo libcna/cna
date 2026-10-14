@@ -74,7 +74,7 @@ namespace
     };
 }
 
-// REMED-CONTENT-002: standard M3U allows absolute entries; CNA deliberately rejects them (see
+// Standard M3U allows absolute entries; CNA deliberately rejects them (see
 // PlaylistParser's own class docs) -- a hostile playlist must not be able to make the engine open
 // an arbitrary file elsewhere on disk.
 TEST(PlaylistParserTest, AbsoluteEntryIsSkippedNotResolved)
@@ -93,7 +93,7 @@ TEST(PlaylistParserTest, AbsoluteEntryIsSkippedNotResolved)
     EXPECT_NE(parsed.songPaths[0].find("real.mp3"), std::string::npos);
 }
 
-// REMED-CONTENT-002: a "..''-escaping relative entry must be rejected the same as an absolute one.
+// A "..''-escaping relative entry must be rejected the same as an absolute one.
 TEST(PlaylistParserTest, EscapingEntryIsSkippedNotResolved)
 {
     ScratchPlaylistDir root;

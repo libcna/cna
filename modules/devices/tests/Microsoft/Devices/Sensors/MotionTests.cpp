@@ -26,6 +26,15 @@
 using Microsoft::Devices::Sensors::AttitudeReading;
 using Microsoft::Devices::Sensors::CalibrationEventArgs;
 using Microsoft::Devices::Sensors::Motion;
+
+namespace
+{
+    // Dispose(bool) is the protected .NET pattern hook; only the public Dispose() may reach it.
+    // A caller that could invoke Dispose(false) would mark the sensor disposed without any cleanup.
+    template <typename T>
+    concept ExposesDisposeWithFlag = requires(T& sensor) { sensor.Dispose(false); };
+    static_assert(!ExposesDisposeWithFlag<Motion>, "Motion::Dispose(bool) must not be publicly callable");
+}
 using Microsoft::Devices::Sensors::MotionReading;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;

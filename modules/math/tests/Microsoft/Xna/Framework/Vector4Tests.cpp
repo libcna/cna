@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -118,6 +120,16 @@ TEST(Vector4Test, GetHashCodeDifferentVectorsTypicallyDiffer)
     Vector4 a(1.0f, 2.0f, 3.0f, 4.0f);
     Vector4 b(5.0f, 6.0f, 7.0f, 8.0f);
     EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+// Every component carries the sign bit, so the bit-pattern terms are all large negative ints and
+// their signed sum would overflow; the hash is the wrapped unsigned sum (red under UBSan otherwise).
+TEST(Vector4Test, GetHashCodeWithSignBitComponentsIsTheWrappedUnsignedSum)
+{
+    Vector4 v(-1.0f, -2.0f, -3.0f, -4.0f);
+    const std::uint32_t expected = std::bit_cast<std::uint32_t>(-1.0f) + std::bit_cast<std::uint32_t>(-2.0f)
+                                   + std::bit_cast<std::uint32_t>(-3.0f) + std::bit_cast<std::uint32_t>(-4.0f);
+    EXPECT_EQ(v.GetHashCode(), static_cast<int>(expected));
 }
 
 // --- ToString ---

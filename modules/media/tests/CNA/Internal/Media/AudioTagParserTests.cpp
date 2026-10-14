@@ -304,7 +304,7 @@ TEST(AudioTagParserTest, UnratedFileReportsNoRatingRatherThanARatingOfZero)
 }
 
 // ---------------------------------------------------------------------------------------------
-// REMED-MEDIA-001: `pos + len > bound`-style bounds checks are vulnerable to unsigned integer
+// `pos + len > bound`-style bounds checks are vulnerable to unsigned integer
 // overflow on a 32-bit size_t target -- `pos + len` can wrap around and make the check pass for a
 // length that is actually out of bounds. AudioTagParser.cpp now uses an overflow-safe
 // `len > bound - pos` subtraction form throughout (matching XactParser.cpp's own

@@ -84,6 +84,7 @@ SyncGame::~SyncGame()
     if (session_ != nullptr)
     {
         session_->Dispose();
+        delete session_;
         session_ = nullptr;
     }
 }

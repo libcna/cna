@@ -23,7 +23,7 @@ namespace CNA::Internal::Media
     /// bytes, which correctly round-trips non-ASCII entries either way (verified against the
     /// International.m3u8 fixture's non-ASCII "Étoile" filename).
     ///
-    /// REMED-CONTENT-002: deliberately diverges from standard M3U here -- an absolute entry, or a
+    /// Deliberately diverges from standard M3U here -- an absolute entry, or a
     /// relative entry that escapes the playlist's own containing directory via ".." (or a
     /// symlink), is skipped rather than honored. Standard M3U allows both; this is a conscious
     /// security-over-compatibility choice (an untrusted/hostile playlist file must not be able to

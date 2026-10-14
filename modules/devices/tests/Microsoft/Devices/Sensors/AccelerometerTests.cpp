@@ -26,6 +26,15 @@
 #include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::Accelerometer;
+
+namespace
+{
+    // Dispose(bool) is the protected .NET pattern hook; only the public Dispose() may reach it.
+    // A caller that could invoke Dispose(false) would mark the sensor disposed without any cleanup.
+    template <typename T>
+    concept ExposesDisposeWithFlag = requires(T& sensor) { sensor.Dispose(false); };
+    static_assert(!ExposesDisposeWithFlag<Accelerometer>, "Accelerometer::Dispose(bool) must not be publicly callable");
+}
 using Microsoft::Devices::Sensors::AccelerometerFailedException;
 using Microsoft::Devices::Sensors::AccelerometerReading;
 using Microsoft::Devices::Sensors::AccelerometerReadingEventArgs;

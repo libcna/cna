@@ -2668,7 +2668,7 @@ TEST(ENetBackendTest, HostMeasuresRealRoundtripTimeForRemoteGamer) {
     EXPECT_GT(remoteGamer->getRoundtripTimeProperty(), System::TimeSpan::Zero);
 }
 
-// --- REMED-NET-001: HandleReceive must verify sender authority on host-only broadcast messages ---
+// --- HandleReceive must verify sender authority on host-only broadcast messages ---
 //
 // Before this fix, ServerWelcome/GamerJoinBroadcast/GamerLeaveBroadcast/StateChangeBroadcast were
 // dispatched to their handlers with no check that the sending peer is this session's actual
@@ -2961,7 +2961,7 @@ TEST(ENetBackendTest, HostRejectsForgedStateChangeBroadcastFromNonHostPeer) {
     EXPECT_EQ(gameStartedCount, 0);
 }
 
-// REMED-NET-001: a "client" role session still owns a real, accepting ENetHost of its own (see
+// A "client" role session still owns a real, accepting ENetHost of its own (see
 // ConnectToHost's own doc comment - even a peer that only ever intended to join someone else can
 // be promoted to host later via migration, so its socket accepts connections from the moment it's
 // created). A rogue third party - not the real, trusted host - can connect directly to it and
@@ -3048,7 +3048,7 @@ TEST(ENetBackendTest, ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyP
     EXPECT_TRUE(hostStillPresent);
 }
 
-// --- REMED-NET-003: HandleClientHello per-peer resend guard ---
+// --- HandleClientHello per-peer resend guard ---
 
 TEST(ENetBackendTest, HostRejectsDuplicateClientHelloFromAlreadyHandshakedPeer) {
     SystemLinkSessionFixture host("HostPlayer");
@@ -3447,4 +3447,91 @@ TEST(ENetBackendTest, TheHostTakesVoiceOnlyFromItsSendersMachineAndRelaysIt) {
     EXPECT_EQ(arrived->TargetWireId, remote2);
     EXPECT_EQ(arrived->Sequence, 7);
     EXPECT_EQ(arrived->Payload, relayed.Payload);
+}
+
+// A client-role session owns a real listening ENetHost too (ConnectToHost binds one so the peer
+// can be promoted to host by migration without rebinding), but while it is somebody else's client
+// it must not admit anyone who dials that socket: only the session's real host hands out wire ids
+// and roster snapshots. A promoted survivor has its HostPeer cleared by the migration before the
+// others reconnect, so the same rule still lets it accept their ClientHello.
+TEST(ENetBackendTest, ClientRejectsClientHelloFromRogueThirdPartyPeerOnItsOwnListeningSocket) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        client.session->Update();
+    }
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+
+    uint16_t clientOwnPort = ENetBackend::GetBoundPort(client.session);
+    ASSERT_GT(clientOwnPort, 0);
+    ASSERT_NE(clientOwnPort, fakeHostPort);
+
+    // A rogue peer, unrelated to the real host above, dials the client's own listening socket and
+    // introduces itself exactly as a joining client would to a host.
+    ENetHostHandle rogue = ENetHostHandle::CreateClient(2);
+    ENetPeer* roguePeerFromClientSide = rogue.Connect("127.0.0.1", clientOwnPort, 2);
+    ASSERT_NE(roguePeerFromClientSide, nullptr);
+
+    bool rogueConnected = false;
+    for (int i = 0; i < 200 && !rogueConnected; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (rogue.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            rogueConnected = true;
+        }
+    }
+    ASSERT_TRUE(rogueConnected);
+
+    ClientHelloMessage hello;
+    hello.LocalGamertags = {"RoguePlayer"};
+    auto helloBytes = NetPacketCodec::Encode(hello);
+    rogue.Send(roguePeerFromClientSide, 0, helloBytes.data(), helloBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    rogue.Flush();
+
+    bool rogueDisconnected = false;
+    bool rogueWelcomed = false;
+    for (int i = 0; i < 200 && !rogueDisconnected; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        while (rogue.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_DISCONNECT) {
+                rogueDisconnected = true;
+            } else if (evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                enet_packet_destroy(evt.packet);
+                if (NetPacketCodec::PeekTag(data) == MessageTag::ServerWelcome) rogueWelcomed = true;
+            }
+        }
+    }
+    EXPECT_TRUE(rogueDisconnected)
+        << "a client-role session must disconnect a peer that sends it a ClientHello - it is not that peer's host";
+    EXPECT_FALSE(rogueWelcomed) << "a client must never answer a ClientHello with a ServerWelcome";
+
+    // The roster is untouched: the real host and this client's own gamer, nobody else.
+    EXPECT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+    for (NetworkGamer* g : client.session->getAllGamersProperty()) {
+        EXPECT_NE(g->getGamertagProperty(), "RoguePlayer");
+    }
 }

@@ -495,3 +495,30 @@ TEST(VideoDecoderTest, SeekToStartRebuildsAWorkingResamplerSoAudioStillDecodesAf
     EXPECT_GT(samplesAfter.size(), 0u)
         << "no audio samples decoded after SeekToStart() -- the rebuilt resampler is not working";
 }
+
+// resolution_change.h264 is three 32x32 frames followed by three 64x48 frames in one elementary
+// stream; libavformat probes the stream's last parameter set, so the decoder opens at 64x48 and
+// the first frames arrive smaller than the open-time size. The planar converters size their output
+// and walk the planes by the open-time dimensions, so converting such a frame would read past its
+// planes. XNA's Video has a single fixed Width/Height, so the decoder must refuse the mismatching
+// frame loudly; every frame it does deliver must match the size it reported at open.
+TEST(VideoDecoderTest, MidStreamResolutionChangeThrowsRatherThanReadingPastThePlanes)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open("tests/assets/media/video/resolution_change.h264"));
+    const std::size_t openSizeBytes =
+        static_cast<std::size_t>(decoder.GetWidth()) * decoder.GetHeight() * 4u;
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    try
+    {
+        while (decoder.NextFrame(rgba, pts))
+            EXPECT_EQ(rgba.size(), openSizeBytes);
+        FAIL() << "frames of another size were converted with the open-time dimensions instead of being refused";
+    }
+    catch (const std::runtime_error& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("resolution"), std::string::npos) << e.what();
+    }
+}

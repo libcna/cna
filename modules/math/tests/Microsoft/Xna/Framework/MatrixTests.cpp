@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <numbers>
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
@@ -169,6 +171,31 @@ TEST(MatrixTest, InvertOfIdentityIsIdentity)
     EXPECT_NEAR(result.M12, 0.0f, kEps);
 }
 
+// A nearly singular matrix (its fourth row is almost a combination of the first two) amplifies
+// rounding in the cofactor expansion: with single-precision intermediates the inverse is off by
+// ~2.6e-3 relative, with the double-precision intermediates XNA/FNA use by ~6e-5. The expected
+// values are the float64 inverse; the tolerance sits between the two outcomes.
+TEST(MatrixTest, InvertOfANearlySingularMatrixKeepsDoublePrecisionIntermediates)
+{
+    Matrix m(0.933174968f, -0.801841378f, 1.927790165f, -0.830146313f,
+             0.062339336f, 1.241415501f, -0.242904350f, 0.482364029f,
+             -0.294556797f, 1.858554482f, -0.275711894f, 1.165242553f,
+             0.964917600f, -0.181331456f, 1.806027651f, -0.589626372f);
+    const float expected[16] = {
+        -7397.921059f, -3713.888633f, 10.84834557f, 7398.840636f,
+        3447.535193f, 1732.608590f, -5.761827270f, -3447.818131f,
+        2051.372313f, 1028.967259f, -2.382757356f, -2051.093570f,
+        -6883.504341f, -3458.850759f, 12.22678424f, 6884.254035f};
+
+    Matrix inv = Matrix::Invert(m);
+    const float actual[16] = {inv.M11, inv.M12, inv.M13, inv.M14, inv.M21, inv.M22, inv.M23, inv.M24,
+                              inv.M31, inv.M32, inv.M33, inv.M34, inv.M41, inv.M42, inv.M43, inv.M44};
+    for (int i = 0; i < 16; ++i)
+    {
+        EXPECT_NEAR(actual[i], expected[i], std::fabs(expected[i]) * 1e-3f) << "element " << i;
+    }
+}
+
 TEST(MatrixTest, MatrixTimesItsInverseIsIdentity)
 {
     Matrix m = Matrix::CreateTranslation(3.0f, -1.0f, 2.0f);
@@ -294,6 +321,25 @@ TEST(MatrixTest, GetHashCodeEqualMatricesHaveEqualHash)
     Matrix a = Matrix::getIdentityProperty();
     Matrix b = Matrix::getIdentityProperty();
     EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+// Sixteen sign-bit components: every bit-pattern term is a large negative int, so the signed sum
+// would overflow many times over; the hash is the wrapped unsigned sum (red under UBSan otherwise).
+TEST(MatrixTest, GetHashCodeWithSignBitComponentsIsTheWrappedUnsignedSum)
+{
+    Matrix m = Matrix::CreateScale(-2.0f);
+    m.M41 = -5.0f;
+    m.M42 = -6.0f;
+    m.M43 = -7.0f;
+    m.M44 = -8.0f;
+    const auto bits = [](float value) { return std::bit_cast<std::uint32_t>(value); };
+    std::uint32_t expected = 0;
+    for (float value : {m.M11, m.M12, m.M13, m.M14, m.M21, m.M22, m.M23, m.M24,
+                        m.M31, m.M32, m.M33, m.M34, m.M41, m.M42, m.M43, m.M44})
+    {
+        expected += bits(value);
+    }
+    EXPECT_EQ(m.GetHashCode(), static_cast<int>(expected));
 }
 
 TEST(MatrixTest, GetHashCodeDifferentMatricesTypicallyDiffer)

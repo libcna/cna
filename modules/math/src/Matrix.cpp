@@ -258,10 +258,14 @@ namespace Microsoft::Xna::Framework
 
     int Matrix::GetHashCode() const
     {
-        return FloatHash(M11) + FloatHash(M12) + FloatHash(M13) + FloatHash(M14) +
-            FloatHash(M21) + FloatHash(M22) + FloatHash(M23) + FloatHash(M24) +
-            FloatHash(M31) + FloatHash(M32) + FloatHash(M33) + FloatHash(M34) +
-            FloatHash(M41) + FloatHash(M42) + FloatHash(M43) + FloatHash(M44);
+        // Summed as unsigned so sign-bit components cannot overflow the signed sum (sixteen terms
+        // make that routine); the value is unchanged where the signed sum stayed in range.
+        const auto term = [](float value) { return static_cast<unsigned>(FloatHash(value)); };
+        return static_cast<int>(
+            term(M11) + term(M12) + term(M13) + term(M14) +
+            term(M21) + term(M22) + term(M23) + term(M24) +
+            term(M31) + term(M32) + term(M33) + term(M34) +
+            term(M41) + term(M42) + term(M43) + term(M44));
     }
 
     std::string Matrix::ToString() const

@@ -147,5 +147,6 @@ int main(int argc, char* argv[])
 
     std::printf("[QoSProbe] Probe complete after %d iterations.\n", smokeIterations);
     session->Dispose();
+    delete session;
     return 0;
 }

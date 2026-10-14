@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <bit>
+#include <cstdint>
 #include <cmath>
 #include <numbers>
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -292,6 +294,16 @@ TEST(QuaternionTest, GetHashCodeDifferentQuaternionsTypicallyDiffer)
     Quaternion a = Quaternion::Identity;
     Quaternion b(1.0f, 2.0f, 3.0f, 4.0f);
     EXPECT_NE(a.GetHashCode(), b.GetHashCode());
+}
+
+// Every component carries the sign bit, so the bit-pattern terms are all large negative ints and
+// their signed sum would overflow; the hash is the wrapped unsigned sum (red under UBSan otherwise).
+TEST(QuaternionTest, GetHashCodeWithSignBitComponentsIsTheWrappedUnsignedSum)
+{
+    Quaternion q(-1.0f, -2.0f, -3.0f, -4.0f);
+    const std::uint32_t expected = std::bit_cast<std::uint32_t>(-1.0f) + std::bit_cast<std::uint32_t>(-2.0f)
+                                   + std::bit_cast<std::uint32_t>(-3.0f) + std::bit_cast<std::uint32_t>(-4.0f);
+    EXPECT_EQ(q.GetHashCode(), static_cast<int>(expected));
 }
 
 TEST(QuaternionTest, ToStringFormat)

@@ -539,7 +539,7 @@ namespace CNA::Internal::Net
             pending.erase(removedBegin, pending.end());
         }
 
-        // REMED-NET-001: ServerWelcome/GamerJoinBroadcast/GamerLeaveBroadcast/StateChangeBroadcast/
+        // ServerWelcome/GamerJoinBroadcast/GamerLeaveBroadcast/StateChangeBroadcast/
         // SessionPropertiesBroadcast
         // are, by this protocol's own design, sent only by the session's authoritative host to its
         // connected clients. The only peer connection that is ever the authoritative host from this
@@ -553,7 +553,7 @@ namespace CNA::Internal::Net
             return state.HostPeer != nullptr && peer == state.HostPeer;
         }
 
-        // REMED-NET-001: any connected peer - a modified/malicious client needing no MITM, just a
+        // Any connected peer - a modified/malicious client needing no MITM, just a
         // custom ENet client speaking this fully-inferable wire format - could otherwise forge a
         // host-only broadcast message directly to the host (or to a fellow client's own incidental
         // listening socket, since even a "client" role peer owns a real accepting ENetHost here -
@@ -574,7 +574,25 @@ namespace CNA::Internal::Net
 
         void HandleClientHello(NetworkSession* session, SessionState& state, ENetPeer* peer, const ClientHelloMessage& hello)
         {
-            // REMED-NET-003: a peer that already completed its handshake (already present in
+            // Only the session's host admits gamers. A client-role session owns a listening
+            // ENetHost as well (ConnectToHost binds one so a later migration can promote this
+            // peer without rebinding), so any third party can dial it and send a ClientHello; while
+            // state.HostPeer names someone else as the host, this side must not answer with a
+            // ServerWelcome, hand out wire ids or add the caller to its roster. A survivor that
+            // migration promotes has its HostPeer cleared before the others reconnect, so the
+            // promoted host still accepts their hellos. Same rule as AddLocalGamerRequest.
+            if (state.HostPeer != nullptr)
+            {
+                CNA::Logger::Warn(
+                    "[ENetBackend] Rejected ClientHello sent to a client-role session (this side is "
+                    "not the host) - disconnecting the peer.",
+                    CNA::LogCategory::APPLICATION
+                );
+                state.Host.Disconnect(peer, 0);
+                return;
+            }
+
+            // a peer that already completed its handshake (already present in
             // PeerWireIds, unconditionally populated at the end of a first successful ClientHello
             // below) resending ClientHello would `new` a fresh batch of NetworkGamer objects every
             // time - unbounded roster growth from a single connected peer. A genuine reconnect
@@ -1360,7 +1378,7 @@ namespace CNA::Internal::Net
                         HandleClientHello(session, state, peer, NetPacketCodec::DecodeClientHello(data));
                         break;
                     case MessageTag::ServerWelcome:
-                        // REMED-NET-001: host-only message - see IsFromAuthoritativeHost's own comment.
+                        // Host-only message - see IsFromAuthoritativeHost's own comment.
                         if (!IsFromAuthoritativeHost(state, peer))
                         {
                             RejectUnauthorizedHostOnlyMessage(state, peer, "ServerWelcome");
