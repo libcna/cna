@@ -5852,7 +5852,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_AsciiQuantizeMode`, `CNA_CRTMaskType`, `CNA_DitherMode`, `CNA_RenderQuality`, `CNA_ShadowQuality`, `CNA_TonemappingMode` and `CNA_DepthEffectMode` with their `CNA_*` constants at the native ordinals. The identities are declared in every build so the exported ABI never changes shape with the extension build option",
-      "tests": "native-ordinal static assertions in `CnaCApiGraphicsExt.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsExtSmoke.c` under HEADLESS without the extension layer and SDL_RENDERER with it",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsExt.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsExtSmoke.c` under HEADLESS and OPENGLES3 without the extension layer and under SDL_GPU with it (`CNA_CNAEXT=ON`)",
       "status": "implemented",
       "task": "CBIND-035F7",
       "approved_symbols": [
@@ -5888,7 +5888,7 @@
         "method"
       ],
       "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract — clone, dispose, apply, type name, parameters — covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
-      "tests": "exact canonical defaults, native clamping through the C setters, every mode identity, non-finite and unknown-identity rejection, cross-type handle refusal, cell-size validation, a real ASCII draw with observed grid dimensions and destroy/lifetime paths on SDL_RENDERER with the extension layer; the complete unavailable contract on HEADLESS without it; strict-C `GraphicsExtSmoke.c` plus C/C++ handle assertions",
+      "tests": "exact canonical defaults, native clamping through the C setters, every mode identity, non-finite and unknown-identity rejection, cross-type handle refusal, cell-size validation, a real ASCII draw with observed grid dimensions and destroy/lifetime paths on SDL_GPU with the extension layer; the complete unavailable contract on HEADLESS without it; strict-C `GraphicsExtSmoke.c` plus C/C++ handle assertions",
       "status": "implemented",
       "task": "CBIND-035F7",
       "approved_symbols": [
@@ -7427,7 +7427,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 14 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
+      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 10 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
       "tests": "`CoreExtSmoke.c` classifies every public renderer identity, pins three fixed answers a consumer can rely on, and asserts that the unknown identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7490,7 +7490,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 14 public renderer identities and refuses anything else",
+      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 10 public renderer identities and refuses anything else",
       "tests": "`CoreExtSmoke.c` reads the maturity of every public renderer identity and asserts that an out-of-range identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",

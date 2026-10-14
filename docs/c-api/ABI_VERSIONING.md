@@ -55,7 +55,7 @@ the first ABI that can report a UIKit window.
 
 The ABI was **0.45.0** (`RRC-018`). It **retires four public renderer
 identities** -- `OPENGLES2` (`2`), `WEBGL1` (`5`), `DIRECTX12` (`15`) and `CANVAS` (`17`) -- together
-with the four `CNA_GRAPHICS_RENDERER_*` constants that named them. CNA now has 14 public renderer
+with the four `CNA_GRAPHICS_RENDERER_*` constants that named them. CNA then had 14 public renderer
 identities (`docs/removed-renderers.md`). `CNA_GRAPHICS_RENDERER_MAXIMUM` stays `43` (`FNA3D`); no
 route, structure, field, capability bit or exported symbol changes, and no surviving identity is
 renumbered. What breaks is a binding that names one of the four removed constants (it no longer
