@@ -56,6 +56,7 @@
 #include <cstdlib>
 #include <memory>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -272,9 +273,25 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("pbr_effect_hand_derived"))
+        return CNA::Examples::Conformance::kSkipExitCode;
+    if (!CNA::Examples::Conformance::ProbePbrLightingEvaluated("pbr_effect_hand_derived"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     PbrEffectHandDerivedTest game;
-    game.Run();
+    try
+    {
+        game.Run();
+    }
+    catch (const std::exception& e)
+    {
+        // Every draw here is a PbrEffect or SkinnedPbrEffect one, so a renderer with no
+        // metallic-roughness model (FNA3D) refuses the whole program by name.
+        if (!CNA::Examples::Conformance::IsNamedPbrRefusal(e))
+            throw;
+        std::printf("[SKIP] pbr_effect_hand_derived: %s\n", e.what());
+        return CNA::Examples::Conformance::kSkipExitCode;
+    }
     return game.ExitCode();
 }

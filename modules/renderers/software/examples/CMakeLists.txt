@@ -1160,6 +1160,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
             $<TARGET_FILE:cna_oracle_render_software> 0
             colored_linelist_quad colored_linestrip_quad
         TIMEOUT 30 LABELS "Software")
+
+    # RRC-045: the renderer-neutral conformance programs (modules/graphics/examples/conformance/),
+    # which carry XNA behaviour first proved on retired renderers. SOFTWARE is an independent
+    # implementation family, so a contract it passes is no longer held by the GPU families alone.
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_conformance_programs(
+        BUILDER cna_software_test TEST_PREFIX Software TIMEOUT 120 LABELS "Software")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

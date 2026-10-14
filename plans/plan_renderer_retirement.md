@@ -34,6 +34,7 @@ finish it; none restores a retired renderer, option or constant.
 | RRC-042 | Remove `GraphicsRendererDescriptor::wantsHighDpi`: only the retired METAL descriptor set it, so it was permanently false; pixel density stays a platform request (`WindowDescription::highDpi`), documented as an Apple known gap | done |
 | RRC-043 | `SDL_GPU` implements `RendererFeature::BaseInstanceDrawing` (its three implementors were retired, so both `InstancedDrawRangeTest` base-instance cases skipped everywhere): every host-expanded per-instance stream starts at `firstInstance`. An instanced draw with no per-instance stream now draws `instanceCount` copies on `SDL_GPU` and `WEBGPU`, as XNA does (both drew one), pinned by a new shared case | done |
 | RRC-044 | Remove the two empty `CheckValidationClean()` stubs left by the Vulkan validation gate; the shared stock-effect sampler contract tags failures by effect family, not by the retired renderer's descriptor-set names | done |
+| RRC-045 | The 30 conformance programs ran only on EasyGL, SDL_GPU and WebGPU because nobody had registered them elsewhere: `cna_register_conformance_programs()` now registers them on SOFTWARE, FNA3D and HEADLESS too. A program skips (exit 77) only for a stated capability reason -- a Diagnostic-category renderer has no pixel oracle, SOFTWARE's documented reduced PBR model, FNA3D's named PBR and stock-instancing refusals -- and the deviations the new families show are recorded in `handoff.md` §5.1 item 7 | done |
 
 ## Final report
 

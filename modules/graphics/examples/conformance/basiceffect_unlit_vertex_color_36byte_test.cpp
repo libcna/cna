@@ -57,6 +57,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -219,6 +220,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("basiceffect_unlit_vertex_color_36byte"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     BasicEffectUnlitVertexColor36ByteTest game;
     game.Run();
     return game.getResult();

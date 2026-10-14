@@ -42,6 +42,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -94,6 +95,8 @@ namespace
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("basiceffect_textured_msaa"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
 

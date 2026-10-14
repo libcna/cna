@@ -115,7 +115,7 @@ namespace CNA::Internal::Renderers
             "effect would present a visibly different material as a successful draw, so the draw is "
             "refused instead (plans/plan_gltf.md GLTF-477). Use a renderer that implements the model "
             "(EasyGL: OPENGLES3/OPENGL33/WEBGL2, SDL_GPU, WEBGPU, "
-            "DIRECTX9/11), or a reduced one whose "
+            "DIRECTX9), or a reduced one whose "
             "boundary is documented (SOFTWARE).");
     }
 }

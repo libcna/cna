@@ -36,6 +36,7 @@
 #include <exception>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -133,5 +134,7 @@ protected:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("basic_effect_declaration_inputs"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     return CNA::Examples::RunPixelTest<BasicEffectDeclarationInputsTest>();
 }

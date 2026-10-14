@@ -33,6 +33,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -172,6 +173,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("backbuffer_reset_resize"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     BackBufferResetResizeTest game;
     game.Run();
     return game.getResult();

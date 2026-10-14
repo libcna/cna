@@ -49,6 +49,7 @@
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/ShaderDiagnosticEXT.hpp"
 #include "common/PortableTintShaderPackage.hpp"
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -252,6 +253,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("shader_effect_refusal"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     ShaderEffectRefusalTest game;

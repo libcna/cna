@@ -45,6 +45,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -274,9 +275,25 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("stock_effect_uniform_ring"))
+        return CNA::Examples::Conformance::kSkipExitCode;
+    if (!CNA::Examples::Conformance::ProbePbrLightingEvaluated("stock_effect_uniform_ring"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     StockEffectUniformRingTest game;
-    game.Run();
+    try
+    {
+        game.Run();
+    }
+    catch (const std::exception& e)
+    {
+        // Every draw here is a PbrEffect or SkinnedPbrEffect one, so a renderer with no
+        // metallic-roughness model (FNA3D) refuses the whole program by name.
+        if (!CNA::Examples::Conformance::IsNamedPbrRefusal(e))
+            throw;
+        std::printf("[SKIP] stock_effect_uniform_ring: %s\n", e.what());
+        return CNA::Examples::Conformance::kSkipExitCode;
+    }
     return game.ExitCode();
 }

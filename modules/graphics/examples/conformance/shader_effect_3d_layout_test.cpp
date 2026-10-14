@@ -78,6 +78,7 @@
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "common/ShaderEffect3DShaderPackage.generated.hpp"
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -551,6 +552,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("shader_effect_3d_layout"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     // Unbuffered, so the legs already decided stay on record if a later one aborts the process.
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     if (!CNA::Examples::ProbeGpuDisplayAvailable())

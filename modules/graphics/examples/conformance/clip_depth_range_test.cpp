@@ -38,6 +38,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -169,6 +170,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("clip_depth_range"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     ClipDepthRangeTest game;

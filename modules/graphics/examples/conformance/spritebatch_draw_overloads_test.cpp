@@ -38,6 +38,7 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -183,6 +184,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("spritebatch_draw_overloads"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     SpriteBatchDrawOverloadsTest game;
     game.Run();
     return game.getResult();

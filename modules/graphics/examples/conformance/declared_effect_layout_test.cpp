@@ -60,6 +60,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -424,6 +425,12 @@ protected:
                     }
                     catch (const std::exception& e)
                     {
+                        if (CNA::Examples::Conformance::IsNamedPbrRefusal(e))
+                        {
+                            std::printf("[SKIP] %s: no PBR model on this renderer (%s)\n", label,
+                                        e.what());
+                            return;
+                        }
                         Check(false, label, std::string("threw something other than "
                                                         "NotSupportedException: ") + e.what());
                         return;
@@ -456,6 +463,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("declared_effect_layout"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     DeclaredEffectLayoutTest game;

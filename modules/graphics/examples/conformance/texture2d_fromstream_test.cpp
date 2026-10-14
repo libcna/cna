@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -147,6 +148,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("texture2d_fromstream"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     Texture2DFromStreamTest game;
     game.Run();
     return game.getResult();

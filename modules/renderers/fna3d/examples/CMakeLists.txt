@@ -105,6 +105,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_Capabilities COMMAND cna_test_fna3d_capabilities
         TIMEOUT 120 LABELS "Fna3d")
 
+    # RRC-045: the renderer-neutral conformance programs, through FNA3D's own driver. They run under
+    # the same FNA3D_FORCE_DRIVER as the rest of this directory (set below).
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_conformance_programs(
+        BUILDER cna_fna3d_test TEST_PREFIX Fna3d TIMEOUT 120 LABELS "Fna3d")
+
     # Keep the stated validation target executable, not merely documentary: every CTest in this
     # directory must exercise the configured arm. The oracle script has its own OpenGL default,
     # but this explicit property overrides it and keeps `ctest -L Fna3d` uniform and visible in

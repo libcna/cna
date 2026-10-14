@@ -55,6 +55,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -251,6 +252,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("stock_effect_unsupplied_input"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;

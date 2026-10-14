@@ -53,6 +53,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -334,6 +335,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("pbr_vertex_colour"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     {
         PbrVertexColourTest game;
         game.Run();

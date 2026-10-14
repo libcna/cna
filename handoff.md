@@ -164,20 +164,29 @@ The single authoritative list. Every entry below was checked against the code on
 7. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
     The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
     of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites; measured 2026-10-13 on
-    Linux through the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan) and `WEBGPU`:
+    Linux through the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan) and `WEBGPU`, and
+    since RRC-045 (2026-10-14) also registered and measured on `SOFTWARE`, `FNA3D` (its OpenGL
+    driver) and `HEADLESS` (whose pixel-oracle programs skip: it makes no pixel claim):
     - `SkinnedEffect.VertexColorEnabled` folds the vertex colour after the specular term and after
       the saturate on all three (`*_Conformance_skinned_effect_vertex_color` F/G: 44 instead of
-      218, 128 instead of 230); XNA folds it in first (`VULKAN-200`/`205`).
+      218, 128 instead of 230); XNA folds it in first (`VULKAN-200`/`205`). FNA3D ignores the
+      flag outright (B equals A) and saturates before the fold (G: 255 instead of 230); SOFTWARE
+      passes.
     - A textured `BasicEffect` over a declaration without `TextureCoordinate0` is accepted by
-      EasyGL, SDL_GPU, WebGPU and SOFTWARE; XNA throws `InvalidOperationException`
-      (`*_Conformance_basic_effect_declaration_inputs` C). FNA3D refuses with `std::runtime_error`.
+      EasyGL, SDL_GPU, WebGPU, SOFTWARE and FNA3D (measured 2026-10-14; FNA3D was earlier recorded as
+      refusing); XNA throws `InvalidOperationException`
+      (`*_Conformance_basic_effect_declaration_inputs` C).
     - `GraphicsAdapter`'s format queries answer a different multisample count (0) from what `Reset`
-      and `RenderTarget2D` apply (EasyGL 8, SDL_GPU 8, WebGPU 4), WebGPU's `Reset` applies back-buffer
-      format 9 where the query says `Color`, and `GraphicsDevice::Reset` does not clamp
-      `MultiSampleCount` through the query (`*_Conformance_graphics_adapter_query`).
+      and `RenderTarget2D` apply (EasyGL 8, SDL_GPU 8, WebGPU 4, SOFTWARE 4, FNA3D 8, HEADLESS 1024 for
+      a render target), WebGPU's and HEADLESS's `Reset` apply back-buffer format 9 where the query
+      says `Color`, and `GraphicsDevice::Reset` does not clamp `MultiSampleCount` through the query
+      (`*_Conformance_graphics_adapter_query`). FNA3D also does not apply `GraphicsDeviceManager`'s
+      default `Depth24` request in that program. HEADLESS reports `MultiSampleAntiAliasing` while
+      applying 0 samples (`Headless_Conformance_capability_truth`).
     - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered
-      edge texel (`render_target_own_msaa` D); a `SkinnedEffect` over a declaration without normal,
-      weights or bone indices draws nothing and reports success (`stock_effect_unsupplied_input` C).
+      edge texel (`render_target_own_msaa` D). EasyGL, SOFTWARE and FNA3D: a `SkinnedEffect` over a
+      declaration without normal, weights or bone indices draws nothing and reports success
+      (`stock_effect_unsupplied_input` C).
     - SDL_GPU: cube faces in a multi-render-target set throw `std::runtime_error` while
       `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4 and the three `RenderTargetSemantics`
       plural cube-face cases; DIRECTX9 has the same refusal, and HEADLESS refuses the three

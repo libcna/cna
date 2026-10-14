@@ -246,17 +246,48 @@ function(cna_register_parity_fixtures)
                 FAIL_REGULAR_EXPRESSION "${P_FAIL_REGULAR_EXPRESSION}")
         endif()
     endforeach()
+    cna_register_conformance_programs(
+        BUILDER ${P_BUILDER} TEST_PREFIX ${P_TEST_PREFIX} TIMEOUT ${P_TIMEOUT}
+        LABELS ${P_LABELS} ENVIRONMENT ${P_ENVIRONMENT}
+        FAIL_REGULAR_EXPRESSION ${P_FAIL_REGULAR_EXPRESSION})
+endfunction()
+
+# Builds and registers every CNA_CONFORMANCE_FIXTURES program for one renderer, as
+# <TEST_PREFIX>_Conformance_<name> with the Conformance label. cna_register_parity_fixtures() calls
+# it; a family without the parity corpus (SOFTWARE, HEADLESS, FNA3D) calls it directly, so a
+# renderer-neutral contract is never absent from a family merely because nobody registered it
+# (RRC-045). A program decides at run time whether this renderer can execute it and exits 77 (CTest
+# SKIP) with the capability it lacks; registration does not pre-filter by family.
+#
+#   BUILDER, TEST_PREFIX, LABELS, ENVIRONMENT, TIMEOUT and FAIL_REGULAR_EXPRESSION as above.
+function(cna_register_conformance_programs)
+    cmake_parse_arguments(P ""
+        "BUILDER;TEST_PREFIX;TIMEOUT"
+        "LABELS;ENVIRONMENT;FAIL_REGULAR_EXPRESSION" ${ARGN})
+    if(P_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR
+            "cna_register_conformance_programs: unparsed arguments: ${P_UNPARSED_ARGUMENTS}")
+    endif()
+    if(NOT P_BUILDER OR NOT P_TEST_PREFIX)
+        message(FATAL_ERROR
+            "cna_register_conformance_programs: BUILDER and TEST_PREFIX are required")
+    endif()
+    if(NOT P_TIMEOUT)
+        set(P_TIMEOUT 60)
+    endif()
     string(TOLOWER "${P_TEST_PREFIX}" _cna_conformance_suffix)
     foreach(_fixture IN LISTS CNA_CONFORMANCE_FIXTURES)
         set(_target "cna_conformance_${_fixture}_${_cna_conformance_suffix}")
         set(_source "${CNA_PARITY_FIXTURE_DIR}/../conformance/${_fixture}_test.cpp")
         if(NOT EXISTS "${_source}")
-            message(FATAL_ERROR "cna_register_parity_fixtures: no source for conformance program '${_fixture}' at ${_source}")
+            message(FATAL_ERROR "cna_register_conformance_programs: no source for conformance program '${_fixture}' at ${_source}")
         endif()
         cmake_language(CALL ${P_BUILDER} ${_target} "${_source}")
-        # The shared header-only test fixtures (CNA/TestSupport/...), e.g. the synthetic
-        # compiled-effect builders a multi-output pixel shader comes from.
-        target_include_directories(${_target} PRIVATE "${CMAKE_SOURCE_DIR}/tests/support")
+        # The shared example headers (common/PixelTestGame.hpp, ...) and the shared header-only
+        # test fixtures (CNA/TestSupport/...), e.g. the synthetic compiled-effect builders a
+        # multi-output pixel shader comes from.
+        target_include_directories(${_target} PRIVATE
+            "${CNA_PARITY_FIXTURE_DIR}/.." "${CMAKE_SOURCE_DIR}/tests/support")
         cna_register_renderer_test(NAME "${P_TEST_PREFIX}_Conformance_${_fixture}" COMMAND ${_target}
             TIMEOUT ${P_TIMEOUT} LABELS ${P_LABELS} Conformance ENVIRONMENT ${P_ENVIRONMENT})
         if(P_FAIL_REGULAR_EXPRESSION)

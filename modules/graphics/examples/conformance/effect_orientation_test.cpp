@@ -68,6 +68,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -145,17 +146,33 @@ class EffectOrientationTest : public Game
     {
         std::vector<Color> pixels(static_cast<std::size_t>(kSize * kSize), Color(0, 0, 0, 0));
 
-        ResetScene(dev);
-        draw(dev);
-        dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
-        CheckQuadrants(pixels, family + " / backbuffer");
+        try
+        {
+            ResetScene(dev);
+            draw(dev);
+            dev.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            CheckQuadrants(pixels, family + " / backbuffer");
 
-        dev.SetRenderTarget(target_.get());
-        ResetScene(dev);
-        draw(dev);
-        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-        target_->GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
-        CheckQuadrants(pixels, family + " / RenderTarget2D");
+            dev.SetRenderTarget(target_.get());
+            ResetScene(dev);
+            draw(dev);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            target_->GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+            CheckQuadrants(pixels, family + " / RenderTarget2D");
+        }
+        catch (const std::exception& e)
+        {
+            // A renderer with no metallic-roughness model refuses the PBR families at the draw, and
+            // one whose stock effects take no per-instance input refuses the instanced leg (both
+            // FNA3D); that is this family's skip, not a failure. Anything else still aborts.
+            if (!CNA::Examples::Conformance::IsNamedPbrRefusal(e) &&
+                !CNA::Examples::Conformance::IsNamedStockInstancingRefusal(e))
+                throw;
+            dev.setIndicesProperty(nullptr);
+            dev.SetVertexBuffer(nullptr);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::printf("[SKIP] %s is refused by this renderer: %s\n", family.c_str(), e.what());
+        }
     }
 
     static void Identity(IEffectMatrices& fx)
@@ -372,6 +389,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("effect_orientation"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     EffectOrientationTest game;

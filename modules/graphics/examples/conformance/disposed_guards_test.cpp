@@ -36,6 +36,7 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -218,6 +219,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("disposed_guards"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     // Unbuffered so a crash mid-test (this file exercises exactly the scenarios that used to
     // crash before Task 717's fixes) doesn't lose whichever PASS/FAIL lines already printed.
     std::setvbuf(stdout, nullptr, _IONBF, 0);

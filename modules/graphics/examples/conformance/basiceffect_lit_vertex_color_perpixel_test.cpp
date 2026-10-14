@@ -53,6 +53,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -216,6 +217,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("basiceffect_lit_vertex_color_perpixel"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     BasicEffectLitVertexColorPerPixelTest game;
     game.Run();
     return game.getResult();

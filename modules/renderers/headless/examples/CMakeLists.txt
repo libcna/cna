@@ -494,6 +494,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
     cna_register_renderer_test(NAME Headless_CubeVolume_SetDataContract
         COMMAND cna_test_headless_cube_volume_setdata_contract
         TIMEOUT 30 LABELS "Headless")
+
+    # RRC-045: the renderer-neutral conformance programs. HEADLESS makes no pixel claim, so a
+    # program whose oracle is a read-back pixel skips with that reason; the API contracts (disposed
+    # guards, adapter queries, capability truth, refusals) run.
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
+    cna_register_conformance_programs(
+        BUILDER cna_headless_test TEST_PREFIX Headless TIMEOUT 120 LABELS "Headless")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

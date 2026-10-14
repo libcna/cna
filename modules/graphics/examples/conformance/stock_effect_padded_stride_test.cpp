@@ -57,6 +57,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "ConformanceSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -176,6 +177,14 @@ class StockEffectPaddedStrideTest final : public CNA::Examples::PixelTestGame
         }
         catch (const std::exception& e)
         {
+            // A renderer with no metallic-roughness model refuses the PbrEffect leg by name (FNA3D).
+            if (allowNamedRefusal && CNA::Examples::Conformance::IsNamedPbrRefusal(e))
+            {
+                dev.SetVertexBuffer(nullptr);
+                std::printf("[SKIP] %s at stride %d: no PBR model on this renderer (%s)\n",
+                            label.c_str(), stride, e.what());
+                return;
+            }
             refusal = e.what();
         }
         const std::string what = label + " at stride " + std::to_string(stride) +
@@ -280,6 +289,8 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::Conformance::ProbePixelOutputAvailable("stock_effect_padded_stride"))
+        return CNA::Examples::Conformance::kSkipExitCode;
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     StockEffectPaddedStrideTest game;
