@@ -188,7 +188,10 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-msaa-readback.patch"
         # FNA3D-51: every OpenGL entry point makes its own device's GL and MojoShader contexts
         # current, so several live devices on one thread work.
-        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-device-context.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-device-context.patch"
+        # FNA3D-56: the SDL_GPU driver drew a multisampled cube face into a layer its 2D
+        # renderbuffer does not have, and resolved every face into +X.
+        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-sdlgpu-msaa-cube-face.patch")
     set(_cna_fna3d_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-patches.cmake")
 
