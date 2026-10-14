@@ -56,6 +56,13 @@ namespace CNA::Internal::GltfImport
                 return cgltf_result_file_not_found;
             }
 
+            // A directory opens successfully on POSIX and reports a size of LONG_MAX.
+            std::error_code statusError;
+            if (!std::filesystem::is_regular_file(*native, statusError))
+            {
+                return cgltf_result_file_not_found;
+            }
+
             std::ifstream stream(*native, std::ios::binary | std::ios::ate);
             if (!stream.good())
             {

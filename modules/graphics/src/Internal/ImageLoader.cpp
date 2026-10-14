@@ -163,6 +163,11 @@ namespace CNA::Internal::Graphics
                 CNA::Internal::TryPathFromUtf8(utf8Path);
             if (!native) { return {}; }
 
+            // A directory opens successfully on POSIX and reports a size of LONG_MAX; only a regular
+            // file is a candidate image.
+            std::error_code statusError;
+            if (!std::filesystem::is_regular_file(*native, statusError)) { return {}; }
+
             std::ifstream stream(*native, std::ios::binary | std::ios::ate);
             if (!stream.good()) { return {}; }
             const std::streamsize length = stream.tellg();

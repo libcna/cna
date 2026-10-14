@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <stdexcept>
 #include <vector>
 
@@ -245,6 +246,14 @@ TEST(ImageLoaderTests, TheSynthesisedFileHeaderStepsOverAPaletteAndOverBitfieldM
     plain[0] = 40u;
     plain[14] = 32u;
     EXPECT_EQ(WithBitmapFileHeader(plain)[10], 14u + 40u);
+}
+
+TEST(ImageLoaderTests, ADirectoryIsNotAnImageAndIsRefusedWithoutAllocatingItsReportedSize)
+{
+    // On POSIX a directory opens as a stream and tellg() reports LONG_MAX; reading it as a file would
+    // ask the allocator for 8 exabytes (AddressSanitizer: allocation-size-too-big).
+    const std::string directory = std::filesystem::temp_directory_path().string();
+    EXPECT_THROW((void)ImageLoader::Load(directory), std::runtime_error);
 }
 
 } // namespace

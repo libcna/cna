@@ -116,6 +116,13 @@ namespace CNA::Platform::Common {
             return false;
         }
 
+        // A directory opens successfully on POSIX and reports a size of LONG_MAX.
+        std::error_code statusError;
+        if (!std::filesystem::is_regular_file(*native, statusError))
+        {
+            return false;
+        }
+
         std::ifstream input(*native, std::ios::binary | std::ios::ate);
         if (!input.good())
         {

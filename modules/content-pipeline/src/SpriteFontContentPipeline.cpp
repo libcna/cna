@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <tuple>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <set>
@@ -312,6 +313,10 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] std::vector<FT_Byte> ReadWholeFile(const std::filesystem::path& path)
         {
+            // A directory opens successfully on POSIX and reports a size of LONG_MAX.
+            std::error_code statusError;
+            if (!std::filesystem::is_regular_file(path, statusError)) { return {}; }
+
             std::ifstream stream(path, std::ios::binary | std::ios::ate);
             if (!stream.good()) { return {}; }
             const std::streamsize length = stream.tellg();
