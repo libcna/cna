@@ -175,7 +175,11 @@ function(cna_configure_mojoshader)
         # Apple -- had neither the TEXCRD opcode nor D3D9's oD# clamp; the GLSL/SPIR-V profiles got
         # both above (glsl-texcrd, spirv-texcrd, vertex-color-clamp).
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-texcrd.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-vertex-color-clamp.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-vertex-color-clamp.patch"
+        # The same oD# clamp for desktop GLSL (FNA3D's OpenGL driver drew BasicEffect's lit colour
+        # unclamped on Mesa) and for SPIR-V (FNA3D's SDL_GPU driver): plans/plan_fna3d.md FNA3D-55.
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-desktop-vertex-color-clamp.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vertex-color-clamp.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
     # In order, each patch made on top of the previous ones; a new one is appended at the end
