@@ -2106,6 +2106,54 @@ TEST_F(InstancedDrawRangeTest, BaseInstanceSelectsAbsoluteInstanceRecords)
     expectRows(stockFallback, true, "fogged stock effect first instance 3");
 }
 
+// RRC-043: XNA's DrawInstancedPrimitives with no per-instance stream bound draws instanceCount
+// identical copies (Direct3D 9's indexed-data stream frequency on stream 0); SDL_GPU drew one.
+TEST_F(InstancedDrawRangeTest, InstancedDrawWithoutInstanceStreamRepeatsTheDraw)
+{
+    // Both by design: HEADLESS does not rasterize, so there is no pixel to count, and FNA3D refuses
+    // an instanced draw through a stock effect (FNA's stock effects declare no instance input).
+    if (CNA_RENDERER_IS(Headless, Fna3d))
+        GTEST_SKIP() << "HEADLESS has no pixels and FNA3D refuses stock-effect instancing";
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+    constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
+    VertexBuffer meshBuffer(device, PositionColorDeclaration(), kElementCount, BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), kElementCount);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), kElementCount);
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = false;
+    effect.setDiffuseColorProperty(Vector3(0.2f, 0.2f, 0.2f));
+    effect.setAlphaProperty(1.0f);
+    device.SetVertexBuffer(&meshBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.setBlendStateProperty(BlendState::Additive);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+    const auto draw = [&](int instanceCount)
+    {
+        device.Clear(Color::Black);
+        effect.Apply();
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kElementCount,
+            3 * kVerticesPerSlot, 1, instanceCount);
+        const FrameSnapshot frame = CaptureBackbuffer(device, layout.width, layout.height);
+        return frame.At(static_cast<int>(layout.ColumnCenterX(3)),
+                        static_cast<int>(layout.RowCenterY(0))).getRProperty();
+    };
+
+    const int once = draw(1);
+    const int twice = draw(2);
+    const int thrice = draw(3);
+    ASSERT_GT(once, 0);
+    EXPECT_NEAR(twice, 2 * once, 3);
+    EXPECT_NEAR(thrice, 3 * once, 3);
+}
+
 TEST_F(InstancedDrawRangeTest, BaseInstanceWithoutInstanceStreamRepeatsTheDraw)
 {
     if (!device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing))

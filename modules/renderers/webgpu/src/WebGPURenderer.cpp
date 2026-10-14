@@ -13859,8 +13859,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         const auto* instanceStream = FirstInstanceStream(params);
         if (instanceStream == nullptr)
         {
-            // No per-instance VB -- fall back to a single-instance indexed draw.
-            DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            // No per-instance VB: every instance is the same geometry, and XNA (Direct3D 9's
+            // indexed-data stream frequency) still draws instanceCount of them, which additive
+            // blending and stencil counting make visible. This used to draw it once (RRC-043).
+            for (int instance = 0; instance < std::max(1, instanceCount); ++instance)
+                DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive,
+                                        primitiveCount, params);
             return;
         }
 

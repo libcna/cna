@@ -32,6 +32,7 @@ finish it; none restores a retired renderer, option or constant.
 | RRC-040 | One run-time retired-renderer table (`CNA/Internal/RetiredGraphicsRenderers.hpp`); name refusals carry the reserved value, the C API's numeric routes refuse 1/8/14/42 as retired and an unknown value as unknown; strict-C, C++ and environment-variable regression tests | done |
 | RRC-041 | Remove `ISpriteBatchRenderer::SetSamplerAddressModeWEXT` and its fan-out call (its only implementor was VULKAN); AddressW keeps reaching DIRECTX9 through `SetSamplerAddressW` and the complete-hook renderers through `SetSamplerState`, pinned by `SpriteBatchTests` | done |
 | RRC-042 | Remove `GraphicsRendererDescriptor::wantsHighDpi`: only the retired METAL descriptor set it, so it was permanently false; pixel density stays a platform request (`WindowDescription::highDpi`), documented as an Apple known gap | done |
+| RRC-043 | `SDL_GPU` implements `RendererFeature::BaseInstanceDrawing` (its three implementors were retired, so both `InstancedDrawRangeTest` base-instance cases skipped everywhere): every host-expanded per-instance stream starts at `firstInstance`. An instanced draw with no per-instance stream now draws `instanceCount` copies on `SDL_GPU` and `WEBGPU`, as XNA does (both drew one), pinned by a new shared case | done |
 
 ## Final report
 

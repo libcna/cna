@@ -185,7 +185,9 @@ The single authoritative list. Every entry below was checked against the code on
       `cmake-build-headless` 2026-10-14); a
       `ShaderEffect` uniform array beyond its declared capacity is truncated silently
       (`shader_effect_refusal` E); the portable 3D `ShaderEffect` probe draws nothing on the
-      one-stream routes (`shader_effect_3d_layout` A-C, G) and two vertex streams are refused (D/E).
+      one-stream routes (`shader_effect_3d_layout` A-C, G) and two vertex streams are refused (D/E);
+      the first-instance leg J, which runs since `SDL_GPU` reports `BaseInstanceDrawing` (RRC-043),
+      fails for G's reason -- the `ShaderEffect` route binds no per-instance stream.
     - SDL_GPU, compiled XNA effects (`SdlGpuCompiledEffectDrawTest`, the shared helpers in
       `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`, 2026-10-14): a quad covering
       pixels 1-2 under Direct3D 9's pixel-centre convention lands half a pixel up and left
@@ -310,8 +312,9 @@ The single authoritative list. Every entry below was checked against the code on
   as a non-gating leg). Known gaps against the retired native backends, each to be implemented or
   capability-gated in that campaign: `ShaderEffect` (`CustomEffects`) is compiled out on Windows,
   Apple and the browser because no runtime GLSL-to-SPIR-V-to-DXIL/MSL path exists; occlusion queries
-  are unavailable (SDL_gpu 3.5 has none); `RendererFeature::BaseInstanceDrawing` is implemented by
-  no surviving renderer, although SDL_gpu's draw calls take a first instance.
+  are unavailable (SDL_gpu 3.5 has none). `RendererFeature::BaseInstanceDrawing` is implemented by
+  `SDL_GPU` since RRC-043 (its stock, instanced-matrix and compiled-effect routes expand per-instance
+  streams on the host from the first instance); no other survivor claims it.
 - iOS has simulator smoke evidence only, with `SOFTWARE`.
 - `WEBGPU` is experimental; its open items are in the status summary of `plans/plan_webgpu.md`.
 - `SOFTWARE` is a bounded CPU renderer, and `HEADLESS` and `STUB` make no pixel claim

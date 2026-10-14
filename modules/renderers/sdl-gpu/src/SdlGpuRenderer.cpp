@@ -6519,7 +6519,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
                                      instancedLayout ? pendingInstanceCountEXT_ : 1,
-                                     &command.resident);
+                                     &command.resident,
+                                     instancedLayout ? pendingFirstInstanceEXT_ : 0);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -6585,7 +6586,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
                                      instancedLayout ? pendingInstanceCountEXT_ : 1,
-                                     &command.resident);
+                                     &command.resident,
+                                     instancedLayout ? pendingFirstInstanceEXT_ : 0);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -6648,7 +6650,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
                                      instancedLayout ? pendingInstanceCountEXT_ : 1,
-                                     &command.resident);
+                                     &command.resident,
+                                     instancedLayout ? pendingFirstInstanceEXT_ : 0);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -7592,7 +7595,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
                                      instancedLayout ? pendingInstanceCountEXT_ : 1,
-                                     &command.resident);
+                                     &command.resident,
+                                     instancedLayout ? pendingFirstInstanceEXT_ : 0);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -7656,7 +7660,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
                                      instancedLayout ? pendingInstanceCountEXT_ : 1,
-                                     &command.resident);
+                                     &command.resident,
+                                     instancedLayout ? pendingFirstInstanceEXT_ : 0);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -7731,7 +7736,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
                                      command.vertexData, command.extraVertexStreams,
                                      instancedLayout ? pendingInstanceCountEXT_ : 1,
-                                     &command.resident);
+                                     &command.resident,
+                                     instancedLayout ? pendingFirstInstanceEXT_ : 0);
         command.instanceCount =
             instancedLayout ? static_cast<Uint32>(pendingInstanceCountEXT_) : 1u;
         command.topology = ToTopology(primitive);
@@ -8535,8 +8541,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (source.instanceFrequency > 0)
             {
                 const int frequency = std::max(1, source.instanceFrequency);
+                // RRC-043: drawn instance `instance` is logical instance firstInstance + instance.
+                const int logicalFirst = std::max(0, params.firstInstance);
                 const int lastRecord = source.vertexOffset +
-                    (static_cast<int>(command.instanceCount) - 1) / frequency;
+                    (logicalFirst + static_cast<int>(command.instanceCount) - 1) / frequency;
                 if (source.vertexOffset < 0 || lastRecord >= source.vertexCount)
                 {
                     throw System::ArgumentOutOfRangeException(
@@ -8548,7 +8556,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 for (Uint32 instance = 0; instance < command.instanceCount; ++instance)
                 {
                     const std::size_t record = static_cast<std::size_t>(source.vertexOffset) +
-                        static_cast<std::size_t>(instance / static_cast<Uint32>(frequency));
+                        static_cast<std::size_t>(
+                            (static_cast<Uint32>(logicalFirst) + instance) /
+                            static_cast<Uint32>(frequency));
                     std::memcpy(destination->data() + static_cast<std::size_t>(instance) * stride,
                                 shadow.data() + record * stride, stride);
                 }
@@ -10069,7 +10079,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const StockDrawVertexStreamsEXT& streams, int vertexStart,
         std::vector<std::uint8_t>& stream0Data,
         std::vector<CapturedStockVertexStreamEXT>& extra, int instanceCount,
-        ResidentGeometryEXT* resident)
+        ResidentGeometryEXT* resident, int firstInstance)
     {
         stream0Data.clear();
         extra.clear();
@@ -10101,10 +10111,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                 const std::size_t base =
                     static_cast<std::size_t>(std::max(0, source.vertexOffset)) * recordBytes;
                 destination->assign(static_cast<std::size_t>(instances) * recordBytes, 0u);
+                // RRC-043: drawn instance `instance` is logical instance firstInstance + instance.
+                const int logicalFirst = std::max(0, firstInstance);
                 for (int instance = 0; instance < instances; ++instance)
                 {
                     const std::size_t sourceOffset = base +
-                        static_cast<std::size_t>(instance / source.instanceFrequency) * recordBytes;
+                        static_cast<std::size_t>((logicalFirst + instance) /
+                                                 source.instanceFrequency) * recordBytes;
                     if (sourceOffset + recordBytes > shadow.size())
                         break;
                     std::memcpy(destination->data() +
@@ -10445,10 +10458,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::size_t base =
             static_cast<std::size_t>(std::max(0, source.vertexOffset)) * recordBytes;
         captured.data.assign(static_cast<std::size_t>(instanceCount) * recordBytes, 0u);
+        const int logicalFirst = std::max(0, params.firstInstance); // RRC-043
         for (int instance = 0; instance < instanceCount; ++instance)
         {
             const std::size_t offset = base +
-                static_cast<std::size_t>(instance / source.instanceFrequency) * recordBytes;
+                static_cast<std::size_t>((logicalFirst + instance) / source.instanceFrequency) *
+                    recordBytes;
             if (offset + recordBytes > shadow.size())
                 break;
             std::memcpy(captured.data.data() + static_cast<std::size_t>(instance) * recordBytes,
@@ -10953,8 +10968,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         if (FirstInstanceStream(params) == nullptr)
         {
-            DrawIndexedPrimitivesEx(vb, ib, world, view, projection,
-                                    primitive, primitiveCount, params);
+            // RRC-043: with no per-instance stream every instance is the same geometry, and XNA
+            // (Direct3D 9's indexed-data stream frequency) still draws instanceCount of them --
+            // which additive blending, stencil counting and occlusion make visible. This route
+            // used to draw it once.
+            for (int instance = 0; instance < std::max(1, instanceCount); ++instance)
+                DrawIndexedPrimitivesEx(vb, ib, world, view, projection,
+                                        primitive, primitiveCount, params);
             return;
         }
 
@@ -10996,9 +11016,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct PendingInstanceCount
         {
             int& count;
-            ~PendingInstanceCount() { count = 0; }
-        } pending{pendingInstanceCountEXT_};
+            int& first;
+            ~PendingInstanceCount() { count = 0; first = 0; }
+        } pending{pendingInstanceCountEXT_, pendingFirstInstanceEXT_};
         pendingInstanceCountEXT_ = clampedInstanceCount;
+        pendingFirstInstanceEXT_ = std::max(0, params.firstInstance);
         DispatchStockDrawEXT(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 

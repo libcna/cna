@@ -1273,8 +1273,11 @@ CNA's graphics extensions:
 * **Image-based lighting** (`WMG-0022`) in `PbrEffect` and `SkinnedPbrEffect`, through a group-3
   block that is the WGSL twin of EasyGL's `cnaIblAmbient` — the same split-sum equation, with `roughness * (mipCount - 1)` selecting the prefiltered mip through
   `textureSampleLevel`, and the three resources read through sampler slots 10, 11 and 12 as on EasyGL. `SupportsImageBasedLightingEXT()` answers **true**.
-* **Base-instance drawing** (`SupportsBaseInstanceDrawingEXT()` answers true when the device can
-  begin an instanced draw at a caller-selected instance).
+* **Base-instance drawing is not claimed** (`SupportsBaseInstanceDrawingEXT()` answers false, the
+  interface default): the `ShaderEffect` route expands its per-instance streams from
+  `GpuDrawParams::firstInstance`, but the stock instanced route does not, so
+  `DrawInstancedPrimitivesBaseInstanceEXT` refuses. (This bullet said the opposite until
+  2026-10-14; no override ever existed.)
 * **Debug labels** (`WMG-0020`). `SetStringMarkerEXT` queues a label into the ordered stream and
   `wgpuRenderPassEncoderInsertDebugMarker` emits it at its own position among the draws; the
   renderer additionally opens a debug group around each of its render passes.

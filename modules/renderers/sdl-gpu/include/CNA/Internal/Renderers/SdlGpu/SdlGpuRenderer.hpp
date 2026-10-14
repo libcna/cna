@@ -2940,6 +2940,18 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return Always true: the receiving shaders are created with the renderer.
          */
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+        /**
+         * @brief Reports base-instance drawing, which this renderer honours (RRC-043).
+         *
+         * Every route that binds a per-instance stream -- the stock families, the instanced
+         * SkinnedEffect/PbrEffect matrices and compiled effects -- expands it on the host, so instance
+         * `i` simply reads the record of logical instance `firstInstance + i`, which is the
+         * contract `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT` states. The ShaderEffect
+         * route binds one vertex stream and has no per-instance input to offset.
+         *
+         * @return `true`.
+         */
+        [[nodiscard]] bool SupportsBaseInstanceDrawingEXT() const override { return true; }
 
         /**
          * @brief plans/plan_street_sdlgpu.md STREETS-0002: the PBR shader really does consume an
@@ -3746,7 +3758,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             const StockDrawVertexStreamsEXT& streams, int vertexStart,
             std::vector<std::uint8_t>& stream0Data,
             std::vector<CapturedStockVertexStreamEXT>& extra,
-            int instanceCount = 1, ResidentGeometryEXT* resident = nullptr);
+            int instanceCount = 1, ResidentGeometryEXT* resident = nullptr,
+            int firstInstance = 0);
 
         [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
             const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
@@ -3803,7 +3816,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * @param vb The draw's vertex buffer.
          * @param params The draw's parameters.
-         * @param instanceCount Instances to capture; 0 for an ordinary draw.
+         * @param instanceCount Instances to capture; 0 for an ordinary draw. Instance `i` reads
+         *        the record of logical instance `params.firstInstance + i` (RRC-043).
          * @return The captured stream, or an empty one (stride 0) for an ordinary draw.
          */
         [[nodiscard]] static InstanceTransformStreamEXT CaptureInstanceTransformStreamEXT(
@@ -4438,6 +4452,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// DispatchStockDrawEXT's shape selection and cannot be handed an extra parameter without
         /// threading it through all eleven.
         int pendingInstanceCountEXT_ = 0;
+        /// RRC-043: the first logical instance of that same draw (GpuDrawParams::firstInstance),
+        /// set and cleared with pendingInstanceCountEXT_ for the same reason.
+        int pendingFirstInstanceEXT_ = 0;
         /// STREETS-0001: the instanced vertex modules, created on first use.
         std::array<SDL_GPUShader*, static_cast<std::size_t>(InstancedStockVertexShaderEXT::Count)>
             instancedStockVertexShadersEXT_{};

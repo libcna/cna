@@ -157,7 +157,7 @@ IGraphicsRenderer,SupportsCompiledEffects :: bool () const,2588,default-implemen
 IGraphicsRenderer,ExecutesShaderEffectSourceEXT :: bool () const,2597,default-false,out,renderer=override,renderer=override,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SupportsShadowSamplingEXT :: bool () const,2606,default-implementation,out,renderer=override,renderer=override,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SupportsImageBasedLightingEXT :: bool () const,2611,default-false,out,renderer=override,renderer=override,out,out: CNAEXT/EasyGL context/modern graphics
-IGraphicsRenderer,SupportsBaseInstanceDrawingEXT :: bool () const,2618,default-false,out,renderer=inherited:default-false,renderer=inherited:default-false,out,out: CNAEXT/EasyGL context/modern graphics
+IGraphicsRenderer,SupportsBaseInstanceDrawingEXT :: bool () const,2618,default-false,out,renderer=inherited:default-false,renderer=override,out,out: CNAEXT/EasyGL context/modern graphics; SDL_GPU RRC-043
 IGraphicsRenderer,SupportsTexture3DSamplingEXT :: bool () const,2627,default-false,out,renderer=override,renderer=override,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,GetDisplayColorSpaceEXT :: CNA::DisplayColorSpace () const,2635,default-delegates-or-value,out,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,out,out: CNAEXT/EasyGL context/modern graphics
 IGraphicsRenderer,SetDisplayColorSpaceEXT :: bool (const CNA::DisplayColorSpace),2645,default-delegates-or-value,out,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,out,out: CNAEXT/EasyGL context/modern graphics
