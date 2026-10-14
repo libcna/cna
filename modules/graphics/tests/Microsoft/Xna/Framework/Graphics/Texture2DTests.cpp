@@ -454,7 +454,15 @@ TEST(Texture2DTest, DefaultConstructorLevelCountIsOne)
     EXPECT_EQ(tex.getLevelCountProperty(), 1);
 }
 
-// RRC-047: CNA's Texture2D is a value type whose copies share one GPU texture (REMED-GFX-223), so
+// Every other texture class answers with its fully-qualified .NET name; the most used one must
+// not be the exception, or type-name based diagnostics single it out.
+TEST(Texture2DTest, GetTypeNameReturnsFullyQualifiedName)
+{
+    Texture2D tex;
+    EXPECT_EQ(tex.GetTypeName(), "Microsoft.Xna.Framework.Graphics.Texture2D");
+}
+
+// RRC-047: CNA's Texture2D is a value type whose copies share one GPU texture, so
 // disposing one handle must neither release the texture under the other nor disturb its pixels;
 // the texture goes when its last handle does, and a second Dispose of either handle is a no-op.
 // The retired SDL_RENDERER suite held this (Task 689, sdlrenderer_texture2d_dispose_test.cpp);
@@ -681,7 +689,7 @@ TEST_F(LevelCountTest, NpotFullPartialRowsAndEveryMipRoundTripExactly)
 }
 
 // -----------------------------------------------------------------------
-// REMED-GFX-192 -- one shared [0, LevelCount) validation path must run before mip dimensions,
+// One shared [0, LevelCount) validation path must run before mip dimensions,
 // CPU shadows, allocation, or renderer dispatch. A real mipmapped Texture2D proves every valid
 // level's dimensions and bytes, while the existing CPU-only recording-renderer factory proves that
 // rejected SetData calls never dispatch even on the single-level boundary.
@@ -855,7 +863,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
-    // REMED-GFX-244 promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
+    // Promoted the packed 16-bit formats on EasyGL's ES 3 generation too.
     if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu, Software))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
@@ -912,7 +920,7 @@ TEST_F(UnsupportedFormatConstructionTest, CompressedRegionEndpointOverflowThrows
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -922,7 +930,7 @@ TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 
 TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -932,7 +940,7 @@ TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -942,7 +950,7 @@ TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -952,7 +960,7 @@ TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -962,7 +970,7 @@ TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -972,7 +980,7 @@ TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -982,7 +990,7 @@ TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -992,7 +1000,7 @@ TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
 {
-    // REMED-GFX-242: this fixture's device is GraphicsProfile.Reach, which excludes this
+    // This fixture's device is GraphicsProfile.Reach, which excludes this
     // format -- measured on the real XNA 4.0 runtime, where Reach refuses it with
     // NotSupportedException and HiDef accepts it. The refusal is the PROFILE's and so is
     // unconditional here; whether a renderer could carry it is asked on HiDef below.
@@ -1001,7 +1009,7 @@ TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
 }
 
 
-/// REMED-GFX-242: the same formats on a HiDef device, where the profile no longer refuses them and
+/// The same formats on a HiDef device, where the profile no longer refuses them and
 /// the verdict belongs to the renderer alone. This is where a renderer's promoted set is exercised
 /// -- moving it here is what keeps SKIA-138 and IGL-71 covered once Reach refuses these outright.
 class HiDefFormatConstructionTest : public ::testing::Test
@@ -1203,7 +1211,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // The name keeps its EasyGL prefix only because the list began there.
         const bool easyGlSignedNormalized =
             CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu, Software);
-        // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
+        // The packed 16-bit formats Reach permits, promoted on the same ES 3
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
         // copy and which therefore cannot see a wrong channel order.
@@ -1223,7 +1231,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             CNA_RENDERER_IS(SdlGpu) &&
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
                 CNA::Internal::Renderers::RendererFormatVerdict::Supported;
-        // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
+        // This fixture's device is Reach, and a format the profile excludes is
         // refused however capable the renderer is -- so the profile is a factor of "supported",
         // not an alternative to it.
         const bool profileAllows =
@@ -1248,7 +1256,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || (deviceA4R4G4B4 && format == SurfaceFormat::Bgra4444)
             || (fna3dSignedNormalized && (format == SurfaceFormat::NormalizedByte2
                                           || format == SurfaceFormat::NormalizedByte4))
-            // REMED-GFX-244: block-compressed content is accepted on every EasyGL profile, since
+            // Block-compressed content is accepted on every EasyGL profile, since
             // the decode fallback needs no extension -- unlike the packed formats one line up,
             // whose sized storage is ES 3.
             || (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software)
@@ -1261,7 +1269,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         }
         else if (!profileAllows)
         {
-            // REMED-GFX-242: which of the two refused is the thing worth asserting. A format the
+            // Which of the two refused is the thing worth asserting. A format the
             // profile excludes must carry XNA's own exception type, so a caller can tell "not on
             // this profile" from "not on this renderer" and act on it -- the first is fixed by
             // asking for HiDef, the second is not.
@@ -1279,7 +1287,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
 }
 
 // -----------------------------------------------------------------------
-// REMED-CONTENT-001 -- dimension guard, defense in depth for any direct caller (not just the
+// Dimension guard, defense in depth for any direct caller (not just the
 // XNB content-reader path, which has its own equivalent ContentLoadException check)
 // -----------------------------------------------------------------------
 
@@ -1981,7 +1989,7 @@ TEST_F(Texture2DFromStreamFormatTest, PngRoundTripDecodesCorrectSizeAndColor)
 
     EXPECT_EQ(loaded.getWidthProperty(), 4);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
-    // REMED-GFX-149: `elementCount` is the destination capacity for the WHOLE requested region --
+    // `elementCount` is the destination capacity for the WHOLE requested region --
     // the complete level 0 here -- so a one-element read of a 16-pixel texture is not a legal XNA
     // call and no longer silently returns a one-pixel partial frame. Reading the whole level also
     // makes this a real decode assertion: a decoder that got only the first pixel right used to
@@ -2007,7 +2015,7 @@ TEST_F(Texture2DFromStreamFormatTest, JpegRoundTripDecodesCorrectSizeAndColor)
 
     EXPECT_EQ(loaded.getWidthProperty(), 4);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
-    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
+    // Whole level, not one pixel -- see the PNG round trip above.
     std::vector<Color> px(16, Color(0, 0, 0, 0));
     loaded.GetData(px.data(), 0, 16);
     for (int i = 0; i < 16; ++i)
@@ -2595,7 +2603,7 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 
     EXPECT_EQ(loaded.getWidthProperty(), 2);
     EXPECT_EQ(loaded.getHeightProperty(), 2);
-    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
+    // Whole level, not one pixel -- see the PNG round trip above.
     std::vector<Color> px(4, Color(0, 0, 0, 0));
     loaded.GetData(px.data(), 0, 4);
     for (int i = 0; i < 4; ++i)
@@ -2884,7 +2892,7 @@ TEST_F(SaveAsJpegTest, FilenameOverloadWritesReadableFile)
 
     EXPECT_EQ(loaded.getWidthProperty(), 2);
     EXPECT_EQ(loaded.getHeightProperty(), 2);
-    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
+    // Whole level, not one pixel -- see the PNG round trip above.
     std::vector<Color> px(4, Color(0, 0, 0, 0));
     loaded.GetData(px.data(), 0, 4);
     for (int i = 0; i < 4; ++i)

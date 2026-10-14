@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
 
-    // REMED-CONTENT-001: the native graphics APIs' own validation does not substitute for this --
+    // The native graphics APIs' own validation does not substitute for this --
     // Vulkan's validation layer is advisory (RADV proceeds anyway), and wgpu-native validates
     // lazily at submit time, past CNA's own creation-time null checks. Reject before any
     // renderer-specific texture creation is attempted, using the active renderer's real reported
@@ -113,7 +113,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        // REMED-GFX-242: legality is (profile AND renderer), not renderer alone. XNA decides by
+        // Legality is (profile AND renderer), not renderer alone. XNA decides by
         // GraphicsProfile -- measured on the real 4.0 runtime, Reach refuses eleven formats with
         // NotSupportedException and HiDef refuses none -- while CNA asked only what the renderer
         // could carry, so a renderer able to carry a HiDef-only format offered it to a Reach game
@@ -601,7 +601,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     const std::string& Texture2D::GetTypeName() const
     {
-        static const std::string name = "Texture2D";
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.Texture2D";
         return name;
     }
 
@@ -670,7 +670,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // turn its render-target renderer into an ordinary Texture2D renderer and leave its cached
         // IRenderTargetRenderer pointer dangling. Update the existing level-0 resource instead.
         //
-        // REMED-GFX-223: this in-place update must stay confined to render targets. An ordinary
+        // This in-place update must stay confined to render targets. An ordinary
         // Texture2D's renderer is shareable -- ContentManager hands the same ITextureRenderer to
         // every cached value copy -- so updating it in place would publish this upload to every
         // other holder of that texture, which is exactly
@@ -1573,7 +1573,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // GetData
     // -----------------------------------------------------------------------
 
-    // REMED-GFX-149 / REMED-GFX-128. The destination window every GetData overload is authorised to
+    // The destination window every GetData overload is authorised to
     // write, validated once, in ELEMENTS.
     //
     //   startIndex   -- an index into the CALLER'S array. XNA documents it as "index of the first
@@ -1642,7 +1642,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // never a viewport, never a previous request. Argument validation runs BEFORE the storage
         // and capability decision below, so an undersized or overflowing request is answered with
         // its own specific error on every renderer rather than being weakened into a capability
-        // rejection (REMED-GFX-162's precedence, from the texture side).
+        // rejection (the precedence, from the texture side).
         const int total = width * height;
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, total);
 
@@ -1660,7 +1660,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             traceTransfer("whole-level(gpu)", width, height, 0, 0, 0, width, height,
                           startIndex, elementCount, total, "renderer");
-            // REMED-GFX-127: `pixels` is scratch memory THIS layer owns and zero-initializes,
+            // `pixels` is scratch memory THIS layer owns and zero-initializes,
             // so converting it unconditionally is not "leaving the caller's buffer untouched"
             // when the renderer has no readback -- it fabricates a complete transparent-black
             // frame. Conversion happens only when the renderer reports it wrote the whole
@@ -1772,7 +1772,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     || x > levelW - w || y > levelH - h)
                     throw System::ArgumentException(
                         "Texture2D::GetData: rectangle out of texture bounds", "rect");
-                // REMED-GFX-149: the required element count comes from THIS rectangle's own
+                // The required element count comes from THIS rectangle's own
                 // dimensions at THIS mip level -- never from level 0 and never from the full
                 // resource -- and the destination window is checked overflow-safely.
                 validateTransferWindow("Texture2D::GetData", startIndex, elementCount, w * h);
@@ -1780,7 +1780,7 @@ namespace Microsoft::Xna::Framework::Graphics
                               levelW, levelH, level, x, y, w, h,
                               startIndex, elementCount, w * h, "renderer");
 
-                // REMED-GFX-127: same contract as the whole-level overload above -- scratch memory
+                // Same contract as the whole-level overload above -- scratch memory
                 // this layer zero-initialized is never handed to the caller as if it were content.
                 std::vector<uint8_t> pixels(static_cast<std::size_t>(w) * h * 4, 0);
                 if (!renderer_->GetData(level, x, y, w, h, pixels.data(),
@@ -1816,7 +1816,7 @@ namespace Microsoft::Xna::Framework::Graphics
             || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
             throw System::ArgumentException(
                 "Texture2D::GetData: rectangle out of texture bounds", "rect");
-        // REMED-GFX-149: as above -- this rectangle's own dimensions at this mip level, and an
+        // As above -- this rectangle's own dimensions at this mip level, and an
         // overflow-safe destination window.
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, w * h);
         traceTransfer("rectangle(cpu)", levelW, levelH, level, x, y, w, h,
@@ -2959,7 +2959,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                               std::shared_ptr<std::vector<uint8_t>> cpuPixels)
     {
         Texture2D tex(device, w, h, fmt, levelCount, std::move(renderer));
-        // REMED-GFX-223: the constructor above belongs to RenderTarget2D and therefore raises
+        // The constructor above belongs to RenderTarget2D and therefore raises
         // gpuOnlyContent_, but a cache hit reconstructs an ordinary content texture -- its pixels
         // come from the loader and SetData, never from rendering into it. Leaving the flag raised
         // declares the shared cached renderer authoritative, which makes GetData stop consulting

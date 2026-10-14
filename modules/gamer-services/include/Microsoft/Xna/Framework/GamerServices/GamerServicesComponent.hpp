@@ -34,6 +34,12 @@ namespace Microsoft::Xna::Framework::GamerServices
         void Initialize() override;
 
         /**
+         * @brief Returns the fully qualified XNA type name of this component.
+         * @return `Microsoft.Xna.Framework.GamerServices.GamerServicesComponent`.
+         */
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
+
+        /**
          * @brief Drives GamerServicesDispatcher's per-frame update.
          *
          * @param gameTime Current game timing state.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <string>
+
 #include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include <cstdint>
 #include "System/EventArgs.hpp"
@@ -62,6 +64,20 @@ namespace Microsoft::Xna::Framework::Graphics
          * again with `SetData`. Renderers whose API cannot lose a device never set it.
          */
         [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
+
+        /**
+         * @brief Returns the fully-qualified .NET type name of this object.
+         *
+         * Declared here rather than inherited: a dynamic buffer is its own XNA type, and the base
+         * class's answer would name the wrong class.
+         *
+         * @return `"Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer"`.
+         */
+        CNAEXT [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer";
+            return name;
+        }
 
         /** @brief Marks the content lost and raises ContentLost. */
         CNAEXT void NotifyContentLostEXT() override

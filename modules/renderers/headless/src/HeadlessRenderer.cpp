@@ -318,7 +318,7 @@ namespace CNA::Internal::Renderers::Headless
     {
         resourceId_ = state_->registry.Register("TextureCube", state_->CurrentDebugLabel());
         state_->stats.textureCubesCreated++;
-        // REMED-GFX-130: the six zero-filled face buffers this constructor used to allocate were
+        // The six zero-filled face buffers this constructor used to allocate were
         // never written by SetData and existed only to be handed back by GetData, i.e. they were
         // the fabrication itself. GetData now refuses instead, so the storage has no purpose.
         state_->RecordTrace("CreateTextureCube", "size=" + std::to_string(size));
@@ -339,7 +339,7 @@ namespace CNA::Internal::Renderers::Headless
                "HeadlessTextureCubeRenderer::SetData: negative rectangle");
         Require(state_, dataLength >= 0, "HeadlessTextureCubeRenderer::SetData: negative dataLength");
         state_->RecordTrace("TextureCube::SetData", "face=" + std::to_string(face));
-        // REMED-GFX-135: the trace entry above is the whole of what happens here -- no pixel data is
+        // The trace entry above is the whole of what happens here -- no pixel data is
         // stored anywhere, so this call has never been a completed write and now says so.
         (void)data;
         return false;
@@ -354,7 +354,7 @@ namespace CNA::Internal::Renderers::Headless
     {
         resourceId_ = state_->registry.Register("Texture3D", state_->CurrentDebugLabel());
         state_->stats.textures3DCreated++;
-        // REMED-GFX-130: same as the cube renderer above -- the zero-filled voxel buffer was never
+        // Same as the cube renderer above -- the zero-filled voxel buffer was never
         // written by SetData and existed only for GetData to return, so it is gone with it.
         state_->RecordTrace("CreateTexture3D", "size=" + std::to_string(w) + "x" + std::to_string(h) +
                             "x" + std::to_string(depth));
@@ -373,7 +373,7 @@ namespace CNA::Internal::Renderers::Headless
                "HeadlessTexture3DRenderer::SetData: negative sub-volume");
         Require(state_, dataLength >= 0, "HeadlessTexture3DRenderer::SetData: negative dataLength");
         state_->RecordTrace("Texture3D::SetData", "");
-        // REMED-GFX-135: see HeadlessTextureCubeRenderer::SetData -- trace only, never a store.
+        // See HeadlessTextureCubeRenderer::SetData -- trace only, never a store.
         (void)data;
         return false;
     }
@@ -583,11 +583,11 @@ namespace CNA::Internal::Renderers::Headless
 
     void HeadlessRenderer::ReadBackbuffer(int /*x*/, int /*y*/, int /*w*/, int /*h*/, uint8_t* /*pixels*/)
     {
-        // REMED-GFX-162: Headless rasterizes nothing and owns no backbuffer pixel storage, so it
+        // Headless rasterizes nothing and owns no backbuffer pixel storage, so it
         // cannot read one back. It formerly fabricated a frame here -- filling the caller's buffer
         // with the last Clear() colour for every pixel -- which made a non-rasterizing device
         // indistinguishable from a real black (or last-cleared) frame. That is exactly the
-        // fabricate-rather-than-refuse behaviour REMED-GFX-127/130 removed from the Texture/render-
+        // fabricate-rather-than-refuse behaviour removed from the Texture/render-
         // target readbacks: a renderer with no honest pixel result must reject, not invent one.
         //
         // The refusal is raised HERE, after GraphicsDevice::GetBackBufferData has finished all of
@@ -656,9 +656,9 @@ namespace CNA::Internal::Renderers::Headless
     std::unique_ptr<IRenderTargetCubeRenderer> HeadlessRenderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        // REMED-GFX-136: consumed by being deliberately unused, exactly like this renderer's own
+        // Consumed by being deliberately unused, exactly like this renderer's own
         // CreateRenderTarget2D above. Nothing is ever rasterized here, so there is no face content
-        // either to preserve or to discard -- REMED-GFX-130 already made the readback say so
+        // either to preserve or to discard -- the readback contract already says so
         // instead of fabricating one.
         (void) preserveContents;
         return std::make_unique<HeadlessRenderTargetCubeRenderer>(state_, size, depthFormat, mipMap, multiSampleCount);
@@ -723,7 +723,7 @@ namespace CNA::Internal::Renderers::Headless
     {
         switch (capability)
         {
-            // REMED-CONTENT-004: HeadlessTexture3DRenderer validates arguments and records a trace
+            // HeadlessTexture3DRenderer validates arguments and records a trace
             // but never actually stores pixel data -- Headless has no real GPU resource of any
             // kind by design. Reported here so Texture3D's own constructor can fail cleanly instead
             // of silently discarding every SetData()/GetData() call.
@@ -731,7 +731,7 @@ namespace CNA::Internal::Renderers::Headless
             case CNA::GraphicsCapability::AdditiveBlending:
                 return false;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
-                // REMED-GFX-201: Headless rasterizes nothing, so claiming this would fabricate
+                // Headless rasterizes nothing, so claiming this would fabricate
                 // success for a draw no other renderer of its kind can perform. Its trace still
                 // records the complete binding set, which is what a Headless assertion checks.
                 return false;
@@ -744,7 +744,7 @@ namespace CNA::Internal::Renderers::Headless
                                                   const BlendWriteState& writeState)
     {
         state_->stats.blendStateChangeCount++;
-        // REMED-GFX-077: Headless renders nothing, but it now records the write state into the
+        // Headless renders nothing, but it now records the write state into the
         // trace payload so tests can assert the ColorWriteChannels/MultiSampleMask actually
         // reached the renderer (previously the trace string was empty).
         char buf[96];
@@ -960,7 +960,11 @@ namespace CNA::Internal::Renderers::Headless
                "HeadlessRenderer::DrawInstancedPrimitivesEx: instanceCount must be > 0, got " +
                std::to_string(instanceCount));
         DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
+        // One instanced draw is accounted as `instanceCount` draws of `primitiveCount` primitives
+        // each; the forwarded call above has already booked the first instance on both counters.
         state_->stats.drawCallCount += static_cast<std::uint64_t>(instanceCount - 1);
+        state_->stats.primitiveCount +=
+            static_cast<std::uint64_t>(primitiveCount) * static_cast<std::uint64_t>(instanceCount - 1);
     }
 
     HeadlessStatistics HeadlessRenderer::GetLastFrameStatistics() const

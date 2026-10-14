@@ -9,8 +9,9 @@
 // frames update one full-screen DVB with every option and verify its exact visible result.
 // Each frame:
 //   1. DVB data is updated, drawn, and read back to verify the correct color reached the framebuffer.
-//   2. DynamicIndexBuffer (6 indices) is updated with options and verified via
-//      capacity check (pixel readback via DrawIndexedPrimitives for one option per cycle).
+//   2. DynamicIndexBuffer (6 indices) is updated with the same option and drawn through
+//      DrawIndexedPrimitives with a permuted index order, so the readback proves the uploaded
+//      indices (not just the buffer's capacity) reached the GPU.
 //
 // The test exercises renderer-specific Discard/NoOverwrite strategies across many consecutive
 // updates without recreating the public buffer objects.
@@ -202,12 +203,16 @@ protected:
                 { kTL, col }, { kBL, col }, { kBR, col },
                 { kTL, col }, { kBR, col }, { kTR, col },
             };
-            std::uint16_t idx[6] = { 0, 1, 2, 3, 4, 5 };
+            // The two triangles in the other order: identity indices would make a dropped index
+            // upload invisible, since the vertex order alone already draws the quad.
+            std::uint16_t idx[6] = { 3, 4, 5, 0, 1, 2 };
 
             dvb_->SetData(verts, 0, 6, opt);
             dib_->SetData(idx, 0, 6, opt);
             dev.SetVertexBuffer(dvb_.get());
-            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.setIndicesProperty(dib_.get());
+            dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 6, 0, 2);
+            dev.setIndicesProperty(nullptr);
 
             const Color got = readCenter(dev);
             char label[128];

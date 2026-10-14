@@ -14,6 +14,8 @@
 // Check C -- GetLastFrameStatistics() after exactly 2 draw calls in the current frame reports
 //   drawCallCount == 2, not the cumulative total across all frames so far -- proves the diff
 //   math genuinely isolates the current frame.
+// Check K -- GetLastFrameStatistics() books an instanced draw once per instance on both the
+//   draw-call and the primitive counter (1 primitive x 3 instances = +3 and +3).
 // Check D -- AliveResources() broken down by type name matches the exact expected counts for a
 //   known set of concurrently-alive VertexBuffer/IndexBuffer/Texture2D resources.
 // Check E -- a 32-bit IndexBuffer (IndexElementSize::ThirtyTwoBits) round-trips real index data
@@ -28,11 +30,13 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -168,6 +172,26 @@ protected:
             const HeadlessStatistics& diff = renderer.GetLastFrameStatistics();
             Check(diff.drawCallCount == 2,
                   "GetLastFrameStatistics() reports exactly 2 draw calls for the current frame only");
+
+            // Check K: an instanced draw is accounted once per instance on BOTH counters. The
+            // renderer already books `instanceCount` draw calls for it; the primitives it
+            // rasterizes-in-name are `primitiveCount * instanceCount`, not `primitiveCount`, or a
+            // statistics-driven test could not tell one instance from a hundred.
+            {
+                IndexBuffer ib(dev, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+                const std::uint16_t indices[3] = {0, 1, 2};
+                ib.SetData(indices, 0, 3);
+                const HeadlessStatistics before = renderer.GetLastFrameStatistics();
+                const CNA::Internal::Renderers::GpuDrawParams params{};
+                renderer.DrawInstancedPrimitivesEx(
+                    vb.GetRenderer(), ib.GetRenderer(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    PrimitiveType::TriangleList, 1, 3, params);
+                const HeadlessStatistics after = renderer.GetLastFrameStatistics();
+                Check(after.drawCallCount - before.drawCallCount == 3 &&
+                          after.primitiveCount - before.primitiveCount == 3,
+                      "an instanced draw of 1 primitive x 3 instances adds 3 draw calls and 3 primitives");
+            }
         }
 
         if (frame_ == 3)
@@ -177,7 +201,7 @@ protected:
             {
                 renderer.SetMode(HeadlessMode::Trace);
                 const std::size_t before = renderer.TraceLog().size();
-                renderer.ApplyBlendState(0, 0, 0, 0, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // REMED-GFX-077 default write state
+                renderer.ApplyBlendState(0, 0, 0, 0, 0, 0, CNA::Internal::Renderers::BlendWriteState{}); // default write state
                 renderer.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
                 renderer.ApplyRasterizerState(0, 0, false, 0.0f, 0.0f);
                 renderer.ApplySamplerState(0, 0, 0, 0, 0);
@@ -256,8 +280,8 @@ protected:
 
             CheckEnvironmentModeParsing();
 
-            std::printf("=== %d/%d PASS ===\n", g_passCount, 10);
-            result_ = (g_passCount == 10) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", g_passCount, 11);
+            result_ = (g_passCount == 11) ? 0 : 1;
             Exit();
         }
     }

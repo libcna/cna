@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-054 / SOFTWARE-204 / SOFTWARE-290: public index-buffer copy contract.
+// SOFTWARE-204 / SOFTWARE-290: public index-buffer copy contract.
 //
 // XNA requires both a positive logical capacity and a positive copy element count. A null array is
 // rejected even when the requested count is zero; a non-null zero-element copy is rejected as an
@@ -169,6 +169,18 @@ TEST_F(IndexBufferEmptyDataTest, ZeroCapacityConstructionThrowsForAllBufferKinds
     EXPECT_THROW((DynamicIndexBuffer(
                      device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None)),
                  System::ArgumentOutOfRangeException);
+}
+
+// A DynamicIndexBuffer is its own .NET type; inheriting IndexBuffer's name would make type-name
+// based diagnostics report the wrong class for every streaming index buffer.
+TEST_F(IndexBufferEmptyDataTest, DynamicIndexBufferReportsItsOwnFullyQualifiedTypeName)
+{
+    RequireIndexBuffers();
+
+    const IndexBuffer plain(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    const DynamicIndexBuffer dynamic(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    EXPECT_EQ(plain.GetTypeName(), "Microsoft.Xna.Framework.Graphics.IndexBuffer");
+    EXPECT_EQ(dynamic.GetTypeName(), "Microsoft.Xna.Framework.Graphics.DynamicIndexBuffer");
 }
 
 TEST_F(IndexBufferEmptyDataTest, SharedThirtyTwoBitFactoryRejectsInsteadOfDelegatingToSixteenBits)

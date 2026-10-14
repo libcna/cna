@@ -103,6 +103,17 @@ namespace Microsoft::Xna::Framework::Graphics
         return result.str();
     }
 
+    bool DisplayMode::Equals(const System::Object* obj) const
+    {
+        const auto* other = dynamic_cast<const DisplayMode*>(obj);
+        return other != nullptr && *this == *other;
+    }
+
+    int DisplayMode::GetHashCode() const
+    {
+        return width_ ^ height_ ^ static_cast<int>(format_);
+    }
+
     bool DisplayMode::operator==(const DisplayMode& other) const
     {
         return width_ == other.width_ && height_ == other.height_ && format_ == other.format_;

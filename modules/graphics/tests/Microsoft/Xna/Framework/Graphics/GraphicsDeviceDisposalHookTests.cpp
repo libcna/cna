@@ -110,6 +110,23 @@ TEST(GraphicsDeviceDisposalHookTest, TheDeviceIsAlreadyDisposedWhenDisposingIsRa
     EXPECT_EQ(notifications, 1);
 }
 
+TEST(GraphicsDeviceDisposalHookTest, DisposingHandlersStillSeeTheDevicesResourcesAlive)
+{
+    // XNA raises Disposing before the owned-resource cascade, which is the whole point of the
+    // event: a handler gets one last look at resources that are still valid. Had the cascade run
+    // first, every handler written against XNA would be touching disposed objects.
+    GraphicsDevice device;
+    Texture2D texture(device, 4, 4);
+    bool textureAliveInsideHandler = false;
+    device.Disposing += [&](System::Object*, const System::EventArgs&) {
+        textureAliveInsideHandler = !texture.getIsDisposedProperty();
+    };
+
+    device.Dispose();
+    EXPECT_TRUE(textureAliveInsideHandler);
+    EXPECT_TRUE(texture.getIsDisposedProperty());
+}
+
 TEST(GraphicsDeviceDisposalHookTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
 {
     DeviceDisposeProbe probe;

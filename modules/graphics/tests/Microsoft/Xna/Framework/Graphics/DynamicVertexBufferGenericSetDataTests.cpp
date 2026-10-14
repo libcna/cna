@@ -72,6 +72,14 @@ namespace
         }
     };
 
+    // A DynamicVertexBuffer is its own .NET type; inheriting VertexBuffer's name would make
+    // type-name based diagnostics report the wrong class for every streaming buffer.
+    TEST_F(DynamicVertexBufferGenericSetDataTest, GetTypeNameReturnsFullyQualifiedName)
+    {
+        DynamicVertexBuffer buffer(device, InstanceDeclaration(), 4, BufferUsage::WriteOnly);
+        EXPECT_EQ(buffer.GetTypeName(), "Microsoft.Xna.Framework.Graphics.DynamicVertexBuffer");
+    }
+
     TEST_F(DynamicVertexBufferGenericSetDataTest, UploadsAnApplicationDefinedVertexType)
     {
         // BufferUsage::None rather than the WriteOnly a game would use: XNA refuses GetData on a

@@ -104,20 +104,25 @@ protected:
         const Color kGreen(0, 255, 0, 255);
 
         struct Check { const char* name; CompareFunction func; float bDepth; bool expectPass; };
-        const Check checks[5] = {
-            { "Always",    CompareFunction::Always,    0.9f, true  },
-            { "Never",     CompareFunction::Never,     0.1f, false },
-            { "Less",      CompareFunction::Less,      0.3f, true  },
-            { "LessEqual", CompareFunction::LessEqual, 0.5f, true  },
-            { "Greater",   CompareFunction::Greater,   0.7f, true  },
+        // The red quad is at depth 0.5 in every column; B's depth is chosen so that each of
+        // XNA's eight CompareFunction values is exercised against it, including the three that
+        // depend on exact equality with the stored depth.
+        const Check checks[8] = {
+            { "Always",       CompareFunction::Always,       0.9f, true  },
+            { "Never",        CompareFunction::Never,        0.1f, false },
+            { "Less",         CompareFunction::Less,         0.3f, true  },
+            { "LessEqual",    CompareFunction::LessEqual,    0.5f, true  },
+            { "Greater",      CompareFunction::Greater,      0.7f, true  },
+            { "GreaterEqual", CompareFunction::GreaterEqual, 0.5f, true  },
+            { "Equal",        CompareFunction::Equal,        0.5f, true  },
+            { "NotEqual",     CompareFunction::NotEqual,     0.5f, false },
         };
 
-        const float colW = 2.0f / 5.0f;
-        Color results[5] = {
-            Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0)
-        };
+        constexpr int kCheckCount = 8;
+        const float colW = 2.0f / static_cast<float>(kCheckCount);
+        Color results[kCheckCount] = {};
 
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < kCheckCount; ++i)
         {
             const float x0 = -1.0f + colW * static_cast<float>(i);
             const float x1 = x0 + colW;
@@ -137,7 +142,7 @@ protected:
         }
 
         int passCount = 0;
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < kCheckCount; ++i)
         {
             const Color& c = results[i];
             const bool sawGreen = c.getGProperty() >= 200 && c.getRProperty() <= 60 && c.getBProperty() <= 60;
@@ -150,7 +155,7 @@ protected:
             if (ok) ++passCount;
         }
 
-        result_ = (passCount == 5) ? 0 : 1;
+        result_ = (passCount == kCheckCount) ? 0 : 1;
         Exit();
     }
 

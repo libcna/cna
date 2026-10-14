@@ -142,3 +142,31 @@ TEST(DisplayModeTest, DifferentFormatNotEqual)
     EXPECT_FALSE(a == b);
     EXPECT_TRUE(a != b);
 }
+
+// XNA's DisplayMode is a reference type that compares by value: Equals(object) agrees with the
+// operators and GetHashCode is derived from the same three fields, so two distinct instances
+// describing one mode hash alike.
+TEST(DisplayModeTest, EqualsObjectComparesByValueNotIdentity)
+{
+    const DisplayMode a(1920, 1080, SurfaceFormat::Color);
+    const DisplayMode b(1920, 1080, SurfaceFormat::Color);
+    const DisplayMode c(1280, 1080, SurfaceFormat::Color);
+    EXPECT_TRUE(a.Equals(&b));
+    EXPECT_TRUE(a.Equals(&a));
+    EXPECT_FALSE(a.Equals(&c));
+    EXPECT_FALSE(a.Equals(nullptr));
+}
+
+TEST(DisplayModeTest, EqualModesProduceEqualHashCodes)
+{
+    const DisplayMode a(1920, 1080, SurfaceFormat::Color);
+    const DisplayMode b(1920, 1080, SurfaceFormat::Color);
+    EXPECT_EQ(a.GetHashCode(), b.GetHashCode());
+}
+
+TEST(DisplayModeTest, HashCodeCombinesWidthHeightAndFormat)
+{
+    const DisplayMode dm(1920, 1080, SurfaceFormat::Bgr565);
+    EXPECT_EQ(dm.GetHashCode(), 1920 ^ 1080 ^ static_cast<int>(SurfaceFormat::Bgr565));
+    EXPECT_NE(dm.GetHashCode(), DisplayMode(1920, 1080, SurfaceFormat::Color).GetHashCode());
+}

@@ -51,6 +51,26 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] std::string ToString() const override;
 
         /**
+         * @brief Determines whether the specified object is a DisplayMode describing the same mode.
+         *
+         * Value semantics, as in XNA: two distinct instances with equal Width, Height and Format
+         * are equal. A null or non-DisplayMode object is never equal.
+         *
+         * @param obj The object to compare with this instance.
+         * @return True when @p obj is a DisplayMode with the same width, height and format.
+         */
+        [[nodiscard]] bool Equals(const System::Object* obj) const override;
+
+        /**
+         * @brief Gets the hash code for this object.
+         *
+         * Derived from Width, Height and Format, so equal modes hash alike.
+         *
+         * @return The hash code.
+         */
+        [[nodiscard]] int GetHashCode() const override;
+
+        /**
          * @brief Returns true if both display modes have the same width, height, and format.
          * @param other The display mode to compare with.
          * @return True if equal.

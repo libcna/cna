@@ -33,4 +33,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         // FNA's override does not call base.Update() — matched here intentionally.
         GamerServicesDispatcher::Update();
     }
+
+    const std::string& GamerServicesComponent::GetTypeName() const
+    {
+        static const std::string typeName =
+            "Microsoft.Xna.Framework.GamerServices.GamerServicesComponent";
+        return typeName;
+    }
 }
