@@ -20,6 +20,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -30,14 +31,18 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -825,6 +830,117 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedInstancingDrawContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
+}
+
+// plans/plan_fx.md FX-147: base-instance drawing through a compiled XNA effect. RRC-043 made this
+// renderer report BaseInstanceDrawing, and its compiled route expands the per-instance stream on
+// the host from GpuDrawParams::firstInstance; InstancedDrawRangeTest's base-instance cases draw
+// through BasicEffect, so they pass whatever that route does with the first instance.
+//
+// The effect is the shared suite's Effect Framework bytecode, constructed through the public
+// Effect class: its vertex shader is `oPos = mul(POSITION0 + TEXCOORD0 * StreamMix, Transform)`
+// and its pixel shader writes `Tint`. Instance record k moves a quarter-width quad k quarters
+// right, so the painted columns of the read-back target name exactly the records the draw read,
+// and only the compiled pass paints them in Tint.
+TEST(SdlGpuCompiledEffectDrawTest, BaseInstanceDrawReadsInstanceRecordsFromFirstInstance)
+{
+    GraphicsDevice device;
+    if (RendererOf(device) == nullptr)
+        GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::Instancing));
+    ASSERT_TRUE(device.SupportsRendererFeatureEXT(CNA::RendererFeature::BaseInstanceDrawing))
+        << "SDL_GPU has reported base-instance drawing since RRC-043";
+
+    Effect effect(device,
+                  CNA::TestSupport::BuildSyntheticDrawableEffect(/*readsSecondStream=*/true));
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+    parameters["Tint"]->SetValue(Microsoft::Xna::Framework::Vector4(0.5f, 0.25f, 0.75f, 1.0f));
+    parameters["StreamMix"]->SetValue(Microsoft::Xna::Framework::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
+
+    struct PositionVertex { float x, y, z; };
+    struct InstanceVertex { float x, y, z, w; };
+    const VertexDeclaration positions(static_cast<int>(sizeof(PositionVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    const VertexDeclaration offsets(static_cast<int>(sizeof(InstanceVertex)), {
+        VertexElement(0, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 0),
+    });
+    const PositionVertex quad[6] = {
+        {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, {-0.5f, -1.0f, 0.0f},
+        {-1.0f,  1.0f, 0.0f}, {-0.5f, -1.0f, 0.0f}, {-0.5f,  1.0f, 0.0f},
+    };
+    constexpr int kRecords = 4;
+    const InstanceVertex perInstance[kRecords] = {
+        {0.0f, 0.0f, 0.0f, 0.0f}, {0.5f, 0.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f, 0.0f}, {1.5f, 0.0f, 0.0f, 0.0f},
+    };
+    const std::uint16_t indices[6] = {0, 1, 2, 3, 4, 5};
+
+    VertexBuffer positionBuffer(device, positions, 6, BufferUsage::None);
+    positionBuffer.SetDataRaw(quad, 6, static_cast<int>(sizeof(PositionVertex)));
+    VertexBuffer instanceBuffer(device, offsets, kRecords, BufferUsage::None);
+    instanceBuffer.SetDataRaw(perInstance, kRecords, static_cast<int>(sizeof(InstanceVertex)));
+    IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 6, BufferUsage::None);
+    indexBuffer.SetData(indices, 6);
+
+    // Column k covers pixels 4k..4k+3; its probe sits two pixels inside either edge.
+    RenderTarget2D target(device, 4 * kRecords, 8);
+    const Color clear(9, 19, 29, 255);
+    // One character per column: '#' painted in Tint, '.' still the clear colour, '?' anything else.
+    const auto render = [&](const std::function<void()>& issue) -> std::string {
+        device.SetRenderTarget(&target);
+        device.Clear(clear);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        pass.Apply();
+        device.SetVertexBuffers({VertexBufferBinding(&positionBuffer, 0, 0),
+                                 VertexBufferBinding(&instanceBuffer, 0, 1)});
+        device.setIndicesProperty(&indexBuffer);
+        std::exception_ptr failure;
+        try { issue(); } catch (...) { failure = std::current_exception(); }
+        device.setIndicesProperty(nullptr);
+        device.SetVertexBuffer(nullptr);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        if (failure) std::rethrow_exception(failure);
+
+        std::string columns;
+        for (int column = 0; column < kRecords; ++column)
+        {
+            Color pixel(0, 0, 0, 0);
+            const Rectangle probe(4 * column + 2, 4, 1, 1);
+            target.GetData(0, &probe, &pixel, 0, 1);
+            const bool tint = std::abs(pixel.getRProperty() - 128) <= 3 &&
+                              std::abs(pixel.getGProperty() - 64) <= 3 &&
+                              std::abs(pixel.getBProperty() - 191) <= 3 &&
+                              pixel.getAProperty() == 255;
+            columns += pixel == clear ? '.' : (tint ? '#' : '?');
+        }
+        return columns;
+    };
+    const auto drawFrom = [&](int instanceCount, int firstInstance) {
+        return render([&] {
+            device.DrawInstancedPrimitivesBaseInstanceEXT(
+                PrimitiveType::TriangleList, 0, 0, 6, 0, 2, instanceCount, firstInstance);
+        });
+    };
+
+    EXPECT_EQ(drawFrom(1, 0), "#...") << "first instance 0 reads record 0";
+    // A route that read from record 0 regardless paints "#..." and "##.." for the next three.
+    EXPECT_EQ(drawFrom(1, 1), ".#..") << "first instance 1 must read record 1, not record 0";
+    EXPECT_EQ(drawFrom(2, 1), ".##.") << "drawn instance i must read record 1 + i";
+    EXPECT_EQ(drawFrom(2, 2), "..##") << "the last record of the stream must be reachable";
+    EXPECT_THROW(drawFrom(2, 3), System::ArgumentOutOfRangeException)
+        << "records 3 and 4 of a four-record stream must be refused, not clamped or wrapped";
+    EXPECT_EQ(render([&] {
+                  device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 6, 0, 2, 2);
+              }),
+              "##..")
+        << "XNA's DrawInstancedPrimitives must start at record 0 again after an offset draw";
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, SharedSpriteBatchContract)
