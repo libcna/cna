@@ -146,12 +146,10 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
    the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
    1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
    combined value 5-7 falls through to the same default.
-5. **Shared-test failure with `WEBGPU` as the default renderer** (full `cmake-build-webgpu` runs on
-   RADV through the private runner, 2026-10-13 and 2026-10-14; it fails identically on
-   `9edbf314e`; the run's other failures are the conformance programs of item 7): `WEBGPU`
-   counts only the draws after a `Clear` inside one occlusion run
-   (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`: 192000 of 384000), although
-   `AM4-108` recorded it passing on 2026-10-08.
+5. *(Fixed 2026-10-14.)* `WEBGPU` counted only the draws after a `Clear` inside one occlusion
+   run, because a query slot may be written once per resolve and the Clear splits the run across
+   render passes; a later run now records into a fresh slot and the readback sums the query's
+   slots (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`).
 6. **Shared-test failures with `SDL_GPU` as the default renderer** (full `cmake-build-sdlgpu` runs,
    2026-10-13 and 2026-10-14; each also fails or passes identically on `9edbf314e`; the other
    failures of those runs are items 7 and 16):
@@ -291,23 +289,18 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     `scripts/check_no_posix_setenv.py` fails on the same files. The rest of the tree (the
     `DIRECTX9` and `SDL_GPU` suites, the C API smokes, the examples) builds.
 
-15. **`DIRECTX9` under Wine+DXVK fails part of its own and the shared suite** (first run of a
-    `DIRECTX9`-default MinGW tree, `cmake-build-mingw`, 2026-10-13; not diagnosed, and some may be
-    DXVK's). The `DIRECTX9` suite passes 43 of 57: eleven example programs (`DirectX9_Smoke`,
-    `_CompiledEffects`, `_Draw`, `_DrawEx`, `_Instanced`, `_DrawOffset`, `_Pbr`,
-    `_SkinnedVertexColor`, `_SpriteBatch`, `_EffectRenderer`, `_SpriteBatch_CustomEffect`) read the
-    back buffer on a Reach device and abort (a test defect: they never request HiDef), and three
-    shared contracts fail on pixels -- `TextureFilterMipContract` L3/L9 (negative `MaxMipLevel`),
-    `GraphicsDevice_OrderedClear` V3/V4 (a depth or stencil `Clear` under a scissor is scissored;
-    XNA clears the whole attachment) and `Backbuffer_PassOrder` C5/C6/D1/D2/O1-O4 (depth across
-    back-buffer cycles). `CnaGraphicsTests.exe`: 2,612 pass, 288 skip, 36 fail (among them the
-    cube-face MRT refusal of item 7 and occlusion-query lifecycle cases); `CnaContentTests.exe`:
-    1,703 pass, 29 skip, 1 fail (`RendererStrideConformance`, an unlit stride-32 record). Under the
-    same Wine, `CApi_MediaPlayerSmoke` fails with `SOFTWARE`, and a pre-campaign build of it hangs.
-    `DirectX9_FrameRecovery` is timing-sensitive under `ctest` (2026-10-14: fails there in two of three
-    runs after its first PASS line, while the same binary passes both phases when run directly through
-    `scripts/run-wine-dxvk9.sh`); the held-back-buffer recovery it measures depends on how many frames
-    Wine lets through before the retried `Reset` succeeds.
+15. **`DIRECTX9` under Wine+DXVK: one shared contract still fails** (re-measured 2026-10-14 after the
+    remediation closure; the `DIRECTX9` suite passes 56 of 57). `Backbuffer_PassOrder` fails its
+    3D legs (C5/C6, D1/D2, O1-O4, U2): a `BasicEffect` `DrawPrimitives` issued in one back-buffer
+    cycle is missing or mis-ordered after an intervening render-target cycle, while every sprite,
+    clear, viewport and MRT leg of the same program passes -- undiagnosed. Fixed on the way: the
+    eleven example programs that read the back buffer now request HiDef; a negative `MaxMipLevel`
+    maps to the last level as XNA's unsigned write does (`TextureFilterMipContract` L3/L9); `Clear`
+    lifts the viewport and scissor like XNA (`GraphicsDevice_OrderedClear`); a compiled effect
+    samples the texture set on the device slot after `Apply()` (`CompiledEffects`);
+    `CnaRendererTests.exe` builds. `CnaGraphicsTests.exe` and `CnaContentTests.exe` under Wine were
+    not re-measured. `DirectX9_FrameRecovery` is timing-sensitive under `ctest` (passes when run
+    directly through `scripts/run-wine-dxvk9.sh`).
 16. **A C API game still alive at process exit crashes `SDL_GPU` in a Debug build** (first C API run
     with `SDL_GPU`, `cmake-build-sdlgpu`, 2026-10-14): the five `CApi_TeardownLifetime_*` cases that
     leave a game alive segfault. The C API's static `RuntimeState` destroys the game during
@@ -317,15 +310,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     `SDL_GPU` selected at run time the same case segfaults in the Debug multi-renderer tree and all
     seven teardown cases pass in the Release one (`build-probe`, 2026-10-14). Every other C API case
     passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with the extension layer.
-17. **`HEADLESS` multisample bookkeeping is inconsistent** (found 2026-10-14 while closing the
-    post-audit remediation archive; pre-existing): `Headless_Conformance_capability_truth`,
-    `Headless_Conformance_multisample_count_clamp` and `Headless_Conformance_graphics_adapter_query`
-    fail on HEAD -- the renderer reports `MultiSampleAntiAliasing` while `Reset` applies a sample
-    count of 0, render targets echo any requested count (up to 1024) while the back buffer applies
-    0, and `Reset` keeps a back-buffer format the adapter query rejected. A recording-only fix was
-    tried and reverted because it worsened the clamp/adapter cases; the renderer needs one
-    consistent answer (which count it "applies" and whether it claims MSAA at all).
-
 ### 5.2 Limitations
 
 - `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves
