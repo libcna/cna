@@ -28,6 +28,7 @@
 // exactly once; until it lands, D8 keeps that half open.
 
 #include <algorithm>
+#include "System/ArgumentException.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -991,7 +992,7 @@ TEST(GltfRigidAnimation, APaletteClipIsRefusedRatherThanPosingTheWrongBones)
     palette.Duration = System::TimeSpan::FromSeconds(1.0);
     EXPECT_EQ(ClipTargetSpaceEXT::JointPalette, palette.TargetSpace) << "the default moved";
     EXPECT_THROW(ApplyClipToBonesEXT(model, palette, System::TimeSpan::FromSeconds(0.0)),
-                 std::invalid_argument);
+                 System::ArgumentException);
 }
 
 // --- plans/plan_gltf.md GLTF-299: a clip whose first key is not at t = 0 ---------------------------------

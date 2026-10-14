@@ -6,6 +6,8 @@
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -24,7 +26,7 @@ namespace Microsoft::Xna::Framework
         // FNA relies on List<T>'s implicit range check; C++ adds an explicit one that also covers negative indices.
         if (index < 0 || index >= getCountProperty())
         {
-            throw std::out_of_range("CurveKeyCollection index is out of range");
+            throw System::ArgumentOutOfRangeException("index", "CurveKeyCollection index is out of range");
         }
         return innerlist[static_cast<std::size_t>(index)];
     }
@@ -33,7 +35,7 @@ namespace Microsoft::Xna::Framework
     {
         if (index < 0 || index >= getCountProperty())
         {
-            throw std::out_of_range("CurveKeyCollection index is out of range");
+            throw System::ArgumentOutOfRangeException("index", "CurveKeyCollection index is out of range");
         }
         return innerlist[static_cast<std::size_t>(index)];
     }
@@ -43,7 +45,7 @@ namespace Microsoft::Xna::Framework
         // FNA only checks index >= Count; C++ also guards against negative index.
         if (index < 0 || index >= getCountProperty())
         {
-            throw std::out_of_range("CurveKeyCollection index is out of range");
+            throw System::ArgumentOutOfRangeException("index", "CurveKeyCollection index is out of range");
         }
 
         auto position = innerlist[static_cast<std::size_t>(index)].getPositionProperty();
@@ -119,14 +121,14 @@ namespace Microsoft::Xna::Framework
         // C++ uses std::out_of_range for both cases.
         if (arrayIndex < 0)
         {
-            throw std::out_of_range("arrayIndex is out of range");
+            throw System::ArgumentOutOfRangeException("arrayIndex", "arrayIndex is out of range");
         }
 
         const auto start = static_cast<std::size_t>(arrayIndex);
         const auto requiredSize = start + innerlist.size();
         if (array.size() < requiredSize)
         {
-            throw std::out_of_range("Destination array is too small");
+            throw System::ArgumentException("Destination array is too small");
         }
 
         std::copy(innerlist.begin(), innerlist.end(), array.begin() + arrayIndex);
@@ -157,7 +159,7 @@ namespace Microsoft::Xna::Framework
     {
         if (index < 0 || index >= getCountProperty())
         {
-            throw std::out_of_range("CurveKeyCollection index is out of range");
+            throw System::ArgumentOutOfRangeException("index", "CurveKeyCollection index is out of range");
         }
         innerlist.erase(innerlist.begin() + index);
     }

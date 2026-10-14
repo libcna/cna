@@ -79,6 +79,7 @@
 #include <sstream>
 #include <stdexcept>
 #include "BuiltinContentLoaders.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -188,7 +189,7 @@ namespace Microsoft::Xna::Framework::Content
     Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName)
     {
         if (disposed_)
-            throw std::runtime_error("ContentManager has been disposed.");
+            throw System::ObjectDisposedException("ContentManager");
 
         log::Debug(std::string("Loading asset: ") + assetName);
 

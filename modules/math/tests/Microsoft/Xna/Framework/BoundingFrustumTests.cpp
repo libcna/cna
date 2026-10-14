@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/PlaneIntersectionType.hpp"
 #include "Microsoft/Xna/Framework/Ray.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using Microsoft::Xna::Framework::BoundingBox;
 using Microsoft::Xna::Framework::BoundingFrustum;
@@ -122,7 +123,7 @@ TEST(BoundingFrustumTest, GetCornersTooSmallVectorThrows)
 {
     BoundingFrustum f = MakeTestFrustum();
     std::vector<Vector3> tooSmall(BoundingFrustum::CornerCount - 1);
-    EXPECT_THROW(f.GetCorners(tooSmall), std::out_of_range);
+    EXPECT_THROW(f.GetCorners(tooSmall), System::ArgumentOutOfRangeException);
 }
 
 // --- Contains (Vector3) ---

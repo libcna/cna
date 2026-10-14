@@ -35,6 +35,7 @@ static int CnaBrowserStorageReady()
 #include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
+#include "System/ArgumentException.hpp"
 
 namespace Microsoft::Xna::Framework::Storage
 {
@@ -258,7 +259,7 @@ namespace Microsoft::Xna::Framework::Storage
         System::IAsyncResult* result)
     {
         auto* r = dynamic_cast<ContainerResult*>(result);
-        if (!r) throw std::invalid_argument("result was not produced by BeginOpenContainer.");
+        if (!r) throw System::ArgumentException("result was not produced by BeginOpenContainer.");
 
         int playerIdx = devicePlayer_.has_value()
             ? static_cast<int>(devicePlayer_.value())
@@ -271,7 +272,7 @@ namespace Microsoft::Xna::Framework::Storage
     void StorageDevice::DeleteContainer(const std::string& titleName)
     {
         if (titleName.empty())
-            throw std::invalid_argument("titleName must not be empty.");
+            throw System::ArgumentException("titleName must not be empty.");
 
         // TitleName is caller-supplied. fs::path::operator/ silently discards
         // the storage root for an absolute titleName, and does not reject ".." segments -- either
@@ -282,7 +283,7 @@ namespace Microsoft::Xna::Framework::Storage
         const auto contained = CNA::Internal::ResolveContainedPath(EnsureStorageRoot(), titleName);
         if (!contained.ok)
         {
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "titleName must be a simple name within the storage root, not an absolute path "
                 "or one that escapes it.");
         }
@@ -333,7 +334,7 @@ namespace Microsoft::Xna::Framework::Storage
     std::unique_ptr<StorageDevice> StorageDevice::EndShowSelector(System::IAsyncResult* result)
     {
         auto* r = dynamic_cast<SelectorResult*>(result);
-        if (!r) throw std::invalid_argument("result was not produced by BeginShowSelector.");
+        if (!r) throw System::ArgumentException("result was not produced by BeginShowSelector.");
         return std::unique_ptr<StorageDevice>(new StorageDevice(r->playerIndex));
     }
 

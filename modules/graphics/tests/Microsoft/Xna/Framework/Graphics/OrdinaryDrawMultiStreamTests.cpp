@@ -652,7 +652,7 @@ namespace
             GTEST_SKIP()                                                                     \
                 << "Renderer reports GraphicsCapability::MultiStreamVertexInput = false: "     \
                    "ordinary multi-stream vertex input is not implemented on this renderer "   \
-                   "(REMED-GFX-201). The draw is rejected with System::NotSupportedException "\
+                   ". The draw is rejected with System::NotSupportedException "\
                    "rather than rendered from stream 0 alone -- see "                         \
                    "UnsupportedRendererRejectsMultiStreamDeterministically.";                  \
         }                                                                                    \

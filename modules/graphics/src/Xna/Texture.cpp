@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/InvalidOperationException.hpp"
 #include <algorithm>
@@ -47,7 +51,7 @@ namespace Microsoft::Xna::Framework::Graphics
             case SurfaceFormat::UShortEXT:
                 return 1;
             default:
-                throw std::out_of_range("Texture::GetBlockSizeSquaredEXT: format is not a valid SurfaceFormat value");
+                throw System::ArgumentOutOfRangeException("Texture::GetBlockSizeSquaredEXT: format is not a valid SurfaceFormat value");
         }
     }
 
@@ -90,7 +94,7 @@ namespace Microsoft::Xna::Framework::Graphics
             case SurfaceFormat::Vector4:
                 return 16;
             default:
-                throw std::out_of_range("Texture::GetFormatSizeEXT: format is not a valid SurfaceFormat value");
+                throw System::ArgumentOutOfRangeException("Texture::GetFormatSizeEXT: format is not a valid SurfaceFormat value");
         }
     }
 
@@ -102,7 +106,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture::ValidateGetDataFormat(SurfaceFormat format, int elementSizeInBytes)
     {
         if (GetFormatSizeEXT(format) % elementSizeInBytes != 0)
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "Texture::ValidateGetDataFormat: the type used for the destination element is an "
                 "invalid size for this resource");
     }
@@ -205,7 +209,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (fmt == SurfaceFormat::Color)
             return;
-        throw std::runtime_error(
+        throw System::InvalidOperationException(
             "Texture: SurfaceFormat " + std::to_string(static_cast<int>(fmt)) +
             " is not implemented by the selected graphics renderer");
     }

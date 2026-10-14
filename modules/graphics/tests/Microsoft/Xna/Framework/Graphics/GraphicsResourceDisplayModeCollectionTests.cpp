@@ -15,6 +15,7 @@
 //     GraphicsResource through Texture).
 
 #include <gtest/gtest.h>
+#include "System/ArgumentOutOfRangeException.hpp"
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -89,24 +90,24 @@ TEST(DisplayModeCollectionTest, IndexReturnsCorrectMode)
     EXPECT_EQ(col[1].getHeightProperty(), 768);
 }
 
-TEST(DisplayModeCollectionTest, IndexOutOfBoundsThrowsOutOfRange)
+TEST(DisplayModeCollectionTest, IndexOutOfBoundsThrowsArgumentOutOfRange)
 {
     DisplayModeCollection col;
-    EXPECT_THROW({ [[maybe_unused]] const DisplayMode& m = col[0]; }, std::out_of_range);
+    EXPECT_THROW({ [[maybe_unused]] const DisplayMode& m = col[0]; }, System::ArgumentOutOfRangeException);
 }
 
-TEST(DisplayModeCollectionTest, NegativeIndexThrowsOutOfRange)
+TEST(DisplayModeCollectionTest, NegativeIndexThrowsArgumentOutOfRange)
 {
     std::vector<DisplayMode> modes = { DisplayMode(640, 480, SurfaceFormat::Color) };
     DisplayModeCollection col(std::move(modes));
-    EXPECT_THROW({ [[maybe_unused]] const DisplayMode& m = col[-1]; }, std::out_of_range);
+    EXPECT_THROW({ [[maybe_unused]] const DisplayMode& m = col[-1]; }, System::ArgumentOutOfRangeException);
 }
 
-TEST(DisplayModeCollectionTest, IndexEqualToCountThrowsOutOfRange)
+TEST(DisplayModeCollectionTest, IndexEqualToCountThrowsArgumentOutOfRange)
 {
     std::vector<DisplayMode> modes = { DisplayMode(640, 480, SurfaceFormat::Color) };
     DisplayModeCollection col(std::move(modes));
-    EXPECT_THROW({ [[maybe_unused]] const DisplayMode& m = col[1]; }, std::out_of_range);
+    EXPECT_THROW({ [[maybe_unused]] const DisplayMode& m = col[1]; }, System::ArgumentOutOfRangeException);
 }
 
 // -----------------------------------------------------------------------

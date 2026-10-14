@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/CurveLoopType.hpp"
 #include "Microsoft/Xna/Framework/CurveTangent.hpp"
 #include "Microsoft/Xna/Framework/CurveContinuity.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 
@@ -163,14 +164,14 @@ TEST(CurveTest, ComputeTangentOutOfRangeThrows)
 {
     Curve c;
     c.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
-    EXPECT_THROW(c.ComputeTangent(5, CurveTangent::Flat), std::out_of_range);
+    EXPECT_THROW(c.ComputeTangent(5, CurveTangent::Flat), System::ArgumentOutOfRangeException);
 }
 
 TEST(CurveTest, ComputeTangentNegativeIndexThrows)
 {
     Curve c;
     c.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
-    EXPECT_THROW(c.ComputeTangent(-1, CurveTangent::Flat), std::out_of_range);
+    EXPECT_THROW(c.ComputeTangent(-1, CurveTangent::Flat), System::ArgumentOutOfRangeException);
 }
 
 TEST(CurveTest, ComputeTangentSingleArgDelegates)

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -321,7 +323,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         if (index < 0 || index >= MAX_TOUCHES)
         {
-            throw std::out_of_range("index");
+            throw System::ArgumentOutOfRangeException("index");
         }
 
         const auto slot = static_cast<std::size_t>(index);

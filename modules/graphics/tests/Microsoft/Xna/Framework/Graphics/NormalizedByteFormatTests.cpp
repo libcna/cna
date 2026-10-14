@@ -2,7 +2,7 @@
 // plans/plan_webgpu.md WEBGPU-184: `NormalizedByte2` and `NormalizedByte4` are stored natively.
 //
 // Renderer-neutral: the two formats are `GraphicsProfile.Reach` formats a real XNA game may use,
-// EasyGL has stored them since REMED-GFX-244, and WebGPU gained them here by mapping onto core
+// EasyGL has stored them since the EasyGL 16-bit/normalized storage fix, and WebGPU gained them here by mapping onto core
 // WebGPU's `rg8snorm`/`rgba8snorm`. A renderer that does not support them is skipped rather than
 // failed -- what is asserted is that a renderer claiming them keeps its promise.
 //
@@ -23,6 +23,7 @@
 //      and from neither black nor white.
 
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
 
 #include "CNA/RendererTestGate.hpp"
 
@@ -72,7 +73,7 @@ namespace
         {
             return false;
         }
-        catch (const std::runtime_error&)
+        catch (const System::InvalidOperationException&)
         {
             return false;
         }

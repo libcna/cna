@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/PlaneIntersectionType.hpp"
 #include "Microsoft/Xna/Framework/Ray.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentException.hpp"
 
 using Microsoft::Xna::Framework::BoundingBox;
 using Microsoft::Xna::Framework::BoundingFrustum;
@@ -503,7 +504,7 @@ TEST(BoundingSphereTest, ToStringContainsCenterAndRadius)
 TEST(BoundingSphereTest, CreateFromPointsThrowsOnEmptyVector)
 {
     std::vector<Vector3> empty;
-    EXPECT_THROW(BoundingSphere::CreateFromPoints(empty), std::invalid_argument);
+    EXPECT_THROW(BoundingSphere::CreateFromPoints(empty), System::ArgumentException);
 }
 
 // --- CreateMerged containment edge cases ---

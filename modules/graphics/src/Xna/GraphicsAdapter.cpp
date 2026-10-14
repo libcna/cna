@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -138,7 +142,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto& adapters = getAdaptersProperty();
         if (adapters.empty())
         {
-            throw std::runtime_error("No graphics adapters are available.");
+            throw System::InvalidOperationException("No graphics adapters are available.");
         }
 
         return *adapters[0];

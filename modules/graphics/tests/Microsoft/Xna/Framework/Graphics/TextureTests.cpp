@@ -8,6 +8,8 @@
 // without needing a concrete subclass instance.
 
 #include <gtest/gtest.h>
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -57,8 +59,8 @@ TEST(TextureTest, GetBlockSizeSquaredEXT_UncompressedFormatsAre1)
 
 TEST(TextureTest, GetBlockSizeSquaredEXT_InvalidValueThrowsOutOfRange)
 {
-    EXPECT_THROW(Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(27)), std::out_of_range);
-    EXPECT_THROW(Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(-1)), std::out_of_range);
+    EXPECT_THROW(Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(27)), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(-1)), System::ArgumentOutOfRangeException);
 }
 
 // -----------------------------------------------------------------------
@@ -122,8 +124,8 @@ TEST(TextureTest, GetFormatSizeEXT_Vector4Is16)
 
 TEST(TextureTest, GetFormatSizeEXT_InvalidValueThrowsOutOfRange)
 {
-    EXPECT_THROW(Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(27)), std::out_of_range);
-    EXPECT_THROW(Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(-1)), std::out_of_range);
+    EXPECT_THROW(Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(27)), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(-1)), System::ArgumentOutOfRangeException);
 }
 
 // -----------------------------------------------------------------------
@@ -148,7 +150,7 @@ TEST(TextureTest, GetPixelStoreAlignment_LargeFormatsClampToEight)
 
 TEST(TextureTest, GetPixelStoreAlignment_InvalidValueThrowsOutOfRange)
 {
-    EXPECT_THROW(Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(27)), std::out_of_range);
+    EXPECT_THROW(Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(27)), System::ArgumentOutOfRangeException);
 }
 
 // -----------------------------------------------------------------------
@@ -168,12 +170,12 @@ TEST(TextureTest, ValidateGetDataFormat_EvenDivisionDoesNotThrow)
 TEST(TextureTest, ValidateGetDataFormat_UnevenDivisionThrowsInvalidArgument)
 {
     // Alpha8 is 1 byte/texel: a 4-byte element cannot divide it evenly.
-    EXPECT_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Alpha8, 4), std::invalid_argument);
+    EXPECT_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Alpha8, 4), System::ArgumentException);
     // Color is 4 bytes/texel: a 3-byte element cannot divide it evenly.
-    EXPECT_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Color, 3), std::invalid_argument);
+    EXPECT_THROW(Texture::ValidateGetDataFormat(SurfaceFormat::Color, 3), System::ArgumentException);
 }
 
 TEST(TextureTest, ValidateGetDataFormat_InvalidFormatThrowsOutOfRange)
 {
-    EXPECT_THROW(Texture::ValidateGetDataFormat(static_cast<SurfaceFormat>(27), 4), std::out_of_range);
+    EXPECT_THROW(Texture::ValidateGetDataFormat(static_cast<SurfaceFormat>(27), 4), System::ArgumentOutOfRangeException);
 }

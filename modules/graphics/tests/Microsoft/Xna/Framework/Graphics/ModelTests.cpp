@@ -79,7 +79,7 @@ TEST(ModelTest, AModelWithoutImportedMaterialVariantsKeepsTheAdditiveApiAtItsDef
     EXPECT_TRUE(model.getMaterialVariantNamesEXTProperty().empty());
     EXPECT_EQ(-1, model.getMaterialVariantEXTProperty());
     EXPECT_NO_THROW(model.setMaterialVariantEXTProperty(-1));
-    EXPECT_THROW(model.setMaterialVariantEXTProperty(0), std::out_of_range);
+    EXPECT_THROW(model.setMaterialVariantEXTProperty(0), System::ArgumentOutOfRangeException);
     EXPECT_EQ(-1, model.getMaterialVariantEXTProperty());
 }
 
@@ -265,7 +265,7 @@ TEST(ModelTest, FourArgConstructorThrowsWhenMeshParentBonesSizeMismatches)
     ModelMesh meshA(nullptr, {});
     ModelMesh meshB(nullptr, {});
 
-    EXPECT_THROW(Model(nullptr, { &root }, { &meshA, &meshB }, { &root }), std::out_of_range);
+    EXPECT_THROW(Model(nullptr, { &root }, { &meshA, &meshB }, { &root }), System::ArgumentOutOfRangeException);
 }
 
 // Task 916 finding: FNA's real Model constructor never sets Root at all -- ModelReader assigns it
@@ -300,7 +300,7 @@ TEST(ModelTest, FiveArgConstructorThrowsWhenRootBoneIndexOutOfRange)
 {
     ModelBone root{ 0, "Root" };
 
-    EXPECT_THROW(Model(nullptr, { &root }, {}, {}, 1), std::out_of_range);
+    EXPECT_THROW(Model(nullptr, { &root }, {}, {}, 1), System::ArgumentOutOfRangeException);
 }
 
 TEST(ModelTest, FiveArgConstructorEmptyBonesLeavesRootNullEvenWithDefaultIndex)

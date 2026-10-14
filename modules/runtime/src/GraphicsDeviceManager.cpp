@@ -15,6 +15,9 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -72,7 +75,7 @@ namespace Microsoft::Xna::Framework
     {
         if (game == nullptr)
         {
-            throw std::invalid_argument("The game cannot be null.");
+            throw System::ArgumentNullException("game", "The game cannot be null.");
         }
 
         game_ = game;
@@ -308,7 +311,7 @@ namespace Microsoft::Xna::Framework
 
         if (graphicsDevice_ == nullptr)
         {
-            throw std::runtime_error(
+            throw System::InvalidOperationException(
                 "GraphicsDeviceManager cannot create a GraphicsDevice without a Game-owned device in this CNA renderer.");
         }
 
@@ -667,7 +670,7 @@ namespace Microsoft::Xna::Framework
     {
         if (game_->getServicesProperty().GetService<IGraphicsDeviceManager>() != nullptr)
         {
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "A GraphicsDeviceManager is already registered with this Game.");
         }
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
@@ -441,15 +442,15 @@ TEST(TouchCollectionTest, CopyToFromEmptyCollectionIsANoOp)
 TEST(TouchCollectionTest, CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior)
 {
     // Task 902: a negative or past-the-end arrayIndex previously formed an invalid iterator and
-    // hit std::vector::insert UB. It must now throw std::out_of_range.
+    // hit std::vector::insert UB. It must now throw System::ArgumentOutOfRangeException.
     const TouchCollection collection(std::vector<TouchLocation>{
         TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero)
     });
 
     std::vector<TouchLocation> destination(2); // size 2 -> valid indices are 0,1,2
 
-    EXPECT_THROW(collection.CopyTo(destination, -1), std::out_of_range);
-    EXPECT_THROW(collection.CopyTo(destination, 3), std::out_of_range);   // 3 > size()
+    EXPECT_THROW(collection.CopyTo(destination, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(collection.CopyTo(destination, 3), System::ArgumentOutOfRangeException);   // 3 > size()
     EXPECT_NO_THROW(collection.CopyTo(destination, 2));                   // 2 == size() is valid (append)
 }
 
@@ -473,18 +474,18 @@ TEST(TouchCollectionTest, CopyToInsertsAtValidNonZeroIndex)
 
 TEST(TouchCollectionTest, IndexerThrowsOnOutOfRangeAccess)
 {
-    // Task 904: out-of-range indexer access must throw std::out_of_range, not read OOB.
+    // Task 904: out-of-range indexer access must throw System::ArgumentOutOfRangeException, not read OOB.
     const TouchCollection collection(std::vector<TouchLocation>{
         TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero)
     });
     EXPECT_NO_THROW((void)collection[0]);
-    EXPECT_THROW((void)collection[1], std::out_of_range);
-    EXPECT_THROW((void)collection[std::size_t{100}], std::out_of_range);
+    EXPECT_THROW((void)collection[1], System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)collection[std::size_t{100}], System::ArgumentOutOfRangeException);
 
     const TouchCollection empty;
     EXPECT_EQ(empty.getCountProperty(), 0);
     EXPECT_TRUE(empty.getIsReadOnlyProperty()); // XNA/FNA: TouchCollection.IsReadOnly is always true
-    EXPECT_THROW((void)empty[0], std::out_of_range);
+    EXPECT_THROW((void)empty[0], System::ArgumentOutOfRangeException);
 }
 
 TEST(TouchCollectionTest, IndexOfReturnsPositionOrNegativeOne)

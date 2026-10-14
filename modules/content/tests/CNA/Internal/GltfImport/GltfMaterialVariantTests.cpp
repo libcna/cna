@@ -3,6 +3,7 @@
 // plans/plan_gltf.md GLTF-341 / GLTF-342 -- KHR_materials_variants import and selection.
 
 #include <gtest/gtest.h>
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -208,8 +209,8 @@ TEST(GltfMaterialVariants, InvalidIndicesThrowWithoutChangingTheCurrentSelection
     ASSERT_NE(nullptr, part);
     auto* selectedEffect = part->getEffectProperty();
 
-    EXPECT_THROW(model.setMaterialVariantEXTProperty(-2), std::out_of_range);
-    EXPECT_THROW(model.setMaterialVariantEXTProperty(3), std::out_of_range);
+    EXPECT_THROW(model.setMaterialVariantEXTProperty(-2), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(model.setMaterialVariantEXTProperty(3), System::ArgumentOutOfRangeException);
     EXPECT_EQ(0, model.getMaterialVariantEXTProperty());
     EXPECT_EQ(selectedEffect, part->getEffectProperty());
 }

@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
@@ -177,7 +181,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedPbrEffect::setLightingEnabledProperty(bool value)
     {
         if (!value)
-            throw std::runtime_error("SkinnedPbrEffect does not support setting LightingEnabled to false.");
+            throw System::InvalidOperationException("SkinnedPbrEffect does not support setting LightingEnabled to false.");
     }
 
     DirectionalLight& SkinnedPbrEffect::getDirectionalLight0Property() { return DirectionalLight0; }
@@ -318,7 +322,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedPbrEffect::setSpecularTextureCoordinateSetEXTProperty(int set)
     {
         if (set < 0 || set > 1)
-            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+            throw System::ArgumentOutOfRangeException("PBR packed texture-coordinate set must be 0 or 1.");
         specularTextureCoordinateSetEXT_ = set;
     }
     int SkinnedPbrEffect::getSpecularColorTextureCoordinateSetEXTProperty() const
@@ -328,7 +332,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedPbrEffect::setSpecularColorTextureCoordinateSetEXTProperty(int set)
     {
         if (set < 0 || set > 1)
-            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+            throw System::ArgumentOutOfRangeException("PBR packed texture-coordinate set must be 0 or 1.");
         specularColorTextureCoordinateSetEXT_ = set;
     }
     TextureTransformEXT SkinnedPbrEffect::getSpecularTextureTransformEXTProperty() const
@@ -372,9 +376,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedPbrEffect::setTextureCoordinateSetEXTProperty(int slot, int set)
     {
         if (slot < 0 || slot >= static_cast<int>(textureCoordinateSetsEXT_.size()))
-            throw std::out_of_range("PBR texture-coordinate slot must be in range [0, 4].");
+            throw System::ArgumentOutOfRangeException("PBR texture-coordinate slot must be in range [0, 4].");
         if (set < 0 || set > 1)
-            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+            throw System::ArgumentOutOfRangeException("PBR packed texture-coordinate set must be 0 or 1.");
         textureCoordinateSetsEXT_[static_cast<std::size_t>(slot)] = set;
     }
     const std::array<TextureTransformEXT, 5>&
@@ -386,7 +390,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int slot, const TextureTransformEXT& value)
     {
         if (slot < 0 || slot >= static_cast<int>(textureTransformsEXT_.size()))
-            throw std::out_of_range("PBR texture-transform slot must be in range [0, 4].");
+            throw System::ArgumentOutOfRangeException("PBR texture-transform slot must be in range [0, 4].");
         textureTransformsEXT_[static_cast<std::size_t>(slot)] = value;
     }
     bool    SkinnedPbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }
@@ -410,16 +414,16 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedPbrEffect::setWeightsPerVertexProperty(int v)
     {
         if (v != 1 && v != 2 && v != 4)
-            throw std::out_of_range("WeightsPerVertex must be 1, 2, or 4.");
+            throw System::ArgumentOutOfRangeException("WeightsPerVertex must be 1, 2, or 4.");
         weightsPerVertex_ = v;
     }
 
     void SkinnedPbrEffect::SetBoneTransforms(const std::vector<Matrix>& boneTransforms)
     {
         if (boneTransforms.empty())
-            throw std::invalid_argument("boneTransforms must not be empty.");
+            throw System::ArgumentException("boneTransforms must not be empty.");
         if (static_cast<int>(boneTransforms.size()) > MaxBones)
-            throw std::invalid_argument("boneTransforms exceeds MaxBones.");
+            throw System::ArgumentException("boneTransforms exceeds MaxBones.");
 
         if (bonesParam_) bonesParam_->SetValue(boneTransforms);
     }
@@ -427,7 +431,7 @@ namespace Microsoft::Xna::Framework::Graphics
     std::vector<Matrix> SkinnedPbrEffect::GetBoneTransforms(int count) const
     {
         if (count <= 0 || count > MaxBones)
-            throw std::out_of_range("count must be in range [1, MaxBones].");
+            throw System::ArgumentOutOfRangeException("count must be in range [1, MaxBones].");
 
         std::vector<Matrix> bones = bonesParam_
             ? bonesParam_->GetValueMatrixArray(count)

@@ -7,6 +7,7 @@
 //   828 - INTERNAL_onTouchEvent coordinate scaling: zero / normal / resized / non-integer display
 
 #include <gtest/gtest.h>
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <memory>
 #include <optional>
@@ -219,13 +220,13 @@ TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreCappedAtMaxTouchesByTouchPanelGet
 }
 
 // P5-011: the slot-path SetFinger writes touches_[index]; an out-of-range index must throw
-// std::out_of_range rather than write past the fixed MAX_TOUCHES array (no OOB). The boundary indices
+// System::ArgumentOutOfRangeException rather than write past the fixed MAX_TOUCHES array (no OOB). The boundary indices
 // 0 and MAX_TOUCHES-1 are the valid extremes and must NOT throw.
 TEST_F(TouchEdgeCaseTest, SetFingerRejectsOutOfRangeSlotIndexWithoutOutOfBoundsWrite)
 {
-    EXPECT_THROW(TouchPanel::SetFinger(-1, 1, Vector2::Zero), std::out_of_range);
-    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES, 1, Vector2::Zero), std::out_of_range);
-    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES + 5, 1, Vector2::Zero), std::out_of_range);
+    EXPECT_THROW(TouchPanel::SetFinger(-1, 1, Vector2::Zero), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES, 1, Vector2::Zero), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES + 5, 1, Vector2::Zero), System::ArgumentOutOfRangeException);
 
     EXPECT_NO_THROW(TouchPanel::SetFinger(0, 1, Vector2::Zero));
     EXPECT_NO_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES - 1, 2, Vector2::Zero));

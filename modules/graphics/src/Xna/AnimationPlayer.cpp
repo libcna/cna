@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -196,7 +199,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // motion -- a silent corruption in place of the silent drop GLTF-293 removed.
         if (clip.TargetSpace != ClipTargetSpaceEXT::SceneNode)
         {
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "ApplyClipToBonesEXT: this clip's tracks index a joint palette, not Model::Bones. "
                 "Play it through AnimationPlayer instead -- applying palette indices to bones "
                 "would pose the wrong bones silently.");

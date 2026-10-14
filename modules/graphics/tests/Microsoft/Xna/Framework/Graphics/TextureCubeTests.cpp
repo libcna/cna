@@ -1420,7 +1420,7 @@ namespace
 TEST_F(TextureCubeTest, DDSFromStreamEXTThrowsOnEmptyStream)
 {
     System::IO::MemoryStream stream;
-    EXPECT_THROW(TextureCube::DDSFromStreamEXT(gd, stream), std::runtime_error);
+    EXPECT_THROW(TextureCube::DDSFromStreamEXT(gd, stream), System::ArgumentException);
 }
 
 TEST_F(TextureCubeTest, DDSFromStreamEXTThrowsOnNonDdsMagic)

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <cstdint>
 #include <limits>
@@ -19,7 +21,7 @@ namespace Microsoft::Xna::Framework::Input
         const auto format = texture.getFormatProperty();
         if (format != Graphics::SurfaceFormat::Color && format != Graphics::SurfaceFormat::ColorSrgbEXT)
         {
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "MouseCursor::FromTexture2D: only SurfaceFormat::Color or ColorSrgbEXT textures are accepted for mouse cursors");
         }
 
@@ -30,12 +32,12 @@ namespace Microsoft::Xna::Framework::Input
         {
             // Keep the established public exception category: this path used to surface the
             // native cursor creator's invalid-hot-spot failure as std::runtime_error.
-            throw std::runtime_error("MouseCursor::FromTexture2D: cursor hot spot is outside the texture");
+            throw System::ArgumentException("MouseCursor::FromTexture2D: cursor hot spot is outside the texture");
         }
         if (static_cast<std::size_t>(width) > std::numeric_limits<std::size_t>::max()
                                                   / static_cast<std::size_t>(height))
         {
-            throw std::runtime_error("MouseCursor::FromTexture2D: texture dimensions overflow");
+            throw System::ArgumentException("MouseCursor::FromTexture2D: texture dimensions overflow");
         }
 
         std::vector<Color> pixels(

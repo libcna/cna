@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/GameServiceContainer.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -13,14 +15,14 @@ namespace Microsoft::Xna::Framework
     {
         if (provider == nullptr)
         {
-            throw std::invalid_argument("provider");
+            throw System::ArgumentNullException("provider");
         }
 
         const std::type_index key(type);
 
         if (services_.find(key) != services_.end())
         {
-            throw std::invalid_argument("A service with this type is already registered.");
+            throw System::ArgumentException("A service with this type is already registered.");
         }
 
         // FNA also checks type.IsAssignableFrom(provider.GetType()) here.

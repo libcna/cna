@@ -81,6 +81,7 @@
 #include <sstream>
 #include <stdexcept>
 #include "BuiltinContentLoaders.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -88,7 +89,7 @@ namespace Microsoft::Xna::Framework::Content
     {
         if (disposed_)
         {
-            throw std::runtime_error("ContentManager has been disposed.");
+            throw System::ObjectDisposedException("ContentManager");
         }
 
         const AssetCacheKey cacheKey{std::type_index(typeid(std::any)), NormalizeKey(assetName)};

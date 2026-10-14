@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
@@ -38,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics
         for (float value : rowMajor)
         {
             if (!std::isfinite(value))
-                throw std::invalid_argument("ColorMatrixEffect::SetColorMatrix: every value must be finite");
+                throw System::ArgumentException("ColorMatrixEffect::SetColorMatrix: every value must be finite");
         }
         matrix_ = rowMajor;
     }
@@ -52,7 +56,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!std::isfinite(offset.X) || !std::isfinite(offset.Y) ||
             !std::isfinite(offset.Z) || !std::isfinite(offset.W))
-            throw std::invalid_argument("ColorMatrixEffect::SetColorOffset: every value must be finite");
+            throw System::ArgumentException("ColorMatrixEffect::SetColorOffset: every value must be finite");
         offset_ = offset;
     }
 

@@ -18,6 +18,7 @@
 // format is visible in the log rather than only in a pass/fail bit.
 
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
 
 #include "CNA/RendererTestGate.hpp"
 
@@ -112,9 +113,9 @@ namespace
             outcome.refusalKind = "NotSupportedException";
             outcome.message = exception.what();
         }
-        catch (const std::runtime_error& exception)
+        catch (const System::InvalidOperationException& exception)
         {
-            outcome.refusalKind = "runtime_error";
+            outcome.refusalKind = "InvalidOperationException";
             outcome.message = exception.what();
         }
         catch (const std::exception& exception)

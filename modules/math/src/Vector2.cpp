@@ -10,6 +10,9 @@
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotFiniteNumberException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -72,15 +75,15 @@ namespace Microsoft::Xna::Framework
         {
             if (sourceIndex < 0 || destinationIndex < 0 || length < 0)
             {
-                throw std::out_of_range("array index and length values must be non-negative");
+                throw System::ArgumentOutOfRangeException("sourceIndex", "array index and length values must be non-negative");
             }
             if (static_cast<std::size_t>(sourceIndex + length) > sourceSize)
             {
-                throw std::out_of_range("source range exceeds source array size");
+                throw System::ArgumentException("source range exceeds source array size");
             }
             if (static_cast<std::size_t>(destinationIndex + length) > destinationSize)
             {
-                throw std::out_of_range("destination range exceeds destination array size");
+                throw System::ArgumentException("destination range exceeds destination array size");
             }
         }
     }
@@ -136,7 +139,7 @@ namespace Microsoft::Xna::Framework
 
     void Vector2::CheckForNaNs() const
     {
-        if (std::isnan(X) || std::isnan(Y)) throw std::logic_error("Vector2 contains NaNs!");
+        if (std::isnan(X) || std::isnan(Y)) throw System::NotFiniteNumberException("Vector2 contains NaNs!");
     }
 
     Vector2 Vector2::Add(Vector2 value1, Vector2 value2)

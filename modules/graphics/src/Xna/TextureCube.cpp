@@ -788,7 +788,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         const intcs len = stream.getLengthProperty();
         if (len <= 0)
-            throw std::runtime_error("TextureCube::DDSFromStreamEXT: stream is empty or length unknown");
+            throw System::ArgumentException("TextureCube::DDSFromStreamEXT: stream is empty or length unknown");
 
         std::vector<bytecs> buf(static_cast<std::size_t>(len));
         stream.Read(buf.data(), 0, len);

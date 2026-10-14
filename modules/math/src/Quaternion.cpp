@@ -7,6 +7,7 @@
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
+#include "System/NotFiniteNumberException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -110,7 +111,7 @@ namespace Microsoft::Xna::Framework
 #if !defined(NDEBUG)
         if (std::isnan(X) || std::isnan(Y) || std::isnan(Z) || std::isnan(W))
         {
-            throw std::logic_error("Quaternion contains NaNs!");
+            throw System::NotFiniteNumberException("Quaternion contains NaNs!");
         }
 #endif
     }

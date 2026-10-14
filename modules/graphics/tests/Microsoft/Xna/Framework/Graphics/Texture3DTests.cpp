@@ -146,7 +146,7 @@ protected:
         gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
         {
-            GTEST_SKIP() << "Texture3D is not supported on this renderer (REMED-CONTENT-004)";
+            GTEST_SKIP() << "Texture3D is not supported on this renderer";
         }
     }
 
@@ -697,10 +697,10 @@ TEST_F(Texture3DTest, DisposedValidationPrecedesNullAcrossConcreteAndGenericRout
 // SetDataPointerEXT — null-data guard
 // -----------------------------------------------------------------------
 
-TEST_F(Texture3DTest, SetDataPointerEXTNullDataThrowsInvalidArgument)
+TEST_F(Texture3DTest, SetDataPointerEXTNullDataThrowsArgumentNull)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.SetDataPointerEXT(0, 0, 0, 2, 2, 0, 1, nullptr, 16), std::invalid_argument);
+    EXPECT_THROW(tex.SetDataPointerEXT(0, 0, 0, 2, 2, 0, 1, nullptr, 16), System::ArgumentNullException);
 }
 
 // -----------------------------------------------------------------------

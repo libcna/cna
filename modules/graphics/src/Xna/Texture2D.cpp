@@ -149,7 +149,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 // the sibling refusal one branch down (Texture::ValidateFormat) has always named
                 // the ordinal. This is the renderer's own no -- distinct from the profile's
                 // System::NotSupportedException above -- so it says which format and whose no it is.
-                throw std::runtime_error(
+                throw System::InvalidOperationException(
                     "Texture2D: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
                     " has not passed the renderer's promotion gate -- this renderer classified it "
                     "Unsupported on this device.");
@@ -752,7 +752,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (!gpuOnlyContent_)
             {
-                throw std::runtime_error(
+                throw System::NotSupportedException(
                     "Texture2D::SetData: partial update requires CPU-side pixel storage, which was "
                     "freed because context recovery is disabled (see GraphicsDevice::SetContextRecoveryEnabled); "
                     "update the full level via SetData(Color*, int) instead");
@@ -888,7 +888,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (!gpuOnlyContent_)
             {
-                throw std::runtime_error(
+                throw System::NotSupportedException(
                     "Texture2D::SetData: partial update requires CPU-side pixel storage, which "
                     "was freed because context recovery is disabled");
             }
@@ -973,7 +973,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ThrowIfDataTransferResourceInUseEXT(true);
         validateMipLevel("Texture2D::SetData", level, levelCount_);
         if (!renderer_)
-            throw std::runtime_error("Texture2D::SetData: compressed texture has no renderer");
+            throw System::NotSupportedException("Texture2D::SetData: compressed texture has no renderer");
 
         const int levelW = mipDim(width, level);
         const int levelH = mipDim(height, level);
@@ -1555,7 +1555,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
         if (format_ != SurfaceFormat::Color)
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "Texture2D::SetDataRGBA: raw RGBA requires SurfaceFormat::Color");
         if (!renderer_ || !data || pixelCount <= 0) return;
         if (gpuOnlyContent_)
@@ -1694,12 +1694,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // the renderer texture currently holds.
         if (!cpuPixels_ || cpuPixels_->empty())
         {
-            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
+            throw System::NotSupportedException("Texture2D::GetData: no CPU-side pixel data available");
         }
 
         const auto& px = *cpuPixels_;
         if (px.size() < static_cast<std::size_t>(total) * 4)
-            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
+            throw System::NotSupportedException("Texture2D::GetData: no CPU-side pixel data available");
 
         traceTransfer("whole-level(cpu)", width, height, 0, 0, 0, width, height,
                       startIndex, elementCount, total, "cpuPixels_");
@@ -1799,7 +1799,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     }
                 return;
             }
-            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data for requested mip level");
+            throw System::NotSupportedException("Texture2D::GetData: no CPU-side pixel data for requested mip level");
         }
 
         const int levelW = mipDim(width,  level);
@@ -1880,7 +1880,7 @@ namespace Microsoft::Xna::Framework::Graphics
             const std::size_t expectedBytes = static_cast<std::size_t>(levelW) * levelH
                 * bytesPerTexel;
             if (source->size() < expectedBytes)
-                throw std::runtime_error(
+                throw System::NotSupportedException(
                     "Texture2D::GetData: CPU-side packed pixel storage is incomplete");
             const std::size_t copyBytes = static_cast<std::size_t>(w) * bytesPerTexel;
             for (int row = 0; row < h; ++row)
@@ -1898,7 +1898,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const bool rendererOwnsDefinedMip = level > 0 && renderer_
             && renderer_->HasDefinedMipLevel(level);
         if (!renderer_ || (!gpuOnlyContent_ && !rendererOwnsDefinedMip))
-            throw std::runtime_error(
+            throw System::NotSupportedException(
                 "Texture2D::GetData: no CPU-side packed pixel data for requested mip level");
 
         std::vector<uint8_t> scratch(
@@ -1923,7 +1923,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ThrowIfDataTransferResourceInUseEXT(false);
         validateMipLevel("Texture2D::GetData", level, levelCount_);
         if (!renderer_)
-            throw std::runtime_error("Texture2D::GetData: compressed texture has no renderer");
+            throw System::NotSupportedException("Texture2D::GetData: compressed texture has no renderer");
 
         const int levelW = mipDim(width, level);
         const int levelH = mipDim(height, level);
@@ -2642,7 +2642,7 @@ namespace Microsoft::Xna::Framework::Graphics
             || (rgbaLevels.size() != 1u
                 && rgbaLevels.size() != static_cast<std::size_t>(maximumLevels)))
         {
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "Texture2D::FromStream: decoded mip chain must contain level zero or every level");
         }
 
@@ -2654,7 +2654,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                        * static_cast<std::size_t>(levelHeight) * 4u;
             if (rgbaLevels[level].size() != expected)
             {
-                throw std::invalid_argument(
+                throw System::ArgumentException(
                     "Texture2D::FromStream: decoded RGBA mip level has the wrong byte count");
             }
             levelWidth = std::max(1, levelWidth / 2);
@@ -2701,7 +2701,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<std::vector<std::uint8_t>>&& blockLevels)
     {
         if (blockLevels.empty())
-            throw std::invalid_argument(
+            throw System::ArgumentException(
                 "Texture2D::FromStream: decoded compressed mip chain must contain at least level zero");
 
         // The block byte counts were already validated against the source (DDS/XNB) level
@@ -2794,7 +2794,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using namespace CNA::Internal::Graphics::SurfaceFormatDecoder;
         if (width <= 0 || height <= 0)
-            throw std::runtime_error(std::string(api) + ": texture dimensions are invalid");
+            throw System::ArgumentOutOfRangeException("width", std::string(api) + ": texture dimensions are invalid");
 
         // XNA reads level zero from the live native texture, then converts its declared surface
         // format to an image-compatible RGBA plane. Reading through the public transfer path also

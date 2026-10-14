@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
@@ -162,7 +166,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void PbrEffect::setLightingEnabledProperty(bool value)
     {
         if (!value)
-            throw std::runtime_error("PbrEffect does not support setting LightingEnabled to false.");
+            throw System::InvalidOperationException("PbrEffect does not support setting LightingEnabled to false.");
     }
 
     DirectionalLight& PbrEffect::getDirectionalLight0Property() { return DirectionalLight0; }
@@ -298,7 +302,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void PbrEffect::setSpecularTextureCoordinateSetEXTProperty(int set)
     {
         if (set < 0 || set > 1)
-            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+            throw System::ArgumentOutOfRangeException("PBR packed texture-coordinate set must be 0 or 1.");
         specularTextureCoordinateSetEXT_ = set;
     }
     int PbrEffect::getSpecularColorTextureCoordinateSetEXTProperty() const
@@ -308,7 +312,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void PbrEffect::setSpecularColorTextureCoordinateSetEXTProperty(int set)
     {
         if (set < 0 || set > 1)
-            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+            throw System::ArgumentOutOfRangeException("PBR packed texture-coordinate set must be 0 or 1.");
         specularColorTextureCoordinateSetEXT_ = set;
     }
     TextureTransformEXT PbrEffect::getSpecularTextureTransformEXTProperty() const
@@ -350,9 +354,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void PbrEffect::setTextureCoordinateSetEXTProperty(int slot, int set)
     {
         if (slot < 0 || slot >= static_cast<int>(textureCoordinateSetsEXT_.size()))
-            throw std::out_of_range("PBR texture-coordinate slot must be in range [0, 4].");
+            throw System::ArgumentOutOfRangeException("PBR texture-coordinate slot must be in range [0, 4].");
         if (set < 0 || set > 1)
-            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+            throw System::ArgumentOutOfRangeException("PBR packed texture-coordinate set must be 0 or 1.");
         textureCoordinateSetsEXT_[static_cast<std::size_t>(slot)] = set;
     }
     const std::array<TextureTransformEXT, 5>& PbrEffect::getTextureTransformsEXTProperty() const
@@ -362,7 +366,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void PbrEffect::setTextureTransformEXTProperty(int slot, const TextureTransformEXT& value)
     {
         if (slot < 0 || slot >= static_cast<int>(textureTransformsEXT_.size()))
-            throw std::out_of_range("PBR texture-transform slot must be in range [0, 4].");
+            throw System::ArgumentOutOfRangeException("PBR texture-transform slot must be in range [0, 4].");
         textureTransformsEXT_[static_cast<std::size_t>(slot)] = value;
     }
     bool    PbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }

@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Ray.hpp"
+#include "System/ArgumentException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -247,7 +248,7 @@ namespace Microsoft::Xna::Framework
     {
         if (points.empty())
         {
-            throw std::invalid_argument("points must contain at least one point");
+            throw System::ArgumentException("points must contain at least one point");
         }
 
         Vector3 minx(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),

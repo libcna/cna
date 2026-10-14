@@ -28,6 +28,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include "System/ArgumentNullException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 
@@ -192,7 +193,7 @@ TEST_F(GamePlatformOwnershipTest, ExplicitNullPlatformIsRejected)
         {
             QuietGame game(std::unique_ptr<CNA::Platform::IPlatform>{});
         },
-        std::invalid_argument);
+        System::ArgumentNullException);
     EXPECT_FALSE(CNA::Platform::HasCurrentPlatform());
 }
 

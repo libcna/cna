@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -24,7 +28,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (weights.size() != morph.PositionDeltas.size())
         {
-            throw std::runtime_error(
+            throw System::ArgumentException(
                 "BlendMorphTargetsEXT: expected " + std::to_string(morph.PositionDeltas.size()) +
                 " weight(s), got " + std::to_string(weights.size()) + ".");
         }
@@ -239,7 +243,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* morph = dynamic_cast<MorphTargetDataEXT*>(part.getTagProperty());
         if (!morph)
         {
-            throw std::runtime_error(
+            throw System::InvalidOperationException(
                 "SetMorphWeightsEXT: the given ModelMeshPart has no MorphTargetDataEXT attached "
                 "via its own Tag property.");
         }

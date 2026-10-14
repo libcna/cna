@@ -9,6 +9,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "System/IServiceProvider.hpp"
+#include "System/ArgumentNullException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -41,7 +42,7 @@ namespace Microsoft::Xna::Framework
         {
             if (provider == nullptr)
             {
-                throw std::invalid_argument("provider");
+                throw System::ArgumentNullException("provider");
             }
 
             AddService(typeid(TService), static_cast<void*>(provider));

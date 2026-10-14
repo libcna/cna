@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/GameServiceContainer.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 
 using Microsoft::Xna::Framework::GameServiceContainer;
 
@@ -51,7 +53,7 @@ TEST(GameServiceContainerTest, AddThenGetReturnsService)
 TEST(GameServiceContainerTest, AddNullThrows)
 {
     GameServiceContainer c;
-    EXPECT_THROW(c.AddService<IFakeService>(nullptr), std::invalid_argument);
+    EXPECT_THROW(c.AddService<IFakeService>(nullptr), System::ArgumentNullException);
 }
 
 TEST(GameServiceContainerTest, AddDuplicateTypeThrows)
@@ -59,7 +61,7 @@ TEST(GameServiceContainerTest, AddDuplicateTypeThrows)
     GameServiceContainer c;
     FakeServiceImpl a, b;
     c.AddService<IFakeService>(&a);
-    EXPECT_THROW(c.AddService<IFakeService>(&b), std::invalid_argument);
+    EXPECT_THROW(c.AddService<IFakeService>(&b), System::ArgumentException);
 }
 
 TEST(GameServiceContainerTest, RemoveServiceMakesGetReturnNull)

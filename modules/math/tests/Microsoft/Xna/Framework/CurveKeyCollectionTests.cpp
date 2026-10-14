@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/CurveKeyCollection.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 
@@ -107,7 +109,7 @@ TEST(CurveKeyCollectionTest, RemoveAt)
 TEST(CurveKeyCollectionTest, RemoveAtOutOfRangeThrows)
 {
     CurveKeyCollection col;
-    EXPECT_THROW(col.RemoveAt(0), std::out_of_range);
+    EXPECT_THROW(col.RemoveAt(0), System::ArgumentOutOfRangeException);
 }
 
 TEST(CurveKeyCollectionTest, SetItemPropertySamePositionReplacesInPlace)
@@ -133,7 +135,7 @@ TEST(CurveKeyCollectionTest, SetItemPropertyDifferentPositionReinserts)
 TEST(CurveKeyCollectionTest, SetItemPropertyOutOfRangeThrows)
 {
     CurveKeyCollection col;
-    EXPECT_THROW(col.setItemProperty(0, CurveKey(1.0f, 1.0f)), std::out_of_range);
+    EXPECT_THROW(col.setItemProperty(0, CurveKey(1.0f, 1.0f)), System::ArgumentOutOfRangeException);
 }
 
 TEST(CurveKeyCollectionTest, CopyTo)
@@ -152,7 +154,7 @@ TEST(CurveKeyCollectionTest, CopyToNegativeIndexThrows)
     CurveKeyCollection col;
     col.Add(CurveKey(1.0f, 1.0f));
     std::vector<CurveKey> dest(2, CurveKey(0.0f, 0.0f));
-    EXPECT_THROW(col.CopyTo(dest, -1), std::out_of_range);
+    EXPECT_THROW(col.CopyTo(dest, -1), System::ArgumentOutOfRangeException);
 }
 
 TEST(CurveKeyCollectionTest, CopyToArrayTooSmallThrows)
@@ -161,15 +163,15 @@ TEST(CurveKeyCollectionTest, CopyToArrayTooSmallThrows)
     col.Add(CurveKey(1.0f, 1.0f));
     col.Add(CurveKey(2.0f, 2.0f));
     std::vector<CurveKey> dest(1, CurveKey(0.0f, 0.0f));
-    EXPECT_THROW(col.CopyTo(dest, 0), std::out_of_range);
+    EXPECT_THROW(col.CopyTo(dest, 0), System::ArgumentException);
 }
 
 TEST(CurveKeyCollectionTest, GetItemPropertyOutOfRangeThrows)
 {
     CurveKeyCollection col;
     col.Add(CurveKey(1.0f, 1.0f));
-    EXPECT_THROW(col.getItemProperty(1), std::out_of_range);
-    EXPECT_THROW(col.getItemProperty(-1), std::out_of_range);
+    EXPECT_THROW(col.getItemProperty(1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(col.getItemProperty(-1), System::ArgumentOutOfRangeException);
 }
 
 TEST(CurveKeyCollectionTest, CloneIsIndependent)

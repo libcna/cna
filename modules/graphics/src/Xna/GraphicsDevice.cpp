@@ -3256,7 +3256,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (renderer_ == nullptr)
         {
-            throw std::runtime_error("GraphicsDevice renderer is not available.");
+            throw System::InvalidOperationException("GraphicsDevice renderer is not available.");
         }
 
         return *renderer_;
@@ -3841,7 +3841,7 @@ namespace Microsoft::Xna::Framework::Graphics
         platformWindow_ = platform_->CreateWindow(description);
         if (!platformWindow_)
         {
-            throw std::runtime_error("platform returned a null window");
+            throw System::InvalidOperationException("platform returned a null window");
         }
         // CNA created it, so CNA may tear it down and rebuild it for a candidate of another window
         // kind. MERGE: the platform wrapper tracks the same fact for lifetime purposes; this flag
@@ -4106,7 +4106,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 }
                 if (isDebugForcedInitFailure(candidate->name))
                 {
-                    throw std::runtime_error(
+                    throw System::InvalidOperationException(
                         std::string(candidate->name) +
                         ": initialization failed (forced by CNA_DEBUG_FAIL_RENDERER_INIT)");
                 }
@@ -5247,7 +5247,7 @@ namespace Microsoft::Xna::Framework::Graphics
             auto* const publicTarget = dynamic_cast<IRenderTarget*>(texture);
             if (source == nullptr || publicTarget == nullptr)
             {
-                throw std::invalid_argument(
+                throw System::ArgumentException(
                     "SetRenderTargets: binding " + std::to_string(i)
                     + " must contain a RenderTarget2D or RenderTargetCube.");
             }

@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentException.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
@@ -681,13 +682,13 @@ TEST(MatrixTest, CreateOrthographicOffCenterM44)
 TEST(MatrixTest, CreatePerspectiveThrowsForBadNear)
 {
     Matrix result;
-    EXPECT_THROW(Matrix::CreatePerspective(1.0f, 1.0f, 0.0f, 100.0f, result), std::invalid_argument);
+    EXPECT_THROW(Matrix::CreatePerspective(1.0f, 1.0f, 0.0f, 100.0f, result), System::ArgumentException);
 }
 
 TEST(MatrixTest, CreatePerspectiveThrowsWhenNearGreaterFar)
 {
     Matrix result;
-    EXPECT_THROW(Matrix::CreatePerspective(1.0f, 1.0f, 10.0f, 5.0f, result), std::invalid_argument);
+    EXPECT_THROW(Matrix::CreatePerspective(1.0f, 1.0f, 10.0f, 5.0f, result), System::ArgumentException);
 }
 
 TEST(MatrixTest, CreatePerspectiveM34IsMinusOne)
@@ -699,7 +700,7 @@ TEST(MatrixTest, CreatePerspectiveM34IsMinusOne)
 TEST(MatrixTest, CreatePerspectiveFieldOfViewThrowsBadFov)
 {
     Matrix result;
-    EXPECT_THROW(Matrix::CreatePerspectiveFieldOfView(0.0f, 1.0f, 1.0f, 100.0f, result), std::invalid_argument);
+    EXPECT_THROW(Matrix::CreatePerspectiveFieldOfView(0.0f, 1.0f, 1.0f, 100.0f, result), System::ArgumentException);
 }
 
 TEST(MatrixTest, CreatePerspectiveFieldOfViewM34IsMinusOne)
@@ -714,7 +715,7 @@ TEST(MatrixTest, CreatePerspectiveOffCenterThrowsBadNear)
 {
     Matrix result;
     EXPECT_THROW(Matrix::CreatePerspectiveOffCenter(-1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 100.0f, result),
-                 std::invalid_argument);
+                 System::ArgumentException);
 }
 
 TEST(MatrixTest, CreatePerspectiveOffCenterM34IsMinusOne)

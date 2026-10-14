@@ -17,6 +17,7 @@
 
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "SharpRuntime/Storage/StoragePaths.hpp"
+#include "System/ArgumentException.hpp"
 
 using Microsoft::Xna::Framework::Storage::StorageDevice;
 
@@ -75,9 +76,9 @@ namespace
     };
 }
 
-TEST_F(StorageDeviceDeleteContainerTest, EmptyTitleNameThrowsInvalidArgument)
+TEST_F(StorageDeviceDeleteContainerTest, EmptyTitleNameThrowsArgumentException)
 {
-    EXPECT_THROW(device_->DeleteContainer(""), std::invalid_argument);
+    EXPECT_THROW(device_->DeleteContainer(""), System::ArgumentException);
 }
 
 TEST_F(StorageDeviceDeleteContainerTest, AppNameAlsoScopesSharpRuntimeIsolatedStorage)
@@ -90,7 +91,7 @@ TEST_F(StorageDeviceDeleteContainerTest, AppNameAlsoScopesSharpRuntimeIsolatedSt
 TEST_F(StorageDeviceDeleteContainerTest, AbsoluteTitleNameThrowsAndDeletesNothing)
 {
     CreateMarker("sentinel.txt");
-    EXPECT_THROW(device_->DeleteContainer("/etc"), std::invalid_argument);
+    EXPECT_THROW(device_->DeleteContainer("/etc"), System::ArgumentException);
     EXPECT_TRUE(MarkerExists("sentinel.txt")) << "storage root must be untouched by a rejected call";
 }
 
@@ -100,14 +101,14 @@ TEST_F(StorageDeviceDeleteContainerTest, EscapingTitleNameThrowsAndDeletesNothin
     // storage root (a SDL pref-path directory is always several levels deep), landing on some
     // other, unrelated real directory this test must never actually touch.
     CreateMarker("sentinel.txt");
-    EXPECT_THROW(device_->DeleteContainer("../../../../../../../../tmp"), std::invalid_argument);
+    EXPECT_THROW(device_->DeleteContainer("../../../../../../../../tmp"), System::ArgumentException);
     EXPECT_TRUE(MarkerExists("sentinel.txt")) << "storage root must be untouched by a rejected call";
 }
 
 TEST_F(StorageDeviceDeleteContainerTest, DotTitleNameThrowsAndDoesNotDeleteTheWholeRoot)
 {
     CreateMarker("sentinel.txt");
-    EXPECT_THROW(device_->DeleteContainer("."), std::invalid_argument);
+    EXPECT_THROW(device_->DeleteContainer("."), System::ArgumentException);
     EXPECT_TRUE(MarkerExists("sentinel.txt")) << "'.' must not delete the entire storage root";
 }
 
@@ -127,34 +128,34 @@ TEST_F(StorageDeviceDeleteContainerTest, ContainerOpenRejectsPathsOutsideStorage
     auto parentEscape = device_->BeginOpenContainer("../outside", nullptr, nullptr);
     EXPECT_THROW(
         { [[maybe_unused]] auto rejected = device_->EndOpenContainer(parentEscape.get()); },
-        std::invalid_argument);
+        System::ArgumentException);
 
     auto absoluteEscape = device_->BeginOpenContainer("/tmp/cna-storage-escape", nullptr, nullptr);
     EXPECT_THROW(
         { [[maybe_unused]] auto rejected = device_->EndOpenContainer(absoluteEscape.get()); },
-        std::invalid_argument);
+        System::ArgumentException);
 }
 
 TEST_F(StorageDeviceDeleteContainerTest, ContainerOperationsRejectLexicalEscapes)
 {
     auto container = OpenContainer("ContainedGame");
 
-    EXPECT_THROW(container->CreateDirectory("../outside"), std::invalid_argument);
+    EXPECT_THROW(container->CreateDirectory("../outside"), System::ArgumentException);
     EXPECT_THROW(
         { [[maybe_unused]] const bool rejected = container->DirectoryExists("../outside"); },
-        std::invalid_argument);
-    EXPECT_THROW(container->DeleteDirectory("../outside"), std::invalid_argument);
+        System::ArgumentException);
+    EXPECT_THROW(container->DeleteDirectory("../outside"), System::ArgumentException);
     EXPECT_THROW(
         { [[maybe_unused]] auto rejected = container->CreateFile("../outside.bin"); },
-        std::invalid_argument);
+        System::ArgumentException);
     EXPECT_THROW(
         { [[maybe_unused]] const bool rejected = container->FileExists("../outside.bin"); },
-        std::invalid_argument);
-    EXPECT_THROW(container->DeleteFile("../outside.bin"), std::invalid_argument);
+        System::ArgumentException);
+    EXPECT_THROW(container->DeleteFile("../outside.bin"), System::ArgumentException);
     EXPECT_THROW(
         { [[maybe_unused]] auto rejected =
             container->OpenFile("../outside.bin", System::IO::FileMode::Open); },
-        std::invalid_argument);
+        System::ArgumentException);
 
     EXPECT_FALSE(MarkerExists("ContainedGame/outside.bin"));
 }
@@ -175,10 +176,10 @@ TEST_F(StorageDeviceDeleteContainerTest, ContainerOperationsRejectSymlinkEscapes
 
     EXPECT_THROW(
         { [[maybe_unused]] auto rejected = container->CreateFile("escape/outside.bin"); },
-        std::invalid_argument);
+        System::ArgumentException);
     EXPECT_THROW(
         { [[maybe_unused]] const bool rejected = container->FileExists("escape/outside.bin"); },
-        std::invalid_argument);
+        System::ArgumentException);
     EXPECT_FALSE(fs::exists(outsideRoot / "outside.bin"));
 }
 

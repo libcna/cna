@@ -10,6 +10,8 @@
 // (like the ModelTypeReader stride-52/56 paths it mirrors) never populates that shadow.
 
 #include <cmath>
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentException.hpp"
 #include <cstring>
 #include <gtest/gtest.h>
 #include <stdexcept>
@@ -141,8 +143,8 @@ TEST(BlendMorphTargetsEXTTest, TextureCoordinateIsUnaffectedByBlending)
 TEST(BlendMorphTargetsEXTTest, WrongWeightCountThrows)
 {
     const MorphTargetDataEXT morph = BuildTwoTargetMorphData();
-    EXPECT_THROW(BlendMorphTargetsEXT(morph, {1.0f}), std::runtime_error);
-    EXPECT_THROW(BlendMorphTargetsEXT(morph, {1.0f, 1.0f, 1.0f}), std::runtime_error);
+    EXPECT_THROW(BlendMorphTargetsEXT(morph, {1.0f}), System::ArgumentException);
+    EXPECT_THROW(BlendMorphTargetsEXT(morph, {1.0f, 1.0f, 1.0f}), System::ArgumentException);
 }
 
 TEST(SetMorphWeightsEXTTest, ReuploadsTheVertexBufferAndUpdatesStoredWeights)
@@ -221,7 +223,7 @@ TEST(SetMorphWeightsEXTTest, MissingTagThrows)
     VertexBuffer vb(device, 1);
     IndexBuffer ib(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
     ModelMeshPart part(&vb, &ib, 1, 1, 0, 0);
-    EXPECT_THROW(SetMorphWeightsEXT(part, {1.0f}), std::runtime_error);
+    EXPECT_THROW(SetMorphWeightsEXT(part, {1.0f}), System::InvalidOperationException);
 }
 
 TEST(EvaluateMorphWeightsEXTTest, EmptyTrackReturnsEmptyVector)

@@ -365,7 +365,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
         if (!data)
-            throw std::invalid_argument("Texture3D::SetDataPointerEXT: data must not be null");
+            throw System::ArgumentNullException("data", "Texture3D::SetDataPointerEXT: data must not be null");
 
         // `if (renderer_)` used to drop the upload silently. Texture3D's constructor
         // already refuses a device that reports no GraphicsCapability::Texture3D, so a null renderer

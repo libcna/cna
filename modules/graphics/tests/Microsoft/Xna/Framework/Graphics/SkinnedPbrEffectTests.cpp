@@ -5,6 +5,9 @@
 // See SkinnedPbrEffect.hpp's own doc comment for the design rationale.
 
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 #include <memory>
 #include <stdexcept>
 
@@ -87,10 +90,10 @@ TEST_F(SkinnedPbrEffectDefaultsTest, TextureCoordinateSelectorsDefaultValidateAn
     fx.FillGpuDrawParams(params);
     EXPECT_EQ(params.pbrTextureCoordinateSetMask, 0b01010u);
 
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(-1, 0), std::out_of_range);
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), std::out_of_range);
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), std::out_of_range);
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(-1, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, TextureTransformsDefaultValidateAndReachAffineDrawParams)
@@ -115,8 +118,8 @@ TEST_F(SkinnedPbrEffectDefaultsTest, TextureTransformsDefaultValidateAndReachAff
     EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[9][2], 0.75f);
     EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[9][3], 0.0f);
 
-    EXPECT_THROW(fx.setTextureTransformEXTProperty(-1, identity), std::out_of_range);
-    EXPECT_THROW(fx.setTextureTransformEXTProperty(5, identity), std::out_of_range);
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(-1, identity), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(5, identity), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
@@ -126,7 +129,7 @@ TEST_F(SkinnedPbrEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SetLightingEnabledFalseThrows)
 {
-    EXPECT_THROW(fx.setLightingEnabledProperty(false), std::runtime_error);
+    EXPECT_THROW(fx.setLightingEnabledProperty(false), System::InvalidOperationException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SetLightingEnabledTrueDoesNotThrow)
@@ -305,8 +308,8 @@ TEST_F(SkinnedPbrEffectDefaultsTest, SpecularTextureInputsRoundTripAndReachDrawP
     EXPECT_EQ(fx.getSpecularTextureTransformEXTProperty(), strengthTransform);
     EXPECT_EQ(fx.getSpecularColorTextureTransformEXTProperty(), colorTransform);
     EXPECT_FALSE(fx.getSpecularColorTextureIsSrgbEXTProperty());
-    EXPECT_THROW(fx.setSpecularTextureCoordinateSetEXTProperty(-1), std::out_of_range);
-    EXPECT_THROW(fx.setSpecularColorTextureCoordinateSetEXTProperty(2), std::out_of_range);
+    EXPECT_THROW(fx.setSpecularTextureCoordinateSetEXTProperty(-1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setSpecularColorTextureCoordinateSetEXTProperty(2), System::ArgumentOutOfRangeException);
 
     GpuDrawParams params;
     fx.FillGpuDrawParams(params);
@@ -391,13 +394,13 @@ TEST_F(SkinnedPbrEffectDefaultsTest, GetBoneTransformsReturnsIndependentCopy)
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SetBoneTransformsThrowsOnEmpty)
 {
-    EXPECT_THROW(fx.SetBoneTransforms(std::vector<Matrix>{}), std::invalid_argument);
+    EXPECT_THROW(fx.SetBoneTransforms(std::vector<Matrix>{}), System::ArgumentException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SetBoneTransformsThrowsWhenExceedingMaxBones)
 {
     std::vector<Matrix> tooMany(SkinnedPbrEffect::MaxBones + 1, Matrix::getIdentityProperty());
-    EXPECT_THROW(fx.SetBoneTransforms(tooMany), std::invalid_argument);
+    EXPECT_THROW(fx.SetBoneTransforms(tooMany), System::ArgumentException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SetBoneTransformsAcceptsExactlyMaxBones)
@@ -408,17 +411,17 @@ TEST_F(SkinnedPbrEffectDefaultsTest, SetBoneTransformsAcceptsExactlyMaxBones)
 
 TEST_F(SkinnedPbrEffectDefaultsTest, GetBoneTransformsThrowsOnZeroCount)
 {
-    EXPECT_THROW((void)fx.GetBoneTransforms(0), std::out_of_range);
+    EXPECT_THROW((void)fx.GetBoneTransforms(0), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, GetBoneTransformsThrowsOnNegativeCount)
 {
-    EXPECT_THROW((void)fx.GetBoneTransforms(-1), std::out_of_range);
+    EXPECT_THROW((void)fx.GetBoneTransforms(-1), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, GetBoneTransformsThrowsWhenExceedingMaxBones)
 {
-    EXPECT_THROW((void)fx.GetBoneTransforms(SkinnedPbrEffect::MaxBones + 1), std::out_of_range);
+    EXPECT_THROW((void)fx.GetBoneTransforms(SkinnedPbrEffect::MaxBones + 1), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, WeightsPerVertexAcceptsOneTwoAndFour)
@@ -433,8 +436,8 @@ TEST_F(SkinnedPbrEffectDefaultsTest, WeightsPerVertexAcceptsOneTwoAndFour)
 
 TEST_F(SkinnedPbrEffectDefaultsTest, WeightsPerVertexThrowsOnInvalidValue)
 {
-    EXPECT_THROW(fx.setWeightsPerVertexProperty(3), std::out_of_range);
-    EXPECT_THROW(fx.setWeightsPerVertexProperty(0), std::out_of_range);
+    EXPECT_THROW(fx.setWeightsPerVertexProperty(3), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setWeightsPerVertexProperty(0), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, BoneTransformsRoundTrip)

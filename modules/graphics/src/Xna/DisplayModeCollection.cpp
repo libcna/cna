@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/DisplayModeCollection.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -25,7 +29,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (index < 0 || index >= getCountProperty())
         {
-            throw std::out_of_range("index");
+            throw System::ArgumentOutOfRangeException("index");
         }
 
         return modes_[static_cast<std::size_t>(index)];

@@ -5,6 +5,8 @@
 // rationale (glTF 2.0's own reference BRDF, CNA's established 3-light + ambient convention).
 
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include <memory>
 #include <stdexcept>
 
@@ -82,7 +84,7 @@ TEST_F(PbrEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
 
 TEST_F(PbrEffectDefaultsTest, SetLightingEnabledFalseThrows)
 {
-    EXPECT_THROW(fx.setLightingEnabledProperty(false), std::runtime_error);
+    EXPECT_THROW(fx.setLightingEnabledProperty(false), System::InvalidOperationException);
 }
 
 TEST_F(PbrEffectDefaultsTest, SetLightingEnabledTrueDoesNotThrow)
@@ -194,10 +196,10 @@ TEST_F(PbrEffectDefaultsTest, TextureCoordinateSelectorsDefaultValidateAndReachD
     fx.FillGpuDrawParams(params);
     EXPECT_EQ(params.pbrTextureCoordinateSetMask, 0b10101u);
 
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(-1, 0), std::out_of_range);
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), std::out_of_range);
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), std::out_of_range);
-    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(-1, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(PbrEffectDefaultsTest, TextureTransformsDefaultValidateAndReachAffineDrawParams)
@@ -226,8 +228,8 @@ TEST_F(PbrEffectDefaultsTest, TextureTransformsDefaultValidateAndReachAffineDraw
     EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[1][0], 0.0f);
     EXPECT_FLOAT_EQ(params.pbrTextureTransformRows[1][1], 1.0f);
 
-    EXPECT_THROW(fx.setTextureTransformEXTProperty(-1, identity), std::out_of_range);
-    EXPECT_THROW(fx.setTextureTransformEXTProperty(5, identity), std::out_of_range);
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(-1, identity), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setTextureTransformEXTProperty(5, identity), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(PbrEffectDefaultsTest, DirectionalLight0DefaultsToDisabled)
@@ -310,8 +312,8 @@ TEST_F(PbrEffectDefaultsTest, SpecularTextureInputsRoundTripAndReachDrawParams)
     EXPECT_EQ(fx.getSpecularTextureTransformEXTProperty(), strengthTransform);
     EXPECT_EQ(fx.getSpecularColorTextureTransformEXTProperty(), colorTransform);
     EXPECT_FALSE(fx.getSpecularColorTextureIsSrgbEXTProperty());
-    EXPECT_THROW(fx.setSpecularTextureCoordinateSetEXTProperty(-1), std::out_of_range);
-    EXPECT_THROW(fx.setSpecularColorTextureCoordinateSetEXTProperty(2), std::out_of_range);
+    EXPECT_THROW(fx.setSpecularTextureCoordinateSetEXTProperty(-1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fx.setSpecularColorTextureCoordinateSetEXTProperty(2), System::ArgumentOutOfRangeException);
 
     GpuDrawParams params;
     fx.FillGpuDrawParams(params);

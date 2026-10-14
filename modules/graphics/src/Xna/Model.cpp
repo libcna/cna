@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -35,7 +37,7 @@ namespace CNA::Internal::Graphics
         {
             if (binding.part == nullptr)
             {
-                throw std::invalid_argument(
+                throw System::ArgumentException(
                     "ConfigureModelMaterialVariantsEXT: a binding has no ModelMeshPart");
             }
             binding.variants.resize(names.size());
@@ -108,11 +110,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // switching between them must not have to catch two different things.
         if (fieldOfView <= 0.0f || fieldOfView >= 3.141593f)
         {
-            throw std::invalid_argument("fieldOfView <= 0 or >= PI");
+            throw System::ArgumentException("fieldOfView <= 0 or >= PI");
         }
         if (nearPlaneDistance <= 0.0f)
         {
-            throw std::invalid_argument("nearPlaneDistance <= 0");
+            throw System::ArgumentException("nearPlaneDistance <= 0");
         }
 
         // CreatePerspectiveFieldOfView with the zfar terms at their limits: -zfar/(zfar-znear) -> -1
@@ -300,7 +302,7 @@ namespace Microsoft::Xna::Framework::Graphics
             ? static_cast<int>(materialVariants_->names.size()) : 0;
         if (value < -1 || value >= variantCount)
         {
-            throw std::out_of_range("materialVariantEXT");
+            throw System::ArgumentOutOfRangeException("materialVariantEXT");
         }
         if (materialVariants_ == nullptr)
         {
@@ -363,14 +365,14 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!bones_.bones_.empty())
         {
             if (rootBoneIndex >= bones_.bones_.size())
-                throw std::out_of_range("rootBoneIndex");
+                throw System::ArgumentOutOfRangeException("rootBoneIndex");
             root_ = bones_.bones_[rootBoneIndex];
         }
 
         if (meshParentBones.empty())
             return;
         if (meshParentBones.size() != meshes_.meshes_.size())
-            throw std::out_of_range("meshParentBones");
+            throw System::ArgumentOutOfRangeException("meshParentBones");
 
         for (std::size_t i = 0; i < meshParentBones.size(); ++i)
             meshes_.meshes_[i]->parentBone_ = meshParentBones[i];

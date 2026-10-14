@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -188,7 +189,7 @@ namespace Microsoft::Xna::Framework
         // FNA has no bounds check here; C++ adds one to avoid undefined behaviour
         if (keyIndex < 0 || keyIndex >= keys.getCountProperty())
         {
-            throw std::out_of_range("Curve keyIndex is out of range");
+            throw System::ArgumentOutOfRangeException("keyIndex", "Curve keyIndex is out of range");
         }
 
         CurveKey& key = keys.getItemProperty(keyIndex);

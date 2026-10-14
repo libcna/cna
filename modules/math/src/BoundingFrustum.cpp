@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Ray.hpp"
 #include "System/NotImplementedException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -171,7 +172,7 @@ namespace Microsoft::Xna::Framework
     {
         if (outputCorners.size() < CornerCount)
         {
-            throw std::out_of_range("corners");
+            throw System::ArgumentOutOfRangeException("corners");
         }
 
         for (int i = 0; i < CornerCount; i += 1)
@@ -258,7 +259,7 @@ namespace Microsoft::Xna::Framework
         }
         if (ctype != ContainmentType::Intersects)
         {
-            throw std::out_of_range("ctype");
+            throw System::ArgumentOutOfRangeException("ctype");
         }
 
         throw System::NotImplementedException("BoundingFrustum::Intersects(Ray) is not implemented");

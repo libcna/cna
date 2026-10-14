@@ -843,7 +843,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     }
     else
     {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), System::InvalidOperationException);
     }
 }
 
@@ -857,7 +857,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
     }
     else
     {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), System::InvalidOperationException);
     }
 }
 
@@ -870,7 +870,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     }
     else
     {
-        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), System::InvalidOperationException);
     }
 }
 
@@ -1024,7 +1024,7 @@ protected:
         if (verdict == CNA::Internal::Renderers::RendererFormatVerdict::Supported)
             EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, format));
         else
-            EXPECT_THROW(Texture2D(gd, 2, 2, false, format), std::runtime_error);
+            EXPECT_THROW(Texture2D(gd, 2, 2, false, format), System::InvalidOperationException);
     }
 };
 
@@ -1279,9 +1279,9 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         }
         else
         {
-            EXPECT_THROW(Texture2D(gd, 4, 4, false, format), std::runtime_error)
+            EXPECT_THROW(Texture2D(gd, 4, 4, false, format), System::InvalidOperationException)
                 << "SurfaceFormat ordinal " << static_cast<int>(format)
-                << " must throw std::runtime_error, not silently succeed with the wrong GPU format";
+                << " must throw InvalidOperationException, not silently succeed with the wrong GPU format";
         }
     }
 }
@@ -1415,7 +1415,7 @@ TEST(Texture2DTest, GetDataNoCpuPixelsThrowsRuntimeError)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(buf, 0, 1), std::runtime_error);
+    EXPECT_THROW(tex.GetData(buf, 0, 1), System::NotSupportedException);
 }
 
 // Task 265: negative startIndex is rejected before it can compute a negative
@@ -1441,7 +1441,7 @@ TEST(Texture2DTest, GetData2ParamNoCpuPixelsThrowsRuntimeError)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(buf, 1), std::runtime_error);
+    EXPECT_THROW(tex.GetData(buf, 1), System::NotSupportedException);
 }
 
 // -----------------------------------------------------------------------
@@ -1488,7 +1488,7 @@ TEST(Texture2DTest, GetDataLevelNoCpuPixelsThrowsRuntimeError)
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     // getMipBufferConst(0) returns nullptr when cpuPixels_ is empty
-    EXPECT_THROW(tex.GetData(0, nullptr, buf, 0, 1), std::runtime_error);
+    EXPECT_THROW(tex.GetData(0, nullptr, buf, 0, 1), System::NotSupportedException);
 }
 
 // -----------------------------------------------------------------------
@@ -1803,7 +1803,7 @@ TEST_F(ContextRecoveryTest, GetDataThrowsAfterFullUploadWithRecoveryDisabled)
     tex.SetData(in, 4);
 
     Color out[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(out, 4), std::runtime_error);
+    EXPECT_THROW(tex.GetData(out, 4), System::NotSupportedException);
 }
 
 TEST_F(ContextRecoveryTest, PartialUpdateAfterShadowFreedThrowsInsteadOfCorruptingTexture)
@@ -1819,7 +1819,7 @@ TEST_F(ContextRecoveryTest, PartialUpdateAfterShadowFreedThrowsInsteadOfCorrupti
 
     const Rectangle onePixel(0, 0, 1, 1);
     Color patch(9, 9, 9, 9);
-    EXPECT_THROW(tex.SetData(0, &onePixel, &patch, 0, 1), std::runtime_error);
+    EXPECT_THROW(tex.SetData(0, &onePixel, &patch, 0, 1), System::NotSupportedException);
 }
 
 TEST_F(ContextRecoveryTest, PartialUpdateCoveringFullLevelDoesNotThrowEvenWithRecoveryDisabled)
@@ -2300,11 +2300,11 @@ TEST_F(SaveAsPngTest, NullStreamThrowsArgumentNullException)
         [&] { tex.SaveAsPng(nullptr, 1, 1); }, "stream");
 }
 
-TEST_F(SaveAsPngTest, NoCpuPixelDataThrowsRuntimeError)
+TEST_F(SaveAsPngTest, NoCpuPixelDataThrowsNotSupported)
 {
     Texture2D tex; // no SetData / renderer -> cpuPixels_ is empty
     MemoryStream stream;
-    EXPECT_THROW(tex.SaveAsPng(&stream, 1, 1), std::runtime_error);
+    EXPECT_THROW(tex.SaveAsPng(&stream, 1, 1), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SaveAsPngTest, TargetDimensionsUseXnaArgumentExceptions)
@@ -2644,11 +2644,11 @@ TEST_F(SaveAsJpegTest, NullStreamThrowsArgumentNullException)
         [&] { tex.SaveAsJpeg(nullptr, 1, 1); }, "stream");
 }
 
-TEST_F(SaveAsJpegTest, NoCpuPixelDataThrowsRuntimeError)
+TEST_F(SaveAsJpegTest, NoCpuPixelDataThrowsNotSupported)
 {
     Texture2D tex;
     MemoryStream stream;
-    EXPECT_THROW(tex.SaveAsJpeg(&stream, 1, 1), std::runtime_error);
+    EXPECT_THROW(tex.SaveAsJpeg(&stream, 1, 1), System::ArgumentOutOfRangeException);
 }
 
 TEST_F(SaveAsJpegTest, TargetDimensionsUseXnaArgumentExceptions)

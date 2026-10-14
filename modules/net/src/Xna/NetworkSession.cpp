@@ -900,7 +900,7 @@ namespace Microsoft::Xna::Framework::Net
             // Capture only owned logical values so queued cleanup cannot reference this session.
             try {
                 const auto service=LeaderboardService();
-                if(!service) throw std::runtime_error("no leaderboard service");
+                if(!service) throw System::InvalidOperationException("no leaderboard service");
                 const auto gameplay=leaderboardGameplay_,owner=leaderboardOwner_;
                 auto* executor=service.get();
                 // The backend joins its own executor before destruction. A queued task must not

@@ -6,6 +6,7 @@
 // and does not need an SDL video driver.
 
 #include <gtest/gtest.h>
+#include "System/ArgumentException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -697,7 +698,7 @@ TEST(MouseCursorTest, FromTexture2DRejectsNonColorSurfaceFormat)
     const std::vector<Color> pixels(16, Color::White);
     const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Bgr565, pixels);
 
-    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 0, 0), std::invalid_argument);
+    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 0, 0), System::ArgumentException);
 }
 
 TEST(MouseCursorTest, FromTexture2DThrowsWhenOriginIsOutsideTheTexture)
@@ -705,6 +706,6 @@ TEST(MouseCursorTest, FromTexture2DThrowsWhenOriginIsOutsideTheTexture)
     const std::vector<Color> pixels(16, Color::White);
     const Texture2D tex = Texture2D::CreateCpuOnlyForTests(4, 4, SurfaceFormat::Color, pixels);
 
-    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 100, 100), std::runtime_error);
-    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, -1, 0), std::runtime_error);
+    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 100, 100), System::ArgumentException);
+    EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, -1, 0), System::ArgumentException);
 }

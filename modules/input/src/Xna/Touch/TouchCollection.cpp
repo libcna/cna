@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
@@ -66,14 +67,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
     TouchLocation& TouchCollection::operator[](std::size_t index)
     {
         if (index >= touches_.size())
-            throw std::out_of_range("TouchCollection index out of range");
+            throw System::ArgumentOutOfRangeException("TouchCollection index out of range");
         return touches_[index];
     }
 
     const TouchLocation& TouchCollection::operator[](std::size_t index) const
     {
         if (index >= touches_.size())
-            throw std::out_of_range("TouchCollection index out of range");
+            throw System::ArgumentOutOfRangeException("TouchCollection index out of range");
         return touches_[index];
     }
 
@@ -115,7 +116,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         // > size() forms an invalid iterator and std::vector::insert is undefined behavior.
         // FNA throws ArgumentOutOfRangeException for a bad index; we map that to std::out_of_range.
         if (arrayIndex < 0 || static_cast<std::size_t>(arrayIndex) > array.size())
-            throw std::out_of_range("TouchCollection::CopyTo: arrayIndex is out of range");
+            throw System::ArgumentOutOfRangeException("TouchCollection::CopyTo: arrayIndex is out of range");
         for (const auto& t : touches_)
             array.insert(array.begin() + arrayIndex++, t);
     }
@@ -153,14 +154,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
     void TouchCollection::RemoveAt(int index)
     {
         if (index < 0 || static_cast<std::size_t>(index) >= touches_.size())
-            throw std::out_of_range("TouchCollection index out of range");
+            throw System::ArgumentOutOfRangeException("TouchCollection index out of range");
         touches_.erase(touches_.begin() + index);
     }
 
     void TouchCollection::Insert(int index, const TouchLocation& item)
     {
         if (index < 0 || static_cast<std::size_t>(index) > touches_.size())
-            throw std::out_of_range("TouchCollection index out of range");
+            throw System::ArgumentOutOfRangeException("TouchCollection index out of range");
         touches_.insert(touches_.begin() + index, item);
     }
 
