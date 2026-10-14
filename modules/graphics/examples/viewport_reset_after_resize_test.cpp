@@ -44,7 +44,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-// plans/plan_vulkan_modern_graphics.md VMG-0003: a CNA_ENABLE_SDL=OFF build (CNA_EXAMPLES_NO_SDL)
+// VMG-0003 (the retired Vulkan renderer's workstream): a CNA_ENABLE_SDL=OFF build (CNA_EXAMPLES_NO_SDL)
 // has no SDL window to ask; the platform's own GameWindow reports the same logical client size.
 #if !defined(CNA_EXAMPLES_NO_SDL)
 #include <SDL3/SDL.h>

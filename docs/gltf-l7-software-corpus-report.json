@@ -46,7 +46,7 @@
   "goldenComparison": {
     "rgbTolerance": 0,
     "alphaTolerance": 0,
-    "justification": "Two independent production-viewer processes using CNA's CPU rasterizer must produce byte-identical PNG files for every renderable asset. The renderer has its own goldens; no EasyGL or Vulkan image or tolerance is reused."
+    "justification": "Two independent production-viewer processes using CNA's CPU rasterizer must produce byte-identical PNG files for every renderable asset. The renderer has its own goldens; no other renderer's image or tolerance is reused."
   },
   "classification": {
     "scope": "Differences between this run and the committed same-renderer goldens. Reported/deferred glTF features remain owned by their L1-L6 diagnostics; the independent Khronos subset is docs/gltf-reference-comparison.json.",

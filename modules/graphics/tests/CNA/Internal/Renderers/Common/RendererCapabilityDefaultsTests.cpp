@@ -4,8 +4,8 @@
 // Capability defaults must stay explicitly unknown/zero, and a malformed supported bit must
 // never pass the public known-and-supported predicate.
 //
-// What matters here is precisely the DEFAULT behaviour, because that is what 45 of the 46 renderers
-// get. When these decisions lived behind the preprocessor, the #else branch carried the
+// What matters here is precisely the DEFAULT behaviour, because that is what nearly every renderer
+// gets. When these decisions lived behind the preprocessor, the #else branch carried the
 // renderer-agnostic answer; moving them behind virtuals only preserves behaviour if the defaults
 // reproduce that #else branch exactly. A default that silently narrowed a public API -- for
 // example a Color-transfer predicate that answered "Color only" instead of "any texel size that is

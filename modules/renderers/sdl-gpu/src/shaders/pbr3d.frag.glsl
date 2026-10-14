@@ -22,7 +22,7 @@ layout(set = 2, binding = 3) uniform sampler2D uEmissiveMap;
 layout(set = 2, binding = 4) uniform sampler2D uOcclusionMap;
 layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
 layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;
-// plans/plan_street_sdlgpu.md STREETS-0002: an ImageBasedLightEXT's three resources, after the
+// STREETS-0002: an ImageBasedLightEXT's three resources, after the
 // shadow maps at 7..9, read through GraphicsDevice.SamplerStates[10..12] as on EasyGL and
 // WebGPU. A draw with no environment binds neutral white here and iblParams.x switches the term off.
 layout(set = 2, binding = 10) uniform samplerCube uIblIrradiance;
@@ -66,7 +66,7 @@ layout(set = 3, binding = 2) uniform PbrParams {
     vec4 specularFresnelInputs; // xyz=unclamped dielectric F0, w=specular factor
     vec4 textureTransformRows[10];
     vec4 specularTextureTransformRows[4];
-    // plans/plan_sdlgpu_modern_graphics.md SMG-0032: the stock sampler LOD biases used to be a
+    // SMG-0032: the stock sampler LOD biases used to be a
     // fourth block of their own. SDL_gpu allows four uniform buffers per stage, and shadow
     // reception needs one, so the two vectors ride at the end of this block instead.
     vec4 lodBias0To3;
@@ -125,7 +125,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
 // A disabled/never-configured DirectionalLight can forward Direction=(0,0,0) (matches
 // lit_textured3d.frag.glsl's own established workaround) -- normalize() on a true zero vector is
 // undefined and can poison the whole light sum with NaN. Not present in EasyGLRenderer's
-// own PbrLight callers (an OpenGL-driver-specific tolerance this Vulkan-backed renderer does not
+// own PbrLight callers (an OpenGL-driver-specific tolerance this SDL_GPU renderer does not
 // share) -- a deliberate, documented improvement over the reference, not a behavior change for
 // any enabled light (NdotL already collapses the whole per-light term to zero when L=0).
 vec3 safeNormalize(vec3 v) {

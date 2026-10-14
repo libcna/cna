@@ -110,9 +110,9 @@ void main() {
     // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix
     // transpose(inverse(mat3(world))), not raw mat3(lp.world). Raw World is correct only for
     // rotation and uniform scale and diverges from FNA's mul(normal, WorldInverseTranspose) under
-    // non-uniform scale; it also contradicted this renderer's own unskinned pbr3d.vert.glsl and its
-    // (now-fixed) Vulkan sibling pbr3d_skinned.vert.glsl. The tangent stays on raw World: tangents
-    // transform as directions, not as normals (glTF convention, unchanged).
+    // non-uniform scale; it also contradicted this renderer's own unskinned pbr3d.vert.glsl and the
+    // retired Vulkan renderer's (since-fixed) pbr3d_skinned.vert.glsl. The tangent stays on raw
+    // World: tangents transform as directions, not as normals (glTF convention, unchanged).
     mat3 skinNormalMat = mat3(skinMat);
     mat3 worldNormalMat = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
     fragNormal = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, inNormal));

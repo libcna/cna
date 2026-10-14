@@ -3,7 +3,7 @@
 # CNA module alias; the paired ModuleLinkClosure_* test inspects the probe's generated link
 # line and fails when a forbidden archive/library appears, turning every module's real
 # dependency closure into a permanent contract. RendererIdentityRegistry mechanically pins
-# the 42 public renderer identities across both registries.
+# the public renderer identities across both registries.
 #
 # Native-only (the probes exist to inspect host link lines; Emscripten/Android links are
 # covered by their own configurations' full builds).
@@ -223,11 +223,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
 
-        # plans/plan_renderer_cleanup.md RRC-009/RRC-010: the two API decisions the 25-identity
-        # curation forced, held in opposite directions -- the removed 2D mesh entry point stays
-        # removed, and the retained surface-presenter flag stays retained only while the platform
-        # code it was kept for still exists. The script names both symbols; this comment does not,
-        # so that the gate's own "no active file names the removed API" rule stays strict.
+        # RRC-009/RRC-010 (the since-removed plans/plan_renderer_cleanup.md): the two API decisions
+        # the 25-identity curation forced, held in opposite directions -- the removed 2D mesh entry
+        # point stays removed, and the retained surface-presenter flag stays retained only while the
+        # platform code it was kept for still exists. The script names both symbols; this comment
+        # does not, so that the gate's own "no active file names the removed API" rule stays strict.
         add_test(NAME RendererCurationApiDecisions
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_removed_renderer_api.py")
@@ -533,9 +533,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             PROPERTIES LABELS "renderer;configuration")
     endforeach()
 
-    # plans/plan_renderer_cleanup.md RRC-006: every retired renderer selector must be REFUSED, by
-    # name, on every route that can name one -- and the refusal must say it was retired rather than
-    # merely unknown.
+    # RRC-006 (the since-removed plans/plan_renderer_cleanup.md): every retired renderer selector
+    # must be REFUSED, by name, on every route that can name one -- and the refusal must say it was
+    # retired rather than merely unknown.
     #
     # The case list is generated from CNA_RENDERER_RETIRED_IDENTITIES itself rather than written
     # out here, so retiring a renderer cannot add a name to the refusal list without also adding
@@ -563,12 +563,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
 
     # The other two routes, plus the controls that keep the refusal honest. BGFX and RLGL stand in
     # for the whole retired set on the SET and OPTION routes -- the per-identity sweep above already
-    # proves the table is complete, so repeating 37 identities on three routes would buy nothing but
-    # 111 tests. What these add is route coverage: a member of CNA_GRAPHICS_RENDERERS and a
+    # proves the table is complete, so repeating 41 identities on three routes would buy nothing but
+    # 123 tests. What these add is route coverage: a member of CNA_GRAPHICS_RENDERERS and a
     # CNA_RENDERER_<X>=ON option are read by different code than the cache selector.
     #
     # The ACCEPT and unknown-name controls exist because a refusal that refuses everything is not a
-    # working gate: without them, a bug that rejected all input would pass all 37 cases above.
+    # working gate: without them, a bug that rejected all input would pass all 41 cases above.
     set(_cna_retired_route_cases
         # name|route|identity|outcome|expected text
         "SetMember_BGFX|SET|BGFX|REFUSE|removed-renderers.md"
@@ -644,9 +644,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 --wayland-guard-applies ${CNA_TEST_WAYLAND_GUARD_APPLIES})
         set_tests_properties(CnaTestDisplayIsolation PROPERTIES LABELS "configuration" TIMEOUT 300)
     endif()
-    # plans/plan_vulkan_modern_graphics.md VMG-0007: every SPIR-V module the tree ships -- SDL_GPU's
-    # stock shaders and every generated shader package -- validated by spirv-val. An offline gate
-    # like the package reproducibility tests: it exits 77 where spirv-val is not installed.
+    # VMG-0007 (the retired Vulkan renderer's workstream): every SPIR-V module the tree ships --
+    # SDL_GPU's stock shaders and every generated shader package -- validated by spirv-val. An
+    # offline gate like the package reproducibility tests: it exits 77 where spirv-val is not
+    # installed.
     if(Python3_Interpreter_FOUND AND "SDL_GPU" IN_LIST CNA_RENDERER_IDENTITIES)
         add_test(NAME SpirvPayloadValidation
             COMMAND Python3::Interpreter

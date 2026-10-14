@@ -715,7 +715,7 @@ namespace
         }
 
         /// Whether the running renderer AND renderer actually apply the bound per-instance world
-        /// matrix. Bgfx's Vulkan renderer currently does not: `vs_instanced3d.sc` builds the
+        /// matrix. The since-retired bgfx renderer's Vulkan route did not: `vs_instanced3d.sc` built the
         /// per-instance matrix with the raw `mat4(i_data0..i_data3)` constructor, which bgfx maps
         /// to GLSL's column constructor on the GLSL profile and to HLSL's ROW constructor on
         /// SPIR-V/HLSL/Metal/WGSL -- bgfx supplies `mtxFromCols()` for exactly this. The matrix is

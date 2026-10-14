@@ -243,8 +243,8 @@ namespace
     };
 
     /// The identity: the transition test needs an instance stream that exists and is consumed, not
-    /// one that moves geometry. Identity is also its own transpose, so the bgfx Vulkan renderer's
-    /// transposed per-instance matrix (REMED-GFX-121) cannot perturb this fixture.
+    /// one that moves geometry. Identity is also its own transpose, so the since-retired bgfx
+    /// renderer's transposed per-instance matrix (REMED-GFX-121) could not perturb this fixture.
     InstanceMatrix IdentityInstance()
     {
         return InstanceMatrix{

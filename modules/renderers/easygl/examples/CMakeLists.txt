@@ -95,16 +95,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
-        # VULKAN-214: the control -- 'preserve survives a resize' is a claim
-        # about the XNA contract, so one renderer cannot answer it alone.
+        # VULKAN-214: first registered as the control beside the since-retired Vulkan renderer --
+        # 'preserve survives a resize' is a claim about the XNA contract. SDL_GPU now runs the same
+        # program as SdlGpu_CrossFamily_RenderTargetPreserveAcrossResize (RRC-046).
         cna_easygl_test(cna_test_easygl_rendertarget_preserve_across_resize
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_preserve_across_resize_test.cpp)
         cna_register_renderer_test(NAME EasyGL_RenderTargetPreserveAcrossResize
             COMMAND cna_test_easygl_rendertarget_preserve_across_resize
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # VULKAN-058: the control that turned a candidate finding into a
-        # defect -- EasyGL masked the sprite correctly while Vulkan painted the whole target.
+        # VULKAN-058: the control that turned a candidate finding into a defect -- EasyGL masked the
+        # sprite correctly while the since-retired Vulkan renderer painted the whole target. SDL_GPU
+        # now runs it too (SdlGpu_CrossFamily_SpriteBatch_DepthStencilState, RRC-046).
         cna_easygl_test(cna_test_easygl_spritebatch_depthstencil_state
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_depthstencil_state_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_DepthStencilState
@@ -870,7 +872,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_EnvironmentMapEffect_WorldTransform COMMAND cna_test_easygl_environmentmapeffect_worldtransform
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 399: cross-renderer EnvironmentMapEffect capstone (Tasks 393-398 combined)
+        # Task 399: EnvironmentMapEffect capstone, written cross-renderer and run on EasyGL (Tasks 393-398 combined)
         cna_easygl_test(cna_test_easygl_environmentmapeffect_combined
                         easygl_environmentmapeffect_combined_test.cpp)
         cna_register_renderer_test(NAME EasyGL_EnvironmentMapEffect_Combined COMMAND cna_test_easygl_environmentmapeffect_combined
@@ -972,7 +974,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_TwoBoneBlend COMMAND cna_test_easygl_skinnedeffect_twobone_blend
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 409: cross-renderer SkinnedEffect capstone (identity + single-bone + two-bone blend)
+        # Task 409: SkinnedEffect capstone, written cross-renderer and run on EasyGL (identity + single-bone + two-bone blend)
         cna_easygl_test(cna_test_easygl_skinnedeffect_combined
                         easygl_skinnedeffect_combined_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_Combined COMMAND cna_test_easygl_skinnedeffect_combined
@@ -1533,7 +1535,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BasicEffect_Emissive COMMAND cna_test_easygl_basiceffect_emissive
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 370: BasicEffect cross-renderer image comparison suite — closes Phase 42
+        # Task 370: BasicEffect image comparison suite (written cross-renderer, run on EasyGL) — closes Phase 42
         cna_easygl_test(cna_test_easygl_basiceffect_combined
                         easygl_basiceffect_combined_test.cpp)
         cna_register_renderer_test(NAME EasyGL_BasicEffect_Combined COMMAND cna_test_easygl_basiceffect_combined
@@ -1598,7 +1600,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DualTextureEffect_Fog COMMAND cna_test_easygl_dualtextureeffect_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # Task 389: DualTextureEffect cross-renderer image comparison suite (closes Phase 44 pixel work)
+        # Task 389: DualTextureEffect image comparison suite (written cross-renderer, run on EasyGL) (closes Phase 44 pixel work)
         cna_easygl_test(cna_test_easygl_dualtextureeffect_combined
                         easygl_dualtextureeffect_combined_test.cpp)
         cna_register_renderer_test(NAME EasyGL_DualTextureEffect_Combined COMMAND cna_test_easygl_dualtextureeffect_combined

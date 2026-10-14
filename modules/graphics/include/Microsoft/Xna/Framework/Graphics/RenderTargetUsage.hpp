@@ -60,7 +60,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * preserving target has no previous content to preserve. Nothing survives device recreation.
      * Depth and stencil are observable only indirectly, through what a later depth-tested or
      * stencil-tested draw does; `examples/rendertarget_depthstencil_usage_test` is the oracle that
-     * enforces every clause above on all fourteen renderers.
+     * enforces every clause above on every renderer.
      *
      * @param usage The public usage the render target was constructed with.
      * @return True when the renderer must load this target's existing colour, depth and stencil

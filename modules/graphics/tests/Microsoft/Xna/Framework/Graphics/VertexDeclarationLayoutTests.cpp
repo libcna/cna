@@ -656,8 +656,9 @@ protected:
     ///
     ///   * every renderer except bgfx and EasyGL left `SetVertexDeclaration` an empty override
     ///     (Vulkan, WebGPU, Software, SdlGpu, D3D9, D3D11, D3D12), so the declaration was discarded
-    ///     and a layout selected by stride -- REMED-GFX-217 (since translated by Vulkan, WebGPU,
-    ///     Software and, per DX-221/DX-222, D3D11 -- see TranslatesDeclarations());
+    ///     and a layout selected by stride -- REMED-GFX-217 (since translated by WebGPU, Software
+    ///     and SDL_GPU, as it was by the since-retired Vulkan and, per DX-221/DX-222, D3D11 -- see
+    ///     TranslatesDeclarations());
     ///   * EasyGL consumes the declaration but assigns each attribute's location from its INDEX in
     ///     the element list rather than from its semantic, so any declaration whose element order
     ///     differs from the selected stock program's input order binds the wrong attributes --
@@ -665,7 +666,8 @@ protected:
     ///
     /// Neither translator may be written here. REMED-GFX-DECL-GUARD instead makes both safe: a
     /// declaration those inferred layouts cannot represent faithfully is REFUSED deterministically
-    /// before any native layout, command or submission exists. So on those nine renderers the three
+    /// before any native layout, command or submission exists. So on every renderer
+    /// TranslatesDeclarations() does not name, the three
     /// colliding declarations assert a REJECTION, not a measured wrong picture -- an arm that
     /// starts rendering again fails whether the picture is right (the translator landed, and the
     /// arm is stale) or wrong (the guard regressed), and the message distinguishes them.

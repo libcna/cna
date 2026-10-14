@@ -38,7 +38,7 @@ void main() {
     // Y-up-convention projection matrix needs no additional correction on this renderer.
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
-    // plans/plan_street_sdlgpu.md STREETS-0008 (the Vulkan renderer's VULKAN-197): Direct3D 9
+    // STREETS-0008 (the retired Vulkan renderer's VULKAN-197): Direct3D 9
     // saturates a vertex shader's colour output registers before interpolation, and FNA writes this
     // value to `vout.Diffuse : COLOR0`. Clamped here, at the vertex, not after the interpolator.
     fragColor = clamp((pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor

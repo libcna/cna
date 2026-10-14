@@ -34,7 +34,7 @@ void main() {
     fragUV = inUV;
     // Mix vertex color and diffuse based on vertexColorEnabled flag (matches colored3d.vert.glsl's
     // convention for the same flag).
-    // plans/plan_street_sdlgpu.md STREETS-0008 (the Vulkan renderer's VULKAN-197): Direct3D 9
+    // STREETS-0008 (the retired Vulkan renderer's VULKAN-197): Direct3D 9
     // saturates a vertex shader's colour output registers before interpolation, and FNA writes this
     // value to `vout.Diffuse : COLOR0`. Clamped here, at the vertex, not after the interpolator.
     fragTint = clamp((pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor

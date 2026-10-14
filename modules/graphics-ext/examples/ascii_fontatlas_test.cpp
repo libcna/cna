@@ -119,8 +119,8 @@ public:
     AsciiFontAtlasTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
-        // plans/plan_vulkan_modern_graphics.md VMG-0004: the engine layer is HiDef work -- float and
-        // multiple render targets, and the back-buffer readback every check here reads -- while the
+        // VMG-0004 (the retired Vulkan renderer's workstream): the engine layer is HiDef work --
+        // float and multiple render targets, and the back-buffer readback every check here reads -- while the
         // manager defaults to Reach, where GetBackBufferData is refused (SOFTWARE-213). Under Reach
         // this program skipped or aborted before its first check on every renderer.
         if (Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty().IsProfileSupported(

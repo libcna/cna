@@ -142,7 +142,7 @@ namespace CNA::Internal::Renderers
          * @brief Whether the renderer can honestly enforce a GraphicsProfile floor.
          *
          * Null means "no renderer-specific answer": GraphicsAdapter keeps its honest `return true`,
-         * which is what 45 of the 46 renderers had. Only D3D9 has a real D3DCAPS9 to consult, and
+         * which is what 45 of the then 46 renderers had. Only D3D9 has a real D3DCAPS9 to consult, and
          * this project refuses to substitute a hardcoded table pretending to be a capability query.
          */
         bool (*isProfileSupported)(int graphicsProfile) = nullptr;
@@ -313,7 +313,7 @@ namespace CNA::Internal::Renderers
          *
          * Unlike the hooks above, the members of this struct MAY be null -- null means "this
          * renderer has no renderer-specific answer, use the framework's own rule". That is the
-         * honest state for 45 of the 46 renderers, and the distinction matters: a renderer forced
+         * honest state for 45 of the then 46 renderers, and the distinction matters: a renderer forced
          * to restate the framework rule would eventually restate it wrongly.
          */
         RendererAdapterQueries adapterQueries{};

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plans/plan_vulkan_modern_graphics.md VMG-0005: validate every checked-in SPIR-V payload.
+"""VMG-0005 (the retired Vulkan renderer's workstream): validate every checked-in SPIR-V payload.
 
 SDL_GPU's stock shaders and every generated shader package (`*ShaderPackage.generated.hpp`,
 tools/shader_package) embed SPIR-V as `uint32_t NAME[] = { ... };` word arrays. A driver may accept

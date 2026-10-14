@@ -2210,7 +2210,7 @@ namespace CNA::Internal::Renderers
          * @brief Whether a Texture2D may be created with the given surface format.
          *
          * Tri-state on purpose. The framework already has a renderer-agnostic rule for this
-         * (Texture::ValidateFormat), and 45 of the 46 renderers are content with it -- so the
+         * (Texture::ValidateFormat), and nearly every renderer is content with it -- so the
          * default is Defer, meaning "the framework's own rule applies". Only a renderer that
          * genuinely stores each format in its own native layout (SKIA) answers Supported /
          * Unsupported. A plain bool would have forced every other renderer to restate the

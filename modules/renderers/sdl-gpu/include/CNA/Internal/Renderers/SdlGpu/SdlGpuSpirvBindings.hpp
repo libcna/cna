@@ -21,12 +21,14 @@
  * CNA's portable shader packages do not obey it, and are not wrong to: their SPIR-V is compiled
  * from the `*.vulkan.*.glsl` sources, which are written against the descriptor convention of
  * CNA's **own** (since retired) Vulkan renderer (fragment samplers at `set = 1` and small per-draw
- * parameters in a `push_constant` block). Two renderers that both consumed SPIR-V still disagreed
- * about where a resource lives, so something has to translate, and the honest place for that is
+ * parameters in a `push_constant` block). Two renderers that both consumed SPIR-V disagreed
+ * about where a resource lives, so something had to translate, and the honest place for that was
  * here rather than in the shader sources -- the package was shared with Vulkan, which was
  * validated against it, and a second set of numbers baked into the sources would have made one
  * of the two renderers wrong (`plans/plan_sdlgpu_modern_graphics.md` Phase 10, "do not assume
- * Vulkan descriptor-set numbering").
+ * Vulkan descriptor-set numbering"). The sources keep that convention now that the Vulkan
+ * renderer is retired (WebGPU's WGSL payloads are derived from the same sources), so the
+ * translation stays here.
  *
  * Two transformations happen, and nothing else:
  *
@@ -41,8 +43,8 @@
  *    descriptor needs; the block's member offsets are already explicit in the SPIR-V and are left
  *    exactly as the compiler wrote them.
  *
- * The second one is only safe because the two layouts were already the same shape. CNA's Vulkan
- * post-process push-constant block is `vec2 viewportSize; mat4 uMatrix; vec4 uVector; float
+ * The second one is only safe because the two layouts were already the same shape. The portable
+ * post-process packages' push-constant block is `vec2 viewportSize; mat4 uMatrix; vec4 uVector; float
  * uScalar`, whose compiler-assigned offsets are 0, 16, 80 and 96 -- byte for byte the 128-byte
  * uniform block `SdlGpuEffectRenderer` has always pushed (see its own documentation). Those offsets
  * also satisfy std140 on their own (a `mat4` and a `vec4` both land on 16), so the block is a legal
@@ -117,8 +119,9 @@ namespace CNA::Internal::Renderers::SdlGpu
      * @brief The rewritten module, its resource map and the counts `SDL_gpu` asks for. CNAEXT.
      *
      * `error` non-empty means nothing else in this value is meaningful; the caller must surface the
-     * text rather than fall back to the untransformed module, because a module left in CNA's Vulkan
-     * layout does not fail loudly on `SDL_gpu` -- it binds the wrong resources.
+     * text rather than fall back to the untransformed module, because a module left in the portable
+     * packages' Vulkan-convention layout does not fail loudly on `SDL_gpu` -- it binds the wrong
+     * resources.
      */
     struct SpirvRemapResultEXT
     {

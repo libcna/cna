@@ -10,7 +10,7 @@
   "goldenComparison": {
     "rgbTolerance": 0,
     "alphaTolerance": 0,
-    "justification": "Two independent production-viewer processes using CNA's CPU rasterizer must produce byte-identical PNG files for every renderable asset. The renderer has its own goldens; no EasyGL or Vulkan image or tolerance is reused."
+    "justification": "Two independent production-viewer processes using CNA's CPU rasterizer must produce byte-identical PNG files for every renderable asset. The renderer has its own goldens; no other renderer's image or tolerance is reused."
   },
   "resolvedDivergences": [],
   "overrides": {

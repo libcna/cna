@@ -42,7 +42,7 @@ layout(set = 3, binding = 2) uniform SamplerLodBias {
     vec4 slots4To7;
 } samplerLodBias;
 
-// plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception, from the one shared snippet.
+// SMG-0032: shadow reception, from the one shared snippet.
 // SDL_gpu numbers fragment samplers (set 2) and fragment uniform buffers (set 3) from zero, so the
 // three shadow maps follow uTexture and the parameter block follows SamplerLodBias.
 #define CNA_SHADOW_SAMPLER_SET 2

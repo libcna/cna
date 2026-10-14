@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plans/plan_renderer_cleanup.md RRC-006: one case of "a retired renderer selector is refused, by
-# name, with no silent fallback" -- run for real.
+# RRC-006 (the since-removed plans/plan_renderer_cleanup.md): one case of "a retired renderer
+# selector is refused, by name, with no silent fallback" -- run for real.
 #
 # Runs cmake/RendererIdentities.cmake in `cmake -P` script mode with one selection and asserts the
 # outcome. Same shape and same reason as cmake/Tests/RendererDefaultCase.cmake: the refusal is a
@@ -62,7 +62,7 @@ if(CNA_RETIRED_CASE_OUTCOME STREQUAL "REFUSE")
             "${CNA_RETIRED_CASE_IDENTITY} is a retired renderer identity, named through the "
             "${CNA_RETIRED_CASE_ROUTE} route, and the configure accepted it. A retired selector "
             "must fail by name -- accepting it silently configures some other renderer instead, "
-            "which is the exact silent fallback plans/plan_renderer_cleanup.md forbids.\n"
+            "which is the exact silent fallback docs/removed-renderers.md forbids.\n"
             "${_cna_case_output}")
     endif()
 elseif(CNA_RETIRED_CASE_OUTCOME STREQUAL "ACCEPT")

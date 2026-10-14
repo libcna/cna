@@ -140,7 +140,7 @@ def spv_to_cpp_array(name: str, spv: bytes) -> str:
     )
 
 
-# plans/plan_sdlgpu_modern_graphics.md SMG-0032: shadow reception is ONE piece of GLSL, spliced
+# SMG-0032: shadow reception is ONE piece of GLSL, spliced
 # into every including shader rather than copied into each. It was the retired Vulkan renderer's
 # snippet and moved here with it on 2026-10-13. The including shader defines CNA_SHADOW_* first to
 # put the four resources where SDL_gpu's fixed set convention wants them; every sampling, cascade,
@@ -155,7 +155,7 @@ def expand_local_includes(source: str) -> str:
     return source.replace(marker, SHADOW_SAMPLING_GLSL.read_text())
 
 
-# plans/plan_street_sdlgpu.md STREETS-0001: the per-instance world matrix, as an OPTIONAL input to
+# STREETS-0001: the per-instance world matrix, as an OPTIONAL input to
 # every stock 3D vertex shader -- the retired Vulkan renderer's VULKAN-227 prologue, same four
 # columns at the same locations 12..15. An instanced stock draw keeps its effect's family (its
 # uniforms, samplers and fragment stage) and differs only in the vertex module, which is the

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: MS-PL
 # =====================================================================================
 # CNA renderer identities: the public set, the retired set, and the early refusal of both
-# unknown and retired selections (plans/plan_renderer_cleanup.md RRC-002).
+# unknown and retired selections (RRC-002, from the since-removed plans/plan_renderer_cleanup.md;
+# docs/removed-renderers.md is the record of every retirement).
 #
 # CNA intentionally maintains a curated renderer set. This file is the CMake side of the identity
 # registry: GraphicsRendererType.hpp is the C++ side, CNA/C/graphics.h the C ABI side, and

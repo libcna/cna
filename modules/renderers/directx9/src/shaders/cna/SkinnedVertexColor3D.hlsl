@@ -46,7 +46,8 @@
 // REMED-GFX-006: applies the World INVERSE-TRANSPOSE (computed in-shader via InverseTranspose3x3)
 //       after the skin-local rotation, not raw (float3x3)World. This is correct under non-uniform
 //       World scale as well as rotation, matching SkinnedEffect.fx's own WorldInverseTranspose and
-//       the corrected cross-renderer skinned shaders (Vulkan/EasyGL/Bgfx/GPU). EasyGL itself is
+//       the corrected skinned shaders of EasyGL, SDL_GPU and the since-retired Vulkan and bgfx
+//       renderers. EasyGL itself is
 //       out of scope for this task and was not touched.
 //
 // Vertex declaration (stride 56, D3D9VertexDeclarations.hpp): POSITION0 (FLOAT3, 0), NORMAL0

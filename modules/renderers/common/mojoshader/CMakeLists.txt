@@ -3,8 +3,8 @@
 # renderer once SDL_GPU needed the same code; before that it had exactly one consumer and there was
 # nothing to share.
 #
-# Follows the same shape as common/d3d: built only for the configurations that ask for it, and
-# added by the renderers composition rather than unconditionally.
+# Built only for the configurations that ask for it, and added by the renderers composition rather
+# than unconditionally.
 file(GLOB MOJOSHADER_EFFECT_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_library(cna_renderer_mojoshader_effect STATIC ${MOJOSHADER_EFFECT_SOURCES})
 target_link_libraries(cna_renderer_mojoshader_effect PUBLIC cna_renderer_common cna_mojoshader)

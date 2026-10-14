@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MS-PL
 """Guard the renderer-curation API decisions: what was removed stays removed, what was kept stays used.
 
-`plans/plan_renderer_cleanup.md` `RRC-009` removed `DrawMeshEXT` -- the SpriteBatch 2D triangle-mesh
-entry point -- from the C++ API and the C ABI, because the 25-renderer curation left it with no
-implementer at all. `RRC-010` examined `needsSurfacePresenter` the same way and reached the opposite
+`RRC-009` (the since-removed `plans/plan_renderer_cleanup.md`) removed `DrawMeshEXT` -- the
+SpriteBatch 2D triangle-mesh entry point -- from the C++ API and the C ABI, because the 25-renderer
+curation left it with no implementer at all. `RRC-010` examined `needsSurfacePresenter` the same way and reached the opposite
 verdict: no retained renderer *sets* it, but a retained, tested consumer (`TerminalSurfacePresenter`,
 reached through `IPlatformSurfacePresenter`) is waiting on it, so it stays.
 
@@ -161,7 +161,7 @@ def check_presenter_justification_intact() -> list[str]:
             f"{PRESENTER_DECLARATION}: `{PRESENTER_FIELD}` is gone. RRC-010 kept it because "
             f"`{PRESENTER_CONSUMER}` is a working, tested consumer with no other route to a frame. "
             "Removing it is an owner decision that must also retire the TERMINAL presentation "
-            "path and update plans/plan_renderer_cleanup.md RRC-010."]
+            "path and record that decision in docs/removed-renderers.md."]
 
     read_site = REPO_ROOT / PRESENTER_READ_SITE
     if not read_site.is_file() or PRESENTER_FIELD not in read_site.read_text(encoding="utf-8"):

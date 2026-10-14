@@ -3,7 +3,7 @@
 // compile_shaders.py. Set 1 is deliberately identical for every family; set 0 remains the
 // family's material/lighting bundle.
 //
-// plans/plan_sdlgpu_modern_graphics.md SMG-0032: the SDL_GPU renderer includes this same file,
+// SMG-0032: the SDL_GPU renderer includes this same file,
 // but SDL_gpu fixes its own descriptor sets (fragment samplers in set 2, fragment uniform buffers
 // in set 3, each numbered from zero), so an including shader may place the four resources by
 // defining these first. The defaults are this renderer's own layout and leave its SPIR-V
@@ -54,8 +54,9 @@ float CnaShadowTap(vec3 uv, vec2 uvMin, vec2 uvMax) {
             vec2 at = clamp(
                 uv.xy + vec2(float(x), float(y)) * cnaShadow.shadowTexelBlendDebug.xy,
                 uvMin, uvMax);
-            // plans/plan_street.md STREET-0007: the directional casters write the map in Vulkan's
-            // clip space (top row first), so the XNA-convention atlas coordinate is read flipped.
+            // STREET-0007 (found on the since-retired Vulkan renderer): the directional casters
+            // write the map in Vulkan's clip space (top row first), so the XNA-convention atlas
+            // coordinate is read flipped.
             float occluder = texture(uCnaShadowMap, vec2(at.x, 1.0 - at.y)).r;
             lit += (uv.z - cnaShadow.directional.y <= occluder) ? 1.0 : 0.0;
             taps += 1.0;

@@ -584,7 +584,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_SkinnedPbrEffect COMMAND cna_test_sdlgpu_skinnedpbreffect
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # plans/plan_street_sdlgpu.md STREETS-0001: an instanced stock draw keeps its effect's family.
+    # STREETS-0001: an instanced stock draw keeps its effect's family.
     # Every instanced draw here used to take the position-only instanced3d module, so cna-street's
     # instanced PbrEffect props were flat white silhouettes. The WebGPU renderer had the same
     # defect (STREETW-0001/0004/0005) and its two witnesses use nothing but the XNA API, so they
@@ -599,9 +599,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_instanced_stock_families
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # plans/plan_street_sdlgpu.md STREETS-0008: Direct3D 9 saturates a vertex shader's colour
+    # STREETS-0008: Direct3D 9 saturates a vertex shader's colour
     # outputs (oD0/oD1) before interpolation, which XNA games observe. The retired VULKAN renderer's
-    # two renderer-agnostic witnesses, compiled again: BasicEffect's unlit COLOR0 (VULKAN-197) and
+    # two renderer-agnostic witnesses, compiled again: BasicEffect's unlit COLOR0 (the retired Vulkan renderer's VULKAN-197) and
     # EnvironmentMapEffect's COLOR1 amount (VULKAN-196, already clamped here since SDLGPU-81).
     cna_sdlgpu_test(cna_test_sdlgpu_basiceffect_diffuse_color_clamp
         ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp)
@@ -614,7 +614,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_environmentmapeffect_amount_clamp
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # plans/plan_street_sdlgpu.md STREETS-0004: a ShaderEffect's texture unit u samples through
+    # STREETS-0004: a ShaderEffect's texture unit u samples through
     # SamplerStates[u] (VULKAN-166's witness, first written for the retired VULKAN renderer).
     cna_sdlgpu_test(cna_test_sdlgpu_shader_effect_per_unit_sampler
         ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_per_unit_sampler_test.cpp)
@@ -622,7 +622,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_shader_effect_per_unit_sampler
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
-    # plans/plan_street_sdlgpu.md STREETS-0003: an engine-layer pass reads a half-float render
+    # STREETS-0003: an engine-layer pass reads a half-float render
     # target through the linear filter it asked for. FullscreenPass exists only with CNAEXT.
     if(CNA_CNAEXT)
 
