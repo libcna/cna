@@ -133,7 +133,7 @@ Windows execution.
 
 | Item | State |
 |---|---|
-| SDL_GPU driver | Linux lane completed on AMD Radeon 780M / RADV: the 91-sample startup/stability corpus ran through FNA3D's SDL_GPU/Vulkan driver, and the same 66-test renderer/compiled-effect/oracle selection used for OpenGL completes with 65 passes plus one intentional Reach-profile skip. |
+| SDL_GPU driver | Linux lane completed on AMD Radeon 780M / RADV: the 91-sample startup/stability corpus ran through FNA3D's SDL_GPU/Vulkan driver, and the same 66-test renderer/compiled-effect/oracle selection used for OpenGL completes with 65 passes plus one intentional Reach-profile skip. The whole FNA3D-default CTest corpus (10,665 tests, `-DCNA_FNA3D_TEST_DRIVER=SDLGPU`) passed on 2026-10-14 after FNA3D-55 to -57. |
 | Direct3D 11 driver | Windows or DXVK-native only. External gate. The renderer code is driver-agnostic in the sense that it makes the same FNA3D calls; it is **not** established that the observable results match, and this lane has already found three driver-dependent behaviours (sub-rectangle readback origin, volume readback, compressed readback), so an OpenGL pass must not be read as validating the other drivers. |
 | macOS / iOS | Not exercised. External gate. |
 | Multiple simultaneous FNA3D devices on one thread | Supported on the OpenGL and SDL_GPU drivers (FNA3D-51): CNA's FNA3D patch makes every OpenGL entry point switch to its own device's GL and MojoShader contexts; the SDL_GPU driver needed nothing. Direct3D 11 is not measured. |

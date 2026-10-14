@@ -111,7 +111,7 @@ Where the XNA behaviour went:
   behaviour on METAL alone (float cube typed transfer, Short2 positions, Short4 blend indices) gated
   to the survivors measured to pass them.
 
-What the migrated tests found the survivors get wrong is in `handoff.md` §5.1 (items 8-16): among
+What the migrated tests found the survivors get wrong is in `handoff.md` §5.1 (items 7-15): among
 them SkinnedEffect's vertex-colour fold, BasicEffect without TEXCOORD0 accepted, the adapter
 multisample answer, cube faces in MRT sets refused by SDL_GPU and DIRECTX9, SDL_GPU/WebGPU
 ShaderEffect gaps, the unlit 36-byte vertex-colour saturate on SDL_GPU and WebGPU, and the SPIR-V
@@ -153,7 +153,7 @@ compiled-effect `vPos`/`TEXBEM` gaps that only the Metal route had fixed.
    (`CustomEffects`) compiled out on Windows, Apple and Emscripten (no runtime source-to-DXIL/MSL
    path); occlusion queries (none in SDL_gpu 3.5); `RendererFeature::BaseInstanceDrawing` (no
    survivor implements it; SDL_gpu's draw calls take a first instance).
-5. The SDL_GPU defects in `handoff.md` §5.1 items 7, 8, 10, 14 and 17 -- among them the
+5. The SDL_GPU defects in `handoff.md` §5.1 items 6, 7, 9, 13 and 16 -- among them the
    compiled-effect half-pixel coverage and device-slot contracts and the C API's exit-time teardown
    crash in Debug builds (the validation layer is unloaded first; Release passes), both found by
    this campaign's runs.
@@ -192,17 +192,19 @@ regeneration byte-identical to the committed `spirv_shaders.hpp`.
 | `build-probe` (Release) | the multi-renderer set above, Release, C API | 11,316 | 5 | 197 |
 
 Every failure is a `handoff.md` §5.1 entry: the multi tree's 5 are EasyGL conformance programs
-(item 8); SDL_GPU's 21 are the non-video-platform device cases (item 7), the cube-face MRT refusal,
-conformance programs and compiled-effect contracts (item 8) and five C API exit-time teardown
-crashes (item 17, the first C API run on `SDL_GPU`); WebGPU's 7 are the occlusion count across a
-`Clear` (item 6) and six conformance programs (item 8); HEADLESS's 3 are the cube-face MRT refusal
-(item 8). SOFTWARE's 4 are the load-dependent `DynamicSoundEffectInstanceTest` case (item 7) and the
+(item 7); SDL_GPU's 21 are the non-video-platform device cases (item 6), the cube-face MRT refusal,
+conformance programs and compiled-effect contracts (item 7) and five C API exit-time teardown
+crashes (item 16, the first C API run on `SDL_GPU`); WebGPU's 7 are the occlusion count across a
+`Clear` (item 5) and six conformance programs (item 7); HEADLESS's 3 are the cube-face MRT refusal
+(item 7). SOFTWARE's 4 are the load-dependent `DynamicSoundEffectInstanceTest` case (item 6) and the
 three C API inventory gates, which measured the other session's uncommitted `ContentManager` member
 (one new protected symbol); on the committed tree those gates pass (the multi and SDL_GPU runs).
-FNA3D's 23 are item 4's two saturation cases and item 18: 17 cases that create a second device or
-game in one process (a documented FNA3D limitation), two multisampled read-backs that return 0, and
-two content-pipeline cases that pass alone. The Release tree fails exactly the Debug multi tree's
-5. Item 17 is Debug-only: with `SDL_GPU`
+FNA3D's 23 were two unsaturated `COLOR0` cases, 17 cases that keep two devices or games alive, two
+multisampled read-backs that returned 0 and two content-pipeline cases that failed only in parallel;
+all were fixed after the campaign (`plans/plan_fna3d.md` FNA3D-51 and -54 to -57, and `XNAPP-021`'s
+shared temporary directory); the FNA3D-default tree's corpus then passed on FNA3D's SDL_GPU driver
+and, but for one SystemLink discovery case that passes alone, on its OpenGL driver. The Release
+tree fails exactly the Debug multi tree's 5. Item 16 is Debug-only: with `SDL_GPU`
 selected at run time the seven `CApi_TeardownLifetime_*` cases pass in the Release tree (no
 validation layer) and `game-alive` segfaults in the Debug one. The retired-name refusals (`CnaRendererRetired_*` configure probes,
 `GraphicsRendererSelectionTests`, `CoreExtSmoke.c`) pass in every tree that registers them.
@@ -232,12 +234,12 @@ whose load, update and draw callbacks issue both draw-command families and check
 **Windows.** `cmake-build-mingw` (MinGW-w64 GCC 14 cross build, Release; `DIRECTX9` default with
 `SDL_GPU`, `SOFTWARE`, `HEADLESS`; C API, NET), rebuilt on the final code: every target builds
 except the eight test units that use POSIX-only APIs, so `CnaTests.exe` does not link
-(`handoff.md` §5.1 item 15). Under Wine: the C API with `SOFTWARE` passes 106 of 108
+(`handoff.md` §5.1 item 14). Under Wine: the C API with `SOFTWARE` passes 106 of 108
 (`CApi_MediaLibrarySmoke` skips, `CApi_MediaPlayerSmoke` fails as before the campaign); the
-`DIRECTX9` suite through DXVK passes 43 of 57 (the 14 failures of item 16); and
+`DIRECTX9` suite through DXVK passes 43 of 57 (the 14 failures of item 15); and
 `cna_bench_graphics_renderer.exe` runs `SDL_GPU` on its Direct3D 12 backend through vkd3d-proton
 (500 sprites and 20 stock-effect meshes per frame, clean exit). The module gtest binaries ran under
-Wine with `DIRECTX9` on 2026-10-13, after `DIRECTX11` was retired (item 16).
+Wine with `DIRECTX9` on 2026-10-13, after `DIRECTX11` was retired (item 15).
 
 **Not run here:** native Windows (MSVC, Direct3D 12 hardware); macOS and iOS (no Apple host, so
 `SDL_GPU` on Metal and the iOS allow-list are configure-checked only); a physical Android device;
