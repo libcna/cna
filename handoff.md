@@ -192,11 +192,10 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       edge texel (`render_target_own_msaa` D). EasyGL, SOFTWARE and FNA3D: a `SkinnedEffect` over a
       declaration without normal, weights or bone indices draws nothing and reports success
       (`stock_effect_unsupplied_input` C).
-    - SDL_GPU: cube faces in a multi-render-target set throw `std::runtime_error` while
-      `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4 and the three `RenderTargetSemantics`
-      plural cube-face cases; DIRECTX9 has the same refusal, and HEADLESS refuses the three
-      `RenderTargetSemantics` cases with "cannot bind a cube face alongside other render targets",
-      `cmake-build-headless` 2026-10-14); a
+    - SDL_GPU and DIRECTX9: cube faces in a multi-render-target set are refused with
+      `System::NotSupportedException` while `MultipleRenderTargets` is true (the `cube_mrt_binding`
+      M1-M4 and `RenderTargetSemantics` plural cube-face cases skip on that refusal); HEADLESS
+      accepts them since 2026-10-14. On SDL_GPU a
       `ShaderEffect` uniform array beyond its declared capacity is truncated silently
       (`shader_effect_refusal` E); the portable 3D `ShaderEffect` probe draws nothing on the
       one-stream routes (`shader_effect_3d_layout` A-C, G) and two vertex streams are refused (D/E);
@@ -305,6 +304,10 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     cube-face MRT refusal of item 7 and occlusion-query lifecycle cases); `CnaContentTests.exe`:
     1,703 pass, 29 skip, 1 fail (`RendererStrideConformance`, an unlit stride-32 record). Under the
     same Wine, `CApi_MediaPlayerSmoke` fails with `SOFTWARE`, and a pre-campaign build of it hangs.
+    `DirectX9_FrameRecovery` is timing-sensitive under `ctest` (2026-10-14: fails there in two of three
+    runs after its first PASS line, while the same binary passes both phases when run directly through
+    `scripts/run-wine-dxvk9.sh`); the held-back-buffer recovery it measures depends on how many frames
+    Wine lets through before the retried `Reset` succeeds.
 16. **A C API game still alive at process exit crashes `SDL_GPU` in a Debug build** (first C API run
     with `SDL_GPU`, `cmake-build-sdlgpu`, 2026-10-14): the five `CApi_TeardownLifetime_*` cases that
     leave a game alive segfault. The C API's static `RuntimeState` destroys the game during

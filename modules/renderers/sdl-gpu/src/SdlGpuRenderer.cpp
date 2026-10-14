@@ -5007,7 +5007,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         for (int i = 0; i < count; ++i)
             if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
+                throw System::NotSupportedException(
                     "SdlGpuRenderer::SetRenderTargets: cube faces in a multi-target "
                     "set are not implemented by this CNA renderer.");
 

@@ -726,5 +726,7 @@ namespace CNA::Internal::Renderers::Headless
         // made SetRenderTargets refuse more than one -- while SupportsCapability kept reporting
         // MultipleRenderTargets as available, because Headless answers true by default.
         std::vector<HeadlessRenderTargetRenderer*> boundRenderTargets_;
+        /// Every cube face bound as part of a multi-target set, in binding order.
+        std::vector<HeadlessRenderTargetCubeRenderer*> boundCubeTargets_;
     };
 }

@@ -8,6 +8,7 @@
 // macro ERROR (wingdi.h) that collides with LogLevel::ERROR/LogCategory::ERROR's own enumerator
 // names if windows.h is parsed first.
 #include "CNA/Logger.hpp"
+#include "System/NotSupportedException.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
@@ -1402,7 +1403,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         for (int i = 0; i < count; ++i)
             if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
+                throw System::NotSupportedException(
                     "DirectX9Renderer::SetRenderTargets: cube faces in a multi-target "
                     "set are not implemented by this CNA renderer.");
 

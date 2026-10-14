@@ -641,6 +641,11 @@ namespace CNA::Internal::Renderers::Headless
             target->UnbindAsRenderTarget();
         }
         boundRenderTargets_.clear();
+        for (HeadlessRenderTargetCubeRenderer* cube : boundCubeTargets_)
+        {
+            cube->UnbindAsRenderTarget();
+        }
+        boundCubeTargets_.clear();
     }
 
     void HeadlessRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
@@ -672,16 +677,8 @@ namespace CNA::Internal::Renderers::Headless
             SetRenderTarget2D(nullptr);
             return;
         }
-        // A cube face is bound through its own entry point, which owns the whole binding: a cube
-        // face has no meaningful "and also these other targets" on any renderer, so mixing one
-        // into a multi-target set is rejected rather than silently binding the face alone.
-        if (renderTargets[0].IsRenderTargetCubeFace())
+        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
         {
-            if (count > 1)
-            {
-                throw std::runtime_error(
-                    "HeadlessRenderer cannot bind a cube face alongside other render targets.");
-            }
             SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
                                     renderTargets[0].GetCubeFace());
             return;
@@ -690,14 +687,19 @@ namespace CNA::Internal::Renderers::Headless
         // Bound as a set rather than one at a time: SetRenderTarget2D unbinds everything first,
         // so calling it in a loop would leave only the last target bound -- which is exactly the
         // "silently rendered to one of them" failure a refusal was previously guarding against.
+        // A cube face takes a slot like any 2D target: nothing is rasterized here, so the face
+        // only has to be accounted as bound.
         UnbindAllRenderTargets();
         for (int i = 0; i < count; ++i)
         {
             if (renderTargets[i].IsRenderTargetCubeFace())
             {
-                UnbindAllRenderTargets();
-                throw std::runtime_error(
-                    "HeadlessRenderer cannot bind a cube face alongside other render targets.");
+                auto* cube = static_cast<HeadlessRenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                if (cube == nullptr) continue;
+                cube->BindAsRenderTargetFace(renderTargets[i].GetCubeFace());
+                boundCubeTargets_.push_back(cube);
+                continue;
             }
 
             auto* target = static_cast<HeadlessRenderTargetRenderer*>(
