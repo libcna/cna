@@ -104,6 +104,10 @@ Key APIs on `HeadlessRenderer` (all `CNAEXT`, not part of the XNA surface):
 - `SpriteBatch`'s captured `LastBatch()` draw-call data (texture/rects/color/rotation/effects per
   `Draw()` call) is implemented but not yet separately asserted on by any test — only the aggregate
   `drawCallCount` is checked.
+- `TextureCube` and `Texture3D` store no pixels on this renderer: `SetData` throws
+  `System::NotSupportedException` and `GetData` refuses rather than fabricating texels, so a content
+  pipeline load of a cube or volume texture under HEADLESS throws instead of silently succeeding.
+  `Texture2D` and `RenderTarget2D` do keep their bytes.
 
 Resolved since the first commit: viewport/scissor validation now cross-references the actual
 bound-target size (not just non-negative dimensions); creation-site tracking is implemented via an

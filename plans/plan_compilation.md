@@ -471,7 +471,7 @@ foundation work, but both are now available on the reference host.
   passes under Xvfb, and the focused STUB core/math suites pass 63/63 and 840/840. The 9,079-test
   monolithic OPENGLES3 runtime run completed with 40 existing renderer-correctness failures. Three
   representative failures reproduce in isolated CTest processes: the vertex-declaration case
-  explicitly names the open/stale `REMED-GFX-217` expectation, shadow-filter softness is an
+  explicitly names the then-open vertex-declaration-fidelity expectation, shadow-filter softness is an
   existing rendering difference, and the EasyGL compiled-effect test reports its existing runtime
   selection boundary. COMP-008 changes only documentation, Python tooling, and CI YAML, so these
   cannot be caused by its implementation; nevertheless the task remains 🟨 rather than claiming

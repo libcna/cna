@@ -42,6 +42,10 @@ The C ABI maps the same exception to `CNA_RESULT_NOT_SUPPORTED`. Metadata-only
 `cna_video_create_with_metadata` remains successful; file probing and playback report the missing
 backend deterministically.
 
+A video whose coded resolution changes mid-stream is refused: `VideoDecoder::NextFrame` throws
+`std::runtime_error` on the first frame whose size differs from the one reported at open, because
+XNA's `Video` has a single fixed `Width`/`Height` and the frame converters are sized by it.
+
 `CNA_VIDEO_AVAILABLE` is defined on CNA targets only when the FFmpeg backend was selected.
 `CNA_FFMPEG_AVAILABLE` remains as the legacy equivalent for existing internal/test code.
 

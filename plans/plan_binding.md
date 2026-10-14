@@ -1580,7 +1580,7 @@ after the campaign had formally exited.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-123 | Stop recurring full-file report commits | ✅ | **Done 2026-08-30.** `docs/c-api/COVERAGE.md` is now a compact generated summary carrying the full inventory's SHA-256; `--write` emits the complete matrix to ignored `build/c-api/COVERAGE_FULL.md`, while `--check`, the release gate, the limitations generator, CTest and all three CI workflows still rebuild and validate the canonical inventory. `remediation/REMEDIATION_PROGRESS.md` and its README now freeze that manually maintained file as a historical archive and direct new work to active plans. Existing Git history is intentionally unchanged; rewriting shared history is a separate destructive repository-owner decision. |
+| CBIND-123 | Stop recurring full-file report commits | ✅ | **Done 2026-08-30.** `docs/c-api/COVERAGE.md` is now a compact generated summary carrying the full inventory's SHA-256; `--write` emits the complete matrix to ignored `build/c-api/COVERAGE_FULL.md`, while `--check`, the release gate, the limitations generator, CTest and all three CI workflows still rebuild and validate the canonical inventory. The manually maintained remediation progress log was frozen as a historical archive at the same time (the whole remediation archive directory was later reconciled and deleted; Git history keeps it). Existing Git history is intentionally unchanged; rewriting shared history is a separate destructive repository-owner decision. |
 
 ## Phase B18 — close the sample-port public-API tail
 

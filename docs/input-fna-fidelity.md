@@ -473,7 +473,11 @@ else in this section is FNA-required behavior, not CNA scope creep.
   handler for these two events also toggles the X11 "fullscreen desktop" window flag and
   enables/disables the SDL screensaver; CNA does not replicate either. Neither affects input
   semantics (the subject of this audit); revisit only if X11 fullscreen-on-Alt-Tab behavior or
-  screensaver suppression is reported as a real-world gap.
+  screensaver suppression is reported as a real-world gap. Two neighbouring FNA window behaviours
+  are likewise not replicated, because `CNA::Platform::IPlatformWindow` has no window-position API
+  and the platform event model has no fullscreen-entered/left kinds: `GameWindow::EndScreenDeviceChange`
+  resizes but does not re-centre the window on its display, and `GraphicsDeviceManager::IsFullScreen`
+  is not resynchronised when the window manager toggles fullscreen outside the game's own request.
 - **Coordinate consistency (INPUT-TOUCH-024, was task 952 — verified):** both touch paths target the same
   **logical (virtual back-buffer) coordinate space.** `GraphicsDevice` sets `TouchPanel::DisplayWidth/Height`
   to `virtualWidth/Height`. The **gesture** path scales the normalized SDL coord linearly by

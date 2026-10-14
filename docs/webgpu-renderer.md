@@ -552,7 +552,7 @@ cross-face leak and blended edge pixels (Check F), and MSAA+mipMap combined.
 
 A finding surfaced while writing this test — that `QueueSprite()` computed every sprite's clip-space
 geometry from the BACKBUFFER's logical dimensions unconditionally, never from the currently-bound
-render target — **has since been fixed** (REMED-GFX-019: `QueueSprite` now derives clip space from the
+render target — **has since been fixed** (`QueueSprite` now derives clip space from the
 bound target's own dimensions; the letterboxed-backbuffer edge was closed by `WEBGPU-141`(A)). A
 `SpriteBatch.Draw()` into an off-screen `RenderTarget2D`/cube face now maps 1:1 into that target's own
 pixels, verified by `WebGPU_SpriteBatch_RenderTarget`. (The historical note that
@@ -687,7 +687,7 @@ the specular term is added), and both dual-texture families gained `TEXCOORD1` s
 sampled with its own UV set.
 
 **What was deliberately NOT converted**, and still selects its attribute array from the stride with
-`REMED-GFX-DECL-GUARD`'s refusal keeping it safe: the **skinned** and **PBR** routes. `WEBGPU-177`
+the declaration-fidelity guard's refusal keeping it safe: the **skinned** and **PBR** routes. `WEBGPU-177`
 owns their conversion. A declaration those routes cannot represent is refused by name, exactly as
 before. (The **instanced** route was on this list until `WEBGPU-172` converted it — see below.)
 

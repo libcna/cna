@@ -157,7 +157,7 @@ the currently RGBA8-only renderer readback seam.
 |---|---|
 | `SetVertexBuffer(VertexBuffer)` | ✅ |
 | `SetVertexBuffer(VertexBuffer, int offset)` | ✅ |
-| `SetVertexBuffers(params VertexBufferBinding[])` | ✅ |
+| `SetVertexBuffers(params VertexBufferBinding[])` (`VertexBufferBinding.VertexOffset` is counted in vertices, as in XNA — FNA's XML comment saying bytes is wrong; FNA3D itself multiplies by the stride) | ✅ |
 | `GetVertexBuffers()` | ✅ |
 
 CNA adds three non-XNA helpers, explicitly marked `CNAEXT` by `SOFTWARE-329`:

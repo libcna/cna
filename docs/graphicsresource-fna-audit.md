@@ -45,8 +45,11 @@ in a per-device list (`AddResourceReference` / `RemoveResourceReference`). This 
 - `GraphicsDevice.Reset()` — to call `GraphicsDeviceResetting()` on every tracked resource,
   allowing them to release GPU handles before the device is recreated.
 
-**CNA status**: No resource list exists on `GraphicsDevice`. Resources are not notified on
-device reset or device disposal.
+**CNA status** (re-checked 2026-10-14): implemented. `GraphicsDevice` keeps a mutex-guarded
+`resources_` list filled by `AddResourceReference`/`RemoveResourceReference` from the
+`GraphicsResource` device setter and destructor, and `GraphicsDevice::Dispose()` moves the list
+aside and disposes every tracked resource (re-entrant removal is a no-op, as in FNA). Reset raises
+the public `DeviceResetting`/`DeviceReset` events rather than calling a per-resource hook.
 
 **Impact**: Low in current test-driven usage where the device outlives all resources.
 Will matter once device-reset / multi-device scenarios are exercised.

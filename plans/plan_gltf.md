@@ -451,8 +451,7 @@ adds the layers they never covered.
 `FUTURE.md` Phase 5 — **THIS CAMPAIGN**. Its audit scope list is a subset of §29's phases; its rule
 "Do not assume every `cna-gltf-viewer` visual failure is in the parser" is honoured by §6's taxonomy.
 
-`remediation/REMEDIATION_PROGRESS.md` `REMED-NA-016` — **STILL VALID, OUT OF SCOPE THERE, IN SCOPE
-HERE**: a UBSan-confirmed misaligned 4-byte `float` load in `cgltf_component_read_float`
+The post-audit remediation's cgltf finding (`REMED-NA-016`) — **out of scope there, IN SCOPE HERE**: a UBSan-confirmed misaligned 4-byte `float` load in `cgltf_component_read_float`
 (`third_party/cgltf/cgltf.h`), live under `GltfToCnjToolTest.ResolvesSparseAccessorOverride`. Carried
 forward as `GLTF-036`/`GLTF-037`.
 

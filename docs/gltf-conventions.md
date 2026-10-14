@@ -762,8 +762,7 @@ and it is a load-time cost on an import path, not a per-frame one.
 
 **When the rule would change.** If a fault could not be answered outside the reader — a wrong value
 with no CNA-side hook to correct it — the choice would be a patch *or* replacing the reader, and
-that is a decision with its own review, not something to do quietly in a bug fix. `REMED-NA-016`
-is the precedent for the current disposition: the misaligned `float` load UBSan found inside cgltf
+that is a decision with its own review, not something to do quietly in a bug fix. The precedent for the current disposition is the audit's cgltf finding: the misaligned `float` load UBSan found inside cgltf
 was **not** patched there either. It turned out to be a malformed fixture CNA had accepted, and the
 answer was to refuse such a file (§3.6.2.4) rather than to make the parser tolerate it.
 

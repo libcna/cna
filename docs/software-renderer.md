@@ -851,12 +851,12 @@ can execute an opcode and still accept invalid classic bytecode.
   Microsoft XNA profile, result-availability, Begin/End/reuse and disposal rules. `SOFTWARE-309`
   additionally proves that destroying 50 active queries leaves the next query able to complete and
   publish its result on Software and both EasyGL profiles.
-- **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
+- **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and
   the GPU renderers' GFX-072 contract. The **3D** path also honors X/Y, Width/Height, raster clipping
-  and `MinDepth/MaxDepth` (`REMED-GFX-079`, 25/25 focused checks), and an enabled
-  `ScissorRectangle` intersects both paths in target space (`REMED-GFX-080`). The default
+  and `MinDepth/MaxDepth` (25/25 focused checks), and an enabled
+  `ScissorRectangle` intersects both paths in target space. The default
   full-target viewport remains byte-identical to the earlier behavior. The shared 50-check matrix
   also requires a zero-width or zero-height scissor to reject every fragment; `SOFTWARE-310`
   corrected EasyGL's former stale-rectangle behavior while Software remained conformant.

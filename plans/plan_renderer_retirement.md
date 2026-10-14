@@ -384,7 +384,7 @@ RRC-038). 5,974 lines remain (counted at `3df66da5c` by an uncommitted classific
 
 | Kind | Lines | Goal category | Examples |
 |---|---:|---|---|
-| History files | 4,375 | historical | `plans/`, `remediation/`, `misc/`, `CHANGELOG.md`, `docs/removed-renderers.md`, `docs/c-api/ABI_VERSIONING.md`, `spikes/`, the XNA-runtime oracles in `tools/xna-oracle/` |
+| History files | 4,375 | historical | `plans/`, `misc/`, `CHANGELOG.md`, `docs/removed-renderers.md`, `docs/c-api/ABI_VERSIONING.md`, `spikes/`, the XNA-runtime oracles in `tools/xna-oracle/` |
 | Dated audits and migration documents | 184 | historical, migration documentation | `AUDIT.md`, `RAM.md`, the culling and depth audits, `docs/graphics-compatibility-report.md`, `docs/build-performance.md` measurements, `docs/RendererNamingMigration.md`, `docs/xna-4-api-coverage.md`'s history sections -- marked as predating the retirement where they read as current |
 | Retirement statements and machinery | 343 | retired-selector diagnostic, historical | "the retired VULKAN renderer ...", refusal and reserved-value text, `CnaRendererRetired_*` |
 | Task-ID provenance | 204 | historical | `VULKAN-`, `DX-`, `AM4-`, `METAL-` task IDs on the finding they explain |

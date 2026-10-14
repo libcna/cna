@@ -314,7 +314,20 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     `SDL_GPU` selected at run time the same case segfaults in the Debug multi-renderer tree and all
     seven teardown cases pass in the Release one (`build-probe`, 2026-10-14). Every other C API case
     passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with the extension layer.
+17. **`HEADLESS` multisample bookkeeping is inconsistent** (found 2026-10-14 while closing the
+    post-audit remediation archive; pre-existing): `Headless_Conformance_capability_truth`,
+    `Headless_Conformance_multisample_count_clamp` and `Headless_Conformance_graphics_adapter_query`
+    fail on HEAD -- the renderer reports `MultiSampleAntiAliasing` while `Reset` applies a sample
+    count of 0, render targets echo any requested count (up to 1024) while the back buffer applies
+    0, and `Reset` keeps a back-buffer format the adapter query rejected. A recording-only fix was
+    tried and reverted because it worsened the clamp/adapter cases; the renderer needs one
+    consistent answer (which count it "applies" and whether it claims MSAA at all).
+
 ### 5.2 Limitations
+
+- `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves
+  `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so the mask reaches the renderer and is
+  deliberately not applied; `ColorWriteChannels` is honoured.
 
 - `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does
   not compute — reserved for the human author, see §6.
@@ -358,6 +371,11 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
   `System::NotImplementedException` in the remaining case. The owner reserved the real
   implementation as hands-on C++ work: do not implement it, generate it, or remove the exception.
   `BoundingFrustumTests.cpp` covers only the two answered cases.
+- **Licence-header convention.** The tree carries 30 MIT and ~3,150 MS-PL SPDX headers, two
+  `storage` source/header pairs with mismatched headers, and ~170 header-less `.hpp`/`.cpp` files
+  (mostly examples). Which header CNA-original files carry, and whether `CNA::Internal::Net` stays
+  MIT on purpose, is the owner's policy call; a one-line rule next to `CHECKLIST.md`'s header
+  section and a lint would follow from it.
 
 ## 7. Build, test and environment
 
