@@ -178,8 +178,14 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-metal-vertex-color-clamp.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
+    # In order, each patch made on top of the previous ones; a new one is appended at the end
+    # (apply-fna3d-patches.cmake).
     set(_cna_fna3d_source_patch
-        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-xna-pixel-center.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-xna-pixel-center.patch"
+        # plans/plan_fna3d.md FNA3D-54: a multisampled render target read back as 0 on OpenGL (its
+        # renderbuffer's GL name matched the texture's), and a mipped RenderTargetCube's resolve
+        # asked glGenerateMipmap for a face.
+        "${CMAKE_CURRENT_LIST_DIR}/patches/fna3d-3240147-opengl-msaa-readback.patch")
     set(_cna_fna3d_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-patches.cmake")
 
@@ -200,6 +206,11 @@ function(cna_configure_mojoshader)
         set(_cna_mojoshader_without_sdl TRUE)
     endif()
 
+    # ExternalProject splits a ';' inside a PATCH_COMMAND argument into separate arguments, which
+    # left the patch step with only the first patch of each series. LIST_SEPARATOR keeps them whole.
+    string(REPLACE ";" "|" _cna_fna3d_mojoshader_patch_arg "${_cna_fna3d_mojoshader_patch}")
+    string(REPLACE ";" "|" _cna_fna3d_source_patch_arg "${_cna_fna3d_source_patch}")
+
     FetchContent_Declare(
         fna3d
         GIT_REPOSITORY "${CNA_FNA3D_GIT_REPOSITORY}"
@@ -213,10 +224,11 @@ function(cna_configure_mojoshader)
         # recompile -- every single time. The ref is pinned, so there is nothing to update to; the
         # explicit re-apply after MakeAvailable is what keeps the sources correct regardless.
         UPDATE_DISCONNECTED TRUE
+        LIST_SEPARATOR "|"
         PATCH_COMMAND  "${CMAKE_COMMAND}"
-                       "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
+                       "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch_arg}"
                        "-DCNA_FNA3D_MOJOSHADER_PATCH_SCRIPT=${_cna_fna3d_mojoshader_patch_script}"
-                       "-DCNA_FNA3D_SOURCE_PATCH_FILE=${_cna_fna3d_source_patch}"
+                       "-DCNA_FNA3D_SOURCE_PATCH_FILE=${_cna_fna3d_source_patch_arg}"
                        -P "${_cna_fna3d_patch_script}"
     )
 
