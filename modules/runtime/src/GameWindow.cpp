@@ -273,6 +273,17 @@ namespace Microsoft::Xna::Framework
                         ? CNA::Platform::WindowFullscreenMode::ExclusiveFullscreen
                         : CNA::Platform::WindowFullscreenMode::Windowed);
             }
+
+#ifndef __ANDROID__
+            // XNA (and FNA) re-centre a windowed game on its display after every device change,
+            // so a resolution change does not leave the window hanging off the screen edge. A
+            // fullscreen window has nothing to centre.
+            if (clientWidth > 0 && clientHeight > 0 &&
+                window_->GetFullscreenMode() == CNA::Platform::WindowFullscreenMode::Windowed)
+            {
+                window_->CenterOnDisplay();
+            }
+#endif
         }
 
         screenDeviceName_ = screenDeviceName;

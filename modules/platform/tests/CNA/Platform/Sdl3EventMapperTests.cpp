@@ -76,6 +76,21 @@ TEST(Sdl3EventMapperTests, WindowEventsMapToTheirKinds)
     }
 }
 
+TEST(Sdl3EventMapperTests, FullscreenTransitionsMapToTheirOwnKinds)
+{
+    // A window-manager fullscreen toggle must reach the game as a distinct kind, so
+    // GraphicsDeviceManager.IsFullScreen can follow the window instead of its last request.
+    SDL_Event enter = MakeEvent(SDL_EVENT_WINDOW_ENTER_FULLSCREEN);
+    SDL_Event leave = MakeEvent(SDL_EVENT_WINDOW_LEAVE_FULLSCREEN);
+
+    PlatformEvent a;
+    PlatformEvent b;
+    ASSERT_TRUE(MapSdlEvent(enter, a));
+    ASSERT_TRUE(MapSdlEvent(leave, b));
+    EXPECT_EQ(std::get<WindowEvent>(a).kind, WindowEventKind::FullscreenEntered);
+    EXPECT_EQ(std::get<WindowEvent>(b).kind, WindowEventKind::FullscreenLeft);
+}
+
 TEST(Sdl3EventMapperTests, ResizeAndPixelSizeChangeStayDistinct)
 {
     // Conflating them is how a renderer draws at the wrong scale under high DPI, so the mapping

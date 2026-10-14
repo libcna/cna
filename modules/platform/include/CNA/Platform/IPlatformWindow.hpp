@@ -168,6 +168,14 @@ namespace CNA::Platform {
         virtual void SetSize(int width, int height) = 0;
 
         /**
+         * @brief Re-centres the window on the display it currently occupies.
+         *
+         * Windowed mode only; a fullscreen window has no position to move. The default does
+         * nothing, for platforms whose windows have no position (headless, terminal).
+         */
+        virtual void CenterOnDisplay() {}
+
+        /**
          * @brief Gets the display scale factor for this window.
          *
          * @return The scale, where 1.0 means one logical unit per physical pixel. Always 1.0 on

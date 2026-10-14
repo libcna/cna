@@ -221,6 +221,39 @@ namespace
     };
 }
 
+// A fullscreen toggle performed by the window system (not by ApplyChanges) must be reflected in
+// GraphicsDeviceManager.IsFullScreen, so the next ApplyChanges keeps what the user chose.
+TEST(GameEventSemanticsTest, WindowSystemFullscreenTransitionsResyncTheManager)
+{
+    auto platform = std::make_unique<TranscriptPlatform>(Platform::PlatformFactory::Create("Headless"));
+    TranscriptPlatform* scriptedPlatform = platform.get();
+    // Same refusal rule as the golden transcript: a renderer that needs a GL context cannot sit on
+    // the Headless platform, which is not an event-semantics difference.
+    std::unique_ptr<TranscriptGame> gameOwner;
+    try
+    {
+        gameOwner = std::make_unique<TranscriptGame>(std::move(platform));
+    }
+    catch (const Graphics::NoSuitableGraphicsDeviceException& refusal)
+    {
+        if (!CNA::Runtime::Testing::IsPlatformRefusal(refusal))
+            throw;
+        GTEST_SKIP() << "the Headless platform cannot back this build's renderer: " << refusal.what();
+    }
+    TranscriptGame& game = *gameOwner;
+    GraphicsDeviceManager manager(&game);
+    ASSERT_FALSE(manager.getIsFullScreenProperty());
+    constexpr Platform::WindowId ownWindow = 1;
+
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FullscreenEntered, ownWindow)});
+    EXPECT_TRUE(manager.getIsFullScreenProperty());
+
+    RunFrameWith(game, *scriptedPlatform,
+                 {WindowEvent(Platform::WindowEventKind::FullscreenLeft, ownWindow)});
+    EXPECT_FALSE(manager.getIsFullScreenProperty());
+}
+
 TEST_P(GameEventSemanticsGoldenTest, ObservableEventSemanticsMatchTheCapturedBaseline)
 {
     auto platform = std::make_unique<TranscriptPlatform>(

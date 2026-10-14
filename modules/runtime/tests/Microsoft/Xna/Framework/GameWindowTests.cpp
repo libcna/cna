@@ -323,9 +323,11 @@ namespace
             received = orientations;
             ++callCount;
         }
+        void CenterOnDisplay() override { ++centerCalls; }
 
         CNA::Platform::ScreenOrientation received = CNA::Platform::ScreenOrientation::None;
         int callCount = 0;
+        int centerCalls = 0;
 
     private:
         CNA::Platform::IPlatformWindow* inner_;
@@ -360,6 +362,30 @@ TEST(GameWindowTest, SetSupportedOrientations_FallsBackWhenTheCurrentOneStopsBei
 
     window.SetSupportedOrientations(DisplayOrientation::Portrait);
     EXPECT_EQ(DisplayOrientation::Portrait, window.getCurrentOrientationProperty());
+}
+
+// XNA re-centres a windowed game after a device change; a window going fullscreen has no
+// position to centre, so the request is made only for the windowed outcome.
+TEST(GameWindowTest, EndScreenDeviceChange_RecentresAWindowedWindowOnly)
+{
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    std::unique_ptr<CNA::Platform::IPlatformWindow> inner =
+        platform->CreateWindow(MakeDescription("recentre"));
+    OrientationRecordingWindow recording(inner.get());
+    TestableGameWindow window(&recording);
+
+    window.BeginScreenDeviceChange(false);
+    window.EndScreenDeviceChange(window.getScreenDeviceNameProperty(), 320, 240);
+    EXPECT_EQ(1, recording.centerCalls);
+
+    window.BeginScreenDeviceChange(true);
+    window.EndScreenDeviceChange(window.getScreenDeviceNameProperty(), 320, 240);
+    EXPECT_EQ(1, recording.centerCalls) << "a fullscreen outcome must not be re-centred";
+
+    window.BeginScreenDeviceChange(false);
+    window.EndScreenDeviceChange(window.getScreenDeviceNameProperty(), 640, 480);
+    EXPECT_EQ(2, recording.centerCalls);
 }
 
 TEST(GameWindowTest, SetSupportedOrientations_ForwardsTheRequestedSetToThePlatformWindow)

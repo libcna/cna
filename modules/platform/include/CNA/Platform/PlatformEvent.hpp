@@ -58,7 +58,11 @@ namespace CNA::Platform {
         /** @brief The window's display scale, or the content scale of the display it is on, changed. */
         DisplayScaleChanged,
         /** @brief The window moved to a different display. */
-        DisplayChanged
+        DisplayChanged,
+        /** @brief The window became fullscreen, whether the game asked or the window system did. */
+        FullscreenEntered,
+        /** @brief The window left fullscreen, whether the game asked or the window system did. */
+        FullscreenLeft
     };
 
     /** @brief Something happened to a window. */

@@ -155,7 +155,7 @@
     },
     "modules/platform/tests/CNA/Platform/Sdl3EventMapperTests.cpp": {
       "category": "platform-sdl3-integration",
-      "max_references": 217
+      "max_references": 221
     },
     "modules/platform/tests/CNA/Platform/Sdl3InputDevicesTests.cpp": {
       "category": "platform-sdl3-integration",

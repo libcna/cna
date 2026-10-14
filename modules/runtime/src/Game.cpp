@@ -32,6 +32,9 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
+#include "System/ArgumentNullException.hpp"
+#include "System/ObjectDisposedException.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #include <emscripten/html5.h>
@@ -214,7 +217,7 @@ namespace Microsoft::Xna::Framework
         {
             if (!platform)
             {
-                throw std::invalid_argument("Game requires a non-null platform");
+                throw System::ArgumentNullException("platform", "Game requires a non-null platform");
             }
 
             {
@@ -1153,7 +1156,7 @@ namespace Microsoft::Xna::Framework
     {
         if (isDisposed_)
         {
-            throw std::runtime_error("The Game object was used after being disposed.");
+            throw System::ObjectDisposedException("Game", "The Game object was used after being disposed.");
         }
     }
 
@@ -1545,6 +1548,19 @@ namespace Microsoft::Xna::Framework
 #if !defined(__ANDROID__)
                         setIsActiveProperty(true);
 #endif
+                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        break;
+                    case CNA::Platform::WindowEventKind::FullscreenEntered:
+                    case CNA::Platform::WindowEventKind::FullscreenLeft:
+                        // The window system can toggle fullscreen without the game asking (a
+                        // window-manager shortcut). Following the window keeps
+                        // GraphicsDeviceManager.IsFullScreen truthful, so a later ApplyChanges()
+                        // does not silently undo what the user chose.
+                        if (auto* manager = dynamic_cast<GraphicsDeviceManager*>(graphicsDeviceManager_))
+                        {
+                            manager->setIsFullScreenProperty(
+                                platformEvent.kind == CNA::Platform::WindowEventKind::FullscreenEntered);
+                        }
                         GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::Exposed:

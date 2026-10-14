@@ -57,6 +57,7 @@ namespace CNA::Platform::Sdl3 {
 
         /** @brief Sets the client size. @param width New width. @param height New height. */
         void SetSize(int width, int height) override;
+        void CenterOnDisplay() override;
 
         /** @brief Gets the display scale. @return Logical-to-physical scale factor. */
         [[nodiscard]] float GetDisplayScale() const override;

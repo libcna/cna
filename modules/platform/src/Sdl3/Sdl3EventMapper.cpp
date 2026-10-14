@@ -42,6 +42,8 @@ namespace CNA::Platform::Sdl3 {
                     window.kind = WindowEventKind::DisplayScaleChanged;
                     break;
                 case SDL_EVENT_WINDOW_DISPLAY_CHANGED:    window.kind = WindowEventKind::DisplayChanged; break;
+                case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:   window.kind = WindowEventKind::FullscreenEntered; break;
+                case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:   window.kind = WindowEventKind::FullscreenLeft; break;
                 default:
                     return false;
             }
@@ -74,6 +76,8 @@ namespace CNA::Platform::Sdl3 {
             case SDL_EVENT_WINDOW_MOVED:
             case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+            case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+            case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
                 return MapWindowEvent(source, destination);
 
             // --- keyboard ----------------------------------------------------------------------

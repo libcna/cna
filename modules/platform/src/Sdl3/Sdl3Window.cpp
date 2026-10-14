@@ -356,6 +356,20 @@ namespace CNA::Platform::Sdl3 {
         RequireSdlSuccess(SDL_SetWindowSize(window_, width, height), "Window::SetSize");
     }
 
+    void Sdl3Window::CenterOnDisplay()
+    {
+        if ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) return;
+        const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+        // Some window systems do not let an application place its own top-level windows (Wayland:
+        // "cannot position non-popup windows"); SDL reports that as a failure. Centring is cosmetic,
+        // so the window simply stays where the compositor put it instead of the game failing to start.
+        if (!SDL_SetWindowPosition(window_, SDL_WINDOWPOS_CENTERED_DISPLAY(display),
+                                   SDL_WINDOWPOS_CENTERED_DISPLAY(display)))
+        {
+            SDL_ClearError();
+        }
+    }
+
     float Sdl3Window::GetDisplayScale() const
     {
         // IPlatformWindow's value converts logical window coordinates to drawable pixels. SDL
