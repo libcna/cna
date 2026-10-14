@@ -138,7 +138,7 @@ namespace
     // still required to reach it (a source/compile contract), which is what the C1 property checks
     // and the creation checks cover here.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, false, false,
-                                 true, Support::Unsupported, false, true, false};
+                                 false, Support::Unsupported, false, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};

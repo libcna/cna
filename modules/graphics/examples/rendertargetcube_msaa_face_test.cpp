@@ -138,7 +138,8 @@ namespace
 #if defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing, so it owns no face colour at all and its readback stays
     // The deterministic refusal. The whole public sequence must still be legal.
-    constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true,
+    // Headless applies 0 samples to every target, so no face engages MSAA.
+    constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, false,
                                  Support::Unsupported, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, true,

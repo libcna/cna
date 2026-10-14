@@ -260,8 +260,10 @@ namespace CNA::Internal::Renderers::Headless
     HeadlessRenderTargetRenderer::HeadlessRenderTargetRenderer(std::shared_ptr<HeadlessSharedState> state, int w, int h,
                                                       int depthFormat, bool mipMap, int multiSampleCount)
         : state_(std::move(state)), width_(w), height_(h), depthFormat_(depthFormat),
-          mipMap_(mipMap), multiSampleCount_(multiSampleCount)
+          mipMap_(mipMap)
     {
+        // Headless multisamples nothing; the request is applied as 0, like the back buffer's.
+        (void) multiSampleCount;
         resourceId_ = state_->registry.Register("RenderTarget2D", state_->CurrentDebugLabel());
         state_->stats.renderTargetsCreated++;
         pixels_.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, 0u);
@@ -287,9 +289,9 @@ namespace CNA::Internal::Renderers::Headless
 
     HeadlessRenderTargetCubeRenderer::HeadlessRenderTargetCubeRenderer(std::shared_ptr<HeadlessSharedState> state, int size,
                                                               int depthFormat, bool mipMap, int multiSampleCount)
-        : state_(std::move(state)), size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
-          multiSampleCount_(multiSampleCount)
+        : state_(std::move(state)), size_(size), depthFormat_(depthFormat), mipMap_(mipMap)
     {
+        (void) multiSampleCount;
         resourceId_ = state_->registry.Register("RenderTargetCube", state_->CurrentDebugLabel());
         state_->stats.renderTargetCubesCreated++;
         state_->RecordTrace("CreateRenderTargetCube", "size=" + std::to_string(size));
@@ -736,6 +738,10 @@ namespace CNA::Internal::Renderers::Headless
                 // Headless rasterizes nothing, so claiming this would fabricate
                 // success for a draw no other renderer of its kind can perform. Its trace still
                 // records the complete binding set, which is what a Headless assertion checks.
+                return false;
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+                // Nothing is sampled, so no request is multisampled: the back buffer and every
+                // render target apply 0, and the adapter query selects 0, consistently.
                 return false;
             default:
                 return true;

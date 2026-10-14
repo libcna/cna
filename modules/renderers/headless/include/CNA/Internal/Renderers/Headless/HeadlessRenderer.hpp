@@ -627,6 +627,20 @@ namespace CNA::Internal::Renderers::Headless
                                                              const std::string& fragSrc) override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /** @brief Headless multisamples nothing: every requested count is applied as 0. */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(int /*requestedMultiSampleCount*/) const override
+        {
+            return 0;
+        }
+        /**
+         * @brief Headless registers no adapter format query, so GraphicsAdapter selects Color for
+         *        every back-buffer request; Reset applies the same answer rather than echoing the
+         *        request.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int /*requestedFormat*/) const override
+        {
+            return 0;
+        }
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,

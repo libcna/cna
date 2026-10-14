@@ -142,12 +142,10 @@ namespace
     // binding/tracing works, but nothing is ever drawn into it, so there is no rendered face it
     // could honestly return. the honest TextureCube/Texture3D readback contract already deleted the zero-filled buffers that used to
     // make its cube readback look like one.
-    // `msaaCubeTargets` true: this renderer records and reports the requested sample count as
-    // applied, which is what a state-tracking diagnostic renderer is for -- it is a bookkeeping
-    // claim, not a rasterized one, and there is no resolved surface behind it to read (hence
-    // `msaaReadback` Unsupported, like every other readback here).
+    // `msaaCubeTargets` false: Headless samples nothing, so every requested count is applied as 0
+    // -- on the back buffer, on RenderTarget2D and on the cube alike -- and the capability says so.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
-                                 false, true, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
+                                 false, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     // SOFTWARE-119 owns six independent CPU colour/sample planes, generates every mip on unbind,
     // and exposes exact top-first upload/readback from the same storage the rasterizer writes.
