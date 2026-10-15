@@ -34,6 +34,17 @@ def _rim(centre, shape, w, h, n=28):
             # A teardrop: wide at the top, drooping toward the outer bottom corner.
             x = w * c
             y = h * s * (1.0 if s > 0 else 1.25) - 0.004 * (1.0 - s) * (x / w)
+        elif shape == "cat":
+            # Rounded below, sweeping up to points at the outer top corners (outer = +x side here,
+            # mirrored by the caller's side).
+            x = w * math.copysign(abs(c) ** 0.7, c)
+            y = h * math.copysign(abs(s) ** 0.8, s)
+            y += 0.85 * h * max(0.0, c) ** 2 * max(0.0, s)
+            x += 0.20 * w * max(0.0, c) * max(0.0, s)
+        elif shape == "shield":
+            # A wide, shallow sport lens.
+            x = w * math.copysign(abs(c) ** 0.5, c)
+            y = h * math.copysign(abs(s) ** 0.6, s) * (1.0 - 0.15 * max(0.0, -s))
         else:  # browline: a straight heavy top
             x = w * math.copysign(abs(c) ** 0.6, c)
             y = h * (0.85 if s > 0 else 1.0) * math.copysign(abs(s) ** (0.4 if s > 0 else 0.8), s)
@@ -41,48 +52,66 @@ def _rim(centre, shape, w, h, n=28):
     return pts
 
 
+# (rim shape, half width, half height, rim thickness, lens colour or None, heavy brow bar).
+GLASSES = {
+    "glasses_round": ("round", 0.034, 0.032, 0.0024, None, False),
+    "glasses_square": ("square", 0.038, 0.027, 0.0024, None, False),
+    "glasses_aviator": ("aviator", 0.036, 0.028, 0.0024, (0.10, 0.12, 0.15), False),
+    "glasses_browline": ("browline", 0.037, 0.026, 0.0030, None, True),
+    "glasses_narrow": ("square", 0.036, 0.018, 0.0022, None, False),
+    "glasses_wire": ("round", 0.030, 0.028, 0.0013, None, False),
+    "glasses_thick": ("square", 0.039, 0.029, 0.0042, None, False),
+    "glasses_cateye": ("cat", 0.037, 0.026, 0.0030, None, False),
+    "glasses_oversized": ("round", 0.042, 0.039, 0.0030, None, False),
+    "glasses_bigsquare": ("square", 0.043, 0.035, 0.0032, None, False),
+    "sunglasses_sport": ("shield", 0.044, 0.024, 0.0034, (0.12, 0.14, 0.20), False),
+    "sunglasses_square": ("square", 0.040, 0.030, 0.0034, (0.08, 0.08, 0.09), False),
+    "sunglasses_round": ("round", 0.033, 0.031, 0.0022, (0.14, 0.10, 0.06), False),
+}
+
+
 def glasses(body_type, style):
     s = head.SCALE[body_type]
     a = head.anchors(body_type)
     c = head.centre(body_type)
     frame, lenses = Mesh(), Mesh()
-    shape = {"glasses_round": "round", "glasses_square": "square", "glasses_aviator": "aviator",
-             "glasses_browline": "browline"}[style]
-    w, h = {"round": (0.034, 0.032), "square": (0.038, 0.027), "aviator": (0.036, 0.028), "browline": (0.037, 0.026)}[shape]
-    w, h = w * s, h * s
-    thick = {"browline": 0.0030}.get(shape, 0.0024) * s
+    shape, w, h, thick, lens, heavy = GLASSES[style]
+    w, h, thick = w * s, h * s, thick * s
     fronts = []
     for side, name in ((1.0, "Left"), (-1.0, "Right")):
         eye = a["eye" + name]
         centre = (eye[0] + side * 0.002 * s, eye[1] + 0.002 * s, eye[2] + 0.017 * s)
-        # Rims tilt back slightly toward the temples, following the face.
+        # Rims tilt back slightly toward the temples, following the face; shapes with an outer side
+        # are mirrored on the right.
         rim = _rim(centre, shape, w, h)
+        if side < 0:
+            rim = [(2.0 * centre[0] - p[0], p[1], p[2]) for p in reversed(rim)]
         rim = [(p[0], p[1], p[2] - 0.012 * s * max(0.0, side * (p[0] - centre[0]) / w) ** 2) for p in rim]
-        radii = [thick * (1.6 if (shape == "browline" and p[1] > centre[1] + 0.2 * h) else 1.0) for p in rim]
+        radii = [thick * (1.6 if (heavy and p[1] > centre[1] + 0.2 * h) else 1.0) for p in rim]
         frame.append(tube(rim, radii, 6, HEADW, closed=True))
-        if shape == "aviator":
+        if lens:
             rows = [[centre] * len(rim), [lerp(centre, p, 0.55) for p in rim], [lerp(centre, p, 0.98) for p in rim]]
-            lens = Mesh().grid(rows, HEADW)
-            lenses.append(lens)
+            lenses.append(Mesh().grid(rows, HEADW))
         fronts.append((centre, rim))
     (lc, lrim), (rc, rrim) = fronts
     bridge_y = lc[1] + 0.35 * h
     nose = a["noseRoot"]
     frame.append(tube([(lc[0] - w, bridge_y, lc[2] - 0.002 * s), (0.0, bridge_y + 0.004 * s, nose[2] + 0.013 * s),
-                       (rc[0] + w, bridge_y, rc[2] - 0.002 * s)], [thick * 0.9] * 3, 6, HEADW))
+                       (rc[0] + w, bridge_y, rc[2] - 0.002 * s)], [max(thick * 0.9, 0.0016 * s)] * 3, 6, HEADW))
     if shape == "aviator":
         frame.append(tube([(lc[0] - w * 0.7, lc[1] + h * 1.02, lc[2]), (0.0, lc[1] + h * 1.08, nose[2] + 0.01 * s),
                            (rc[0] + w * 0.7, rc[1] + h * 1.02, rc[2])], [thick * 0.7] * 3, 6, HEADW))
+    arm = max(thick * 0.85, 0.0018 * s)
     for side, (centre, rim) in ((1.0, fronts[0]), (-1.0, fronts[1])):
         hinge = (centre[0] + side * w * 1.02, centre[1] + 0.25 * h, centre[2] - 0.012 * s)
         ear = a["ear" + ("Left" if side > 0 else "Right")]
         side_pt = head.side_point(body_type, side, hinge[1] - c[1], (hinge[2] + ear[2]) * 0.5 - c[2], 0.006 * s)[0]
         frame.append(tube([hinge, (side_pt[0], hinge[1], side_pt[2]), (ear[0] - side * 0.004 * s, ear[1] + 0.024 * s, ear[2] - 0.010 * s),
-                           (ear[0] - side * 0.008 * s, ear[1] + 0.006 * s, ear[2] - 0.022 * s)], [thick * 0.85] * 4, 6, HEADW,
+                           (ear[0] - side * 0.008 * s, ear[1] + 0.006 * s, ear[2] - 0.022 * s)], [arm] * 4, 6, HEADW,
                           round_end=True))
     parts = [(frame, "accessory", "plain", (1.0, 1.0, 1.0))]
     if lenses.positions:
-        parts.append((lenses, "none", "plain", (0.10, 0.12, 0.15)))
+        parts.append((lenses, "none", "plain", lens))
     return parts
 
 
@@ -182,6 +211,8 @@ def brim(body_type, line, lift, width, droop, segments=48, phi_range=None, curl=
 
 
 def hat(body_type, style):
+    if style in REVISED_HATS:
+        return revised_hat(body_type, style)
     s = head.SCALE[body_type]
     lift = HAT_LIFT * s
     parts = []
@@ -243,6 +274,114 @@ HAT_COVER = {
     "hat_bucket": (0.42, 0.46, 0.48, 0.50), "hat_fedora": (0.41, 0.45, 0.47, 0.49),
 }
 UNDER_HAT_LIFT = 0.019
+HAT_COVER.update({
+    "hat_backwardcap": (0.40, 0.45, 0.47, 0.50), "hat_trucker": (0.40, 0.45, 0.47, 0.50), "hat_flatcap": (0.39, 0.44, 0.46, 0.48),
+    "hat_sunhat": (0.41, 0.45, 0.47, 0.49), "hat_tophat": (0.40, 0.44, 0.46, 0.48), "hat_beret": (0.30, 0.33, 0.36, 0.40),
+    "hat_helmet": (0.38, 0.44, 0.46, 0.50), "hat_slouchbeanie": (0.42, 0.47, 0.50, 0.54), "hat_western": (0.40, 0.44, 0.46, 0.48),
+})
+
+
+REVISED_HATS = ["hat_backwardcap", "hat_trucker", "hat_flatcap", "hat_sunhat", "hat_tophat", "hat_beret", "hat_helmet",
+                "hat_slouchbeanie", "hat_visor", "hat_western"]
+
+
+def revised_hat(body_type, style):
+    s = head.SCALE[body_type]
+    lift = HAT_LIFT * s
+    main, trim = Mesh(), Mesh()
+    c = head.centre(body_type)
+    if style in ("hat_backwardcap", "hat_trucker"):
+        line = hat_line(0.36 * PI, 0.44 * PI, 0.46 * PI)
+        tall = 0.020 if style == "hat_trucker" else 0.010
+        main.append(crown(body_type, line, lift, bulge=lambda t, p: tall * s * math.sin(t) * (0.5 + 0.5 * math.cos(p))))
+        rng = (PI - 0.36 * PI, PI + 0.36 * PI) if style == "hat_backwardcap" else (-0.36 * PI, 0.36 * PI)
+        bill = brim(body_type, line, lift * 0.9, lambda p: 0.085 * math.cos(p) ** 2, lambda p: 0.020 * math.cos(p) ** 2,
+                    segments=24, phi_range=rng, curl=0.03 if style == "hat_trucker" else 0.0)
+        main.append(bill)
+        top = head.point(body_type, 0.0, 0.0, lift + 0.003 * s)
+        trim.append(ellipsoid(top, ((1, 0, 0), (0, 1, 0), (0, 0, 1)), (0.009 * s, 0.006 * s, 0.009 * s), 8, 6, HEADW))
+        if style == "hat_trucker":
+            # A taller crown of mesh fabric.
+            return [(main, "accessory", "jersey", (1.0, 1.0, 1.0)), (trim, "accessory", "plain", (0.8, 0.8, 0.8))]
+        return [(main, "accessory", "canvas", (1.0, 1.0, 1.0)), (trim, "accessory", "plain", (0.8, 0.8, 0.8))]
+    if style == "hat_flatcap":
+        line = hat_line(0.37 * PI, 0.43 * PI, 0.45 * PI)
+        main.append(crown(body_type, line, lift, bulge=lambda t, p: 0.016 * s * smoothstep(0.05 * PI, 0.25 * PI, t) *
+                          max(0.0, math.cos(p)) - 0.008 * s * (1.0 - smoothstep(0.0, 0.2 * PI, t))))
+        main.append(brim(body_type, line, lift * 0.9, lambda p: 0.040 * math.cos(p) ** 2, lambda p: 0.012 * math.cos(p) ** 2,
+                         segments=20, phi_range=(-0.30 * PI, 0.30 * PI)))
+        return [(main, "accessory", "check", (1.0, 1.0, 1.0))]
+    if style in ("hat_sunhat", "hat_western"):
+        line = hat_line(0.40 * PI, 0.44 * PI, 0.46 * PI)
+        if style == "hat_western":
+            crown_mesh, band = fedora_crown(body_type, line, lift)
+            main.append(crown_mesh)
+            main.append(brim(body_type, line, lift * 0.9, lambda p: 0.085, lambda p: -0.020 * math.sin(p) ** 2 + 0.010 * math.cos(p) ** 2,
+                             curl=0.0))
+            trim.append(band)
+            return [(main, "accessory", "leather", (1.0, 1.0, 1.0)), (trim, "none", "plain", (0.30, 0.20, 0.12))]
+        main.append(crown(body_type, line, lift, bulge=lambda t, p: 0.010 * s * smoothstep(0.1 * PI, 0.3 * PI, t)))
+        main.append(brim(body_type, line, lift * 0.9, lambda p: 0.105, lambda p: 0.026))
+        band = []
+        for k in range(48):
+            phi = PI + 2 * PI * k / 48
+            band.append(head.point(body_type, line(phi) - 0.025 * PI, phi, lift + 0.003 * s))
+        trim.append(tube(band, [0.006 * s] * 48, 6, HEADW, closed=True))
+        return [(main, "accessory", "canvas", (1.0, 1.0, 1.0)), (trim, "none", "plain", (0.20, 0.20, 0.22))]
+    if style == "hat_tophat":
+        line = hat_line(0.40 * PI, 0.44 * PI, 0.46 * PI)
+        base = [head.point(body_type, line(PI + 2 * PI * k / 40), PI + 2 * PI * k / 40, lift) for k in range(40)]
+        cx = sum(p[0] for p in base) / 40.0
+        cz = sum(p[2] for p in base) / 40.0
+        top_y = head.point(body_type, 0.0, 0.0, lift)[1] + 0.10 * s
+        rows = [base]
+        for f in (0.25, 0.6, 1.0):
+            rows.append([(cx + (p[0] - cx) * (1.0 + 0.04 * f), p[1] + (top_y - p[1]) * f, cz + (p[2] - cz) * (1.0 + 0.04 * f)) for p in base])
+        rows.append([(cx + (p[0] - cx) * 0.6, top_y, cz + (p[2] - cz) * 0.6) for p in base])
+        rows.append([(cx, top_y, cz)] * 40)
+        m = Mesh()
+        m.patch_origin = (cx, (top_y + base[0][1]) * 0.5, cz)
+        main.append(m.grid(rows, HEADW))
+        main.append(brim(body_type, line, lift * 0.9, lambda p: 0.050, lambda p: -0.008 * math.sin(p) ** 2))
+        band = [(cx + (p[0] - cx) * 1.012, p[1] + 0.012 * s, cz + (p[2] - cz) * 1.012) for p in base]
+        trim.append(tube(band, [0.007 * s] * 40, 6, HEADW, closed=True))
+        return [(main, "accessory", "fleece", (1.0, 1.0, 1.0)), (trim, "none", "plain", (0.12, 0.12, 0.13))]
+    if style == "hat_beret":
+        line = hat_line(0.30 * PI, 0.36 * PI, 0.40 * PI)
+        main.append(crown(body_type, line, lift * 0.8, bulge=lambda t, p: 0.030 * s * math.sin(min(t / (0.30 * PI), 1.0) * PI) *
+                          (0.7 + 0.3 * math.sin(p))))
+        top = head.point(body_type, 0.02 * PI, 0.0, lift + 0.040 * s)
+        trim.append(tube([top, add(top, (0.0, 0.010 * s, 0.0))], [0.004 * s] * 2, 6, HEADW, round_end=True))
+        return [(main, "accessory", "fleece", (1.0, 1.0, 1.0)), (trim, "accessory", "plain", (0.8, 0.8, 0.8))]
+    if style == "hat_helmet":
+        line = hat_line(0.38 * PI, 0.44 * PI, 0.48 * PI)
+        main.append(crown(body_type, line, lift + 0.008 * s, bulge=lambda t, p: 0.012 * s * smoothstep(0.0, 0.3 * PI, t) *
+                          (1.0 - 0.5 * max(0.0, math.cos(p)))))
+        rim = [head.point(body_type, line(PI + 2 * PI * k / 48), PI + 2 * PI * k / 48, lift + 0.008 * s) for k in range(48)]
+        trim.append(tube(rim, [0.006 * s] * 48, 6, HEADW, closed=True))
+        for side in (1.0, -1.0):
+            start = head.side_point(body_type, side, -0.005 * s, 0.012 * s, 0.010 * s)[0]
+            chin = add(head.anchors(body_type)["chin"], (side * 0.020 * s, -0.004 * s, -0.012 * s))
+            trim.append(tube([start, lerp(start, chin, 0.5), chin], [0.0022 * s] * 3, 6, HEADW))
+        return [(main, "accessory", "plain", (1.0, 1.0, 1.0)), (trim, "none", "plain", (0.18, 0.18, 0.20))]
+    if style == "hat_slouchbeanie":
+        line = hat_line(0.42 * PI, 0.47 * PI, 0.50 * PI)
+        main.append(crown(body_type, line, lift, bulge=lambda t, p: 0.030 * s * (1.0 - smoothstep(0.0, 0.40 * PI, t)) *
+                          (0.4 + 0.6 * max(0.0, -math.cos(p)))))
+        ring_lo = [head.point(body_type, line(PI + 2 * PI * k / 48), PI + 2 * PI * k / 48, lift + 0.008 * s) for k in range(48)]
+        main.append(tube(ring_lo, [0.007 * s] * 48, 6, HEADW, closed=True))
+        return [(main, "accessory", "rib", (1.0, 1.0, 1.0))]
+    if style == "hat_visor":
+        line = hat_line(0.30 * PI, 0.40 * PI, 0.46 * PI)
+        band = []
+        for k in range(48):
+            phi = PI + 2 * PI * k / 48
+            band.append(head.point(body_type, line(phi) - 0.03 * PI, phi, 0.020 * s))
+        main.append(tube(band, [0.010 * s] * 48, 8, HEADW, closed=True))
+        main.append(brim(body_type, lambda p: line(p) - 0.03 * PI, 0.018 * s, lambda p: 0.075 * math.cos(p) ** 2,
+                         lambda p: 0.016 * math.cos(p) ** 2, segments=24, phi_range=(-0.36 * PI, 0.36 * PI), curl=0.02))
+        return [(main, "accessory", "jersey", (1.0, 1.0, 1.0))]
+    raise ValueError(style)
 
 
 # ----- facial hair ------------------------------------------------------------------------------
@@ -395,3 +534,38 @@ def facial_hair(body_type, style):
     else:
         raise ValueError(style)
     return [(locks, "hair", "strands", (1.0, 1.0, 1.0))]
+
+
+# ----- earrings (catalog v3 revision 2, format 3) ---------------------------------------------------
+
+EARRINGS = ["earrings_stud", "earrings_bigstud", "earrings_hoop", "earrings_bighoop", "earrings_drop", "earrings_huggie"]
+
+
+def earrings(body_type, style):
+    """A pair, each side its own part (cnaSide) hanging from the lobe of the default ear."""
+    s = head.SCALE[body_type]
+    out = []
+    for side, name in ((1.0, "left"), (-1.0, "right")):
+        lobe, outward, up = head.ear_lobe(body_type, side)
+        front = normalize(cross(up, outward)) if side > 0 else mul(normalize(cross(up, outward)), -1.0)
+        m, gem = Mesh(), Mesh()
+        if style in ("earrings_stud", "earrings_bigstud"):
+            r = (0.0046 if style == "earrings_stud" else 0.0068) * s
+            m.append(ellipsoid(add(lobe, mul(outward, 0.0025 * s)), (front, up, outward), (r, r, r * 0.8), 10, 8, HEADW))
+        elif style in ("earrings_hoop", "earrings_bighoop", "earrings_huggie"):
+            rad = {"earrings_hoop": 0.0090, "earrings_bighoop": 0.0160, "earrings_huggie": 0.0052}[style] * s
+            thick = {"earrings_hoop": 0.0015, "earrings_bighoop": 0.0017, "earrings_huggie": 0.0020}[style] * s
+            centre = add(add(lobe, mul(up, -rad * 0.85)), mul(outward, 0.0015 * s))
+            loop = [add(centre, add(mul(up, rad * math.cos(2 * PI * k / 24)), mul(front, rad * math.sin(2 * PI * k / 24))))
+                    for k in range(24)]
+            m.append(tube(loop, [thick] * 24, 6, HEADW, closed=True))
+        else:  # drop: a short chain and a teardrop
+            top = add(lobe, mul(outward, 0.0015 * s))
+            bottom = add(top, mul(up, -0.012 * s))
+            m.append(tube([top, lerp(top, bottom, 0.5), bottom], [0.0008 * s] * 3, 5, HEADW))
+            gem.append(ellipsoid(add(bottom, mul(up, -0.005 * s)), (front, up, outward), (0.0036 * s, 0.0055 * s, 0.0030 * s), 10, 8,
+                                 HEADW))
+        out.append((m, "jewelry", "plain", (1.0, 1.0, 1.0), {"cnaSide": name}))
+        if gem.positions:
+            out.append((gem, "accessory", "plain", (1.0, 1.0, 1.0), {"cnaSide": name}))
+    return out

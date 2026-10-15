@@ -121,6 +121,27 @@ REVISED_SHOES = [("shoes_running", 1.0, 1.0), ("shoes_loafers", 0.6, 0.8), ("sho
 ITEMS += [(300 + k, "top", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_TOPS)]
 ITEMS += [(350 + k, "bottom", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_BOTTOMS)]
 ITEMS += [(400 + k, "shoes", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_SHOES)]
+REVISED_GLASSES = [("glasses_narrow", 1.0, 1.0), ("glasses_wire", 0.8, 0.8), ("glasses_thick", 0.8, 1.0),
+                   ("glasses_cateye", 1.0, 0.2), ("glasses_oversized", 0.9, 0.5), ("glasses_bigsquare", 0.7, 0.8),
+                   ("sunglasses_sport", 0.4, 0.6), ("sunglasses_square", 0.6, 0.8), ("sunglasses_round", 0.6, 0.6)]
+REVISED_HATS = [("hat_backwardcap", 0.5, 1.0), ("hat_trucker", 0.4, 0.9), ("hat_flatcap", 0.4, 0.8), ("hat_sunhat", 0.9, 0.3),
+                ("hat_tophat", 0.2, 0.3), ("hat_beret", 0.8, 0.3), ("hat_helmet", 0.2, 0.3), ("hat_slouchbeanie", 0.8, 0.8),
+                ("hat_visor", 0.6, 0.5), ("hat_western", 0.3, 0.5)]
+ITEMS += [(430 + k, "glasses", name, f, m, {"format": 3, "follow": "eyes"}) for k, (name, f, m) in enumerate(REVISED_GLASSES)]
+ITEMS += [(450 + k, "hat", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_HATS)]
+# Accessories (format 3): earrings follow the ears; gloves hide rings.
+ACCESSORY_ITEMS = [(510, "earrings", "earrings_stud", 1.0, 0.3), (511, "earrings", "earrings_bigstud", 0.8, 0.1),
+                   (512, "earrings", "earrings_hoop", 1.0, 0.1), (513, "earrings", "earrings_bighoop", 0.7, 0.02),
+                   (514, "earrings", "earrings_drop", 0.8, 0.02), (515, "earrings", "earrings_huggie", 0.8, 0.2),
+                   (530, "wristwear", "wrist_watch", 1.0, 1.4), (531, "wristwear", "wrist_sportwatch", 0.6, 1.0),
+                   (532, "wristwear", "wrist_bangle", 1.0, 0.1), (533, "wristwear", "wrist_beads", 0.8, 0.5),
+                   (534, "wristwear", "wrist_band", 0.4, 0.5), (535, "wristwear", "wrist_cuff", 0.6, 0.2),
+                   (550, "gloves", "gloves_knit", 1.0, 1.0), (551, "gloves", "gloves_fingerless", 0.8, 0.8),
+                   (552, "gloves", "gloves_work", 0.4, 0.8), (553, "gloves", "gloves_formal", 0.5, 0.3),
+                   (560, "rings", "ring_band", 1.0, 1.0), (561, "rings", "ring_signet", 0.4, 0.8), (562, "rings", "ring_gem", 1.0, 0.1)]
+ITEMS += [(i, slot, name, f, m, {"format": 3, **({"follow": "ears"} if slot == "earrings" else {}),
+                                 **({"hides": ["rings"]} if slot == "gloves" else {})})
+          for i, slot, name, f, m in ACCESSORY_ITEMS]
 # Personal features: facial hair (format 2, and format 3 for revision 2's) and ear shapes (format 3).
 REVISED_FACIAL = [("facial_stubble", 1.4), ("facial_heavystubble", 1.0), ("facial_shortbeard", 1.0), ("facial_longbeard", 0.4),
                   ("facial_horseshoe", 0.4), ("facial_handlebar", 0.2), ("facial_soulpatch", 0.3), ("facial_chinbeard", 0.4),
@@ -183,12 +204,14 @@ def item_glb(body_type, item_id, slot, name):
         parts.append((head.ear_meshes(body_type, EAR_SHAPE_OF[name]), builder.add_material(name, "skin")))
     else:
         built = {"top": garments.top, "bottom": garments.bottom, "shoes": garments.shoes, "glasses": accessories.glasses,
-                 "hat": accessories.hat, "facialHair": accessories.facial_hair}[slot](body_type, name)
+                 "hat": accessories.hat, "facialHair": accessories.facial_hair, "earrings": accessories.earrings,
+                 "wristwear": garments.wristwear, "gloves": garments.gloves, "rings": garments.rings}[slot](body_type, name)
         for index, part in enumerate(built):
             mesh, tint, kind, colour = part[:4]
             extras = part[4] if len(part) > 4 else None
             texture = "hair_clump" if kind == "strands" else kind
-            specular = 2.5 if slot == "glasses" else 0.2 if kind.startswith("stubble") else CLOTH_SPECULAR.get(kind, 1.0)
+            specular = 2.5 if slot == "glasses" else 0.2 if kind.startswith("stubble") else \
+                3.0 if tint == "jewelry" else CLOTH_SPECULAR.get(kind, 1.0)
             parts.append((mesh, material("%s_%d" % (name, index), tint, texture, colour, specular, extras)))
     builder.add_skinned_mesh(name, parts, skin_index)
     return builder.build(), used

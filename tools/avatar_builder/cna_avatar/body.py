@@ -347,9 +347,11 @@ def leg(body, side, inflate=0.0, t_range=None, flare=0.0, segments=16, cap_end=N
                 cap_end=t_range is None if cap_end is None else cap_end, flare=flare, hint=(0.0, 0.0, 1.0))
 
 
-def hand(body, side, sign):
+def hand(body, side, sign, inflate=0.0, finger_segments=3, wrist_start=None):
     """Palm pad from the wrist to the knuckles, knuckle row, four jointed fingers and a thumb with
-    its pad. Fingers keep the rig's straight bind line; their shape does the rounding."""
+    its pad. Fingers keep the rig's straight bind line; their shape does the rounding. Gloves are the
+    same hand `inflate` larger, with `finger_segments` of each finger (fewer for fingerless gloves),
+    starting at `wrist_start` along the hand (metres before the wrist joint) when given."""
     pos = rig.joint_positions(body)
     p = rig.PROPORTIONS[body]
     H = HAND[body]
@@ -367,14 +369,14 @@ def hand(body, side, sign):
     # Palm: superellipse sections from inside the wrist to the knuckles, thickest at the heel of the hand.
     rows = []
     steps = 14
-    start, end = -0.018, pl + 0.002
+    start, end = (-0.018 if wrist_start is None else -wrist_start), pl + 0.002
     for i in range(steps + 1):
         t = i / steps
         c = add(wrist, mul(along, start + t * (end - start)))
         # Width reaches the palm's quickly; thickness slowly, so the forearm's rounded end stays inside.
-        width = wrist_w + (pw - wrist_w) * smoothstep(0.0, 0.38, t)
+        width = wrist_w + (pw - wrist_w) * smoothstep(0.0, 0.38, t) + inflate
         thick = (wrist_d + (pt * (1.0 + 0.16 * math.sin(math.pi * min(t * 1.3, 1.0))) - wrist_d) * smoothstep(0.0, 0.62, t)) \
-            * (1.0 - 0.12 * smoothstep(0.8, 1.0, t))
+            * (1.0 - 0.12 * smoothstep(0.8, 1.0, t)) + inflate
         ring = []
         for s in range(24):
             a = 2.0 * math.pi * s / 24
@@ -398,7 +400,7 @@ def hand(body, side, sign):
     # Thumb pad (thenar), toward the thumb side of the palm.
     thumb_root = pos[I["FingerThumb" + side]]
     pad = add(lerp(wrist, thumb_root, 0.6), mul(normal, 0.004 * k))
-    m.append(ellipsoid(pad, (spread, along, normal), (0.013 * k, 0.022 * k, 0.011 * k), 16, 10,
+    m.append(ellipsoid(pad, (spread, along, normal), (0.013 * k + inflate, 0.022 * k + inflate, 0.011 * k + inflate), 16, 10,
                        lambda q, v, u: {wr: 0.7, I["FingerThumb" + side]: 0.3}))
     for finger in rig.FINGERS + ("Thumb",):
         joints = [I["Finger%s%s" % (finger, side)], I["Finger%s2%s" % (finger, side)], I["Finger%s3%s" % (finger, side)]]
@@ -407,22 +409,26 @@ def hand(body, side, sign):
         tip = add(points[2], mul(direction, rig.FINGER_SEGMENTS[finger][2] * k * 0.9))
         points.append(tip)
         base = H["thumb" if finger == "Thumb" else "finger"] * k * {"Index": 1.0, "Middle": 1.04, "Ring": 0.98,
-                                                                      "Small": 0.86, "Thumb": 1.0}[finger]
+                                                                      "Small": 0.86, "Thumb": 1.0}[finger] + inflate
         # Fingers begin well inside the palm, so the knuckle row grows out of it without a step.
         start = sub(points[0], mul(direction, (0.020 if finger != "Thumb" else 0.014) * k))
         # The part inside the palm moves with the palm, so a curled finger never pokes out of its back.
         path, weights, radii = [start, lerp(start, points[0], 0.6)], [{wr: 1.0}, {wr: 0.9, joints[0]: 0.1}], [base * 0.8, base * 0.92]
-        for s in range(3):
+        for s in range(finger_segments):
             parent = wr if s == 0 else joints[s - 1]
             a, b = points[s], points[s + 1]
             # Knuckle bulge at each joint, slimmer between.
             path += [a, lerp(a, b, 0.5)]
             weights += [{parent: 0.5, joints[s]: 0.5}, {joints[s]: 1.0}]
             radii += [base * (1.06 - 0.09 * s), base * (0.94 - 0.09 * s)]
-        path.append(points[3])
-        weights.append({joints[2]: 1.0})
-        radii.append(base * 0.74)
-        m.append(tube(path, radii, 12, None, row_weights=weights, round_end=True))
+        if finger_segments == 3:
+            path.append(points[3])
+            weights.append({joints[2]: 1.0})
+            radii.append(base * 0.74)
+            m.append(tube(path, radii, 12, None, row_weights=weights, round_end=True))
+        else:
+            # A cut-off finger: an open rolled edge part-way along the segment.
+            m.append(tube(path, radii, 12, None, row_weights=weights, round_end=False, cap=False))
     return m
 
 

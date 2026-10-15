@@ -222,6 +222,66 @@
    "size": 68856
   },
   {
+   "name": "earrings_bighoop.female.glb",
+   "sha256": "5e59fc0d9d0c53f0ac504f14aaab778bf8775fc660f18b353f887377392dbee4",
+   "size": 26036
+  },
+  {
+   "name": "earrings_bighoop.male.glb",
+   "sha256": "62e20b87d7f76e53e4eddac9b07158266665622c11104db3d629fcbf59b153ed",
+   "size": 26024
+  },
+  {
+   "name": "earrings_bigstud.female.glb",
+   "sha256": "0ed6ed27e2b560da123b5a0b10b080fedbba8d02be578e7a5db894af6261941f",
+   "size": 20408
+  },
+  {
+   "name": "earrings_bigstud.male.glb",
+   "sha256": "94206d5cec6d1132e2c1b006a5f0f7ffc081d898b6889f30e94329b306ef004e",
+   "size": 20392
+  },
+  {
+   "name": "earrings_drop.female.glb",
+   "sha256": "e84ed0f4355abc1b521055420950f2a68b068207049b8a7ed3ffffffe66442bb",
+   "size": 24964
+  },
+  {
+   "name": "earrings_drop.male.glb",
+   "sha256": "4004778201ea1de3802ed3ee14dbc279b84653aa960148f8c30ced8a861915ff",
+   "size": 24944
+  },
+  {
+   "name": "earrings_hoop.female.glb",
+   "sha256": "26d8921f3b1542af6e6c543933b0a5f0beb2b0cf3c3fb27b4da7a91a58c62882",
+   "size": 26024
+  },
+  {
+   "name": "earrings_hoop.male.glb",
+   "sha256": "882b2475566e5560458427a3932366180148d46162e0057f50b5b73fe498d5fb",
+   "size": 26012
+  },
+  {
+   "name": "earrings_huggie.female.glb",
+   "sha256": "ba439300b22c859ca5c3e1c22ab7ba1d18d94b4a849af14b1baa91ea59a7e0b1",
+   "size": 26032
+  },
+  {
+   "name": "earrings_huggie.male.glb",
+   "sha256": "7077cf8c911cd032688c2c3c070ddd1e9419848b7bf6c572632303fdbd2af8ba",
+   "size": 26016
+  },
+  {
+   "name": "earrings_stud.female.glb",
+   "sha256": "9e6392a9ccae06405607245b83d1e32ba833577f5bedad852317cad3d505512f",
+   "size": 20396
+  },
+  {
+   "name": "earrings_stud.male.glb",
+   "sha256": "51f1a53e0a447b4f37a10901658652e65102edc886718f5a24180b0b7adb3a6e",
+   "size": 20372
+  },
+  {
    "name": "ears_attached.female.glb",
    "sha256": "5902b586a45f31b2468908bc55621b79853f94ced9726f8a1cc05a571e158e43",
    "size": 45424
@@ -448,43 +508,143 @@
   },
   {
    "name": "glasses_aviator.female.glb",
-   "sha256": "eae9f79a3a91885841deb72ce5cd87e6e0ab1e8fec469fe8c159b883008f64ca",
+   "sha256": "9adca00188d10d6ca32cc3cbf0682c2ee5c9029204b6692fca4332432247df87",
    "size": 40780
   },
   {
    "name": "glasses_aviator.male.glb",
-   "sha256": "79b67fee4739699b8df24410f7d23b4835b201a00d2cfbf29cf10c3b3a23ae27",
+   "sha256": "f8a8ac27194e018a7c785726edbc2cba8012a9fe89759d2a14c1da8b095cec14",
    "size": 40772
   },
   {
+   "name": "glasses_bigsquare.female.glb",
+   "sha256": "309a01629c1f3447de5956837a48dd4295be1afcc3768289202835d80981a647",
+   "size": 31924
+  },
+  {
+   "name": "glasses_bigsquare.male.glb",
+   "sha256": "e2558a16a7a2177e3674634145e05449fc12ab95ec6523d6397aed1c0ca36901",
+   "size": 31908
+  },
+  {
    "name": "glasses_browline.female.glb",
-   "sha256": "39d64b33e0cbff959d7c1a091174059124e4de1ee56e0e1d553dfc5376fb0156",
+   "sha256": "dc98c8c8a4651bb5f7cf13287b0de5dba7697b06b1e7b1a2ecc803d688dfb652",
    "size": 31920
   },
   {
    "name": "glasses_browline.male.glb",
-   "sha256": "fefee7208bc25631621bd1179fe56e25ca23bbfb54d0aaae77c4c98074f3f67d",
+   "sha256": "3fe326ddaf58081ed89f417ce4ab8108027dea9e2cb6313e80ab4df107627560",
    "size": 31908
   },
   {
+   "name": "glasses_cateye.female.glb",
+   "sha256": "b56079d69f01a0b49a366dcef55caa7418fcd6253cc6cf7c1c8177f4c1bd5ce5",
+   "size": 31912
+  },
+  {
+   "name": "glasses_cateye.male.glb",
+   "sha256": "b958044916f6674e581535fd6f8b148f73ef0514e0571a6837b065d11b1785cb",
+   "size": 31900
+  },
+  {
+   "name": "glasses_narrow.female.glb",
+   "sha256": "fc9bc317470bd94eb5f9d0a73f7e98bc0a8f3be66b0fc52b8aa606924afcef05",
+   "size": 31908
+  },
+  {
+   "name": "glasses_narrow.male.glb",
+   "sha256": "bb93aa1df4329fb1b9711c8c996e2a021ea4d1fb302ed5898516347cf9b433dd",
+   "size": 31900
+  },
+  {
+   "name": "glasses_oversized.female.glb",
+   "sha256": "67901773e8d1e732913961b48e86eb9b3732d33ab608cc67e332c6d50923f375",
+   "size": 31924
+  },
+  {
+   "name": "glasses_oversized.male.glb",
+   "sha256": "a60e6a42ae9010351a649b8dac42ecd511929b20f2a8b11484acac74b6112846",
+   "size": 31912
+  },
+  {
    "name": "glasses_round.female.glb",
-   "sha256": "a3d35b39004fef77ab7108c210b67d86276e33c75af23b7da20f9053114e6bca",
+   "sha256": "df152d8aa68691686c2a2c730ddc604ea049b590d18b2a20d538614ed1d06f18",
    "size": 31908
   },
   {
    "name": "glasses_round.male.glb",
-   "sha256": "58e26488bd891086d4d12810d0df69a9bf1c64f2b1fcdbce8e2968fbef470b0a",
+   "sha256": "f98984d9ca3b772269979d5ec91b1e1e311bebc548142e9d258760bce82b475c",
    "size": 31896
   },
   {
    "name": "glasses_square.female.glb",
-   "sha256": "448f99147b5fe0bffde0c322b99bd045807e351ac1255b52d0c4367501e7fd10",
-   "size": 31908
+   "sha256": "3d29bbc4f4da1fb05ed61880441a090de682403a01575b5846c22fc6eb5c81bc",
+   "size": 31912
   },
   {
    "name": "glasses_square.male.glb",
-   "sha256": "292dd810a25ec18647915b037bf2fffd31f19660a70591f96f4fb327d74c94ca",
+   "sha256": "cf97504dc79c06930e2235e39464ec748a3e2da2d1b6a04773d032fa3fc96a10",
    "size": 31900
+  },
+  {
+   "name": "glasses_thick.female.glb",
+   "sha256": "9d8bee50bcb22335720d85c8f78b724fb5dc07d967b7b46a24ddc4a8607fc5fb",
+   "size": 31908
+  },
+  {
+   "name": "glasses_thick.male.glb",
+   "sha256": "475cf467f9896e1e7e66c4bfb5e8f17ad36915a9fd2eb31b28cbf8db08cfbd0c",
+   "size": 31896
+  },
+  {
+   "name": "glasses_wire.female.glb",
+   "sha256": "d6f8af1a0be4882d9b039470febb3b4859513a3393829be2c0cff59019d20a1e",
+   "size": 31900
+  },
+  {
+   "name": "glasses_wire.male.glb",
+   "sha256": "3ec80ceb9399d087d2eefbcb727399f51afc2d00f33e4edd9f80b6dedde41f74",
+   "size": 31892
+  },
+  {
+   "name": "gloves_fingerless.female.glb",
+   "sha256": "3b2e5df56fc826a8a1c470b2094b2ad44cf0d0e4522e7f72580d8508fa2b99db",
+   "size": 111108
+  },
+  {
+   "name": "gloves_fingerless.male.glb",
+   "sha256": "930075dd50f88258126c98249c988c6475aa355ba0be52e31d2bad265ca8a644",
+   "size": 111092
+  },
+  {
+   "name": "gloves_formal.female.glb",
+   "sha256": "f9d9e1bab31a0a729298cd0e0848bd5d2c0b857d9a8f700ee7208ac6232e9d9e",
+   "size": 158632
+  },
+  {
+   "name": "gloves_formal.male.glb",
+   "sha256": "900a48d345174350238e5bd0aadf7c17eb1317cff1190af6563ce2c3b4eab8f3",
+   "size": 158620
+  },
+  {
+   "name": "gloves_knit.female.glb",
+   "sha256": "2a6f35b6df2787bef226554a30a5d7ce643ec27309ad3e479775853879c8cf4b",
+   "size": 157168
+  },
+  {
+   "name": "gloves_knit.male.glb",
+   "sha256": "c7cca88bc98654f9df1fc6a565767a09c170868d493ef9399e6b8fc28f028382",
+   "size": 157152
+  },
+  {
+   "name": "gloves_work.female.glb",
+   "sha256": "d6dd1695821a6fd6d92b51995613f3c09337e32092399435cd8ba4746a756a13",
+   "size": 157156
+  },
+  {
+   "name": "gloves_work.male.glb",
+   "sha256": "3168ca42249b7cf96bb5ddeb7f52d400a6d20f04a3f7bd7295c1b729a2a5798d",
+   "size": 157140
   },
   {
    "name": "hair_afro.female.glb",
@@ -857,6 +1017,16 @@
    "size": 163980
   },
   {
+   "name": "hat_backwardcap.female.glb",
+   "sha256": "7d292460092caaf69519e3632c40976d214b8b084813d98339ba5f5508b5bd71",
+   "size": 52312
+  },
+  {
+   "name": "hat_backwardcap.male.glb",
+   "sha256": "43484a36c52ace492eddbb6d0a44b848bc15e3b7fa84b7e98b4eee06523358e4",
+   "size": 52300
+  },
+  {
    "name": "hat_beanie.female.glb",
    "sha256": "a3963a96df8514777357881b536067dec1bdcaa46121323b370adaf7adbfa4bf",
    "size": 58536
@@ -865,6 +1035,16 @@
    "name": "hat_beanie.male.glb",
    "sha256": "eddcc5b6961818febcc40f5c572e5c1a12cce293c11a1981f4bfcea8b407f3e0",
    "size": 58524
+  },
+  {
+   "name": "hat_beret.female.glb",
+   "sha256": "ca12297b5c0eb9ee458b12ec4565e7c5eec0c9e3c22bd1368e01786175574cf6",
+   "size": 45624
+  },
+  {
+   "name": "hat_beret.male.glb",
+   "sha256": "eb56d0914f552a934934444cd1a49a4ae80d24d93463fcd5f284a17f565d0389",
+   "size": 45612
   },
   {
    "name": "hat_bucket.female.glb",
@@ -897,6 +1077,16 @@
    "size": 52260
   },
   {
+   "name": "hat_flatcap.female.glb",
+   "sha256": "508cb2cdd7a05488678b8599b2de1d17212ebf8f4e13b204f761210bbeaa2e5c",
+   "size": 47836
+  },
+  {
+   "name": "hat_flatcap.male.glb",
+   "sha256": "9dead9b5915f88182accb5bd46fa37d24aeedea936c590bad8f7ac2cb5770ebc",
+   "size": 47824
+  },
+  {
    "name": "hat_headband.female.glb",
    "sha256": "f79f1d7a34a5d47028919b52e5fe2254972e9c859e92c82404a1782a1a7d3397",
    "size": 28772
@@ -905,6 +1095,106 @@
    "name": "hat_headband.male.glb",
    "sha256": "e2125bfc48cfe0f7600b8b194864be7827db1306c2f49e0f69a14bc74d863cf3",
    "size": 28760
+  },
+  {
+   "name": "hat_helmet.female.glb",
+   "sha256": "6ce0f75fe5ddcf5622c4430300939b87431b6c00a1fdc522e8ef456f28782fdb",
+   "size": 59396
+  },
+  {
+   "name": "hat_helmet.male.glb",
+   "sha256": "45895c0c65c7916f656ae958cc8442c9f900bd1c84c1fb246eb480d9197a84be",
+   "size": 59384
+  },
+  {
+   "name": "hat_slouchbeanie.female.glb",
+   "sha256": "374de15ddcbf3913e2ffaa7e8302418ccf0017836cc2bb81d826d9a8f22caea1",
+   "size": 55804
+  },
+  {
+   "name": "hat_slouchbeanie.male.glb",
+   "sha256": "0b9e4a16643fc05a593fec7a598fb58e4304be9397a3588c01b2a39ca3d7e3e7",
+   "size": 55788
+  },
+  {
+   "name": "hat_sunhat.female.glb",
+   "sha256": "ce27c2d9c2ed7343a36e2741f3b9664632c6dc898a8e36eea2aa3fbeed62d29b",
+   "size": 67780
+  },
+  {
+   "name": "hat_sunhat.male.glb",
+   "sha256": "fba52bab3c3ce5e333654e6b02111627a8b2931b4ae3ced20d5dbf10b313b8f4",
+   "size": 67768
+  },
+  {
+   "name": "hat_tophat.female.glb",
+   "sha256": "8bd714f26eb84f5a6ed8aa2be05ab8d9da816f2953ccece825b77a92a9a73486",
+   "size": 44216
+  },
+  {
+   "name": "hat_tophat.male.glb",
+   "sha256": "fd831a9977de0830b14a1f036eeb9b65e41db91bf00d9779d8e0b2e82e194fc1",
+   "size": 44200
+  },
+  {
+   "name": "hat_trucker.female.glb",
+   "sha256": "1dbd83c946aa43ab0e732f4ff1745aa38868a0bd1cbdde9c1db54838118e71e6",
+   "size": 52272
+  },
+  {
+   "name": "hat_trucker.male.glb",
+   "sha256": "89581bfe91aaaab6460de5e71e59ac567a812733f6a4b9111ea44235a96b4927",
+   "size": 52264
+  },
+  {
+   "name": "hat_visor.female.glb",
+   "sha256": "f347adb21b13b9d9da1534f33e55ecb882a7007a401aa7a1d508a100830cdecd",
+   "size": 34564
+  },
+  {
+   "name": "hat_visor.male.glb",
+   "sha256": "cc080c165b1b1948fbc46c5e63f7881e504cf2a6ec68b9bda3eb6bd7092691c8",
+   "size": 34552
+  },
+  {
+   "name": "hat_western.female.glb",
+   "sha256": "d97040a2c46f35f8af21d1625d2ef8f2f360808ed2d9de1fa7b74a36059dff54",
+   "size": 52272
+  },
+  {
+   "name": "hat_western.male.glb",
+   "sha256": "d2574962ba67370a7dd5a5b910ec52c3578d845d0d969d4e6bc1b21709e07e4f",
+   "size": 52256
+  },
+  {
+   "name": "ring_band.female.glb",
+   "sha256": "433d616e5384c94b71cc3d13971ab7497b55b6feede6d314ce8544294d9c6182",
+   "size": 23884
+  },
+  {
+   "name": "ring_band.male.glb",
+   "sha256": "fd964e943f994fc6b637486ed08265e0b8f962ee950d43734e6f174ea8ca2279",
+   "size": 23876
+  },
+  {
+   "name": "ring_gem.female.glb",
+   "sha256": "cd53f7d86a334aef0759cfd498fc86fb3089b384ba37eb66104681112c3f1b0d",
+   "size": 32168
+  },
+  {
+   "name": "ring_gem.male.glb",
+   "sha256": "7654f02b26026899de596d353a8e94bcad7ddde475b7de34bed311b2aad6f7ca",
+   "size": 32168
+  },
+  {
+   "name": "ring_signet.female.glb",
+   "sha256": "461f50edf590634b49e21c3b742d754a0143d7257ff28f8870aae97a50681764",
+   "size": 29576
+  },
+  {
+   "name": "ring_signet.male.glb",
+   "sha256": "126225f614bda7bcd75df82edc5ba66c4426c7a5e2786bd219defcfd4e181427",
+   "size": 29568
   },
   {
    "name": "shoes_boots.female.glb",
@@ -1045,6 +1335,36 @@
    "name": "shoes_sneakers.male.glb",
    "sha256": "48bf7c28d5879ed24013cd7a4aba5ec8f48d6be51c81b46814a6d28489819219",
    "size": 93792
+  },
+  {
+   "name": "sunglasses_round.female.glb",
+   "sha256": "ac0a6109c2a74111dcad7e246f809a8443f4565faebbe3756a9f6e47011d8648",
+   "size": 39608
+  },
+  {
+   "name": "sunglasses_round.male.glb",
+   "sha256": "31890fe78d84bcc327eb2bbe71433b0e36cd72b9fb1b03efe8079907464fbca0",
+   "size": 39604
+  },
+  {
+   "name": "sunglasses_sport.female.glb",
+   "sha256": "e87f82cfec002c9b619a16545b4aff3cd88a555e973f2d92a53ca0bbe78d328f",
+   "size": 39612
+  },
+  {
+   "name": "sunglasses_sport.male.glb",
+   "sha256": "9bc887ec0992925f42da7736e10892ed1220fefd534b762f75c3e0f0bf09157e",
+   "size": 39600
+  },
+  {
+   "name": "sunglasses_square.female.glb",
+   "sha256": "adc542e0a99ab640c36c2b9a53f7fd7adfca50d57d47ae49344c21f50e01dd0c",
+   "size": 39616
+  },
+  {
+   "name": "sunglasses_square.male.glb",
+   "sha256": "28323704e130c7ab595745242ff51ba73d8b7a8298cc53c0a3ae7c3d078d8ae6",
+   "size": 39608
   },
   {
    "name": "tex_cable.png",
@@ -1420,6 +1740,66 @@
    "name": "top_ziphoodie.male.glb",
    "sha256": "164cdfa054c600c4abe56d9b0379263d6c52e266e24a0ba5a8be93f475a5555d",
    "size": 136380
+  },
+  {
+   "name": "wrist_band.female.glb",
+   "sha256": "a7de94dc6f0a9aea90c13a45ac20770a179e11dee55d418846da01b6f9acc226",
+   "size": 51812
+  },
+  {
+   "name": "wrist_band.male.glb",
+   "sha256": "a5c1d1c7a3858bb4da937406d0b5d6c002e58d5fc6f0f85927d928086787afac",
+   "size": 51804
+  },
+  {
+   "name": "wrist_bangle.female.glb",
+   "sha256": "6e029a21cc44ad90ddc16922d7daadb97867c9daf427a35b36b0c03906d4edb6",
+   "size": 53420
+  },
+  {
+   "name": "wrist_bangle.male.glb",
+   "sha256": "b18968f7c058d00810982f5e07d3958a178ee0f4e303da21602ac21f77cce496",
+   "size": 53408
+  },
+  {
+   "name": "wrist_beads.female.glb",
+   "sha256": "852c4f6596484379acc5a2ceb6f4cf7185d0e092c1387561a9cecd6e60e6f7a1",
+   "size": 85640
+  },
+  {
+   "name": "wrist_beads.male.glb",
+   "sha256": "218546a0c7e454034098ef9501ad5b6225d5d9763eb378db0a8aed8456f69ac3",
+   "size": 85628
+  },
+  {
+   "name": "wrist_cuff.female.glb",
+   "sha256": "17f5582e8ec89d0987d51ed5a7b2ab192cb0a974074e8152bcabeec995397823",
+   "size": 51808
+  },
+  {
+   "name": "wrist_cuff.male.glb",
+   "sha256": "09a0d4d33e80ef0d57fd8cb9fc1f58b6ec5578075013899c11aa494cbb29d6db",
+   "size": 51792
+  },
+  {
+   "name": "wrist_sportwatch.female.glb",
+   "sha256": "99330654c97293f11bd83e268347458fef8f334c8fe0ebbd4066d98c1a0c36a2",
+   "size": 59508
+  },
+  {
+   "name": "wrist_sportwatch.male.glb",
+   "sha256": "279a5a2eec892e42a8474b3ad86c80ab7bb88196f1c52d91ef656e361d45536c",
+   "size": 59496
+  },
+  {
+   "name": "wrist_watch.female.glb",
+   "sha256": "b7ad0a5c3783fc12532efc9f8761a85fc144a18ef0f6977cb7a925c29e91fe4f",
+   "size": 59468
+  },
+  {
+   "name": "wrist_watch.male.glb",
+   "sha256": "c8c64a2b1cce88657638a2f8eff63426df799d5db8fac6b123b416b577f03bfa",
+   "size": 59452
   }
  ],
  "bodies": {
@@ -9311,6 +9691,646 @@
     "male": 0.02
    },
    "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "glasses_narrow.female.glb",
+    "male": "glasses_narrow.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 430,
+   "name": "glasses_narrow",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_wire.female.glb",
+    "male": "glasses_wire.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 431,
+   "name": "glasses_wire",
+   "random": {
+    "female": 0.8,
+    "male": 0.8
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_thick.female.glb",
+    "male": "glasses_thick.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 432,
+   "name": "glasses_thick",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_cateye.female.glb",
+    "male": "glasses_cateye.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 433,
+   "name": "glasses_cateye",
+   "random": {
+    "female": 1.0,
+    "male": 0.2
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_oversized.female.glb",
+    "male": "glasses_oversized.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 434,
+   "name": "glasses_oversized",
+   "random": {
+    "female": 0.9,
+    "male": 0.5
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "glasses_bigsquare.female.glb",
+    "male": "glasses_bigsquare.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 435,
+   "name": "glasses_bigsquare",
+   "random": {
+    "female": 0.7,
+    "male": 0.8
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "sunglasses_sport.female.glb",
+    "male": "sunglasses_sport.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 436,
+   "name": "sunglasses_sport",
+   "random": {
+    "female": 0.4,
+    "male": 0.6
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "sunglasses_square.female.glb",
+    "male": "sunglasses_square.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 437,
+   "name": "sunglasses_square",
+   "random": {
+    "female": 0.6,
+    "male": 0.8
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "sunglasses_round.female.glb",
+    "male": "sunglasses_round.male.glb"
+   },
+   "follow": "eyes",
+   "format": 3,
+   "id": 438,
+   "name": "sunglasses_round",
+   "random": {
+    "female": 0.6,
+    "male": 0.6
+   },
+   "slot": "glasses"
+  },
+  {
+   "assets": {
+    "female": "hat_backwardcap.female.glb",
+    "male": "hat_backwardcap.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.4,
+     0.45,
+     0.47,
+     0.5
+    ]
+   },
+   "id": 450,
+   "name": "hat_backwardcap",
+   "random": {
+    "female": 0.5,
+    "male": 1.0
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_trucker.female.glb",
+    "male": "hat_trucker.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.4,
+     0.45,
+     0.47,
+     0.5
+    ]
+   },
+   "id": 451,
+   "name": "hat_trucker",
+   "random": {
+    "female": 0.4,
+    "male": 0.9
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_flatcap.female.glb",
+    "male": "hat_flatcap.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.39,
+     0.44,
+     0.46,
+     0.48
+    ]
+   },
+   "id": 452,
+   "name": "hat_flatcap",
+   "random": {
+    "female": 0.4,
+    "male": 0.8
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_sunhat.female.glb",
+    "male": "hat_sunhat.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.41,
+     0.45,
+     0.47,
+     0.49
+    ]
+   },
+   "id": 453,
+   "name": "hat_sunhat",
+   "random": {
+    "female": 0.9,
+    "male": 0.3
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_tophat.female.glb",
+    "male": "hat_tophat.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.4,
+     0.44,
+     0.46,
+     0.48
+    ]
+   },
+   "id": 454,
+   "name": "hat_tophat",
+   "random": {
+    "female": 0.2,
+    "male": 0.3
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_beret.female.glb",
+    "male": "hat_beret.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.3,
+     0.33,
+     0.36,
+     0.4
+    ]
+   },
+   "id": 455,
+   "name": "hat_beret",
+   "random": {
+    "female": 0.8,
+    "male": 0.3
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_helmet.female.glb",
+    "male": "hat_helmet.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.38,
+     0.44,
+     0.46,
+     0.5
+    ]
+   },
+   "id": 456,
+   "name": "hat_helmet",
+   "random": {
+    "female": 0.2,
+    "male": 0.3
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_slouchbeanie.female.glb",
+    "male": "hat_slouchbeanie.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.42,
+     0.47,
+     0.5,
+     0.54
+    ]
+   },
+   "id": 457,
+   "name": "hat_slouchbeanie",
+   "random": {
+    "female": 0.8,
+    "male": 0.8
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_visor.female.glb",
+    "male": "hat_visor.male.glb"
+   },
+   "format": 3,
+   "id": 458,
+   "name": "hat_visor",
+   "random": {
+    "female": 0.6,
+    "male": 0.5
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hat_western.female.glb",
+    "male": "hat_western.male.glb"
+   },
+   "format": 3,
+   "hairCover": {
+    "lift": 0.02128,
+    "line": [
+     0.4,
+     0.44,
+     0.46,
+     0.48
+    ]
+   },
+   "id": 459,
+   "name": "hat_western",
+   "random": {
+    "female": 0.3,
+    "male": 0.5
+   },
+   "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "earrings_stud.female.glb",
+    "male": "earrings_stud.male.glb"
+   },
+   "follow": "ears",
+   "format": 3,
+   "id": 510,
+   "name": "earrings_stud",
+   "random": {
+    "female": 1.0,
+    "male": 0.3
+   },
+   "slot": "earrings"
+  },
+  {
+   "assets": {
+    "female": "earrings_bigstud.female.glb",
+    "male": "earrings_bigstud.male.glb"
+   },
+   "follow": "ears",
+   "format": 3,
+   "id": 511,
+   "name": "earrings_bigstud",
+   "random": {
+    "female": 0.8,
+    "male": 0.1
+   },
+   "slot": "earrings"
+  },
+  {
+   "assets": {
+    "female": "earrings_hoop.female.glb",
+    "male": "earrings_hoop.male.glb"
+   },
+   "follow": "ears",
+   "format": 3,
+   "id": 512,
+   "name": "earrings_hoop",
+   "random": {
+    "female": 1.0,
+    "male": 0.1
+   },
+   "slot": "earrings"
+  },
+  {
+   "assets": {
+    "female": "earrings_bighoop.female.glb",
+    "male": "earrings_bighoop.male.glb"
+   },
+   "follow": "ears",
+   "format": 3,
+   "id": 513,
+   "name": "earrings_bighoop",
+   "random": {
+    "female": 0.7,
+    "male": 0.02
+   },
+   "slot": "earrings"
+  },
+  {
+   "assets": {
+    "female": "earrings_drop.female.glb",
+    "male": "earrings_drop.male.glb"
+   },
+   "follow": "ears",
+   "format": 3,
+   "id": 514,
+   "name": "earrings_drop",
+   "random": {
+    "female": 0.8,
+    "male": 0.02
+   },
+   "slot": "earrings"
+  },
+  {
+   "assets": {
+    "female": "earrings_huggie.female.glb",
+    "male": "earrings_huggie.male.glb"
+   },
+   "follow": "ears",
+   "format": 3,
+   "id": 515,
+   "name": "earrings_huggie",
+   "random": {
+    "female": 0.8,
+    "male": 0.2
+   },
+   "slot": "earrings"
+  },
+  {
+   "assets": {
+    "female": "wrist_watch.female.glb",
+    "male": "wrist_watch.male.glb"
+   },
+   "format": 3,
+   "id": 530,
+   "name": "wrist_watch",
+   "random": {
+    "female": 1.0,
+    "male": 1.4
+   },
+   "slot": "wristwear"
+  },
+  {
+   "assets": {
+    "female": "wrist_sportwatch.female.glb",
+    "male": "wrist_sportwatch.male.glb"
+   },
+   "format": 3,
+   "id": 531,
+   "name": "wrist_sportwatch",
+   "random": {
+    "female": 0.6,
+    "male": 1.0
+   },
+   "slot": "wristwear"
+  },
+  {
+   "assets": {
+    "female": "wrist_bangle.female.glb",
+    "male": "wrist_bangle.male.glb"
+   },
+   "format": 3,
+   "id": 532,
+   "name": "wrist_bangle",
+   "random": {
+    "female": 1.0,
+    "male": 0.1
+   },
+   "slot": "wristwear"
+  },
+  {
+   "assets": {
+    "female": "wrist_beads.female.glb",
+    "male": "wrist_beads.male.glb"
+   },
+   "format": 3,
+   "id": 533,
+   "name": "wrist_beads",
+   "random": {
+    "female": 0.8,
+    "male": 0.5
+   },
+   "slot": "wristwear"
+  },
+  {
+   "assets": {
+    "female": "wrist_band.female.glb",
+    "male": "wrist_band.male.glb"
+   },
+   "format": 3,
+   "id": 534,
+   "name": "wrist_band",
+   "random": {
+    "female": 0.4,
+    "male": 0.5
+   },
+   "slot": "wristwear"
+  },
+  {
+   "assets": {
+    "female": "wrist_cuff.female.glb",
+    "male": "wrist_cuff.male.glb"
+   },
+   "format": 3,
+   "id": 535,
+   "name": "wrist_cuff",
+   "random": {
+    "female": 0.6,
+    "male": 0.2
+   },
+   "slot": "wristwear"
+  },
+  {
+   "assets": {
+    "female": "gloves_knit.female.glb",
+    "male": "gloves_knit.male.glb"
+   },
+   "format": 3,
+   "hides": [
+    "rings"
+   ],
+   "id": 550,
+   "name": "gloves_knit",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "gloves"
+  },
+  {
+   "assets": {
+    "female": "gloves_fingerless.female.glb",
+    "male": "gloves_fingerless.male.glb"
+   },
+   "format": 3,
+   "hides": [
+    "rings"
+   ],
+   "id": 551,
+   "name": "gloves_fingerless",
+   "random": {
+    "female": 0.8,
+    "male": 0.8
+   },
+   "slot": "gloves"
+  },
+  {
+   "assets": {
+    "female": "gloves_work.female.glb",
+    "male": "gloves_work.male.glb"
+   },
+   "format": 3,
+   "hides": [
+    "rings"
+   ],
+   "id": 552,
+   "name": "gloves_work",
+   "random": {
+    "female": 0.4,
+    "male": 0.8
+   },
+   "slot": "gloves"
+  },
+  {
+   "assets": {
+    "female": "gloves_formal.female.glb",
+    "male": "gloves_formal.male.glb"
+   },
+   "format": 3,
+   "hides": [
+    "rings"
+   ],
+   "id": 553,
+   "name": "gloves_formal",
+   "random": {
+    "female": 0.5,
+    "male": 0.3
+   },
+   "slot": "gloves"
+  },
+  {
+   "assets": {
+    "female": "ring_band.female.glb",
+    "male": "ring_band.male.glb"
+   },
+   "format": 3,
+   "id": 560,
+   "name": "ring_band",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "rings"
+  },
+  {
+   "assets": {
+    "female": "ring_signet.female.glb",
+    "male": "ring_signet.male.glb"
+   },
+   "format": 3,
+   "id": 561,
+   "name": "ring_signet",
+   "random": {
+    "female": 0.4,
+    "male": 0.8
+   },
+   "slot": "rings"
+  },
+  {
+   "assets": {
+    "female": "ring_gem.female.glb",
+    "male": "ring_gem.male.glb"
+   },
+   "format": 3,
+   "id": 562,
+   "name": "ring_gem",
+   "random": {
+    "female": 1.0,
+    "male": 0.1
+   },
+   "slot": "rings"
   }
  ],
  "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",

@@ -232,6 +232,24 @@ def catalog_jobs(catalogs, library, manifest, version, heroes):
         elif slot in ("top", "bottom", "shoes"):
             eye, target, fov = full_body(h)
             jobs.append(job("wardrobe-%03d" % item["id"], "wardrobe", d, eye, target, fov, -25.0, label=item["name"]))
+    for item in manifest["items"]:
+        slot = item["slot"]
+        if slot not in ("earrings", "wristwear", "gloves", "rings"):
+            continue
+        body = 1 if item["random"]["male"] > item["random"]["female"] else 0
+        d = variant(heroes[body], accessories={slot: item["id"]})
+        data = d.encode()
+        if slot == "earrings":
+            head, span = head_height(catalogs, library, data)
+            k = span / REFERENCE_SPAN
+            jobs.append(job("accessories-%03d" % item["id"], "accessories", d, (0.62 * k, head - 0.06 * k, 0.30 * k),
+                            (0.0, head - 0.08 * k, 0.0), 0.5, label=item["name"]))
+        else:
+            wrist, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "WristRight")
+            tip, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "FingerMiddle3Right")
+            hand = (wrist * 0.85 + tip * 0.15)
+            jobs.append(job("accessories-%03d" % item["id"], "accessories", d, hand + np.array([-0.30, 0.06, 0.30]), hand, 0.45,
+                            label=item["name"]))
     for item in manifest.get("featureItems", []):
         if item["slot"] != "facialHair":
             continue

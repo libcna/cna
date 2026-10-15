@@ -10,7 +10,7 @@ colour (a jacket's inner shirt).
 import math
 
 from . import rig, body, head
-from .mathutil import add, sub, mul, normalize, cross, dot, length, lerp, smoothstep, clamp
+from .mathutil import add, sub, mul, normalize, cross, dot, length, lerp, smoothstep, clamp, frame_from_axis
 from .mesh import Mesh, ellipsoid, tube, blend
 
 I = rig.INDEX
@@ -1010,3 +1010,123 @@ def revised_shoes(body_type, style):
     if socks.positions:
         parts.append((socks, "none", "rib", spec["sock"]))
     return parts
+
+
+# ----- wristwear, gloves and rings (catalog v3 revision 2, format 3) -----------------------------
+
+WRISTWEAR = ["wrist_watch", "wrist_sportwatch", "wrist_bangle", "wrist_beads", "wrist_band", "wrist_cuff"]
+GLOVES = ["gloves_knit", "gloves_fingerless", "gloves_work", "gloves_formal"]
+RINGS = ["ring_band", "ring_signet", "ring_gem"]
+SIDE_NAMES = {"Left": "left", "Right": "right"}
+
+
+def _wrist_frame(body_type, side, t):
+    """(centre, along the forearm, outward (back of the wrist), half width, half depth, weights) at t
+    along the arm."""
+    pos = rig.joint_positions(body_type)
+    sh, el, wr = (pos[I[n + side]] for n in ("Shoulder", "Elbow", "Wrist"))
+    p = rig.PROPORTIONS[body_type]
+    upper, lower = length(sub(el, sh)), length(sub(wr, el))
+    axis = normalize(sub(wr, el))
+    centre = add(el, mul(axis, (t - upper / (upper + lower)) * (upper + lower)))
+    _, w, d = body._profile_at(body.ARM[body_type], t)
+    along, normal, spread = rig.hand_frame(1.0 if side == "Left" else -1.0, p)
+    return centre, axis, mul(normal, -1.0), w, d, body.arm_weights(body_type, side)(t)
+
+
+def wristwear(body_type, style):
+    parts = {}
+
+    def add_part(key, mesh, tint, kind, colour, side):
+        entry = parts.setdefault((key, side), (Mesh(), tint, kind, colour, {"cnaSide": SIDE_NAMES[side]}))
+        entry[0].append(mesh)
+    for side, _ in rig.SIDES:
+        t = 0.955
+        centre, axis, back, w, d, wt = _wrist_frame(body_type, side, t)
+        u, v, _ = frame_from_axis(axis, back)
+        weights = lambda q, wt=wt: wt
+
+        def band(inflate, radius, segments=28, wobble=0.0):
+            loop = [add(centre, add(mul(u, (w + inflate) * math.cos(2 * PI * k / segments)),
+                                    mul(v, (d + inflate) * math.sin(2 * PI * k / segments)))) for k in range(segments)]
+            return tube(loop, [radius] * segments, 8, weights, closed=True)
+        if style in ("wrist_watch", "wrist_sportwatch"):
+            sport = style == "wrist_sportwatch"
+            add_part("strap", band(0.004, 0.0055 if sport else 0.0042), "accessory" if sport else "none", "leather",
+                     (1.0, 1.0, 1.0) if sport else (0.24, 0.16, 0.10), side)
+            face_centre = add(centre, mul(back, d + 0.008))
+            r = 0.0115 if sport else 0.0095
+            add_part("case", ellipsoid(face_centre, (u, axis, back) if abs(dot(u, back)) < 0.5 else (v, axis, back),
+                                       (r, r, 0.0045), 16, 8, lambda q, v_, u_, wt=wt: wt), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+            dial = add(face_centre, mul(back, 0.0038))
+            add_part("dial", ellipsoid(dial, (v if abs(dot(u, back)) > 0.5 else u, axis, back), (r * 0.78, r * 0.78, 0.0012), 16, 6,
+                                       lambda q, v_, u_, wt=wt: wt), "none", "plain", (0.10, 0.10, 0.12) if sport else (0.95, 0.94, 0.90), side)
+        elif style == "wrist_bangle":
+            add_part("metal", band(0.006, 0.0032), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+            add_part("metal", band(0.009, 0.0026), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+        elif style == "wrist_beads":
+            beads = Mesh()
+            for k in range(16):
+                a = 2 * PI * k / 16
+                q = add(centre, add(mul(u, (w + 0.006) * math.cos(a)), mul(v, (d + 0.006) * math.sin(a))))
+                beads.append(ellipsoid(q, ((1, 0, 0), (0, 1, 0), (0, 0, 1)), (0.0042, 0.0042, 0.0042), 8, 6,
+                                       lambda q_, v_, u_, wt=wt: wt))
+            add_part("beads", beads, "accessory", "plain", (1.0, 1.0, 1.0), side)
+        elif style == "wrist_band":
+            add_part("band", body.arm(body_type, side, inflate=0.006, t_range=(0.90, 0.99)), "accessory", "rib", (1.0, 1.0, 1.0), side)
+            add_part("band", _limb_ring(body_type, side, "arm", 0.90, 0.006, 0.004), "accessory", "rib", (1.0, 1.0, 1.0), side)
+            add_part("band", _limb_ring(body_type, side, "arm", 0.99, 0.006, 0.004), "accessory", "rib", (1.0, 1.0, 1.0), side)
+        elif style == "wrist_cuff":
+            add_part("metal", body.arm(body_type, side, inflate=0.005, t_range=(0.925, 0.975)), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+            add_part("metal", _limb_ring(body_type, side, "arm", 0.925, 0.005, 0.0022), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+            add_part("metal", _limb_ring(body_type, side, "arm", 0.975, 0.005, 0.0022), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+        else:
+            raise ValueError(style)
+    return list(parts.values())
+
+
+def gloves(body_type, style):
+    main, trim = Mesh(), Mesh()
+    texture = {"gloves_knit": "rib", "gloves_fingerless": "knit", "gloves_work": "leather", "gloves_formal": "plain"}[style]
+    for side, sign in rig.SIDES:
+        inflate = {"gloves_knit": 0.0030, "gloves_fingerless": 0.0024, "gloves_work": 0.0034, "gloves_formal": 0.0016}[style]
+        segments = 1 if style == "gloves_fingerless" else 3
+        main.append(body.hand(body_type, side, sign, inflate=inflate, finger_segments=segments, wrist_start=0.030))
+        cuff_t = 0.90 if style == "gloves_formal" else 0.955
+        main.append(body.arm(body_type, side, inflate=inflate + 0.001, t_range=(cuff_t, 1.0)))
+        trim.append(_limb_ring(body_type, side, "arm", cuff_t, inflate + 0.002, 0.004 if style != "gloves_work" else 0.006))
+    parts = [(main, "gloves", texture, (1.0, 1.0, 1.0))]
+    parts.append((trim, "gloves" if style != "gloves_work" else "none", "rib" if style != "gloves_work" else "plain",
+                  (1.0, 1.0, 1.0) if style != "gloves_work" else (0.22, 0.20, 0.18)))
+    return parts
+
+
+def rings(body_type, style):
+    parts = {}
+    pos = rig.joint_positions(body_type)
+    p = rig.PROPORTIONS[body_type]
+    k = p["hand"]
+    for side, sign in rig.SIDES:
+        base, nxt = pos[I["FingerRing" + side]], pos[I["FingerRing2" + side]]
+        axis = normalize(sub(nxt, base))
+        centre = lerp(base, nxt, 0.45)
+        u, v, _ = frame_from_axis(axis, (0.0, 0.0, 1.0))
+        radius = body.HAND[body_type]["finger"] * k * 0.98 * 0.98 + 0.0010
+        joint = I["FingerRing" + side]
+        weights = lambda q, joint=joint: {joint: 1.0}
+        loop = [add(centre, add(mul(u, radius * math.cos(2 * PI * j / 20)), mul(v, radius * math.sin(2 * PI * j / 20)))) for j in range(20)]
+        m = tube(loop, [0.0016] * 20, 6, weights, closed=True)
+        _, normal, spread = rig.hand_frame(sign, p)
+        back = mul(normal, -1.0)
+        if style == "ring_signet":
+            m.append(ellipsoid(add(centre, mul(back, radius + 0.0014)), (spread, axis, back), (0.0042, 0.0042, 0.0016), 10, 6,
+                               lambda q, v_, u_, joint=joint: {joint: 1.0}))
+        gem = None
+        if style == "ring_gem":
+            gem = ellipsoid(add(centre, mul(back, radius + 0.0026)), (spread, axis, back), (0.0030, 0.0030, 0.0026), 10, 6,
+                            lambda q, v_, u_, joint=joint: {joint: 1.0})
+        name = SIDE_NAMES[side]
+        parts.setdefault(("band", side), (Mesh(), "jewelry", "plain", (1.0, 1.0, 1.0), {"cnaSide": name}))[0].append(m)
+        if gem:
+            parts.setdefault(("gem", side), (Mesh(), "accessory", "plain", (1.0, 1.0, 1.0), {"cnaSide": name}))[0].append(gem)
+    return list(parts.values())
