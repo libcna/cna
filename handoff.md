@@ -305,11 +305,14 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     (re-measured 2026-10-15). The `DIRECTX9` ctest suite passes 58/58 and `CnaGraphicsTests.exe`
     passes every test (2,660, measured as eight `GTEST_TOTAL_SHARDS` shards because one 2,956-test
     Wine process dies or hangs at a varying point). The flake is `DirectX9_CompiledEffects`, which
-    about every other run hangs at the end of its first test inside DXVK 2.6.0's device release
-    (the main thread sits in a Win32 object wait below `~DirectX9Renderer` after the renderer
-    released the device, before the window is destroyed; every other thread of the hung process
-    belongs to DXVK, Mesa's disk cache, Wine or googletest's watcher, none runs CNA code; a rerun
-    passes). `CnaContentTests.exe`: 1,706 pass, no failures; its two `GltfPerformance` budgets (50 ms a
+    about every other run hangs at the end of its first test inside DXVK 2.6.0's
+    `IDirect3DDevice9::Release` (measured 2026-10-15 with teardown markers: every other renderer
+    object -- shaders, caches, the depth surface, the MojoShader context -- is already released, the
+    final device release is the call that never returns, the window is still alive, and every other
+    thread of the hung process is DXVK's, Mesa's disk cache, Wine's or googletest's watcher). A
+    standalone D3D9 program with the same object order (240 create/compile/draw/release cycles under
+    the same Wine, DXVK and private display) never hangs, so the trigger is this process's timing
+    rather than anything CNA asks of the API; a rerun passes. `CnaContentTests.exe`: 1,706 pass, no failures; its two `GltfPerformance` budgets (50 ms a
     parse, 50 ms a load/unload cycle) hold on an idle machine and miss under a concurrent build. Fixed on the way to green, all
     under Wine: static vertex/index buffers live in `D3DPOOL_MANAGED` so the
     resize `Reset` at the first `Present` keeps them and reports the dynamic buffers it empties as
