@@ -647,8 +647,9 @@ namespace CNA::Internal::Renderers::DirectX9
             // + a vertex Color) has no real XNA SkinnedEffect equivalent -- Microsoft's own
             // compiled SkinnedEffect.fx bytecode never carries a Color input (see
             // D3D9SkinnedVertexColorDraw.cpp's own header comment). Routed to CNA's own
-            // SkinnedVertexColor3D custom shader instead of DrawSkinnedEffectEXT, which would
-            // otherwise throw "no matching CNA vertex layout" for this stride (it only accepts 52).
+            // SkinnedVertexColor3D custom shader instead of DrawSkinnedEffectEXT. Microsoft's
+            // stock shader has no Color input, so merely accepting the extra declaration element
+            // would draw without applying the vertex colour.
             if (stride == 56)
             {
                 DrawSkinnedVertexColorEXT(vb, ib, world, view, projection, primitive, primitiveCount, params);
@@ -937,15 +938,22 @@ namespace CNA::Internal::Renderers::DirectX9
                 "texture0 AND texture1 (plans/plan_dx9.md D9-82d)");
 
         // XNA: "The current vertex declaration does not include all the elements required by the
-        // current vertex shader" -- DualTextureEffect reads TextureCoordinate1 (and Color when
-        // VertexColorEnabled), which the dual-UV strides carry.
-        const std::size_t expectedStride = params.vertexColorEnabled ? 32 : 28;
-        if (stride != expectedStride)
+        // current vertex shader" -- validate those elements, not one exact byte stride. D3D9
+        // ignores declaration elements the shader does not read, so a model may legally carry a
+        // normal, tangent, skinning data, padding, or another custom attribute in addition to the
+        // two UVs (and optional colour) this shader consumes.
+        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        std::string missing;
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord0";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 1)) missing += " TexCoord1";
+        if (params.vertexColorEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_COLOR, 0))
+            missing += " Color";
+        if (!missing.empty())
             throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
-                " does not match the required dual-UV declaration: the vertex declaration does not "
-                "include all the elements required by the current vertex shader");
+                " has no matching CNA vertex layout: the vertex declaration has no" + missing);
 
         const int shaderIndex = ComputeDualTextureEffectShaderIndex(params.fogEnabled, params.vertexColorEnabled);
         const DualTextureEffectRegisterTables regs = GetDualTextureEffectRegisterTablesEXT(shaderIndex);
@@ -972,7 +980,7 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
         device_->SetTexture(1, ResolveD3D9TextureEXT(params.texture1));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
+        device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
@@ -1005,12 +1013,18 @@ namespace CNA::Internal::Renderers::DirectX9
                 "DirectX9Renderer::DrawPrimitivesEx (EnvironmentMapEffect): requires non-null "
                 "texture0 AND envMap (plans/plan_dx9.md D9-82e)");
 
-        // VSInputNmTx (Position+Normal+TexCoord) matches the existing stride-32 layout exactly --
-        // no new vertex declaration needed here (unlike DualTextureEffect's D9-82d case).
-        if (stride != 32)
-            throw std::runtime_error(
+        // VSInputNmTx reads Position+Normal+TexCoord. Extra declaration elements are legal and
+        // ignored by D3D9; only the required semantic set matters.
+        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        std::string missing;
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_NORMAL, 0)) missing += " Normal";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord";
+        if (!missing.empty())
+            throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (EnvironmentMapEffect): stride " +
-                std::to_string(stride) + " has no matching CNA vertex layout (plans/plan_dx9.md D9-82e)");
+                std::to_string(stride) + " has no matching CNA vertex layout: the vertex declaration has no" +
+                missing);
 
         // specularEnabled now reads GpuDrawParams' real field (plans/plan_dx9.md D9-81 item 4, resolved
         // 2026-07-16; same category as BasicEffect's PreferPerPixelLighting above).
@@ -1077,7 +1091,7 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
         device_->SetTexture(1, ResolveD3D9TextureCubeEXT(params.envMap));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
+        device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 
@@ -1110,12 +1124,20 @@ namespace CNA::Internal::Renderers::DirectX9
                 "DirectX9Renderer::DrawPrimitivesEx (SkinnedEffect): requires non-null texture0 "
                 "(plans/plan_dx9.md D9-82f)");
 
-        // VSInputNmTxWeights (Position+Normal+TexCoord+BlendWeight+BlendIndices) matches the
-        // existing stride-52 layout exactly -- no new vertex declaration needed here.
-        if (stride != 52)
-            throw std::runtime_error(
+        // VSInputNmTxWeights reads Position+Normal+TexCoord+BlendWeight+BlendIndices. A skinned
+        // PBR stream can also carry a tangent, second UV, colour, or padding; D3D9 ignores those
+        // extras, so validate the shader's semantic inputs instead of demanding stride 52.
+        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        std::string missing;
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_NORMAL, 0)) missing += " Normal";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_BLENDWEIGHT, 0)) missing += " BlendWeight";
+        if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_BLENDINDICES, 0)) missing += " BlendIndices";
+        if (!missing.empty())
+            throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (SkinnedEffect): stride " + std::to_string(stride) +
-                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82f)");
+                " has no matching CNA vertex layout: the vertex declaration has no" + missing);
 
         const bool oneLight = ComputeOneLightEXT(params);
         // preferPerPixelLighting now reads GpuDrawParams' real field (plans/plan_dx9.md D9-81 item 1,
@@ -1211,7 +1233,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
+        device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
         device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
 

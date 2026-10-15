@@ -274,9 +274,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-82: real -- BasicEffect with VertexColorEnabled=true/DiffuseColor=white/fog disabled/
         /// no texture/no lighting (matches every other renderer's own DrawColoredPrimitives scope),
         /// via the real "BasicEffect_VSBasicVcNoFog"/"BasicEffect_PSBasicNoFog" shader pair
-        /// (D9-80's dispatch tables) and D9-72's real register layout. Only stride 16
-        /// (VertexPositionColor) so far -- other strides/effect variants are DrawPrimitivesEx's own
-        /// job (D9-82b/c, not yet implemented).
+        /// (D9-80's dispatch tables) and D9-72's real register layout. This convenience path is
+        /// stride 16 (VertexPositionColor); general stock-effect dispatch uses DrawPrimitivesEx.
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
