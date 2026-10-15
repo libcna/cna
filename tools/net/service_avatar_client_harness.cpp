@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "System/IServiceProvider.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <future>
@@ -125,7 +126,10 @@ int main(int argc,char** argv) {
         // The editor: the service's newest catalog, one row changed, saved with avatars.set.
         using Backend=CNA::Internal::GamerServices::IGamerServicesBackend;
         const auto userId=CNA::Internal::GamerServices::GamerAccess::userId(*(*signedIn)[0]);
-        const auto version=Avatars::parseManifest(onExecutor<std::string>([](Backend& s){return s.avatarCatalog(0);})).version;
+        const auto version=static_cast<std::uint16_t>(onExecutor<int>([](Backend& s){return s.newestAvatarCatalog();}));
+        // The manifest itself is larger than a service message: it is named, then read by hash.
+        check(Avatars::parseManifest(onExecutor<std::string>([](Backend& s){return s.avatarCatalog(0);})).version==version,
+              "the newest manifest is the newest version's");
         const auto catalog=Avatars::catalogManifest(version);
         check(catalog!=nullptr,"the service's newest catalog resolves");
         const auto stored=own.getDescriptionProperty();
@@ -135,21 +139,38 @@ int main(int argc,char** argv) {
         editor.select(1);
         check(editor.field(editor.selection()).label=="Hair color","hair category, hair color row");
         check(editor.adjust(1)&&editor.differsFromStored(),"an edit");
-        const auto edited=editor.encoded();
-        long long revision=0;
-        for(int attempt=0;;++attempt) {
-            try {
-                revision=onExecutor<long long>([&](Backend& s){return s.setAvatar(userId,{edited.begin(),edited.end()});});
-                break;
-            } catch(const CNA::Internal::GamerServices::ServiceOperationError& error) {
-                // The service accepts one avatar change per account every two seconds.
-                if(attempt>2||error.code!="RATE_LIMITED")throw;
-                std::this_thread::sleep_for(std::chrono::milliseconds(2100));
+        auto save=[&](const std::vector<std::uint8_t>& edited) {
+            long long revision=0;
+            for(int attempt=0;;++attempt) {
+                try {
+                    revision=onExecutor<long long>([&](Backend& s){return s.setAvatar(userId,{edited.begin(),edited.end()});});
+                    break;
+                } catch(const CNA::Internal::GamerServices::ServiceOperationError& error) {
+                    // The service accepts one avatar change per account every two seconds.
+                    if(attempt>2||error.code!="RATE_LIMITED")throw;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2100));
+                }
             }
-        }
-        const auto readBack=onExecutor<std::vector<CNA::Internal::GamerServices::ServiceAvatarRecord>>([&](Backend& s){return s.avatars({userId});});
-        check(readBack.size()==1&&std::vector<std::uint8_t>(readBack[0].description.begin(),readBack[0].description.end())==edited,"the service stores the edit");
-        std::cout<<"avatar-edit saved="<<(revision>0)<<" format="<<static_cast<int>(edited[0])<<"\n"<<std::flush;
+            const auto readBack=onExecutor<std::vector<CNA::Internal::GamerServices::ServiceAvatarRecord>>([&](Backend& s){return s.avatars({userId});});
+            check(readBack.size()==1&&std::vector<std::uint8_t>(readBack[0].description.begin(),readBack[0].description.end())==edited,
+                  "the service stores the edit");
+            return revision;
+        };
+        const auto edited=editor.encoded();
+        std::cout<<"avatar-edit saved="<<(save(edited)>0)<<" format="<<static_cast<int>(edited[0])<<"\n"<<std::flush;
+        // What only description format 3 says: another ear shape and an earring on one side.
+        editor.markSaved();
+        // The next choice after the current one, never the first (the default ears, no earring).
+        auto another=[&](Avatars::EditorCategory category) {
+            editor.setCategory(category);
+            const auto options=editor.options(0);
+            const auto current=static_cast<std::size_t>(std::ranges::find_if(options,[](const auto& option){return option.current;})-options.begin());
+            return editor.choose(0,current+1<options.size()?current+1:1);
+        };
+        check(another(Avatars::EditorCategory::Ears),"another ear shape");
+        check(another(Avatars::EditorCategory::Earrings),"an earring");
+        const auto extended=editor.encoded();
+        std::cout<<"avatar-edit3 saved="<<(save(extended)>0)<<" format="<<static_cast<int>(extended[0])<<"\n"<<std::flush;
         return 0;
     } catch(const std::exception& error) {
         std::cerr<<"avatar harness failed: "<<error.what()<<"\n";

@@ -345,6 +345,9 @@ public:
     /** @brief Reads an imported avatar catalog manifest. @param version Catalog version, 0 for the newest.
      * @return catalog.json text. */
     virtual std::string avatarCatalog(int version) = 0;
+    /** @brief The newest avatar catalog version the service has imported: the one it validates a
+     * saved description against. @return Catalog version. */
+    virtual int newestAvatarCatalog() = 0;
     /** @brief Retrieves immutable asset bytes, with verified local cache where configured.
      * @param hash SHA-256 identifier. @return Resource bytes. */
     virtual std::vector<unsigned char> asset(const std::string& hash) = 0;

@@ -158,7 +158,7 @@ public:
             LoadedAvatar loaded;
             auto records=s.avatars({user},Avatars::clientCatalogs());
             if(!records.empty())loaded.record=std::move(records.front());
-            loaded.catalog=Av::parseManifest(s.avatarCatalog(0)).version;
+            loaded.catalog=static_cast<std::uint16_t>(s.newestAvatarCatalog());
             return loaded;
         },[](AvatarEditorScreen& screen,LoadedAvatar loaded){screen.received(std::move(loaded));},
         [](AvatarEditorScreen& screen){screen.fail("Avatar not available","CNA Gamer Services could not be reached. Try again later.");});
@@ -395,7 +395,11 @@ public:
             try {
                 result.revision=s.setAvatar(user,bytes);
             } catch(const ServiceOperationError& error) {
+                // A service from before catalog v3 revision 2 refuses what only format 3 can say.
                 result.error=error.code=="RATE_LIMITED"?"Your avatar was saved moments ago. Wait a few seconds and save again.":
+                             error.code=="INVALID_ARGUMENT"&&bytes.front()==3?
+                                 "CNA Gamer Services does not accept the newer avatar features yet (ears, eyebrows, makeup, jewellery and "
+                                 "the newer styles). Ask its administrator to update it.":
                              "CNA Gamer Services did not accept this avatar ("+error.code+").";
             } catch(const std::exception&) {
                 result.error="CNA Gamer Services could not be reached. Your changes are still here; try again.";

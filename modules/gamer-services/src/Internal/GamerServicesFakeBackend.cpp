@@ -5,6 +5,7 @@
 // backend -- the test suites -- link it. It used to share that object file with the production
 // service client and so shipped in every game that touched Gamer Services.
 #include "QueuedBackend.hpp"
+#include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/ContentHash.hpp"
 #include "ServiceSessionDirectoryFake.hpp"
 #include "CnaService/Protocol.hpp"
@@ -307,6 +308,14 @@ public:
         if(avatarCatalog_.empty())throw Unavailable("Fake fixture has no avatar catalog.");
         return avatarCatalog_;
     }
+    int newestAvatarCatalog() override {
+        std::lock_guard guard(avatarLock_);
+        if(avatarCatalog_.empty())throw Unavailable("Fake fixture has no avatar catalog.");
+        // As the service client does: a development catalog below the baseline is not a catalog.
+        const int version=Json::parse(avatarCatalog_).value("catalogVersion",0);
+        if(!Avatars::isSupportedCatalogVersion(version))throw Unavailable("Invalid avatar catalog response.");
+        return version;
+    }
     std::vector<unsigned char> asset(const std::string& hash) override {
         return catalogFile(hash,0);
     }
@@ -319,7 +328,15 @@ public:
         if(manifest.is_discarded()||!manifest.is_object()||manifest.value("catalogVersion",0)!=version)throw ServiceError("NOT_FOUND");
         unsigned long long total=0;
         for(const auto& asset:manifest.at("assets"))total+=asset.value("size",0ull);
-        return Json{{"version",version},{"packFormat",1},{"reader",1},{"descriptionFormats",Json::array({1,2})},
+        // Format 3 names the kinds it introduced and the items a revision marks so.
+        Json formats=Json::array({1,2});
+        auto extended=[](const Json& entry){
+            static const std::set<std::string> kinds{"ears","earrings","wristwear","gloves","rings","eyebrows","eyeShadow","eyeliner","blush","lips"};
+            return entry.value("format",1)==3||kinds.contains(entry.value("slot",std::string()));
+        };
+        for(const auto* list:{"items","featureItems","faceStyles"})
+            if(manifest.contains(list)&&formats.size()==2&&std::ranges::any_of(manifest[list],extended))formats.push_back(3);
+        return Json{{"version",version},{"packFormat",1},{"reader",manifest.value("reader",1)},{"descriptionFormats",formats},
                     {"manifestSha256",manifestHash()},{"manifestSize",avatarCatalog_.size()},{"totalBytes",total}}.dump();
     }
     std::vector<unsigned char> catalogFile(const std::string& hash,std::size_t) override {
