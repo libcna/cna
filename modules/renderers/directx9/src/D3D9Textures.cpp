@@ -132,13 +132,18 @@ namespace CNA::Internal::Renderers::DirectX9
     // -------------------------------------------------------------------------
 
     D3D9TextureCubeRenderer::D3D9TextureCubeRenderer(
-        IDirect3DDevice9* device, int size, bool mipMap, int /*surfaceFormat*/)
+        IDirect3DDevice9* device, int size, bool mipMap, int surfaceFormat)
         : device_(device)
         , size_(size), mipLevels_(mipMap ? CalculateMipLevels(size, size) : 1)
+        , surfaceFormat_(surfaceFormat)
     {
+        const D3DFORMAT nativeFormat = SurfaceFormatToD3D9(surfaceFormat_);
+        if (nativeFormat == D3DFMT_UNKNOWN)
+            throw std::runtime_error(
+                "D3D9TextureCubeRenderer: requested SurfaceFormat has no D3D9 mapping");
         const HRESULT hr = device_->CreateCubeTexture(
             static_cast<UINT>(size_), static_cast<UINT>(mipLevels_), 0,
-            D3DFMT_A8B8G8R8, D3DPOOL_MANAGED, texture_.GetAddressOf(), nullptr);
+            nativeFormat, D3DPOOL_MANAGED, texture_.GetAddressOf(), nullptr);
         if (FAILED(hr))
             throw std::runtime_error("D3D9TextureCubeRenderer: CreateCubeTexture failed, hr=" + FormatHr(hr));
     }
@@ -152,7 +157,10 @@ namespace CNA::Internal::Renderers::DirectX9
         if (data == nullptr || w <= 0 || h <= 0) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        const std::size_t rowBytes = RowBytes(surfaceFormat_, w);
+        const int rows = StorageRows(surfaceFormat_, h);
+        const std::size_t requiredBytes = rowBytes * static_cast<std::size_t>(rows);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes) return false;
 
         RECT rect{ x, y, x + w, y + h };
         D3DLOCKED_RECT locked{};
@@ -163,8 +171,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         const auto* src = static_cast<const uint8_t*>(data);
         auto* dst = static_cast<uint8_t*>(locked.pBits);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4;
-        for (int row = 0; row < h; ++row)
+        for (int row = 0; row < rows; ++row)
         {
             std::memcpy(dst + static_cast<std::size_t>(row) * locked.Pitch,
                         src + static_cast<std::size_t>(row) * rowBytes, rowBytes);
@@ -178,8 +185,16 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         // Each silent `return` here became a complete transparent-black face once
         // the shared layer converted its own zeroed scratch buffer regardless.
-        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
-        if (data == nullptr || dataLength < w * h * 4) return false;
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0)
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const std::size_t rowBytes = RowBytes(surfaceFormat_, w);
+        const int rows = StorageRows(surfaceFormat_, h);
+        const std::size_t requiredBytes = rowBytes * static_cast<std::size_t>(rows);
+        if (data == nullptr || dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
 
         RECT rect{ x, y, x + w, y + h };
         D3DLOCKED_RECT locked{};
@@ -189,8 +204,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         auto* dst = static_cast<uint8_t*>(data);
         const auto* src = static_cast<const uint8_t*>(locked.pBits);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4;
-        for (int row = 0; row < h; ++row)
+        for (int row = 0; row < rows; ++row)
         {
             std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
                         src + static_cast<std::size_t>(row) * locked.Pitch, rowBytes);
@@ -204,14 +218,19 @@ namespace CNA::Internal::Renderers::DirectX9
     // -------------------------------------------------------------------------
 
     D3D9Texture3DRenderer::D3D9Texture3DRenderer(
-        IDirect3DDevice9* device, int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+        IDirect3DDevice9* device, int w, int h, int depth, bool mipMap, int surfaceFormat)
         : device_(device)
         , width_(w), height_(h), depth_(depth)
         , mipLevels_(mipMap ? CalculateMipLevels(std::max(w, std::max(h, depth)), 1) : 1)
+        , surfaceFormat_(surfaceFormat)
     {
+        const D3DFORMAT nativeFormat = SurfaceFormatToD3D9(surfaceFormat_);
+        if (nativeFormat == D3DFMT_UNKNOWN)
+            throw std::runtime_error(
+                "D3D9Texture3DRenderer: requested SurfaceFormat has no D3D9 mapping");
         const HRESULT hr = device_->CreateVolumeTexture(
             static_cast<UINT>(width_), static_cast<UINT>(height_), static_cast<UINT>(depth_),
-            static_cast<UINT>(mipLevels_), 0, D3DFMT_A8B8G8R8, D3DPOOL_MANAGED,
+            static_cast<UINT>(mipLevels_), 0, nativeFormat, D3DPOOL_MANAGED,
             texture_.GetAddressOf(), nullptr);
         if (FAILED(hr))
             throw std::runtime_error("D3D9Texture3DRenderer: CreateVolumeTexture failed, hr=" + FormatHr(hr));
@@ -228,7 +247,10 @@ namespace CNA::Internal::Renderers::DirectX9
         const int levelD = std::max(1, depth_ >> level);
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
-        if (dataLength < w * h * depth * 4) return false;
+        const std::size_t rowBytes = RowBytes(surfaceFormat_, w);
+        const std::size_t requiredBytes = rowBytes * static_cast<std::size_t>(h) *
+                                          static_cast<std::size_t>(depth);
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes) return false;
 
         D3DBOX box{};
         box.Left = static_cast<UINT>(x);
@@ -245,7 +267,6 @@ namespace CNA::Internal::Renderers::DirectX9
 
         const auto* src = static_cast<const uint8_t*>(data);
         auto* dst = static_cast<uint8_t*>(locked.pBits);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4;
         for (int slice = 0; slice < depth; ++slice)
         {
             for (int row = 0; row < h; ++row)
@@ -267,7 +288,17 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         // See D3D9TextureCubeRenderer::GetData above.
         if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
-        if (data == nullptr || dataLength < w * h * depth * 4) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        const std::size_t rowBytes = RowBytes(surfaceFormat_, w);
+        const std::size_t requiredBytes = rowBytes * static_cast<std::size_t>(h) *
+                                          static_cast<std::size_t>(depth);
+        if (data == nullptr || dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
 
         D3DBOX box{};
         box.Left = static_cast<UINT>(x);
@@ -283,7 +314,6 @@ namespace CNA::Internal::Renderers::DirectX9
 
         auto* dst = static_cast<uint8_t*>(data);
         const auto* src = static_cast<const uint8_t*>(locked.pBits);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4;
         for (int slice = 0; slice < depth; ++slice)
         {
             for (int row = 0; row < h; ++row)

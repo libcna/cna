@@ -192,6 +192,8 @@ namespace CNA::Internal::Renderers::DirectX9
             int surfaceFormat) const override;
         [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const override;
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override;
         /// D9-51: CubeMap creation is gated on the real D3DCAPS9 (D3DPTEXTURECAPS_CUBEMAP) queried
         /// at device-creation time -- returns nullptr (IGraphicsRenderer's own "unsupported"
         /// convention) rather than assuming support, unlike CreateTexture() above.

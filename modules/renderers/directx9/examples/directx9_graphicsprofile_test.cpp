@@ -355,13 +355,83 @@ protected:
                   "Supported creates and accepts its zero-filled level without substitution");
 
             check(dev.GetRenderer().ClassifyTextureCubeFormatEXT(
-                      static_cast<int>(SurfaceFormat::Bgr565)) ==
-                      RendererFormatVerdict::Unsupported &&
+                      static_cast<int>(SurfaceFormat::Single)) ==
+                          RendererFormatVerdict::Supported &&
+                  dev.GetRenderer().ClassifyTextureCubeFormatEXT(
+                      static_cast<int>(SurfaceFormat::Vector4)) ==
+                          RendererFormatVerdict::Supported,
+                  "DirectX9 cube classifier live-probes Single and Vector4 native storage");
+            check(dev.GetRenderer().ClassifyTexture3DFormatEXT(
+                      static_cast<int>(SurfaceFormat::Single)) ==
+                          RendererFormatVerdict::Supported &&
                   dev.GetRenderer().ClassifyTexture3DFormatEXT(
-                      static_cast<int>(SurfaceFormat::Bgr565)) ==
-                      RendererFormatVerdict::Unsupported,
-                  "DirectX9 cube/volume format classifiers do not inherit Texture2D's broader "
-                  "native-format promise");
+                      static_cast<int>(SurfaceFormat::Vector4)) ==
+                          RendererFormatVerdict::Supported,
+                  "DirectX9 volume classifier live-probes Single and Vector4 native storage");
+
+            bool everyAdvertisedCubeFormatRoundTrips = true;
+            bool everyAdvertisedVolumeFormatRoundTrips = true;
+            for (int ordinal = static_cast<int>(SurfaceFormat::Color);
+                 ordinal <= static_cast<int>(SurfaceFormat::HdrBlendable); ++ordinal)
+            {
+                const auto format = static_cast<SurfaceFormat>(ordinal);
+                if (dev.GetRenderer().ClassifyTextureCubeFormatEXT(ordinal) ==
+                    RendererFormatVerdict::Supported)
+                {
+                    try
+                    {
+                        TextureCube cube(dev, 4, false, format);
+                        const bool compressed = format == SurfaceFormat::Dxt1 ||
+                                                format == SurfaceFormat::Dxt3 ||
+                                                format == SurfaceFormat::Dxt5;
+                        const int byteCount = compressed
+                            ? Texture::GetFormatSizeEXT(format)
+                            : 16 * Texture::GetFormatSizeEXT(format);
+                        std::vector<std::uint8_t> source(static_cast<std::size_t>(byteCount));
+                        for (int i = 0; i < byteCount; ++i)
+                            source[static_cast<std::size_t>(i)] =
+                                static_cast<std::uint8_t>((i * 37 + ordinal * 11) & 0xff);
+                        std::vector<std::uint8_t> result(static_cast<std::size_t>(byteCount));
+                        cube.SetData(CubeMapFace::PositiveX, source.data(), byteCount);
+                        cube.GetData(CubeMapFace::PositiveX, result.data(), byteCount);
+                        if (result != source)
+                            everyAdvertisedCubeFormatRoundTrips = false;
+                    }
+                    catch (const std::exception&)
+                    {
+                        everyAdvertisedCubeFormatRoundTrips = false;
+                    }
+                }
+
+                if (dev.GetRenderer().ClassifyTexture3DFormatEXT(ordinal) ==
+                    RendererFormatVerdict::Supported)
+                {
+                    try
+                    {
+                        Texture3D volume(dev, 2, 2, 2, false, format);
+                        const int byteCount = 8 * Texture::GetFormatSizeEXT(format);
+                        std::vector<std::uint8_t> source(static_cast<std::size_t>(byteCount));
+                        for (int i = 0; i < byteCount; ++i)
+                            source[static_cast<std::size_t>(i)] =
+                                static_cast<std::uint8_t>((i * 29 + ordinal * 13) & 0xff);
+                        std::vector<std::uint8_t> result(static_cast<std::size_t>(byteCount));
+                        volume.SetData(source.data(), byteCount);
+                        volume.GetData(result.data(), byteCount);
+                        if (result != source)
+                            everyAdvertisedVolumeFormatRoundTrips = false;
+                    }
+                    catch (const std::exception&)
+                    {
+                        everyAdvertisedVolumeFormatRoundTrips = false;
+                    }
+                }
+            }
+            check(everyAdvertisedCubeFormatRoundTrips,
+                  "DirectX9 cube capability agreement: every advertised classic format creates "
+                  "and round-trips exact native bytes");
+            check(everyAdvertisedVolumeFormatRoundTrips,
+                  "DirectX9 volume capability agreement: every advertised HiDef format creates "
+                  "and round-trips exact native bytes");
         }
 
         // Check K: MaxRenderTargets under HiDef -- the SAME 2-target request Check J refused

@@ -1201,8 +1201,44 @@ namespace CNA::Internal::Renderers::DirectX9
     RendererFormatVerdict DirectX9Renderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color &&
-                       (caps_.TextureCaps & D3DPTEXTURECAPS_CUBEMAP)
+        if (!(caps_.TextureCaps & D3DPTEXTURECAPS_CUBEMAP))
+            return RendererFormatVerdict::Unsupported;
+
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                break;
+            default:
+                return RendererFormatVerdict::Unsupported;
+        }
+
+        const D3DFORMAT nativeFormat = SurfaceFormatToD3D9(surfaceFormat);
+        D3DDISPLAYMODE mode{};
+        if (nativeFormat == D3DFMT_UNKNOWN ||
+            FAILED(d3d9_->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mode)))
+        {
+            return RendererFormatVerdict::Unsupported;
+        }
+        return SUCCEEDED(d3d9_->CheckDeviceFormat(
+                   D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, mode.Format, 0,
+                   D3DRTYPE_CUBETEXTURE, nativeFormat))
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
     }
@@ -1210,10 +1246,52 @@ namespace CNA::Internal::Renderers::DirectX9
     RendererFormatVerdict DirectX9Renderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color &&
-                       caps_.MaxVolumeExtent > 0
+        if (caps_.MaxVolumeExtent == 0)
+            return RendererFormatVerdict::Unsupported;
+
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                break;
+            default:
+                return RendererFormatVerdict::Unsupported;
+        }
+
+        const D3DFORMAT nativeFormat = SurfaceFormatToD3D9(surfaceFormat);
+        D3DDISPLAYMODE mode{};
+        if (nativeFormat == D3DFMT_UNKNOWN ||
+            FAILED(d3d9_->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mode)))
+        {
+            return RendererFormatVerdict::Unsupported;
+        }
+        return SUCCEEDED(d3d9_->CheckDeviceFormat(
+                   D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, mode.Format, 0,
+                   D3DRTYPE_VOLUMETEXTURE, nativeFormat))
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
+    }
+
+    bool DirectX9Renderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+        return (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                format == SurfaceFormat::Dxt5) &&
+               ClassifyTextureCubeFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
     }
 
     std::unique_ptr<ITextureCubeRenderer> DirectX9Renderer::CreateTextureCube(int size, bool mipMap, int surfaceFormat)

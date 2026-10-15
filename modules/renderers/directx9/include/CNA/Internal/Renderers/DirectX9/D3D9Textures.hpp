@@ -2,10 +2,9 @@
 
 // plans/plan_dx9.md Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.
 //
-// Texture2D uses the requested classic XNA SurfaceFormat through D3D9FormatMapping. Volume and
-// cube textures remain RGBA8-only for now; their `surfaceFormat` parameter is accepted for
-// interface-signature compatibility only and their independent capability classifiers keep that
-// limitation visible to callers.
+// All three resource kinds use the requested classic XNA SurfaceFormat through
+// D3D9FormatMapping. Their independent capability classifiers probe the matching D3D9 resource
+// type, so a format is advertised only where the live device can create it.
 //
 // D3DPOOL_MANAGED (not DEFAULT) for all three -- design decision 2's own payoff, confirmed for
 // real by D9-4's spike: MANAGED textures survive Reset() with no re-upload needed and are
@@ -68,13 +67,38 @@ namespace CNA::Internal::Renderers::DirectX9
         /// caller's memory inside this call, so the source is never retained past it.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override
+        {
+            return SetData(face, level, x, y, w, h, data, dataLength);
+        }
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override
+        {
+            return SetData(face, level, x, y, w, h, data, dataLength);
+        }
         /// True only once the whole requested face rectangle has been copied out of
         /// the locked surface; false for an out-of-range face/level or a failed LockRect, so the
         /// shared layer rejects the read instead of fabricating a transparent-black face.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override
+        {
+            return GetData(face, level, x, y, w, h, data, dataLength);
+        }
+        [[nodiscard]] bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override
+        {
+            return GetData(face, level, x, y, w, h, data, dataLength);
+        }
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         [[nodiscard]] IDirect3DCubeTexture9* GetTextureEXT() const { return texture_.Get(); }
 
@@ -83,6 +107,7 @@ namespace CNA::Internal::Renderers::DirectX9
         ComPtr<IDirect3DCubeTexture9> texture_;
         int size_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
     };
 
     /// Real D3D9 volume (3D) texture renderer (D9-51). D9-51's own plan note: volume-texture
@@ -98,14 +123,27 @@ namespace CNA::Internal::Renderers::DirectX9
         /// applied to LockBox's row pitch and slice pitch.
         [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
                                    const void* data, int dataLength) override;
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override
+        {
+            return SetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
         /// Same explicit completion contract as D3D9TextureCubeRenderer::GetData,
         /// applied to LockBox's row pitch and slice pitch.
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override
+        {
+            return GetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
 
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }
         [[nodiscard]] int GetDepthEXT() const { return depth_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] IDirect3DVolumeTexture9* GetTextureEXT() const { return texture_.Get(); }
 
     private:
@@ -115,5 +153,6 @@ namespace CNA::Internal::Renderers::DirectX9
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
     };
 }
