@@ -456,3 +456,15 @@ TEST(AvatarCatalogContentTest, EveryModelMovesSoundlyInEveryAnimation) {
     EXPECT_LT(worstStretch, 4.0f) << worstAt;
     std::cout << "worst edge stretch " << worstStretch << " (" << worstAt << ")\n";
 }
+
+TEST(AvatarCatalogContentTest, ModelsShareTheTexturesTheyHaveInCommon) {
+    // Two avatars in different clothes decode each texture they share (skin, hair, fabrics) once.
+    auto a = dressed(0), b = dressed(1);
+    b.items = {3, 22, 42, 61, 0, 0};
+    const auto first = Avatars::buildAvatarModel(a), second = Avatars::buildAvatarModel(b);
+    std::set<const Avatars::AvatarImage*> mine;
+    for (const auto& image : first->images) mine.insert(image.get());
+    int shared = 0;
+    for (const auto& image : second->images) shared += mine.contains(image.get());
+    EXPECT_GT(shared, 0);
+}

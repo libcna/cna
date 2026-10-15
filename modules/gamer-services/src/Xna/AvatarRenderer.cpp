@@ -101,7 +101,25 @@ namespace Microsoft::Xna::Framework::GamerServices
         int loadingVertexCount = 0;
         int loadingPrimitiveCount = 0;
 
-        void Release()
+        // The device's Disposing subscription: the resources go while their device is still there.
+        // The handler reaches them through a weak reference: a raise already under way still calls
+        // a handler removed during it (C# semantics), possibly after these resources are gone.
+        System::EventHandler<System::EventArgs>::Token disposing = 0;
+        bool subscribed = false;
+        std::shared_ptr<Resources*> self = std::make_shared<Resources*>(this);
+
+        ~Resources() { Unsubscribe(); }
+
+        void Unsubscribe()
+        {
+            if (subscribed && device != nullptr)
+            {
+                device->Disposing.Remove(disposing);
+            }
+            subscribed = false;
+        }
+
+        void ReleaseGpu()
         {
             effect.reset();
             parts.clear();
@@ -115,7 +133,15 @@ namespace Microsoft::Xna::Framework::GamerServices
             device = nullptr;
         }
 
-        // Resources belong to one device; a different device (or a recreated one) rebuilds them.
+        void Release()
+        {
+            Unsubscribe();
+            ReleaseGpu();
+        }
+
+        // Resources belong to one device; a different device (or a recreated one) rebuilds them,
+        // and a device being disposed takes them with it rather than leaving them to outlive it
+        // (an SDL_GPU device torn down under live textures crashes).
         Graphics::GraphicsDevice& Bind()
         {
             auto& current = CNA::Internal::GamerServices::dispatcherGraphicsDevice();
@@ -123,6 +149,15 @@ namespace Microsoft::Xna::Framework::GamerServices
             {
                 Release();
                 device = &current;
+                disposing = current.Disposing.Add([weak = std::weak_ptr<Resources*>(self)](System::Object*, const System::EventArgs&) {
+                    if (const auto alive = weak.lock())
+                    {
+                        // Raised while the device iterates its handlers: no unsubscribing from here.
+                        (*alive)->subscribed = false;
+                        (*alive)->ReleaseGpu();
+                    }
+                });
+                subscribed = true;
             }
             return current;
         }

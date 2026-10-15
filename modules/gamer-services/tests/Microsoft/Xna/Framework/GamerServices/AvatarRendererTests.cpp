@@ -213,6 +213,55 @@ TEST(AvatarRendererTest, DrawsEveryPresetAndExpressionOnTheDispatcherDevice) {
     }
 }
 
+TEST(AvatarRendererTest, EveryFormat3FeatureDrawsAndANewDeviceGetsItsOwnResources) {
+    // An avatar using everything description format 3 adds (eyebrows, ears, every accessory on a
+    // side, every makeup style, the extra colours, proportions, the second face block) draws on the
+    // dispatcher's device; when the game's device is replaced, the renderer builds its resources
+    // again on the new one rather than drawing with the old one's.
+    namespace Avatars = CNA::Internal::GamerServices::Avatars;
+    const auto catalog = Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
+    std::mt19937 random(9);
+    auto descriptor = Avatars::randomDescriptor(1, random);
+    auto first = [&](Avatars::AvatarItemSlot slot) { return catalog->itemsOf(slot).front()->id; };
+    descriptor.eyebrows = first(Avatars::AvatarItemSlot::Eyebrows);
+    descriptor.ears = catalog->itemsOf(Avatars::AvatarItemSlot::Ears).back()->id;
+    for (const auto slot : {Avatars::AvatarItemSlot::Earrings, Avatars::AvatarItemSlot::Wristwear, Avatars::AvatarItemSlot::Rings}) {
+        descriptor.accessories[Avatars::accessoryIndex(slot)] = first(slot);
+    }
+    descriptor.sides[Avatars::accessoryIndex(Avatars::AvatarItemSlot::Wristwear)] = Avatars::AvatarSides::Left;
+    descriptor.sides[Avatars::accessoryIndex(Avatars::AvatarItemSlot::Rings)] = Avatars::AvatarSides::Right;
+    for (const auto slot : {Avatars::AvatarItemSlot::EyeShadow, Avatars::AvatarItemSlot::Eyeliner, Avatars::AvatarItemSlot::Blush,
+                            Avatars::AvatarItemSlot::Lips}) {
+        descriptor.makeup[Avatars::makeupIndex(slot)] = first(slot);
+    }
+    descriptor.colors[static_cast<std::size_t>(Avatars::AvatarColorSlot::Lips)] = {180, 60, 70};
+    descriptor.proportion = 90;
+    descriptor.face[24] = 200;
+    const auto bytes = Avatars::encode(descriptor);
+    ASSERT_EQ(bytes[0], Avatars::ExtendedFormatVersion);
+    AvatarDescription description(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()));
+    AvatarRenderer renderer(&description);
+    ASSERT_EQ(WaitUntilLoaded(renderer), AvatarRendererState::Ready);
+    AvatarAnimation wave(AvatarAnimationPreset::Wave);
+    wave.Update(System::TimeSpan::FromSeconds(0.8), true);
+    {
+        GraphicsDevice device;
+        if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+            GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+        TestingDevice testing(&device);
+        EXPECT_NO_THROW(renderer.Draw(&wave));
+        AvatarExpression blink;
+        blink.setLeftEyeProperty(AvatarEye::Blink);
+        blink.setRightEyeProperty(AvatarEye::Blink);
+        const auto bones = wave.getBoneTransformsProperty();
+        EXPECT_NO_THROW(renderer.Draw(std::vector<Matrix>(bones.begin(), bones.end()), blink));
+    }
+    GraphicsDevice replacement;
+    TestingDevice testing(&replacement);
+    EXPECT_NO_THROW(renderer.Draw(&wave));
+    EXPECT_NO_THROW(renderer.Draw(&wave));
+}
+
 // plans/plan_apple_m4.md AM4-008: the GPU upload used to set its "uploaded" marker before the
 // buffers existed, so a renderer that refuses vertex buffers left a half-built upload behind a
 // complete-looking marker and the second Draw indexed past the end of the part list. Every Draw
