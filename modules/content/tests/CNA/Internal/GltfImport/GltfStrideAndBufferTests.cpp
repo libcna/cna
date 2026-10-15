@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
 #include <string>
 #include <system_error>
 #include <vector>
@@ -393,12 +394,20 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
         // renderer reaches a record through bytes its layout does not describe. So the rule is the
         // partition: reach the boundary, or refuse with a diagnostic that names why.
         std::string failure;
+        bool xnaRefusal = false;
         try
         {
             model.Draw(identity, identity, identity);
             // Deferred renderers submit the draw here. Without Present, a command can be recorded
             // but never reach the driver's input-layout validation.
             gd.Present();
+        }
+        catch (const System::InvalidOperationException& error)
+        {
+            // XNA's own answer when a stock effect reads an element the declaration lacks
+            // (DualTextureEffect's TextureCoordinate1 at stride 20): DIRECTX9 gives it.
+            failure = error.what();
+            xnaRefusal = true;
         }
         catch (const std::exception& error)
         {
@@ -414,7 +423,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
         // plans/plan_apple_m4.md AM4-190: and on FNA3D, a stock effect whose vertex shader reads an
         // input the primitive's layout lacks (DualTextureEffect's TextureCoordinate1 at stride
         // 20): only FNA3D's OpenGL driver can default it, so its other drivers refuse by name.
-        const bool namedRefusal = failure.find("GLTF-477") != std::string::npos ||
+        const bool namedRefusal = xnaRefusal || failure.find("GLTF-477") != std::string::npos ||
             (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Fna3d) &&
              failure.find("FNA3D-MISSING-STOCK-INPUT") != std::string::npos);
         EXPECT_TRUE(namedRefusal)

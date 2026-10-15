@@ -282,12 +282,19 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     defines (a half-pixel offset), and `TEXBEM`/`TEXBEML` read zero bump matrices because neither
     adapter fills the two float4s per sampler MojoShader appends to the uniform block. Shared with
     every SPIR-V backend; the oracles are EasyGL's Shader Model 1-3 compiled-effect sections.
-14. **The MinGW-w64 cross-build cannot compile `CnaTests.exe`** (found 2026-10-13 configuring
-    `cmake-build-mingw`; none of the files is renderer code). GamerServices and content-pipeline
-    tests call POSIX `setenv`/`unsetenv`/`getpid` and include `sys/wait.h`, and
-    `tools/net/service_session_client_harness.cpp` includes `poll.h`; MinGW has none of them.
-    `scripts/check_no_posix_setenv.py` fails on the same files. The rest of the tree (the
-    `DIRECTX9` and `SDL_GPU` suites, the C API smokes, the examples) builds.
+14. **First Windows run of the GamerServices and content-pipeline gtests** (the MinGW-w64
+    cross-build compiles every test binary since 2026-10-15: the POSIX `setenv`/`unsetenv`/`getpid`
+    calls went through `System::Environment`, the fork-based child tests include their POSIX headers
+    only on POSIX, and the net harness polls stdin with `_kbhit` on Windows). Under Wine,
+    `CnaGamerServicesTests.exe` needs `libcurl-x64.dll` from `~/deps/curl-mingw-8.22.0/.../bin`
+    on `WINEPATH` and then passes 623 with 4 failures (`AvatarServiceTest` staging resume,
+    `GamerServicesDispatcherTest.IsInitializedDefaultsFalse`, `GuideTest` show methods,
+    `AssetDiskCacheTest.ALinkIsNeverFollowed`); `CnaContentPipelineTests.exe` passes 428 with 10
+    failures (the four `XmaEncoderService` cases, `XnaFbxImporter` quarter-turn float composition,
+    `XnaBuildContent` include resolution, `XnaContentWriter`/`XnaXnbOutput`/`XnaDifferentialBuild`
+    reporting no `ContentTypeWriter` for `TestGame.Waypoint`, `LargeModelScalingTest`). Both suites
+    pass completely on Linux (658 and the full content-pipeline run); none of the Windows failures
+    has been looked at yet.
 
 15. **`DIRECTX9` under Wine+DXVK: one teardown flake and one content gtest failure remain**
     (re-measured 2026-10-15). The `DIRECTX9` ctest suite passes 58/58 and `CnaGraphicsTests.exe`
@@ -295,15 +302,19 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     Wine process dies or hangs at a varying point). The flake is `DirectX9_CompiledEffects`, which
     about every other run hangs at the end of its first test inside DXVK 2.6.0's device release
     (the main thread sits in a Win32 object wait below `~DirectX9Renderer` after the renderer
-    released the device, before the window is destroyed; a rerun passes). `CnaContentTests.exe`:
-    1,705 pass / 1 failure (`RendererStrideConformance`, the unlit stride-32 record). Fixed on the
-    way to green, all under Wine: static vertex/index buffers live in `D3DPOOL_MANAGED` so the
+    released the device, before the window is destroyed; every other thread of the hung process
+    belongs to DXVK, Mesa's disk cache, Wine or googletest's watcher, none runs CNA code; a rerun
+    passes). `CnaContentTests.exe`: 1,706 pass, no failures; its two `GltfPerformance` budgets (50 ms a
+    parse, 50 ms a load/unload cycle) hold on an idle machine and miss under a concurrent build. Fixed on the way to green, all
+    under Wine: static vertex/index buffers live in `D3DPOOL_MANAGED` so the
     resize `Reset` at the first `Present` keeps them and reports the dynamic buffers it empties as
     content-lost (`DirectX9_BufferResetSurvival`, the `Backbuffer_PassOrder` root cause);
     `OcclusionQuery.IsComplete` polls with `D3DGETDATA_FLUSH`; `Clear` saturates a float colour
     before packing it (4.0 wrapped to 252); a depth-less target disables the depth and stencil
     tests while it is bound; `DrawInstancedPrimitives` without an instance stream repeats the draw;
-    a stock effect over a declaration missing its inputs throws XNA's `InvalidOperationException`;
+    a stock effect over a declaration missing its inputs throws XNA's `InvalidOperationException`
+    (`DualTextureEffect` without `TextureCoordinate1` included, which the glTF stride conformance
+    accepts as the named refusal);
     compiled effects take their reflection from MojoShader's bytecode profile (the HLSL re-emitter
     has no `TEXCRD`) and read only the sampler slots the device exposes; the adapter's render-target
     format query agrees with the renderer, which builds Color targets only (float and classic

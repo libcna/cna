@@ -28,9 +28,13 @@
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
+#if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
+#endif
 #include <thread>
+#if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
+#endif
 
 namespace Service = CNA::Internal::GamerServices;
 namespace Ui = CNA::Internal::GamerServices::GuideUi;
@@ -71,11 +75,11 @@ bool Choose(const std::string& label) {
 class SystemGuideTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root_ = std::filesystem::temp_directory_path() / ("cna-system-guide-" + std::to_string(getpid()));
+        root_ = std::filesystem::temp_directory_path() / ("cna-system-guide-" + std::to_string(System::Environment::getProcessIdProperty()));
         std::filesystem::remove_all(root_);
         const auto* previous = std::getenv("CNA_GAMER_SERVICES_PROFILES_DIR");
         previousProfiles_ = previous ? std::optional<std::string>(previous) : std::nullopt;
-        setenv("CNA_GAMER_SERVICES_PROFILES_DIR", root_.c_str(), 1);
+        System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_PROFILES_DIR", root_.string());
         previous_ = Service::backend();
         if (!GamerServicesDispatcher::getIsInitializedProperty()) GamerServicesDispatcher::Initialize(provider_);
     }
@@ -88,8 +92,8 @@ protected:
         Settle([] { return Count() == 0; });
         Service::setBackendForTesting(previous_);
         CNA::GamerServices::setConfigurationOverride(std::nullopt);
-        if (previousProfiles_) setenv("CNA_GAMER_SERVICES_PROFILES_DIR", previousProfiles_->c_str(), 1);
-        else unsetenv("CNA_GAMER_SERVICES_PROFILES_DIR");
+        if (previousProfiles_) System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_PROFILES_DIR", *previousProfiles_);
+        else System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_PROFILES_DIR", std::nullopt);
         std::filesystem::remove_all(root_);
     }
     void Offline() {
@@ -393,7 +397,7 @@ TEST(GuideVisibilityTest, IsVisibleRequiresInitializedGamerServices) {
     const pid_t pid = fork();
     ASSERT_GE(pid, 0);
     if (pid == 0) {
-        setenv("CNA_TEST_GUIDE_VISIBLE_CHILD", "1", 1);
+        System::Environment::SetEnvironmentVariable("CNA_TEST_GUIDE_VISIBLE_CHILD", std::string("1"));
         execl(self.c_str(), "cna-guide-visible",
               "--gtest_filter=GuideVisibilityTest.IsVisibleRequiresInitializedGamerServices", static_cast<char*>(nullptr));
         _exit(127);

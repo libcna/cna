@@ -2,6 +2,8 @@
 // The avatar editor as a Guide screen, driven as a player would (categories, choices, save,
 // leave) without a device.
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
+#include <optional>
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "../../../../../src/Internal/Guide/GuideSystem.hpp"
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
@@ -54,11 +56,11 @@ class GuideAvatarEditorTest : public ::testing::Test {
 protected:
     void SetUp() override {
         previous_ = Service::backend();
-        profiles_ = std::filesystem::temp_directory_path() / ("cna-editor-profiles-" + std::to_string(getpid()));
+        profiles_ = std::filesystem::temp_directory_path() / ("cna-editor-profiles-" + std::to_string(System::Environment::getProcessIdProperty()));
         std::filesystem::remove_all(profiles_);
         const auto* current = std::getenv("CNA_GAMER_SERVICES_PROFILES_DIR");
         savedProfiles_ = current ? std::optional<std::string>(current) : std::nullopt;
-        setenv("CNA_GAMER_SERVICES_PROFILES_DIR", profiles_.string().c_str(), 1);
+        System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_PROFILES_DIR", profiles_.string());
         Service::ServiceIdentity alice;
         alice.userId = "a";
         alice.gamertag = "Alice";
@@ -78,8 +80,8 @@ protected:
         service_->signOut(1);
         Settle([] { return Gamer::getSignedInGamersProperty()->getCountProperty() == 0; });
         Service::setBackendForTesting(previous_);
-        if (savedProfiles_) setenv("CNA_GAMER_SERVICES_PROFILES_DIR", savedProfiles_->c_str(), 1);
-        else unsetenv("CNA_GAMER_SERVICES_PROFILES_DIR");
+        if (savedProfiles_) System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_PROFILES_DIR", *savedProfiles_);
+        else System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_PROFILES_DIR", std::nullopt);
         std::filesystem::remove_all(profiles_);
     }
     template <typename Condition>

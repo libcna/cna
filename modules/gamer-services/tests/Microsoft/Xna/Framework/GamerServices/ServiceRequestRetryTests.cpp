@@ -5,6 +5,8 @@
 // connection after one exchange: libcurl itself re-sends a request, once, when a reused keep-alive
 // connection dies before any answer, and that would hide which attempt is whose.
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
+#include <optional>
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -153,10 +155,10 @@ private:
 
 class ServiceRequestRetryTest : public ::testing::Test {
 protected:
-    void SetUp() override {previous=Service::backend();setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0",1);}
+    void SetUp() override {previous=Service::backend();System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", std::string("0"));}
     void TearDown() override {
         Service::setBackendForTesting(previous);Deployment::setConfigurationOverride({});
-        unsetenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR");
+        System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", std::nullopt);
     }
     std::shared_ptr<Service::IGamerServicesBackend> signedIn(const LoopbackService& service,Service::ServiceIdentity* identity=nullptr) {
         Deployment::setConfigurationOverride(Deployment::Configuration{service.endpoint(),"retry",{},true});
@@ -268,10 +270,10 @@ struct PictureCacheEnvironment {
         if(const auto* value=std::getenv("CNA_GAMER_SERVICES_CACHE_DIR"))previous=value;
         path=std::filesystem::temp_directory_path()/("cna-picture-policy-"+std::to_string(getpid()));
         std::filesystem::remove_all(path);
-        setenv("CNA_GAMER_SERVICES_CACHE_DIR",path.c_str(),1);
+        System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", path);
     }
     ~PictureCacheEnvironment() {
-        if(previous)setenv("CNA_GAMER_SERVICES_CACHE_DIR",previous->c_str(),1);else unsetenv("CNA_GAMER_SERVICES_CACHE_DIR");
+        if(previous)System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", *previous);else System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", std::nullopt);
         std::filesystem::remove_all(path);
     }
 };

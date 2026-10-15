@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
+#include <optional>
 #include "CNA/GamerServices/Configuration.hpp"
 #include <cstdlib>
 #include <string>
@@ -35,12 +37,12 @@ TEST(ServiceConfigurationTest, AvatarCatalogUpdatesAreOnByDefaultAndCanBeTurnedO
     EXPECT_EQ(defaults.maxAvatarCatalogBytes, std::uint64_t{64} << 20);
     const auto* previous = std::getenv("CNA_AVATAR_CATALOG_UPDATES");
     const std::string saved = previous ? previous : "";
-    setenv("CNA_AVATAR_CATALOG_UPDATES", "0", 1);
+    System::Environment::SetEnvironmentVariable("CNA_AVATAR_CATALOG_UPDATES", std::string("0"));
     EXPECT_FALSE(resolveConfiguration().avatarCatalogUpdates);
-    setenv("CNA_AVATAR_CATALOG_UPDATES", "maybe", 1);
+    System::Environment::SetEnvironmentVariable("CNA_AVATAR_CATALOG_UPDATES", std::string("maybe"));
     EXPECT_THROW((void)resolveConfiguration(), std::runtime_error);
-    if (previous) setenv("CNA_AVATAR_CATALOG_UPDATES", saved.c_str(), 1);
-    else unsetenv("CNA_AVATAR_CATALOG_UPDATES");
+    if (previous) System::Environment::SetEnvironmentVariable("CNA_AVATAR_CATALOG_UPDATES", saved);
+    else System::Environment::SetEnvironmentVariable("CNA_AVATAR_CATALOG_UPDATES", std::nullopt);
 }
 TEST(ServiceConfigurationTest, TheGameVersionIsStatedWhenConfiguredAndMustBeWellFormed) {
     EXPECT_TRUE(Configuration{}.titleVersion.empty());
@@ -53,10 +55,10 @@ TEST(ServiceConfigurationTest, TheGameVersionIsStatedWhenConfiguredAndMustBeWell
     }
     const auto* previous = std::getenv("CNA_GAME_VERSION");
     const std::string saved = previous ? previous : "";
-    setenv("CNA_GAME_VERSION", "2.0", 1);
+    System::Environment::SetEnvironmentVariable("CNA_GAME_VERSION", std::string("2.0"));
     EXPECT_EQ(resolveConfiguration().titleVersion, "2.0");
-    setenv("CNA_GAME_VERSION", "two", 1);
+    System::Environment::SetEnvironmentVariable("CNA_GAME_VERSION", std::string("two"));
     EXPECT_THROW((void)resolveConfiguration(), std::runtime_error);
-    if (previous) setenv("CNA_GAME_VERSION", saved.c_str(), 1);
-    else unsetenv("CNA_GAME_VERSION");
+    if (previous) System::Environment::SetEnvironmentVariable("CNA_GAME_VERSION", saved);
+    else System::Environment::SetEnvironmentVariable("CNA_GAME_VERSION", std::nullopt);
 }

@@ -1,4 +1,5 @@
 #include "ProfileGame.hpp"
+#include "System/Environment.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -28,7 +29,7 @@ int main(int argc, char* argv[])
             _putenv_s("CNA_GAMER_SERVICES_AUTO_SIGN_IN", "Smoke,Smoke Two");
         }
 #else
-        setenv("CNA_GAMER_SERVICES_AUTO_SIGN_IN", "Smoke,Smoke Two", 0);
+        if (!System::Environment::GetEnvironmentVariable("CNA_GAMER_SERVICES_AUTO_SIGN_IN")) System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_AUTO_SIGN_IN", std::string("Smoke,Smoke Two"));
 #endif
         game->SetSmokeFrames(smokeFrames);
     }

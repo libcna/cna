@@ -7,6 +7,8 @@
 // `accepted` case must normalize to the same text, and every `rejected` case must be refused with
 // the same message.
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
+#include <optional>
 
 #include <cmath>
 #include <cstdlib>
@@ -1245,7 +1247,7 @@ namespace
             hadZone_ = current != nullptr;
             if (hadZone_)
                 saved_ = current;
-            ::setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+            System::Environment::SetEnvironmentVariable("TZ", std::string("CET-1CEST,M3.5.0,M10.5.0/3"));
             ::tzset();
 #endif
         }
@@ -1254,9 +1256,9 @@ namespace
         {
 #if !defined(_WIN32)
             if (hadZone_)
-                ::setenv("TZ", saved_.c_str(), 1);
+                System::Environment::SetEnvironmentVariable("TZ", saved_);
             else
-                ::unsetenv("TZ");
+                System::Environment::SetEnvironmentVariable("TZ", std::nullopt);
             ::tzset();
 #endif
         }

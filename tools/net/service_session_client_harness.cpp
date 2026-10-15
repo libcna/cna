@@ -30,7 +30,11 @@
 #include <memory>
 #include <set>
 #include <thread>
+#ifdef _WIN32
+#include <conio.h>
+#else
 #include <poll.h>
+#endif
 #include <unistd.h>
 
 using namespace Microsoft::Xna::Framework::GamerServices;
@@ -60,8 +64,12 @@ std::string line() {
     std::string result;
     const auto deadline=Clock::now()+std::chrono::seconds(60);
     while(true) {
+#ifdef _WIN32
+        if(_kbhit()) {
+#else
         pollfd input{0,POLLIN,0};
         if(poll(&input,1,2)>0) {
+#endif
             char character=0;check(read(0,&character,1)==1,"parent input");
             if(character=='\n')return result;
             result.push_back(character);check(result.size()<=256,"parent input length");continue;

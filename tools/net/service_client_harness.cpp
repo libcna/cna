@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "System/Environment.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
@@ -160,7 +161,7 @@ int main(int argc,char** argv) {
 #if defined(_WIN32)
             _putenv_s("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0");
 #else
-            setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0",1);
+            System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", std::string("0"));
 #endif
         }
         Provider provider;GamerServicesDispatcher::Initialize(provider);

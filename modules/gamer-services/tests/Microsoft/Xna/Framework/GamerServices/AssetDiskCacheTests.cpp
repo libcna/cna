@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
+#include <optional>
 
 #include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
@@ -21,7 +23,7 @@ std::string hashOf(const std::vector<unsigned char>& bytes) {return Avatars::sha
 class AssetDiskCacheTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root_ = std::filesystem::temp_directory_path() / ("cna-asset-cache-" + std::to_string(getpid()) + "-" + std::to_string(++counter_));
+        root_ = std::filesystem::temp_directory_path() / ("cna-asset-cache-" + std::to_string(System::Environment::getProcessIdProperty()) + "-" + std::to_string(++counter_));
         std::filesystem::remove_all(root_);
     }
     void TearDown() override {std::filesystem::remove_all(root_);}
@@ -153,8 +155,8 @@ TEST_F(AssetDiskCacheTest, ConcurrentWritersOfOneEntryLeaveItWhole) {
 TEST_F(AssetDiskCacheTest, TheConfiguredLocationComesFromTheEnvironment) {
     const auto* previous = std::getenv("CNA_GAMER_SERVICES_CACHE_DIR");
     const std::string saved = previous ? previous : "";
-    setenv("CNA_GAMER_SERVICES_CACHE_DIR", root_.c_str(), 1);
+    System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", root_.string());
     EXPECT_EQ(AssetDiskCache::defaultRoot(), root_);
-    if (previous) setenv("CNA_GAMER_SERVICES_CACHE_DIR", saved.c_str(), 1);
-    else unsetenv("CNA_GAMER_SERVICES_CACHE_DIR");
+    if (previous) System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", saved);
+    else System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", std::nullopt);
 }

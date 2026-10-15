@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "../../../../../src/Internal/CredentialStore.hpp"
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
+#include <optional>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -20,11 +22,11 @@ protected:
     void SetUp() override {
         if(const auto* value=std::getenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR"))previous_=value;
         root_=std::filesystem::temp_directory_path()/("cna-credentials-unit-"+std::to_string(getpid()));
-        std::filesystem::remove_all(root_);setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR",root_.c_str(),1);
+        std::filesystem::remove_all(root_);System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", root_);
     }
     void TearDown() override {
-        if(previous_)setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR",previous_->c_str(),1);
-        else unsetenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR");
+        if(previous_)System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", *previous_);
+        else System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", std::nullopt);
         std::filesystem::remove_all(root_);
     }
     std::filesystem::path record() const {
@@ -145,12 +147,12 @@ TEST(CredentialStoreKeyringTest, KeepsRecordsInTheSecretServiceAndMovesOldFilesI
     auto files=[&]{int count=0;for(const auto& entry:std::filesystem::directory_iterator(directory))count+=entry.path().extension()==".json";return count;};
     {
         // Before the keyring: a private file.
-        setenv("CNA_GAMER_SERVICES_KEYRING","0",1);
+        System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_KEYRING", std::string("0"));
         CredentialStore store(config);
         EXPECT_STREQ("private-file",store.protection());
         ASSERT_TRUE(store.save(2,second));
         EXPECT_EQ(1,files());
-        unsetenv("CNA_GAMER_SERVICES_KEYRING");
+        System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_KEYRING", std::nullopt);
     }
     CredentialStore store(config);
     ASSERT_STREQ("secret-service",store.protection());
@@ -206,7 +208,7 @@ TEST(CredentialStoreKeyringTest, AKeyringThatDoesNotAnswerIsGivenTwoSeconds) {
 }
 #endif
 TEST_F(CredentialStoreTest, ExplicitDisableCreatesNoUserFiles) {
-    setenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR","0",1);CredentialStore store(config_);
+    System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", std::string("0"));CredentialStore store(config_);
     EXPECT_FALSE(store.save(0,fixture_));EXPECT_FALSE(store.load(0));EXPECT_FALSE(std::filesystem::exists(root_));
 }
 }

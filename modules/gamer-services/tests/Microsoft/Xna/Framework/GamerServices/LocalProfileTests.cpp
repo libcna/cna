@@ -33,7 +33,9 @@
 #include <thread>
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
+#if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
+#endif
 #endif
 
 namespace Service = CNA::Internal::GamerServices;
@@ -50,19 +52,19 @@ struct Provider final : System::IServiceProvider {
 class ProfileEnvironment {
 public:
     ProfileEnvironment() {
-        root_ = std::filesystem::temp_directory_path() / ("cna-local-profiles-" + std::to_string(getpid()) + "-" + std::to_string(++counter_));
+        root_ = std::filesystem::temp_directory_path() / ("cna-local-profiles-" + std::to_string(System::Environment::getProcessIdProperty()) + "-" + std::to_string(++counter_));
         std::filesystem::remove_all(root_);
         Save("CNA_GAMER_SERVICES_PROFILES_DIR", root_.string());
         Save("CNA_GAMER_SERVICES_AUTO_SIGN_IN", std::nullopt);
     }
     ~ProfileEnvironment() {
         for (const auto& [name, value] : saved_) {
-            if (value) setenv(name.c_str(), value->c_str(), 1);
-            else unsetenv(name.c_str());
+            if (value) System::Environment::SetEnvironmentVariable(name, *value);
+            else System::Environment::SetEnvironmentVariable(name, std::nullopt);
         }
         std::filesystem::remove_all(root_);
     }
-    void Set(const char* name, const std::string& value) { setenv(name, value.c_str(), 1); }
+    void Set(const char* name, const std::string& value) { System::Environment::SetEnvironmentVariable(name, value); }
     std::filesystem::path Store() const { return root_ / "profiles.json"; }
     void Write(const std::string& text) const {
         std::filesystem::create_directories(root_);
@@ -76,8 +78,8 @@ private:
     void Save(const char* name, std::optional<std::string> value) {
         const auto* current = std::getenv(name);
         saved_.emplace_back(name, current ? std::optional<std::string>(current) : std::nullopt);
-        if (value) setenv(name, value->c_str(), 1);
-        else unsetenv(name);
+        if (value) System::Environment::SetEnvironmentVariable(name, *value);
+        else System::Environment::SetEnvironmentVariable(name, std::nullopt);
     }
     static inline int counter_ = 0;
     std::filesystem::path root_;
@@ -456,7 +458,7 @@ TEST(LocalAutoSignInTest, ConfiguredProfilesAppearAtTheFirstUpdate) {
     const pid_t pid = fork();
     ASSERT_GE(pid, 0);
     if (pid == 0) {
-        setenv("CNA_TEST_LOCAL_AUTO_SIGN_IN_CHILD", "1", 1);
+        System::Environment::SetEnvironmentVariable("CNA_TEST_LOCAL_AUTO_SIGN_IN_CHILD", std::string("1"));
         execl(self.c_str(), "cna-local-auto-sign-in",
               "--gtest_filter=LocalAutoSignInTest.ConfiguredProfilesAppearAtTheFirstUpdate", static_cast<char*>(nullptr));
         _exit(127);

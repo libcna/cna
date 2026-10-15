@@ -14,6 +14,8 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include "System/Environment.hpp"
+#include <optional>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
@@ -475,7 +477,7 @@ namespace
     TEST(XnaXnbOutput, AnXnaShapedRouteBuildsToXnbThroughTheCanonicalPipeline)
     {
         ReaderRegistration readers;
-        const std::filesystem::path root = std::filesystem::temp_directory_path() / ("cna-xnapp-compiler-" + std::to_string(::getpid()));
+        const std::filesystem::path root = std::filesystem::temp_directory_path() / ("cna-xnapp-compiler-" + std::to_string(System::Environment::getProcessIdProperty()));
         std::filesystem::remove_all(root);
         std::filesystem::create_directories(root);
         { std::ofstream(root / "patrol.route") << "patrol-route\n"; }

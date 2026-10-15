@@ -1,4 +1,5 @@
 #include "WatchdogGame.hpp"
+#include "System/Environment.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -16,7 +17,7 @@ int main()
         _putenv_s("CNA_GAMER_SERVICES_AUTO_SIGN_IN", "Watchdog");
     }
 #else
-    setenv("CNA_GAMER_SERVICES_AUTO_SIGN_IN", "Watchdog", 0);
+    if (!System::Environment::GetEnvironmentVariable("CNA_GAMER_SERVICES_AUTO_SIGN_IN")) System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_AUTO_SIGN_IN", std::string("Watchdog"));
 #endif
 
     auto* game = new WatchdogGame();

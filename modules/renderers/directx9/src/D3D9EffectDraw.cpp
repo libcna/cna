@@ -936,12 +936,16 @@ namespace CNA::Internal::Renderers::DirectX9
                 "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): requires non-null "
                 "texture0 AND texture1 (plans/plan_dx9.md D9-82d)");
 
+        // XNA: "The current vertex declaration does not include all the elements required by the
+        // current vertex shader" -- DualTextureEffect reads TextureCoordinate1 (and Color when
+        // VertexColorEnabled), which the dual-UV strides carry.
         const std::size_t expectedStride = params.vertexColorEnabled ? 32 : 28;
         if (stride != expectedStride)
-            throw std::runtime_error(
+            throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
-                " does not match the required dual-UV declaration");
+                " does not match the required dual-UV declaration: the vertex declaration does not "
+                "include all the elements required by the current vertex shader");
 
         const int shaderIndex = ComputeDualTextureEffectShaderIndex(params.fogEnabled, params.vertexColorEnabled);
         const DualTextureEffectRegisterTables regs = GetDualTextureEffectRegisterTablesEXT(shaderIndex);
