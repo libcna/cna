@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <chrono>
 #include <cmath>
 #include <map>
@@ -215,6 +216,25 @@ public:
         }
         if(ui.input(Command::Accept)&&!slider&&option_<count)choose(row_,option_);
         if(back)content_=false;
+    }
+
+    std::vector<std::pair<std::string,Box>> targets() const override {
+        std::vector<std::pair<std::string,Box>> out;
+        for(const auto& hit:hits_) {
+            switch(hit.kind) {
+            case Hit::Kind::Category: out.emplace_back("category "+std::to_string(hit.index),hit.box); break;
+            case Hit::Kind::Option: out.emplace_back("option "+std::to_string(hit.row)+" "+std::to_string(hit.index),hit.box); break;
+            case Hit::Kind::Slider: out.emplace_back("slider "+std::to_string(hit.row),hit.box); break;
+            case Hit::Kind::Reset: out.emplace_back("reset",hit.box); break;
+            case Hit::Kind::Stage: out.emplace_back("stage",hit.box); break;
+            }
+        }
+        return out;
+    }
+    std::string stateForTesting() const override {
+        char text[64];
+        std::snprintf(text,sizeof text,"yaw=%.3f zoom=%.3f",static_cast<double>(yaw_),static_cast<double>(zoom_));
+        return text;
     }
 
     void activate(int index) override {

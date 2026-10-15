@@ -9,6 +9,7 @@
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/AvatarEditor.hpp"
+#include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
@@ -16,8 +17,15 @@
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Input/Buttons.hpp"
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+#include "../../../../../../platform/tests/CNA/Platform/CannedGamepad.hpp"
+#include "../../../../../../platform/tests/CNA/Platform/CannedMouse.hpp"
+#include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
 #include "System/IServiceProvider.hpp"
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <random>
@@ -330,4 +338,214 @@ TEST_F(GuideAvatarEditorTest, AServiceWhoseNewestCatalogIsADevelopmentCatalogIsN
     ASSERT_TRUE(Open());
     EXPECT_EQ(std::vector<std::string>{"Avatar not available"}, Ui::labelsForTesting());
     EXPECT_EQ(Service::fakeAvatarTraffic(*service_).packReads, 0);
+}
+
+// ---- The editor driven by real devices: a keyboard, a controller and a mouse behind the platform.
+namespace {
+class EditorKeyboard final : public CNA::Platform::IPlatformKeyboard {
+public:
+    CNA::Platform::KeyboardSnapshot snapshot;
+    void Update() override {}
+    [[nodiscard]] const CNA::Platform::KeyboardSnapshot& GetSnapshot() const override { return snapshot; }
+    [[nodiscard]] bool HasKeyboard() const override { return true; }
+};
+class EditorDevices final : public CNA::Platform::Testing::PlatformTestDecorator {
+public:
+    EditorKeyboard keyboard;
+    CNA::Platform::Testing::CannedGamepad gamepad;
+    CNA::Platform::Testing::CannedMouse mouse;
+    [[nodiscard]] CNA::Platform::IPlatformKeyboard* GetKeyboard() override { return &keyboard; }
+    [[nodiscard]] CNA::Platform::IPlatformGamepad* GetGamepad() override { return &gamepad; }
+    [[nodiscard]] CNA::Platform::IPlatformMouse* GetMouse() override { return &mouse; }
+};
+
+class GuideAvatarEditorDeviceTest : public GuideAvatarEditorTest {
+protected:
+    // One Guide frame as a game draws it: the devices are read, the editor handles them and draws.
+    void Frame() {
+        Ui::draw(device_);
+        std::this_thread::sleep_for(std::chrono::milliseconds(4));
+    }
+    void Keys(std::vector<CNA::Platform::KeyCode> held) {
+        devices_.keyboard.snapshot.pressedKeys = std::move(held);
+        Frame();
+    }
+    void Press(CNA::Platform::KeyCode key) { Keys({key}); Keys({}); }
+    void Pad(std::uint32_t buttons, float rightStickX = 0.0f, float rightTrigger = 0.0f) {
+        CNA::Platform::GamepadSnapshot snapshot;
+        snapshot.connected = true;
+        snapshot.buttons = buttons;
+        snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::RightThumbstickX)] = rightStickX;
+        snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::RightTrigger)] = rightTrigger;
+        devices_.gamepad.SetPendingSnapshot(0, snapshot);
+        devices_.gamepad.Update();
+        Frame();
+    }
+    void Button(Microsoft::Xna::Framework::Input::Buttons button) { Pad(static_cast<std::uint32_t>(button)); Pad(0); }
+    void Mouse(Microsoft::Xna::Framework::Vector2 at, bool down, int wheel = 0) {
+        CNA::Platform::MouseSnapshot snapshot;
+        snapshot.x = static_cast<int>(at.X);
+        snapshot.y = static_cast<int>(at.Y);
+        snapshot.buttons = down ? std::uint8_t{1} : std::uint8_t{0};
+        snapshot.scrollY = wheel;
+        devices_.mouse.SetPending(snapshot);
+        devices_.mouse.Update();
+        Frame();
+    }
+    void Click(Microsoft::Xna::Framework::Vector2 at) { Mouse(at, false); Mouse(at, true); Mouse(at, false); }
+    static Microsoft::Xna::Framework::Vector2 Target(const std::string& name) {
+        for (const auto& [target, centre] : Ui::targetsForTesting())
+            if (target == name) return centre;
+        ADD_FAILURE() << "no mouse target " << name;
+        return {};
+    }
+    // The yaw and zoom of the editor's camera.
+    static std::pair<float, float> View() {
+        float yaw = 0, zoom = 0;
+        EXPECT_EQ(2, std::sscanf(Ui::stateForTesting().c_str(), "yaw=%f zoom=%f", &yaw, &zoom)) << Ui::stateForTesting();
+        return {yaw, zoom};
+    }
+    // The stored avatar's hairstyle as the Hair category's first row names it.
+    std::string WornHair() {
+        const auto stored = Stored();
+        const auto descriptor = Avatars::decode(std::vector<std::uint8_t>(stored.begin(), stored.end()));
+        const auto manifest = Avatars::embeddedManifest(descriptor->catalogVersion);
+        return "Hairstyle: " + manifest->item(descriptor->items[0], Avatars::AvatarItemSlot::Hair)->label;
+    }
+
+    // The device the editor's avatars draw on: theirs once ready, which a warm model cache makes
+    // happen within the test.
+    struct DispatcherDevice {
+        explicit DispatcherDevice(Microsoft::Xna::Framework::Graphics::GraphicsDevice* device) { Service::setDispatcherGraphicsDeviceForTesting(device); }
+        ~DispatcherDevice() { Service::setDispatcherGraphicsDeviceForTesting(nullptr); }
+    };
+    EditorDevices devices_;
+    CNA::Platform::Testing::ScopedCurrentPlatform scope_{devices_};
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice device_;
+    DispatcherDevice dispatcher_{&device_};
+};
+}
+
+TEST_F(GuideAvatarEditorDeviceTest, AKeyboardReachesEveryPartOfTheEditor) {
+    using CNA::Platform::KeyCode;
+    ASSERT_TRUE(Open());
+    Keys({});
+    for (int k = 0; k < 8; ++k) Press(KeyCode::Down);
+    ASSERT_EQ(8, Ui::focusForTesting());
+    // Enter opens Hair; Right tries on another style, Enter keeps it.
+    Press(KeyCode::Enter);
+    const auto worn = WornHair();
+    ASSERT_EQ(worn, Label(0));
+    Press(KeyCode::Right);
+    if (Label(0).find("(trying ") == std::string::npos) Press(KeyCode::Left);
+    ASSERT_NE(Label(0).find("(trying "), std::string::npos) << Label(0);
+    Press(KeyCode::Enter);
+    EXPECT_NE(worn, Label(0));
+    // Up from the first row is the category's Reset.
+    Press(KeyCode::Up);
+    ASSERT_EQ("Reset Hair", Label(0));
+    Press(KeyCode::Enter);
+    Press(KeyCode::Down);
+    EXPECT_EQ(worn, Label(0));
+    // C turns the avatar and + zooms in while held.
+    const auto [yaw, zoom] = View();
+    for (int frame = 0; frame < 12; ++frame) Keys({KeyCode::C, KeyCode::OemPlus});
+    Keys({});
+    EXPECT_GT(View().first, yaw);
+    EXPECT_LT(View().second, zoom);
+    // Escape back to the categories; X shuffles the category shown (its style and colour); Y
+    // randomizes; Escape asks to save.
+    const auto hair = Ui::labelsForTesting();
+    Press(KeyCode::Escape);
+    ASSERT_EQ(CategoryNames(), Ui::labelsForTesting());
+    Press(KeyCode::X);
+    Press(KeyCode::Enter);
+    EXPECT_NE(hair, Ui::labelsForTesting()) << "X shuffles the hair";
+    Press(KeyCode::Escape);
+    Press(KeyCode::Y);
+    Press(KeyCode::Escape);
+    EXPECT_EQ("avatarEditorLeave", Ui::currentScreenForTesting());
+}
+
+TEST_F(GuideAvatarEditorDeviceTest, AControllerReachesEveryPartOfTheEditor) {
+    using Microsoft::Xna::Framework::Input::Buttons;
+    ASSERT_TRUE(Open());
+    Pad(0);
+    for (int k = 0; k < 8; ++k) Button(Buttons::DPadDown);
+    ASSERT_EQ(8, Ui::focusForTesting());
+    Button(Buttons::A);
+    const auto worn = WornHair();
+    ASSERT_EQ(worn, Label(0));
+    Button(Buttons::DPadRight);
+    if (Label(0).find("(trying ") == std::string::npos) Button(Buttons::DPadLeft);
+    ASSERT_NE(Label(0).find("(trying "), std::string::npos) << Label(0);
+    Button(Buttons::A);
+    EXPECT_NE(worn, Label(0));
+    Button(Buttons::DPadUp);
+    ASSERT_EQ("Reset Hair", Label(0));
+    Button(Buttons::A);
+    Button(Buttons::DPadDown);
+    EXPECT_EQ(worn, Label(0));
+    // The right stick turns the avatar, the right trigger zooms in.
+    const auto [yaw, zoom] = View();
+    for (int frame = 0; frame < 12; ++frame) Pad(0, 1.0f, 1.0f);
+    Pad(0);
+    EXPECT_GT(View().first, yaw);
+    EXPECT_LT(View().second, zoom);
+    // RB turns the category page; B goes back; Y randomizes; B asks to save.
+    Button(Buttons::B);
+    ASSERT_EQ(CategoryNames(), Ui::labelsForTesting());
+    Button(Buttons::RightShoulder);
+    EXPECT_EQ(9, Ui::focusForTesting());
+    Button(Buttons::Y);
+    Button(Buttons::B);
+    EXPECT_EQ("avatarEditorLeave", Ui::currentScreenForTesting());
+}
+
+TEST_F(GuideAvatarEditorDeviceTest, AMouseReachesEveryPartOfTheEditor) {
+    ASSERT_TRUE(Open());
+    Mouse({1, 1}, false);
+    // A category on the rail, then cards of its first row.
+    Click(Target("category 8"));
+    ASSERT_EQ(8, Ui::focusForTesting());
+    Frame();
+    // Two cards of the style strip (it shows the worn style's neighbourhood).
+    std::vector<std::string> cards;
+    for (const auto& [name, centre] : Ui::targetsForTesting())
+        if (name.starts_with("option 0 ")) cards.push_back(name);
+    ASSERT_GE(cards.size(), 2u);
+    Click(Target(cards[0]));
+    const auto first = Label(0);
+    ASSERT_TRUE(first.starts_with("Hairstyle: ")) << first;
+    Frame();
+    Click(Target(cards[1]));
+    EXPECT_NE(first, Label(0));
+    // The category's Reset button.
+    Frame();
+    Click(Target("reset"));
+    EXPECT_EQ(WornHair(), Label(0));
+    // A slider, clicked left of its middle.
+    Frame();
+    Click(Target("category 0"));
+    Frame();
+    std::string slider;
+    for (const auto& [name, centre] : Ui::targetsForTesting())
+        if (name.starts_with("slider ") && slider.empty()) slider = name;
+    ASSERT_FALSE(slider.empty());
+    const auto row = static_cast<std::size_t>(std::stoi(slider.substr(7)));
+    const auto at = Target(slider);
+    Click({at.X + 30.0f, at.Y});
+    const auto right = Label(row);
+    Frame();
+    Click({at.X - 60.0f, at.Y});
+    EXPECT_NE(right, Label(row));
+    // The stage: the wheel zooms, a drag turns the avatar.
+    const auto stage = Target("stage");
+    const auto [yaw, zoom] = View();
+    Mouse(stage, false, 120);
+    EXPECT_LT(View().second, zoom);
+    Mouse(stage, true, 120);
+    Mouse({stage.X + 80.0f, stage.Y}, true, 120);
+    Mouse({stage.X + 80.0f, stage.Y}, false, 120);
+    EXPECT_NE(View().first, yaw);
 }

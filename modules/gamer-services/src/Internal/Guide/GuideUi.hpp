@@ -5,6 +5,7 @@
 // screen reads the service asynchronously, so the game never waits on the network to draw.
 #include "Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -147,4 +148,8 @@ void frameForTesting();
 void sendForTesting(Command command);
 /** @brief Tests: acts as if an item was clicked. @param index Item. */
 void clickForTesting(int index);
+/** @brief Tests: where the top screen's mouse targets are, as last drawn: name and centre. @return Targets. */
+std::vector<std::pair<std::string,Microsoft::Xna::Framework::Vector2>> targetsForTesting();
+/** @brief Tests: the top screen's state not shown as labels. @return Text. */
+std::string stateForTesting();
 }
