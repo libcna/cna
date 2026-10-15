@@ -218,6 +218,11 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
         (args.out / name).write_bytes(data)
+    # Files of an earlier generation that this one no longer has (a catalog directory holds only
+    # the generator's output).
+    for stale in sorted(p for p in args.out.iterdir() if p.is_file() and p.name not in files and
+                        p.suffix in (".glb", ".png", ".json")):
+        stale.unlink()
     print("wrote %d files (%d bytes) to %s" % (len(files), sum(len(d) for d in files.values()), args.out))
     return 0
 

@@ -68,6 +68,43 @@ def hair_clump():
     return image(128, 64, fn)
 
 
+def image_rgba(width, height, fn):
+    """PNG from fn(u, v) -> (r, g, b, a) in 0..1 (straight alpha)."""
+    pixels = bytearray()
+    for y in range(height):
+        v = (y + 0.5) / height
+        for x in range(width):
+            u = (x + 0.5) / width
+            pixels += bytes(int(round(255 * clamp(k, 0.0, 1.0))) for k in fn(u, v))
+    return png.encode_rgba(width, height, pixels)
+
+
+def stubble(density):
+    """Short hairs as soft dots (white, tinted by the hair colour), fading at the beard's edge
+    (v runs from the cheeks down over the jaw, u around the face)."""
+    def fn(u, v):
+        grain = fbm(u * 160.0, v * 60.0, 41, 2, wrap_x=160)
+        # Fades out toward the top edge of the beard area (v near 0).
+        edge = smoothstep(0.0, 0.35, v)
+        return (1.0, 1.0, 1.0, density * edge * (0.42 + 0.30 * (grain - 0.5)))
+    return image_rgba(256, 64, fn)
+
+
+def hair_coil():
+    """Tightly coiled hair: small round curls packed over the surface."""
+    def fn(u, v):
+        cx, cy = u * 40.0, v * 20.0
+        best = 1.0
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                ix, iy = math.floor(cx) + dx, math.floor(cy) + dy
+                px = ix + 0.5 + 0.35 * (_hash(ix % 40, iy, 31) - 0.5)
+                py = iy + 0.5 + 0.35 * (_hash(ix % 40, iy, 37) - 0.5)
+                best = min(best, math.hypot(cx - px, cy - py))
+        return 0.62 + 0.36 * smoothstep(0.75, 0.15, best)
+    return image(128, 64, fn)
+
+
 def hair_cap():
     """u around the head, v from crown to hairline: fine strands running down."""
     def fn(u, v):

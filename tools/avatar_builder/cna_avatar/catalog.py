@@ -32,6 +32,12 @@ def texture_bytes(kind):
         return textures.hair_clump()
     if kind == "hair_cap":
         return textures.hair_cap()
+    if kind == "hair_coil":
+        return textures.hair_coil()
+    if kind == "stubble":
+        return textures.stubble(0.55)
+    if kind == "stubble_heavy":
+        return textures.stubble(0.85)
     if kind == "skin_head":
         return textures.skin_head()
     return textures.cloth(kind)
@@ -88,11 +94,25 @@ ITEMS = [
     (100, "hat", "hat_cap", 1.0, 1.0), (101, "hat", "hat_beanie", 1.0, 1.0), (102, "hat", "hat_bucket", 1.0, 1.0),
     (103, "hat", "hat_fedora", 0.8, 1.0), (104, "hat", "hat_headband", 1.0, 0.3),
 ]
-# Personal features: facial hair (format 2) and ear shapes (format 3).
+# Revision 2 hairstyles (format 3): (name, female weight, male weight).
+REVISED_HAIR = [
+    ("hair_crew", 0.2, 1.3), ("hair_fade", 0.2, 1.2), ("hair_shaved", 0.1, 0.5), ("hair_balding", 0.0, 0.35),
+    ("hair_quiff", 0.2, 0.9), ("hair_slick", 0.3, 0.7), ("hair_crop", 0.5, 1.0), ("hair_curlyshort", 0.6, 1.0),
+    ("hair_afro", 0.6, 0.7), ("hair_twists", 0.4, 0.6), ("hair_shag", 0.8, 0.5), ("hair_wavy", 1.0, 0.4),
+    ("hair_bobbangs", 1.2, 0.1), ("hair_lob", 1.2, 0.2), ("hair_curtain", 1.0, 0.5), ("hair_mohawk", 0.1, 0.25),
+    ("hair_topknot", 0.3, 0.5), ("hair_halfup", 1.0, 0.1), ("hair_longbangs", 1.2, 0.1), ("hair_longwavy", 1.2, 0.15),
+    ("hair_layered", 1.1, 0.1), ("hair_longcurly", 1.0, 0.1), ("hair_braid", 0.9, 0.05), ("hair_lowponytail", 1.0, 0.2),
+    ("hair_highponytail", 1.0, 0.05), ("hair_sideponytail", 0.7, 0.05), ("hair_spacebuns", 0.5, 0.05),
+]
+ITEMS += [(200 + k, "hair", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_HAIR)]
+# Personal features: facial hair (format 2, and format 3 for revision 2's) and ear shapes (format 3).
+REVISED_FACIAL = [("facial_stubble", 1.4), ("facial_heavystubble", 1.0), ("facial_shortbeard", 1.0), ("facial_longbeard", 0.4),
+                  ("facial_horseshoe", 0.4), ("facial_handlebar", 0.2), ("facial_soulpatch", 0.3), ("facial_chinbeard", 0.4),
+                  ("facial_vandyke", 0.5), ("facial_sideburns", 0.5), ("facial_muttonchops", 0.2), ("facial_pencil", 0.2)]
 FEATURE_ITEMS = [
     (120, "facialHair", "facial_mustache", 0.0, 1.0), (121, "facialHair", "facial_goatee", 0.0, 1.0),
     (122, "facialHair", "facial_beard", 0.0, 1.0), (123, "facialHair", "facial_chinstrap", 0.0, 1.0),
-] + [(500 + k, "ears", "ears_" + shape.lower(), 1.0, 1.0) for k, shape in enumerate(
+] + [(480 + k, "facialHair", name, 0.0, weight, {"format": 3}) for k, (name, weight) in enumerate(REVISED_FACIAL)] + [(500 + k, "ears", "ears_" + shape.lower(), 1.0, 1.0) for k, shape in enumerate(
     ("round", "small", "large", "longLobe", "attached", "protruding"))]
 EAR_SHAPE_OF = {"ears_" + shape.lower(): shape for shape in ("round", "small", "large", "longLobe", "attached", "protruding")}
 
@@ -141,7 +161,8 @@ def item_glb(body_type, item_id, slot, name):
         if scalp.positions:
             parts.append((scalp, material(name + "_scalp", "hair", "hair_cap", specular=HAIR_SPECULAR)))
         if locks.positions:
-            parts.append((locks, material(name, "hair", "hair_clump", specular=HAIR_SPECULAR)))
+            texture = "hair_coil" if name in hair.COILED else "hair_clump"
+            parts.append((locks, material(name, "hair", texture, specular=HAIR_SPECULAR * (0.5 if texture == "hair_coil" else 1.0))))
     elif slot == "ears":
         parts.append((head.ear_meshes(body_type, EAR_SHAPE_OF[name]), builder.add_material(name, "skin")))
     else:
@@ -151,7 +172,7 @@ def item_glb(body_type, item_id, slot, name):
             mesh, tint, kind, colour = part[:4]
             extras = part[4] if len(part) > 4 else None
             texture = "hair_clump" if kind == "strands" else kind
-            specular = 2.5 if slot == "glasses" else CLOTH_SPECULAR.get(kind, 1.0)
+            specular = 2.5 if slot == "glasses" else 0.2 if kind.startswith("stubble") else CLOTH_SPECULAR.get(kind, 1.0)
             parts.append((mesh, material("%s_%d" % (name, index), tint, texture, colour, specular, extras)))
     builder.add_skinned_mesh(name, parts, skin_index)
     return builder.build(), used

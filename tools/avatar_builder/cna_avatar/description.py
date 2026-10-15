@@ -21,6 +21,16 @@ FORMAT_TWO_FACE = 16
 NEUTRAL = 128
 # The baseline avatar catalog (BaseCatalogVersion): catalogs below it were development catalogs.
 BASE_CATALOG_VERSION = 3
+# Item id -> lowest description format naming it, for descriptors built without their own table
+# (set from the catalog by the review tools: use_catalog).
+ITEM_FORMATS = {}
+
+
+def use_catalog(manifest):
+    """Descriptors created from now on know which of this catalog's items need format 3."""
+    ITEM_FORMATS.clear()
+    ITEM_FORMATS.update({e["id"]: e.get("format", 1) for key in ("items", "featureItems", "faceStyles")
+                         for e in manifest.get(key, [])})
 
 
 class Descriptor:
@@ -45,7 +55,7 @@ class Descriptor:
         self.makeup = dict(makeup or {})
         self.proportion = proportion
         # Item id -> lowest format naming it (the catalog's "format"); ids absent are format 1.
-        self.item_formats = dict(item_formats or {})
+        self.item_formats = dict(item_formats if item_formats is not None else ITEM_FORMATS)
 
     def extended(self):
         return bool(self.eyebrows or self.ears or any(self.accessories.values()) or any(self.sides.values()) or

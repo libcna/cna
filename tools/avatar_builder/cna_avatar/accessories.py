@@ -263,74 +263,135 @@ def _face_shell(body_type, region, lift, rows=10, cols=28):
     return grid
 
 
+def _beard_region(my, full, chin_only=False, sideburns=False, mutton=False, chin_strap=False):
+    """region(x, y, z) in head-local male-scale metres: 1 where a beard of this shape grows."""
+    def region(x, y, z):
+        ax = abs(x)
+        # The cheek line runs from the sideburn in front of the ear (high) to beside the mouth (low);
+        # nothing wraps behind the ears.
+        cheek_y = -0.016 - 0.052 * smoothstep(0.000, 0.075, z)
+        under = smoothstep(cheek_y + 0.010, cheek_y - 0.020, y) * smoothstep(-0.050, -0.018, z)
+        if sideburns or mutton:
+            # Only in front of the ears, down to the jaw (mutton chops spread onto the cheeks).
+            reach = 0.040 if mutton else 0.012
+            burn = smoothstep(reach + 0.012, reach - 0.004, z) * smoothstep(-0.040, -0.020, z)
+            return under * burn * smoothstep(-0.10 if mutton else -0.07, -0.05 if mutton else -0.045, -abs(y + 0.03))
+        if chin_only:
+            return smoothstep(0.040, 0.026, ax) * smoothstep(my - 0.020, my - 0.034, y) * smoothstep(-0.02, 0.02, z)
+        if full:
+            chin = smoothstep(my - 0.024, my - 0.046, y) if ax < 0.040 else 1.0
+            return under * chin
+        if chin_strap:
+            edge = smoothstep(-0.100, -0.122, y) + smoothstep(0.040, 0.010, z)
+            return under * min(1.0, edge)
+        return under
+    return region
+
+
+def _beard_shell(body_type, region, thick, under=0.004):
+    s = head.SCALE[body_type]
+    c = head.centre(body_type)
+    grid = []
+    for r in range(20):
+        theta = PI * (0.48 + 0.40 * r / 19)
+        row = []
+        for k in range(47):
+            phi = -0.64 * PI + 1.28 * PI * k / 46
+            local = head.local_point(body_type, theta, phi)
+            inside = region(local[0] / s, local[1] / s, local[2] / s)
+            # Outside the region the shell dives under the skin, so its edge grows out of it.
+            row.append(head.point(body_type, theta, phi, thick * inside - under * s * (1.0 - inside)))
+        grid.append(row)
+    shell = Mesh()
+    shell.patch_origin = c
+    return shell.grid(grid, HEADW, wrap=False)
+
+
 def facial_hair(body_type, style):
     s = head.SCALE[body_type]
     a = head.anchors(body_type)
     c = head.centre(body_type)
     locks = Mesh()
     mouth = sub(a["mouth"], c)
+    my = mouth[1] / s
 
-    def mustache():
+    def mustache(count=3, length=0.022, thick=0.011, droop=0.0, curl=0.0, spread=0.010):
         m = Mesh()
         for side in (1.0, -1.0):
-            for k in range(3):
-                x0 = side * (0.004 + 0.010 * k) * s
+            for k in range(count):
+                x0 = side * (0.004 + spread * k) * s
                 start = head.front_point(body_type, x0, mouth[1] + 0.027 * s, 0.004 * s)[0]
-                end = head.front_point(body_type, x0 + side * 0.022 * s, mouth[1] + 0.006 * s - 0.004 * k * s, 0.004 * s)[0]
+                end = head.front_point(body_type, x0 + side * length * s, mouth[1] + (0.006 - droop - 0.004 * k) * s, 0.004 * s)[0]
+                if curl:
+                    end = add(end, (side * curl * s * 0.5, curl * s, 0.002 * s))
                 mid = add(lerp(start, end, 0.5), (0.0, 0.003 * s, 0.006 * s))
-                m.append(hair.lock(body_type, hair._catmull([start, mid, end], 4), hair.taper(0.011 * s, 0.2),
-                                   hair.taper(0.006 * s, 0.3)))
+                m.append(hair.lock(body_type, hair._catmull([start, mid, end], 4), hair.taper(thick * s, 0.2),
+                                   hair.taper(thick * 0.55 * s, 0.3)))
         return m
 
-    if style == "facial_mustache":
-        locks.append(mustache())
-    elif style == "facial_goatee":
-        locks.append(mustache())
-        for k in range(5):
-            x = (k - 2) * 0.010 * s
-            start = head.front_point(body_type, x, mouth[1] - 0.030 * s, 0.003 * s)[0]
-            end = head.front_point(body_type, x * 0.7, mouth[1] - 0.065 * s, 0.008 * s)[0]
-            end = add(end, (0.0, -0.012 * s, 0.006 * s))
-            locks.append(hair.lock(body_type, hair._catmull([start, lerp(start, end, 0.5), end], 4), hair.taper(0.012 * s, 0.25),
-                                   hair.taper(0.007 * s, 0.3)))
-    elif style in ("facial_beard", "facial_chinstrap"):
-        full = style == "facial_beard"
-        my = mouth[1] / s
+    def chin_locks(count, top, bottom, width, length_down, spacing=0.010):
+        m = Mesh()
+        for k in range(count):
+            x = (k - (count - 1) / 2.0) * spacing * s
+            start = head.front_point(body_type, x, mouth[1] - top * s, 0.003 * s)[0]
+            end = head.front_point(body_type, x * 0.7, mouth[1] - bottom * s, 0.008 * s)[0]
+            end = add(end, (0.0, -length_down * s, 0.006 * s))
+            m.append(hair.lock(body_type, hair._catmull([start, lerp(start, end, 0.5), end], 4), hair.taper(width * s, 0.25),
+                               hair.taper(width * 0.58 * s, 0.3)))
+        return m
+
+    parts = []
+    if style in ("facial_stubble", "facial_heavystubble"):
+        # Stubble is a translucent shading over the skin, not a shell.
+        beard = _beard_region(my, True)
 
         def region(x, y, z):
-            ax = abs(x)
-            # The cheek line runs from the sideburn in front of the ear (high) to beside the
-            # mouth (low); nothing wraps behind the ears.
-            cheek_y = 0.004 - 0.066 * smoothstep(0.010, 0.080, z)
-            under = smoothstep(cheek_y + 0.012, cheek_y - 0.022, y) * smoothstep(-0.050, -0.018, z)
-            if full:
-                chin = smoothstep(my - 0.024, my - 0.046, y) if ax < 0.040 else 1.0
-                return under * chin
-            edge = smoothstep(-0.100, -0.122, y) + smoothstep(0.040, 0.010, z)
-            return under * min(1.0, edge)
-        thick = (0.012 if full else 0.006) * s
-        grid = []
-        for r in range(27):
-            theta = PI * (0.48 + 0.40 * r / 26)
-            row = []
-            for k in range(65):
-                phi = -0.64 * PI + 1.28 * PI * k / 64
-                local = head.local_point(body_type, theta, phi)
-                inside = region(local[0] / s, local[1] / s, local[2] / s)
-                # Outside the region the shell dives under the skin, so its edge grows out of it.
-                row.append(head.point(body_type, theta, phi, thick * inside - 0.004 * s * (1.0 - inside)))
-            grid.append(row)
-        shell = Mesh()
-        shell.patch_origin = c
-        locks.append(shell.grid(grid, HEADW, wrap=False))
-        if full:
+            lip = smoothstep(0.034, 0.022, abs(x)) * smoothstep(my + 0.002, my + 0.010, y) * smoothstep(my + 0.034, my + 0.024, y)
+            return max(beard(x, y, z), lip * smoothstep(0.02, 0.06, z))
+        shell = _beard_shell(body_type, region, 0.0009 * s, under=0.0)
+        texture = "stubble" if style == "facial_stubble" else "stubble_heavy"
+        return [(shell, "hair", texture, (1.0, 1.0, 1.0), {"cnaBlend": "alpha"})]
+    if style == "facial_mustache":
+        locks.append(mustache())
+    elif style == "facial_pencil":
+        locks.append(mustache(count=2, length=0.024, thick=0.0055, spread=0.012))
+    elif style == "facial_handlebar":
+        locks.append(mustache(count=3, length=0.030, thick=0.012, curl=0.010))
+    elif style == "facial_horseshoe":
+        locks.append(mustache(count=3, length=0.024, thick=0.011, droop=0.004))
+        for side in (1.0, -1.0):
+            top = head.front_point(body_type, side * 0.034 * s, mouth[1] + 0.004 * s, 0.005 * s)[0]
+            bottom = head.front_point(body_type, side * 0.036 * s, mouth[1] - 0.046 * s, 0.006 * s)[0]
+            locks.append(hair.lock(body_type, hair._catmull([top, lerp(top, bottom, 0.5), bottom], 4), hair.taper(0.011 * s, 0.5),
+                                   hair.taper(0.007 * s, 0.5)))
+    elif style == "facial_goatee":
+        locks.append(mustache())
+        locks.append(chin_locks(5, 0.030, 0.065, 0.012, 0.012))
+    elif style == "facial_vandyke":
+        locks.append(mustache(count=2, length=0.026, thick=0.010, curl=0.004))
+        locks.append(chin_locks(4, 0.034, 0.070, 0.011, 0.018, spacing=0.009))
+    elif style == "facial_soulpatch":
+        locks.append(chin_locks(3, 0.022, 0.044, 0.008, 0.002, spacing=0.006))
+    elif style == "facial_chinbeard":
+        locks.append(_beard_shell(body_type, _beard_region(my, False, chin_only=True), 0.010 * s))
+        locks.append(chin_locks(5, 0.040, 0.075, 0.014, 0.010))
+    elif style in ("facial_beard", "facial_chinstrap", "facial_shortbeard", "facial_longbeard"):
+        full = style != "facial_chinstrap"
+        thick = {"facial_beard": 0.012, "facial_chinstrap": 0.006, "facial_shortbeard": 0.007, "facial_longbeard": 0.014}[style]
+        locks.append(_beard_shell(body_type, _beard_region(my, full, chin_strap=not full), thick * s))
+        if style == "facial_beard":
             locks.append(mustache())
-            for k in range(7):
-                x = (k - 3) * 0.013 * s
-                start = head.front_point(body_type, x, mouth[1] - 0.040 * s, 0.010 * s)[0]
-                end = add(head.front_point(body_type, x * 0.8, mouth[1] - 0.080 * s, 0.012 * s)[0], (0.0, -0.014 * s, 0.004 * s))
-                locks.append(hair.lock(body_type, hair._catmull([start, lerp(start, end, 0.5), end], 4), hair.taper(0.016 * s, 0.25),
-                                       hair.taper(0.009 * s, 0.3)))
+            locks.append(chin_locks(7, 0.040, 0.080, 0.016, 0.014, spacing=0.013))
+        elif style == "facial_shortbeard":
+            locks.append(mustache(thick=0.009))
+        elif style == "facial_longbeard":
+            locks.append(mustache(thick=0.012))
+            locks.append(chin_locks(8, 0.040, 0.090, 0.020, 0.060, spacing=0.012))
+    elif style in ("facial_sideburns", "facial_muttonchops"):
+        mutton = style == "facial_muttonchops"
+        locks.append(_beard_shell(body_type, _beard_region(my, False, sideburns=not mutton, mutton=mutton), 0.008 * s))
+        if mutton:
+            locks.append(mustache(thick=0.010))
     else:
         raise ValueError(style)
     return [(locks, "hair", "strands", (1.0, 1.0, 1.0))]

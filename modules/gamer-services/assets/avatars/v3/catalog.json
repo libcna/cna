@@ -178,43 +178,163 @@
   },
   {
    "name": "facial_beard.female.glb",
-   "sha256": "d75c759f155109a28750a12ab50975ca281526f9765b05047e39d9b762cbd168",
-   "size": 128224
+   "sha256": "b55bb93811797ab1c397b468ed2b8d05015dbcd45eefd587fb058ecac8b66bbc",
+   "size": 92660
   },
   {
    "name": "facial_beard.male.glb",
-   "sha256": "96e197b77e6abc86bc2edbd63e2240f7e4ccad9e9ef6ae58d5921d2859b58fbc",
-   "size": 128212
+   "sha256": "b8247bbb35bc23549477920c1caf0d8a9f9f33b010804d884f914ea525dec17b",
+   "size": 92648
+  },
+  {
+   "name": "facial_chinbeard.female.glb",
+   "sha256": "900a4167b9b6063208fec78f39078ef6cc5d288acf8dbe200c9bff46cbea3440",
+   "size": 67780
+  },
+  {
+   "name": "facial_chinbeard.male.glb",
+   "sha256": "3c6a6ec27ea003f88127c42ef3741fb90c063ff4977fe65a349e7d89ba8f450c",
+   "size": 67764
   },
   {
    "name": "facial_chinstrap.female.glb",
-   "sha256": "92d012a9785c59610ef046f51cd6a6d915073e6aa2672c54d9967fbb747d19a6",
-   "size": 87780
+   "sha256": "07b5f864a59bf3b644e0420e2ce6785af59304597fdc641e8f847ecae29afee8",
+   "size": 52212
   },
   {
    "name": "facial_chinstrap.male.glb",
-   "sha256": "f9d7084a411d459291a4a4fa1d2fe9b678a6f6a7721ad8c3212ceb31d7e3637d",
-   "size": 87768
+   "sha256": "df499f178c52d0bf568d33eb78abc861a9185e50fed6b94b90fb23f096a5712e",
+   "size": 52200
   },
   {
    "name": "facial_goatee.female.glb",
-   "sha256": "090f15de8e6fda4f937229f9af5b921507743acf11d5891998f0092b45a37753",
-   "size": 45860
+   "sha256": "40b825c2d337283b7dfca139c6133c09a7ecdb06bc9c79f8259ae452c6158023",
+   "size": 45864
   },
   {
    "name": "facial_goatee.male.glb",
-   "sha256": "47d3016159cf0f154ccbbfa5febde86b6889b0ccad443a668e1eb12c48e4250f",
-   "size": 45848
+   "sha256": "6ce3ab30a3da7ba06616ad968d6a66426a60fce2a6d242131cc8a88e575aa5d1",
+   "size": 45852
+  },
+  {
+   "name": "facial_handlebar.female.glb",
+   "sha256": "113d5883a266deb90b6efd95dd51549b82a42dfa1e736e2aa49639f11de7c67f",
+   "size": 30316
+  },
+  {
+   "name": "facial_handlebar.male.glb",
+   "sha256": "a7136bae9501f984ca36844188f631e8f8c2a4991ea8edffd734d1818b82d9ee",
+   "size": 30300
+  },
+  {
+   "name": "facial_heavystubble.female.glb",
+   "sha256": "1446ec9d6ab16b0e34ed7c9b2763b7bb7c732871e03f5ff2141fece80985d4c7",
+   "size": 52248
+  },
+  {
+   "name": "facial_heavystubble.male.glb",
+   "sha256": "ae43d6ca8bcc382a8a19b46266548640d782ebf350c25dec4dd76a1a39aa7dfd",
+   "size": 52236
+  },
+  {
+   "name": "facial_horseshoe.female.glb",
+   "sha256": "d143e243784aa17a3e70b4bcca752860384d9f5703b4bac00fcd52c600f455e5",
+   "size": 36540
+  },
+  {
+   "name": "facial_horseshoe.male.glb",
+   "sha256": "7e81ce8a9576ac1394c7378c205503339930b65d85dcec2fdcb27ced9f1ee149",
+   "size": 36528
+  },
+  {
+   "name": "facial_longbeard.female.glb",
+   "sha256": "be6dae6607f47833d554642b84015b9ef68aa833e484f216401fa033ec601ac7",
+   "size": 95788
+  },
+  {
+   "name": "facial_longbeard.male.glb",
+   "sha256": "0b67fae7a343b702bf0ada99a7d4d97863bd38a820f05b4ffb7c5b52384881f5",
+   "size": 95776
   },
   {
    "name": "facial_mustache.female.glb",
-   "sha256": "4ce0e04e658131cb77337bbde2e74eaddb78a9d84274cd21cf6c9e14d10e414c",
+   "sha256": "a7e50c214346a402c4f46270328531851c3feebc1ae5544dd716d2b3e80adbbe",
    "size": 30308
   },
   {
    "name": "facial_mustache.male.glb",
-   "sha256": "119feffec8bd6c23048ed40625af60a3b4ec70d02f40b053aa80751844025941",
+   "sha256": "284c4ac80843c3ea545fe14e69bff1a8a6985a8c8ca67916f204ab496a0bfac5",
    "size": 30296
+  },
+  {
+   "name": "facial_muttonchops.female.glb",
+   "sha256": "b0790a157452878ad14825be2c7a634f5bec4381f04f1dafe832df1c44c7f364",
+   "size": 70896
+  },
+  {
+   "name": "facial_muttonchops.male.glb",
+   "sha256": "6d2d25b8b54fc0e0418a66f4c0164596b98d88493533a57dd5ca53fb4479a4ec",
+   "size": 70884
+  },
+  {
+   "name": "facial_pencil.female.glb",
+   "sha256": "8aab54769d23ae280128249c06a24121ce75bc69fad55cc0de8bf88f06258598",
+   "size": 24076
+  },
+  {
+   "name": "facial_pencil.male.glb",
+   "sha256": "2ee548a082f686a4e69a7a189d84750a45596f27ead953d4d57194589fa463e2",
+   "size": 24064
+  },
+  {
+   "name": "facial_shortbeard.female.glb",
+   "sha256": "6c71bc1b3f9905211818ea78a05a33dd325206841ee11bdcf5550d1bf9d2469c",
+   "size": 70892
+  },
+  {
+   "name": "facial_shortbeard.male.glb",
+   "sha256": "ed94ed7a9d4c2f9c76e8017a5540e71599861735d0c6ee27df5c7e17dba3f90a",
+   "size": 70880
+  },
+  {
+   "name": "facial_sideburns.female.glb",
+   "sha256": "69d94a0a6c3f7783d064a808cfd8ee80e54516736e8d2ea1377ce5e0e2cd9e92",
+   "size": 52212
+  },
+  {
+   "name": "facial_sideburns.male.glb",
+   "sha256": "01e755d54798d4ba3255e3ada4164be667b4194cb71856841d001afe06c29057",
+   "size": 52196
+  },
+  {
+   "name": "facial_soulpatch.female.glb",
+   "sha256": "1c222aa4d247bb08594878e7e9523030d22443fa418acadab46e7ec30fc789f3",
+   "size": 20972
+  },
+  {
+   "name": "facial_soulpatch.male.glb",
+   "sha256": "5add195e4b21a3f3870219949152f4df212c0d14c8fb158fcffa4ab7a2ab9890",
+   "size": 20960
+  },
+  {
+   "name": "facial_stubble.female.glb",
+   "sha256": "93b87e0760de6f478c518f3ac296a67b40f0bf3a83c95f4c5850bd796e1d11e8",
+   "size": 52220
+  },
+  {
+   "name": "facial_stubble.male.glb",
+   "sha256": "db9220b908f99c1e46345a5586fc02a825103c89074fa0b028dac594e63c6263",
+   "size": 52208
+  },
+  {
+   "name": "facial_vandyke.female.glb",
+   "sha256": "fe7c2b26ba6950222b0f2e8d13836716e5b42e365bc1383f5bf2db6d1843313b",
+   "size": 36532
+  },
+  {
+   "name": "facial_vandyke.male.glb",
+   "sha256": "9bdeb16d30d273f7efffb7491fb8785d584bf518f66e12be361f4b89aa0764f1",
+   "size": 36516
   },
   {
    "name": "glasses_aviator.female.glb",
@@ -257,104 +377,374 @@
    "size": 31900
   },
   {
+   "name": "hair_afro.female.glb",
+   "sha256": "4a7c5f6c0055c17ef82b9c963c60ca4ac6ba38d95bf5927c74c39f92b45f74f4",
+   "size": 97172
+  },
+  {
+   "name": "hair_afro.male.glb",
+   "sha256": "eb0ce374466d06759cb16c34d8a14cd29c059c2129b13dff1ecaa08addadb27a",
+   "size": 97164
+  },
+  {
+   "name": "hair_balding.female.glb",
+   "sha256": "153d077d1aa73af2964177dc41aa85d300530911d94928d2c86fa279cef305a4",
+   "size": 25732
+  },
+  {
+   "name": "hair_balding.male.glb",
+   "sha256": "39a103e38689867715d5d6a63e325bf3348f98511f4856b37814bcde17d274ac",
+   "size": 25724
+  },
+  {
    "name": "hair_bob.female.glb",
-   "sha256": "00acb6f1e8ff72b3ff700468dd1627e39119ecbcaab28d7d95f6ffaa972051c8",
-   "size": 209792
+   "sha256": "772382468e6fca4db33f4e26350c9dedc0a30687cac65cffdd78f9ff3f416b59",
+   "size": 194568
   },
   {
    "name": "hair_bob.male.glb",
-   "sha256": "211fec110bc9e5230c3c6f199bac6786c3d30d0f1a030b719aef1f3d5b5ab123",
-   "size": 209780
+   "sha256": "46a5f56915e315abff18fbe9de658c035395b340ef6572770d5d39857f8c441d",
+   "size": 194556
+  },
+  {
+   "name": "hair_bobbangs.female.glb",
+   "sha256": "bfebea64b4df29530785546e14598393710291b0b49c5845d0bb83b2fd1e6fc4",
+   "size": 167164
+  },
+  {
+   "name": "hair_bobbangs.male.glb",
+   "sha256": "5f4f56ebd49216eb772a594e53874bc69dc96f5c12068f7071a52c92d785f29f",
+   "size": 167148
+  },
+  {
+   "name": "hair_braid.female.glb",
+   "sha256": "7a6a62e77fecc47454809672d7d92a8b356354ecccb485bec83965bfad05f371",
+   "size": 127372
+  },
+  {
+   "name": "hair_braid.male.glb",
+   "sha256": "e5e3cc1ad43cfe99d66adf9feec8e1bffbb250e2dbde9a7741ea431c879514b0",
+   "size": 127360
   },
   {
    "name": "hair_bun.female.glb",
-   "sha256": "41c286142ade7f268ed39267fc05189e4487a3a4b81a0d267acd10cf9428f51b",
-   "size": 128452
+   "sha256": "726d2cc312328686e6f23608aea0bf2d047dbcffd4215f2bbbf307e853619d1f",
+   "size": 113224
   },
   {
    "name": "hair_bun.male.glb",
-   "sha256": "703d421d410454f7758d17e279217e97189e23230d74922faba4c8ca9a0f21f7",
-   "size": 128440
+   "sha256": "4079b2bf2c0859e8eea9f2c0dcb4773c9b6590c13d50785f8d7354a7b5fd8ac3",
+   "size": 113212
   },
   {
    "name": "hair_buzz.female.glb",
-   "sha256": "0caa6fd0bae01f63bd9b96ce42c81b3af303dc9706fa606371e1aadb388a8375",
-   "size": 47192
+   "sha256": "be0263832fcf8125f2e7723f635de36c53cacdc09b9905eb41c99aa8377521ce",
+   "size": 31968
   },
   {
    "name": "hair_buzz.male.glb",
-   "sha256": "7d6f979faca1ab01157fef399595c162c1ff67a6afc9b8684b236549c9e881a4",
-   "size": 47180
+   "sha256": "4902d394a54fc893ae516f3cebe86b890546b3cd916e5ec0193fd92549fc87b5",
+   "size": 31956
+  },
+  {
+   "name": "hair_crew.female.glb",
+   "sha256": "2399c6ca514c18abc32c26eb35930f959915718cacc396eca7020e679ab473c8",
+   "size": 139136
+  },
+  {
+   "name": "hair_crew.male.glb",
+   "sha256": "088626df26590400102d2b3f9fc61597ea960339f6ed87f2ea990777e341201b",
+   "size": 139120
+  },
+  {
+   "name": "hair_crop.female.glb",
+   "sha256": "7b313055f72895352d5ecc54169d0ff0ed1cf1f20340f1f70110c4d77557b40d",
+   "size": 150248
+  },
+  {
+   "name": "hair_crop.male.glb",
+   "sha256": "14a0675830c86b998a4c14e859b53a3e22638191c5dcd3fe0bbd87660e84a1b2",
+   "size": 150236
   },
   {
    "name": "hair_curly.female.glb",
-   "sha256": "95bc6cc1a9642fff6bcf87c38288a26482635055a9cb99486e08a2dc36a577d6",
-   "size": 623932
+   "sha256": "dc583c85b28247e588d40fb8a9b0ce6bb2cd125b574c2a1a1f7b1774e0bb475f",
+   "size": 474308
   },
   {
    "name": "hair_curly.male.glb",
-   "sha256": "7e4b470657294db18b93a4f88c80390fab7de9b9a9392f42750c6c5bb2034b42",
-   "size": 623920
+   "sha256": "449eba4e322eca93d741b52a70eb2f1e733266fa253c1c99e90915322690310b",
+   "size": 474296
+  },
+  {
+   "name": "hair_curlyshort.female.glb",
+   "sha256": "f07c78ca40b096c9594e4f07b218324c78d8ea2d0834c4e51572bf42d4e6b6de",
+   "size": 209724
+  },
+  {
+   "name": "hair_curlyshort.male.glb",
+   "sha256": "c30bd688f0d1986eef5e4ab6b952f450809ceb7ef9baebfc5ac4186143bab3a4",
+   "size": 209712
+  },
+  {
+   "name": "hair_curtain.female.glb",
+   "sha256": "d4a7a31166f0984950770c6da28d31ebd6f16af0cca0047d1cb3d1d89c9ad512",
+   "size": 123720
+  },
+  {
+   "name": "hair_curtain.male.glb",
+   "sha256": "acc0e3f5f6400c25d6229ceeacd0cc30f046ecbb4eda7646129b7b09bb42d1c4",
+   "size": 123700
+  },
+  {
+   "name": "hair_fade.female.glb",
+   "sha256": "21dc0002f68e66530d5d9fa4e4c8e4d0f1e686f7b262c311d6e789b4a3eb590c",
+   "size": 116448
+  },
+  {
+   "name": "hair_fade.male.glb",
+   "sha256": "dab3d254a3feb79f3e0ca1ab90297fbd425ad739601791afe7eddd895683850a",
+   "size": 116436
+  },
+  {
+   "name": "hair_halfup.female.glb",
+   "sha256": "e178825cf8b31c3ee2823d76027ce6d71b9554456e3e332d77dc7ca5408f7547",
+   "size": 154628
+  },
+  {
+   "name": "hair_halfup.male.glb",
+   "sha256": "6c85bd1148b1050867cf7d82a81a93a80ca1a4249527d961fd8740ff6c1d0701",
+   "size": 154616
+  },
+  {
+   "name": "hair_highponytail.female.glb",
+   "sha256": "c1fd2913d02ad4462520f6286e1f2b49ccac56aae2c290be71328cce35dafc59",
+   "size": 134980
+  },
+  {
+   "name": "hair_highponytail.male.glb",
+   "sha256": "d5e7a0b928834a364b0584548c56a0415249759a59359014262d43f07cc39418",
+   "size": 134968
+  },
+  {
+   "name": "hair_layered.female.glb",
+   "sha256": "cac4de4c6857c3bb20fca5cdc639fecc928d387be50592e92febcb7b03dd2ea3",
+   "size": 203864
+  },
+  {
+   "name": "hair_layered.male.glb",
+   "sha256": "46e7c31ac4e574e27f4c2d02dbfef674e20a05d63cccd4f2dca7b7575fda1045",
+   "size": 203852
+  },
+  {
+   "name": "hair_lob.female.glb",
+   "sha256": "7c135ac1d97fe1017e72167134f55b8b10359a3803d75a04f859af16a7d311b9",
+   "size": 161764
+  },
+  {
+   "name": "hair_lob.male.glb",
+   "sha256": "5439a74fc510f99d1f158a271dc413ba162cc07360198b05d36a5f0312ab84e2",
+   "size": 161748
   },
   {
    "name": "hair_long.female.glb",
-   "sha256": "4827f412e00afb8479f3c184dd2267e3f0d2ca72a59dc68f5c64093cbcf1beb0",
-   "size": 224520
+   "sha256": "09ceca3fd3aba27554abbc49e59aaa7a3f48236852bfef435f258283c0e32d51",
+   "size": 209292
   },
   {
    "name": "hair_long.male.glb",
-   "sha256": "45699dc3eb4bc0a330f8c568b56ad012089f4ec05658ecbbef797ffa73866a90",
-   "size": 224504
+   "sha256": "59fb4dcc6799b7914b21d9aa85e45d05e409b021b1462971785111df19b13912",
+   "size": 209280
+  },
+  {
+   "name": "hair_longbangs.female.glb",
+   "sha256": "c76030bed779e55a27927f8982afe766b5544ec6e57c0cd874743887d42f2a79",
+   "size": 206988
+  },
+  {
+   "name": "hair_longbangs.male.glb",
+   "sha256": "3d5c2d46e571d86e6cf720e67714ea671e08e7490a619d14bca4a019518ccb07",
+   "size": 206972
+  },
+  {
+   "name": "hair_longcurly.female.glb",
+   "sha256": "45a534ab686d04ef54e106853b4916637a7e1432ad4387fe0b69fb8f05e065bc",
+   "size": 277680
+  },
+  {
+   "name": "hair_longcurly.male.glb",
+   "sha256": "48cbd6238d73e2903c290755edd5dce254095da5a8820e134276bc85d8dc2ad2",
+   "size": 277668
+  },
+  {
+   "name": "hair_longwavy.female.glb",
+   "sha256": "46de661652e06f07b2afe541ab1f092932465560352ad82ec668c343994cbd68",
+   "size": 216860
+  },
+  {
+   "name": "hair_longwavy.male.glb",
+   "sha256": "0c40369b1487f4d962378f052fad9c695726caf905e32e115e98870acc4d612e",
+   "size": 216848
+  },
+  {
+   "name": "hair_lowponytail.female.glb",
+   "sha256": "9000388666d68a78d56d31482ef4bbe8ae492fce762feaa40b4475b197dc8f7b",
+   "size": 134972
+  },
+  {
+   "name": "hair_lowponytail.male.glb",
+   "sha256": "249fa039ba65be8a5e6f9cf1f961b0044e7fcfc9e00e0ca1d1b4b4433900c85f",
+   "size": 134956
+  },
+  {
+   "name": "hair_mohawk.female.glb",
+   "sha256": "2225dbcc9d9e5cef3103846015babee03b2f5c0d604c2f6c79dc7f8bf6284f86",
+   "size": 59320
+  },
+  {
+   "name": "hair_mohawk.male.glb",
+   "sha256": "19a176e557411a5034341f8fe8afdc16de44ab75f8c37bb742731c5db3967824",
+   "size": 59308
   },
   {
    "name": "hair_pigtails.female.glb",
-   "sha256": "92cfb4c6f29f33f3d52636ae68f20a4ad51e921307fffed6dc32746501e7628e",
-   "size": 147844
+   "sha256": "e8d6b2fc6108b5921c558b4224c8ce8accdc145b953abfbe45aa0313a4987232",
+   "size": 132620
   },
   {
    "name": "hair_pigtails.male.glb",
-   "sha256": "58a85a46858549f5f6f53f1b532b4e7cd384c39a4f37332c722a59fb2cfeb57d",
-   "size": 147836
+   "sha256": "59f9c2bf9273344a3fafb516d250eec544a9046646cc4d45f05c8d5c0b36f636",
+   "size": 132608
   },
   {
    "name": "hair_ponytail.female.glb",
-   "sha256": "5066d8c1781809dcb028094a6daac9b5dd2b8d2d3336e60771021f47429d011c",
-   "size": 152112
+   "sha256": "e05d98f5f895955297b279386f9f3c3bd7420d7675ce9112ac56dfd976bec29f",
+   "size": 136884
   },
   {
    "name": "hair_ponytail.male.glb",
-   "sha256": "dadd3c7a9c8346817a970e26fc652603e0d8927365fa80ba28c56ec0f5816ba6",
-   "size": 152100
+   "sha256": "b1b6540356345906b944c32e6f76175f23647c99e01c3e1950c30bb516b59709",
+   "size": 136876
+  },
+  {
+   "name": "hair_quiff.female.glb",
+   "sha256": "bb6ce72e70ff111ddaa11cf725af3e5a8fd59b5eb53319bb17e0f141c8a16305",
+   "size": 139136
+  },
+  {
+   "name": "hair_quiff.male.glb",
+   "sha256": "8f06b465a1450a48cbed07a7748f0621a3bba5406937c143b678c6f2e90e2f81",
+   "size": 139124
+  },
+  {
+   "name": "hair_shag.female.glb",
+   "sha256": "2e4097211cbd65a981d2ab528b0e5ca9ced87685dc83ed47d5408a6748f55609",
+   "size": 157804
+  },
+  {
+   "name": "hair_shag.male.glb",
+   "sha256": "15e12af8a329b3a655af16b244dfe244a2c78fb6c0e3c7aeea11453fb202dbb7",
+   "size": 157788
+  },
+  {
+   "name": "hair_shaved.female.glb",
+   "sha256": "4f6ad462c1eda57383a32ed9d87cdceb262adec89ae5f3a45e1a3622e3e3ef18",
+   "size": 31980
+  },
+  {
+   "name": "hair_shaved.male.glb",
+   "sha256": "5784a6a411946fc9036c66e5c5089c0784b7d6067268271db1eec38299b99bcb",
+   "size": 31968
   },
   {
    "name": "hair_short.female.glb",
-   "sha256": "cdac50564f9698a2ec803c09a32ccf8bc6bb7c692010cdf62159a67ba6238d3c",
-   "size": 179564
+   "sha256": "9a572d3bbabbfad2b7f7d98c2c7418526b845185f4b775596a87ef9eb0910679",
+   "size": 164336
   },
   {
    "name": "hair_short.male.glb",
-   "sha256": "ebf8384be4fe75d7503a6492f48d7dd45bead26771e41d49ef8864903ea3840e",
-   "size": 179552
+   "sha256": "cd017c0740d937a070bee60c37eb300df91d0620e007c88d38234f05005d3427",
+   "size": 164328
   },
   {
    "name": "hair_sidepart.female.glb",
-   "sha256": "476dfef8c1837ee8a7f60fcbb2657e5be2e8eb09a35223a75e7fd1f8a7678e5a",
-   "size": 146808
+   "sha256": "c269243886f194cebb906cb6cd24715f1cd36d317205fabae069d19770cf8a8c",
+   "size": 131584
   },
   {
    "name": "hair_sidepart.male.glb",
-   "sha256": "d5ac05aef92302df628da96d47da3be61e41bb88d1d5a9d9822e46398f3c3255",
-   "size": 146800
+   "sha256": "e9a9a5d6bfff3f7ce2bb47db028250d65d03f25fbe824c5c60d17006bdd3e6f9",
+   "size": 131576
+  },
+  {
+   "name": "hair_sideponytail.female.glb",
+   "sha256": "81f1700acaaee910f1dc8c0ca2146037771f62404d28e08048894c0082e262e6",
+   "size": 134976
+  },
+  {
+   "name": "hair_sideponytail.male.glb",
+   "sha256": "6e9763cf4d6b318a2cd9025e31a7ac17c74e42d884142bc2a38d8aefc9328379",
+   "size": 134964
+  },
+  {
+   "name": "hair_slick.female.glb",
+   "sha256": "9e61fd3a47b55e4a78abad1ccc8ca131f692178428076b55075d317f8ca3e406",
+   "size": 83084
+  },
+  {
+   "name": "hair_slick.male.glb",
+   "sha256": "1f55daa43032651be0ab1a12634e7717903f90149ee7d978cdfbfe5c5ac9038a",
+   "size": 83072
+  },
+  {
+   "name": "hair_spacebuns.female.glb",
+   "sha256": "18c400eeff74599681ab5cee6e5f84358530b866ac99e539100dcee7fe5e2bfb",
+   "size": 115808
+  },
+  {
+   "name": "hair_spacebuns.male.glb",
+   "sha256": "4d4c33f5141ad473ca761276185f53e46e610e7df25ec3f8253b9f678c6c83cf",
+   "size": 115796
   },
   {
    "name": "hair_spiky.female.glb",
-   "sha256": "de91c080ec904a7cd4199d704d7daeeb5efadc1f4ccfcab6f6b75b0bac478f8c",
-   "size": 169972
+   "sha256": "85a20ccee41dfb7fa2b87cf5b349b45e9442714a85857c4b5bf1926928f4ad06",
+   "size": 154744
   },
   {
    "name": "hair_spiky.male.glb",
-   "sha256": "7a1f65207d2fed88d7c8341a62effa8500f11823947ec8cec020feed3cd31fe3",
-   "size": 169956
+   "sha256": "2eb788316a03f284e7cf62600716fed48a7797ae7d0874600d80b3483335ced6",
+   "size": 154728
+  },
+  {
+   "name": "hair_topknot.female.glb",
+   "sha256": "e486a738c86a1e4d7ebf1629f9d1ca30751b3f5babb679bff4ccefe663725a82",
+   "size": 85892
+  },
+  {
+   "name": "hair_topknot.male.glb",
+   "sha256": "194b56c21322ffed6802b6d66d6a4396febf1917d1a41a6acacd2d0abd8452b7",
+   "size": 85876
+  },
+  {
+   "name": "hair_twists.female.glb",
+   "sha256": "8a2e110c71967c4a7cab97f88079b6e81a7178fe4ac612051e3fae40896e35d5",
+   "size": 183664
+  },
+  {
+   "name": "hair_twists.male.glb",
+   "sha256": "024f440b9a2adc1fc478e202f06b078372f2bc8f9d25de02d4f3f6c51b53d20a",
+   "size": 183652
+  },
+  {
+   "name": "hair_wavy.female.glb",
+   "sha256": "a605c9cf28e9e1987eca330f61355402f199b0aeb7c5263c388ac98d0b4f0d11",
+   "size": 164000
+  },
+  {
+   "name": "hair_wavy.male.glb",
+   "sha256": "a918f11a8726260659d82000e3206b05f0da58a51232346abf9f343f0ae31140",
+   "size": 163980
   },
   {
    "name": "hat_beanie.female.glb",
@@ -487,6 +877,11 @@
    "size": 5769
   },
   {
+   "name": "tex_hair_coil.png",
+   "sha256": "46fd1be58eb08ce54ffecf1c6444f1352731c2cb89602cee6959f41201c9b7ef",
+   "size": 10076
+  },
+  {
    "name": "tex_knit.png",
    "sha256": "17d6788f592c1f7e61a7f1045e09486c1e92bd54867968c8249b3e86cf0b55ff",
    "size": 8953
@@ -515,6 +910,16 @@
    "name": "tex_skin_head.png",
    "sha256": "061fed87936e986b05e2c82624f42d66fffb29fbafc6bb1ae41d43921ba98592",
    "size": 572
+  },
+  {
+   "name": "tex_stubble.png",
+   "sha256": "828cdcb7897d4617a92a843a045c907d1c3f4811e32e96e78655024c9c148b0b",
+   "size": 13847
+  },
+  {
+   "name": "tex_stubble_heavy.png",
+   "sha256": "405afff8e46dbca5f8f36fc91103fc03f74be814193657f04fbe83c717f52f3b",
+   "size": 15762
   },
   {
    "name": "top_hoodie.female.glb",
@@ -3582,6 +3987,174 @@
    "random": {
     "female": 0.0,
     "male": 1.0
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_stubble.female.glb",
+    "male": "facial_stubble.male.glb"
+   },
+   "format": 3,
+   "id": 480,
+   "name": "facial_stubble",
+   "random": {
+    "female": 0.0,
+    "male": 1.4
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_heavystubble.female.glb",
+    "male": "facial_heavystubble.male.glb"
+   },
+   "format": 3,
+   "id": 481,
+   "name": "facial_heavystubble",
+   "random": {
+    "female": 0.0,
+    "male": 1.0
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_shortbeard.female.glb",
+    "male": "facial_shortbeard.male.glb"
+   },
+   "format": 3,
+   "id": 482,
+   "name": "facial_shortbeard",
+   "random": {
+    "female": 0.0,
+    "male": 1.0
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_longbeard.female.glb",
+    "male": "facial_longbeard.male.glb"
+   },
+   "format": 3,
+   "id": 483,
+   "name": "facial_longbeard",
+   "random": {
+    "female": 0.0,
+    "male": 0.4
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_horseshoe.female.glb",
+    "male": "facial_horseshoe.male.glb"
+   },
+   "format": 3,
+   "id": 484,
+   "name": "facial_horseshoe",
+   "random": {
+    "female": 0.0,
+    "male": 0.4
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_handlebar.female.glb",
+    "male": "facial_handlebar.male.glb"
+   },
+   "format": 3,
+   "id": 485,
+   "name": "facial_handlebar",
+   "random": {
+    "female": 0.0,
+    "male": 0.2
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_soulpatch.female.glb",
+    "male": "facial_soulpatch.male.glb"
+   },
+   "format": 3,
+   "id": 486,
+   "name": "facial_soulpatch",
+   "random": {
+    "female": 0.0,
+    "male": 0.3
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_chinbeard.female.glb",
+    "male": "facial_chinbeard.male.glb"
+   },
+   "format": 3,
+   "id": 487,
+   "name": "facial_chinbeard",
+   "random": {
+    "female": 0.0,
+    "male": 0.4
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_vandyke.female.glb",
+    "male": "facial_vandyke.male.glb"
+   },
+   "format": 3,
+   "id": 488,
+   "name": "facial_vandyke",
+   "random": {
+    "female": 0.0,
+    "male": 0.5
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_sideburns.female.glb",
+    "male": "facial_sideburns.male.glb"
+   },
+   "format": 3,
+   "id": 489,
+   "name": "facial_sideburns",
+   "random": {
+    "female": 0.0,
+    "male": 0.5
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_muttonchops.female.glb",
+    "male": "facial_muttonchops.male.glb"
+   },
+   "format": 3,
+   "id": 490,
+   "name": "facial_muttonchops",
+   "random": {
+    "female": 0.0,
+    "male": 0.2
+   },
+   "slot": "facialHair"
+  },
+  {
+   "assets": {
+    "female": "facial_pencil.female.glb",
+    "male": "facial_pencil.male.glb"
+   },
+   "format": 3,
+   "id": 491,
+   "name": "facial_pencil",
+   "random": {
+    "female": 0.0,
+    "male": 0.2
    },
    "slot": "facialHair"
   },
@@ -7404,6 +7977,384 @@
     "male": 0.3
    },
    "slot": "hat"
+  },
+  {
+   "assets": {
+    "female": "hair_crew.female.glb",
+    "male": "hair_crew.male.glb"
+   },
+   "format": 3,
+   "id": 200,
+   "name": "hair_crew",
+   "random": {
+    "female": 0.2,
+    "male": 1.3
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_fade.female.glb",
+    "male": "hair_fade.male.glb"
+   },
+   "format": 3,
+   "id": 201,
+   "name": "hair_fade",
+   "random": {
+    "female": 0.2,
+    "male": 1.2
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_shaved.female.glb",
+    "male": "hair_shaved.male.glb"
+   },
+   "format": 3,
+   "id": 202,
+   "name": "hair_shaved",
+   "random": {
+    "female": 0.1,
+    "male": 0.5
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_balding.female.glb",
+    "male": "hair_balding.male.glb"
+   },
+   "format": 3,
+   "id": 203,
+   "name": "hair_balding",
+   "random": {
+    "female": 0.0,
+    "male": 0.35
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_quiff.female.glb",
+    "male": "hair_quiff.male.glb"
+   },
+   "format": 3,
+   "id": 204,
+   "name": "hair_quiff",
+   "random": {
+    "female": 0.2,
+    "male": 0.9
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_slick.female.glb",
+    "male": "hair_slick.male.glb"
+   },
+   "format": 3,
+   "id": 205,
+   "name": "hair_slick",
+   "random": {
+    "female": 0.3,
+    "male": 0.7
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_crop.female.glb",
+    "male": "hair_crop.male.glb"
+   },
+   "format": 3,
+   "id": 206,
+   "name": "hair_crop",
+   "random": {
+    "female": 0.5,
+    "male": 1.0
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_curlyshort.female.glb",
+    "male": "hair_curlyshort.male.glb"
+   },
+   "format": 3,
+   "id": 207,
+   "name": "hair_curlyshort",
+   "random": {
+    "female": 0.6,
+    "male": 1.0
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_afro.female.glb",
+    "male": "hair_afro.male.glb"
+   },
+   "format": 3,
+   "id": 208,
+   "name": "hair_afro",
+   "random": {
+    "female": 0.6,
+    "male": 0.7
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_twists.female.glb",
+    "male": "hair_twists.male.glb"
+   },
+   "format": 3,
+   "id": 209,
+   "name": "hair_twists",
+   "random": {
+    "female": 0.4,
+    "male": 0.6
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_shag.female.glb",
+    "male": "hair_shag.male.glb"
+   },
+   "format": 3,
+   "id": 210,
+   "name": "hair_shag",
+   "random": {
+    "female": 0.8,
+    "male": 0.5
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_wavy.female.glb",
+    "male": "hair_wavy.male.glb"
+   },
+   "format": 3,
+   "id": 211,
+   "name": "hair_wavy",
+   "random": {
+    "female": 1.0,
+    "male": 0.4
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_bobbangs.female.glb",
+    "male": "hair_bobbangs.male.glb"
+   },
+   "format": 3,
+   "id": 212,
+   "name": "hair_bobbangs",
+   "random": {
+    "female": 1.2,
+    "male": 0.1
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_lob.female.glb",
+    "male": "hair_lob.male.glb"
+   },
+   "format": 3,
+   "id": 213,
+   "name": "hair_lob",
+   "random": {
+    "female": 1.2,
+    "male": 0.2
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_curtain.female.glb",
+    "male": "hair_curtain.male.glb"
+   },
+   "format": 3,
+   "id": 214,
+   "name": "hair_curtain",
+   "random": {
+    "female": 1.0,
+    "male": 0.5
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_mohawk.female.glb",
+    "male": "hair_mohawk.male.glb"
+   },
+   "format": 3,
+   "id": 215,
+   "name": "hair_mohawk",
+   "random": {
+    "female": 0.1,
+    "male": 0.25
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_topknot.female.glb",
+    "male": "hair_topknot.male.glb"
+   },
+   "format": 3,
+   "id": 216,
+   "name": "hair_topknot",
+   "random": {
+    "female": 0.3,
+    "male": 0.5
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_halfup.female.glb",
+    "male": "hair_halfup.male.glb"
+   },
+   "format": 3,
+   "id": 217,
+   "name": "hair_halfup",
+   "random": {
+    "female": 1.0,
+    "male": 0.1
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_longbangs.female.glb",
+    "male": "hair_longbangs.male.glb"
+   },
+   "format": 3,
+   "id": 218,
+   "name": "hair_longbangs",
+   "random": {
+    "female": 1.2,
+    "male": 0.1
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_longwavy.female.glb",
+    "male": "hair_longwavy.male.glb"
+   },
+   "format": 3,
+   "id": 219,
+   "name": "hair_longwavy",
+   "random": {
+    "female": 1.2,
+    "male": 0.15
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_layered.female.glb",
+    "male": "hair_layered.male.glb"
+   },
+   "format": 3,
+   "id": 220,
+   "name": "hair_layered",
+   "random": {
+    "female": 1.1,
+    "male": 0.1
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_longcurly.female.glb",
+    "male": "hair_longcurly.male.glb"
+   },
+   "format": 3,
+   "id": 221,
+   "name": "hair_longcurly",
+   "random": {
+    "female": 1.0,
+    "male": 0.1
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_braid.female.glb",
+    "male": "hair_braid.male.glb"
+   },
+   "format": 3,
+   "id": 222,
+   "name": "hair_braid",
+   "random": {
+    "female": 0.9,
+    "male": 0.05
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_lowponytail.female.glb",
+    "male": "hair_lowponytail.male.glb"
+   },
+   "format": 3,
+   "id": 223,
+   "name": "hair_lowponytail",
+   "random": {
+    "female": 1.0,
+    "male": 0.2
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_highponytail.female.glb",
+    "male": "hair_highponytail.male.glb"
+   },
+   "format": 3,
+   "id": 224,
+   "name": "hair_highponytail",
+   "random": {
+    "female": 1.0,
+    "male": 0.05
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_sideponytail.female.glb",
+    "male": "hair_sideponytail.male.glb"
+   },
+   "format": 3,
+   "id": 225,
+   "name": "hair_sideponytail",
+   "random": {
+    "female": 0.7,
+    "male": 0.05
+   },
+   "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "hair_spacebuns.female.glb",
+    "male": "hair_spacebuns.male.glb"
+   },
+   "format": 3,
+   "id": 226,
+   "name": "hair_spacebuns",
+   "random": {
+    "female": 0.5,
+    "male": 0.05
+   },
+   "slot": "hair"
   }
  ],
  "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",

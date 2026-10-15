@@ -24,7 +24,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from cna_avatar import preview, rig  # noqa: E402
-from cna_avatar.description import Descriptor  # noqa: E402
+from cna_avatar.description import Descriptor, use_catalog  # noqa: E402
 
 SKIN = [(255, 224, 196), (241, 194, 160), (224, 172, 128), (198, 134, 90), (160, 104, 68), (120, 78, 52),
         (92, 58, 40), (255, 210, 180)]
@@ -120,6 +120,7 @@ def full_body(height):
 
 def build_jobs(catalogs, version):
     manifest = catalogs.manifest(version)
+    use_catalog(manifest)
     library = preview.ClipLibrary(catalogs.glb(version, manifest["animations"]["asset"]))
     PRESETS[:] = manifest["animations"]["presets"]
     jobs = []
@@ -169,6 +170,9 @@ def build_jobs(catalogs, version):
             k = span / REFERENCE_SPAN
             jobs.append(job("faces-random-%02d" % seed, "faces", v, (0.0, h - 0.02 * k, 0.86 * k), (0.0, h - 0.05 * k, 0.0), 0.5, yaw=-15.0,
                             label="random face %d" % seed))
+    # Every catalog entry on the avatar it suits best: hairstyles and facial hair as head close-ups,
+    # wardrobe items full length, accessories close to where they are worn.
+    jobs += catalog_jobs(catalogs, library, manifest, version, heroes)
     presets = manifest["animations"]["presets"]
     for index, preset in enumerate(presets):
         d = heroes[0 if preset.startswith("Female") else 1] if preset.startswith(("Female", "Male")) else heroes[index % 2]
@@ -201,6 +205,44 @@ def build_jobs(catalogs, version):
     return {"size": 320, "background": BACKGROUND, "catalogVersion": version, "jobs": jobs}
 
 
+def catalog_jobs(catalogs, library, manifest, version, heroes):
+    jobs = []
+    fmt = {e["id"]: e.get("format", 1) for key in ("items", "featureItems") for e in manifest.get(key, [])}
+
+    def variant(d, **changes):
+        v = Descriptor(d.body_type, d.height_mm, d.build, version, dict(d.colors), dict(d.items), d.facial_hair, list(d.face),
+                       item_formats=fmt)
+        for key, value in changes.items():
+            if key in v.items:
+                v.items[key] = value
+            else:
+                setattr(v, key, value)
+        return v
+    for item in manifest["items"]:
+        slot = item["slot"]
+        body = 1 if item["random"]["male"] > item["random"]["female"] else 0
+        d = variant(heroes[body], **{slot: item["id"]})
+        head, span = head_height(catalogs, library, d.encode())
+        k = span / REFERENCE_SPAN
+        h = d.height_mm / 1000.0
+        if slot in ("hair", "hat", "glasses"):
+            sheet = "hair" if slot == "hair" else "headwear"
+            jobs.append(job("%s-%03d" % (sheet, item["id"]), sheet, d, (0.30 * k, head + 0.02 * k, 0.88 * k), (0.0, head - 0.05 * k, 0.0),
+                            0.55, yaw=-20.0, label=item["name"]))
+        elif slot in ("top", "bottom", "shoes"):
+            eye, target, fov = full_body(h)
+            jobs.append(job("wardrobe-%03d" % item["id"], "wardrobe", d, eye, target, fov, -25.0, label=item["name"]))
+    for item in manifest.get("featureItems", []):
+        if item["slot"] != "facialHair":
+            continue
+        d = variant(heroes[1], facial_hair=item["id"])
+        head, span = head_height(catalogs, library, d.encode())
+        k = span / REFERENCE_SPAN
+        jobs.append(job("facial-%03d" % item["id"], "facial", d, (0.30 * k, head - 0.02 * k, 0.86 * k), (0.0, head - 0.06 * k, 0.0),
+                        0.5, yaw=-20.0, label=item["name"]))
+    return jobs
+
+
 def cmd_jobs(args):
     catalogs = preview.Catalogs(args.catalogs)
     data = build_jobs(catalogs, args.version)
@@ -229,7 +271,8 @@ def cmd_sheets(args):
     from PIL import Image, ImageDraw
     data = json.loads(args.jobs.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
-    columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8}
+    columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8, "hair": 8, "headwear": 8,
+               "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8}
     cell = args.cell
     sheets = {}
     for j in data["jobs"]:
