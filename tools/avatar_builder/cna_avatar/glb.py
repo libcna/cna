@@ -4,7 +4,7 @@ import json
 import struct
 
 from . import rig
-from .mathutil import quantize
+from .mathutil import cross, length, quantize, sub
 
 FLOAT, UBYTE, SHORT, USHORT, UINT = 5126, 5121, 5122, 5123, 5125
 
@@ -102,9 +102,13 @@ class GlbBuilder:
         for mesh, material in parts:
             mesh.validate()
             textured = "baseColorTexture" in self.gltf["materials"][material]["pbrMetallicRoughness"]
+            positions = [tuple(quantize(c) for c in p) for p in mesh.positions]
+            # A triangle a deformation or the quantizing left without area draws nothing: dropped.
+            triangles = [mesh.indices[t:t + 3] for t in range(0, len(mesh.indices), 3)]
+            kept = [i for a, b, c in triangles
+                    if length(cross(sub(positions[b], positions[a]), sub(positions[c], positions[a]))) >= 1e-9 for i in (a, b, c)]
             attributes = {
-                "POSITION": self.accessor([tuple(quantize(c) for c in p) for p in mesh.positions], "VEC3", FLOAT, 3,
-                                          target=34962, bounds=True),
+                "POSITION": self.accessor(positions, "VEC3", FLOAT, 3, target=34962, bounds=True),
                 # Normalized 16-bit normals, padded to 8 bytes per element.
                 "NORMAL": self.accessor([tuple(max(-32767, min(32767, int(round(c * 32767.0)))) for c in n)
                                          for n in mesh.normals], "VEC3", SHORT, normalized=True, target=34962, pad=2),
@@ -116,7 +120,7 @@ class GlbBuilder:
                 attributes["TEXCOORD_0"] = self.accessor([tuple(max(0, min(65535, int(round(c * 65535.0)))) for c in uv)
                                                           for uv in mesh.uvs], "VEC2", USHORT, normalized=True, target=34962)
             index_type = USHORT if len(mesh.positions) < 65536 else UINT
-            indices = self.accessor(mesh.indices, "SCALAR", index_type, target=34963)
+            indices = self.accessor(kept, "SCALAR", index_type, target=34963)
             primitives.append({"attributes": attributes, "indices": indices, "material": material, "mode": 4})
         self.gltf.setdefault("meshes", []).append({"name": name, "primitives": primitives})
         self.gltf["nodes"].append({"name": name, "mesh": len(self.gltf["meshes"]) - 1, "skin": skin})
