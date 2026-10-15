@@ -181,10 +181,9 @@ TEST(AvatarCatalogTest, CatalogV3HasTheItemFeatureStyleAndAnimationContract) {
 }
 
 TEST(AvatarCatalogTest, AManifestMustNameASupportedCatalogVersion) {
-    const auto& files = Avatars::embeddedCatalogFiles();
-    auto file = std::find_if(files.begin(), files.end(), [](const auto& entry) { return std::string_view(entry.name) == "v3/catalog.json"; });
-    ASSERT_NE(file, files.end());
-    const std::string text(reinterpret_cast<const char*>(file->data), file->size);
+    const auto bytes = Avatars::embeddedCatalogFile("v3/catalog.json");
+    ASSERT_FALSE(bytes.empty());
+    const std::string text(bytes.begin(), bytes.end());
     auto as = [&](int version) {
         auto copy = text;
         const auto at = copy.find("\"catalogVersion\": 3");
@@ -210,7 +209,7 @@ TEST(AvatarCatalogTest, EmbeddedAssetsResolveByContentNotByName) {
     const auto male = Avatars::resolveAsset(*v3, "body.male.glb");
     const auto resolved = Avatars::resolveAsset(swapped, "body.female.glb");
     ASSERT_TRUE(resolved.has_value());
-    EXPECT_EQ(resolved->view.data(), male->view.data());
+    EXPECT_TRUE(std::ranges::equal(resolved->view, male->view));
     auto foreign = *v3;
     foreign.assets.at("hair_bob.female.glb").sha256 = std::string(64, 'a');
     EXPECT_FALSE(Avatars::resolveAsset(foreign, "hair_bob.female.glb").has_value());
@@ -297,10 +296,10 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
         const char* digest;
     };
     const Case cases[] = {
-        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "92cd550de75546fe115e34e2eee33522b0c5bbc8024f9f8479f25b194b897806"},
-        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "6a5f6748346ab31fcb1cf4a7c6ce9a590cb435a1bb51079a91e7e158c743ad41"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "e94f036d0a6cf581628e4328fde9720b045ff1a3a1addc2f573b0010e48c83ae"},
-        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "42acc3166fd861729ac686e1df6094b1c136632cf7fe52ec609f939a77a11f7c"},
+        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "72498b4f688eb924244dbe25382fec0760cbd354de6c7e0f77be83ad111bcf7a"},
+        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "75b1c65b37f8f6126fe4a13220761713252eb64180b79f00e8041d1bb99b981e"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "0fb690f0b0935cf9df04f4d0b7beabae34c013d65dc655026a3afe235db9586d"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "5321cad4396c304ced1bbaccb33e1b0e3036ff396020b0348b0f62eb7c9119d5"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;

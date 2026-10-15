@@ -475,8 +475,9 @@ const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs()
         for(const auto& file:embeddedCatalogFiles()) {
             const std::string_view name(file.name);
             if(!name.starts_with("v")||!name.ends_with("/catalog.json"))continue;
+            const auto text=inflateEmbedded(file);
             auto manifest=std::make_shared<const CatalogManifest>(
-                parseManifest(std::string_view(reinterpret_cast<const char*>(file.data),file.size)));
+                parseManifest(std::string_view(reinterpret_cast<const char*>(text.data()),text.size())));
             if(name!="v"+std::to_string(manifest->version)+"/catalog.json")
                 throw std::runtime_error("avatar catalog: "+std::string(name)+" describes another version");
             out.push_back(std::move(manifest));
@@ -500,17 +501,30 @@ std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version)
 
 const CatalogManifest& newestEmbeddedManifest(){return *embeddedCatalogs().back();}
 
-std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset)
+std::optional<AssetBytes> embeddedFileByContent(const CatalogAsset& asset)
 {
-    // Each compiled-in file is hashed at most once per process.
+    // Each compiled-in file is inflated and hashed at most once per process to learn its identity.
     for(const auto& file:embeddedCatalogFiles()) {
-        if(file.size!=asset.size)continue;
+        if((file.inflatedSize?file.inflatedSize:file.size)!=asset.size)continue;
+        std::shared_ptr<const std::vector<std::uint8_t>> contents;
+        {
+            std::lock_guard guard(verifiedLock);
+            if(auto hash=embeddedHashes.find(file.data);hash!=embeddedHashes.end()&&hash->second!=asset.sha256)continue;
+        }
+        contents=std::make_shared<const std::vector<std::uint8_t>>(inflateEmbedded(file));
         std::lock_guard guard(verifiedLock);
         auto hash=embeddedHashes.find(file.data);
-        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(file.bytes())).first;
-        if(hash->second==asset.sha256)return file.bytes();
+        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(*contents)).first;
+        if(hash->second==asset.sha256)return AssetBytes{contents,std::span<const std::uint8_t>(*contents)};
     }
     return std::nullopt;
+}
+
+std::vector<std::uint8_t> embeddedCatalogFile(std::string_view name)
+{
+    for(const auto& file:embeddedCatalogFiles())
+        if(name==file.name)return inflateEmbedded(file);
+    return {};
 }
 
 int maximumFaceTile(const FaceLayout& layout)
@@ -528,7 +542,7 @@ std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::stri
     if(listed==manifest.assets.end())return std::nullopt;
     // Compiled-in contents are found by size and hash, never by name: two catalog versions may
     // hold different files under one name.
-    if(auto embedded=embeddedFileByContent(listed->second))return AssetBytes{nullptr,*embedded};
+    if(auto embedded=embeddedFileByContent(listed->second))return embedded;
     // Otherwise the installed pack of exactly this version, verified again on every read. Assets
     // are never downloaded here: a missing catalog is installed as a whole (catalogManifest).
     auto bytes=installedCatalogFile(manifest.version,listed->second);

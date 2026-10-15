@@ -35,10 +35,8 @@ struct Provider final : System::IServiceProvider {
 };
 
 std::string CatalogText(int version) {
-    for (const auto& file : Avatars::embeddedCatalogFiles())
-        if (std::string_view(file.name) == "v" + std::to_string(version) + "/catalog.json")
-            return {reinterpret_cast<const char*>(file.data), file.size};
-    return {};
+    const auto bytes = Avatars::embeddedCatalogFile("v" + std::to_string(version) + "/catalog.json");
+    return {bytes.begin(), bytes.end()};
 }
 
 std::vector<unsigned char> Avatar(std::uint8_t body, std::uint32_t seed) {

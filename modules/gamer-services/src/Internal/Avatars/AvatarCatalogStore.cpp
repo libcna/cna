@@ -338,7 +338,7 @@ CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumB
         for(const auto& [name,asset]:manifest.assets) {
             const auto target=staging/asset.sha256;
             std::optional<std::vector<std::uint8_t>> bytes;
-            if(auto embedded=embeddedFileByContent(asset))bytes.emplace(embedded->begin(),embedded->end());
+            if(auto embedded=embeddedFileByContent(asset))bytes.emplace(embedded->view.begin(),embedded->view.end());
             for(const auto& candidate:others) {
                 if(bytes)break;
                 if(!embeddedManifest(candidate))bytes=installedCatalogFile(candidate,asset);

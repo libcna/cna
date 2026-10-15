@@ -37,7 +37,8 @@ _LIMB = {"male": 1.24, "female": 1.17}
 ARM = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in ARM.items()}
 LEG = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in LEG.items()}
 NECK = {"male": 0.064, "female": 0.054}
-FOOT = {"male": (0.034, 0.032, 0.090), "female": (0.031, 0.030, 0.082)}
+# The bare foot is seen only in open shoes; it is low and flat so every closed shoe covers it.
+FOOT = {"male": (0.034, 0.025, 0.090), "female": (0.031, 0.023, 0.082)}
 # Palm (half-width, half-thickness, length) and finger/thumb radii, before the hand scale. The
 # palm is as wide as the finger row it carries (v3: the fingers used to fuse into a mitten on a palm
 # twice their span).
@@ -429,7 +430,7 @@ def foot(body, side, inflate=0.0, segments=16):
     pos = rig.joint_positions(body)
     ankle = pos[I["Ankle" + side]]
     rx, ry, rz = FOOT[body]
-    centre = (ankle[0], ry + 0.020, ankle[2] + 0.048)
+    centre = (ankle[0], ry + 0.013, ankle[2] + 0.048)
     toe_z = pos[I["Toe" + side]][2]
     return ellipsoid(centre, UP_AXES, (rx + inflate, ry + inflate, rz + inflate), segments, 12,
                      lambda p, v, u: blend(I["Ankle" + side], I["Toe" + side], smoothstep(toe_z - 0.06, toe_z, p[2])))

@@ -105,6 +105,22 @@ REVISED_HAIR = [
     ("hair_highponytail", 1.0, 0.05), ("hair_sideponytail", 0.7, 0.05), ("hair_spacebuns", 0.5, 0.05),
 ]
 ITEMS += [(200 + k, "hair", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_HAIR)]
+# Revision 2 tops, bottoms and shoes (format 3).
+REVISED_TOPS = [("top_vneck", 1.0, 1.0), ("top_raglan", 0.8, 1.0), ("top_buttonup", 0.8, 1.0), ("top_flannel", 0.6, 1.0),
+                ("top_sweatshirt", 1.0, 1.0), ("top_ziphoodie", 0.9, 1.0), ("top_quarterzip", 0.6, 0.8),
+                ("top_cardigan", 1.0, 0.5), ("top_vest", 0.4, 0.6), ("top_puffervest", 0.6, 0.7), ("top_puffer", 0.6, 0.7),
+                ("top_blazer", 0.6, 0.8), ("top_denimjacket", 0.8, 0.8), ("top_jersey", 0.5, 0.9), ("top_stripedtee", 1.0, 0.9),
+                ("top_blouse", 1.2, 0.05), ("top_henley", 0.6, 0.9), ("top_windbreaker", 0.7, 0.8), ("top_layered", 0.8, 1.0)]
+REVISED_BOTTOMS = [("bottom_chinos", 0.8, 1.2), ("bottom_formal", 0.5, 0.8), ("bottom_sportshorts", 0.6, 0.8),
+                   ("bottom_cargoshorts", 0.4, 0.9), ("bottom_capri", 0.8, 0.1), ("bottom_wideleg", 0.8, 0.3),
+                   ("bottom_leggings", 1.0, 0.05), ("bottom_denimskirt", 0.9, 0.02), ("bottom_midiskirt", 0.9, 0.02),
+                   ("bottom_trackpants", 0.8, 1.0), ("bottom_bermuda", 0.4, 0.8)]
+REVISED_SHOES = [("shoes_running", 1.0, 1.0), ("shoes_loafers", 0.6, 0.8), ("shoes_slipons", 0.9, 0.8), ("shoes_hiking", 0.5, 0.8),
+                 ("shoes_chelsea", 0.7, 0.7), ("shoes_sandals", 0.6, 0.4), ("shoes_rainboots", 0.4, 0.3),
+                 ("shoes_skate", 0.7, 0.9), ("shoes_maryjanes", 0.8, 0.02)]
+ITEMS += [(300 + k, "top", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_TOPS)]
+ITEMS += [(350 + k, "bottom", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_BOTTOMS)]
+ITEMS += [(400 + k, "shoes", name, f, m, {"format": 3}) for k, (name, f, m) in enumerate(REVISED_SHOES)]
 # Personal features: facial hair (format 2, and format 3 for revision 2's) and ear shapes (format 3).
 REVISED_FACIAL = [("facial_stubble", 1.4), ("facial_heavystubble", 1.0), ("facial_shortbeard", 1.0), ("facial_longbeard", 0.4),
                   ("facial_horseshoe", 0.4), ("facial_handlebar", 0.2), ("facial_soulpatch", 0.3), ("facial_chinbeard", 0.4),

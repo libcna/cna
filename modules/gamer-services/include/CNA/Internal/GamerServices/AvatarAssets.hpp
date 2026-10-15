@@ -37,8 +37,14 @@ std::string_view boneName(int slot);
 int boneIndex(std::string_view name);
 
 /** @brief Every file of every catalog version compiled into the library, named "v<N>/<file>"
- * (generated source). @return Files by name. */
+ * (generated source), stored deflated: read them through inflateEmbedded. @return Files by name. */
 std::span<const EmbeddedFile> embeddedCatalogFiles();
+/** @brief The contents of a compiled-in file. @param file Record. @return Bytes.
+ * @throws std::runtime_error when the stored data is damaged. */
+std::vector<std::uint8_t> inflateEmbedded(const EmbeddedFile& file);
+/** @brief The contents of one compiled-in catalog file by name ("v3/catalog.json").
+ * @param name Name. @return Bytes, or empty when no such file is compiled in. */
+std::vector<std::uint8_t> embeddedCatalogFile(std::string_view name);
 
 /** @brief One file listed by a catalog manifest. */
 struct CatalogAsset {
@@ -284,8 +290,8 @@ struct AssetBytes {
 std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::string_view name);
 
 /** @brief A compiled-in file with exactly this size and SHA-256, whatever catalog holds it.
- * @param asset Listed file. @return Its bytes, or empty. */
-std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset);
+ * @param asset Listed file. @return Its bytes (inflated), or empty. */
+std::optional<AssetBytes> embeddedFileByContent(const CatalogAsset& asset);
 /** @brief The highest atlas tile index a layout names. @param layout Layout. @return Index. */
 int maximumFaceTile(const FaceLayout& layout);
 /** @brief One file of the installed pack of a catalog version, verified against its size and

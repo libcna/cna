@@ -301,6 +301,14 @@ TEST(AvatarEditorTest, FaceFeaturesAndFacialHairUseFormatTwo) {
     descriptor.bodyType=body;
     descriptor.facialHair=0;
     descriptor.face.fill(Avatars::NeutralFaceParameter);
+    // Entries of the first v3 release, which format 1 names.
+    descriptor.items={1,20,40,60,0,0};
+    descriptor.eyebrows=descriptor.ears=0;
+    descriptor.accessories={};
+    descriptor.sides={};
+    descriptor.makeup={};
+    descriptor.proportion=Avatars::NeutralFaceParameter;
+    std::fill(descriptor.colors.begin()+Avatars::FormatTwoColorSlotCount,descriptor.colors.end(),Avatars::AvatarColor{});
     const auto stored=Avatars::encode(descriptor);
     EXPECT_EQ(stored[0],Avatars::FormatVersion);
     AvatarEditorModel model(newest(),stored,1);

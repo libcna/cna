@@ -89,11 +89,9 @@ std::vector<unsigned char> Renamed(std::vector<unsigned char> bytes, const std::
 }
 
 NewerCatalog MakeNewerCatalog() {
-    const auto& files = Avatars::embeddedCatalogFiles();
-    const auto baseline = "v" + std::to_string(Avatars::BaseCatalogVersion) + "/catalog.json";
-    auto manifestFile = std::find_if(files.begin(), files.end(), [&](const auto& file) { return std::string_view(file.name) == baseline; });
+    const auto manifestText = Avatars::embeddedCatalogFile("v" + std::to_string(Avatars::BaseCatalogVersion) + "/catalog.json");
     NewerCatalog catalog;
-    catalog.json = nlohmann::json::parse(std::string(reinterpret_cast<const char*>(manifestFile->data), manifestFile->size));
+    catalog.json = nlohmann::json::parse(std::string(manifestText.begin(), manifestText.end()));
     catalog.json["catalogVersion"] = Newer;
     for (const char* body : {"female", "male"}) {
         // A distinct file: the cap renamed inside its JSON chunk, so its contents and hash are new.

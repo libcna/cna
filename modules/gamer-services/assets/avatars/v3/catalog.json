@@ -43,13 +43,33 @@
   },
   {
    "name": "body.female.glb",
-   "sha256": "da2f7f77d774f1869bff3eb4d2d4085e603fd902ac1dff513ae0a2fd347b7139",
+   "sha256": "4ffb63ef5ac022d8d5daf0070798ac03804c82aa4bc69272871795d9c9fdc880",
    "size": 475736
   },
   {
    "name": "body.male.glb",
-   "sha256": "662c2cd03af0d95f0c331772277aa1b64ca9a47213f93b034fc36e889d500896",
+   "sha256": "15a32f30fe1f653056cb924f0a6ba14cbda6aa33e68cc0c3a1bd2f75372721d5",
    "size": 475724
+  },
+  {
+   "name": "bottom_bermuda.female.glb",
+   "sha256": "2e0334ed9ae4034ae7189b2e9bb723688f2086a01866c2c389c34eba443934cc",
+   "size": 73048
+  },
+  {
+   "name": "bottom_bermuda.male.glb",
+   "sha256": "89e88f4c6ef2ab55dfcef41e10040a7642875d55ca334a7e433d01359acbdb58",
+   "size": 73036
+  },
+  {
+   "name": "bottom_capri.female.glb",
+   "sha256": "cf1a25933e45ac96b728f951d5dc02c1482a2d74627c494bc0e129cbdf17753b",
+   "size": 80396
+  },
+  {
+   "name": "bottom_capri.male.glb",
+   "sha256": "524cdeaadc966d74bdf3970a8f5cd65133aaf335ea6880ca07c061a3011b621c",
+   "size": 80388
   },
   {
    "name": "bottom_cargo.female.glb",
@@ -60,6 +80,46 @@
    "name": "bottom_cargo.male.glb",
    "sha256": "bb6e113952651a3d9e78494883172afcf05235ca0de71bf028204134505d8fb9",
    "size": 93092
+  },
+  {
+   "name": "bottom_cargoshorts.female.glb",
+   "sha256": "4bdde211d1dca677dffce49624f3ca9a8142981136d96d190c7c866169d838a7",
+   "size": 78408
+  },
+  {
+   "name": "bottom_cargoshorts.male.glb",
+   "sha256": "44af4e4e58919f7c6f75abef207db57a3343e826d1ba9f0350291be6133d2fa8",
+   "size": 78396
+  },
+  {
+   "name": "bottom_chinos.female.glb",
+   "sha256": "35722aac6441e1ade89a2af5807be54772456597b7f020a7f601bad327d96cc3",
+   "size": 86288
+  },
+  {
+   "name": "bottom_chinos.male.glb",
+   "sha256": "3491c357e98b4a04b2bffea9c2ddbb3b9aea88fb0ac5e958b1c1489fc93bc195",
+   "size": 86280
+  },
+  {
+   "name": "bottom_denimskirt.female.glb",
+   "sha256": "15437bb933f4e89279ac7bff78d23a97a02fca28e2a2635471e126d7357598db",
+   "size": 73568
+  },
+  {
+   "name": "bottom_denimskirt.male.glb",
+   "sha256": "1dbf46d2a69737cb259afe9c5b33f0636df20b82b5cf401979649dbfb82fa5d5",
+   "size": 73556
+  },
+  {
+   "name": "bottom_formal.female.glb",
+   "sha256": "7a2ba3246eefd88de4a8d069fe3a58633c942a99433ca48e956775abb2531b92",
+   "size": 75968
+  },
+  {
+   "name": "bottom_formal.male.glb",
+   "sha256": "d448ea37d5f10d3be48b65ea01a5de24a02b3b2b00f416523c4683cbf4d4e4ec",
+   "size": 75956
   },
   {
    "name": "bottom_jeans.female.glb",
@@ -82,6 +142,16 @@
    "size": 86284
   },
   {
+   "name": "bottom_leggings.female.glb",
+   "sha256": "483f7f07e570118b426e9036051e7ad558494492bd003ecb8cae487a26339c90",
+   "size": 67416
+  },
+  {
+   "name": "bottom_leggings.male.glb",
+   "sha256": "51ad8d7de75a890427febcd4cc4e30aab6ba6f9359458480de1d94a6321a29b2",
+   "size": 67404
+  },
+  {
    "name": "bottom_longskirt.female.glb",
    "sha256": "38b1cb4c8e5b8c2a795dea3452d7907d286eabd9728b5766171cce5c5e8fc523",
    "size": 73564
@@ -90,6 +160,16 @@
    "name": "bottom_longskirt.male.glb",
    "sha256": "cd694c85efe8e98e19925d2777915668b57703dece0b060a860703d71ec836dc",
    "size": 73548
+  },
+  {
+   "name": "bottom_midiskirt.female.glb",
+   "sha256": "0b4f194aebe4888ac2a5d21522e4491f18ee2e2cbe20da623218a04010471761",
+   "size": 73560
+  },
+  {
+   "name": "bottom_midiskirt.male.glb",
+   "sha256": "6f7b16aa23713a57efaa7bcce8e97bbc522663722c38553b3f31a37ee4147a87",
+   "size": 73552
   },
   {
    "name": "bottom_shorts.female.glb",
@@ -110,6 +190,36 @@
    "name": "bottom_skirt.male.glb",
    "sha256": "54622a51b825df53be992afe5b210ef8b35f20a3d1b211c474a036fc73fbd789",
    "size": 73532
+  },
+  {
+   "name": "bottom_sportshorts.female.glb",
+   "sha256": "9fa7456f9dfd2a9234aef1e5aaec8cc6ccefd90a157a9a85425f7648ccd64e92",
+   "size": 77032
+  },
+  {
+   "name": "bottom_sportshorts.male.glb",
+   "sha256": "124d25fea0973b2f7da22862796c75a393b3009beb30b0633942b3cb47773cff",
+   "size": 77016
+  },
+  {
+   "name": "bottom_trackpants.female.glb",
+   "sha256": "8a25dd63a93dc609458c7f52faeadaeafd1db24c64eef55a3cbe50e0d8bda4dd",
+   "size": 94692
+  },
+  {
+   "name": "bottom_trackpants.male.glb",
+   "sha256": "a4fc3d8f18cc2d22a9b9ee8df540bed24c1ed35ad9a680941d9f735abe91a88a",
+   "size": 94680
+  },
+  {
+   "name": "bottom_wideleg.female.glb",
+   "sha256": "32ecdcdea1ec72cd41dfebe420286679d0d0725b874617813e160d67e7e8bef1",
+   "size": 68868
+  },
+  {
+   "name": "bottom_wideleg.male.glb",
+   "sha256": "e61660d0376bbc1a83e883fd9bd4b0fa0f76a06e76d6e75660a68c5264891917",
+   "size": 68856
   },
   {
    "name": "ears_attached.female.glb",
@@ -807,6 +917,16 @@
    "size": 98816
   },
   {
+   "name": "shoes_chelsea.female.glb",
+   "sha256": "10fe2511c628b29e01a0317684c729a1d4e01001bd1fc400cfd7fc22f3a6887a",
+   "size": 80324
+  },
+  {
+   "name": "shoes_chelsea.male.glb",
+   "sha256": "2ab228f53ced6de554a91c599fdc2027911ae181004fa14952a36395188d32b1",
+   "size": 80312
+  },
+  {
    "name": "shoes_dress.female.glb",
    "sha256": "2dca8cd987256dc727823ff8dd571dd94806a6215253e5d7b13bbd080d42bb24",
    "size": 61440
@@ -837,6 +957,86 @@
    "size": 76532
   },
   {
+   "name": "shoes_hiking.female.glb",
+   "sha256": "db242eeb4df7e77e331d2a2d8416e3c55667f358dd8924d33e9df0d8b4d8a573",
+   "size": 97356
+  },
+  {
+   "name": "shoes_hiking.male.glb",
+   "sha256": "53d6c7253d8ba41ec8a287aab51861666aed4fdfe45af00d00ce00670e5a5ecc",
+   "size": 97344
+  },
+  {
+   "name": "shoes_loafers.female.glb",
+   "sha256": "c97c326f2e9eb4fec7092b5bf57103b2aae76e05552fd47451265f1035a78aec",
+   "size": 61448
+  },
+  {
+   "name": "shoes_loafers.male.glb",
+   "sha256": "be8eec12cf57679e020818efb8a55ea42aa1345132108545f610913c1ec72d5b",
+   "size": 61440
+  },
+  {
+   "name": "shoes_maryjanes.female.glb",
+   "sha256": "5f7f4de5088b7c8f79dcea919842c5603b67e55393c12c3467210e3fd473a431",
+   "size": 68040
+  },
+  {
+   "name": "shoes_maryjanes.male.glb",
+   "sha256": "2d411d0f89ec05e5a59d9e345c0b43ecc66c6da9a6d292c9ef46085972fa376d",
+   "size": 68028
+  },
+  {
+   "name": "shoes_rainboots.female.glb",
+   "sha256": "9925db7eea20b6c8cbfd702dce8dd1d7a8acefe8439954fc5fced1126d207ee5",
+   "size": 84900
+  },
+  {
+   "name": "shoes_rainboots.male.glb",
+   "sha256": "0efadec898a7d3eb51618d897a49b3481ca053213279db04741c4404e52a69cd",
+   "size": 84888
+  },
+  {
+   "name": "shoes_running.female.glb",
+   "sha256": "e2fe7754ed8460e81d8a2af4f7e1fa80f1b64d69b981783ea24196f1cce63310",
+   "size": 107180
+  },
+  {
+   "name": "shoes_running.male.glb",
+   "sha256": "66c4cfa39f4a6b9a3c0ec9ac90bc7a7b43baa30477a696661c36123c4405ce32",
+   "size": 107168
+  },
+  {
+   "name": "shoes_sandals.female.glb",
+   "sha256": "fb852110df85218864dc25cceba183aaa16174f900529b46379629f85b26f97a",
+   "size": 43440
+  },
+  {
+   "name": "shoes_sandals.male.glb",
+   "sha256": "0ea1dae1f091cbf80f5645c5b33be8ed1d9ce479a4e9080d0b531ae935a17b2d",
+   "size": 43428
+  },
+  {
+   "name": "shoes_skate.female.glb",
+   "sha256": "a542a0247a0d500b390e0f695fe7adba30601a38209ca122cf0c44b868fec527",
+   "size": 93780
+  },
+  {
+   "name": "shoes_skate.male.glb",
+   "sha256": "c2637602d926a2c460f6c2910a98b1de1c4ee4a8e08d4e20005c79708164c59b",
+   "size": 93772
+  },
+  {
+   "name": "shoes_slipons.female.glb",
+   "sha256": "b71cead0824fccd3630b991f6719e4f853ad0b916a883689d45554967126ef7c",
+   "size": 57400
+  },
+  {
+   "name": "shoes_slipons.male.glb",
+   "sha256": "925fa8da7f10ab11097b6181e666f0ab5c88b382e42d10bed3ec96bf093cded5",
+   "size": 57392
+  },
+  {
    "name": "shoes_sneakers.female.glb",
    "sha256": "377f3636c62763d394a5ade8ec962cd0778c6f58ce604a2f3add6f1e02bb479d",
    "size": 93800
@@ -855,6 +1055,11 @@
    "name": "tex_canvas.png",
    "sha256": "9e70e3a861e887a84583306a8197347c2b27b29371412830f16fed412e07bacc",
    "size": 5950
+  },
+  {
+   "name": "tex_check.png",
+   "sha256": "efa97e756c0b248f9a4e47a8f6b6a36395c5a7dab7e60083d58a27082d6e969e",
+   "size": 571
   },
   {
    "name": "tex_denim.png",
@@ -882,6 +1087,11 @@
    "size": 10076
   },
   {
+   "name": "tex_jersey.png",
+   "sha256": "1b2a358b8f726e07f15b056af924c3640aed86af47a87302b0f16a43874d9bc4",
+   "size": 9131
+  },
+  {
    "name": "tex_knit.png",
    "sha256": "17d6788f592c1f7e61a7f1045e09486c1e92bd54867968c8249b3e86cf0b55ff",
    "size": 8953
@@ -902,6 +1112,11 @@
    "size": 1934
   },
   {
+   "name": "tex_quilt.png",
+   "sha256": "43edbb82a13fa22c2839bcec73089801dd597b28b28816472cfb38410cf9c690",
+   "size": 708
+  },
+  {
    "name": "tex_rib.png",
    "sha256": "f786ee34240792f520855a5db0fee88f6ddfa5c48f57148b016b393577ccbb9f",
    "size": 376
@@ -912,6 +1127,11 @@
    "size": 572
   },
   {
+   "name": "tex_stripes.png",
+   "sha256": "43ea127fc18c871475765ab84ba40feffef443fb3279cadba782b6d006b02a22",
+   "size": 5349
+  },
+  {
    "name": "tex_stubble.png",
    "sha256": "828cdcb7897d4617a92a843a045c907d1c3f4811e32e96e78655024c9c148b0b",
    "size": 13847
@@ -920,6 +1140,76 @@
    "name": "tex_stubble_heavy.png",
    "sha256": "405afff8e46dbca5f8f36fc91103fc03f74be814193657f04fbe83c717f52f3b",
    "size": 15762
+  },
+  {
+   "name": "top_blazer.female.glb",
+   "sha256": "e45fa6148ac7eb93406eb4b17bd890e8cfcdd072b8ca8aca524d0e01bf36ea8c",
+   "size": 149848
+  },
+  {
+   "name": "top_blazer.male.glb",
+   "sha256": "89a4165fecc7a20c225dcd1618374ea6a104cfcd4740db0abcbc884374f9d8e3",
+   "size": 149836
+  },
+  {
+   "name": "top_blouse.female.glb",
+   "sha256": "5270b595d21f17d0eb54a452bd9ef37aea8ce0706defd763aff97ca3764aec71",
+   "size": 89580
+  },
+  {
+   "name": "top_blouse.male.glb",
+   "sha256": "7864da27a6185858bb41cbde3e71ca4a274c63acaee962be420999f49800e916",
+   "size": 89568
+  },
+  {
+   "name": "top_buttonup.female.glb",
+   "sha256": "0b1be7473710df42cb5d521d436798882e7f9d92bfa1f6395f5d601af01e18fe",
+   "size": 121756
+  },
+  {
+   "name": "top_buttonup.male.glb",
+   "sha256": "c3329712239b878704257c2982f638810d8a82c27011b6f12e69f3afef58d3d5",
+   "size": 121744
+  },
+  {
+   "name": "top_cardigan.female.glb",
+   "sha256": "324a0eb0f5415dd91105f9c38aeadf6c85e453fdf23f2b974c8361e7b5029cab",
+   "size": 139348
+  },
+  {
+   "name": "top_cardigan.male.glb",
+   "sha256": "22de5f2fba301d4f97195aaa4649d4ee153c7352da07067ff18007580895352b",
+   "size": 139336
+  },
+  {
+   "name": "top_denimjacket.female.glb",
+   "sha256": "afe4e3a2de955ee995f75a5f19ed5b9a151b7147adee237402dd27f95f907b41",
+   "size": 146976
+  },
+  {
+   "name": "top_denimjacket.male.glb",
+   "sha256": "cfb15d95c7a6f8d0a8dab499194cb6a0201f0410931d773678561447302c4eb8",
+   "size": 146964
+  },
+  {
+   "name": "top_flannel.female.glb",
+   "sha256": "e7562e513793d7c58a9ebe45906fa18ce50ab6a0d56a911ca1e7863f1f56c191",
+   "size": 121732
+  },
+  {
+   "name": "top_flannel.male.glb",
+   "sha256": "67a82debc6a6a89d13480f7e02bae44655a540e67385379eea32f6a611f997f4",
+   "size": 121720
+  },
+  {
+   "name": "top_henley.female.glb",
+   "sha256": "f4827670d6a91c19561d887cff406f26b186715ace5b6995335e2d2600e85621",
+   "size": 114320
+  },
+  {
+   "name": "top_henley.male.glb",
+   "sha256": "315ab45a90e11ab1ef2c71cccca605715688e09a57aecfe1ec55041d6e533256",
+   "size": 114304
   },
   {
    "name": "top_hoodie.female.glb",
@@ -933,13 +1223,33 @@
   },
   {
    "name": "top_jacket.female.glb",
-   "sha256": "5fca82b0be958fc5e3597cc5b9351042230a2cd61f07cf54616e3eb0a3d6baeb",
-   "size": 125324
+   "sha256": "94ee43358e0e93994b5efdd6efe1d4910862dd737cdc0d01d242d3982a51954b",
+   "size": 139672
   },
   {
    "name": "top_jacket.male.glb",
-   "sha256": "6613ea1408916209dc4db50e964ff08ed646eb4a5a132c6f1d85c1fc1c8ffe8a",
-   "size": 125316
+   "sha256": "2052ff8d5f1c2b6972118ed68060f7873325bac7686e55ce15809e7dd945857b",
+   "size": 139660
+  },
+  {
+   "name": "top_jersey.female.glb",
+   "sha256": "ee928ea0ad3544d6c4d63ee7a69ad53c9e409b19f67c9d37fd6ccb990e2b24ae",
+   "size": 93868
+  },
+  {
+   "name": "top_jersey.male.glb",
+   "sha256": "ec150644a72c9bee950b168f652a94fcf06dea528b6843262b2bff702dbe058a",
+   "size": 93856
+  },
+  {
+   "name": "top_layered.female.glb",
+   "sha256": "0dca7f4183c1c79b143aed4fbcb65849fd2061057cd99c08766692686d9431d8",
+   "size": 128552
+  },
+  {
+   "name": "top_layered.male.glb",
+   "sha256": "23bb7a11ec7dc40d2397304cf81a005556b5285235678a34fa3f9788ba024878",
+   "size": 128536
   },
   {
    "name": "top_longsleeve.female.glb",
@@ -962,6 +1272,46 @@
    "size": 94420
   },
   {
+   "name": "top_puffer.female.glb",
+   "sha256": "8f0ff55710a9a664bfab04f7c6f373126c2eae8c3dbb063698d9d4d16bf6b119",
+   "size": 109080
+  },
+  {
+   "name": "top_puffer.male.glb",
+   "sha256": "f386be388fae22c14d97d1dad7461c3b2ab78e6b06109f6e3695898931052064",
+   "size": 109064
+  },
+  {
+   "name": "top_puffervest.female.glb",
+   "sha256": "af248ddcb69e7bd152a8faa46336e9ec8fdba99bacf1683ff2b8052f0bd633f7",
+   "size": 155928
+  },
+  {
+   "name": "top_puffervest.male.glb",
+   "sha256": "3e4ddd4d41ba297817b829e353b8a121904871b40ede3776807f1515901c901a",
+   "size": 155916
+  },
+  {
+   "name": "top_quarterzip.female.glb",
+   "sha256": "126ed0d43c85f4886181659e151ab41e439d1472b7c3fc445fc4db59b76ecc3e",
+   "size": 109100
+  },
+  {
+   "name": "top_quarterzip.male.glb",
+   "sha256": "a06147124dc17eec6e36c950702d6655a3e3151a7bd15879cbfd68c16017875d",
+   "size": 109088
+  },
+  {
+   "name": "top_raglan.female.glb",
+   "sha256": "2c5fc8004d499820e00212756ffcd3669c2f86d09377528101068e1544b243f5",
+   "size": 95196
+  },
+  {
+   "name": "top_raglan.male.glb",
+   "sha256": "25be6f4fccfbdaf7abfd1eda26107278a79eb657d13e5908815ddc0c7108d88a",
+   "size": 95180
+  },
+  {
    "name": "top_shirt.female.glb",
    "sha256": "9e336d975ec1c83455def11efb665eed0c989560639258d158d4c3f85b6ddbf1",
    "size": 105092
@@ -972,6 +1322,16 @@
    "size": 105076
   },
   {
+   "name": "top_stripedtee.female.glb",
+   "sha256": "db389df3c2960545d6948ac5a2d30fcba03c2a0f01b86bff025dc557056c50f4",
+   "size": 91068
+  },
+  {
+   "name": "top_stripedtee.male.glb",
+   "sha256": "94488ba05a672b1b2dc057c82d475a05586121a0ea448add2bbaec858490b7dc",
+   "size": 91056
+  },
+  {
    "name": "top_sweater.female.glb",
    "sha256": "47f363a265dd57fca7dacee74550e390e71b88d0cf144db677982ca59a339ab8",
    "size": 107264
@@ -980,6 +1340,16 @@
    "name": "top_sweater.male.glb",
    "sha256": "5392db4fcb5d4724d46029493da34f1d51e9629d24d5c29a9e3c221dfcbb4673",
    "size": 107256
+  },
+  {
+   "name": "top_sweatshirt.female.glb",
+   "sha256": "dce47a2c919e5939bcc8820a01296f840e040ecf195708dca6dc0036da7c5296",
+   "size": 107280
+  },
+  {
+   "name": "top_sweatshirt.male.glb",
+   "sha256": "2e847fa7e1b31dffff884f515bf770afcab6aa09700b87b1239b34659be95de0",
+   "size": 107268
   },
   {
    "name": "top_tank.female.glb",
@@ -1010,6 +1380,46 @@
    "name": "top_turtleneck.male.glb",
    "sha256": "0c2fff95d075f1113ca0054bde9fa6ce40e771c497da3fcf8a8f89e3661f6cfa",
    "size": 111184
+  },
+  {
+   "name": "top_vest.female.glb",
+   "sha256": "9f31d7cb86ccb04f5c89784ba7d7f00df15b84f583ae0553b7b06846b5eeb8c6",
+   "size": 149752
+  },
+  {
+   "name": "top_vest.male.glb",
+   "sha256": "a057586b6d6b455fd891187270cdc0086bd6e0185c7f232fa1943aa5598f1b59",
+   "size": 149740
+  },
+  {
+   "name": "top_vneck.female.glb",
+   "sha256": "d0d3b917c019685cac5cb612643c27817533da1f0784a7cc46245108bc818cb5",
+   "size": 93880
+  },
+  {
+   "name": "top_vneck.male.glb",
+   "sha256": "1d848ef679c534dffde57270dbbf99c3afa955a4ef0b876dcb1c46a56d48f02c",
+   "size": 93868
+  },
+  {
+   "name": "top_windbreaker.female.glb",
+   "sha256": "5b7cfc69ebd141f4367e20fc8c341cbfc6171da6397d17500918e57ce422726d",
+   "size": 109124
+  },
+  {
+   "name": "top_windbreaker.male.glb",
+   "sha256": "599435ac782f0f7029de52970aca3178b05a4b93d5f236a68f171a582f3581cf",
+   "size": 109108
+  },
+  {
+   "name": "top_ziphoodie.female.glb",
+   "sha256": "5ab3f3ab87b71982eb86f5616a6d72fa9af356c4970a69fc07af41c824d32e64",
+   "size": 136384
+  },
+  {
+   "name": "top_ziphoodie.male.glb",
+   "sha256": "164cdfa054c600c4abe56d9b0379263d6c52e266e24a0ba5a8be93f475a5555d",
+   "size": 136380
   }
  ],
  "bodies": {
@@ -8355,6 +8765,552 @@
     "male": 0.05
    },
    "slot": "hair"
+  },
+  {
+   "assets": {
+    "female": "top_vneck.female.glb",
+    "male": "top_vneck.male.glb"
+   },
+   "format": 3,
+   "id": 300,
+   "name": "top_vneck",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_raglan.female.glb",
+    "male": "top_raglan.male.glb"
+   },
+   "format": 3,
+   "id": 301,
+   "name": "top_raglan",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_buttonup.female.glb",
+    "male": "top_buttonup.male.glb"
+   },
+   "format": 3,
+   "id": 302,
+   "name": "top_buttonup",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_flannel.female.glb",
+    "male": "top_flannel.male.glb"
+   },
+   "format": 3,
+   "id": 303,
+   "name": "top_flannel",
+   "random": {
+    "female": 0.6,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_sweatshirt.female.glb",
+    "male": "top_sweatshirt.male.glb"
+   },
+   "format": 3,
+   "id": 304,
+   "name": "top_sweatshirt",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_ziphoodie.female.glb",
+    "male": "top_ziphoodie.male.glb"
+   },
+   "format": 3,
+   "id": 305,
+   "name": "top_ziphoodie",
+   "random": {
+    "female": 0.9,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_quarterzip.female.glb",
+    "male": "top_quarterzip.male.glb"
+   },
+   "format": 3,
+   "id": 306,
+   "name": "top_quarterzip",
+   "random": {
+    "female": 0.6,
+    "male": 0.8
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_cardigan.female.glb",
+    "male": "top_cardigan.male.glb"
+   },
+   "format": 3,
+   "id": 307,
+   "name": "top_cardigan",
+   "random": {
+    "female": 1.0,
+    "male": 0.5
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_vest.female.glb",
+    "male": "top_vest.male.glb"
+   },
+   "format": 3,
+   "id": 308,
+   "name": "top_vest",
+   "random": {
+    "female": 0.4,
+    "male": 0.6
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_puffervest.female.glb",
+    "male": "top_puffervest.male.glb"
+   },
+   "format": 3,
+   "id": 309,
+   "name": "top_puffervest",
+   "random": {
+    "female": 0.6,
+    "male": 0.7
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_puffer.female.glb",
+    "male": "top_puffer.male.glb"
+   },
+   "format": 3,
+   "id": 310,
+   "name": "top_puffer",
+   "random": {
+    "female": 0.6,
+    "male": 0.7
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_blazer.female.glb",
+    "male": "top_blazer.male.glb"
+   },
+   "format": 3,
+   "id": 311,
+   "name": "top_blazer",
+   "random": {
+    "female": 0.6,
+    "male": 0.8
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_denimjacket.female.glb",
+    "male": "top_denimjacket.male.glb"
+   },
+   "format": 3,
+   "id": 312,
+   "name": "top_denimjacket",
+   "random": {
+    "female": 0.8,
+    "male": 0.8
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_jersey.female.glb",
+    "male": "top_jersey.male.glb"
+   },
+   "format": 3,
+   "id": 313,
+   "name": "top_jersey",
+   "random": {
+    "female": 0.5,
+    "male": 0.9
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_stripedtee.female.glb",
+    "male": "top_stripedtee.male.glb"
+   },
+   "format": 3,
+   "id": 314,
+   "name": "top_stripedtee",
+   "random": {
+    "female": 1.0,
+    "male": 0.9
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_blouse.female.glb",
+    "male": "top_blouse.male.glb"
+   },
+   "format": 3,
+   "id": 315,
+   "name": "top_blouse",
+   "random": {
+    "female": 1.2,
+    "male": 0.05
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_henley.female.glb",
+    "male": "top_henley.male.glb"
+   },
+   "format": 3,
+   "id": 316,
+   "name": "top_henley",
+   "random": {
+    "female": 0.6,
+    "male": 0.9
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_windbreaker.female.glb",
+    "male": "top_windbreaker.male.glb"
+   },
+   "format": 3,
+   "id": 317,
+   "name": "top_windbreaker",
+   "random": {
+    "female": 0.7,
+    "male": 0.8
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "top_layered.female.glb",
+    "male": "top_layered.male.glb"
+   },
+   "format": 3,
+   "id": 318,
+   "name": "top_layered",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "top"
+  },
+  {
+   "assets": {
+    "female": "bottom_chinos.female.glb",
+    "male": "bottom_chinos.male.glb"
+   },
+   "format": 3,
+   "id": 350,
+   "name": "bottom_chinos",
+   "random": {
+    "female": 0.8,
+    "male": 1.2
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_formal.female.glb",
+    "male": "bottom_formal.male.glb"
+   },
+   "format": 3,
+   "id": 351,
+   "name": "bottom_formal",
+   "random": {
+    "female": 0.5,
+    "male": 0.8
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_sportshorts.female.glb",
+    "male": "bottom_sportshorts.male.glb"
+   },
+   "format": 3,
+   "id": 352,
+   "name": "bottom_sportshorts",
+   "random": {
+    "female": 0.6,
+    "male": 0.8
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_cargoshorts.female.glb",
+    "male": "bottom_cargoshorts.male.glb"
+   },
+   "format": 3,
+   "id": 353,
+   "name": "bottom_cargoshorts",
+   "random": {
+    "female": 0.4,
+    "male": 0.9
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_capri.female.glb",
+    "male": "bottom_capri.male.glb"
+   },
+   "format": 3,
+   "id": 354,
+   "name": "bottom_capri",
+   "random": {
+    "female": 0.8,
+    "male": 0.1
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_wideleg.female.glb",
+    "male": "bottom_wideleg.male.glb"
+   },
+   "format": 3,
+   "id": 355,
+   "name": "bottom_wideleg",
+   "random": {
+    "female": 0.8,
+    "male": 0.3
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_leggings.female.glb",
+    "male": "bottom_leggings.male.glb"
+   },
+   "format": 3,
+   "id": 356,
+   "name": "bottom_leggings",
+   "random": {
+    "female": 1.0,
+    "male": 0.05
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_denimskirt.female.glb",
+    "male": "bottom_denimskirt.male.glb"
+   },
+   "format": 3,
+   "id": 357,
+   "name": "bottom_denimskirt",
+   "random": {
+    "female": 0.9,
+    "male": 0.02
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_midiskirt.female.glb",
+    "male": "bottom_midiskirt.male.glb"
+   },
+   "format": 3,
+   "id": 358,
+   "name": "bottom_midiskirt",
+   "random": {
+    "female": 0.9,
+    "male": 0.02
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_trackpants.female.glb",
+    "male": "bottom_trackpants.male.glb"
+   },
+   "format": 3,
+   "id": 359,
+   "name": "bottom_trackpants",
+   "random": {
+    "female": 0.8,
+    "male": 1.0
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "bottom_bermuda.female.glb",
+    "male": "bottom_bermuda.male.glb"
+   },
+   "format": 3,
+   "id": 360,
+   "name": "bottom_bermuda",
+   "random": {
+    "female": 0.4,
+    "male": 0.8
+   },
+   "slot": "bottom"
+  },
+  {
+   "assets": {
+    "female": "shoes_running.female.glb",
+    "male": "shoes_running.male.glb"
+   },
+   "format": 3,
+   "id": 400,
+   "name": "shoes_running",
+   "random": {
+    "female": 1.0,
+    "male": 1.0
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_loafers.female.glb",
+    "male": "shoes_loafers.male.glb"
+   },
+   "format": 3,
+   "id": 401,
+   "name": "shoes_loafers",
+   "random": {
+    "female": 0.6,
+    "male": 0.8
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_slipons.female.glb",
+    "male": "shoes_slipons.male.glb"
+   },
+   "format": 3,
+   "id": 402,
+   "name": "shoes_slipons",
+   "random": {
+    "female": 0.9,
+    "male": 0.8
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_hiking.female.glb",
+    "male": "shoes_hiking.male.glb"
+   },
+   "format": 3,
+   "id": 403,
+   "name": "shoes_hiking",
+   "random": {
+    "female": 0.5,
+    "male": 0.8
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_chelsea.female.glb",
+    "male": "shoes_chelsea.male.glb"
+   },
+   "format": 3,
+   "id": 404,
+   "name": "shoes_chelsea",
+   "random": {
+    "female": 0.7,
+    "male": 0.7
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_sandals.female.glb",
+    "male": "shoes_sandals.male.glb"
+   },
+   "format": 3,
+   "id": 405,
+   "name": "shoes_sandals",
+   "random": {
+    "female": 0.6,
+    "male": 0.4
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_rainboots.female.glb",
+    "male": "shoes_rainboots.male.glb"
+   },
+   "format": 3,
+   "id": 406,
+   "name": "shoes_rainboots",
+   "random": {
+    "female": 0.4,
+    "male": 0.3
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_skate.female.glb",
+    "male": "shoes_skate.male.glb"
+   },
+   "format": 3,
+   "id": 407,
+   "name": "shoes_skate",
+   "random": {
+    "female": 0.7,
+    "male": 0.9
+   },
+   "slot": "shoes"
+  },
+  {
+   "assets": {
+    "female": "shoes_maryjanes.female.glb",
+    "male": "shoes_maryjanes.male.glb"
+   },
+   "format": 3,
+   "id": 408,
+   "name": "shoes_maryjanes",
+   "random": {
+    "female": 0.8,
+    "male": 0.02
+   },
+   "slot": "shoes"
   }
  ],
  "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",

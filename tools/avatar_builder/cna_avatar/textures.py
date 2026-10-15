@@ -155,11 +155,27 @@ def cloth(kind, width=128, height=128, seed=0):
             return 0.78 + 0.18 * folds * smoothstep(0.1, 0.9, v)
         if kind == "plain":
             return 0.95
+        if kind == "check":
+            # A plaid: two crossing sets of darker bands with a finer line between.
+            bx = 0.5 + 0.5 * math.cos(u * 8.0 * 2.0 * math.pi)
+            by = 0.5 + 0.5 * math.cos(v * 8.0 * 2.0 * math.pi)
+            line = smoothstep(0.92, 1.0, 0.5 + 0.5 * math.cos(u * 16.0 * 2.0 * math.pi + 1.0)) + \
+                smoothstep(0.92, 1.0, 0.5 + 0.5 * math.cos(v * 16.0 * 2.0 * math.pi + 1.0))
+            return 0.98 - 0.22 * smoothstep(0.55, 0.75, bx) - 0.22 * smoothstep(0.55, 0.75, by) + 0.10 * min(line, 1.0)
+        if kind == "stripes":
+            band = 0.5 + 0.5 * math.cos(v * 14.0 * 2.0 * math.pi)
+            return 0.97 - 0.32 * smoothstep(0.35, 0.55, band) + 0.04 * (fbm(u * 16.0, v * 16.0, seed + 3, 2, wrap_x=16) - 0.5)
+        if kind == "quilt":
+            channel = abs(math.sin(v * 9.0 * math.pi))
+            return 0.68 + 0.30 * channel ** 0.5
+        if kind == "jersey":
+            mesh = 0.5 + 0.25 * math.sin(u * 160.0 * math.pi) * math.sin(v * 160.0 * math.pi)
+            return 0.86 + 0.06 * mesh + 0.06 * (fbm(u * 12.0, v * 12.0, seed + 15, 2, wrap_x=12) - 0.5)
         return 0.88 + 0.10 * (fbm(u * 16.0, v * 16.0, seed + 1, 3, wrap_x=16) - 0.5)
 
     def fn(u, v):
         f = fabric(u, v)
-        if kind not in ("plain", "leather", "rib"):
+        if kind not in ("plain", "leather", "rib", "check", "stripes", "quilt"):
             # Side seams with a line of stitches beside them.
             for seam in (0.25, 0.75):
                 d = abs(u - seam) * width

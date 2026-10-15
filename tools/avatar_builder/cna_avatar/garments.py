@@ -185,6 +185,8 @@ def row_y(body_type, row):
 # ----- tops ---------------------------------------------------------------------------------------
 
 def top(body_type, style):
+    if style in REVISED_TOPS:
+        return revised_top(body_type, style)
     tw = hem_weights(body_type)
     parts = []
     main = Mesh()
@@ -280,6 +282,7 @@ def top(body_type, style):
         # An open zip jacket (top colour) over a crew shirt (accessory colour).
         inner = Mesh()
         inner.append(shell(body_type, 0.017, (1, 10), lower=0.02, flare=0.026))
+        inner.append(_hem(body_type, 0.017, 0.026, 0.02, 0.005))
         inner.append(neck_rib(body_type, 0.009, 0.008, drop=0.004))
         parts.append((inner, "accessory", "knit", (1.0, 1.0, 1.0)))
         main.append(_open_shell(body_type, 0.030, (1, 10), gap=0.34, lower=0.04, flare=0.030))
@@ -399,6 +402,8 @@ def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004):
 # ----- bottoms ------------------------------------------------------------------------------------
 
 def bottom(body_type, style):
+    if style in REVISED_BOTTOMS:
+        return revised_bottom(body_type, style)
     tw = body.torso_weights(body_type)
     main = Mesh()
     parts = []
@@ -548,6 +553,8 @@ def shoe(body_type, side, style, socks):
 
 
 def shoes(body_type, style):
+    if style in REVISED_SHOES:
+        return revised_shoes(body_type, style)
     parts = []
     upper, trim, socks = Mesh(), Mesh(), Mesh()
     for side, _ in rig.SIDES:
@@ -561,4 +568,445 @@ def shoes(body_type, style):
         parts.append((trim, "none", "plain", colour))
     if socks.positions:
         parts.append((socks, "none", "rib", (0.94, 0.94, 0.92) if style == "shoes_sneakers" else (0.20, 0.20, 0.22)))
+    return parts
+
+
+# ----- catalog v3 revision 2: more tops, bottoms and shoes ---------------------------------------
+
+REVISED_TOPS = ["top_vneck", "top_raglan", "top_buttonup", "top_flannel", "top_sweatshirt", "top_ziphoodie", "top_quarterzip",
+                "top_cardigan", "top_vest", "top_puffervest", "top_puffer", "top_blazer", "top_denimjacket", "top_jersey",
+                "top_stripedtee", "top_blouse", "top_henley", "top_windbreaker", "top_layered"]
+REVISED_BOTTOMS = ["bottom_chinos", "bottom_formal", "bottom_sportshorts", "bottom_cargoshorts", "bottom_capri",
+                   "bottom_wideleg", "bottom_leggings", "bottom_denimskirt", "bottom_midiskirt", "bottom_trackpants",
+                   "bottom_bermuda"]
+REVISED_SHOES = ["shoes_running", "shoes_loafers", "shoes_slipons", "shoes_hiking", "shoes_chelsea", "shoes_sandals",
+                 "shoes_rainboots", "shoes_skate", "shoes_maryjanes"]
+
+
+def v_rib(body_type, inflate, radius, depth):
+    """A V neckline: a rib around the base of the neck dipping to a point at the front."""
+    c, rx, rz, n = body.torso_sections(body_type, inflate)[10]
+    loop = []
+    for k in range(40):
+        a = 2.0 * PI * k / 40
+        wrapped = abs(((a + PI) % (2.0 * PI)) - PI)
+        v = max(0.0, 1.0 - wrapped / 0.85)
+        loop.append((c[0] + rx * 0.92 * math.sin(a), c[1] - depth * v, c[2] + rz * math.cos(a) * (1.0 + 0.30 * v)))
+    return tube(loop, [radius] * len(loop), 8, body.torso_weights(body_type), closed=True)
+
+
+def placket(body_type, inflate, top_row, bottom_y, radius, weights):
+    """A line down the centre front (a zip or a button placket) from a torso row to bottom_y."""
+    top = front_point(body_type, top_row, inflate + 0.002, 0.0)
+    path = []
+    for k in range(9):
+        y = top[1] + (bottom_y - top[1]) * k / 8
+        path.append((0.0, y, front_z(body_type, inflate + 0.002, 0.0, y) + 0.001))
+    return tube(path, [radius] * len(path), 6, weights)
+
+
+def buttons_down(body_type, inflate, count, top_y, spacing, weights):
+    m = Mesh()
+    for k in range(count):
+        m.append(_button_at(body_type, inflate, top_y - k * spacing, weights))
+    return m
+
+
+def revised_top(body_type, style):
+    tw = hem_weights(body_type)
+    parts, main, trim, accent = [], Mesh(), Mesh(), Mesh()
+    texture = "knit"
+    trim_colour = (0.92, 0.91, 0.88)
+    collar_y = row_y(body_type, 9)
+
+    def tee(inflate=0.017, sleeves=0.42, hem=0.006):
+        main.append(shell(body_type, inflate, (1, 10), lower=0.03, flare=0.030))
+        main.append(_hem(body_type, inflate, 0.030, 0.03, hem))
+        for side, _ in rig.SIDES:
+            (accent if style == "top_raglan" else main).append(sleeve(body_type, side, inflate - 0.001, sleeves, cuff=0.006,
+                                                                     flare=0.006 if sleeves < 0.6 else 0.0))
+
+    if style in ("top_vneck", "top_jersey", "top_stripedtee", "top_raglan"):
+        tee()
+        if style == "top_stripedtee":
+            main.append(neck_rib(body_type, 0.012, 0.009, drop=0.004))
+            texture = "stripes"
+        else:
+            main.append(v_rib(body_type, 0.013, 0.008, 0.055))
+            texture = "jersey" if style == "top_jersey" else "knit"
+    elif style == "top_layered":
+        tee()
+        main.append(neck_rib(body_type, 0.012, 0.009, drop=0.004))
+        for side, _ in rig.SIDES:
+            accent.append(sleeve(body_type, side, 0.011, 0.95, cuff=0.007, start=0.36))
+    elif style in ("top_buttonup", "top_flannel", "top_henley"):
+        henley = style == "top_henley"
+        inflate = 0.017 if henley else 0.019
+        main.append(shell(body_type, inflate, (1, 10), lower=0.045 if not henley else 0.03, flare=0.030))
+        main.append(_hem(body_type, inflate, 0.030, 0.045 if not henley else 0.03, 0.004))
+        for side, _ in rig.SIDES:
+            main.append(sleeve(body_type, side, inflate - 0.001, 0.95, cuff=0.008))
+        if henley:
+            main.append(neck_rib(body_type, 0.012, 0.009, drop=0.004))
+            trim.append(buttons_down(body_type, 0.022, 3, collar_y - 0.035, 0.028, tw))
+        else:
+            main.append(_collar(body_type, 0.018, spread=0.7))
+            trim.append(buttons_down(body_type, 0.022, 6, collar_y - 0.045, 0.070, tw))
+            c = front_point(body_type, 7, inflate, 0.065)
+            main.append(patch(body_type, add(c, (0.0, -0.02, 0.0)), (0.028, 0.032), (0.1, 0.0, 1.0), tw, depth=0.004))
+        texture = "check" if style == "top_flannel" else "canvas" if not henley else "knit"
+    elif style == "top_sweatshirt":
+        main.append(shell(body_type, 0.026, (1, 10), lower=0.035, flare=0.012))
+        main.append(_hem(body_type, 0.026, 0.012, 0.035, 0.013))
+        main.append(neck_rib(body_type, 0.022, 0.013, drop=0.004))
+        for side, _ in rig.SIDES:
+            main.append(sleeve(body_type, side, 0.024, 0.93, cuff=0.012))
+        texture = "fleece"
+    elif style == "top_ziphoodie":
+        main.append(shell(body_type, 0.028, (1, 10), lower=0.04, flare=0.010))
+        main.append(_hem(body_type, 0.028, 0.010, 0.04, 0.012))
+        main.append(neck_rib(body_type, 0.024, 0.011, drop=0.0))
+        for side, _ in rig.SIDES:
+            main.append(sleeve(body_type, side, 0.024, 0.93, cuff=0.011))
+        main.append(_hood(body_type))
+        trim.append(placket(body_type, 0.028, 10, row_y(body_type, 1) - 0.035, 0.0035, tw))
+        for sx in (0.07, -0.07):
+            c = front_point(body_type, 3, 0.028, sx)
+            main.append(patch(body_type, add(c, (0.0, -0.02, 0.0)), (0.040, 0.050), (sx * 3.0, 0.0, 1.0), tw, depth=0.005))
+        trim_colour = (0.55, 0.56, 0.58)
+        texture = "fleece"
+    elif style in ("top_quarterzip", "top_windbreaker", "top_puffer"):
+        inflate = {"top_quarterzip": 0.018, "top_windbreaker": 0.030, "top_puffer": 0.044}[style]
+        main.append(shell(body_type, inflate, (1, 10), lower=0.035 if style != "top_puffer" else 0.05, flare=0.014))
+        main.append(_hem(body_type, inflate, 0.014, 0.035 if style != "top_puffer" else 0.05, 0.008 if style == "top_quarterzip" else 0.012))
+        for side, _ in rig.SIDES:
+            main.append(sleeve(body_type, side, inflate - 0.002, 0.93, cuff=0.010))
+        main.append(_collar_stand(body_type, inflate))
+        bottom_y = collar_y - 0.12 if style == "top_quarterzip" else row_y(body_type, 1) - 0.04
+        trim.append(placket(body_type, inflate, 10, bottom_y, 0.003, tw))
+        trim_colour = (0.55, 0.56, 0.58)
+        texture = {"top_quarterzip": "jersey", "top_windbreaker": "canvas", "top_puffer": "quilt"}[style]
+    elif style in ("top_cardigan", "top_blazer", "top_denimjacket", "top_vest", "top_puffervest"):
+        inner = Mesh()
+        inner.append(shell(body_type, 0.017, (1, 10), lower=0.02, flare=0.026))
+        inner.append(_hem(body_type, 0.017, 0.026, 0.02, 0.005))
+        if style in ("top_blazer", "top_vest"):
+            inner.append(_collar(body_type, 0.016, spread=0.8))
+            for side, _ in rig.SIDES:
+                inner.append(sleeve(body_type, side, 0.015, 0.95, cuff=0.007) if style == "top_vest" else Mesh())
+        else:
+            inner.append(neck_rib(body_type, 0.009, 0.008, drop=0.004))
+            if style == "top_puffervest":
+                for side, _ in rig.SIDES:
+                    inner.append(sleeve(body_type, side, 0.015, 0.95, cuff=0.008))
+        inner_texture = "canvas" if style in ("top_blazer", "top_vest") else "knit"
+        inner_parts = [(inner, "accessory", inner_texture, (1.0, 1.0, 1.0))]
+        if style == "top_cardigan":
+            main.append(_open_shell(body_type, 0.026, (1, 10), gap=0.30, lower=0.05, flare=0.026))
+            for side, _ in rig.SIDES:
+                main.append(sleeve(body_type, side, 0.024, 0.94, cuff=0.011))
+            for k in range(4):
+                y = collar_y - 0.10 - k * 0.075
+                p = front_point(body_type, 7, 0.030, 0.0)
+                trim.append(ellipsoid((0.045, y, front_z(body_type, 0.030, 0.045, y) + 0.003), ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                                      (0.006, 0.006, 0.0025), 8, 5, lambda q, v, u: tw(q)))
+            texture = "cable"
+        elif style == "top_blazer":
+            main.append(_open_shell(body_type, 0.030, (1, 10), gap=0.62, lower=0.085, flare=0.034))
+            main.append(_collar_stand(body_type, 0.030))
+            for side, _ in rig.SIDES:
+                main.append(sleeve(body_type, side, 0.027, 0.95, cuff=0.006))
+            for sx in (0.085, -0.085):
+                c = front_point(body_type, 2, 0.032, sx)
+                main.append(patch(body_type, c, (0.036, 0.010), (sx * 2.5, 0.0, 1.0), tw, depth=0.004))
+            for k in range(2):
+                y = row_y(body_type, 3) + 0.02 - k * 0.07
+                trim.append(ellipsoid((0.040, y, front_z(body_type, 0.034, 0.040, y) + 0.003), ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                                      (0.007, 0.007, 0.003), 8, 5, lambda q, v, u: tw(q)))
+            trim_colour = (0.20, 0.20, 0.22)
+            texture = "plain"
+        elif style == "top_denimjacket":
+            main.append(_open_shell(body_type, 0.030, (1, 10), gap=0.24, lower=0.04, flare=0.022))
+            main.append(_collar(body_type, 0.030, spread=0.5))
+            for side, _ in rig.SIDES:
+                main.append(sleeve(body_type, side, 0.027, 0.94, cuff=0.010))
+            for sx in (0.075, -0.075):
+                c = front_point(body_type, 7, 0.032, sx)
+                main.append(patch(body_type, add(c, (0.0, -0.01, 0.0)), (0.032, 0.026), (sx * 2.0, 0.0, 1.0), tw, depth=0.005))
+            trim_colour = (0.78, 0.62, 0.30)
+            texture = "denim"
+        else:
+            # Waistcoat or puffer vest: sleeveless over the inner shirt.
+            puffy = style == "top_puffervest"
+            inflate = 0.040 if puffy else 0.024
+            main.append(_open_shell(body_type, inflate, (1, 9), gap=0.10, lower=0.03 if puffy else 0.05, flare=0.010))
+            main.append(_hem(body_type, inflate, 0.010, 0.03 if puffy else 0.05, 0.006))
+            if puffy:
+                main.append(_collar_stand(body_type, inflate))
+                trim.append(placket(body_type, inflate, 9, row_y(body_type, 1) - 0.03, 0.003, tw))
+                trim_colour = (0.55, 0.56, 0.58)
+            else:
+                trim.append(buttons_down(body_type, inflate + 0.006, 4, collar_y - 0.11, 0.06, tw))
+                trim_colour = (0.20, 0.20, 0.22)
+            texture = "quilt" if puffy else "plain"
+        parts += inner_parts
+    elif style == "top_blouse":
+        main.append(shell(body_type, 0.018, (1, 10), lower=0.05, flare=0.060))
+        main.append(_hem(body_type, 0.018, 0.060, 0.05, 0.005))
+        main.append(neck_rib(body_type, 0.012, 0.007, drop=0.006, depth=0.035))
+        for side, _ in rig.SIDES:
+            main.append(sleeve(body_type, side, 0.020, 0.34, cuff=0.006, flare=0.016))
+        texture = "plain"
+    else:
+        raise ValueError(style)
+    parts.append((main, "top", texture, (1.0, 1.0, 1.0)))
+    if accent.positions:
+        parts.append((accent, "accessory", "knit", (1.0, 1.0, 1.0)))
+    if trim.positions:
+        parts.append((trim, "none", "plain", trim_colour))
+    return parts
+
+
+def _trousers(body_type, inflate, end, cuff, flare, texture, pockets=False, stripes=False, crease=False):
+    tw = body.torso_weights(body_type)
+    main, accent = Mesh(), Mesh()
+    main.append(shell(body_type, inflate, (0, 3), cap_bottom=0.05))
+    main.append(ring_band(body_type, 3, inflate - 0.002, 0.0055))
+    pos = rig.joint_positions(body_type)
+    for side, sign in rig.SIDES:
+        main.append(trouser_leg(body_type, side, inflate + 0.002, end, cuff=cuff, flare=flare))
+        hip, knee, ankle = pos[I["Hip" + side]], pos[I["Knee" + side]], pos[I["Ankle" + side]]
+        lw = body.leg_weights(body_type, side)
+        if pockets:
+            c = lerp(hip, knee, 0.55)
+            main.append(patch(body_type, add(c, (sign * 0.074, 0.0, 0.004)), (0.036, 0.046), (sign, 0.0, 0.25),
+                              lambda p, lw=lw: lw(0.3), depth=0.014))
+        if stripes or crease:
+            # A side stripe (sportswear) or a pressed crease down the front of each leg.
+            path, weights = [], []
+            total = length(sub(knee, hip)) + length(sub(ankle, knee))
+            for k in range(12):
+                t = 0.02 + (end - 0.04) * k / 11
+                if t * total <= length(sub(knee, hip)):
+                    centre = add(hip, mul(normalize(sub(knee, hip)), t * total))
+                else:
+                    centre = add(knee, mul(normalize(sub(ankle, knee)), t * total - length(sub(knee, hip))))
+                _, w, d = body._profile_at(body.LEG[body_type], t)
+                offset = (sign * (w + inflate + 0.004), 0.0, 0.0) if stripes else (0.0, 0.0, d + inflate + 0.004)
+                path.append(add(centre, offset))
+                weights.append(lw(t))
+            (accent if stripes else main).append(tube(path, [0.006 if stripes else 0.0018] * len(path), 6, None, row_weights=weights))
+    parts = [(main, "bottom", texture, (1.0, 1.0, 1.0))]
+    if accent.positions:
+        parts.append((accent, "accessory", "plain", (1.0, 1.0, 1.0)))
+    return parts
+
+
+def _skirt(body_type, length_offset, flare, texture):
+    main = Mesh()
+    main.append(shell(body_type, 0.008, (0, 3), cap_bottom=0.05))
+    main.append(ring_band(body_type, 3, 0.007, 0.005))
+    p = rig.PROPORTIONS[body_type]
+    a = body.anchors(body_type)
+    waist = body.torso_sections(body_type, 0.012)[3]
+    hips = body.torso_sections(body_type, 0.012)[1]
+    bottom_y = p["knee"][1] + length_offset
+    hip_y = p["hip"][1]
+    sections = []
+    for i in range(10):
+        t = i / 9.0
+        y = a["lower"] + 0.02 + (bottom_y - a["lower"] - 0.02) * t
+        k = smoothstep(a["lower"] + 0.02, hip_y - 0.02, y)
+        rx = waist[1] + (hips[1] - waist[1]) * k + flare * t * t
+        rz = waist[2] + (hips[2] - waist[2]) * k + flare * 0.8 * t * t
+        sections.append(((0.0, y, 0.0), rx, rz, 2.2))
+    sections.reverse()
+
+    def skirt(pt):
+        k = 0.95 * smoothstep(hip_y + 0.005, hip_y - 0.06, pt[1])
+        s = smoothstep(-0.07, 0.07, pt[0])
+        w = {I["BackLower"]: 1.0 - k}
+        if k > 0:
+            w[I["HipLeft"]] = k * s
+            w[I["HipRight"]] = k * (1.0 - s)
+        return w
+    main.append(body.section_loft(sections, 48, skirt))
+    hem = body.superellipse_ring(sections[0][0], sections[0][1], sections[0][2], 2.2, 48)
+    main.append(tube(hem, [0.006] * len(hem), 6, skirt, closed=True))
+    return [(main, "bottom", texture, (1.0, 1.0, 1.0))]
+
+
+def revised_bottom(body_type, style):
+    if style == "bottom_chinos":
+        return _trousers(body_type, 0.009, 0.97, 0.007, 0.0, "canvas")
+    if style == "bottom_formal":
+        return _trousers(body_type, 0.011, 0.98, 0.0, 0.010, "plain", crease=True)
+    if style == "bottom_sportshorts":
+        return _trousers(body_type, 0.012, 0.34, 0.006, 0.016, "jersey", stripes=True)
+    if style == "bottom_cargoshorts":
+        return _trousers(body_type, 0.011, 0.44, 0.007, 0.012, "canvas", pockets=True)
+    if style == "bottom_capri":
+        return _trousers(body_type, 0.009, 0.78, 0.007, 0.002, "canvas")
+    if style == "bottom_wideleg":
+        return _trousers(body_type, 0.014, 0.98, 0.0, 0.040, "plain")
+    if style == "bottom_leggings":
+        return _trousers(body_type, 0.004, 0.96, 0.0, -0.004, "knit")
+    if style == "bottom_trackpants":
+        return _trousers(body_type, 0.014, 0.97, 0.012, -0.004, "jersey", stripes=True)
+    if style == "bottom_bermuda":
+        return _trousers(body_type, 0.011, 0.52, 0.007, 0.010, "canvas")
+    if style == "bottom_denimskirt":
+        return _skirt(body_type, 0.11, 0.05, "denim")
+    if style == "bottom_midiskirt":
+        return _skirt(body_type, -0.07, 0.08, "pleat")
+    raise ValueError(style)
+
+
+# Footwear: (length, sole thickness, toe and heel height, toe rubber, laces, a sneaker collar,
+# a shaft (top t of the leg, inflation), a sock colour, the upper's texture, the trim colour).
+SHOE_SPECS = {
+    "shoes_running": dict(L=0.30, sole=0.030, toe=0.046, heel=0.078, rubber=0.016, laces=4, collar=True, shaft=None,
+                          sock=(0.94, 0.94, 0.92), texture="jersey", trim=(0.95, 0.95, 0.92), accent=True),
+    "shoes_loafers": dict(L=0.285, sole=0.014, toe=0.044, heel=0.066, rubber=0.0, laces=0, collar=False, shaft=None,
+                          sock=(0.20, 0.20, 0.22), texture="leather", trim=None),
+    "shoes_slipons": dict(L=0.285, sole=0.016, toe=0.044, heel=0.064, rubber=0.008, laces=0, collar=False, shaft=None,
+                          sock=None, texture="canvas", trim=(0.95, 0.95, 0.92)),
+    "shoes_hiking": dict(L=0.30, sole=0.034, toe=0.050, heel=0.084, rubber=0.010, laces=5, collar=False, shaft=(0.84, 0.016),
+                         sock=None, texture="leather", trim=(0.22, 0.20, 0.18)),
+    "shoes_chelsea": dict(L=0.29, sole=0.020, toe=0.046, heel=0.076, rubber=0.0, laces=0, collar=False, shaft=(0.86, 0.014),
+                          sock=None, texture="leather", trim=(0.16, 0.15, 0.15)),
+    "shoes_rainboots": dict(L=0.30, sole=0.026, toe=0.048, heel=0.082, rubber=0.0, laces=0, collar=False, shaft=(0.62, 0.024),
+                            sock=None, texture="plain", trim=None),
+    "shoes_skate": dict(L=0.30, sole=0.026, toe=0.050, heel=0.080, rubber=0.016, laces=4, collar=True, shaft=None,
+                        sock=(0.94, 0.94, 0.92), texture="canvas", trim=(0.95, 0.95, 0.92)),
+    "shoes_maryjanes": dict(L=0.255, sole=0.012, toe=0.040, heel=0.058, rubber=0.0, laces=0, collar=False, shaft=None,
+                            sock=(0.94, 0.94, 0.92), texture="leather", trim=None, strap=True),
+}
+
+
+def _spec_shoe(body_type, side, spec, socks, accent):
+    pos = rig.joint_positions(body_type)
+    ankle, toe = pos[I["Ankle" + side]], pos[I["Toe" + side]]
+    sign = 1.0 if side == "Left" else -1.0
+    scale = 1.0 if body_type == "male" else 0.92
+    L, W, HW = spec["L"] * scale, 0.108 * scale, 0.080 * scale
+    heel_z = ankle[2] - 0.065 * scale
+    sole_t = spec["sole"] * scale
+    weights = lambda p: blend(I["Ankle" + side], I["Toe" + side], smoothstep(toe[2] - 0.07, toe[2] + 0.01, p[2]))
+    cx = ankle[0] + sign * 0.004
+    n = 36
+    outline = [_footprint(L, W, HW, k / n) for k in range(n)]
+    trim, upper = Mesh(), Mesh()
+    rows = []
+    rubber = spec["rubber"] * scale
+    for y, inset in ((0.0, 0.006), (0.003, 0.0), (sole_t - 0.003, 0.0), (sole_t, 0.004)):
+        ring = []
+        for x, z in outline:
+            d = normalize((x, 0.0, (z - L * 0.5) * 0.35))
+            toe_lift = rubber * smoothstep(0.80, 0.98, z / L) * (y / sole_t)
+            ring.append((cx + x - d[0] * inset, y + toe_lift, heel_z + z - d[2] * inset))
+        rows.append(ring)
+    rows.insert(0, [(cx, 0.0, heel_z + L * 0.5)] * n)
+    rows.append([(cx, sole_t, heel_z + L * 0.5)] * n)
+    sole = Mesh().grid(rows, lambda p, v, u: weights(p))
+    (trim if spec["trim"] else upper).append(sole)
+    cz = heel_z + L * 0.46
+    toe_h, heel_h = spec["toe"] * scale, spec["heel"] * scale
+
+    def height(z):
+        return toe_h + (heel_h - toe_h) * smoothstep(0.78, 0.32, (z - heel_z) / L)
+    rows = []
+    for i in range(9):
+        a = 0.5 * PI * i / 8
+        r = math.cos(a)
+        ring = []
+        for x, z in outline:
+            px, pz = cx + x * r, cz + (heel_z + z - cz) * r
+            ring.append((px, sole_t - 0.004 + (height(pz) + 0.004) * math.sin(a) ** 0.8, pz))
+        rows.append(ring)
+    upper.append(Mesh().grid(rows, lambda p, v, u: weights(p)))
+    collar_y = sole_t + heel_h - 0.004 * scale
+    shin_r = body.LEG[body_type][-1][1]
+    if spec["shaft"]:
+        top_t, inflate = spec["shaft"]
+        upper.append(body.leg(body_type, side, inflate=inflate, t_range=(top_t, 1.0)))
+        upper.append(_limb_ring(body_type, side, "leg", top_t, inflate, 0.006 * scale))
+    elif spec["sock"]:
+        socks.append(body.leg(body_type, side, inflate=0.005, t_range=(0.88, 1.0)))
+    if spec["collar"]:
+        collar = [(ankle[0] + (shin_r + 0.009) * math.sin(2 * PI * k / 24), collar_y,
+                   ankle[2] - 0.004 + (shin_r + 0.009) * 1.05 * math.cos(2 * PI * k / 24)) for k in range(24)]
+        trim.append(tube(collar, [0.0055 * scale] * 24, 8, weights, closed=True))
+    for k in range(spec["laces"]):
+        z = heel_z + L * (0.66 - 0.075 * k)
+        yy = sole_t + height(z) + 0.002
+        trim.append(tube([(cx - 0.022, yy - 0.004, z), (cx, yy + 0.002, z + 0.004), (cx + 0.022, yy - 0.004, z)],
+                         [0.0035] * 3, 6, weights, round_end=True))
+    if spec.get("accent"):
+        # A swoosh-free accent band along the side of the upper.
+        for flank in (1.0, -1.0):
+            path = []
+            for k in range(8):
+                z = heel_z + L * (0.18 + 0.55 * k / 7)
+                x, _ = _footprint(L, W, HW, 0.25 if flank > 0 else 0.75)
+                path.append((cx + flank * (abs(x) * 0.96 + 0.002), sole_t + height(z) * (0.35 + 0.25 * k / 7), z))
+            accent.append(tube(path, [0.006 * scale] * len(path), 6, weights, round_end=True))
+    if spec.get("strap"):
+        z = heel_z + L * 0.42
+        strap = [(cx + (0.040 * scale) * math.cos(PI * k / 10), sole_t + height(z) * 0.95 * math.sin(PI * k / 10) + 0.004, z)
+                 for k in range(11)]
+        upper.append(tube(strap, [0.004 * scale] * 11, 6, weights))
+    return upper, trim
+
+
+def _sandal(body_type, side):
+    pos = rig.joint_positions(body_type)
+    ankle, toe = pos[I["Ankle" + side]], pos[I["Toe" + side]]
+    sign = 1.0 if side == "Left" else -1.0
+    scale = 1.0 if body_type == "male" else 0.92
+    L, W, HW = 0.27 * scale, 0.100 * scale, 0.076 * scale
+    heel_z = ankle[2] - 0.060 * scale
+    sole_t = 0.020 * scale
+    weights = lambda p: blend(I["Ankle" + side], I["Toe" + side], smoothstep(toe[2] - 0.07, toe[2] + 0.01, p[2]))
+    cx = ankle[0] + sign * 0.004
+    n = 32
+    outline = [_footprint(L, W, HW, k / n) for k in range(n)]
+    rows = [[(cx, 0.0, heel_z + L * 0.5)] * n]
+    for y, inset in ((0.0, 0.004), (sole_t, 0.0)):
+        rows.append([(cx + x, y, heel_z + z) for x, z in outline])
+    rows.append([(cx, sole_t, heel_z + L * 0.5)] * n)
+    sole = Mesh().grid(rows, lambda p, v, u: weights(p))
+    straps = Mesh()
+    foot_r = body.FOOT[body_type]
+    for frac, lift in ((0.70, 0.026), (0.40, 0.040)):
+        z = heel_z + L * frac
+        straps.append(tube([(cx + (foot_r[0] + 0.004) * math.cos(PI * k / 10), sole_t + lift * scale * math.sin(PI * k / 10), z)
+                            for k in range(11)], [0.006 * scale] * 11, 6, weights))
+    back = [(cx + (foot_r[0] + 0.004) * math.cos(PI * k / 12), 0.050 * scale, ankle[2] - 0.035 * scale * math.sin(PI * k / 12))
+            for k in range(13)]
+    straps.append(tube(back, [0.005 * scale] * 13, 6, weights))
+    return sole, straps
+
+
+def revised_shoes(body_type, style):
+    if style == "shoes_sandals":
+        soles, straps = Mesh(), Mesh()
+        for side, _ in rig.SIDES:
+            sole, strap = _sandal(body_type, side)
+            soles.append(sole)
+            straps.append(strap)
+        return [(straps, "shoes", "leather", (1.0, 1.0, 1.0)), (soles, "none", "leather", (0.42, 0.30, 0.20))]
+    spec = SHOE_SPECS[style]
+    upper, trim, socks, accent = Mesh(), Mesh(), Mesh(), Mesh()
+    for side, _ in rig.SIDES:
+        u, t = _spec_shoe(body_type, side, spec, socks, accent)
+        upper.append(u)
+        trim.append(t)
+    parts = [(upper, "shoes", spec["texture"], (1.0, 1.0, 1.0))]
+    if trim.positions:
+        parts.append((trim, "none", "plain", spec["trim"] or (0.18, 0.17, 0.16)))
+    if accent.positions:
+        parts.append((accent, "accessory", "plain", (1.0, 1.0, 1.0)))
+    if socks.positions:
+        parts.append((socks, "none", "rib", spec["sock"]))
     return parts
