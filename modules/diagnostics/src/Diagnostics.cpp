@@ -454,14 +454,26 @@ namespace CNA::Diagnostics
             delete context;
         }
 
+        // Trivially destructible, so it stays valid while thread-local destructors run: objects with static
+        // storage duration (GraphicsResource statics) are destroyed after the holder on the exiting thread
+        // and still emit events.
+        thread_local bool threadContextReleased = false;
+
         struct ThreadContextHolder
         {
-            ~ThreadContextHolder() { UnregisterThreadContext(context); }
+            ~ThreadContextHolder()
+            {
+                threadContextReleased = true;
+                UnregisterThreadContext(context);
+                context = nullptr;
+            }
             ThreadContext* context = nullptr;
         };
 
         [[nodiscard]] ThreadContext& GetThreadContext()
         {
+            if (threadContextReleased)
+                throw std::runtime_error("Diagnostics thread context already released");
             thread_local ThreadContextHolder holder;
             if (holder.context == nullptr)
             {
