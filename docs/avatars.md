@@ -222,14 +222,16 @@ every item replaced by its slot default (its ids are not read against another ve
 animations are system data, not part of a description, and come from the newest compiled-in
 catalog.
 
-Catalog v3 revision 2 has:
+Catalog v3 revision 3 has the entries revision 2 added, with their art reworked for visual
+quality (the generator's modules say how each kind is built; `docs/avatar-art-direction.md` records
+the visual language):
 
-- a body per body type in stylized, friendly adult proportions of the console era (about 4.7
-  heads tall): a sculpted head with a tapered jaw, cheekbones, chin and brow on a neck that
-  carries it, shoulders and a torso broad enough for the head, limbs and hands in proportion
-  (a palm, four fingers and a thumb); a rounded nose, filled ears with a helix and lobe, and the
-  face-feature decal patches; a proportion morph (byte 100) for compact to long-limbed figures at
-  the same height;
+- a body per body type in stylized, friendly adult proportions of the console era (about 4.8
+  heads tall): a head sculpted from a face profile, a back and a front outline, with the nose,
+  eye sockets, brow, cheekbones, muzzle, lips and chin in its surface; sculpted ears (helix,
+  bowl, antihelix, tragus, lobe); hands whose back widens to an arc of knuckles, with fingers that
+  cascade when they curl; the face-feature decal patches; a proportion morph (byte 100) for
+  compact to long-limbed figures at the same height;
 - 143 wardrobe items and accessories fitted to both bodies, with labels, per-body CreateRandom
   weights and compatibility rules: 37 hairstyles (very short, buzzed, shaved and balding to long,
   curly, coiled, braided, tied back and ponytails), 28 tops, 17 bottoms, 14 shoes, 13 glasses,
@@ -246,13 +248,18 @@ Catalog v3 revision 2 has:
   trademarked costumes);
 - `faceAnchors` (where glasses and earrings ride) and `headSurface` (the head's radius by
   direction, used to fit hair under a hat);
-- shared textures (`tex_*.png`: hair clumps and coils, fabrics such as denim, knit, check,
-  stripes, quilting and jersey, skin and stubble) named by materials and stored once;
+- shared textures (`tex_*.png`: hair clumps, coils and twists, fabrics such as denim, knit, check,
+  stripes, quilting and jersey, skin, and per-body stubble masks that hold both the grain and
+  where the beard grows) named by materials and stored once;
 - `face_features.png`, an atlas of every eye, eyebrow, mouth and makeup tile at 128 pixels per
   tile; `animations.glb` with the 31 presets as glTF cubic-spline rotation curves;
-- `catalog.json`, listing every file (354 in all, 31.7 MB) with its SHA-256. Compiled in, the
-  files are deflated (`cna_embed_binary_files ... COMPRESS`) to 13.5 MB of the library, inflated
-  once when first used; only programs that use avatars link the catalog.
+- `catalog.json`, listing every file (359 in all, 44.8 MB) with its SHA-256. Compiled in, the
+  files are deflated (`cna_embed_binary_files ... COMPRESS`) to a 21.4 MB library
+  (`cna_gamerservices_avatar_catalog`), inflated once when first used; only programs that use
+  avatars link the catalog. (Revision 2 was 32.9 MB, 14.1 MB deflated: revision 3's hair, clothing
+  and shoes are sculpted rather than lofted. Assembling an avatar from the compiled-in catalog took
+  about 345 ms cold and 185 ms warm in a Debug build, against 235 and 110 ms for revision 2; an
+  avatar already assembled is reused at once.)
 
 **Compatibility rules are data**, not code: a hat's `hairCover` gives the line where its brim
 meets the head and how far hair under it is lifted, and the assembly removes the hair the hat hides
@@ -336,7 +343,7 @@ sends a projection onto the newest catalog the client has, marked as such, and l
 avatar unchanged. A client that reads fewer description formats than the stored avatar uses (a CNA
 build from before format 3) receives a canonical copy without what it cannot read: an item only
 format 3 names becomes its slot's lowest older item, and eyebrows, ears, accessories and makeup are
-left out. A manifest larger than one service message (revision 2's is) is named by
+left out. A manifest larger than one service message (revisions 2 and 3's are) is named by
 `avatars.catalog` and read by hash from the file route. Games see an
 ordinary description either way, and `AvatarDescription.Changed` follows the stored avatar's
 revision, so installing a catalog or receiving a projection is never a change.

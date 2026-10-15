@@ -66,6 +66,33 @@ the height together, so no part reads as out of scale with the others. The table
 the generator and is kept as the record of that pass; the bodies no longer follow its 6.0
 head-heights.
 
+## Catalog v3 revision 3 (2026-10-15): the visual language
+
+Revision 3 reworks the art of revision 2's entries (no entries added) so the avatar reads as an
+authored stylized character rather than as procedural parts. The rules the generator now follows:
+
+| Area | Rule |
+|---|---|
+| Head | One sculpted surface from three silhouettes -- a face profile (flat forehead plane, brow, a face plane, a defined chin, a jaw line under the ear), a back and a front outline -- joined by superellipse sections that are squarer at the cheeks. Features are relief *in* the surface (nose, sockets, brow, cheekbones, muzzle, lips, chin), never separate primitives. Facets crowd onto the face. |
+| Face proportions | Mouth 7.1 cm and nose tip 3.2 cm under the head centre (male scale); eyes 5.4 cm apart from the midline; a modest nose (2.2 cm male, 1.8 cm female at the tip); the profile must read at 90 degrees. Female heads: narrower jaw, smaller chin and nose. |
+| Eyes, brows | An almond opening whose upper lid rests on the top of the iris; a slim lid line thickening toward the outer corner; a warm sclera shaded under the lid; a small highlight; a pink inner corner. Brows are hair: soft at the head, a tapered tail, strokes along the hair direction, tinted by the hair colour. |
+| Ears | One closed form: rolled helix open toward the face, bowl, antihelix, tragus, lobe. |
+| Hair | Masses, not strips: strands marched over the head under a style's flow form a slab of clumped locks with grooves, thickness and pointed tips; hair lies on the scalp and hangs from where the head curves away, behind the shoulders, to a set hem. Short styles end together at the hairline. Clump scale: 22-40 locks round a head; groove depth about 60 % of a lock's crest. |
+| Garments | Built like garments: tops hang from the chest by their fit in soft folds, close over the shoulders to a neck opening, and have bands, collars (stand, fall, points), cuffs and hems with the cloth's thickness; sleeves and trouser legs cover the limbs' envelope (no elbow or knee hollow) and fold at the cuff, elbow and knee; buttons, plackets and pockets lie on the cloth. Layers: an inner layer always hangs inside the outer one at every height. |
+| Shoes | Lasted: an upper that holds the foot and heel, a sole with a lip and toe spring, the details of the style (welt, toe cap, tongue and laces, collar, heel tab, apron) as geometry. Low shoes always have a sock. |
+| Hands | The back of the hand widens to an arc of knuckles; fingers curl in a cascade. |
+| Surfaces | Low-frequency forms only (folds 3-8 mm deep, grooves, seams 1-2 mm): nothing that needs more than the shared textures and SkinnedEffect's one light to read. Hair specular 1.6, cloth 0.3-1.0, leather 2.0. |
+| Makeup | Soft washes and flushes with radial falloff; liner on the eye's own lid line; nothing with a hard outline but liner. |
+
+Measured by `avatar_audit.py` on revision 3: the female body 1.68 m and 4.78 heads tall (head 0.351 m,
+shoulders 1.42 heads), the male 1.80 m and 4.94 heads (head 0.364 m, shoulders 1.56 heads); limbs,
+hands and feet as revision 2. No garment, shoe, hat or hairstyle lets more than 2 % of the skin under
+it show through in the bind pose; `AvatarCatalogContentTest` checks layers and details in every pose.
+
+Review it with the `portraits`, `presets` and `bodies` sheets of `avatar_review.py` (five angles
+with a portrait lens, every face preset, every build) and with `random` sheets of
+`cna_avatar_review --random` avatars.
+
 ## Proportion targets
 
 Expressed in **head-heights** (the classic, non-proprietary figure-drawing/character-design unit —
