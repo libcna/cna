@@ -283,63 +283,63 @@
   },
   {
    "name": "ears_attached.female.glb",
-   "sha256": "5902b586a45f31b2468908bc55621b79853f94ced9726f8a1cc05a571e158e43",
-   "size": 45424
+   "sha256": "47f2b74501120fe5c9891d993e90d194f4c9a8d04342b64a8f45633d1515578b",
+   "size": 57940
   },
   {
    "name": "ears_attached.male.glb",
-   "sha256": "00804b0309001807ad521c8a1ba9cf5bf832bcd39d6d4d891674d19bf63a02d8",
-   "size": 45416
+   "sha256": "2619c494f727077e5c738e5ae756a2e1ebc0742357e32f238f790be5285c1245",
+   "size": 57932
   },
   {
    "name": "ears_large.female.glb",
-   "sha256": "ab0486bf451c5f24e6ff6803fb1e468cc80499b8eae6d0952ba1745934bd5ba1",
-   "size": 45416
+   "sha256": "7eb55d85fede50bb231f279e8a56f714e6de5130cafdcdb398b588798a4a2bb7",
+   "size": 57932
   },
   {
    "name": "ears_large.male.glb",
-   "sha256": "3f9491edb65aeab969522da07429c96789c0d63c3f8cc6b68fa7ccd361f2ad6a",
-   "size": 45400
+   "sha256": "ff5643419c1a0f200cf3c2c58e365f9684ab6455e41e1c7e85a524d78d1fa38b",
+   "size": 57916
   },
   {
    "name": "ears_longlobe.female.glb",
-   "sha256": "ed1c255de8436f33b5c4c47bac3fafc307718088b1f6bb6c35e54166e8808b4f",
-   "size": 53496
+   "sha256": "0a3f6491ed5780ea00ec240df7f3c20dec8eb9a437c125b9717ca4dbbefde3db",
+   "size": 66012
   },
   {
    "name": "ears_longlobe.male.glb",
-   "sha256": "1b1efd3f2e765a0958a7aae7d26d4e2674d862a03074d7cbdc212720ed123557",
-   "size": 53484
+   "sha256": "63030279d9c9839909f93d62731c0c595988d9caca1a1094b24b495a018fd4f6",
+   "size": 66000
   },
   {
    "name": "ears_protruding.female.glb",
-   "sha256": "6b4fee1f830a73dbe9ff6b05f5ee4671691c7abea39c1cbb3f37b242633a6b7b",
-   "size": 45432
+   "sha256": "a6fc7783ea74857addd8fa9bdc7b8e187ea38868147a40b7308b8a061469133a",
+   "size": 57952
   },
   {
    "name": "ears_protruding.male.glb",
-   "sha256": "9bf64cec20f8d492ddb61210fb114b8ce06305e663ec8567d0e4901a679a14ec",
-   "size": 45420
+   "sha256": "ef7188607befeb6180453aadca1c3d7da4a769d55f2cb86c6439b0931ccc8561",
+   "size": 57940
   },
   {
    "name": "ears_round.female.glb",
-   "sha256": "812b15377896eef410635606a2d6d3abc4e5c1e132908b9e3c1964a4ce924157",
-   "size": 45416
+   "sha256": "2d60b9902d618631b59264734063f34026ff206d106131379877c063af206b1f",
+   "size": 57932
   },
   {
    "name": "ears_round.male.glb",
-   "sha256": "dd2eb4ce20b6fb707179f28638b5964ab1c66a9bd939b43cb5b2c1961dca200e",
-   "size": 45404
+   "sha256": "7d4c50a6ccfb06cce14cf01d368eaf6513b3fbaeffb677adccd5179d391f6ffe",
+   "size": 57920
   },
   {
    "name": "ears_small.female.glb",
-   "sha256": "9630a87c0c624b9b1266f421ddf743f518e90dbe4c62fc7678a52441827ca043",
-   "size": 45416
+   "sha256": "693a4fab980733abe9369a68c88a339f130057b1b68472afb04e19701b6ee2d6",
+   "size": 57932
   },
   {
    "name": "ears_small.male.glb",
-   "sha256": "cc7d853f4294ad0342cc3c1ffb420131040642b88fe27b1301fd3ce3a2406921",
-   "size": 45400
+   "sha256": "db316eb05e1308c0d194ba06b0b711c32a6ef829e5cf6ab73cd2d373fc9bfb62",
+   "size": 57920
   },
   {
    "name": "face_features.png",

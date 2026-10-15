@@ -195,22 +195,28 @@ def ear_meshes(body, shape="round"):
         back = (0.0, math.sin(tilt), math.cos(tilt))
         out = normalize((side, 0.0, -0.30 - 0.5 * (e["out"] - 0.30)))
         centre_pt = add(surface, mul(out, (0.004 + 0.004 * (e["out"] - 0.30)) * s))
-        # The shell, its rolled rim (helix) along the back and top, and a softer inner ridge
-        # (antihelix): a filled ear, not a hoop.
+        # The shell, its rolled rim (helix) and a softer inner ridge (antihelix): a filled ear, not
+        # a hoop. The helix is open at the front as an ear's is: it starts above the ear's opening,
+        # rolls over the top and down the back, and fades into the lobe; a small tragus guards the
+        # opening, and the antihelix forks towards the top.
         m.append(ellipsoid(centre_pt, (out, up, back), (e["d"] * 1.25 * s, e["h"] * s, e["w"] * s), 14, 12, HEAD))
-        rim, ridge = [], []
         rh, rw = e["rim"]
-        for k in range(18):
-            a = math.pi * (0.08 + 1.72 * k / 17)
-            h = rh * s * math.cos(a) + 0.002 * s
-            w = rw * s * math.sin(a)
-            rim.append(add(add(add(centre_pt, mul(up, h)), mul(back, -w)), mul(out, 0.0050 * s)))
-        for k in range(10):
-            a = math.pi * (0.30 + 1.05 * k / 9)
-            ridge.append(add(add(add(centre_pt, mul(up, rh * 0.55 * s * math.cos(a) + 0.003 * s)),
-                                 mul(back, -rw * 0.55 * s * math.sin(a))), mul(out, 0.0058 * s)))
-        m.append(tube(rim, [e["rim_r"] * s] * len(rim), 8, HEAD, round_end=True))
-        m.append(tube(ridge, [e["rim_r"] * 0.62 * s] * len(ridge), 6, HEAD, round_end=True))
+
+        def on_ear(a, scale, lift, raise_=0.0):
+            # A point of the ear's outline at angle a (0 top, pi/2 back of the head, pi bottom).
+            h = rh * scale * s * math.cos(a) + raise_ * s
+            w = rw * scale * s * math.sin(a)
+            return add(add(add(centre_pt, mul(up, h)), mul(back, -w)), mul(out, lift * s))
+        count = 20
+        rim = [on_ear(math.pi * (-0.30 + 1.22 * k / (count - 1)), 1.0, 0.0052, 0.002) for k in range(count)]
+        taper = [e["rim_r"] * s * (0.45 + 0.55 * min(1.0, k / 4.0, (count - 1 - k) / 5.0)) for k in range(count)]
+        m.append(tube(rim, taper, 8, HEAD, round_end=True))
+        ridge = [on_ear(math.pi * (0.10 + 0.70 * k / 9), 0.58, 0.0050, 0.002) for k in range(10)]
+        m.append(tube(ridge, [e["rim_r"] * 0.60 * s] * len(ridge), 6, HEAD, round_end=True))
+        fork = [on_ear(math.pi * (0.10 - 0.30 * k / 5), 0.58 + 0.10 * k / 5, 0.0048, 0.002 + 0.002 * k / 5) for k in range(6)]
+        m.append(tube(fork, [e["rim_r"] * (0.55 - 0.15 * k / 5) * s for k in range(6)], 6, HEAD, round_end=True))
+        tragus = on_ear(math.pi * 1.45, 0.62, 0.0046, -0.003)
+        m.append(ellipsoid(tragus, (out, up, back), (e["d"] * 0.55 * s, 0.0050 * s, 0.0040 * s), 10, 8, HEAD))
         if e["lobe"] > 0.0:
             lobe = add(add(centre_pt, mul(up, -(e["h"] * 0.82 + e["lobe"] * 0.5) * s)), mul(back, 0.002 * s))
             m.append(ellipsoid(lobe, (out, up, back), (e["d"] * 0.8 * s, (0.006 + e["lobe"] * 0.6) * s, 0.0085 * s), 12, 8, HEAD))
