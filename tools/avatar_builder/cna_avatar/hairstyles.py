@@ -226,7 +226,7 @@ def _parted(body, ob, s, start, end, count, seed, hem, thickness, line_, gravity
     """A parted style: strands from both sides of a part flowing down, round the face, to a hem at
     head-local height `hem` (male metres below the head centre; `front_hem` more at the face); the
     fan at the front of the part sweeps aside at the hairline."""
-    roots = part_roots(ob, start, end, count, seed=seed)
+    roots = part_roots(ob, start, end, count, seed=seed, front_fan=0.08)
     level = lambda p: ob.c[1] + (hem - front_hem * max(0.0, normalize(sub(p, ob.c))[2])) * s
     main = Flow(gravity=gravity, lift=0.0015 * s, cling_below=0.0, avoid_face=line_, behind=90.0,
                 until=lambda p: p[1] < level(p))
@@ -240,6 +240,9 @@ def _crown(body, ob, s, theta, phi, count, seed, line_, thickness, scale=1.0, gr
     """Short hair from a crown swirl lying on the head and ending at the hairline (scaled by `scale`)."""
     roots = crown_roots(ob, theta, phi, count, radius=0.03 * s, seed=seed)
     flow = Flow(gravity=gravity, lift=0.0012 * s, stop=lambda p_: line_(p_) * scale, body=False, cling_below=-1.0)
+    # The hairline ends the strands: clumps end together there, with small notches only.
+    kw.setdefault("notch", 0.012 * s)
+    kw.setdefault("length_jitter", 0.02)
     return shell(ob, roots, 0.40, flow, thickness, seed, **kw)
 
 
@@ -297,7 +300,8 @@ def _sidepart(body, ob, s):
     std = line(*SHORT_LINE)
     roots = part_roots(ob, (0.26 * PI, 0.22 * PI), (0.12 * PI, 0.85 * PI), 26, seed=108, front_fan=0.10)
     flow = Flow(gravity=3.0, lift=0.0014 * s, stop=lambda phi: std(phi) * 1.01, body=False, cling_below=-1.0)
-    locks = shell(ob, roots, 0.40, flow, taper_thickness(0.014 * s, 0.003 * s, 1.3), 108, tip=0.4, tip_round=0.7)
+    locks = shell(ob, roots, 0.40, flow, taper_thickness(0.014 * s, 0.003 * s, 1.3), 108, tip=0.4, tip_round=0.7,
+                  notch=0.012 * s, length_jitter=0.02)
     return locks, cap(body, line(*STANDARD), 0.0025 * s)
 
 

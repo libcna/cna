@@ -385,69 +385,78 @@ def eyebrow(state, side, style="classic"):
 
 # ----- makeup (drawn white: tinted by the description's makeup colours) --------------------------
 
+def _glow(cx, cy, rx, ry, strength, core=0.25, bias=None):
+    """One layer of makeup: an ellipse whose opacity is `strength` within `core` of its radius and
+    falls smoothly to nothing at its edge; bias(x, y) scales it further."""
+    def opacity(x, y):
+        q = math.hypot((x - cx) / rx, (y - cy) / ry)
+        o = strength * (1.0 - smoothstep(core, 1.0, q))
+        return o * (bias(x, y) if bias else 1.0)
+    return (ellipse(cx, cy, rx, ry), (255, 255, 255), opacity)
+
+
+def _soft(shape, strength, falloff, bias=None):
+    """One layer of makeup: `shape` filled with an opacity that rises smoothly from its edge over
+    `falloff` inward to `strength` (no rings or hard edges); bias(x, y) scales it further."""
+    def opacity(x, y):
+        o = strength * smoothstep(0.0, falloff, -shape(x, y))
+        return o * (bias(x, y) if bias else 1.0)
+    return (grow(shape, 0.0), (255, 255, 255), opacity)
+
+
 def eye_shadow(style, side):
-    """Lid colour between the lash line and the brow, strongest at the lashes (the eye's white covers
-    the opening while the eye is open; a closed eye shows a coloured lid). Tiles are on the eye shadow
-    patch, the eye patch raised and enlarged (SHADOW_PATCH), where the eye opening's centre is at
-    y = -0.26 and its upper lid at about y = 0.20."""
+    """Lid colour between the lash line and the brow, strongest at the lashes and fading upward (the
+    eye's white covers the opening while the eye is open; a closed eye shows a coloured lid). Tiles
+    are on the eye shadow patch, the eye patch raised and enlarged (SHADOW_PATCH), where the eye
+    opening's centre is at y = -0.26 and its upper lid at about y = 0.20."""
     inner = -1.0 if side == "Left" else 1.0
     ey = -0.26
     erx = RX * 0.87
+    lash = ey + 0.20
+    rising = lambda x, y: 1.0 - 0.55 * smoothstep(lash + 0.15, lash + 0.60, y)
     if style == "soft":
-        lid = ellipse(-inner * 0.03, ey + 0.36, erx * 1.06, 0.48)
-    elif style == "smoky":
-        lid = either(ellipse(-inner * 0.08, ey + 0.38, erx * 1.20, 0.56), ellipse(-inner * 0.04, ey - 0.36, erx * 0.95, 0.16))
-    elif style == "winged":
-        wing = stroke([(-inner * erx * 0.55, ey + 0.34), (-inner * (erx + 0.26), ey + 0.62)], [0.46, 0.08])
-        lid = either(ellipse(-inner * 0.03, ey + 0.34, erx * 1.04, 0.44), wing)
-    else:  # "highlight": the inner corner and the brow bone
-        lid = either(ellipse(inner * erx * 0.74, ey + 0.10, 0.20, 0.26), ellipse(-inner * 0.06, ey + 0.95, erx * 0.95, 0.15))
-
-    def colour(x, y):
-        return (255, 255, 255)
-    # Strongest at the lash line, fading upward and toward the edges.
-    fade = Sdf(lambda x, y: (y - (ey + 0.20)) * 0.9 - 0.25, FULL)
-    layers = [(grow(lid, 0.06), colour, 0.25)]
-    for k in range(4):
-        layers.append((grow(lid, -0.06 * k), colour, 0.30))
-    if style != "highlight":
-        layers.append((both(lid, Sdf(lambda x, y: y - (ey + 0.48), FULL)), colour, 0.45))
-    return layers
+        return [_glow(-inner * 0.03, ey + 0.40, erx * 1.14, 0.48, 1.0, 0.45, rising)]
+    if style == "smoky":
+        return [_glow(-inner * 0.08, ey + 0.42, erx * 1.28, 0.56, 1.0, 0.55, rising),
+                _glow(-inner * 0.04, ey - 0.30, erx * 0.95, 0.15, 0.55, 0.2)]
+    if style == "winged":
+        wing = stroke([(-inner * erx * 0.55, ey + 0.32), (-inner * (erx + 0.32), ey + 0.66)], [0.42, 0.05])
+        return [_glow(-inner * 0.03, ey + 0.38, erx * 1.08, 0.44, 1.0, 0.45, rising), _soft(wing, 0.95, 0.10)]
+    # "highlight": a light touch at the inner corner and softly under the brow's arch.
+    return [_glow(inner * erx * 0.74, ey + 0.10, 0.24, 0.30, 0.75, 0.2),
+            _glow(-inner * 0.10, ey + 0.86, erx * 0.85, 0.20, 0.45, 0.1)]
 
 
 def eyeliner(style, side, closed):
     """A line along the upper lid ending in a wing (on the eye patch, like the eye tiles); `closed`
-    follows the closed lid of a blink instead."""
+    follows the closed lid of a blink instead. It lies on the eye's own lid line, thickest toward
+    the outer corner."""
     inner = -1.0 if side == "Left" else 1.0
-    width = {"thin": 0.10, "winged": 0.13, "bold": 0.20}[style]
-    wing = {"thin": 0.16, "winged": 0.44, "bold": 0.30}[style]
+    width = {"thin": 0.07, "winged": 0.10, "bold": 0.15}[style]
+    wing = {"thin": 0.14, "winged": 0.40, "bold": 0.28}[style]
     if closed:
         lid = curve(lambda x: -0.10 - 0.08 * (1.0 - (x / 0.66) ** 2), -0.62, 0.62, width * 0.9)
         tail_from = (-inner * 0.62, -0.10)
     else:
-        lid = curve(lambda x: CY + RY * 0.98 * math.sqrt(max(0.0, 1.0 - (x / RX) ** 2)) - 0.02, -RX * 0.86, RX * 0.94,
-                    lambda t: width * (0.55 + 0.45 * t if inner < 0 else 1.0 - 0.45 * t))
-        tail_from = (-inner * RX * 0.92, CY + 0.10)
-    tail_to = (tail_from[0] - inner * wing, tail_from[1] + wing * 0.55)
-    layers = [(lid, LINE, 1.0), (stroke([tail_from, tail_to], [width * 1.2, 0.025]), LINE, 1.0)]
+        top = lambda x: CY + RY * math.sqrt(max(0.0, 1.0 - (x / RX) ** 2)) + 0.012
+        lid = curve(top, -RX * 0.84, RX * 0.96, lambda t: width * (0.45 + 0.55 * t if inner < 0 else 1.0 - 0.55 * t))
+        tail_from = (-inner * RX * 0.94, CY + 0.07)
+    tail_to = (tail_from[0] - inner * wing, tail_from[1] + wing * 0.50)
+    layers = [(lid, LINE, 1.0), (stroke([tail_from, tail_to], [width * 1.1, 0.02]), LINE, 1.0)]
     if style == "bold" and not closed:
-        lower = curve(lambda x: CY - RY * 0.85 * math.sqrt(max(0.0, 1.0 - (x / RX) ** 2)) + 0.04, -RX * 0.2 * inner, RX * 0.9,
-                      0.05)
-        layers.append((lower, LINE, 0.7))
+        lower = curve(lambda x: CY - RY * 0.80 * math.sqrt(max(0.0, 1.0 - (x / RX) ** 2)) + 0.03, -RX * 0.2 * inner, RX * 0.9,
+                      0.04)
+        layers.append((lower, LINE, 0.6))
     return layers
 
 
 def blush(style, side):
+    """A soft flush on the cheek: strongest in its middle, fading to nothing at its edge."""
     inner = -1.0 if side == "Left" else 1.0
     if style == "sweep":
-        shape = stroke([(inner * 0.30, -0.22), (-inner * 0.38, 0.18)], [0.62, 0.40])
-    else:
-        shape = ellipse(0.0, 0.0, 0.56, 0.44)
-
-    def colour(x, y):
-        return (255, 255, 255)
-    # A soft falloff: shrinking layers, weakest at the edge.
-    return [(grow(shape, 0.10 - 0.11 * k), colour, 0.18) for k in range(5)]
+        shape = stroke([(inner * 0.30, -0.22), (-inner * 0.42, 0.20)], [0.80, 0.50])
+        return [_soft(shape, 0.80, 0.38)]
+    return [_glow(0.0, 0.0, 0.88, 0.70, 0.80, 0.0)]
 
 
 def lips_mask(state):

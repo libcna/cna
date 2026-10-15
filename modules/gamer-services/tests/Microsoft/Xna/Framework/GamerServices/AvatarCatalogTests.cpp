@@ -296,10 +296,10 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
         const char* digest;
     };
     const Case cases[] = {
-        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "9a8d5fbb7d043727e1c0c96eaeb2d1677719bcfd809528431b13e454108bf1f4"},
-        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "63a3569b382f3ce49a2b6d406ad30bf92b8161d7844f73dbf0bca2480ab05839"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "f1d3c50afdf0d8446f118bbea6ce6f0b4bd95aae3eef812a575e9b36982b2230"},
-        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "21adba064086314409c5cd6f80087a322a0156050f9ba8e101cd37dbf861a204"},
+        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "b5b60f01669ca2b304d195d6176ba1afdc95514d45798ace6592a67e90149dcd"},
+        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "a0699ba523c93adc8b20913663394e32a0afd955880e5e024fb91f6041a9e2fc"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "df45f7d6021f35a9aaf7a10e3e31093cb89a40129814178028c9cb40fba535cb"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "136448481c52422ff9ab05231d3c1ccf4f48ed3a7e69820db22d25172de9083c"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;
@@ -450,7 +450,10 @@ TEST(AvatarCatalogTest, FacialHairAndFaceShapeChangeOnlyTheHead) {
     bearded.facialHair = 122;
     const auto withBeard = Avatars::buildAvatarModel(bearded);
     EXPECT_TRUE(withBeard->substitutedItems.empty());
-    EXPECT_EQ(withBeard->parts.size(), plain->parts.size() + 1);
+    // The beard adds exactly its own model's parts (a grown beard and the stubble round it).
+    const auto v3 = Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
+    const auto beardGlb = Avatars::parseAvatarGlb(Avatars::resolveAsset(*v3, v3->featureItem(122)->assets[1])->view);
+    EXPECT_EQ(withBeard->parts.size(), plain->parts.size() + beardGlb.primitives.size());
     auto wide = baseline(1, {1, 20, 40, 60, 0, 0});
     wide.face[0] = 255;  // head width
     wide.face[5] = 255;  // eye size

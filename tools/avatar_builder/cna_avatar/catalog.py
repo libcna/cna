@@ -15,7 +15,7 @@ FEATURE_TINTS = {"eyeLeft": ("none", "eyes"), "eyeRight": ("none", "eyes"), "eye
 SPECULAR = {"eyeLeft": (2.5, 3.0), "eyeRight": (2.5, 3.0), "eyebrowLeft": (0.4,), "eyebrowRight": (0.4,), "mouth": (1.6,)}
 CLOTH_SPECULAR = {"knit": 0.35, "rib": 0.35, "cable": 0.3, "fleece": 0.25, "denim": 0.45, "canvas": 0.5, "pleat": 0.4,
                   "leather": 2.0, "plain": 1.0, "strands": 2.0}
-HAIR_SPECULAR = 2.2
+HAIR_SPECULAR = 1.6
 # Makeup decals: (tint, specular, layer).
 MAKEUP_DECALS = {"shadowLeft": ("eyeShadow", 0.6, 0), "shadowRight": ("eyeShadow", 0.6, 0), "blushLeft": ("blush", 0.2, 0),
                  "blushRight": ("blush", 0.2, 0), "lips": ("lips", 1.8, 0), "linerLeft": ("none", 1.0, 1),
@@ -38,8 +38,11 @@ def texture_bytes(kind):
         return textures.hair_twist()
     if kind.startswith("stubble"):
         from . import accessories
-        heavy, body_type = kind.startswith("stubble_heavy"), kind.rsplit("_", 1)[1]
-        return accessories.stubble_texture(body_type, 0.85 if heavy else 0.55)
+        body_type = kind.rsplit("_", 1)[1]
+        if kind.startswith("stubble_halo"):
+            # Round a grown beard: the stubble reaches a little past it, so its edge fades out.
+            return accessories.stubble_texture(body_type, 0.80, dilate=0.012)
+        return accessories.stubble_texture(body_type, 0.85 if kind.startswith("stubble_heavy") else 0.55)
     if kind == "skin_head":
         return textures.skin_head()
     return textures.cloth(kind)

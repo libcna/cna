@@ -482,18 +482,24 @@ def _union(*regions):
 STUBBLE_THETA, STUBBLE_PHI = (0.46, 0.92), 0.66
 
 
-def stubble_region(body_type):
+def stubble_region(body_type, dilate=0.0):
+    """Where stubble grows: the full beard's and the mustache's region, grown by `dilate` metres
+    (the halo round a grown beard)."""
     s = head.SCALE[body_type]
     my = sub(head.anchors(body_type)["mouth"], head.centre(body_type))[1] / s
-    return _union(_beard_region(my, True), _mustache_region(my, width=0.044, height=0.020))
+    base = _union(_beard_region(my, True), _mustache_region(my, width=0.044, height=0.020))
+    if not dilate:
+        return base
+    offsets = [(0.0, 0.0)] + [(dilate * math.cos(a), dilate * math.sin(a)) for a in (k * PI / 4 for k in range(8))]
+    return lambda x, y, z: max(base(x + dx, y + dy, z) for dx, dy in offsets)
 
 
-def stubble_texture(body_type, density, width=384, height=192):
-    """The stubble texture of one body: fine soft dots where the beard grows, over the stubble
-    shell's (u, v) -- u across the face, v from the cheeks down under the jaw."""
+def stubble_texture(body_type, density, width=384, height=192, dilate=0.0):
+    """The stubble texture of one body: fine soft dots where the beard grows (grown by `dilate`),
+    over the stubble shell's (u, v) -- u across the face, v from the cheeks down under the jaw."""
     from . import textures
     s = head.SCALE[body_type]
-    region = stubble_region(body_type)
+    region = stubble_region(body_type, dilate)
     rows = []
     for py in range(height):
         v = (py + 0.5) / height
@@ -627,6 +633,11 @@ def facial_hair(body_type, style):
         add_part(_hanging_beard(body_type, my - 0.052, 0.026, 0.030, 493, 0.010), "hair_clump")
     if not parts:
         raise ValueError(style)
+    if style in ("facial_beard", "facial_shortbeard", "facial_longbeard", "facial_muttonchops", "facial_chinstrap"):
+        # Under a grown beard the face is stubbled, so the beard's edge fades into the skin.
+        halo = _face_shell(body_type, stubble_region(body_type), 0.0, under=0.0, lift=0.0007, theta=STUBBLE_THETA,
+                           phi=STUBBLE_PHI)
+        parts.insert(0, (halo, "hair", "stubble_halo_" + body_type, (1.0, 1.0, 1.0), {"cnaBlend": "alpha"}))
     return parts
 
 
