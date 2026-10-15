@@ -203,6 +203,22 @@ TEST_F(ServiceRequestRetryTest, ADevelopmentCatalogIsNeverAskedForOrAccepted) {
     EXPECT_NO_THROW((void)backend->avatarCatalog(3));
 }
 
+TEST_F(ServiceRequestRetryTest, AnAvatarReadThatNamesNoCatalogsSendsNoCatalogList) {
+    // A caller that only reads descriptions (the editor's read-back) names no catalogs; the service
+    // refuses an empty list, so none is sent. A caller that names its catalogs negotiates.
+    LoopbackService service(true);
+    service.avatars(3);
+    const auto backend=signedIn(service);
+    ASSERT_EQ(1u,backend->avatars({"u1"}).size());
+    ASSERT_EQ(1u,backend->avatars({"u1"},Service::AvatarClientCatalogs{{3},true}).size());
+    const auto reads=service.arguments("avatars.get");
+    ASSERT_EQ(2u,reads.size());
+    EXPECT_FALSE(reads[0].contains("catalogs"));
+    EXPECT_EQ(Json::array({1,2}),reads[0]["formats"]);
+    EXPECT_EQ(Json::array({3}),reads[1]["catalogs"]);
+    EXPECT_TRUE(reads[1]["catalogUpdates"].is_boolean());
+}
+
 TEST_F(ServiceRequestRetryTest, ALostResponseIsAskedForOnceMoreUnderTheSameRequestId) {
     LoopbackService service(true);
     const auto backend=signedIn(service);

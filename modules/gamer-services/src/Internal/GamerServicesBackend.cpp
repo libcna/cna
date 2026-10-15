@@ -408,7 +408,8 @@ public:
         // whether (and how large) it installs the one a description names. The service answers
         // with the stored avatar when that is drawable here, else with a marked projection.
         Json args{{"userIds",ids},{"formats",Json::array({1,2})}};
-        if(capabilities_.contains("avatar-catalog-packs")) {
+        // A caller that names no catalogs only reads descriptions; the service refuses an empty list.
+        if(capabilities_.contains("avatar-catalog-packs")&&!client.versions.empty()) {
             Json catalogs=Json::array();
             for(auto version:client.versions)catalogs.push_back(version);
             const auto policy=avatarCatalogPolicy();
