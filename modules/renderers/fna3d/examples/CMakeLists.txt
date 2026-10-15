@@ -89,7 +89,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     # images by scripts/run-oracle-corpus-diff-fna3d.sh. This corpus is the only thing in the tree
     # that drives DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, the lighting variants and
     # fog through this renderer.
-    cna_fna3d_test(cna_oracle_render_fna3d ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
+    cna_fna3d_test(cna_oracle_render_fna3d ${CNA_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
     # plans/plan_fna3d.md FNA3D-27: registered as a real CTest, unlike the OpenGLES1 twin, because this
     # is the only permanent coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have
     # under this renderer. The script gates on a scene failing to RENDER, not on pixel equality --
@@ -97,7 +97,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     # docs/fna3d-parity-report.md holds the per-scene numbers against the EasyGL baseline.
     cna_register_renderer_test(
         NAME Fna3d_XNA_Oracle
-        COMMAND "${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff-fna3d.sh"
+        COMMAND "${CNA_SOURCE_DIR}/scripts/run-oracle-corpus-diff-fna3d.sh"
                 $<TARGET_FILE:cna_oracle_render_fna3d>
         TIMEOUT 600 LABELS "Fna3d")
 

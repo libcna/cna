@@ -29,7 +29,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
@@ -38,6 +40,7 @@
 
 #include "common/PixelTestGame.hpp"
 
+#include <array>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
@@ -210,6 +213,42 @@ public:
               "Vector4 is exposed for HiDef vertex-texture sampling");
         Check(renderer.ClassifySurfaceFormatEXT(99) == RendererFormatVerdict::Unsupported,
               "an invalid SurfaceFormat ordinal is not advertised as native storage");
+
+        Check(renderer.ClassifyTexture3DFormatEXT(static_cast<int>(SurfaceFormat::Single)) ==
+                  RendererFormatVerdict::Supported &&
+              renderer.ClassifyTexture3DFormatEXT(static_cast<int>(SurfaceFormat::Vector4)) ==
+                  RendererFormatVerdict::Supported,
+              "Single and Vector4 are exposed through the public Texture3D format gate");
+        {
+            std::array<float, 8> sourceSingle{
+                -2.0f, -1.0f, -0.5f, 0.0f, 0.25f, 0.5f, 1.0f, 4.0f};
+            std::array<float, 8> resultSingle{};
+            Texture3D single(device, 2, 2, 2, false, SurfaceFormat::Single);
+            single.SetData(sourceSingle.data(), static_cast<int>(sourceSingle.size()));
+            single.GetData(resultSingle.data(), static_cast<int>(resultSingle.size()));
+            Check(resultSingle == sourceSingle,
+                  "Single Texture3D preserves all binary32 voxels through SetData/GetData");
+
+            std::array<Vector4, 8> sourceVector4{
+                Vector4(-1.0f, 0.0f, 1.0f, 2.0f), Vector4(3.0f, 4.0f, 5.0f, 6.0f),
+                Vector4(7.0f, 8.0f, 9.0f, 10.0f), Vector4(11.0f, 12.0f, 13.0f, 14.0f),
+                Vector4(15.0f, 16.0f, 17.0f, 18.0f), Vector4(19.0f, 20.0f, 21.0f, 22.0f),
+                Vector4(23.0f, 24.0f, 25.0f, 26.0f), Vector4(27.0f, 28.0f, 29.0f, 30.0f)};
+            std::array<Vector4, 8> resultVector4{};
+            Texture3D vector4(device, 2, 2, 2, false, SurfaceFormat::Vector4);
+            vector4.SetData(sourceVector4.data(), static_cast<int>(sourceVector4.size()));
+            vector4.GetData(resultVector4.data(), static_cast<int>(resultVector4.size()));
+            bool vectorsMatch = true;
+            for (std::size_t i = 0; i < sourceVector4.size(); ++i)
+            {
+                vectorsMatch &= resultVector4[i].X == sourceVector4[i].X &&
+                                resultVector4[i].Y == sourceVector4[i].Y &&
+                                resultVector4[i].Z == sourceVector4[i].Z &&
+                                resultVector4[i].W == sourceVector4[i].W;
+            }
+            Check(vectorsMatch,
+                  "Vector4 Texture3D preserves all four binary32 channels through SetData/GetData");
+        }
 
         // The device still works after all of that.
         device.Clear(Color(12, 34, 56, 255));

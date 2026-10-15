@@ -415,6 +415,34 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    RendererFormatVerdict Fna3dRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<Xna>(surfaceFormat))
+        {
+            // Fna3dTexture3DRenderer already preserves the declared unit width, uploads that
+            // exact byte count, and either reads it natively or from its checked upload mirror.
+            case Xna::Color:
+            case Xna::Bgr565:
+            case Xna::Bgra5551:
+            case Xna::Bgra4444:
+            case Xna::Rgba1010102:
+            case Xna::Rg32:
+            case Xna::Rgba64:
+            case Xna::Alpha8:
+            case Xna::Single:
+            case Xna::Vector2:
+            case Xna::Vector4:
+            case Xna::HalfSingle:
+            case Xna::HalfVector2:
+            case Xna::HalfVector4:
+            case Xna::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Unsupported;
+        }
+    }
+
     void Fna3dRenderer::RequireTextureFormatSupportedEXT(int surfaceFormat, const char* what) const
     {
         if (SupportsTextureFormatEXT(surfaceFormat))
