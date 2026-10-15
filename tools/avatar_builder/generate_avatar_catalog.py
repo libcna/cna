@@ -28,7 +28,8 @@ DEFAULT_OUT = HERE.parent.parent / "modules" / "gamer-services" / "assets" / "av
 CATALOG_VERSION = 3
 # Revision 2 (2026-10): the first v3 release's ids keep their kinds, and everything added since is
 # named only by format 3 descriptions (docs/avatars.md).
-CATALOG_REVISION = 2
+# Revision 3 (2026-10): the same entries, art reworked for visual quality.
+CATALOG_REVISION = 3
 # The catalog contract level a reader needs: 2 adds shared texture files, face styles, accessories,
 # ear shapes, hair covers, anchors and the head surface.
 READER = 2
@@ -58,22 +59,48 @@ def face_anchors(body_type):
     return {name: _round(a[name]) for name in ("eyeLeft", "eyeRight", "earLeft", "earRight")}
 
 
-def build():
+def _glb_task(task):
+    """One GLB of the catalog: ("body", body type) or ("item", body type, id, slot, name)."""
+    if task[0] == "body":
+        return catalog.body_glb(task[1])
+    return catalog.item_glb(*task[1:])
+
+
+def build(jobs=1):
     from cna_avatar import accessories, head
     files = {}
     textures_used = set()
     items, features = [], []
-    for body_type in rig.BODY_TYPES:
-        files["body.%s.glb" % body_type], used = catalog.body_glb(body_type)
+    tasks = [("body", b) for b in rig.BODY_TYPES]
+    for entry_def in catalog.ITEMS + catalog.FEATURE_ITEMS:
+        item_id, slot, name = entry_def[:3]
+        tasks += [("item", b, item_id, slot, name) for b in rig.BODY_TYPES]
+    # Every GLB and atlas tile depends only on its own task, so the output is the same however the
+    # work is split.
+    pool = None
+    if jobs > 1:
+        import multiprocessing
+        pool = multiprocessing.Pool(jobs)
+    try:
+        built = pool.map(_glb_task, tasks, chunksize=1) if pool else [_glb_task(task) for task in tasks]
+        atlas, layout, styles = face.atlas(pool)
+    finally:
+        if pool:
+            pool.close()
+    glbs = {}
+    for task, (data, used) in zip(tasks, built):
+        name = "body.%s.glb" % task[1] if task[0] == "body" else "%s.%s.glb" % (task[4], task[1])
+        glbs[name] = data
         textures_used.update(used)
+    for body_type in rig.BODY_TYPES:
+        files["body.%s.glb" % body_type] = glbs["body.%s.glb" % body_type]
     for entry_def in catalog.ITEMS + catalog.FEATURE_ITEMS:
         item_id, slot, name, female, male = entry_def[:5]
         extras = entry_def[5] if len(entry_def) > 5 else {}
         entry = {"id": item_id, "slot": slot, "name": name, "random": {"female": female, "male": male},
                  "assets": {b: "%s.%s.glb" % (name, b) for b in rig.BODY_TYPES}}
         for body_type in rig.BODY_TYPES:
-            files["%s.%s.glb" % (name, body_type)], used = catalog.item_glb(body_type, item_id, slot, name)
-            textures_used.update(used)
+            files["%s.%s.glb" % (name, body_type)] = glbs["%s.%s.glb" % (name, body_type)]
         if name in accessories.HAT_COVER:
             entry["hairCover"] = {"line": list(accessories.HAT_COVER[name]),
                                   "lift": round(accessories.UNDER_HAT_LIFT * max(head.SCALE.values()), 5)}
@@ -83,7 +110,6 @@ def build():
         (features if slot in ("facialHair", "ears") else items).append(entry)
     for kind in sorted(textures_used):
         files[catalog.texture_file(kind)] = catalog.texture_bytes(kind)
-    atlas, layout, styles = face.atlas()
     files["face_features.png"] = atlas
     files["animations.glb"] = catalog.animations_glb()
     assets = [{"name": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
@@ -197,8 +223,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--jobs", type=int, default=1, help="build the GLBs in this many processes")
     args = parser.parse_args()
-    files = build()
+    files = build(args.jobs)
     if args.check:
         stale = [name for name, data in files.items()
                  if not (args.out / name).is_file() or (args.out / name).read_bytes() != data]

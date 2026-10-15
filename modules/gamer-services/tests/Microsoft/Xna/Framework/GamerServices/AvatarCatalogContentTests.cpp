@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// The content of CNA's avatar catalog v3 (revision 2): every model is sound geometry, every
+// The content of CNA's avatar catalog v3 (revision 3): every model is sound geometry, every
 // reference of the manifest resolves to what the editor and the random generator expect, and what
 // an avatar wears is assembled where and as its description says.
 #include <gtest/gtest.h>
@@ -118,7 +118,7 @@ TEST(AvatarCatalogContentTest, EveryModelIsSoundGeometry) {
 }
 
 TEST(AvatarCatalogContentTest, TheCatalogOffersAWardrobeInEveryKind) {
-    // The breadth catalog v3 revision 2 ships, per editor category.
+    // The breadth catalog v3 ships since revision 2, per editor category.
     const std::map<AvatarItemSlot, std::size_t> least{
         {AvatarItemSlot::Hair, 35}, {AvatarItemSlot::Top, 28}, {AvatarItemSlot::Bottom, 17}, {AvatarItemSlot::Shoes, 14},
         {AvatarItemSlot::Glasses, 13}, {AvatarItemSlot::Hat, 15}, {AvatarItemSlot::FacialHair, 16}, {AvatarItemSlot::Ears, 6},

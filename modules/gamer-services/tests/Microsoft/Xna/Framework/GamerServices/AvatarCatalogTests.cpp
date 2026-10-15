@@ -111,13 +111,13 @@ const std::vector<std::pair<Avatars::AvatarItemSlot, std::vector<std::uint16_t>>
 }
 }
 
-TEST(AvatarCatalogTest, CatalogV3Revision2KeepsTheFirstReleaseAndAddsOnlyFormat3Entries) {
+TEST(AvatarCatalogTest, CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3Entries) {
     // Catalog v3 is revised in place: every entry of the first release keeps its id, kind and name,
     // and is still named by format 1 and 2 descriptions; everything added needs format 3, which a
     // reader of only formats 1 and 2 never receives (the service projects it).
     const auto v3 = Avatars::embeddedManifest(3);
     ASSERT_NE(v3, nullptr);
-    EXPECT_EQ(v3->revision, 2);
+    EXPECT_EQ(v3->revision, 3);
     std::set<std::uint16_t> first;
     for (const auto& [slot, ids] : firstRelease()) {
         for (auto id : ids) {
@@ -285,7 +285,7 @@ std::string ModelDigest(const Avatars::AvatarModel& model) {
 
 TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
     // A v3 description, format 1 or format 2, draws the same model on every machine: these digests
-    // pin catalog v3 revision 2 (a later revision changes them on purpose).
+    // pin catalog v3 revision 3 (a later revision changes them on purpose).
     struct Case {
         std::uint8_t body;
         std::uint16_t height;
@@ -296,10 +296,10 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
         const char* digest;
     };
     const Case cases[] = {
-        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "97e7d5bbd14a88f67b265c3943c5ec2115ac02aeb826953c598031ddf15e3fd0"},
-        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "6ecff30855c0fe121d71c8a232851b329c1c184cc57d439b7a3e3d858f375526"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "6bbf16fe54a61f131639a0cd24665f04e3a2221e8907618fc5a799d13744f85a"},
-        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "00702db69e77dad4ae98524409fc14abbb62add88a3ad9feaa68fd4bd7860517"},
+        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "843c5a196e94bd6b9c9922695b7000109edc6eeec394435340aa600ba195bfbf"},
+        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "5aa2da705193172d6760d03554321ed252fb9164a286aa1a7b47fbd0f5bad620"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "5000590b57f40f40b911571af0ecdb462031339f4c7432241d54876b3005c2ef"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "782786223d25d83e70202d8f4b1a7394136b0903b04bdcefb9d777b8a00fec83"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;

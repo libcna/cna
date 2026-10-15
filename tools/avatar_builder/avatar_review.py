@@ -97,6 +97,19 @@ def posed_joint(catalogs, library, description, animation, time, name, yaw=0.0):
 PRESETS = []
 
 
+def head_centre(catalogs, library, description, yaw=0.0):
+    """Where the posed head's centre is seen from a camera on +z with the avatar turned by yaw:
+    close-ups aim there, so a pose that carries the head forward does not push it out of frame."""
+    model = preview.assemble(catalogs, description)
+    rotations, root, _ = library.sample("Stand0", 0.0)
+    skins = preview.skin_matrices(model, rotations, root, library.bind)
+    head = rig.INDEX["Head"]
+    bind = model["bind_positions"][head]
+    # The head's centre sits above its joint by the same share of the head in every catalog.
+    centre = np.array([0.0, bind[1] + 0.46 * (model["height"] - bind[1]), 0.0, 1.0])
+    return (preview.yaw_matrix(yaw) @ skins[head] @ centre)[:3]
+
+
 def head_height(catalogs, library, description):
     """(height to frame the face at, the head's span from its joint to the top): close-ups keep
     their distance in proportion to the head, so heads of every size are framed alike."""
@@ -175,6 +188,7 @@ def build_jobs(catalogs, version):
     # Every catalog entry on the avatar it suits best: hairstyles and facial hair as head close-ups,
     # wardrobe items full length, accessories close to where they are worn.
     jobs += catalog_jobs(catalogs, library, manifest, version, heroes)
+    jobs += quality_jobs(catalogs, library, manifest, version)
     presets = manifest["animations"]["presets"]
     for index, preset in enumerate(presets):
         d = heroes[0 if preset.startswith("Female") else 1] if preset.startswith(("Female", "Male")) else heroes[index % 2]
@@ -295,6 +309,102 @@ def catalog_jobs(catalogs, library, manifest, version, heroes):
     return jobs
 
 
+PRESET_STRENGTH = 1.35
+TONES = [(249, 214, 187), (222, 170, 132), (176, 120, 82), (118, 76, 50), (82, 52, 36)]
+# Portrait avatars: (body, skin, hair colour, eye colour, hair, face preset, extras) -- a spread of
+# bodies, skin tones, hair lengths and textures, facial hair, glasses, headwear, makeup and earrings.
+PORTRAITS = [
+    (0, 0, (120, 78, 40), (70, 130, 90), "hair_wavy", "Oval", {}),
+    (1, 2, (36, 28, 24), (70, 46, 30), "hair_short", "Balanced", {}),
+    (0, 4, (28, 24, 22), (58, 38, 28), "hair_longcurly", "Heart",
+     {"accessories": {"earrings": 512}, "makeup": {"lips": 671, "eyeliner": 650}, "lips": (156, 66, 74)}),
+    (1, 3, (28, 24, 22), (58, 38, 28), "hair_fade", "Square", {"facial_hair": 482}),
+    (1, 0, (160, 118, 74), (72, 112, 158), "hair_sidepart", "Long", {"glasses": 81, "facial_hair": 480}),
+    (0, 1, (70, 48, 34), (88, 56, 34), "hair_bobbangs", "Round", {"glasses": 80, "makeup": {"blush": 660}, "blush": (226, 128, 124)}),
+    (1, 1, (98, 66, 42), (94, 122, 72), "hair_shag", "Angular", {"hat": 100}),
+    (0, 2, (196, 156, 98), (104, 146, 190), "hair_long", "Youthful", {"hat": 101}),
+    (1, 4, (28, 24, 22), (44, 42, 46), "hair_afro", "Broad", {"facial_hair": 122}),
+    (0, 3, (46, 34, 28), (122, 84, 46), "hair_highponytail", "Angular",
+     {"makeup": {"eyeShadow": 640, "eyeliner": 651}, "eyeShadow": (138, 108, 98), "accessories": {"earrings": 510}}),
+    (1, 2, (142, 138, 134), (118, 126, 138), "hair_balding", "Mature", {"facial_hair": 122, "glasses": 83}),
+    (0, 0, (146, 66, 38), (94, 122, 72), "hair_bun", "Soft", {}),
+]
+# Head views: (label, yaw, camera height offset in head spans, distance factor).
+HEAD_VIEWS = (("front", 0.0, 0.0), ("3/4", -35.0, 0.0), ("profile", -90.0, 0.0), ("above", -25.0, 0.55), ("below", -20.0, -0.45))
+
+
+def quality_jobs(catalogs, library, manifest, version):
+    """The art review: portraits from five angles, every face preset on both bodies, and body
+    builds full length from three sides."""
+    jobs = []
+    names = {i["name"]: i["id"] for i in manifest["items"]}
+    controls = [c["name"] for c in manifest["faceControls"]["male"]]
+    presets = {(p["group"], p["name"]): p["values"] for p in manifest.get("facePresets", [])}
+    fmt = {e["id"]: e.get("format", 1) for key in ("items", "featureItems", "faceStyles") for e in manifest.get(key, [])}
+
+    def shaped(values):
+        face = [128] * len(controls)
+        for key, value in values.items():
+            if key in controls:
+                # As the editor applies a preset (AvatarEditor.cpp PresetStrength).
+                value = max(-1.0, min(1.0, value * PRESET_STRENGTH))
+                face[controls.index(key)] = max(0, min(255, int(round(128 + value * 127))))
+        return face
+
+    def avatar(body, skin, hair_colour, eyes, hair, preset, extras, top=None, bottom=None):
+        authored = manifest["bodies"][("female", "male")[body]]["authoredHeightMillimeters"]
+        colors = {"skin": TONES[skin], "hair": hair_colour, "eyes": eyes, "top": CLOTH[(skin * 3 + body) % len(CLOTH)],
+                  "bottom": CLOTH[9 if body else 5], "shoes": CLOTH[8], "accessory": CLOTH[0]}
+        for key in ("lips", "eyeShadow", "blush"):
+            if key in extras:
+                colors[key] = extras[key]
+        if "accessories" in extras:
+            colors["jewelry"] = (212, 175, 90)
+        items = {"hair": names[hair], "top": top or names["top_tshirt"], "bottom": bottom or names["bottom_jeans"],
+                 "shoes": names["shoes_sneakers"], "glasses": extras.get("glasses", 0), "hat": extras.get("hat", 0)}
+        d = Descriptor(body, authored, 128, version, colors, items, extras.get("facial_hair", 0),
+                       shaped(presets.get(("face", preset), {})), accessories=extras.get("accessories"),
+                       makeup=extras.get("makeup"), item_formats=fmt)
+        return d
+    for index, spec in enumerate(PORTRAITS):
+        d = avatar(*spec)
+        head, span = head_height(catalogs, library, d.encode())
+        k = span / REFERENCE_SPAN
+        for label, yaw, lift in HEAD_VIEWS:
+            c = head_centre(catalogs, library, d.encode(), yaw)
+            jobs.append(job("portraits-%02d-%s" % (index, label.replace("/", "")), "portraits", d,
+                            (c[0], head + lift * 0.72 * k, c[2] + 1.85 * k), (c[0], head - 0.04 * k, c[2]), 0.28, yaw=yaw,
+                            label="%s %s %s" % (spec[5], spec[4][5:], label)))
+    for body in (0, 1):
+        for (group, name), values in presets.items():
+            if group != "face":
+                continue
+            d = avatar(body, 1 + body, (70, 48, 34), (88, 56, 34), "hair_ponytail" if body == 0 else "hair_crew", name, {})
+            head, span = head_height(catalogs, library, d.encode())
+            k = span / REFERENCE_SPAN
+            for label, yaw in (("front", 0.0), ("3/4", -30.0), ("profile", -90.0)):
+                c = head_centre(catalogs, library, d.encode(), yaw)
+                jobs.append(job("presets-%d-%s-%s" % (body, name.lower(), label.replace("/", "")), "presets", d,
+                                (c[0], head, c[2] + 1.85 * k), (c[0], head - 0.04 * k, c[2]), 0.28, yaw=yaw,
+                                label="%s %s %s" % (("female", "male")[body], name, label)))
+    for body in (0, 1):
+        authored = manifest["bodies"][("female", "male")[body]]["authoredHeightMillimeters"]
+        for label, height, build, proportion in (("petite slim", -0.6, -0.6, -0.3), ("average", 0.0, 0.0, 0.0),
+                                                 ("tall athletic", 0.6, 0.3, 0.4), ("heavy", 0.0, 0.95, 0.0),
+                                                 ("youthful", -0.75, -0.2, -0.9)):
+            d = avatar(body, 2, (70, 48, 34), (88, 56, 34), "hair_lob" if body == 0 else "hair_crop", "Balanced", {},
+                       top=names["top_longsleeve"], bottom=names["bottom_chinos"])
+            d.height_mm = int(round(authored + height * 110))
+            d.build = max(0, min(255, int(round(128 + build * 127))))
+            d.proportion = max(0, min(255, int(round(128 + proportion * 127))))
+            h = d.height_mm / 1000.0
+            eye, target, fov = full_body(1.9)
+            for view, yaw in (("front", 0.0), ("3/4", -35.0), ("side", -90.0)):
+                jobs.append(job("bodies-%d-%s-%s" % (body, label.replace(" ", ""), view.replace("/", "")), "bodies", d, eye, target,
+                                fov, yaw, label="%s %s %s" % (("female", "male")[body], label, view)))
+    return jobs
+
+
 def cmd_jobs(args):
     catalogs = preview.Catalogs(args.catalogs)
     data = build_jobs(catalogs, args.version)
@@ -324,7 +434,7 @@ def cmd_sheets(args):
     data = json.loads(args.jobs.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
     columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8, "hair": 8, "hairback": 8, "headwear": 8,
-               "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8}
+               "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8, "portraits": 10, "presets": 9, "bodies": 6}
     cell = args.cell
     sheets = {}
     for j in data["jobs"]:

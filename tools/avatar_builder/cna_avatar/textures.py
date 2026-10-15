@@ -114,16 +114,17 @@ def hair_cap():
 
 
 def skin_head():
-    """Head multiplier: soft cheek warmth, a little lip-area and ear warmth (u = 0.5 is the face)."""
+    """Head multiplier (u = 0.5 is the face, v = theta / pi): a faint warmth over the cheeks, nose
+    and chin, broad enough that face controls never move a feature out of it."""
     def fn(u, v):
         warm = 0.0
-        for cu in (0.5 - 0.092, 0.5 + 0.092):
-            d = ((u - cu) / 0.045) ** 2 + ((v - 0.60) / 0.06) ** 2
+        for cu in (0.5 - 0.085, 0.5 + 0.085):
+            d = ((u - cu) / 0.075) ** 2 + ((v - 0.585) / 0.085) ** 2
             warm = max(warm, max(0.0, 1.0 - d) ** 2)
-        chin = max(0.0, 1.0 - ((u - 0.5) / 0.05) ** 2 - ((v - 0.78) / 0.05) ** 2) ** 2
-        g = 1.0 - 0.13 * warm - 0.03 * chin
-        b = 1.0 - 0.15 * warm - 0.04 * chin
-        return (1.0, g, b)
+        nose = max(0.0, 1.0 - ((u - 0.5) / 0.03) ** 2 - ((v - 0.555) / 0.05) ** 2) ** 2
+        chin = max(0.0, 1.0 - ((u - 0.5) / 0.05) ** 2 - ((v - 0.76) / 0.05) ** 2) ** 2
+        tint = 0.055 * warm + 0.035 * nose + 0.025 * chin
+        return (1.0, 1.0 - tint, 1.0 - 1.15 * tint)
     return image(128, 64, fn)
 
 

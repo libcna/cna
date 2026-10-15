@@ -18,15 +18,18 @@ HEAD = lambda *args: {I["Head"]: 1.0}
 # The male head in head-local metres; the female head is the same shape a little smaller with a
 # narrower jaw. Revision 2: an adult face -- a rounded cranium over cheekbones, a jaw that tapers
 # to a defined chin.
-RADII = (0.148, 0.172, 0.150)
+RADII = (0.146, 0.170, 0.150)
 SCALE = {"male": 1.12, "female": 1.08}
-JAW = {"male": 0.27, "female": 0.32}
+JAW = {"male": 0.25, "female": 0.31}
+JAW_ANGLE = {"male": 0.07, "female": 0.03}
+CHIN = {"male": 0.0045, "female": 0.0030}
+NOSE_HEIGHT = {"male": 0.0215, "female": 0.0180}
 
 # Feature anchors in head-local metres (male scale): eye centres, brows, nose, mouth, ears.
 EYE = (0.054, -0.004)           # |x|, y on the face surface
 BROW = (0.056, 0.056)
-MOUTH_Y = -0.076
-NOSE_ROOT_Y, NOSE_TIP_Y = -0.006, -0.028
+MOUTH_Y = -0.071
+NOSE_ROOT_Y, NOSE_TIP_Y = -0.002, -0.032
 EAR = (-0.012, -0.014)          # y, z of the ear centre; x is on the side surface
 
 
@@ -47,35 +50,165 @@ def local_point(body, theta, phi, lift=0.0):
     return p
 
 
+def _blob(x, y, cx, cy, rx, ry):
+    """A smooth bump of height 1 at (cx, cy) on the face, falling to 0 at the ellipse (rx, ry)."""
+    q = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2
+    return (1.0 - q) ** 3 if q < 1.0 else 0.0
+
+
+def _smax(a, b, k):
+    """Smooth maximum: the larger of a and b, blended over k."""
+    h = clamp(0.5 + 0.5 * (a - b) / k, 0.0, 1.0)
+    return b + (a - b) * h + k * h * (1.0 - h)
+
+
+def _nose(body, x, y):
+    """The nose's height above the face at front coordinates (x, y), male metres: one smooth form,
+    a narrow bridge rising from between the eyes into a rounded tip whose underside turns back
+    into the upper lip, widening at its base into the wings."""
+    tip = NOSE_TIP_Y + (0.003 if body == "female" else 0.0)
+    u = (NOSE_ROOT_Y - y) / (NOSE_ROOT_Y - tip)
+    if u < -0.35 or u > 1.75:
+        return 0.0
+    # Along the nose: low at the root, rising to the tip, rolling round under it.
+    rise = 0.12 + 0.88 * smoothstep(-0.30, 1.02, u) ** 1.35
+    fall = (1.0 - smoothstep(0.96, 1.55, u)) ** 0.7
+    height = NOSE_HEIGHT[body] * rise * fall * smoothstep(-0.35, 0.05, u)
+    # Across it: a rounded ridge, wider toward the base where the wings are.
+    narrow = 0.92 if body == "female" else 1.0
+    width = narrow * (0.0085 + 0.0055 * smoothstep(0.0, 0.85, u) + 0.0075 * smoothstep(0.72, 1.18, u) - 0.003 * smoothstep(1.2, 1.6, u))
+    q = (x / width) ** 2
+    if q >= 1.0:
+        return 0.0
+    roundness = 1.25 - 0.55 * smoothstep(0.55, 1.05, u)
+    return height * (1.0 - q) ** roundness
+
+
+def _features(body, x, y):
+    """Relief of the face at front coordinates (x, y) (male metres), outward: broad, soft forms."""
+    ex, ey = EYE
+    h = 0.0
+    for side in (1.0, -1.0):
+        # The eye sits in a shallow socket under the brow; the eyeball rounds the lids forward.
+        h -= 0.0045 * _blob(x, y, side * ex, ey + 0.004, 0.044, 0.036)
+        h += 0.0036 * _blob(x, y, side * ex, ey - 0.002, 0.030, 0.023)
+        # A soft brow over each eye, and the cheekbone below and outside it.
+        h += 0.0022 * _blob(x, y, side * (ex + 0.002), ey + 0.046, 0.052, 0.020)
+        h += 0.0035 * _blob(x, y, side * 0.086, ey - 0.056, 0.050, 0.034)
+        # The corners of the mouth tuck in a little.
+        h -= 0.0012 * _blob(x, y, side * 0.035, MOUTH_Y, 0.010, 0.009)
+    # The mouth region rounds forward as one form; the lips sit on it, the upper a little fuller.
+    h += 0.0042 * _blob(x, y, 0.0, MOUTH_Y + 0.004, 0.052, 0.040)
+    h += 0.0026 * _blob(x, y, 0.0, MOUTH_Y + 0.0060, 0.030, 0.0080)
+    h += 0.0030 * _blob(x, y, 0.0, MOUTH_Y - 0.0078, 0.026, 0.0090)
+    h -= 0.0008 * _blob(x, y, 0.0, MOUTH_Y + 0.0002, 0.030, 0.0022)
+    # Under the lower lip a soft groove, then the chin.
+    h -= 0.0012 * _blob(x, y, 0.0, MOUTH_Y - 0.024, 0.026, 0.009)
+    h += CHIN[body] * _blob(x, y, 0.0, MOUTH_Y - 0.050, 0.034, 0.028)
+    return h + _nose(body, x, y)
+
+
+def _clamped_spline(knots):
+    """A C2 cubic spline through (t, value) knots with zero slope at both ends (so the head is
+    smooth at its poles); returns the function of t."""
+    ts = [k[0] for k in knots]
+    vs = [k[1] for k in knots]
+    n = len(ts)
+    h = [ts[i + 1] - ts[i] for i in range(n - 1)]
+    # Tridiagonal system for the second derivatives with clamped (zero) end slopes.
+    a, b, c, r = [0.0] * n, [0.0] * n, [0.0] * n, [0.0] * n
+    b[0], c[0], r[0] = 2.0 * h[0], h[0], 6.0 * ((vs[1] - vs[0]) / h[0])
+    for i in range(1, n - 1):
+        a[i], b[i], c[i] = h[i - 1], 2.0 * (h[i - 1] + h[i]), h[i]
+        r[i] = 6.0 * ((vs[i + 1] - vs[i]) / h[i] - (vs[i] - vs[i - 1]) / h[i - 1])
+    a[n - 1], b[n - 1], r[n - 1] = h[n - 2], 2.0 * h[n - 2], -6.0 * ((vs[n - 1] - vs[n - 2]) / h[n - 2])
+    for i in range(1, n):
+        w = a[i] / b[i - 1]
+        b[i] -= w * c[i - 1]
+        r[i] -= w * r[i - 1]
+    m = [0.0] * n
+    m[n - 1] = r[n - 1] / b[n - 1]
+    for i in range(n - 2, -1, -1):
+        m[i] = (r[i] - c[i] * m[i + 1]) / b[i]
+
+    def fn(t):
+        t = min(max(t, ts[0]), ts[-1])
+        i = 0
+        while i < n - 2 and t > ts[i + 1]:
+            i += 1
+        u = t - ts[i]
+        hi = h[i]
+        slope = (vs[i + 1] - vs[i]) / hi - hi * (2.0 * m[i] + m[i + 1]) / 6.0
+        return vs[i] + slope * u + m[i] * u * u / 2.0 + (m[i + 1] - m[i]) * u ** 3 / (6.0 * hi)
+    return fn
+
+
+def _polar(curve):
+    """(height, outward) silhouette points -> radius as a function of theta from the crown."""
+    return _clamped_spline([(math.atan2(b, a), math.hypot(a, b)) for a, b in curve])
+
+
+# The head's three silhouettes in head-local metres (male, before SCALE), crown to the bottom of
+# the head where the neck enters: the mid-line profile of the face (height, forward) without its
+# features, the back of the head (height, backward) and the outline seen from the front (height,
+# sideways) -- a rounded cranium, a flat-fronted face that tapers to a defined chin, a jaw whose
+# angle sits under the ear.
+PROFILE = {
+    "front": [(0.170, 0.0), (0.155, 0.068), (0.118, 0.116), (0.070, 0.142), (0.032, 0.150), (0.000, 0.149),
+              (-0.040, 0.150), (-0.076, 0.150), (-0.104, 0.147), (-0.128, 0.140), (-0.147, 0.122), (-0.155, 0.092),
+              (-0.152, 0.058), (-0.145, 0.025), (-0.142, 0.0)],
+    "back": [(0.170, 0.0), (0.148, 0.082), (0.098, 0.132), (0.030, 0.149), (-0.030, 0.142), (-0.072, 0.118),
+             (-0.104, 0.084), (-0.128, 0.042), (-0.142, 0.0)],
+    "side": [(0.170, 0.0), (0.150, 0.082), (0.108, 0.128), (0.058, 0.145), (0.000, 0.146), (-0.040, 0.140),
+             (-0.078, 0.124), (-0.106, 0.102), (-0.128, 0.068), (-0.142, 0.0)],
+}
+# The female head: a narrower jaw, a smaller chin and a softer brow.
+FEMALE_CHANGES = {"front": {-0.104: -0.003, -0.128: -0.005, -0.147: -0.006, -0.155: -0.004, 0.032: -0.002},
+                  "side": {-0.078: -0.006, -0.106: -0.012, -0.128: -0.010}}
+# How square the head's horizontal sections are in front (2 round; more, broad planes that turn at
+# the cheeks; less, pointed like the chin) by theta.
+SQUARENESS = [(0.0, 2.0), (0.30 * math.pi, 2.1), (0.44 * math.pi, 2.40), (0.53 * math.pi, 2.30), (0.62 * math.pi, 2.05),
+              (0.72 * math.pi, 1.95), (0.84 * math.pi, 1.95), (math.pi, 2.0)]
+
+
+def _silhouettes(body):
+    out = {}
+    for name, curve in PROFILE.items():
+        changes = FEMALE_CHANGES.get(name, {}) if body == "female" else {}
+        out[name] = _polar([(a, b + changes.get(a, 0.0)) for a, b in curve])
+    out["squareness"] = _clamped_spline(SQUARENESS)
+    return out
+
+
+_SILHOUETTES = {}
+
+
 def _base_point(body, theta, phi):
     s = SCALE[body]
-    d = (math.sin(theta) * math.sin(phi), math.cos(theta), math.sin(theta) * math.cos(phi))
-    x, y, z = d[0] * RADII[0], d[1] * RADII[1], d[2] * RADII[2]
-    front = max(d[2], 0.0)
-    below = smoothstep(-0.10, -0.95, d[1])
-    # The jaw tapers toward a defined chin; at the jaw's angle, under the ears, it stays wider.
-    x *= 1.0 - JAW[body] * below * (0.45 + 0.55 * smoothstep(-0.2, 0.8, d[2]))
-    # The lower face is shallower at its sides than the cranium: the jaw recedes from the chin.
-    z *= 1.0 - 0.14 * below * smoothstep(0.15, 0.75, abs(d[0]))
-    # The underside of the jaw rises behind the chin, so the jaw line reads and the neck has room.
-    y *= 1.0 - 0.10 * smoothstep(-0.55, -1.0, d[1]) * smoothstep(0.55, -0.2, d[2])
-    # The face comes forward of the cranium between the brow and the chin; the sides of the
-    # cranium flatten a little above the ears.
-    face = smoothstep(0.25, 0.9, d[2]) * (1.0 - smoothstep(0.55, 0.95, d[1]))
-    z *= 1.0 + 0.04 * face
-    x *= 1.0 - 0.035 * smoothstep(0.55, 0.95, abs(d[0])) * smoothstep(-0.2, 0.4, d[1])
-    # Seen from above the head is an egg, narrower at the face: the nose leads the cheeks.
-    x *= 1.0 - 0.10 * smoothstep(0.15, 1.0, d[2]) * (1.0 - smoothstep(0.55, 1.0, d[1]))
-    # Cheekbones, brow, chin and soft eye sockets, pushed along the direction.
-    push = 0.0
-    for side in (1.0, -1.0):
-        push += 0.011 * _bump(d, (side * 0.62, -0.06, 0.78), 5.0, 30.0)
-        push -= 0.0045 * _bump(d, (side * EYE[0] / 0.13, EYE[1] / 0.13, 1.0), 3.0, 16.0)
-        push += 0.0035 * _bump(d, (side * 0.36, 0.34, 0.86), 4.0, 22.0)
-    push += 0.012 * _bump(d, (0.0, -0.78, 0.63), 4.0, 24.0)
-    push += 0.004 * _bump(d, (0.0, 0.30, 0.95), 6.0, 30.0)
-    push -= 0.006 * _bump(d, (0.0, -0.10, -1.0), 10.0, 70.0)
-    x, y, z = x + d[0] * push, y + d[1] * push, z + d[2] * push
+    if body not in _SILHOUETTES:
+        _SILHOUETTES[body] = _silhouettes(body)
+    curves = _SILHOUETTES[body]
+    sp, cp = math.sin(phi), math.cos(phi)
+    side = curves["side"](theta)
+    if cp >= 0.0:
+        depth, n = curves["front"](theta), curves["squareness"](theta)
+    else:
+        depth, n = curves["back"](theta), 2.0
+    # The horizontal section through this direction: a superellipse through the three silhouettes.
+    ax, az = abs(sp), abs(cp)
+    if ax < 1e-12:
+        r = depth
+    elif az < 1e-12:
+        r = side
+    else:
+        r = ((ax / side) ** n + (az / depth) ** n) ** (-1.0 / n)
+    d = (math.sin(theta) * sp, math.cos(theta), math.sin(theta) * cp)
+    x, y, z = d[0] * r, d[1] * r, d[2] * r
+    # Features: relief over the front of the face, pushed outward along the direction.
+    gate = smoothstep(0.30, 0.62, d[2])
+    if gate > 0.0:
+        push = _features(body, x, y) * gate
+        x, y, z = x + d[0] * push, y + d[1] * push, z + d[2] * push
     return (x * s, y * s, z * s)
 
 
@@ -133,38 +266,46 @@ def side_point(body, side, y, z, lift=0.0):
     return add(centre(body), local_point(body, theta, phi, lift)), theta, phi
 
 
-def head_mesh(body, segments=64, rings=46):
-    """The head surface, UV-mapped around (u) and top to bottom (v), seam at the back."""
-    rows = []
-    for r in range(rings + 1):
-        # Rings crowd toward the face's latitudes, where the features are.
-        t = r / rings
-        theta = math.pi * (t - 0.06 * math.sin(2.0 * math.pi * t))
-        rows.append([point(body, theta, math.pi + 2.0 * math.pi * c / segments) for c in range(segments)])
-    return Mesh().grid(rows, HEAD, uv_seam=True)
+def _crowded(count, centre, width, gain, period):
+    """count + 1 parameters over [0, period] (wrapping when period is 2 pi), crowded around
+    `centre`: the density is 1 + gain * exp(-((a - centre) / width)^2), so features there get fine
+    facets and the rest of the head stays light."""
+    samples = 2048
+    mass, total = [0.0], 0.0
+    for k in range(samples):
+        a = period * (k + 0.5) / samples
+        delta = a - centre
+        if period > 4.0:
+            delta = (delta + math.pi) % (2.0 * math.pi) - math.pi
+        total += (1.0 + gain * math.exp(-(delta / width) ** 2)) * period / samples
+        mass.append(total)
+    out, j = [], 0
+    for i in range(count + 1):
+        target = total * i / count
+        while j < samples and mass[j + 1] < target:
+            j += 1
+        f = (target - mass[j]) / max(mass[j + 1] - mass[j], 1e-12) if j < samples else 0.0
+        out.append(period * (j + f) / samples)
+    return out
 
 
-def nose_mesh(body):
-    """A rounded nose: a soft bridge from between the eyes into a ball tip that leads the face, with
-    small wings either side."""
-    s = SCALE[body]
-    root, _, _ = front_point(body, 0.0, NOSE_ROOT_Y * s, -0.004 * s)
-    tip_base, _, _ = front_point(body, 0.0, NOSE_TIP_Y * s)
-    tip = add(tip_base, (0.0, 0.002 * s, 0.012 * s))
-    m = Mesh()
-    path = [lerp(root, tip, k / 5.0) for k in range(6)]
-    radii = [0.0068 * s, 0.0074 * s, 0.0082 * s, 0.0096 * s, 0.0114 * s, 0.0128 * s]
-    m.append(tube(path, radii, 14, HEAD, round_end=True))
-    m.append(_blob(add(tip, (0.0, -0.0015 * s, -0.004 * s)), (0.0142 * s, 0.0120 * s, 0.0120 * s), 14, 10))
-    for side in (1.0, -1.0):
-        wing = add(tip_base, (side * 0.0128 * s, -0.0004 * s, 0.002 * s))
-        m.append(_blob(wing, (0.0082 * s, 0.0074 * s, 0.0086 * s)))
+def head_mesh(body, segments=112, rings=96):
+    """The head surface, UV-mapped around (u, 0.5 at the face) and top to bottom (v = theta / pi),
+    seam at the back; facets crowd onto the face, where the features are."""
+    thetas = _crowded(rings, 0.60 * math.pi, 0.36, 4.0, math.pi)
+    phis = _crowded(segments, math.pi, 0.50, 5.0, 2.0 * math.pi)[:-1]
+    rows = [[point(body, theta, math.pi + phi) for phi in phis] for theta in thetas]
+    m = Mesh().grid(rows, HEAD, uv_seam=True)
+    emitted = segments + 1
+    for r, theta in enumerate(thetas):
+        for c in range(emitted):
+            m.uvs[r * emitted + c] = (phis[c] / (2.0 * math.pi) if c < segments else 1.0, theta / math.pi)
     return m
 
 
-def _blob(c, r, segments=12, rings=8):
-    from .mesh import ellipsoid
-    return ellipsoid(c, ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)), r, segments, rings, HEAD)
+def nose_mesh(body):
+    """The nose is part of the head surface (_nose); nothing separate is drawn."""
+    return Mesh()
 
 
 # Ear shapes: (height, width, depth of the lobe shell, rim height and width, rim thickness, how far
@@ -181,59 +322,118 @@ EAR_SHAPES = {
 EAR_ORDER = ("round", "small", "large", "longLobe", "attached", "protruding")
 
 
+def _ear_frame(body, side, e):
+    """(centre, up, back, out) of one ear: tilted back, standing out from the head by its shape."""
+    s = SCALE[body]
+    surface = side_point(body, side, EAR[0] * s, EAR[1] * s)[0]
+    tilt = math.radians(e["tilt"])
+    up = (0.0, math.cos(tilt), -math.sin(tilt))
+    back = (0.0, math.sin(tilt), math.cos(tilt))
+    out = normalize((side, 0.0, -0.30 - 0.5 * (e["out"] - 0.30)))
+    return add(surface, mul(out, (0.002 + 0.004 * (e["out"] - 0.30)) * s)), up, back, out
+
+
+def _ear_outline(e, a):
+    """The ear's outline at angle a (0 top, pi/2 toward the back of the head, pi the lobe, 3/2 pi
+    the face side) as (up, back) in metres before SCALE: broad and round above, narrowing into the
+    lobe, its front edge straighter where it joins the head."""
+    h, w = e["h"], e["w"] * 1.22
+    up = h * math.cos(a)
+    back = w * math.sin(a)
+    lower = smoothstep(0.0, -1.0, math.cos(a))
+    back *= 1.0 - 0.30 * lower
+    if math.sin(a) < 0.0:
+        back *= 0.70
+    up -= max(e["lobe"], 0.0) * lower ** 2
+    return up, back + 0.12 * w * lower
+
+
+def _ear_relief(e, r, a):
+    """How far the front of the ear stands out of its plane (0..1 of its depth) at (r, a): a rolled
+    helix rim open toward the face, a shallow bowl, the antihelix ridge inside the rim, the tragus
+    over the opening and a full lobe."""
+    top_to_back = smoothstep(-0.25, 0.10, math.cos(a - 0.35 * math.pi))      # helix: over the top and down the back
+    opening = smoothstep(0.92 * math.pi, 1.10 * math.pi, a) * (1.0 - smoothstep(1.62 * math.pi, 1.82 * math.pi, a))
+    rim = smoothstep(0.60, 0.84, r) * max(top_to_back, 1.0 - opening) * (1.0 - 0.55 * opening)
+    f = 0.22 + 0.10 * smoothstep(0.0, 0.5, r)
+    f = _smax(f, rim, 0.12)
+    # The antihelix: a softer ridge inside the rim from the top round the back, forking upward.
+    ridge_band = math.exp(-((r - 0.56) / 0.09) ** 2)
+    ridge = 0.72 * ridge_band * smoothstep(0.05 * math.pi, 0.25 * math.pi, a) * (1.0 - smoothstep(0.80 * math.pi, 0.95 * math.pi, a))
+    f = _smax(f, ridge, 0.10)
+    # The tragus, a small flap in front of the opening.
+    da = (a - 1.42 * math.pi + math.pi) % (2.0 * math.pi) - math.pi
+    f = _smax(f, 0.80 * math.exp(-(da / 0.18) ** 2 - ((r - 0.62) / 0.14) ** 2), 0.08)
+    # The lobe is full, not hollow.
+    lobe = smoothstep(0.78 * math.pi, 0.95 * math.pi, a) * (1.0 - smoothstep(1.10 * math.pi, 1.26 * math.pi, a))
+    f = _smax(f, 0.72 * lobe * smoothstep(0.30, 0.65, r), 0.10)
+    return f
+
+
 def ear_meshes(body, shape="round"):
-    """Ears: a flattened shell tilted back on each side of the head, a rolled rim and, for some
-    shapes, a hanging lobe. Each ear is skinned to the Head joint. Returns (shell, folds): the
-    shell sits in the folds' shade."""
-    from .mesh import ellipsoid
+    """Ears: each one closed form tilted back on the side of the head -- the rolled helix rim, the
+    bowl it frames, the antihelix ridge, the tragus and the lobe sculpted into its front, a smooth
+    back meeting the head. Skinned to the Head joint. Returns (shell, folds): the bowl, in the
+    rim's shade, and the rest of the ear."""
     e = EAR_SHAPES[shape]
     s = SCALE[body]
-    shell, m = Mesh(), Mesh()
+    shell, folds = Mesh(), Mesh()
+    columns = 28
+    front_r = [0.0, 0.12, 0.24, 0.36, 0.46, 0.54, 0.60, 0.66, 0.72, 0.78, 0.84, 0.89, 0.93, 0.96, 0.985, 1.0]
+    back_r = [0.97, 0.88, 0.70, 0.45, 0.0]
+    depth = e["d"] * 1.25 * s
     for side in (1.0, -1.0):
-        surface = side_point(body, side, EAR[0] * s, EAR[1] * s)[0]
-        tilt = math.radians(e["tilt"])
-        up = (0.0, math.cos(tilt), -math.sin(tilt))
-        back = (0.0, math.sin(tilt), math.cos(tilt))
-        out = normalize((side, 0.0, -0.30 - 0.5 * (e["out"] - 0.30)))
-        centre_pt = add(surface, mul(out, (0.004 + 0.004 * (e["out"] - 0.30)) * s))
-        # The shell, its rolled rim (helix) and a softer inner ridge (antihelix): a filled ear, not
-        # a hoop. The helix is open at the front as an ear's is: it starts above the ear's opening,
-        # rolls over the top and down the back, and fades into the lobe; a small tragus guards the
-        # opening, and the antihelix forks towards the top.
-        shell.append(ellipsoid(centre_pt, (out, up, back), (e["d"] * 1.25 * s, e["h"] * s, e["w"] * s), 14, 12, HEAD))
-        rh, rw = e["rim"]
+        centre_pt, up, back, out = _ear_frame(body, side, e)
 
-        def on_ear(a, scale, lift, raise_=0.0):
-            # A point of the ear's outline at angle a (0 top, pi/2 back of the head, pi bottom).
-            h = rh * scale * s * math.cos(a) + raise_ * s
-            w = rw * scale * s * math.sin(a)
-            return add(add(add(centre_pt, mul(up, h)), mul(back, -w)), mul(out, lift * s))
-        count = 20
-        rim = [on_ear(math.pi * (-0.30 + 1.22 * k / (count - 1)), 1.0, 0.0052, 0.002) for k in range(count)]
-        taper = [e["rim_r"] * s * (0.45 + 0.55 * min(1.0, k / 4.0, (count - 1 - k) / 5.0)) for k in range(count)]
-        m.append(tube(rim, taper, 8, HEAD, round_end=True))
-        ridge = [on_ear(math.pi * (0.10 + 0.70 * k / 9), 0.58, 0.0050, 0.002) for k in range(10)]
-        m.append(tube(ridge, [e["rim_r"] * 0.60 * s] * len(ridge), 6, HEAD, round_end=True))
-        fork = [on_ear(math.pi * (0.10 - 0.30 * k / 5), 0.58 + 0.10 * k / 5, 0.0048, 0.002 + 0.002 * k / 5) for k in range(6)]
-        m.append(tube(fork, [e["rim_r"] * (0.55 - 0.15 * k / 5) * s for k in range(6)], 6, HEAD, round_end=True))
-        tragus = on_ear(math.pi * 1.45, 0.62, 0.0046, -0.003)
-        m.append(ellipsoid(tragus, (out, up, back), (e["d"] * 0.55 * s, 0.0050 * s, 0.0040 * s), 10, 8, HEAD))
-        if e["lobe"] > 0.0:
-            lobe = add(add(centre_pt, mul(up, -(e["h"] * 0.82 + e["lobe"] * 0.5) * s)), mul(back, 0.002 * s))
-            m.append(ellipsoid(lobe, (out, up, back), (e["d"] * 0.8 * s, (0.006 + e["lobe"] * 0.6) * s, 0.0085 * s), 12, 8, HEAD))
-    return shell, m
+        def at(r, a, front):
+            u, w = _ear_outline(e, a)
+            # The edge rolls over: the height falls to nothing as r reaches the outline.
+            roll = math.sqrt(max(0.0, 1.0 - ((r - 0.80) / 0.20) ** 2)) if r > 0.80 else 1.0
+            if front:
+                height = depth * _ear_relief(e, r, a) * roll
+            else:
+                height = -depth * 0.55 * roll * (0.5 + 0.5 * (1.0 - r))
+            # Toward the face the ear lies against the head; its back edge stands out.
+            lean = 0.5 + 0.5 * math.sin(a)
+            height += depth * 0.35 * (lean - 0.5) * r
+            p = add(centre_pt, add(mul(up, u * s * r), mul(back, -w * s * r)))
+            return add(p, mul(out, height))
+        rows = [[at(r, 2.0 * math.pi * c / columns, True) for c in range(columns)] for r in front_r]
+        rows += [[at(r, 2.0 * math.pi * c / columns, False) for c in range(columns)] for r in back_r]
+        whole = Mesh()
+        whole.patch_origin = centre_pt
+        whole.grid(rows, HEAD)
+        # The bowl (front rows inside the antihelix) is drawn in its shade; the rows overlap by one
+        # ring so the two parts close.
+        split = front_r.index(0.54)
+        cols = columns
+        for target, r0, r1 in ((shell, 0, split), (folds, split, len(rows) - 1)):
+            part = Mesh()
+            index = {}
+            for r in range(r0, r1 + 1):
+                for c in range(cols):
+                    index[r * cols + c] = len(part.positions)
+                    part.positions.append(whole.positions[r * cols + c])
+                    part.normals.append(whole.normals[r * cols + c])
+                    part.uvs.append(whole.uvs[r * cols + c])
+                    part.skin.append(whole.skin[r * cols + c])
+            for k in range(0, len(whole.indices), 3):
+                tri = whole.indices[k:k + 3]
+                if all(t in index for t in tri):
+                    part.indices += [index[t] for t in tri]
+            target.append(part)
+    return shell, folds
 
 
 def ear_lobe(body, side, shape="round"):
     """Where an earring hangs from: the bottom of the ear's lobe on one side (1 left, -1 right)."""
     e = EAR_SHAPES[shape]
     s = SCALE[body]
-    surface = side_point(body, side, EAR[0] * s, EAR[1] * s)[0]
-    tilt = math.radians(e["tilt"])
-    up = (0.0, math.cos(tilt), -math.sin(tilt))
-    out = normalize((side, 0.0, -0.30 - 0.5 * (e["out"] - 0.30)))
-    centre_pt = add(surface, mul(out, (0.004 + 0.004 * (e["out"] - 0.30)) * s))
-    return add(add(centre_pt, mul(up, -(e["h"] * 0.80 + max(e["lobe"], 0.0)) * s)), mul(out, 0.004 * s)), out, up
+    centre_pt, up, back, out = _ear_frame(body, side, e)
+    u, w = _ear_outline(e, math.pi)
+    r = 0.82
+    point = add(centre_pt, add(mul(up, u * s * r), mul(back, -w * s * r)))
+    return add(point, mul(out, e["d"] * 1.25 * s * 0.45)), out, up
 
 
 def anchors(body):
@@ -245,7 +445,7 @@ def anchors(body):
         out["brow" + name] = front_point(body, side * BROW[0] * s, BROW[1] * s)[0]
         out["ear" + name] = side_point(body, side, EAR[0] * s, EAR[1] * s)[0]
     out["mouth"] = front_point(body, 0.0, MOUTH_Y * s)[0]
-    out["noseTip"] = add(front_point(body, 0.0, NOSE_TIP_Y * s)[0], (0.0, 0.004 * s, 0.02 * s))
+    out["noseTip"] = front_point(body, 0.0, (NOSE_TIP_Y - 0.0035) * s)[0]
     out["noseRoot"] = front_point(body, 0.0, NOSE_ROOT_Y * s)[0]
     out["chin"] = front_point(body, 0.0, -0.13 * s)[0]
     out["crown"] = point(body, 0.0, 0.0)

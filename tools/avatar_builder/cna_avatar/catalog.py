@@ -51,8 +51,9 @@ def body_glb(body_type):
                                   "authoredHeight": rig.PROPORTIONS[body_type]["height"]}})
     skin_index = builder.add_rig(body_type)
     skin_material = builder.add_material("skin", "skin")
-    parts = [(skin, skin_material), (head, builder.add_material("head", "skin", texture_file=texture_file("skin_head"))),
-             (details, skin_material)]
+    parts = [(skin, skin_material), (head, builder.add_material("head", "skin", texture_file=texture_file("skin_head")))]
+    if details.positions:
+        parts.append((details, skin_material))
     decals = face.build_decals(body_type)
     makeup = face.build_makeup(body_type)
 
@@ -181,27 +182,33 @@ OUTFITS = [
      {"top": (196, 174, 130), "bottom": (150, 152, 156), "shoes": (240, 240, 236), "accessory": (130, 80, 170)}),
 ]
 
-# Named shapes for the editor, each a few controls in [-1, 1] of their range. Shapes, not people:
-# no preset stands for an ethnicity or a gender.
+# Named shapes for the editor, each a few controls in [-1, 1] of their range (at most 0.6: the editor
+# applies them 1.35 times, which still leaves a slider step either side). Shapes, not people: no
+# preset stands for an ethnicity or a gender.
 FACE_PRESETS = [
     ("face", "Balanced", {}),
-    ("face", "Round", {"headWidth": 0.35, "headHeight": -0.25, "jawWidth": 0.25, "chinSize": -0.3, "cheekFullness": 0.5,
-                       "jawTaper": -0.3}),
-    ("face", "Long", {"headWidth": -0.25, "headHeight": 0.4, "jawWidth": -0.2, "chinSize": 0.3, "chinHeight": 0.3,
-                      "cheekFullness": -0.25}),
-    ("face", "Square", {"headWidth": 0.15, "jawWidth": 0.55, "jawAngle": 0.5, "chinSize": 0.35, "jawTaper": -0.4,
-                        "cheekFullness": -0.2}),
-    ("face", "Heart", {"headWidth": 0.2, "jawWidth": -0.45, "jawTaper": 0.5, "chinSize": -0.35, "cheekboneWidth": 0.4,
-                       "foreheadHeight": 0.2}),
-    ("face", "Oval", {"headWidth": -0.1, "headHeight": 0.2, "cheekboneWidth": 0.2, "jawTaper": 0.2}),
-    ("face", "Soft", {"jawWidth": -0.1, "chinSize": -0.15, "cheekFullness": 0.45, "jawAngle": -0.4}),
-    ("face", "Angular", {"cheekboneWidth": 0.5, "cheekFullness": -0.5, "jawAngle": 0.5, "chinProjection": 0.4, "jawTaper": 0.2}),
-    ("face", "Broad", {"headWidth": 0.5, "jawWidth": 0.4, "cheekboneWidth": 0.4, "headHeight": -0.1}),
-    ("face", "Narrow", {"headWidth": -0.45, "jawWidth": -0.3, "cheekboneWidth": -0.3, "headHeight": 0.15}),
-    ("face", "Youthful", {"eyeSize": 0.35, "noseSize": -0.35, "cheekFullness": 0.4, "jawWidth": -0.25, "chinSize": -0.3,
-                          "foreheadHeight": 0.3, "browHeight": 0.15}),
-    ("face", "Mature", {"eyeSize": -0.25, "noseSize": 0.3, "jawWidth": 0.25, "chinProjection": 0.3, "cheekFullness": -0.35,
-                        "browHeight": -0.2, "upperLip": -0.3, "lowerLip": -0.2}),
+    ("face", "Round", {"headWidth": 0.35, "headHeight": -0.35, "jawWidth": 0.4, "jawTaper": -0.55, "chinSize": -0.45,
+                       "chinHeight": -0.3, "cheekFullness": 0.6, "jawAngle": -0.35}),
+    ("face", "Long", {"headWidth": -0.3, "headHeight": 0.6, "jawWidth": -0.25, "chinHeight": 0.6, "chinSize": 0.2,
+                      "cheekFullness": -0.4, "foreheadHeight": 0.35, "noseSize": 0.15}),
+    ("face", "Square", {"headWidth": 0.15, "jawWidth": 0.6, "jawAngle": 0.6, "jawTaper": -0.6, "chinSize": 0.45,
+                        "cheekFullness": -0.3, "cheekboneWidth": 0.15}),
+    ("face", "Heart", {"headWidth": 0.25, "foreheadHeight": 0.4, "cheekboneWidth": 0.55, "jawWidth": -0.6, "jawTaper": 0.6,
+                       "chinSize": -0.35, "chinProjection": 0.2, "jawAngle": -0.45}),
+    ("face", "Oval", {"headWidth": -0.15, "headHeight": 0.3, "cheekboneWidth": 0.3, "jawTaper": 0.3, "chinHeight": 0.2}),
+    ("face", "Soft", {"cheekFullness": 0.6, "jawAngle": -0.55, "chinSize": -0.2, "jawTaper": -0.2, "chinProjection": -0.3,
+                      "noseSize": -0.15}),
+    ("face", "Angular", {"cheekboneWidth": 0.6, "cheekFullness": -0.6, "jawAngle": 0.6, "chinProjection": 0.55, "jawTaper": 0.3,
+                         "chinSize": 0.3, "noseBridge": 0.45}),
+    ("face", "Broad", {"headWidth": 0.6, "jawWidth": 0.5, "cheekboneWidth": 0.5, "noseWidth": 0.35, "mouthWidth": 0.3,
+                       "headHeight": -0.2}),
+    ("face", "Narrow", {"headWidth": -0.6, "jawWidth": -0.45, "cheekboneWidth": -0.45, "noseWidth": -0.3, "headHeight": 0.3,
+                        "eyeSpacing": -0.25}),
+    ("face", "Youthful", {"eyeSize": 0.5, "noseSize": -0.45, "noseTip": 0.35, "cheekFullness": 0.5, "jawWidth": -0.3,
+                          "chinSize": -0.35, "foreheadHeight": 0.45, "browHeight": 0.2, "headHeight": -0.3, "mouthWidth": -0.2}),
+    ("face", "Mature", {"eyeSize": -0.3, "noseSize": 0.45, "noseBridge": 0.35, "jawWidth": 0.35, "jawAngle": 0.35,
+                        "chinProjection": 0.35, "cheekFullness": -0.45, "browHeight": -0.3, "upperLip": -0.35, "lowerLip": -0.25,
+                        "headHeight": 0.25, "eyeShape": -0.3}),
     ("eyes", "Balanced", {}),
     ("eyes", "Bright", {"eyeSize": 0.45, "eyeShape": 0.3, "browHeight": 0.2}),
     ("eyes", "Narrow", {"eyeSize": -0.3, "eyeShape": -0.5}),
@@ -217,21 +224,21 @@ FACE_PRESETS = [
     ("brows", "Wide apart", {"browSpacing": 0.6}),
     ("brows", "Close", {"browSpacing": -0.6}),
     ("brows", "Lifted", {"browAngle": 0.6, "browHeight": 0.2}),
-    ("brows", "Bold", {"browThickness": 0.7}),
+    ("brows", "Bold", {"browThickness": 0.6}),
     ("brows", "Fine", {"browThickness": -0.6}),
     ("ears", "Natural", {}),
     ("ears", "Small", {"earSize": -0.6}),
     ("ears", "Large", {"earSize": 0.6}),
     ("ears", "High", {"earHeight": 0.6}),
     ("ears", "Low", {"earHeight": -0.6}),
-    ("ears", "Flat", {"earAngle": -0.7}),
-    ("ears", "Prominent", {"earAngle": 0.8, "earSize": 0.2}),
+    ("ears", "Flat", {"earAngle": -0.6}),
+    ("ears", "Prominent", {"earAngle": 0.6, "earSize": 0.2}),
     ("nose", "Balanced", {}),
     ("nose", "Button", {"noseSize": -0.35, "noseWidth": -0.1, "noseHeight": 0.15, "noseTip": 0.4}),
     ("nose", "Broad", {"noseSize": 0.25, "noseWidth": 0.55, "noseBridge": 0.4}),
     ("nose", "Long", {"noseSize": 0.35, "noseWidth": -0.2, "noseHeight": -0.3, "noseTip": -0.3}),
     ("nose", "Narrow", {"noseWidth": -0.5, "noseBridge": -0.4}),
-    ("nose", "Upturned", {"noseTip": 0.7, "noseHeight": 0.2}),
+    ("nose", "Upturned", {"noseTip": 0.6, "noseHeight": 0.2}),
     ("nose", "Strong", {"noseBridge": 0.6, "noseSize": 0.3, "noseTip": -0.2}),
     ("nose", "Small", {"noseSize": -0.6}),
     ("mouth", "Balanced", {}),
@@ -240,7 +247,7 @@ FACE_PRESETS = [
     ("mouth", "Full lips", {"upperLip": 0.5, "lowerLip": 0.6}),
     ("mouth", "Thin lips", {"upperLip": -0.5, "lowerLip": -0.4}),
     ("mouth", "Full upper", {"upperLip": 0.6}),
-    ("mouth", "Full lower", {"lowerLip": 0.7}),
+    ("mouth", "Full lower", {"lowerLip": 0.6}),
     ("body", "Average", {}),
     ("body", "Petite", {"height": -0.6, "build": -0.3, "proportion": -0.3}),
     ("body", "Youthful", {"height": -0.75, "build": -0.2, "proportion": -0.9}),
@@ -369,7 +376,7 @@ def item_glb(body_type, item_id, slot, name):
     elif slot == "ears":
         shell, folds = head.ear_meshes(body_type, EAR_SHAPE_OF[name])
         # The shell is in the shade of the rim and folds round it.
-        parts.append((shell, builder.add_material(name + "_shell", "skin", color=(0.86, 0.84, 0.84))))
+        parts.append((shell, builder.add_material(name + "_shell", "skin", color=(0.93, 0.91, 0.91))))
         parts.append((folds, builder.add_material(name, "skin")))
     else:
         built = {"top": garments.top, "bottom": garments.bottom, "shoes": garments.shoes, "glasses": accessories.glasses,

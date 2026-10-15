@@ -118,8 +118,8 @@ def band(a, width):
 
 
 def render(layers, size=TILE):
-    """Straight-alpha RGBA tile from (shape, colour, opacity) layers, back to front. A colour may
-    be a function of (x, y)."""
+    """Straight-alpha RGBA tile from (shape, colour, opacity) layers, back to front. A colour or an
+    opacity may be a function of (x, y)."""
     pixels = bytearray()
     for py in range(size):
         y = 1.0 - (py + 0.5) / size * 2.0
@@ -130,7 +130,9 @@ def render(layers, size=TILE):
                 box = shape.box
                 if x < box[0] - PIX or x > box[2] + PIX or y < box[1] - PIX or y > box[3] + PIX:
                     continue
-                cover = clamp(0.5 - shape(x, y) / PIX, 0.0, 1.0) * opacity
+                cover = clamp(0.5 - shape(x, y) / PIX, 0.0, 1.0)
+                if cover > 0.0:
+                    cover *= opacity(x, y) if callable(opacity) else opacity
                 if cover <= 0.0:
                     continue
                 c = colour(x, y) if callable(colour) else colour
@@ -152,43 +154,46 @@ def mix(c0, c1, t):
 
 # ----- eyes -------------------------------------------------------------------------------------
 
-# Catalog v3: an almond opening, wider than tall, with a smaller iris under a bolder lid line.
-RX, RY, CY, FLOOR = 0.70, 0.60, 0.02, -0.46
+# Catalog v3 revision 3: an almond opening whose upper lid rests on the top of the iris, a slim
+# tapered lid line, a warm sclera in the lid's shade, and a small highlight.
+RX, RY, CY, FLOOR = 0.70, 0.52, 0.02, -0.44
+LID = (48, 32, 28)
+SCLERA = (244, 239, 232)
 
 
 def _opening(rx=RX, ry=RY):
-    return both(ellipse(0.0, CY, rx, ry), above(lambda x: FLOOR - 0.08 * (x / rx) ** 2))
+    return both(ellipse(0.0, CY, rx, ry), above(lambda x: FLOOR - 0.06 * (x / rx) ** 2))
 
 
 def eye_layers(state, side):
     """(white layer, iris layer) shape lists for 'Left'/'Right'."""
     inner = -1.0 if side == "Left" else 1.0
-    iris_c, iris_r = (0.0, -0.02), 0.42
+    iris_c, iris_r = (0.0, 0.03), 0.41
     rx, ry = RX, RY
     lid = None         # upper lid height at the inner and outer corners (a straight cut)
     raise_low = None   # lower lid pushed up (a smile squint)
     closed = None
     if state == "Sad":
-        lid, iris_c = (0.52, 0.12), (0.0, -0.16)
+        lid, iris_c = (0.46, 0.10), (0.0, -0.12)
     elif state == "Angry":
-        lid, iris_c = (0.05, 0.55), (0.0, -0.10)
+        lid, iris_c = (0.02, 0.48), (0.0, -0.06)
     elif state == "Confused":
         if side == "Left":
-            lid, iris_c = (0.34, 0.26), (inner * 0.10, -0.08)
+            lid, iris_c = (0.30, 0.22), (inner * 0.10, -0.04)
         else:
-            rx, ry, iris_c = 0.74, 0.70, (inner * 0.10, 0.04)
+            rx, ry, iris_c = 0.73, 0.64, (inner * 0.10, 0.06)
     elif state == "Shocked":
-        rx, ry, iris_c, iris_r = 0.76, 0.74, (0.0, 0.04), 0.32
+        rx, ry, iris_c, iris_r = 0.76, 0.72, (0.0, 0.06), 0.31
     elif state == "Happy":
-        raise_low, iris_c = -0.30, (0.0, 0.02)
+        raise_low, iris_c = -0.30, (0.0, 0.04)
     elif state == "LookUp":
         iris_c = (0.0, 0.22)
     elif state == "LookDown":
-        lid, iris_c = (0.30, 0.30), (0.0, -0.24)
+        lid, iris_c = (0.26, 0.26), (0.0, -0.22)
     elif state == "LookLeft":
-        iris_c = (0.28, 0.0)   # the avatar's left is the viewer's right
+        iris_c = (0.28, 0.02)   # the avatar's left is the viewer's right
     elif state == "LookRight":
-        iris_c = (-0.28, 0.0)
+        iris_c = (-0.28, 0.02)
     elif state == "Laughing":
         closed = "laugh"
     elif state == "Yawning":
@@ -201,33 +206,48 @@ def eye_layers(state, side):
         return _closed_eye(closed, inner), []
     opening = _opening(rx, ry)
     visible = opening
+    top_of = lambda x: CY + ry * math.sqrt(max(0.0, 1.0 - (x / rx) ** 2))
     if lid:
         # A straight upper lid from the inner corner (x = inner * rx) to the outer one.
         y_in, y_out = lid
-        visible = both(visible, below(lambda x: y_in + (y_out - y_in) * (inner * rx - x) / (2.0 * inner * rx)))
+        cut = lambda x: y_in + (y_out - y_in) * (inner * rx - x) / (2.0 * inner * rx)
+        visible = both(visible, below(cut))
+        top_of = lambda x, cut=cut, t=top_of: min(t(x), cut(x))
     if raise_low is not None:
         # Cheeks push the lower lid up into an arch.
         visible = both(visible, above(lambda x: raise_low + 0.30 * (1.0 - (x / rx) ** 2)))
 
     def sclera(x, y):
-        # Soft shadow under the upper lid and toward the corners.
-        shade = 0.20 * smoothstep(0.05, ry * 0.95, y - CY) + 0.10 * smoothstep(0.35, 0.62, abs(x))
-        return mix((252, 251, 248), (196, 194, 200), shade)
+        # The upper lid's shade falls across the top of the eye; the corners are in shadow too.
+        under_lid = smoothstep(0.30, 0.0, top_of(x) - y)
+        shade = 0.42 * under_lid + 0.16 * smoothstep(0.30, 0.66, abs(x)) + 0.06 * smoothstep(-0.1, -0.4, y)
+        c = mix(SCLERA, (178, 168, 170), shade)
+        # The pink inner corner.
+        corner = smoothstep(0.20, 0.0, math.hypot(x - inner * (rx - 0.08), y - (CY - 0.06)))
+        return mix(c, (214, 152, 150), 0.65 * corner)
 
-    upper = both(band(visible, 0.16), Sdf(lambda x, y: (CY - 0.14) - y, FULL))
-    lower = both(band(visible, 0.05), Sdf(lambda x, y: y - (CY - 0.14), FULL))
-    # The lid line ends in a small wing at the outer corner.
-    wing = stroke([(-inner * rx * 0.86, CY + 0.10), (-inner * (rx + 0.13), CY + 0.20)], [0.10, 0.03])
-    crease = curve(lambda x: CY + ry + 0.10 - 0.22 * (x / rx) ** 2, -rx * 0.8, rx * 0.8, 0.045)
+    # The lid line: slim at the inner corner, fuller toward the outer one, ending in a short flick.
+    def outer_of(x):
+        return clamp((-inner * x / rx + 1.0) * 0.5, 0.0, 1.0)
+
+    def lid_width(x):
+        o = outer_of(x)
+        return 0.040 + 0.085 * smoothstep(0.0, 0.72, o) - 0.035 * smoothstep(0.80, 1.0, o)
+    # The line follows the lid down round the outer corner a little, into the flick.
+    upper = both(Sdf(lambda x, y: abs(visible(x, y)) - 0.5 * lid_width(x), FULL),
+                 Sdf(lambda x, y: (CY - 0.06 - 0.08 * smoothstep(0.6, 1.0, outer_of(x))) - y, FULL))
+    lower = both(band(visible, 0.035), Sdf(lambda x, y: y - (CY - 0.18), FULL))
+    wing = stroke([(-inner * rx * 0.94, CY + 0.02), (-inner * (rx + 0.09), CY + 0.12)], [0.06, 0.018])
+    crease = curve(lambda x: CY + ry + 0.12 - 0.22 * (x / rx) ** 2, -rx * 0.75, rx * 0.8, 0.035)
     lashes = []
-    for k, (a, length_) in enumerate(((0.55, 0.16), (0.78, 0.20), (0.98, 0.18))):
-        # Three short flicks off the outer end of the upper lid.
+    for a, length_ in ((0.80, 0.12), (0.98, 0.13)):
+        # Two short flicks off the outer end of the upper lid.
         sx = -inner * rx * math.sin(a) * 0.98
         sy = CY + ry * 0.92 * math.cos(a) * (0.35 if lid else 1.0) + (0.0 if not lid else 0.15)
-        ex, ey = sx - inner * length_ * 0.8, sy + length_ * 0.7
-        lashes.append(stroke([(sx, sy), (ex, ey)], [0.07, 0.02]))
-    white = [(visible, sclera, 1.0), (lower, LINE, 0.45), (upper, LINE, 1.0), (wing, LINE, 1.0), (crease, LINE, 0.18)]
-    white += [(lash, LINE, 1.0) for lash in lashes]
+        ex, ey = sx - inner * length_ * 0.8, sy + length_ * 0.6
+        lashes.append(stroke([(sx, sy), (ex, ey)], [0.05, 0.015]))
+    white = [(visible, sclera, 1.0), (lower, (96, 62, 56), 0.35), (upper, LID, 0.96), (wing, LID, 0.92), (crease, LID, 0.13)]
+    white += [(lash, LID, 0.85) for lash in lashes]
 
     ix, iy = iris_c
 
@@ -235,17 +255,18 @@ def eye_layers(state, side):
         r = math.hypot(x - ix, y - iy) / iris_r
         a = math.atan2(y - iy, x - ix)
         streak = 0.06 * math.cos(11.0 * a) + 0.04 * math.cos(23.0 * a + 1.0)
-        v = 0.50 + 0.42 * smoothstep(1.0, 0.55, r) + 0.12 * smoothstep(0.62, 0.45, r) + streak * smoothstep(1.0, 0.5, r)
-        # The lid's shadow darkens the top of the iris.
-        v *= 1.0 - 0.28 * smoothstep(iy + 0.05, iy + iris_r, y)
+        v = 0.48 + 0.40 * smoothstep(1.0, 0.62, r) + 0.14 * smoothstep(0.62, 0.45, r) + streak * smoothstep(1.0, 0.5, r)
+        # Lighter toward the bottom, where light passes through; the lid's shadow darkens the top.
+        v *= 1.0 + 0.10 * smoothstep(0.0, -0.8, (y - iy) / iris_r)
+        v *= 1.0 - 0.34 * smoothstep(top_of(x) - 0.30, top_of(x), y)
         v = clamp(v, 0.0, 1.0)
         return (255 * v, 255 * v, 255 * v)
     iris = both(circle(ix, iy, iris_r), visible)
-    pupil = both(circle(ix, iy - 0.01, iris_r * 0.44), visible)
-    highlight = either(circle(ix - 0.36 * iris_r, iy + 0.38 * iris_r, iris_r * 0.24),
-                       circle(ix + 0.34 * iris_r, iy - 0.30 * iris_r, iris_r * 0.10))
-    ring = both(band(circle(ix, iy, iris_r - 0.02), 0.05), visible)
-    iris_layers = [(minus(iris, highlight), iris_colour, 1.0), (minus(ring, highlight), (70, 70, 70), 0.5),
+    pupil = both(circle(ix, iy - 0.01, iris_r * 0.42), visible)
+    highlight = either(circle(ix - 0.34 * iris_r, iy + 0.36 * iris_r, iris_r * 0.17),
+                       circle(ix + 0.32 * iris_r, iy - 0.30 * iris_r, iris_r * 0.07))
+    ring = both(band(circle(ix, iy, iris_r - 0.02), 0.06), visible)
+    iris_layers = [(minus(iris, highlight), iris_colour, 1.0), (minus(ring, highlight), (52, 52, 52), 0.6),
                    (minus(pupil, highlight), PUPIL, 1.0)]
     return white, iris_layers
 
@@ -336,15 +357,30 @@ def eyebrow(state, side, style="classic"):
         widths = [w * k for w in widths]
     shape = stroke(pts, widths)
     feather = p["feather"]
+    x_in, x_out = pts[0][0], pts[-1][0]
+
+    def along(x):
+        return clamp((x - x_in) / (x_out - x_in), 0.0, 1.0)
 
     def colour(x, y):
-        # A darker core with lighter, hair-like edges; feathered styles break the edge into strokes.
+        # Hairs: fine strokes that rise and fan out at the brow's head and lie flat along its tail,
+        # over a darker core; feathered styles break the edge into strokes.
         d = shape(x, y)
+        u = along(x)
+        angle = (1.25 - 1.0 * smoothstep(0.0, 0.55, u)) * (1.0 if x_out < x_in else -1.0)
+        hairs = 0.5 + 0.5 * math.sin(58.0 * (x * math.sin(angle) - y * math.cos(angle)))
         edge = smoothstep(-0.02, 0.10, d + 0.12)
         if feather:
             edge = clamp(edge + feather * 0.25 * (0.5 + 0.5 * math.sin(x * 46.0 + y * 9.0)) * smoothstep(-0.10, 0.0, d), 0.0, 1.0)
-        return mix((255, 255, 255), (206, 206, 206), edge)
-    return [(shape, colour, 1.0)]
+        return mix((255, 255, 255), (196, 196, 196), clamp(0.75 * edge + 0.22 * hairs, 0.0, 1.0))
+
+    def opacity(x, y):
+        # The head of the brow is softer than its body, and its edge is broken by hairs.
+        u = along(x)
+        d = shape(x, y)
+        hairs = 0.5 + 0.5 * math.sin(41.0 * x + 23.0 * y)
+        return (0.55 + 0.45 * smoothstep(0.0, 0.32, u)) * (1.0 - 0.35 * hairs * smoothstep(-0.05, 0.0, d))
+    return [(shape, colour, opacity)]
 
 
 # ----- makeup (drawn white: tinted by the description's makeup colours) --------------------------
@@ -441,7 +477,7 @@ def mouth(state):
         lower_lip = curve(lambda x: fn(x) - 0.125, x0 * 0.82, x1 * 0.82, lambda t: 0.25 * math.sin(math.pi * t) ** 0.8 + 0.03)
         upper_lip = curve(lambda x: fn(x) + 0.075 - 0.035 * math.cos(math.pi * x / 0.42), x0 * 0.78, x1 * 0.78,
                           lambda t: 0.15 * math.sin(math.pi * t) ** 0.7 + 0.02)
-        line = curve(fn, x0, x1, lambda t: 0.060 + 0.035 * math.sin(math.pi * t))
+        line = curve(fn, x0, x1, lambda t: 0.032 + 0.040 * math.sin(math.pi * t) ** 0.8)
         s += [lips(lower_lip, 0.36), lips(upper_lip, 0.30), (line, LINE, 0.92)]
         if state == "Happy":
             for side in (-1.0, 1.0):
@@ -491,50 +527,73 @@ LINER_STYLES = ("thin", "winged", "bold")
 BLUSH_STYLES = ("round", "sweep")
 
 
-def atlas():
+def _tile_layers(spec):
+    kind, args = spec[0], spec[1:]
+    if kind == "eye":
+        state, side, layer = args
+        return eye_layers(state, side)[layer]
+    if kind == "eyebrow":
+        return eyebrow(*args)
+    if kind == "mouth":
+        return mouth(*args)
+    if kind == "eyeShadow":
+        return eye_shadow(*args)
+    if kind == "eyeliner":
+        return eyeliner(*args)
+    if kind == "blush":
+        return blush(*args)
+    return lips_mask(*args)
+
+
+def _tile(spec):
+    return render(_tile_layers(spec))
+
+
+def atlas(pool=None):
     """Returns (png bytes, layout, style tiles): layout maps every expression state to tile indices;
-    style tiles map each face style (eyebrows, makeup, lip masks) to its tiles."""
-    tiles = []
+    style tiles map each face style (eyebrows, makeup, lip masks) to its tiles. Tiles are rendered in
+    `pool` (a multiprocessing pool) when given."""
+    specs = []
     layout = {"tileSize": TILE, "columns": COLUMNS, "eyes": {}, "eyebrows": {}, "mouths": {}}
     for state in EYES:
         entry = {}
         for side in ("Left", "Right"):
-            white, iris = eye_layers(state, side)
-            entry[side.lower()] = [len(tiles), len(tiles) + 1]
-            tiles += [render(white), render(iris)]
+            entry[side.lower()] = [len(specs), len(specs) + 1]
+            specs += [("eye", state, side, 0), ("eye", state, side, 1)]
         layout["eyes"][state] = entry
     for state in EYEBROWS:
         entry = {}
         for side in ("Left", "Right"):
-            entry[side.lower()] = len(tiles)
-            tiles.append(render(eyebrow(state, side)))
+            entry[side.lower()] = len(specs)
+            specs.append(("eyebrow", state, side))
         layout["eyebrows"][state] = entry
     for state in MOUTHS:
-        layout["mouths"][state] = len(tiles)
-        tiles.append(render(mouth(state)))
+        layout["mouths"][state] = len(specs)
+        specs.append(("mouth", state))
     styles = {}
 
-    def add(key, layers):
-        styles[key] = styles.get(key, []) + [len(tiles)]
-        tiles.append(render(layers))
+    def add(key, spec):
+        styles[key] = styles.get(key, []) + [len(specs)]
+        specs.append(spec)
     for style in BROW_STYLES:
         if style == "classic":
             continue
         for state in EYEBROWS:
             for side in ("Left", "Right"):
-                add(("eyebrows", style), eyebrow(state, side, style))
+                add(("eyebrows", style), ("eyebrow", state, side, style))
     for style in SHADOW_STYLES:
         for side in ("Left", "Right"):
-            add(("eyeShadow", style), eye_shadow(style, side))
+            add(("eyeShadow", style), ("eyeShadow", style, side))
     for style in LINER_STYLES:
         for closed in (False, True):
             for side in ("Left", "Right"):
-                add(("eyeliner", style), eyeliner(style, side, closed))
+                add(("eyeliner", style), ("eyeliner", style, side, closed))
     for style in BLUSH_STYLES:
         for side in ("Left", "Right"):
-            add(("blush", style), blush(style, side))
+            add(("blush", style), ("blush", style, side))
     for state in MOUTHS:
-        add(("lips", "mask"), lips_mask(state))
+        add(("lips", "mask"), ("lips", state))
+    tiles = pool.map(_tile, specs, chunksize=1) if pool else [_tile(spec) for spec in specs]
     rows = (len(tiles) + COLUMNS - 1) // COLUMNS
     width, height = COLUMNS * TILE, rows * TILE
     pixels = bytearray(width * height * 4)
@@ -553,7 +612,7 @@ FEATURES = {
     # name: (x centre, y centre, width, height) in head-local metres on the face (male scale)
     "eyeLeft": (0.054, -0.004, 0.076, 0.070), "eyeRight": (-0.054, -0.004, 0.076, 0.070),
     "eyebrowLeft": (0.056, 0.056, 0.080, 0.044), "eyebrowRight": (-0.056, 0.056, 0.080, 0.044),
-    "mouth": (0.0, -0.078, 0.136, 0.080),
+    "mouth": (0.0, -0.073, 0.136, 0.080),
 }
 # Makeup patches: eye shadow on a raised, larger copy of the eye patch (the shadow tiles place the
 # eye opening at y = -0.26), eyeliner on the eye patch itself, blush on the cheeks, lips on the mouth.

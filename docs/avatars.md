@@ -202,8 +202,9 @@ manifest or catalog pack naming one is refused: the description decodes to nothi
 renderer `Unavailable`), it is never drawn from catalog 3, and stale packs of them left on a
 developer's disk are ignored.
 
-**Revisions.** Catalog v3 was first released on 2026-09-30; **revision 2** (manifest
-`"revision": 2`) is the current content of the same version. A revision may improve the art of
+**Revisions.** Catalog v3 was first released on 2026-09-30; revision 2 added entries, and
+**revision 3** (manifest `"revision": 3`), the current content of the same version, reworks the
+art of the same entries for visual quality. A revision may improve the art of
 every item and add entries, but every first-release id keeps its kind and its description format
 1 (hair 1–10, tops 20–28, bottoms 40–45, shoes 60–64, glasses 80–83, hats 100–104, facial hair
 120–123), and everything a revision adds is marked `"format": 3`, so only a format 3 description
@@ -211,7 +212,7 @@ can name it. A first-release avatar is therefore still a valid, canonical descri
 build or service that reads only formats 1 and 2 never meets an id it does not have: the service
 gives it a copy without the format 3 parts. A new catalog *version* (v4) was considered and set
 aside: it would have doubled the shipped catalog and made v3 a second generation to support.
-`AvatarCatalogTest.CatalogV3Revision2KeepsTheFirstReleaseAndAddsOnlyFormat3Entries` pins the rule.
+`AvatarCatalogTest.CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3Entries` pins the rule.
 
 A description is drawn from exactly the catalog version it names — the compiled-in manifest of
 that version, else an installed pack of it (below) — never from another. Files are found by size and SHA-256, so two
