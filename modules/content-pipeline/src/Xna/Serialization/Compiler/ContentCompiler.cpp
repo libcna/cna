@@ -189,6 +189,149 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
             const Xnb::XnbTypeWriterBase* canonical_;
         };
 
+        /// Resolves the runtime surface format carried by a processed bitmap.
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat TextureFormat(
+            const Graphics::BitmapContent& bitmap)
+        {
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat format{};
+            if (!bitmap.TryGetFormat(format))
+            {
+                throw PipelineException(
+                    "ContentCompiler: a texture's bitmap type has no surface format to write.");
+            }
+            return format;
+        }
+
+        /// Flattens six pipeline face chains into the XNB writer's face-major level order.
+        [[nodiscard]] Xnb::XnbTextureCubeContent ConvertTextureCube(
+            const Graphics::TextureCubeContent& source)
+        {
+            const Graphics::MipmapChainCollection& faces = source.getFacesProperty();
+            if (faces.getCountProperty() != 6)
+            {
+                throw PipelineException("ContentCompiler: a cube texture must have six faces.");
+            }
+            const Graphics::MipmapChain& first = *faces[0];
+            if (first.getCountProperty() == 0)
+            {
+                throw PipelineException("ContentCompiler: a cube texture face has no mipmap levels.");
+            }
+            Xnb::XnbTextureCubeContent wrapper;
+            Xnb::XnbTextureData& texture = wrapper.texture;
+            texture.kind = Xnb::XnbTextureKind::TextureCube;
+            texture.surfaceFormat = TextureFormat(*first[0]);
+            texture.width = static_cast<std::uint32_t>(first[0]->getWidthProperty());
+            texture.height = static_cast<std::uint32_t>(first[0]->getHeightProperty());
+            texture.depth = 1u;
+            texture.faceCount = 6u;
+            texture.mipCount = static_cast<std::uint32_t>(first.getCountProperty());
+            texture.platform = 'w';
+            for (SharpRuntime::intcs face = 0; face < faces.getCountProperty(); ++face)
+            {
+                const Graphics::MipmapChain& chain = *faces[face];
+                if (chain.getCountProperty() != first.getCountProperty())
+                {
+                    throw PipelineException(
+                        "ContentCompiler: every cube face must have the same mipmap count.");
+                }
+                for (SharpRuntime::intcs level = 0; level < chain.getCountProperty(); ++level)
+                {
+                    const SharpRuntime::intcs expectedWidth =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getWidthProperty() >> level);
+                    const SharpRuntime::intcs expectedHeight =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getHeightProperty() >> level);
+                    if (chain[level]->getWidthProperty() != expectedWidth ||
+                        chain[level]->getHeightProperty() != expectedHeight)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every cube face must have the same mipmap dimensions.");
+                    }
+                    if (TextureFormat(*chain[level]) != texture.surfaceFormat)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every level of a cube texture must have the same surface format.");
+                    }
+                    const auto bytes = chain[level]->GetPixelData();
+                    texture.levels.emplace_back(bytes.begin(), bytes.end());
+                }
+            }
+            return wrapper;
+        }
+
+        /// Packs each volume mip into one payload, with its surviving slices placed consecutively.
+        [[nodiscard]] Xnb::XnbTexture3DContent ConvertTexture3D(
+            const Graphics::Texture3DContent& source)
+        {
+            const Graphics::MipmapChainCollection& slices = source.getFacesProperty();
+            if (slices.getCountProperty() == 0 || slices[0]->getCountProperty() == 0)
+            {
+                throw PipelineException(
+                    "ContentCompiler: a volume texture must have a depth and a mipmap level.");
+            }
+            const Graphics::MipmapChain& first = *slices[0];
+            Xnb::XnbTexture3DContent wrapper;
+            Xnb::XnbTextureData& texture = wrapper.texture;
+            texture.kind = Xnb::XnbTextureKind::Texture3D;
+            texture.surfaceFormat = TextureFormat(*first[0]);
+            texture.width = static_cast<std::uint32_t>(first[0]->getWidthProperty());
+            texture.height = static_cast<std::uint32_t>(first[0]->getHeightProperty());
+            texture.depth = static_cast<std::uint32_t>(slices.getCountProperty());
+            texture.faceCount = 1u;
+            texture.mipCount = static_cast<std::uint32_t>(first.getCountProperty());
+            texture.platform = 'w';
+            for (SharpRuntime::intcs slice = 0; slice < slices.getCountProperty(); ++slice)
+            {
+                SharpRuntime::intcs expectedLevels = 0;
+                for (SharpRuntime::intcs level = 0; level < first.getCountProperty(); ++level)
+                {
+                    if (slice < std::max<SharpRuntime::intcs>(
+                                    1, slices.getCountProperty() >> level))
+                    {
+                        ++expectedLevels;
+                    }
+                }
+                if (slices[slice]->getCountProperty() != expectedLevels)
+                {
+                    throw PipelineException(
+                        "ContentCompiler: a volume texture slice has the wrong mipmap count for its depth.");
+                }
+            }
+            for (SharpRuntime::intcs level = 0; level < first.getCountProperty(); ++level)
+            {
+                const SharpRuntime::intcs levelDepth =
+                    std::max<SharpRuntime::intcs>(1, slices.getCountProperty() >> level);
+                std::vector<std::uint8_t> combined;
+                for (SharpRuntime::intcs slice = 0; slice < levelDepth; ++slice)
+                {
+                    const Graphics::MipmapChain& chain = *slices[slice];
+                    if (chain.getCountProperty() <= level)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: a volume texture slice is missing a mipmap level.");
+                    }
+                    const SharpRuntime::intcs expectedWidth =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getWidthProperty() >> level);
+                    const SharpRuntime::intcs expectedHeight =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getHeightProperty() >> level);
+                    if (chain[level]->getWidthProperty() != expectedWidth ||
+                        chain[level]->getHeightProperty() != expectedHeight)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every volume slice must have the same mipmap dimensions.");
+                    }
+                    if (TextureFormat(*chain[level]) != texture.surfaceFormat)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every level of a volume texture must have the same surface format.");
+                    }
+                    const auto bytes = chain[level]->GetPixelData();
+                    combined.insert(combined.end(), bytes.begin(), bytes.end());
+                }
+                texture.levels.push_back(std::move(combined));
+            }
+            return wrapper;
+        }
+
         /// A processed sound or song reaches the canonical writer for it the same way: the pipeline's content object becomes the
         /// canonical data (what the .xnb holds), and the canonical writer writes it. `Convert` does the one conversion that differs.
         template<typename TContent, typename TCanonical, typename TConvert>
@@ -381,6 +524,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                    [facade, this](TargetPlatform platform) -> std::shared_ptr<Xnb::XnbTypeWriterBase>
                                    { return std::make_shared<Adapter<TContent>>(facade, platform, this); }});
         };
+        addCanonical.template operator()<Graphics::TextureCubeContent, Xnb::XnbTextureCubeContent>(
+            ConvertTextureCube);
+        addCanonical.template operator()<Graphics::Texture3DContent, Xnb::XnbTexture3DContent>(
+            ConvertTexture3D);
         addCanonical.template operator()<Processors::SoundEffectContent, Xnb::XnbSoundEffectData>(
             [](const Processors::SoundEffectContent& sound) {
                 Xnb::XnbSoundEffectData data;

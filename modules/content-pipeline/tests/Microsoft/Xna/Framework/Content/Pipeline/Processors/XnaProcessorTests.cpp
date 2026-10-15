@@ -2266,6 +2266,80 @@ TEST(XnaTexturePipeline, AProcessedTextureBecomesAnXnbCnaReadsBack)
     EXPECT_EQ(read.levels[0], std::vector<std::uint8_t>(expected.begin(), expected.end()));
 }
 
+TEST(XnaTexturePipeline, ProcessedCubeAndVolumeTexturesBecomeXnbFilesCnaReadsBack)
+{
+    auto cube = std::make_shared<Graphics::TextureCubeContent>();
+    for (int face = 0; face < 6; ++face)
+    {
+        auto bitmap = Gradient(4, 4);
+        bitmap->SetPixel(0, 0, Color(face * 20, face * 10, face * 5, 255));
+        std::as_const(cube->getFacesProperty())[face]->Add(bitmap);
+    }
+    cube->GenerateMipmaps(false);
+    auto volume = std::make_shared<Graphics::Texture3DContent>();
+    for (int slice = 0; slice < 4; ++slice)
+    {
+        auto bitmap = Gradient(4, 4);
+        bitmap->SetPixel(0, 0, Color(slice * 80, slice * 40, slice * 20, 255));
+        volume->getFacesProperty().Add(std::make_shared<Graphics::MipmapChain>(bitmap));
+    }
+    volume->GenerateMipmaps(false);
+
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler compiler;
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::CompileOptions options;
+    options.assetName = "Textures/cube";
+    const auto cubeFile = compiler.Compile<Graphics::TextureCubeContent>(cube, options);
+    options.assetName = "Textures/volume";
+    const auto volumeFile = compiler.Compile<Graphics::Texture3DContent>(volume, options);
+
+    ScratchDirectory scratch("texture-shapes");
+    const auto write = [&](const char* name, const CNA::Internal::Xnb::XnbAssetWriteResult& result) {
+        const std::filesystem::path path = scratch.Path() / name;
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(result.bytes.data()),
+                  static_cast<std::streamsize>(result.bytes.size()));
+        return path;
+    };
+    const CNA::Internal::Xnb::XnbCanonicalAsset cubeAsset =
+        CNA::Internal::Xnb::DecodeXnbCanonicalAsset(write("cube.xnb", cubeFile));
+    const auto& readCube = std::get<CNA::Internal::Xnb::XnbTextureData>(cubeAsset.value);
+    EXPECT_EQ(readCube.kind, CNA::Internal::Xnb::XnbTextureKind::TextureCube);
+    EXPECT_EQ(readCube.faceCount, 6u);
+    EXPECT_EQ(readCube.mipCount, 3u);
+    ASSERT_EQ(readCube.levels.size(), 18u);
+    for (std::size_t face = 0; face < 6u; ++face)
+    {
+        const auto& chain =
+            *std::as_const(cube->getFacesProperty())[static_cast<int>(face)];
+        for (int level = 0; level < 3; ++level)
+        {
+            const auto expected = std::as_const(chain)[level]->GetPixelData();
+            EXPECT_EQ(readCube.levels[face * 3u + static_cast<std::size_t>(level)],
+                      std::vector<std::uint8_t>(expected.begin(), expected.end()));
+        }
+    }
+
+    const CNA::Internal::Xnb::XnbCanonicalAsset volumeAsset =
+        CNA::Internal::Xnb::DecodeXnbCanonicalAsset(write("volume.xnb", volumeFile));
+    const auto& readVolume = std::get<CNA::Internal::Xnb::XnbTextureData>(volumeAsset.value);
+    EXPECT_EQ(readVolume.kind, CNA::Internal::Xnb::XnbTextureKind::Texture3D);
+    EXPECT_EQ(readVolume.depth, 4u);
+    EXPECT_EQ(readVolume.mipCount, 3u);
+    ASSERT_EQ(readVolume.levels.size(), 3u);
+    for (int level = 0; level < 3; ++level)
+    {
+        std::vector<std::uint8_t> expectedVolume;
+        for (int slice = 0; slice < std::max(1, 4 >> level); ++slice)
+        {
+            const auto bytes =
+                std::as_const(*std::as_const(volume->getFacesProperty())[slice])[level]
+                    ->GetPixelData();
+            expectedVolume.insert(expectedVolume.end(), bytes.begin(), bytes.end());
+        }
+        EXPECT_EQ(readVolume.levels[static_cast<std::size_t>(level)], expectedVolume);
+    }
+}
+
 
 // The processors' sound and song outputs compile too, through the canonical SoundEffect and Song writers.
 TEST(XnaAudioPipeline, AProcessedSoundAndSongBecomeXnbFilesCnaReadsBack)
