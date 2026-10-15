@@ -5,6 +5,7 @@
 // mostly natural; accessories and makeup appear now and then, worn the way people wear them.
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace CNA::Internal::GamerServices::Avatars {
@@ -85,13 +86,18 @@ AvatarDescriptor randomDescriptor(const CatalogManifest& catalog,std::optional<s
     d.build=static_cast<std::uint8_t>(std::clamp<double>(dice.normal(128.0,28.0),70.0,205.0));
     if(shaped)d.proportion=compact?faceByte(std::clamp(dice.normal(-0.6,0.15),-1.0,-0.3)):faceByte(std::clamp(dice.normal(0.0,0.10),-0.25,0.25));
 
-    // Colours: any skin tone, mostly natural hair and eyes.
+    // Colours: any skin tone, mostly natural hair and eyes. Light eyes (green, blue, grey) are
+    // less common the deeper the skin tone, never excluded.
     const auto skin=colorPalette(AvatarColorSlot::Skin);
-    d.colors[at(AvatarColorSlot::Skin)]=skin[dice.index(skin.size())];
+    const auto skinIndex=dice.index(skin.size());
+    d.colors[at(AvatarColorSlot::Skin)]=skin[skinIndex];
     const auto hairColors=colorPalette(AvatarColorSlot::Hair);
     d.colors[at(AvatarColorSlot::Hair)]=hairColors[std::min(dice.weighted(HairWeights),hairColors.size()-1)];
     const auto eyes=colorPalette(AvatarColorSlot::Eyes);
-    d.colors[at(AvatarColorSlot::Eyes)]=eyes[std::min(dice.weighted(EyeWeights),eyes.size()-1)];
+    auto eyeWeights=std::to_array(EyeWeights);
+    const double depth=skin.size()>1?static_cast<double>(skinIndex)/static_cast<double>(skin.size()-1):0.0;
+    for(std::size_t light=4;light<=8&&light<eyeWeights.size();++light)eyeWeights[light]*=1.0-0.8*depth;
+    d.colors[at(AvatarColorSlot::Eyes)]=eyes[std::min(dice.weighted(eyeWeights),eyes.size()-1)];
 
     // Face: a named shape for each part of it, then a little individual variation; nothing extreme.
     if(shaped) {
@@ -123,9 +129,12 @@ AvatarDescriptor randomDescriptor(const CatalogManifest& catalog,std::optional<s
             return !entry.second||(item&&item->randomWeight[body]>0.05f);
         }))outfits.push_back(&outfit);
     bool hatChosen=false,glovesChosen=false;
-    if(!outfits.empty()&&dice.chance(0.40)) {
+    if(!outfits.empty()&&dice.chance(0.25)) {
         const auto& outfit=*outfits[dice.index(outfits.size())];
+        // The outfit's hat is worn half the time: a whole crowd in matching hats looks like a uniform.
+        const bool wearHat=dice.chance(0.5);
         for(const auto& [slot,id]:outfit.items) {
+            if(slot==AvatarItemSlot::Hat&&!wearHat)continue;
             if(static_cast<std::size_t>(slot)<AvatarItemSlotCount)d.items[static_cast<std::size_t>(slot)]=id;
             else if(slot>=AvatarItemSlot::Earrings&&slot<=AvatarItemSlot::Rings)d.accessories[accessoryIndex(slot)]=id;
             hatChosen|=slot==AvatarItemSlot::Hat;
