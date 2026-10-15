@@ -1164,13 +1164,15 @@ CNA_GL_PUNCTUAL_DECL
 "    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor*cnaShadow;\n"
 "    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
-"    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
+// XNA folds the vertex colour into the lit diffuse before the specular term is added (only its
+// alpha scales the highlight) and the saturate -- the target's clamp -- comes after the fold.
+"    FragColor=vec4(litRGB*texColor.rgb*vc.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
 "    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 // Vertex color modulates the whole combined diffuse+specular output, not just diffuse -- applied
 // after the specular add so VertexColorEnabled=true with a black vertex color genuinely zeroes
 // the pixel (a specular highlight added afterward would otherwise leak through unmodulated).
-"    FragColor.rgb*=vc.rgb;\n"
+
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
@@ -1207,6 +1209,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // both declarations here too, not assumed safe by analogy.
 "uniform highp vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
+"uniform mediump float uVertexColorEnabled;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -1271,7 +1274,9 @@ CNA_GL_SKIN_NORMAL_DECL
 // to 99.99%% with any ONE of its three directional lights on and drops to 90.31%% with all
 // three. Saturating here is what oD0/oD1 do, not an approximation of them. FX-122 fixed the
 // same D3D9 semantic in MojoShader's compiled-effect path; this is the built-in effect path.
-"    vLitRGB=clamp(lightSum*uDiffuseColor.rgb+uEmissiveColor,0.0,1.0);\n"
+// XNA folds the vertex colour into the diffuse in the vertex stage, before the interpolator
+// saturates it (ambient 1.8 x 0.5 is 0.9, not 0.5), and before any specular is added.
+"    vLitRGB=clamp((lightSum*uDiffuseColor.rgb+uEmissiveColor)*((uVertexColorEnabled>0.5)?aColor.rgb:vec3(1.0)),0.0,1.0);\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
@@ -1300,7 +1305,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
 // See EnsureSkinnedProgram()'s identical comment: vertex color modulates the whole combined
 // diffuse+specular output, applied after the specular add.
-"    FragColor.rgb*=vc.rgb;\n"
+
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"

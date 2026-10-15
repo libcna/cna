@@ -71,10 +71,13 @@ void main() {
     vec4 tex = (pc.textureEnabled > 0.5)
         ? texture(uTexture, fragUV, samplerLodBias.slots0To3.x) : vec4(1.0);
 
+    // XNA folds the vertex colour into the diffuse before the specular term is added, so only the
+    // colour's alpha scales the highlight; the vertex-lit path folded the RGB in the vertex stage.
+    vec4 vertexColor = (pc.vertexColorEnabled > 0.5) ? fragVertexColor : vec4(1.0);
     vec4 color;
     if (pc.lightingEnabled > 0.5) {
         if (lp.emissiveColor_pad.w < 0.5) {
-            color = vec4(fragVertexLit, fragTint.a) * tex;
+            color = vec4(fragVertexLit, fragTint.a * vertexColor.a) * tex;
             color.rgb += fragVertexSpecular * color.a;
         } else {
             vec3 N = normalize(fragNormal);
@@ -95,17 +98,15 @@ void main() {
             vec3 h2 = safeNormalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, lp.specularColorPower.w);
             vec3 specularRGB = (spec0 * lp.light0Specular_pad.xyz + spec1 * lp.light1Specular_pad.xyz
                                 + spec2 * lp.light2Specular_pad.xyz) * lp.specularColorPower.xyz * shadow;
-            vec3 lit = lightSum * fragTint.rgb + lp.emissiveColor_pad.xyz;
-            color = vec4(lit, fragTint.a) * tex;
+            vec3 lit = (lightSum * fragTint.rgb + lp.emissiveColor_pad.xyz) * vertexColor.rgb;
+            color = vec4(lit, fragTint.a * vertexColor.a) * tex;
             color.rgb *= CnaCascadeDebugTint(fragWorldPos);
             color.rgb += specularRGB * color.a;
         }
     } else {
-        color = fragTint * tex;
+        color = fragTint * tex * vertexColor;
     }
 
-    vec4 vertexColor = (pc.vertexColorEnabled > 0.5) ? fragVertexColor : vec4(1.0);
-    color *= vertexColor;
     outColor = color;
     // Blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
     outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);

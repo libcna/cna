@@ -28,6 +28,20 @@ namespace CNA::Internal::Renderers::SdlGpu
      *
      * @return The descriptor for GraphicsRendererType::SdlGpu.
      */
+    namespace
+    {
+        /// The candidate SdlGpuRenderer::ClampSampleCount starts from: the largest of 2, 4 and 8
+        /// not above the request. The device may still step down when a format lacks that count;
+        /// 8 is what every Vulkan device this renderer has run on supports.
+        int ClampMultiSampleCount(int /*surfaceFormat*/, int requestedMultiSampleCount)
+        {
+            if (requestedMultiSampleCount >= 8) return 8;
+            if (requestedMultiSampleCount >= 4) return 4;
+            if (requestedMultiSampleCount >= 2) return 2;
+            return 0;
+        }
+    }
+
     const GraphicsRendererDescriptor& GetDescriptor()
     {
         static const GraphicsRendererDescriptor descriptor{
@@ -38,6 +52,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             .needsVideoSubsystem      = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
+            .adapterQueries           = {
+                .clampMultiSampleCount = &ClampMultiSampleCount,
+            },
         };
         return descriptor;
     }

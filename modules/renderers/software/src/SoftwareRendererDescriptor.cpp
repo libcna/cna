@@ -29,6 +29,16 @@ namespace CNA::Internal::Renderers::Software
      *
      * @return The descriptor for GraphicsRendererType::Software.
      */
+    namespace
+    {
+        /// What SoftwareFramebuffer::SetMultiSampleCount applies: the CPU rasterizer has one
+        /// multisample mode, a 2x2 grid, so four or more samples become 4 and fewer become 0.
+        int ClampMultiSampleCount(int /*surfaceFormat*/, int requestedMultiSampleCount)
+        {
+            return requestedMultiSampleCount >= 4 ? 4 : 0;
+        }
+    }
+
     const GraphicsRendererDescriptor& GetDescriptor()
     {
         static const GraphicsRendererDescriptor descriptor{
@@ -47,6 +57,9 @@ namespace CNA::Internal::Renderers::Software
             .needsSurfacePresenter    = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
+            .adapterQueries           = {
+                .clampMultiSampleCount = &ClampMultiSampleCount,
+            },
         };
         return descriptor;
     }

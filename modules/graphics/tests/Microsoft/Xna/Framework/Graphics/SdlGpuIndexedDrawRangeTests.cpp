@@ -1300,20 +1300,24 @@ TEST_F(SdlGpuIndexedDrawRangeTest, DualTextureFamilyHonorsIndexedOffsets)
 
     const auto decoy = TrianglePositions(kDecoyX);
     const auto intended = TrianglePositions(kIntendedX);
-    const std::array<VertexPositionTexture, 6> vertices{
-        VertexPositionTexture(decoy[0], Vector2(0.0f, 0.0f)),
-        VertexPositionTexture(decoy[1], Vector2(1.0f, 0.0f)),
-        VertexPositionTexture(decoy[2], Vector2(0.5f, 1.0f)),
-        VertexPositionTexture(intended[0], Vector2(0.0f, 0.0f)),
-        VertexPositionTexture(intended[1], Vector2(1.0f, 0.0f)),
-        VertexPositionTexture(intended[2], Vector2(0.5f, 1.0f)),
+    // DualTextureEffect reads TextureCoordinate1 as well; XNA refuses a declaration without it.
+    struct DualUvVertex { Vector3 position; Vector2 uv0; Vector2 uv1; };
+    const auto dual = [](const Vector3& p, float u, float v) {
+        return DualUvVertex{p, Vector2(u, v), Vector2(u, v)};
     };
+    const std::array<DualUvVertex, 6> vertices{
+        dual(decoy[0], 0.0f, 0.0f), dual(decoy[1], 1.0f, 0.0f), dual(decoy[2], 0.5f, 1.0f),
+        dual(intended[0], 0.0f, 0.0f), dual(intended[1], 1.0f, 0.0f), dual(intended[2], 0.5f, 1.0f),
+    };
+    const VertexDeclaration dualDeclaration(sizeof(DualUvVertex), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1)});
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
 
-    VertexBuffer vertexBuffer(
-        device, VertexPositionTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
+    VertexBuffer vertexBuffer(device, dualDeclaration, 6, BufferUsage::None);
     IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 6);
+    vertexBuffer.SetDataRaw(vertices.data(), 6, static_cast<int>(sizeof(DualUvVertex)));
     indexBuffer.SetData(indices.data(), 3);
 
     RenderTarget2D target = MakeTarget(device);
@@ -1398,7 +1402,15 @@ TEST_F(SdlGpuIndexedDrawRangeTest, SkinnedFamilyHonorsIndexedOffsets)
     };
     const std::array<std::uint16_t, 3> indices{0, 1, 2};
 
-    VertexBuffer vertexBuffer(device, 6);
+    // SkinnedEffect reads Normal, TextureCoordinate0, BlendWeight0 and BlendIndices0; XNA refuses a
+    // buffer that does not declare them, so the record's layout is declared.
+    const VertexDeclaration skinnedDeclaration(sizeof(GpuSkinnedVertex), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+        VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+        VertexElement(48, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0)});
+    VertexBuffer vertexBuffer(device, skinnedDeclaration, 6, BufferUsage::None);
     vertexBuffer.SetDataRaw(vertices.data(), 6, static_cast<int>(sizeof(GpuSkinnedVertex)));
     IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
     indexBuffer.SetData(indices.data(), 3);

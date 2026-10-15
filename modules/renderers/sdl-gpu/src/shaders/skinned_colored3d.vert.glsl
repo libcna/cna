@@ -103,7 +103,10 @@ void main() {
     float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
     vec3 lightSum = pc.ambientColor + NdotL0 * pc.light0Diffuse
                     + NdotL1 * lp.light1Diffuse_pad.xyz + NdotL2 * lp.light2Diffuse_pad.xyz;
-    fragVertexLit = clamp(lightSum * pc.diffuseColor.rgb + lp.emissiveColor_pad.xyz,
+    // XNA folds the vertex colour into the diffuse here, before the interpolator saturates it
+    // (ambient 1.8 x 0.5 is 0.9, not 0.5) and before the fragment stage adds specular.
+    vec3 vertexColorRGB = (pc.vertexColorEnabled > 0.5) ? inColor.rgb : vec3(1.0);
+    fragVertexLit = clamp((lightSum * pc.diffuseColor.rgb + lp.emissiveColor_pad.xyz) * vertexColorRGB,
                           0.0, 1.0);
     vec3 h0 = safeNormalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, lp.specularColorPower.w);
     vec3 h1 = safeNormalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, lp.specularColorPower.w);

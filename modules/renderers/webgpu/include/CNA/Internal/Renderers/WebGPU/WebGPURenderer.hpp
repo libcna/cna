@@ -1755,6 +1755,19 @@ namespace CNA::Internal::Renderers::WebGPU
             static_cast<void>(requestedMultiSampleCount);
             return GetMultiSampleCount();
         }
+        /**
+         * @brief The swap chain is created in the surface's 8-bit colour format whatever the game
+         * requested, so the applied back-buffer format is Color -- the format the adapter query
+         * selects for every non-Color request.
+         *
+         * @param requestedFormat The requested SurfaceFormat ordinal; not consulted.
+         * @return The SurfaceFormat::Color ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override
+        {
+            static_cast<void>(requestedFormat);
+            return 0;
+        }
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         bool TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const override;
 

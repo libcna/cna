@@ -1709,6 +1709,71 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void GraphicsDevice::RequireStockEffectInputs(
+        const CNA::Internal::Renderers::GpuDrawParams& p) const
+    {
+        // Compiled (authentic XNA) effects and CNA's PBR extension carry their own input
+        // contracts; the legacy empty-declaration route has no elements to check against.
+        if (p.compiledEffectRuntime != nullptr || p.pbr) return;
+        // The streams the draw reads, the same way FillVertexStreamBindings resolves them: the
+        // SetVertexBuffers list when it describes the bound buffer, otherwise that buffer alone.
+        // Every stream counts, per-instance ones included: Direct3D 9 validates the shader's
+        // inputs against the union of the streams.
+        std::vector<const VertexBuffer*> streams;
+        if (!currentVertexBuffers_.empty() &&
+            currentVertexBuffers_[0].getVertexBufferProperty() == currentVertexBuffer_)
+        {
+            for (const VertexBufferBinding& binding : currentVertexBuffers_)
+                if (binding.getVertexBufferProperty() != nullptr)
+                    streams.push_back(binding.getVertexBufferProperty());
+        }
+        else if (currentVertexBuffer_ != nullptr)
+        {
+            streams.push_back(currentVertexBuffer_);
+        }
+        bool anyDeclared = false;
+        for (const VertexBuffer* buffer : streams)
+            if (!buffer->getVertexDeclarationProperty().GetVertexElements().empty()) anyDeclared = true;
+        const auto provides = [&](VertexElementUsage usage, int usageIndex)
+        {
+            for (const VertexBuffer* buffer : streams)
+                for (const VertexElement& element :
+                     buffer->getVertexDeclarationProperty().GetVertexElements())
+                    if (element.getVertexElementUsageProperty() == usage &&
+                        element.getUsageIndexProperty() == usageIndex)
+                        return true;
+            return false;
+        };
+        const auto require = [&](VertexElementUsage usage, int usageIndex, const char* name)
+        {
+            if (provides(usage, usageIndex) || !anyDeclared) return;
+            throw System::InvalidOperationException(
+                std::string("The current vertex declaration does not include all the elements "
+                            "required by the current vertex shader. ") + name + " is missing.");
+        };
+        // The legacy empty-declaration route infers a layout from the stride; a skinned draw cannot
+        // be inferred that way (it drew nothing), and XNA has no undeclared buffers at all.
+        if (!anyDeclared && p.skinned)
+            throw System::InvalidOperationException(
+                "The current vertex declaration does not include all the elements required by the "
+                "current vertex shader. BlendIndices0 is missing (SkinnedEffect needs a "
+                "VertexDeclaration naming its elements).");
+        // Position is read by every stock shader, so it decides whether anything is declared at all.
+        if (!provides(VertexElementUsage::Position, 0) && anyDeclared)
+            throw System::InvalidOperationException(
+                "The current vertex declaration does not include all the elements required by the "
+                "current vertex shader. Position0 is missing.");
+        if (p.vertexColorEnabled) require(VertexElementUsage::Color, 0, "Color0");
+        if (p.textureEnabled) require(VertexElementUsage::TextureCoordinate, 0, "TextureCoordinate0");
+        if (p.dualTexture) require(VertexElementUsage::TextureCoordinate, 1, "TextureCoordinate1");
+        if (p.lightingEnabled) require(VertexElementUsage::Normal, 0, "Normal0");
+        if (p.skinned)
+        {
+            require(VertexElementUsage::BlendIndices, 0, "BlendIndices0");
+            require(VertexElementUsage::BlendWeight, 0, "BlendWeight0");
+        }
+    }
+
     void GraphicsDevice::ValidateVertexStreamCapability(
         const CNA::Internal::Renderers::GpuDrawParams& p) const
     {
@@ -1877,6 +1942,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "primitiveCount", std::to_string(primitiveCount));
         }
         ValidateVertexStreamCapability(p);
+        RequireStockEffectInputs(p);
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(
             currentVertexBuffer_->GetRenderer(),
@@ -1975,6 +2041,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "numVertices", std::to_string(numVertices));
         }
         ValidateVertexStreamCapability(p);
+        RequireStockEffectInputs(p);
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(
             currentVertexBuffer_->GetRenderer(),
@@ -2100,6 +2167,7 @@ namespace Microsoft::Xna::Framework::Graphics
             ValidateInstanceStreamRanges(p, instanceCount, firstInstance);
         }
         ValidateVertexStreamCapability(p);
+        RequireStockEffectInputs(p);
         applySamplerStatesToRenderer();
         renderer_->DrawInstancedPrimitivesEx(
             currentVertexBuffer_->GetRenderer(),

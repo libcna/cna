@@ -1581,10 +1581,11 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let texColor = textureSampleBias(tex, texSampler, input.uv, u.samplerBias.x);
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     let vc = select(vec4f(1.0, 1.0, 1.0, 1.0), input.color, vertexColorEnabled > 0.5);
-    var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
+    // XNA folds the vertex colour into the lit diffuse before the specular term is added, so only
+    // the colour's alpha scales the highlight, and the saturate (the target's clamp) comes after.
+    var color = vec4f(litRGB * texColor.rgb * vc.rgb, u.diffuseColor.a * texColor.a * vc.a);
     color = vec4f(color.rgb * cnaCascadeDebugTint(input.worldPos), color.a);
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
-    color = vec4f(color.rgb * vc.rgb, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
     return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
@@ -1819,7 +1820,10 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                   + ndotl2 * lp.light2Diffuse.xyz;
     // plans/plan_apple_m4.md AM4-106: COLOR0/COLOR1 of XNA's per-vertex-lit SkinnedEffect, which
     // Direct3D 9 saturates before interpolation (EasyGL clamps both the same way).
-    output.litRGB = clamp(lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz, vec3f(0.0), vec3f(1.0));
+    // XNA folds the vertex colour into the diffuse here, before the interpolator saturates it
+    // (ambient 1.8 x 0.5 is 0.9, not 0.5) and before the fragment stage adds specular.
+    let vcRGB = select(vec3f(1.0, 1.0, 1.0), input.color.rgb, u.light0DiffuseVertexColor.w > 0.5);
+    output.litRGB = clamp((lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz) * vcRGB, vec3f(0.0), vec3f(1.0));
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
@@ -1833,8 +1837,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     let vc = select(vec4f(1.0, 1.0, 1.0, 1.0), input.color, vertexColorEnabled > 0.5);
     var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
+    // The vertex stage folded the colour's RGB into litRGB; only its alpha scales the highlight.
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
-    color = vec4f(color.rgb * vc.rgb, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
     return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }

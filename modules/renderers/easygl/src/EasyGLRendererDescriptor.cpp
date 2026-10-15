@@ -61,15 +61,27 @@ namespace CNA::Internal::Renderers::EasyGL
             return surfaceFormat == static_cast<int>(SurfaceFormat::Color);
         }
 
+        /// What EasyGLRenderer applies: XNA's largest power of two not above the request, clamped
+        /// to GL_MAX_SAMPLES by the renderer -- 8 on every GL implementation this renderer has run
+        /// on, so the adapter answers that before a context exists.
+        int ClampMultiSampleCount(int /*surfaceFormat*/, int requestedMultiSampleCount)
+        {
+            if (requestedMultiSampleCount >= 8) return 8;
+            if (requestedMultiSampleCount >= 4) return 4;
+            if (requestedMultiSampleCount >= 2) return 2;
+            return 0;
+        }
+
         template <CNA::GraphicsRendererType Identity>
         RendererAdapterQueries AdapterQueriesFor()
         {
             if constexpr (Identity == CNA::GraphicsRendererType::OpenGL33)
-                return {};
+                return {.clampMultiSampleCount = &ClampMultiSampleCount};
 
             return {
                 .isRenderTargetFormatSupported =
                     &IsGuaranteedGlesRenderTargetFormat,
+                .clampMultiSampleCount = &ClampMultiSampleCount,
             };
         }
 

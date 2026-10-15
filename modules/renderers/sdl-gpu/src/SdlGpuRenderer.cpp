@@ -12960,14 +12960,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// whose elements are `strideFloats` apart. Writing element by element rather than one
         /// memcpy is the whole point: std140 pads a `float`, `vec2` or `vec3` element out to
         /// sixteen bytes, and the caller's data is tightly packed.
-        void WriteStd140ArrayEXT(float* destination, const std::size_t destinationFloats,
+        void WriteStd140ArrayEXT(const char* name, float* destination,
+                                 const std::size_t destinationFloats,
                                  const float* values, const int count,
                                  const int elementFloats, const int strideFloats)
         {
             if (values == nullptr || count <= 0) return;
             const std::size_t writable = destinationFloats / static_cast<std::size_t>(strideFloats);
-            const std::size_t elements =
-                std::min(static_cast<std::size_t>(count), writable);
+            // An array past the declared capacity is refused by name rather than cut short: a
+            // silently truncated bone palette or light list is a wrong picture with no diagnostic.
+            if (static_cast<std::size_t>(count) > writable)
+                throw System::NotSupportedException(
+                    "SDL_GPU ShaderEffect: uniform array '" + std::string(name ? name : "") +
+                    "' has room for " + std::to_string(writable) + " elements; " +
+                    std::to_string(count) + " were set.");
+            const std::size_t elements = static_cast<std::size_t>(count);
             for (std::size_t element = 0; element < elements; ++element)
                 std::memcpy(destination + element * static_cast<std::size_t>(strideFloats),
                             values + element * static_cast<std::size_t>(elementFloats),
@@ -12975,33 +12982,33 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
-    void SdlGpuEffectRenderer::SetUniformFloatArray(const char*, const float* values, const int count)
+    void SdlGpuEffectRenderer::SetUniformFloatArray(const char* name, const float* values, const int count)
     {
-        WriteStd140ArrayEXT(uniformArraysEXT_.floats.data(), uniformArraysEXT_.floats.size(),
+        WriteStd140ArrayEXT(name, uniformArraysEXT_.floats.data(), uniformArraysEXT_.floats.size(),
                             values, count, 1, 4);
         uniformArraysUsedEXT_ = true;
         uniformArraySnapshotEXT_.reset();
     }
 
-    void SdlGpuEffectRenderer::SetUniformVec2Array(const char*, const float* values, const int count)
+    void SdlGpuEffectRenderer::SetUniformVec2Array(const char* name, const float* values, const int count)
     {
-        WriteStd140ArrayEXT(uniformArraysEXT_.vec2s.data(), uniformArraysEXT_.vec2s.size(),
+        WriteStd140ArrayEXT(name, uniformArraysEXT_.vec2s.data(), uniformArraysEXT_.vec2s.size(),
                             values, count, 2, 4);
         uniformArraysUsedEXT_ = true;
         uniformArraySnapshotEXT_.reset();
     }
 
-    void SdlGpuEffectRenderer::SetUniformVec3Array(const char*, const float* values, const int count)
+    void SdlGpuEffectRenderer::SetUniformVec3Array(const char* name, const float* values, const int count)
     {
-        WriteStd140ArrayEXT(uniformArraysEXT_.vec3s.data(), uniformArraysEXT_.vec3s.size(),
+        WriteStd140ArrayEXT(name, uniformArraysEXT_.vec3s.data(), uniformArraysEXT_.vec3s.size(),
                             values, count, 3, 4);
         uniformArraysUsedEXT_ = true;
         uniformArraySnapshotEXT_.reset();
     }
 
-    void SdlGpuEffectRenderer::SetUniformMat4Array(const char*, const float* values, const int count)
+    void SdlGpuEffectRenderer::SetUniformMat4Array(const char* name, const float* values, const int count)
     {
-        WriteStd140ArrayEXT(uniformArraysEXT_.mat4s.data(), uniformArraysEXT_.mat4s.size(),
+        WriteStd140ArrayEXT(name, uniformArraysEXT_.mat4s.data(), uniformArraysEXT_.mat4s.size(),
                             values, count, 16, 16);
         uniformArraysUsedEXT_ = true;
         uniformArraySnapshotEXT_.reset();

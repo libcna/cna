@@ -29,6 +29,17 @@ namespace CNA::Internal::Renderers::WebGPU
      *
      * @return The descriptor for GraphicsRendererType::WebGPU.
      */
+    namespace
+    {
+        /// What WebGPURenderer::PickSampleCount applies: WebGPU guarantees exactly 1 and 4
+        /// samples for every renderable format, so a request of four or more is 4 and anything
+        /// smaller is single-sampled (reported as XNA's 0).
+        int ClampMultiSampleCount(int /*surfaceFormat*/, int requestedMultiSampleCount)
+        {
+            return requestedMultiSampleCount >= 4 ? 4 : 0;
+        }
+    }
+
     const GraphicsRendererDescriptor& GetDescriptor()
     {
         static const GraphicsRendererDescriptor descriptor{
@@ -39,6 +50,9 @@ namespace CNA::Internal::Renderers::WebGPU
             .needsVideoSubsystem      = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
+            .adapterQueries           = {
+                .clampMultiSampleCount = &ClampMultiSampleCount,
+            },
         };
         return descriptor;
     }

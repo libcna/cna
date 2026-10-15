@@ -1958,6 +1958,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // elements across several bindings would otherwise render from a subset of them, which
         // looks like a correct draw of the wrong data. The classic shapes -- one per-vertex stream,
         // and one per-vertex plus one per-instance stream -- never reach any of these checks.
+        /// XNA's own check before a stock-effect draw: every element the selected stock shader
+        /// reads (Position; Color, TextureCoordinate0/1, Normal, BlendIndices/BlendWeight by
+        /// effect flags) must be present in the bound per-vertex declarations, or the draw throws
+        /// InvalidOperationException naming the missing element.
+        void RequireStockEffectInputs(const CNA::Internal::Renderers::GpuDrawParams& p) const;
         void ValidateVertexStreamCapability(
             const CNA::Internal::Renderers::GpuDrawParams& p) const;
 

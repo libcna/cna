@@ -162,80 +162,47 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
 
 7. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
     The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
-    of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites; measured 2026-10-13 on
-    Linux through the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan) and `WEBGPU`, and
-    since RRC-045 (2026-10-14) also registered and measured on `SOFTWARE`, `FNA3D` (its OpenGL
-    driver) and `HEADLESS` (whose pixel-oracle programs skip: it makes no pixel claim):
-    - `SkinnedEffect.VertexColorEnabled` folds the vertex colour after the specular term and after
-      the saturate on all three (`*_Conformance_skinned_effect_vertex_color` F/G: 44 instead of
-      218, 128 instead of 230); XNA folds it in first (`VULKAN-200`/`205`). FNA3D ignores the
-      flag outright (B equals A) and saturates before the fold (G: 255 instead of 230); SOFTWARE
-      passes.
-    - A textured `BasicEffect` over a declaration without `TextureCoordinate0` is accepted by
-      EasyGL, SDL_GPU, WebGPU, SOFTWARE and FNA3D (measured 2026-10-14; FNA3D was earlier recorded as
-      refusing); XNA throws `InvalidOperationException`, as DIRECTX9 does since 2026-10-15
-      (`*_Conformance_basic_effect_declaration_inputs` C).
-    - `GraphicsAdapter`'s format queries answer a different multisample count (0) from what `Reset`
-      and `RenderTarget2D` apply (EasyGL 8, SDL_GPU 8, WebGPU 4, SOFTWARE 4, FNA3D 8, HEADLESS 1024 for
-      a render target), WebGPU's and HEADLESS's `Reset` apply back-buffer format 9 where the query
-      says `Color`, and `GraphicsDevice::Reset` does not clamp `MultiSampleCount` through the query
-      (`*_Conformance_graphics_adapter_query`). FNA3D also does not apply `GraphicsDeviceManager`'s
-      default `Depth24` request in that program. HEADLESS reports `MultiSampleAntiAliasing` while
-      applying 0 samples (`Headless_Conformance_capability_truth`). `*_Conformance_multisample_count_clamp`
-      (RRC-047, FNA's `ClosestMSAAPower` rule for requests 0-16) passes on EasyGL, SDL_GPU, WebGPU
-      and SOFTWARE; FNA3D's back buffer keeps a 3, 5 or 7 request unrounded while its render
-      targets round it down, and HEADLESS's render targets echo every request unclamped while its
-      back buffer applies 0.
-    - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered
-      edge texel (`render_target_own_msaa` D). EasyGL, SOFTWARE and FNA3D: a `SkinnedEffect` over a
-      declaration without normal, weights or bone indices draws nothing and reports success
-      (`stock_effect_unsupplied_input` C).
+    of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites, measured on Linux through
+    the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan), `WEBGPU`, `SOFTWARE`, `FNA3D`
+    (its OpenGL driver) and `HEADLESS` (whose pixel-oracle programs skip). Closed on 2026-10-15,
+    verified on SOFTWARE, SDL_GPU, WEBGPU and EasyGL: a stock effect over a declaration missing an
+    element it reads throws XNA's `InvalidOperationException` from `GraphicsDevice` on every renderer
+    (`basic_effect_declaration_inputs` C, `stock_effect_unsupplied_input` C, which also refuses the
+    undeclared skinned draw that drew nothing); `SkinnedEffect.VertexColorEnabled` folds the vertex
+    colour into the diffuse before specular and before the saturate on EasyGL, SDL_GPU and WebGPU
+    (`skinned_effect_vertex_color` F/G); the adapter's multisample answer is the count `Reset` and
+    `RenderTarget2D` apply (SOFTWARE 4, WebGPU 4, SDL_GPU and EasyGL the largest of 2/4/8 not above
+    the request, as their devices apply on this hardware; `graphics_adapter_query`,
+    `multisample_count_clamp`); WebGPU's `Reset` applies the Color back buffer the query selected;
+    an SDL_GPU `ShaderEffect` uniform array beyond its capacity is refused by name
+    (`shader_effect_refusal` E). Still open:
+    - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered edge
+      texel (`render_target_own_msaa` D); 4x resolves as expected, so this is the GL driver's 2x
+      sample pattern meeting the probe's edge, not measured further.
+    - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
+      the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
+      round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
+      `graphics_adapter_query`. FNA3D's driver owns those answers.
     - SDL_GPU and DIRECTX9: cube faces in a multi-render-target set are refused with
-      `System::NotSupportedException` while `MultipleRenderTargets` is true (the `cube_mrt_binding`
-      M1-M4 and `RenderTargetSemantics` plural cube-face cases skip on that refusal); HEADLESS
-      accepts them since 2026-10-14. On SDL_GPU a
-      `ShaderEffect` uniform array beyond its declared capacity is truncated silently
-      (`shader_effect_refusal` E); the portable 3D `ShaderEffect` probe draws nothing on the
-      one-stream routes (`shader_effect_3d_layout` A-C, G) and two vertex streams are refused (D/E);
-      the first-instance leg J, which runs since `SDL_GPU` reports `BaseInstanceDrawing` (RRC-043),
-      fails for G's reason -- the `ShaderEffect` route binds no per-instance stream.
-    - SDL_GPU, compiled XNA effects (`SdlGpuCompiledEffectDrawTest`, the shared helpers in
-      `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`, 2026-10-14): a quad covering
-      pixels 1-2 under Direct3D 9's pixel-centre convention lands half a pixel up and left
-      (`SharedHalfPixelCoverageContract`); a texture set on the device slot after `Apply()` is not the
-      one the draw samples (`SharedDeviceTextureSlotAfterApplyContract`); and a pixel shader writing
-      `COLOR2` into a one-target pass draws with a Vulkan validation warning (output location 2 has
-      no attachment), which fails `SdlGpu_CompiledEffectRuntime`. WebGPU's compiled effects
-      (`CNA_WEBGPU_COMPILED_EFFECTS`, off by default) fail the same two contracts on the same
-      MojoShader SPIR-V route (measured 2026-10-14).
+      `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
+      and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
+      them. A capability boundary, reported as such.
+    - SDL_GPU `ShaderEffect` 3D route: the portable probe draws nothing on the one-stream routes
+      (`shader_effect_3d_layout` A-C, G), two vertex streams are refused (D/E), and the
+      first-instance leg J fails for G's reason -- the route binds no per-instance stream.
+    - SDL_GPU compiled XNA effects (`SdlGpuCompiledEffectDrawTest`, the shared helpers in
+      `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`): a quad covering pixels 1-2
+      under Direct3D 9's pixel-centre convention lands half a pixel up and left
+      (`SharedHalfPixelCoverageContract`); a texture set on the device slot after `Apply()` is not
+      the one the draw samples (`SharedDeviceTextureSlotAfterApplyContract`); a pixel shader writing
+      `COLOR2` into a one-target pass draws with a Vulkan validation warning, which fails
+      `SdlGpu_CompiledEffectRuntime`. WebGPU's compiled effects (`CNA_WEBGPU_COMPILED_EFFECTS`, off
+      by default) fail the same two contracts on the same MojoShader SPIR-V route.
     - WebGPU: a `ShaderEffect` disposed after `End()` and before the flush drops its draw
       (`deferred_effect_query_lifetime` E2-E4; `webgpu_effect_outlived_by_draw_test` Check B asserts
       the drop, contrary to XNA); two vertex streams into a `ShaderEffect` are refused, and a missing
-      input is refused only at replay, after which the queued draw throws again from a destructor and
-      terminates the process (`shader_effect_3d_layout` D/E, F/H, run last for that reason).
-    - SDL_GPU and WebGPU: an unlit `BasicEffect` over the 36-byte Position+Normal+Colour+TexCoord
-      record does not saturate vertex colour × `DiffuseColor` at the vertex, as Direct3D 9's `oD0`
-      does (`*_Conformance_basiceffect_unlit_vertex_color_36byte` B: 255 instead of XNA's 178; EasyGL
-      passes). The program was registered only by the retired `VULKAN` suite until 2026-10-13.
-    - SDL_GPU and WebGPU, in three `CnaTests` cases first pinned on the retired `METAL` (now gated to
-      the renderers that pass them): a `Vector4` `RenderTargetCube` face's typed `GetData` throws
-      "did not return the complete declared-format cube region"
-      (`HdrRenderTargetRoundTripTest.AFloatCubeTargetTransfersItsTypedTexels`); `Short2` positions
-      are not read as their integer values (SDL_GPU draws the wrong pixel, WebGPU aborts;
-      `IntegerVertexElementTest`); and `SkinnedEffect` refuses `Short4` blend indices, which XNA
-      accepts (`SkinnedEffectBoneIndexFormatTest`). Measured 2026-10-13 by selecting each renderer
-      at run time in `cmake-build-multi`.
-    - SDL_GPU and WebGPU ignore `SpecularTextureCoordinateSetEXT` (81 instead of 66, measured by
-      selecting them at run time against `pbr_texture_slot_mapping_test.cpp` in the EasyGL-default
-      multi-renderer tree; on SDL_GPU registered as `SdlGpu_CrossFamily_PbrTextureSlotMapping` since
-      RRC-046).
-    - SDL_GPU, in programs that had run on EasyGL alone (and on the retired `DIRECTX11`) until
-      RRC-046 gave them SDL_GPU as a second family (`SdlGpu_CrossFamily_*`, measured 2026-10-14;
-      145 of 148 pass): the back buffer's clear colour is gone after switching to two render
-      targets and back (`RenderTarget_Roundtrip`: black, where FNA, EasyGL and `DIRECTX11` keep it;
-      XNA leaves a `DiscardContents` back buffer undefined, FNA preserves it); and a positive
-      `DepthBias` (+3e-4) does not push a primitive behind a coplanar-ish one
-      (`DepthBiasMagnitudeContract`; the two negative sizes pass).
+      input is refused only at replay, after which the queued draw throws again from a destructor
+      and terminates the process (`shader_effect_3d_layout` D/E, F/H, run last for that reason).
 
 8. **`EasyGL`'s per-pixel `SkinnedEffect` draws a textured, ambient-only quad white.** With a real
     red `Texture2D` bound and `PreferPerPixelLighting=true` the draw reads (255,255,255,255); the
