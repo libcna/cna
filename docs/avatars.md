@@ -137,7 +137,8 @@ keeps the edits. When the stored avatar changes elsewhere while the editor is op
 editor shows the new one and an edited one says that saving replaces it. Running games see a saved
 avatar through `AvatarDescription.Changed`.
 
-`cna_avatar_editor` is built with the examples of a 3D renderer (`CNA_BUILD_EXAMPLES`).
+`cna_avatar_editor` is built with the examples (`CNA_BUILD_EXAMPLES`) whenever the default renderer
+draws (not HEADLESS or STUB), as are `cna_avatar_review` and `cna_guide_review`.
 `--capture DIR` walks the categories, tries on and keeps choices, randomizes and saves, writing a
 PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
 `CNA_GAMER_SERVICES_PROFILES_DIR` a scratch store it runs unattended on a private display.

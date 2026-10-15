@@ -326,31 +326,37 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
             cna_copy_sdl_runtime(cna_demo_avatar_bone_state_boundary)
         endif()
     endif()
+endif()
 
+# GSP-A2 / GSX-U0 / GSP-I1: the avatar and Guide review tools and the avatar editor use only the
+# standard API, so they are built for any default renderer that draws (DIRECTX9 under Wine reviews
+# avatars the same way as the GL renderers), not only the GL ones the demos above need.
+if(CNA_BUILD_EXAMPLES AND CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN
+        AND NOT CNA_GRAPHICS_RENDERER MATCHES "^(HEADLESS|STUB)$")
     # GSP-A2: cna_avatar_review renders tools/avatar_builder/avatar_review.py job lists through the
     # standard avatar API, for deterministic before/after review sheets.
-    if(CNA_ENABLE_GAMER_SERVICES AND NOT EMSCRIPTEN)
-        add_executable(cna_avatar_review avatar_review/AvatarReview.cpp)
-        target_link_libraries(cna_avatar_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(cna_avatar_review PRIVATE SDL3::SDL3main)
-        endif()
-        # GSX-U0: deterministic captures of every system UI surface over a stand-in game.
-        add_executable(cna_guide_review guide_review/GuideReview.cpp)
-        target_link_libraries(cna_guide_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(cna_guide_review PRIVATE SDL3::SDL3main)
-        endif()
-        # GSP-I1: the CNA avatar editor, a program of its own so no game needs customization code.
-        add_executable(cna_avatar_editor avatar_editor/AvatarEditor.cpp)
-        target_link_libraries(cna_avatar_editor PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(cna_avatar_editor PRIVATE SDL3::SDL3main)
-        endif()
-        if(WIN32)
-            cna_windows_gui_executable(cna_avatar_editor)
-            cna_copy_sdl_runtime(cna_avatar_editor)
-        endif()
+    add_executable(cna_avatar_review avatar_review/AvatarReview.cpp)
+    target_link_libraries(cna_avatar_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_avatar_review PRIVATE SDL3::SDL3main)
+    endif()
+    # GSX-U0: deterministic captures of every system UI surface over a stand-in game.
+    add_executable(cna_guide_review guide_review/GuideReview.cpp)
+    target_link_libraries(cna_guide_review PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_guide_review PRIVATE SDL3::SDL3main)
+    endif()
+    # GSP-I1: the CNA avatar editor, a program of its own so no game needs customization code.
+    add_executable(cna_avatar_editor avatar_editor/AvatarEditor.cpp)
+    target_link_libraries(cna_avatar_editor PRIVATE CNA CNA_GamerServices SHARP_RUNTIME)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_avatar_editor PRIVATE SDL3::SDL3main)
+    endif()
+    if(WIN32)
+        cna_windows_gui_executable(cna_avatar_editor)
+        cna_copy_sdl_runtime(cna_avatar_editor)
+        cna_copy_sdl_runtime(cna_avatar_review)
+        cna_copy_sdl_runtime(cna_guide_review)
     endif()
 endif()
 

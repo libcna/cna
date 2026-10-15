@@ -668,13 +668,16 @@ been run.
   hands, feet, every face control, every hairstyle from the front and from behind, every garment,
   headwear, facial-hair style, ear shape, accessory and makeup style, key frames of every
   animation, every expression) ran on OpenGL 3.3, OpenGL ES 3, SOFTWARE, SDL_GPU (Vulkan), WebGPU
-  and FNA3D (its SDL_GPU Vulkan driver), one multi-renderer build, each confirmed by its log, all
-  frames rendered. Against OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel
-  difference is 0.09/255 (WebGPU) and the worst silhouette overlap 0.9994 (SOFTWARE); OpenGL ES 3
-  is identical. The XNA AvatarShadows sample ran on OpenGL ES 3 (Mesa software) on 2026-09-30, not
-  re-run for revision 2. HEADLESS runs the API tests. Not measured: `DIRECTX9` (no Windows host; the gamer-services library cross-builds
-  with MinGW), and SDL_GPU's Direct3D 12 and Metal backends.
-- **Reason:** the remaining renderers need another host or a separate build.
+  and FNA3D (its SDL_GPU Vulkan driver) from one multi-renderer build, and on DIRECTX9 (Wine with
+  DXVK) and SDL_GPU's Direct3D 12 backend (Wine with vkd3d-proton) from the MinGW Windows build,
+  each confirmed by its log, all frames rendered. Against OpenGL 3.3 (`avatar_review.py compare`)
+  the worst mean absolute pixel difference is 0.09/255 (WebGPU) and the worst silhouette overlap
+  0.9988 (DIRECTX9); OpenGL ES 3 is identical. The avatar, editor and Guide gtests pass on each of
+  the six Linux renderers, and the Windows build's gamer-services suite passes under Wine. The XNA
+  AvatarShadows sample ran on OpenGL ES 3 (Mesa software) on 2026-09-30, not re-run for revision 2.
+  HEADLESS runs the API tests. Not measured: SDL_GPU's Metal backend (no macOS host), and DIRECTX9
+  and Direct3D 12 on native Windows drivers rather than their Vulkan translations.
+- **Reason:** Metal and native Windows drivers need another host.
 - **Observable impact:** unknown on those; none found on the ones measured.
 - **Porting impact:** none known.
 - **Future work:** the same review on a Windows and a macOS host.
