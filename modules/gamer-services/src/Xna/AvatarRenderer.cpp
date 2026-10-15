@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
@@ -165,7 +166,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                 GpuPart gpu;
                 gpu.vertexCount = static_cast<int>(vertices.size());
                 gpu.primitiveCount = static_cast<int>(part.indices.size() / 3);
-                gpu.vertices = std::make_unique<Graphics::VertexBuffer>(*device, gpu.vertexCount);
+                gpu.vertices = std::make_unique<Graphics::VertexBuffer>(*device, Graphics::VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(), gpu.vertexCount, Graphics::BufferUsage::WriteOnly);
                 gpu.vertices->SetData(vertices.data(), gpu.vertexCount);
                 gpu.indices = std::make_unique<Graphics::IndexBuffer>(*device, static_cast<int>(part.indices.size()));
                 gpu.indices->SetData(part.indices.data(), static_cast<int>(part.indices.size()));
@@ -479,7 +480,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             r.loadingEffect = std::make_unique<Graphics::BasicEffect>(device);
             r.loadingVertexCount = static_cast<int>(vertices.size());
             r.loadingPrimitiveCount = static_cast<int>(indices.size() / 3);
-            r.loadingVertices = std::make_unique<Graphics::VertexBuffer>(device, r.loadingVertexCount);
+            r.loadingVertices = std::make_unique<Graphics::VertexBuffer>(device, Graphics::VertexPositionColor::getVertexDeclarationStatic(), r.loadingVertexCount, Graphics::BufferUsage::WriteOnly);
             r.loadingVertices->SetData(vertices.data(), r.loadingVertexCount);
             r.loadingIndices = std::make_unique<Graphics::IndexBuffer>(device, static_cast<int>(indices.size()));
             r.loadingIndices->SetData(indices.data(), static_cast<int>(indices.size()));
