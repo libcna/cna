@@ -350,46 +350,41 @@ def eyebrow(state, side, style="classic"):
 # ----- makeup (drawn white: tinted by the description's makeup colours) --------------------------
 
 def eye_shadow(style, side):
-    """Lid colour over the upper lid and the eye opening (the eye's white covers the opening while the
-    eye is open, so a closed eye shows a coloured lid), fading up toward the brow. Tiles are on the
-    eye shadow patch, the eye patch raised and enlarged (SHADOW_PATCH), where the eye opening's
-    centre is at y = -0.26."""
+    """Lid colour between the lash line and the brow, strongest at the lashes (the eye's white covers
+    the opening while the eye is open; a closed eye shows a coloured lid). Tiles are on the eye shadow
+    patch, the eye patch raised and enlarged (SHADOW_PATCH), where the eye opening's centre is at
+    y = -0.26 and its upper lid at about y = 0.20."""
     inner = -1.0 if side == "Left" else 1.0
     ey = -0.26
-    erx, ery = RX * 0.87, RY * 0.77
+    erx = RX * 0.87
     if style == "soft":
-        lid = ellipse(0.0, ey + 0.06, erx * 1.04, ery * 1.22)
-        fade = 0.30
+        lid = ellipse(-inner * 0.03, ey + 0.36, erx * 1.06, 0.48)
     elif style == "smoky":
-        lid = either(ellipse(-inner * 0.08, ey + 0.10, erx * 1.16, ery * 1.40), ellipse(-inner * 0.04, ey - 0.06, erx * 1.06, ery * 1.0))
-        fade = 0.42
+        lid = either(ellipse(-inner * 0.08, ey + 0.38, erx * 1.20, 0.56), ellipse(-inner * 0.04, ey - 0.36, erx * 0.95, 0.16))
     elif style == "winged":
-        wing = stroke([(-inner * erx * 0.55, ey + 0.16), (-inner * (erx + 0.24), ey + 0.40)], [0.42, 0.08])
-        lid = either(ellipse(0.0, ey + 0.06, erx * 1.04, ery * 1.20), wing)
-        fade = 0.30
+        wing = stroke([(-inner * erx * 0.55, ey + 0.34), (-inner * (erx + 0.26), ey + 0.62)], [0.46, 0.08])
+        lid = either(ellipse(-inner * 0.03, ey + 0.34, erx * 1.04, 0.44), wing)
     else:  # "highlight": the inner corner and the brow bone
-        lid = either(ellipse(inner * erx * 0.74, ey + 0.04, 0.18, 0.24), ellipse(-inner * 0.06, ey + ery * 1.75, erx * 0.95, 0.13))
-        fade = 0.16
-    top = ey + ery * 1.6
+        lid = either(ellipse(inner * erx * 0.74, ey + 0.10, 0.20, 0.26), ellipse(-inner * 0.06, ey + 0.95, erx * 0.95, 0.15))
 
     def colour(x, y):
         return (255, 255, 255)
-    # Strongest at the lash line, fading upward and at the edges.
-    layers = []
-    for k in range(5):
-        shape = grow(lid, -0.04 * k)
-        layers.append((shape, colour, 0.16 + 0.04 * k))
+    # Strongest at the lash line, fading upward and toward the edges.
+    fade = Sdf(lambda x, y: (y - (ey + 0.20)) * 0.9 - 0.25, FULL)
+    layers = [(grow(lid, 0.06), colour, 0.25)]
+    for k in range(4):
+        layers.append((grow(lid, -0.06 * k), colour, 0.30))
     if style != "highlight":
-        layers = [(both(shape, Sdf(lambda x, y, k=k: y - (top - 0.12 * k), FULL)), c, o) for k, (shape, c, o) in enumerate(layers)]
-    return [(grow(lid, fade * 0.25), colour, 0.10)] + layers
+        layers.append((both(lid, Sdf(lambda x, y: y - (ey + 0.48), FULL)), colour, 0.45))
+    return layers
 
 
 def eyeliner(style, side, closed):
     """A line along the upper lid ending in a wing (on the eye patch, like the eye tiles); `closed`
     follows the closed lid of a blink instead."""
     inner = -1.0 if side == "Left" else 1.0
-    width = {"thin": 0.07, "winged": 0.09, "bold": 0.15}[style]
-    wing = {"thin": 0.10, "winged": 0.34, "bold": 0.24}[style]
+    width = {"thin": 0.10, "winged": 0.13, "bold": 0.20}[style]
+    wing = {"thin": 0.16, "winged": 0.44, "bold": 0.30}[style]
     if closed:
         lid = curve(lambda x: -0.10 - 0.08 * (1.0 - (x / 0.66) ** 2), -0.62, 0.62, width * 0.9)
         tail_from = (-inner * 0.62, -0.10)
@@ -443,9 +438,9 @@ def mouth(state):
         else:
             fn = lambda x: 0.02 + 0.10 * math.sin((x + 0.5) * 2.4 * math.pi / 1.0) * 0.5 + 0.10 * x
             x0, x1 = -0.5, 0.5
-        lower_lip = curve(lambda x: fn(x) - 0.11, x0 * 0.80, x1 * 0.80, lambda t: 0.20 * math.sin(math.pi * t) ** 0.8 + 0.03)
-        upper_lip = curve(lambda x: fn(x) + 0.065 - 0.035 * math.cos(math.pi * x / 0.42), x0 * 0.76, x1 * 0.76,
-                          lambda t: 0.11 * math.sin(math.pi * t) ** 0.7 + 0.02)
+        lower_lip = curve(lambda x: fn(x) - 0.125, x0 * 0.82, x1 * 0.82, lambda t: 0.25 * math.sin(math.pi * t) ** 0.8 + 0.03)
+        upper_lip = curve(lambda x: fn(x) + 0.075 - 0.035 * math.cos(math.pi * x / 0.42), x0 * 0.78, x1 * 0.78,
+                          lambda t: 0.15 * math.sin(math.pi * t) ** 0.7 + 0.02)
         line = curve(fn, x0, x1, lambda t: 0.060 + 0.035 * math.sin(math.pi * t))
         s += [lips(lower_lip, 0.36), lips(upper_lip, 0.30), (line, LINE, 0.92)]
         if state == "Happy":

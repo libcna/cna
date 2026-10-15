@@ -78,6 +78,8 @@ def build():
             entry["hairCover"] = {"line": list(accessories.HAT_COVER[name]),
                                   "lift": round(accessories.UNDER_HAT_LIFT * max(head.SCALE.values()), 5)}
         entry.update(extras)
+        if name in catalog.LABELS:
+            entry["label"] = catalog.LABELS[name]
         (features if slot in ("facialHair", "ears") else items).append(entry)
     for kind in sorted(textures_used):
         files[catalog.texture_file(kind)] = catalog.texture_bytes(kind)
@@ -95,7 +97,10 @@ def build():
                    for b in rig.BODY_TYPES},
         "items": items,
         "featureItems": features,
-        "faceStyles": catalog.face_styles(styles),
+        "faceStyles": [dict(style, label=catalog.LABELS[style["name"]]) if style["name"] in catalog.LABELS else style
+                       for style in catalog.face_styles(styles)],
+        "outfits": catalog.outfits(),
+        "facePresets": catalog.face_presets(),
         "faceControls": {b: facecontrols.controls(b) for b in rig.BODY_TYPES},
         "faceAnchors": {b: face_anchors(b) for b in rig.BODY_TYPES},
         "headSurface": {b: head_surface(b) for b in rig.BODY_TYPES},

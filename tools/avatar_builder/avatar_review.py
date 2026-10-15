@@ -250,6 +250,22 @@ def catalog_jobs(catalogs, library, manifest, version, heroes):
             hand = (wrist * 0.85 + tip * 0.15)
             jobs.append(job("accessories-%03d" % item["id"], "accessories", d, hand + np.array([-0.30, 0.06, 0.30]), hand, 0.45,
                             label=item["name"]))
+    makeup_colors = {"eyeShadow": (150, 96, 140), "eyeliner": (0, 0, 0), "blush": (228, 120, 120), "lips": (190, 50, 70)}
+    for item in manifest.get("faceStyles", []):
+        slot = item["slot"]
+        body = 0 if slot != "eyebrows" or item["random"]["female"] >= item["random"]["male"] else 1
+        # Hair pulled back from the face, so brows and makeup show.
+        pulled = {"hair": next((i["id"] for i in manifest["items"] if i["name"] == "hair_ponytail"), heroes[body].items["hair"])}
+        if slot == "eyebrows":
+            d = variant(heroes[body], eyebrows=item["id"], **pulled)
+        else:
+            d = variant(heroes[body], makeup={slot: item["id"]}, **pulled)
+            if slot in ("eyeShadow", "blush", "lips"):
+                d.colors[slot] = makeup_colors[slot]
+        head, span = head_height(catalogs, library, d.encode())
+        k = span / REFERENCE_SPAN
+        jobs.append(job("makeup-%03d" % item["id"], "makeup", d, (0.0, head - 0.03 * k, 0.62 * k), (0.0, head - 0.06 * k, 0.0), 0.5,
+                        yaw=-10.0, label=item["name"]))
     for item in manifest.get("featureItems", []):
         if item["slot"] != "facialHair":
             continue

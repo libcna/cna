@@ -43,12 +43,12 @@
   },
   {
    "name": "body.female.glb",
-   "sha256": "4ffb63ef5ac022d8d5daf0070798ac03804c82aa4bc69272871795d9c9fdc880",
+   "sha256": "c4153dd68c5fc582ab66783820ae8fb59ef92dedb49a2a72987ba4dad36deb6e",
    "size": 475736
   },
   {
    "name": "body.male.glb",
-   "sha256": "15a32f30fe1f653056cb924f0a6ba14cbda6aa33e68cc0c3a1bd2f75372721d5",
+   "sha256": "222e42f5ffe25d9698ebd5e405f10c3ebafd0546c4bc80a395cc15745047ea45",
    "size": 475724
   },
   {
@@ -343,8 +343,8 @@
   },
   {
    "name": "face_features.png",
-   "sha256": "a2cae8ef15674f10ecb6a2f0a9e251f5f9fc11fa883a9239d2ceb78c8a1b26b7",
-   "size": 426871
+   "sha256": "eaafbfb2bdd786244de0dadf36501f7edfb627003109b07bcbbe54f20941c378",
+   "size": 431456
   },
   {
    "name": "facial_beard.female.glb",
@@ -1743,62 +1743,62 @@
   },
   {
    "name": "wrist_band.female.glb",
-   "sha256": "a7de94dc6f0a9aea90c13a45ac20770a179e11dee55d418846da01b6f9acc226",
-   "size": 51812
+   "sha256": "f3284c990c9748c70ec869c1074e893e1c878b50b33fe0a887403261b0945165",
+   "size": 50340
   },
   {
    "name": "wrist_band.male.glb",
-   "sha256": "a5c1d1c7a3858bb4da937406d0b5d6c002e58d5fc6f0f85927d928086787afac",
-   "size": 51804
+   "sha256": "0e4f3e0194beb2761c64caff2288ba2b7e2577f8e38f90820f4a8a96112235b6",
+   "size": 50324
   },
   {
    "name": "wrist_bangle.female.glb",
-   "sha256": "6e029a21cc44ad90ddc16922d7daadb97867c9daf427a35b36b0c03906d4edb6",
-   "size": 53420
+   "sha256": "f0619d91b68ffe3b67d228a7fb61b226ec825d6e6dbc04084160cb592f08ff5c",
+   "size": 53424
   },
   {
    "name": "wrist_bangle.male.glb",
-   "sha256": "b18968f7c058d00810982f5e07d3958a178ee0f4e303da21602ac21f77cce496",
-   "size": 53408
+   "sha256": "985669d87eca1f4b577065ab42a559174987dc71e03a54200522ea1ab02cc9f7",
+   "size": 53404
   },
   {
    "name": "wrist_beads.female.glb",
-   "sha256": "852c4f6596484379acc5a2ceb6f4cf7185d0e092c1387561a9cecd6e60e6f7a1",
+   "sha256": "7f216ae718b8ebf78b08bbb5312e62dbc1199ad2e74a4909234eff37f18cc316",
    "size": 85640
   },
   {
    "name": "wrist_beads.male.glb",
-   "sha256": "218546a0c7e454034098ef9501ad5b6225d5d9763eb378db0a8aed8456f69ac3",
+   "sha256": "5ad2989dd7d872ad84eacc84596bdfd786a54df5764e40a8636cc7aeb265209a",
    "size": 85628
   },
   {
    "name": "wrist_cuff.female.glb",
-   "sha256": "17f5582e8ec89d0987d51ed5a7b2ab192cb0a974074e8152bcabeec995397823",
-   "size": 51808
+   "sha256": "3174188dcdeeb18876f1a401ea8e5b40613c40925a625b424aa5a6b82c2b62a4",
+   "size": 50336
   },
   {
    "name": "wrist_cuff.male.glb",
-   "sha256": "09a0d4d33e80ef0d57fd8cb9fc1f58b6ec5578075013899c11aa494cbb29d6db",
-   "size": 51792
+   "sha256": "ee4fb9285f5ca426dc990dc86a3f0c17f8721757bcb47d728bfe42db0f54ae04",
+   "size": 50328
   },
   {
    "name": "wrist_sportwatch.female.glb",
-   "sha256": "99330654c97293f11bd83e268347458fef8f334c8fe0ebbd4066d98c1a0c36a2",
-   "size": 59508
+   "sha256": "39d2d3999cebf8c1c70dbbdede03bcbecee73b2db829e661755a520aca7caef4",
+   "size": 59516
   },
   {
    "name": "wrist_sportwatch.male.glb",
-   "sha256": "279a5a2eec892e42a8474b3ad86c80ab7bb88196f1c52d91ef656e361d45536c",
+   "sha256": "f83e41d4f7ed8b8ab73ad50a6d74ef4bf7f7b9acff0fc9b7fcb8ea97078a200d",
    "size": 59496
   },
   {
    "name": "wrist_watch.female.glb",
-   "sha256": "b7ad0a5c3783fc12532efc9f8761a85fc144a18ef0f6977cb7a925c29e91fe4f",
+   "sha256": "d88054173203baf2a8e4f205078b8193581d2e5f709b91da6030c8a779e5cc3c",
    "size": 59468
   },
   {
    "name": "wrist_watch.male.glb",
-   "sha256": "c8c64a2b1cce88657638a2f8eff63426df799d5db8fac6b123b416b577f03bfa",
+   "sha256": "dfb3678160e215ae6adde9be4924718540872ecbcc3aec350f77aa3134686350",
    "size": 59452
   }
  ],
@@ -4242,10 +4242,497 @@
    }
   ]
  },
+ "facePresets": [
+  {
+   "group": "face",
+   "name": "Balanced",
+   "values": {}
+  },
+  {
+   "group": "face",
+   "name": "Round",
+   "values": {
+    "cheekFullness": 0.5,
+    "chinSize": -0.3,
+    "headHeight": -0.25,
+    "headWidth": 0.35,
+    "jawTaper": -0.3,
+    "jawWidth": 0.25
+   }
+  },
+  {
+   "group": "face",
+   "name": "Long",
+   "values": {
+    "cheekFullness": -0.25,
+    "chinHeight": 0.3,
+    "chinSize": 0.3,
+    "headHeight": 0.4,
+    "headWidth": -0.25,
+    "jawWidth": -0.2
+   }
+  },
+  {
+   "group": "face",
+   "name": "Square",
+   "values": {
+    "cheekFullness": -0.2,
+    "chinSize": 0.35,
+    "headWidth": 0.15,
+    "jawAngle": 0.5,
+    "jawTaper": -0.4,
+    "jawWidth": 0.55
+   }
+  },
+  {
+   "group": "face",
+   "name": "Heart",
+   "values": {
+    "cheekboneWidth": 0.4,
+    "chinSize": -0.35,
+    "foreheadHeight": 0.2,
+    "headWidth": 0.2,
+    "jawTaper": 0.5,
+    "jawWidth": -0.45
+   }
+  },
+  {
+   "group": "face",
+   "name": "Oval",
+   "values": {
+    "cheekboneWidth": 0.2,
+    "headHeight": 0.2,
+    "headWidth": -0.1,
+    "jawTaper": 0.2
+   }
+  },
+  {
+   "group": "face",
+   "name": "Soft",
+   "values": {
+    "cheekFullness": 0.45,
+    "chinSize": -0.15,
+    "jawAngle": -0.4,
+    "jawWidth": -0.1
+   }
+  },
+  {
+   "group": "face",
+   "name": "Angular",
+   "values": {
+    "cheekFullness": -0.5,
+    "cheekboneWidth": 0.5,
+    "chinProjection": 0.4,
+    "jawAngle": 0.5,
+    "jawTaper": 0.2
+   }
+  },
+  {
+   "group": "face",
+   "name": "Broad",
+   "values": {
+    "cheekboneWidth": 0.4,
+    "headHeight": -0.1,
+    "headWidth": 0.5,
+    "jawWidth": 0.4
+   }
+  },
+  {
+   "group": "face",
+   "name": "Narrow",
+   "values": {
+    "cheekboneWidth": -0.3,
+    "headHeight": 0.15,
+    "headWidth": -0.45,
+    "jawWidth": -0.3
+   }
+  },
+  {
+   "group": "face",
+   "name": "Youthful",
+   "values": {
+    "browHeight": 0.15,
+    "cheekFullness": 0.4,
+    "chinSize": -0.3,
+    "eyeSize": 0.35,
+    "foreheadHeight": 0.3,
+    "jawWidth": -0.25,
+    "noseSize": -0.35
+   }
+  },
+  {
+   "group": "face",
+   "name": "Mature",
+   "values": {
+    "browHeight": -0.2,
+    "cheekFullness": -0.35,
+    "chinProjection": 0.3,
+    "eyeSize": -0.25,
+    "jawWidth": 0.25,
+    "lowerLip": -0.2,
+    "noseSize": 0.3,
+    "upperLip": -0.3
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Balanced",
+   "values": {}
+  },
+  {
+   "group": "eyes",
+   "name": "Bright",
+   "values": {
+    "browHeight": 0.2,
+    "eyeShape": 0.3,
+    "eyeSize": 0.45
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Narrow",
+   "values": {
+    "eyeShape": -0.5,
+    "eyeSize": -0.3
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Wide-set",
+   "values": {
+    "eyeSize": 0.1,
+    "eyeSpacing": 0.5
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Close-set",
+   "values": {
+    "eyeSpacing": -0.5
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Upturned",
+   "values": {
+    "browHeight": 0.15,
+    "eyeTilt": 0.55
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Downturned",
+   "values": {
+    "browHeight": -0.2,
+    "eyeTilt": -0.5
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Round",
+   "values": {
+    "eyeShape": 0.6,
+    "eyeSize": 0.2
+   }
+  },
+  {
+   "group": "eyes",
+   "name": "Almond",
+   "values": {
+    "eyeShape": -0.3,
+    "eyeSize": 0.1,
+    "eyeTilt": 0.25
+   }
+  },
+  {
+   "group": "brows",
+   "name": "Natural",
+   "values": {}
+  },
+  {
+   "group": "brows",
+   "name": "High",
+   "values": {
+    "browHeight": 0.6
+   }
+  },
+  {
+   "group": "brows",
+   "name": "Low",
+   "values": {
+    "browAngle": -0.2,
+    "browHeight": -0.5
+   }
+  },
+  {
+   "group": "brows",
+   "name": "Wide apart",
+   "values": {
+    "browSpacing": 0.6
+   }
+  },
+  {
+   "group": "brows",
+   "name": "Close",
+   "values": {
+    "browSpacing": -0.6
+   }
+  },
+  {
+   "group": "brows",
+   "name": "Lifted",
+   "values": {
+    "browAngle": 0.6,
+    "browHeight": 0.2
+   }
+  },
+  {
+   "group": "brows",
+   "name": "Bold",
+   "values": {
+    "browThickness": 0.7
+   }
+  },
+  {
+   "group": "brows",
+   "name": "Fine",
+   "values": {
+    "browThickness": -0.6
+   }
+  },
+  {
+   "group": "ears",
+   "name": "Natural",
+   "values": {}
+  },
+  {
+   "group": "ears",
+   "name": "Small",
+   "values": {
+    "earSize": -0.6
+   }
+  },
+  {
+   "group": "ears",
+   "name": "Large",
+   "values": {
+    "earSize": 0.6
+   }
+  },
+  {
+   "group": "ears",
+   "name": "High",
+   "values": {
+    "earHeight": 0.6
+   }
+  },
+  {
+   "group": "ears",
+   "name": "Low",
+   "values": {
+    "earHeight": -0.6
+   }
+  },
+  {
+   "group": "ears",
+   "name": "Flat",
+   "values": {
+    "earAngle": -0.7
+   }
+  },
+  {
+   "group": "ears",
+   "name": "Prominent",
+   "values": {
+    "earAngle": 0.8,
+    "earSize": 0.2
+   }
+  },
+  {
+   "group": "nose",
+   "name": "Balanced",
+   "values": {}
+  },
+  {
+   "group": "nose",
+   "name": "Button",
+   "values": {
+    "noseHeight": 0.15,
+    "noseSize": -0.35,
+    "noseTip": 0.4,
+    "noseWidth": -0.1
+   }
+  },
+  {
+   "group": "nose",
+   "name": "Broad",
+   "values": {
+    "noseBridge": 0.4,
+    "noseSize": 0.25,
+    "noseWidth": 0.55
+   }
+  },
+  {
+   "group": "nose",
+   "name": "Long",
+   "values": {
+    "noseHeight": -0.3,
+    "noseSize": 0.35,
+    "noseTip": -0.3,
+    "noseWidth": -0.2
+   }
+  },
+  {
+   "group": "nose",
+   "name": "Narrow",
+   "values": {
+    "noseBridge": -0.4,
+    "noseWidth": -0.5
+   }
+  },
+  {
+   "group": "nose",
+   "name": "Upturned",
+   "values": {
+    "noseHeight": 0.2,
+    "noseTip": 0.7
+   }
+  },
+  {
+   "group": "nose",
+   "name": "Strong",
+   "values": {
+    "noseBridge": 0.6,
+    "noseSize": 0.3,
+    "noseTip": -0.2
+   }
+  },
+  {
+   "group": "nose",
+   "name": "Small",
+   "values": {
+    "noseSize": -0.6
+   }
+  },
+  {
+   "group": "mouth",
+   "name": "Balanced",
+   "values": {}
+  },
+  {
+   "group": "mouth",
+   "name": "Wide smile",
+   "values": {
+    "mouthHeight": 0.1,
+    "mouthWidth": 0.5
+   }
+  },
+  {
+   "group": "mouth",
+   "name": "Small",
+   "values": {
+    "mouthWidth": -0.45
+   }
+  },
+  {
+   "group": "mouth",
+   "name": "Full lips",
+   "values": {
+    "lowerLip": 0.6,
+    "upperLip": 0.5
+   }
+  },
+  {
+   "group": "mouth",
+   "name": "Thin lips",
+   "values": {
+    "lowerLip": -0.4,
+    "upperLip": -0.5
+   }
+  },
+  {
+   "group": "mouth",
+   "name": "Full upper",
+   "values": {
+    "upperLip": 0.6
+   }
+  },
+  {
+   "group": "mouth",
+   "name": "Full lower",
+   "values": {
+    "lowerLip": 0.7
+   }
+  },
+  {
+   "group": "body",
+   "name": "Average",
+   "values": {}
+  },
+  {
+   "group": "body",
+   "name": "Petite",
+   "values": {
+    "build": -0.3,
+    "height": -0.6,
+    "proportion": -0.3
+   }
+  },
+  {
+   "group": "body",
+   "name": "Youthful",
+   "values": {
+    "build": -0.2,
+    "height": -0.75,
+    "proportion": -0.9
+   }
+  },
+  {
+   "group": "body",
+   "name": "Tall",
+   "values": {
+    "height": 0.6,
+    "proportion": 0.4
+   }
+  },
+  {
+   "group": "body",
+   "name": "Athletic",
+   "values": {
+    "build": 0.25,
+    "height": 0.2,
+    "proportion": 0.3
+   }
+  },
+  {
+   "group": "body",
+   "name": "Broad",
+   "values": {
+    "build": 0.6,
+    "proportion": -0.1
+   }
+  },
+  {
+   "group": "body",
+   "name": "Slim",
+   "values": {
+    "build": -0.6,
+    "proportion": 0.2
+   }
+  },
+  {
+   "group": "body",
+   "name": "Heavy",
+   "values": {
+    "build": 0.95
+   }
+  }
+ ],
  "faceStyles": [
   {
    "format": 3,
    "id": 600,
+   "label": "Natural",
    "name": "brows_natural",
    "random": {
     "female": 1.4,
@@ -4268,6 +4755,7 @@
   {
    "format": 3,
    "id": 601,
+   "label": "Straight",
    "name": "brows_straight",
    "random": {
     "female": 0.6,
@@ -4290,6 +4778,7 @@
   {
    "format": 3,
    "id": 602,
+   "label": "Soft arch",
    "name": "brows_softarch",
    "random": {
     "female": 1.2,
@@ -4312,6 +4801,7 @@
   {
    "format": 3,
    "id": 603,
+   "label": "High arch",
    "name": "brows_higharch",
    "random": {
     "female": 0.8,
@@ -4334,6 +4824,7 @@
   {
    "format": 3,
    "id": 604,
+   "label": "Thin",
    "name": "brows_thin",
    "random": {
     "female": 0.8,
@@ -4356,6 +4847,7 @@
   {
    "format": 3,
    "id": 605,
+   "label": "Thick",
    "name": "brows_thick",
    "random": {
     "female": 0.6,
@@ -4378,6 +4870,7 @@
   {
    "format": 3,
    "id": 606,
+   "label": "Short",
    "name": "brows_short",
    "random": {
     "female": 0.5,
@@ -4400,6 +4893,7 @@
   {
    "format": 3,
    "id": 607,
+   "label": "Long",
    "name": "brows_long",
    "random": {
     "female": 0.6,
@@ -4422,6 +4916,7 @@
   {
    "format": 3,
    "id": 608,
+   "label": "Angled",
    "name": "brows_angled",
    "random": {
     "female": 0.5,
@@ -4444,6 +4939,7 @@
   {
    "format": 3,
    "id": 609,
+   "label": "Rounded",
    "name": "brows_rounded",
    "random": {
     "female": 0.8,
@@ -4466,6 +4962,7 @@
   {
    "format": 3,
    "id": 610,
+   "label": "Bushy",
    "name": "brows_bushy",
    "random": {
     "female": 0.2,
@@ -4488,6 +4985,7 @@
   {
    "format": 3,
    "id": 611,
+   "label": "Low and flat",
    "name": "brows_lowflat",
    "random": {
     "female": 0.4,
@@ -4510,6 +5008,7 @@
   {
    "format": 3,
    "id": 640,
+   "label": "Soft",
    "name": "shadow_soft",
    "opacity": 0.85,
    "random": {
@@ -4525,6 +5024,7 @@
   {
    "format": 3,
    "id": 641,
+   "label": "Smoky",
    "name": "shadow_smoky",
    "opacity": 0.85,
    "random": {
@@ -4540,6 +5040,7 @@
   {
    "format": 3,
    "id": 642,
+   "label": "Winged",
    "name": "shadow_winged",
    "opacity": 0.85,
    "random": {
@@ -4555,6 +5056,7 @@
   {
    "format": 3,
    "id": 643,
+   "label": "Highlight",
    "name": "shadow_highlight",
    "opacity": 0.85,
    "random": {
@@ -4570,6 +5072,7 @@
   {
    "format": 3,
    "id": 650,
+   "label": "Thin",
    "name": "liner_thin",
    "random": {
     "female": 1.0,
@@ -4586,6 +5089,7 @@
   {
    "format": 3,
    "id": 651,
+   "label": "Winged",
    "name": "liner_winged",
    "random": {
     "female": 1.0,
@@ -4602,6 +5106,7 @@
   {
    "format": 3,
    "id": 652,
+   "label": "Bold",
    "name": "liner_bold",
    "random": {
     "female": 1.0,
@@ -4618,6 +5123,7 @@
   {
    "format": 3,
    "id": 660,
+   "label": "Round",
    "name": "blush_round",
    "opacity": 0.75,
    "random": {
@@ -4633,6 +5139,7 @@
   {
    "format": 3,
    "id": 661,
+   "label": "Sweep",
    "name": "blush_sweep",
    "opacity": 0.75,
    "random": {
@@ -4648,6 +5155,7 @@
   {
    "format": 3,
    "id": 670,
+   "label": "Tint",
    "name": "lips_tint",
    "opacity": 0.45,
    "random": {
@@ -4675,6 +5183,7 @@
   {
    "format": 3,
    "id": 671,
+   "label": "Colour",
    "name": "lips_color",
    "opacity": 0.75,
    "random": {
@@ -4702,6 +5211,7 @@
   {
    "format": 3,
    "id": 672,
+   "label": "Bold",
    "name": "lips_bold",
    "opacity": 0.95,
    "random": {
@@ -4734,6 +5244,7 @@
     "male": "facial_mustache.male.glb"
    },
    "id": 120,
+   "label": "Mustache",
    "name": "facial_mustache",
    "random": {
     "female": 0.0,
@@ -4747,6 +5258,7 @@
     "male": "facial_goatee.male.glb"
    },
    "id": 121,
+   "label": "Goatee",
    "name": "facial_goatee",
    "random": {
     "female": 0.0,
@@ -4760,6 +5272,7 @@
     "male": "facial_beard.male.glb"
    },
    "id": 122,
+   "label": "Full beard",
    "name": "facial_beard",
    "random": {
     "female": 0.0,
@@ -4773,6 +5286,7 @@
     "male": "facial_chinstrap.male.glb"
    },
    "id": 123,
+   "label": "Chinstrap",
    "name": "facial_chinstrap",
    "random": {
     "female": 0.0,
@@ -4787,6 +5301,7 @@
    },
    "format": 3,
    "id": 480,
+   "label": "Stubble",
    "name": "facial_stubble",
    "random": {
     "female": 0.0,
@@ -4801,6 +5316,7 @@
    },
    "format": 3,
    "id": 481,
+   "label": "Heavy stubble",
    "name": "facial_heavystubble",
    "random": {
     "female": 0.0,
@@ -4815,6 +5331,7 @@
    },
    "format": 3,
    "id": 482,
+   "label": "Short beard",
    "name": "facial_shortbeard",
    "random": {
     "female": 0.0,
@@ -4829,6 +5346,7 @@
    },
    "format": 3,
    "id": 483,
+   "label": "Long beard",
    "name": "facial_longbeard",
    "random": {
     "female": 0.0,
@@ -4843,6 +5361,7 @@
    },
    "format": 3,
    "id": 484,
+   "label": "Horseshoe",
    "name": "facial_horseshoe",
    "random": {
     "female": 0.0,
@@ -4857,6 +5376,7 @@
    },
    "format": 3,
    "id": 485,
+   "label": "Handlebar",
    "name": "facial_handlebar",
    "random": {
     "female": 0.0,
@@ -4871,6 +5391,7 @@
    },
    "format": 3,
    "id": 486,
+   "label": "Soul patch",
    "name": "facial_soulpatch",
    "random": {
     "female": 0.0,
@@ -4885,6 +5406,7 @@
    },
    "format": 3,
    "id": 487,
+   "label": "Chin beard",
    "name": "facial_chinbeard",
    "random": {
     "female": 0.0,
@@ -4899,6 +5421,7 @@
    },
    "format": 3,
    "id": 488,
+   "label": "Van Dyke",
    "name": "facial_vandyke",
    "random": {
     "female": 0.0,
@@ -4913,6 +5436,7 @@
    },
    "format": 3,
    "id": 489,
+   "label": "Sideburns",
    "name": "facial_sideburns",
    "random": {
     "female": 0.0,
@@ -4927,6 +5451,7 @@
    },
    "format": 3,
    "id": 490,
+   "label": "Mutton chops",
    "name": "facial_muttonchops",
    "random": {
     "female": 0.0,
@@ -4941,6 +5466,7 @@
    },
    "format": 3,
    "id": 491,
+   "label": "Pencil mustache",
    "name": "facial_pencil",
    "random": {
     "female": 0.0,
@@ -4954,6 +5480,7 @@
     "male": "ears_round.male.glb"
    },
    "id": 500,
+   "label": "Round",
    "name": "ears_round",
    "random": {
     "female": 1.0,
@@ -4967,6 +5494,7 @@
     "male": "ears_small.male.glb"
    },
    "id": 501,
+   "label": "Small",
    "name": "ears_small",
    "random": {
     "female": 1.0,
@@ -4980,6 +5508,7 @@
     "male": "ears_large.male.glb"
    },
    "id": 502,
+   "label": "Large",
    "name": "ears_large",
    "random": {
     "female": 1.0,
@@ -4993,6 +5522,7 @@
     "male": "ears_longlobe.male.glb"
    },
    "id": 503,
+   "label": "Long lobes",
    "name": "ears_longlobe",
    "random": {
     "female": 1.0,
@@ -5006,6 +5536,7 @@
     "male": "ears_attached.male.glb"
    },
    "id": 504,
+   "label": "Attached lobes",
    "name": "ears_attached",
    "random": {
     "female": 1.0,
@@ -5019,6 +5550,7 @@
     "male": "ears_protruding.male.glb"
    },
    "id": 505,
+   "label": "Standing out",
    "name": "ears_protruding",
    "random": {
     "female": 1.0,
@@ -8227,6 +8759,7 @@
     "male": "hair_short.male.glb"
    },
    "id": 1,
+   "label": "Short",
    "name": "hair_short",
    "random": {
     "female": 0.6,
@@ -8240,6 +8773,7 @@
     "male": "hair_spiky.male.glb"
    },
    "id": 2,
+   "label": "Spiky",
    "name": "hair_spiky",
    "random": {
     "female": 0.4,
@@ -8253,6 +8787,7 @@
     "male": "hair_bob.male.glb"
    },
    "id": 3,
+   "label": "Bob",
    "name": "hair_bob",
    "random": {
     "female": 1.4,
@@ -8266,6 +8801,7 @@
     "male": "hair_ponytail.male.glb"
    },
    "id": 4,
+   "label": "Ponytail",
    "name": "hair_ponytail",
    "random": {
     "female": 1.4,
@@ -8279,6 +8815,7 @@
     "male": "hair_buzz.male.glb"
    },
    "id": 5,
+   "label": "Buzz cut",
    "name": "hair_buzz",
    "random": {
     "female": 0.3,
@@ -8292,6 +8829,7 @@
     "male": "hair_long.male.glb"
    },
    "id": 6,
+   "label": "Long",
    "name": "hair_long",
    "random": {
     "female": 1.4,
@@ -8305,6 +8843,7 @@
     "male": "hair_curly.male.glb"
    },
    "id": 7,
+   "label": "Curly",
    "name": "hair_curly",
    "random": {
     "female": 1.0,
@@ -8318,6 +8857,7 @@
     "male": "hair_sidepart.male.glb"
    },
    "id": 8,
+   "label": "Side part",
    "name": "hair_sidepart",
    "random": {
     "female": 0.6,
@@ -8331,6 +8871,7 @@
     "male": "hair_bun.male.glb"
    },
    "id": 9,
+   "label": "Bun",
    "name": "hair_bun",
    "random": {
     "female": 1.2,
@@ -8344,6 +8885,7 @@
     "male": "hair_pigtails.male.glb"
    },
    "id": 10,
+   "label": "Pigtails",
    "name": "hair_pigtails",
    "random": {
     "female": 1.0,
@@ -8357,6 +8899,7 @@
     "male": "top_tshirt.male.glb"
    },
    "id": 20,
+   "label": "T-shirt",
    "name": "top_tshirt",
    "random": {
     "female": 1.0,
@@ -8370,6 +8913,7 @@
     "male": "top_longsleeve.male.glb"
    },
    "id": 21,
+   "label": "Long sleeve",
    "name": "top_longsleeve",
    "random": {
     "female": 1.0,
@@ -8383,6 +8927,7 @@
     "male": "top_hoodie.male.glb"
    },
    "id": 22,
+   "label": "Hoodie",
    "name": "top_hoodie",
    "random": {
     "female": 1.0,
@@ -8396,6 +8941,7 @@
     "male": "top_tank.male.glb"
    },
    "id": 23,
+   "label": "Tank top",
    "name": "top_tank",
    "random": {
     "female": 1.0,
@@ -8409,6 +8955,7 @@
     "male": "top_shirt.male.glb"
    },
    "id": 24,
+   "label": "Shirt",
    "name": "top_shirt",
    "random": {
     "female": 0.8,
@@ -8422,6 +8969,7 @@
     "male": "top_sweater.male.glb"
    },
    "id": 25,
+   "label": "Cable sweater",
    "name": "top_sweater",
    "random": {
     "female": 1.0,
@@ -8435,6 +8983,7 @@
     "male": "top_jacket.male.glb"
    },
    "id": 26,
+   "label": "Zip jacket",
    "name": "top_jacket",
    "random": {
     "female": 1.0,
@@ -8448,6 +8997,7 @@
     "male": "top_polo.male.glb"
    },
    "id": 27,
+   "label": "Polo",
    "name": "top_polo",
    "random": {
     "female": 0.7,
@@ -8461,6 +9011,7 @@
     "male": "top_turtleneck.male.glb"
    },
    "id": 28,
+   "label": "Turtleneck",
    "name": "top_turtleneck",
    "random": {
     "female": 1.0,
@@ -8474,6 +9025,7 @@
     "male": "bottom_jeans.male.glb"
    },
    "id": 40,
+   "label": "Jeans",
    "name": "bottom_jeans",
    "random": {
     "female": 1.0,
@@ -8487,6 +9039,7 @@
     "male": "bottom_shorts.male.glb"
    },
    "id": 41,
+   "label": "Shorts",
    "name": "bottom_shorts",
    "random": {
     "female": 0.8,
@@ -8500,6 +9053,7 @@
     "male": "bottom_skirt.male.glb"
    },
    "id": 42,
+   "label": "Pleated skirt",
    "name": "bottom_skirt",
    "random": {
     "female": 1.2,
@@ -8513,6 +9067,7 @@
     "male": "bottom_cargo.male.glb"
    },
    "id": 43,
+   "label": "Cargo trousers",
    "name": "bottom_cargo",
    "random": {
     "female": 0.6,
@@ -8526,6 +9081,7 @@
     "male": "bottom_joggers.male.glb"
    },
    "id": 44,
+   "label": "Joggers",
    "name": "bottom_joggers",
    "random": {
     "female": 1.0,
@@ -8539,6 +9095,7 @@
     "male": "bottom_longskirt.male.glb"
    },
    "id": 45,
+   "label": "Long skirt",
    "name": "bottom_longskirt",
    "random": {
     "female": 0.8,
@@ -8552,6 +9109,7 @@
     "male": "shoes_sneakers.male.glb"
    },
    "id": 60,
+   "label": "Sneakers",
    "name": "shoes_sneakers",
    "random": {
     "female": 1.2,
@@ -8565,6 +9123,7 @@
     "male": "shoes_boots.male.glb"
    },
    "id": 61,
+   "label": "Boots",
    "name": "shoes_boots",
    "random": {
     "female": 1.0,
@@ -8578,6 +9137,7 @@
     "male": "shoes_hightops.male.glb"
    },
    "id": 62,
+   "label": "High-tops",
    "name": "shoes_hightops",
    "random": {
     "female": 1.0,
@@ -8591,6 +9151,7 @@
     "male": "shoes_dress.male.glb"
    },
    "id": 63,
+   "label": "Dress shoes",
    "name": "shoes_dress",
    "random": {
     "female": 0.6,
@@ -8604,6 +9165,7 @@
     "male": "shoes_flats.male.glb"
    },
    "id": 64,
+   "label": "Flats",
    "name": "shoes_flats",
    "random": {
     "female": 1.0,
@@ -8618,6 +9180,7 @@
    },
    "follow": "eyes",
    "id": 80,
+   "label": "Round",
    "name": "glasses_round",
    "random": {
     "female": 1.0,
@@ -8632,6 +9195,7 @@
    },
    "follow": "eyes",
    "id": 81,
+   "label": "Square",
    "name": "glasses_square",
    "random": {
     "female": 1.0,
@@ -8646,6 +9210,7 @@
    },
    "follow": "eyes",
    "id": 82,
+   "label": "Aviators",
    "name": "glasses_aviator",
    "random": {
     "female": 1.0,
@@ -8660,6 +9225,7 @@
    },
    "follow": "eyes",
    "id": 83,
+   "label": "Browline",
    "name": "glasses_browline",
    "random": {
     "female": 1.0,
@@ -8682,6 +9248,7 @@
     ]
    },
    "id": 100,
+   "label": "Cap",
    "name": "hat_cap",
    "random": {
     "female": 1.0,
@@ -8704,6 +9271,7 @@
     ]
    },
    "id": 101,
+   "label": "Beanie",
    "name": "hat_beanie",
    "random": {
     "female": 1.0,
@@ -8726,6 +9294,7 @@
     ]
    },
    "id": 102,
+   "label": "Bucket hat",
    "name": "hat_bucket",
    "random": {
     "female": 1.0,
@@ -8748,6 +9317,7 @@
     ]
    },
    "id": 103,
+   "label": "Fedora",
    "name": "hat_fedora",
    "random": {
     "female": 0.8,
@@ -8761,6 +9331,7 @@
     "male": "hat_headband.male.glb"
    },
    "id": 104,
+   "label": "Headband",
    "name": "hat_headband",
    "random": {
     "female": 1.0,
@@ -8775,6 +9346,7 @@
    },
    "format": 3,
    "id": 200,
+   "label": "Crew cut",
    "name": "hair_crew",
    "random": {
     "female": 0.2,
@@ -8789,6 +9361,7 @@
    },
    "format": 3,
    "id": 201,
+   "label": "Fade",
    "name": "hair_fade",
    "random": {
     "female": 0.2,
@@ -8803,6 +9376,7 @@
    },
    "format": 3,
    "id": 202,
+   "label": "Shaved",
    "name": "hair_shaved",
    "random": {
     "female": 0.1,
@@ -8817,6 +9391,7 @@
    },
    "format": 3,
    "id": 203,
+   "label": "Balding",
    "name": "hair_balding",
    "random": {
     "female": 0.0,
@@ -8831,6 +9406,7 @@
    },
    "format": 3,
    "id": 204,
+   "label": "Quiff",
    "name": "hair_quiff",
    "random": {
     "female": 0.2,
@@ -8845,6 +9421,7 @@
    },
    "format": 3,
    "id": 205,
+   "label": "Slicked back",
    "name": "hair_slick",
    "random": {
     "female": 0.3,
@@ -8859,6 +9436,7 @@
    },
    "format": 3,
    "id": 206,
+   "label": "Textured crop",
    "name": "hair_crop",
    "random": {
     "female": 0.5,
@@ -8873,6 +9451,7 @@
    },
    "format": 3,
    "id": 207,
+   "label": "Short curls",
    "name": "hair_curlyshort",
    "random": {
     "female": 0.6,
@@ -8887,6 +9466,7 @@
    },
    "format": 3,
    "id": 208,
+   "label": "Afro",
    "name": "hair_afro",
    "random": {
     "female": 0.6,
@@ -8901,6 +9481,7 @@
    },
    "format": 3,
    "id": 209,
+   "label": "Twists",
    "name": "hair_twists",
    "random": {
     "female": 0.4,
@@ -8915,6 +9496,7 @@
    },
    "format": 3,
    "id": 210,
+   "label": "Shag",
    "name": "hair_shag",
    "random": {
     "female": 0.8,
@@ -8929,6 +9511,7 @@
    },
    "format": 3,
    "id": 211,
+   "label": "Wavy",
    "name": "hair_wavy",
    "random": {
     "female": 1.0,
@@ -8943,6 +9526,7 @@
    },
    "format": 3,
    "id": 212,
+   "label": "Bob with bangs",
    "name": "hair_bobbangs",
    "random": {
     "female": 1.2,
@@ -8957,6 +9541,7 @@
    },
    "format": 3,
    "id": 213,
+   "label": "Long bob",
    "name": "hair_lob",
    "random": {
     "female": 1.2,
@@ -8971,6 +9556,7 @@
    },
    "format": 3,
    "id": 214,
+   "label": "Curtain bangs",
    "name": "hair_curtain",
    "random": {
     "female": 1.0,
@@ -8985,6 +9571,7 @@
    },
    "format": 3,
    "id": 215,
+   "label": "Mohawk",
    "name": "hair_mohawk",
    "random": {
     "female": 0.1,
@@ -8999,6 +9586,7 @@
    },
    "format": 3,
    "id": 216,
+   "label": "Top knot",
    "name": "hair_topknot",
    "random": {
     "female": 0.3,
@@ -9013,6 +9601,7 @@
    },
    "format": 3,
    "id": 217,
+   "label": "Half up",
    "name": "hair_halfup",
    "random": {
     "female": 1.0,
@@ -9027,6 +9616,7 @@
    },
    "format": 3,
    "id": 218,
+   "label": "Long with bangs",
    "name": "hair_longbangs",
    "random": {
     "female": 1.2,
@@ -9041,6 +9631,7 @@
    },
    "format": 3,
    "id": 219,
+   "label": "Long waves",
    "name": "hair_longwavy",
    "random": {
     "female": 1.2,
@@ -9055,6 +9646,7 @@
    },
    "format": 3,
    "id": 220,
+   "label": "Long layers",
    "name": "hair_layered",
    "random": {
     "female": 1.1,
@@ -9069,6 +9661,7 @@
    },
    "format": 3,
    "id": 221,
+   "label": "Long curls",
    "name": "hair_longcurly",
    "random": {
     "female": 1.0,
@@ -9083,6 +9676,7 @@
    },
    "format": 3,
    "id": 222,
+   "label": "Braid",
    "name": "hair_braid",
    "random": {
     "female": 0.9,
@@ -9097,6 +9691,7 @@
    },
    "format": 3,
    "id": 223,
+   "label": "Low ponytail",
    "name": "hair_lowponytail",
    "random": {
     "female": 1.0,
@@ -9111,6 +9706,7 @@
    },
    "format": 3,
    "id": 224,
+   "label": "High ponytail",
    "name": "hair_highponytail",
    "random": {
     "female": 1.0,
@@ -9125,6 +9721,7 @@
    },
    "format": 3,
    "id": 225,
+   "label": "Side ponytail",
    "name": "hair_sideponytail",
    "random": {
     "female": 0.7,
@@ -9139,6 +9736,7 @@
    },
    "format": 3,
    "id": 226,
+   "label": "Two buns",
    "name": "hair_spacebuns",
    "random": {
     "female": 0.5,
@@ -9153,6 +9751,7 @@
    },
    "format": 3,
    "id": 300,
+   "label": "V-neck",
    "name": "top_vneck",
    "random": {
     "female": 1.0,
@@ -9167,6 +9766,7 @@
    },
    "format": 3,
    "id": 301,
+   "label": "Raglan tee",
    "name": "top_raglan",
    "random": {
     "female": 0.8,
@@ -9181,6 +9781,7 @@
    },
    "format": 3,
    "id": 302,
+   "label": "Button-up",
    "name": "top_buttonup",
    "random": {
     "female": 0.8,
@@ -9195,6 +9796,7 @@
    },
    "format": 3,
    "id": 303,
+   "label": "Flannel",
    "name": "top_flannel",
    "random": {
     "female": 0.6,
@@ -9209,6 +9811,7 @@
    },
    "format": 3,
    "id": 304,
+   "label": "Sweatshirt",
    "name": "top_sweatshirt",
    "random": {
     "female": 1.0,
@@ -9223,6 +9826,7 @@
    },
    "format": 3,
    "id": 305,
+   "label": "Zip hoodie",
    "name": "top_ziphoodie",
    "random": {
     "female": 0.9,
@@ -9237,6 +9841,7 @@
    },
    "format": 3,
    "id": 306,
+   "label": "Quarter zip",
    "name": "top_quarterzip",
    "random": {
     "female": 0.6,
@@ -9251,6 +9856,7 @@
    },
    "format": 3,
    "id": 307,
+   "label": "Cardigan",
    "name": "top_cardigan",
    "random": {
     "female": 1.0,
@@ -9265,6 +9871,7 @@
    },
    "format": 3,
    "id": 308,
+   "label": "Waistcoat",
    "name": "top_vest",
    "random": {
     "female": 0.4,
@@ -9279,6 +9886,7 @@
    },
    "format": 3,
    "id": 309,
+   "label": "Puffer vest",
    "name": "top_puffervest",
    "random": {
     "female": 0.6,
@@ -9293,6 +9901,7 @@
    },
    "format": 3,
    "id": 310,
+   "label": "Puffer jacket",
    "name": "top_puffer",
    "random": {
     "female": 0.6,
@@ -9307,6 +9916,7 @@
    },
    "format": 3,
    "id": 311,
+   "label": "Blazer",
    "name": "top_blazer",
    "random": {
     "female": 0.6,
@@ -9321,6 +9931,7 @@
    },
    "format": 3,
    "id": 312,
+   "label": "Denim jacket",
    "name": "top_denimjacket",
    "random": {
     "female": 0.8,
@@ -9335,6 +9946,7 @@
    },
    "format": 3,
    "id": 313,
+   "label": "Sport jersey",
    "name": "top_jersey",
    "random": {
     "female": 0.5,
@@ -9349,6 +9961,7 @@
    },
    "format": 3,
    "id": 314,
+   "label": "Striped tee",
    "name": "top_stripedtee",
    "random": {
     "female": 1.0,
@@ -9363,6 +9976,7 @@
    },
    "format": 3,
    "id": 315,
+   "label": "Blouse",
    "name": "top_blouse",
    "random": {
     "female": 1.2,
@@ -9377,6 +9991,7 @@
    },
    "format": 3,
    "id": 316,
+   "label": "Henley",
    "name": "top_henley",
    "random": {
     "female": 0.6,
@@ -9391,6 +10006,7 @@
    },
    "format": 3,
    "id": 317,
+   "label": "Windbreaker",
    "name": "top_windbreaker",
    "random": {
     "female": 0.7,
@@ -9405,6 +10021,7 @@
    },
    "format": 3,
    "id": 318,
+   "label": "Layered tee",
    "name": "top_layered",
    "random": {
     "female": 0.8,
@@ -9419,6 +10036,7 @@
    },
    "format": 3,
    "id": 350,
+   "label": "Chinos",
    "name": "bottom_chinos",
    "random": {
     "female": 0.8,
@@ -9433,6 +10051,7 @@
    },
    "format": 3,
    "id": 351,
+   "label": "Dress trousers",
    "name": "bottom_formal",
    "random": {
     "female": 0.5,
@@ -9447,6 +10066,7 @@
    },
    "format": 3,
    "id": 352,
+   "label": "Sport shorts",
    "name": "bottom_sportshorts",
    "random": {
     "female": 0.6,
@@ -9461,6 +10081,7 @@
    },
    "format": 3,
    "id": 353,
+   "label": "Cargo shorts",
    "name": "bottom_cargoshorts",
    "random": {
     "female": 0.4,
@@ -9475,6 +10096,7 @@
    },
    "format": 3,
    "id": 354,
+   "label": "Capris",
    "name": "bottom_capri",
    "random": {
     "female": 0.8,
@@ -9489,6 +10111,7 @@
    },
    "format": 3,
    "id": 355,
+   "label": "Wide leg",
    "name": "bottom_wideleg",
    "random": {
     "female": 0.8,
@@ -9503,6 +10126,7 @@
    },
    "format": 3,
    "id": 356,
+   "label": "Leggings",
    "name": "bottom_leggings",
    "random": {
     "female": 1.0,
@@ -9517,6 +10141,7 @@
    },
    "format": 3,
    "id": 357,
+   "label": "Denim skirt",
    "name": "bottom_denimskirt",
    "random": {
     "female": 0.9,
@@ -9531,6 +10156,7 @@
    },
    "format": 3,
    "id": 358,
+   "label": "Midi skirt",
    "name": "bottom_midiskirt",
    "random": {
     "female": 0.9,
@@ -9545,6 +10171,7 @@
    },
    "format": 3,
    "id": 359,
+   "label": "Track pants",
    "name": "bottom_trackpants",
    "random": {
     "female": 0.8,
@@ -9559,6 +10186,7 @@
    },
    "format": 3,
    "id": 360,
+   "label": "Bermudas",
    "name": "bottom_bermuda",
    "random": {
     "female": 0.4,
@@ -9573,6 +10201,7 @@
    },
    "format": 3,
    "id": 400,
+   "label": "Running shoes",
    "name": "shoes_running",
    "random": {
     "female": 1.0,
@@ -9587,6 +10216,7 @@
    },
    "format": 3,
    "id": 401,
+   "label": "Loafers",
    "name": "shoes_loafers",
    "random": {
     "female": 0.6,
@@ -9601,6 +10231,7 @@
    },
    "format": 3,
    "id": 402,
+   "label": "Slip-ons",
    "name": "shoes_slipons",
    "random": {
     "female": 0.9,
@@ -9615,6 +10246,7 @@
    },
    "format": 3,
    "id": 403,
+   "label": "Hiking boots",
    "name": "shoes_hiking",
    "random": {
     "female": 0.5,
@@ -9629,6 +10261,7 @@
    },
    "format": 3,
    "id": 404,
+   "label": "Chelsea boots",
    "name": "shoes_chelsea",
    "random": {
     "female": 0.7,
@@ -9643,6 +10276,7 @@
    },
    "format": 3,
    "id": 405,
+   "label": "Sandals",
    "name": "shoes_sandals",
    "random": {
     "female": 0.6,
@@ -9657,6 +10291,7 @@
    },
    "format": 3,
    "id": 406,
+   "label": "Rain boots",
    "name": "shoes_rainboots",
    "random": {
     "female": 0.4,
@@ -9671,6 +10306,7 @@
    },
    "format": 3,
    "id": 407,
+   "label": "Skate shoes",
    "name": "shoes_skate",
    "random": {
     "female": 0.7,
@@ -9685,6 +10321,7 @@
    },
    "format": 3,
    "id": 408,
+   "label": "Mary Janes",
    "name": "shoes_maryjanes",
    "random": {
     "female": 0.8,
@@ -9700,6 +10337,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 430,
+   "label": "Narrow",
    "name": "glasses_narrow",
    "random": {
     "female": 1.0,
@@ -9715,6 +10353,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 431,
+   "label": "Wire",
    "name": "glasses_wire",
    "random": {
     "female": 0.8,
@@ -9730,6 +10369,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 432,
+   "label": "Thick frame",
    "name": "glasses_thick",
    "random": {
     "female": 0.8,
@@ -9745,6 +10385,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 433,
+   "label": "Cat-eye",
    "name": "glasses_cateye",
    "random": {
     "female": 1.0,
@@ -9760,6 +10401,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 434,
+   "label": "Oversized",
    "name": "glasses_oversized",
    "random": {
     "female": 0.9,
@@ -9775,6 +10417,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 435,
+   "label": "Big square",
    "name": "glasses_bigsquare",
    "random": {
     "female": 0.7,
@@ -9790,6 +10433,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 436,
+   "label": "Sport shades",
    "name": "sunglasses_sport",
    "random": {
     "female": 0.4,
@@ -9805,6 +10449,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 437,
+   "label": "Square shades",
    "name": "sunglasses_square",
    "random": {
     "female": 0.6,
@@ -9820,6 +10465,7 @@
    "follow": "eyes",
    "format": 3,
    "id": 438,
+   "label": "Round shades",
    "name": "sunglasses_round",
    "random": {
     "female": 0.6,
@@ -9843,6 +10489,7 @@
     ]
    },
    "id": 450,
+   "label": "Cap, backwards",
    "name": "hat_backwardcap",
    "random": {
     "female": 0.5,
@@ -9866,6 +10513,7 @@
     ]
    },
    "id": 451,
+   "label": "Trucker cap",
    "name": "hat_trucker",
    "random": {
     "female": 0.4,
@@ -9889,6 +10537,7 @@
     ]
    },
    "id": 452,
+   "label": "Flat cap",
    "name": "hat_flatcap",
    "random": {
     "female": 0.4,
@@ -9912,6 +10561,7 @@
     ]
    },
    "id": 453,
+   "label": "Sun hat",
    "name": "hat_sunhat",
    "random": {
     "female": 0.9,
@@ -9935,6 +10585,7 @@
     ]
    },
    "id": 454,
+   "label": "Top hat",
    "name": "hat_tophat",
    "random": {
     "female": 0.2,
@@ -9958,6 +10609,7 @@
     ]
    },
    "id": 455,
+   "label": "Beret",
    "name": "hat_beret",
    "random": {
     "female": 0.8,
@@ -9981,6 +10633,7 @@
     ]
    },
    "id": 456,
+   "label": "Bike helmet",
    "name": "hat_helmet",
    "random": {
     "female": 0.2,
@@ -10004,6 +10657,7 @@
     ]
    },
    "id": 457,
+   "label": "Slouch beanie",
    "name": "hat_slouchbeanie",
    "random": {
     "female": 0.8,
@@ -10018,6 +10672,7 @@
    },
    "format": 3,
    "id": 458,
+   "label": "Visor",
    "name": "hat_visor",
    "random": {
     "female": 0.6,
@@ -10041,6 +10696,7 @@
     ]
    },
    "id": 459,
+   "label": "Western hat",
    "name": "hat_western",
    "random": {
     "female": 0.3,
@@ -10056,6 +10712,7 @@
    "follow": "ears",
    "format": 3,
    "id": 510,
+   "label": "Studs",
    "name": "earrings_stud",
    "random": {
     "female": 1.0,
@@ -10071,6 +10728,7 @@
    "follow": "ears",
    "format": 3,
    "id": 511,
+   "label": "Big studs",
    "name": "earrings_bigstud",
    "random": {
     "female": 0.8,
@@ -10086,6 +10744,7 @@
    "follow": "ears",
    "format": 3,
    "id": 512,
+   "label": "Hoops",
    "name": "earrings_hoop",
    "random": {
     "female": 1.0,
@@ -10101,6 +10760,7 @@
    "follow": "ears",
    "format": 3,
    "id": 513,
+   "label": "Big hoops",
    "name": "earrings_bighoop",
    "random": {
     "female": 0.7,
@@ -10116,6 +10776,7 @@
    "follow": "ears",
    "format": 3,
    "id": 514,
+   "label": "Drops",
    "name": "earrings_drop",
    "random": {
     "female": 0.8,
@@ -10131,6 +10792,7 @@
    "follow": "ears",
    "format": 3,
    "id": 515,
+   "label": "Huggies",
    "name": "earrings_huggie",
    "random": {
     "female": 0.8,
@@ -10145,6 +10807,7 @@
    },
    "format": 3,
    "id": 530,
+   "label": "Watch",
    "name": "wrist_watch",
    "random": {
     "female": 1.0,
@@ -10159,6 +10822,7 @@
    },
    "format": 3,
    "id": 531,
+   "label": "Sport watch",
    "name": "wrist_sportwatch",
    "random": {
     "female": 0.6,
@@ -10173,6 +10837,7 @@
    },
    "format": 3,
    "id": 532,
+   "label": "Bangles",
    "name": "wrist_bangle",
    "random": {
     "female": 1.0,
@@ -10187,6 +10852,7 @@
    },
    "format": 3,
    "id": 533,
+   "label": "Beads",
    "name": "wrist_beads",
    "random": {
     "female": 0.8,
@@ -10201,6 +10867,7 @@
    },
    "format": 3,
    "id": 534,
+   "label": "Sweatband",
    "name": "wrist_band",
    "random": {
     "female": 0.4,
@@ -10215,6 +10882,7 @@
    },
    "format": 3,
    "id": 535,
+   "label": "Cuff",
    "name": "wrist_cuff",
    "random": {
     "female": 0.6,
@@ -10232,6 +10900,7 @@
     "rings"
    ],
    "id": 550,
+   "label": "Knit",
    "name": "gloves_knit",
    "random": {
     "female": 1.0,
@@ -10249,6 +10918,7 @@
     "rings"
    ],
    "id": 551,
+   "label": "Fingerless",
    "name": "gloves_fingerless",
    "random": {
     "female": 0.8,
@@ -10266,6 +10936,7 @@
     "rings"
    ],
    "id": 552,
+   "label": "Work",
    "name": "gloves_work",
    "random": {
     "female": 0.4,
@@ -10283,6 +10954,7 @@
     "rings"
    ],
    "id": 553,
+   "label": "Formal",
    "name": "gloves_formal",
    "random": {
     "female": 0.5,
@@ -10297,6 +10969,7 @@
    },
    "format": 3,
    "id": 560,
+   "label": "Band",
    "name": "ring_band",
    "random": {
     "female": 1.0,
@@ -10311,6 +10984,7 @@
    },
    "format": 3,
    "id": 561,
+   "label": "Signet",
    "name": "ring_signet",
    "random": {
     "female": 0.4,
@@ -10325,6 +10999,7 @@
    },
    "format": 3,
    "id": 562,
+   "label": "Gem",
    "name": "ring_gem",
    "random": {
     "female": 1.0,
@@ -10334,6 +11009,326 @@
   }
  ],
  "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",
+ "outfits": [
+  {
+   "colors": {
+    "bottom": [
+     36,
+     52,
+     92
+    ],
+    "shoes": [
+     240,
+     240,
+     236
+    ],
+    "top": [
+     50,
+     150,
+     200
+    ]
+   },
+   "items": {
+    "bottom": 40,
+    "gloves": 0,
+    "hat": 0,
+    "shoes": 60,
+    "top": 20
+   },
+   "name": "Casual"
+  },
+  {
+   "colors": {
+    "bottom": [
+     36,
+     52,
+     92
+    ],
+    "shoes": [
+     120,
+     90,
+     60
+    ],
+    "top": [
+     232,
+     220,
+     196
+    ]
+   },
+   "items": {
+    "bottom": 350,
+    "gloves": 0,
+    "hat": 0,
+    "shoes": 401,
+    "top": 302
+   },
+   "name": "Smart casual"
+  },
+  {
+   "colors": {
+    "accessory": [
+     240,
+     240,
+     236
+    ],
+    "bottom": [
+     30,
+     32,
+     36
+    ],
+    "shoes": [
+     30,
+     32,
+     36
+    ],
+    "top": [
+     30,
+     32,
+     36
+    ]
+   },
+   "items": {
+    "bottom": 351,
+    "gloves": 0,
+    "hat": 0,
+    "shoes": 63,
+    "top": 311
+   },
+   "name": "Formal"
+  },
+  {
+   "colors": {
+    "accessory": [
+     220,
+     60,
+     56
+    ],
+    "bottom": [
+     240,
+     240,
+     236
+    ],
+    "shoes": [
+     240,
+     240,
+     236
+    ],
+    "top": [
+     220,
+     60,
+     56
+    ]
+   },
+   "items": {
+    "bottom": 352,
+    "gloves": 0,
+    "hat": 0,
+    "shoes": 400,
+    "top": 313,
+    "wristwear": 534
+   },
+   "name": "Sport"
+  },
+  {
+   "colors": {
+    "accessory": [
+     240,
+     150,
+     40
+    ],
+    "bottom": [
+     196,
+     174,
+     130
+    ],
+    "shoes": [
+     120,
+     90,
+     60
+    ],
+    "top": [
+     108,
+     116,
+     64
+    ]
+   },
+   "items": {
+    "bottom": 43,
+    "gloves": 0,
+    "hat": 100,
+    "shoes": 403,
+    "top": 317
+   },
+   "name": "Outdoor"
+  },
+  {
+   "colors": {
+    "accessory": [
+     240,
+     150,
+     40
+    ],
+    "bottom": [
+     120,
+     90,
+     60
+    ],
+    "shoes": [
+     220,
+     60,
+     56
+    ],
+    "top": [
+     250,
+     210,
+     60
+    ]
+   },
+   "items": {
+    "bottom": 355,
+    "glasses": 438,
+    "gloves": 0,
+    "hat": 0,
+    "shoes": 62,
+    "top": 301
+   },
+   "name": "Retro"
+  },
+  {
+   "colors": {
+    "accessory": [
+     90,
+     180,
+     80
+    ],
+    "bottom": [
+     60,
+     62,
+     70
+    ],
+    "shoes": [
+     240,
+     240,
+     236
+    ],
+    "top": [
+     30,
+     32,
+     36
+    ]
+   },
+   "items": {
+    "bottom": 44,
+    "gloves": 0,
+    "hat": 450,
+    "shoes": 407,
+    "top": 305
+   },
+   "name": "Gamer"
+  },
+  {
+   "colors": {
+    "accessory": [
+     232,
+     220,
+     196
+    ],
+    "bottom": [
+     232,
+     220,
+     196
+    ],
+    "shoes": [
+     120,
+     90,
+     60
+    ],
+    "top": [
+     50,
+     150,
+     200
+    ]
+   },
+   "items": {
+    "bottom": 41,
+    "glasses": 437,
+    "gloves": 0,
+    "hat": 453,
+    "shoes": 405,
+    "top": 314
+   },
+   "name": "Summer"
+  },
+  {
+   "colors": {
+    "accessory": [
+     232,
+     220,
+     196
+    ],
+    "bottom": [
+     36,
+     52,
+     92
+    ],
+    "gloves": [
+     232,
+     220,
+     196
+    ],
+    "shoes": [
+     120,
+     90,
+     60
+    ],
+    "top": [
+     120,
+     36,
+     48
+    ]
+   },
+   "items": {
+    "bottom": 40,
+    "gloves": 550,
+    "hat": 457,
+    "shoes": 61,
+    "top": 310
+   },
+   "name": "Winter"
+  },
+  {
+   "colors": {
+    "accessory": [
+     130,
+     80,
+     170
+    ],
+    "bottom": [
+     150,
+     152,
+     156
+    ],
+    "shoes": [
+     240,
+     240,
+     236
+    ],
+    "top": [
+     196,
+     174,
+     130
+    ]
+   },
+   "items": {
+    "bottom": 44,
+    "gloves": 0,
+    "hat": 101,
+    "shoes": 402,
+    "top": 25
+   },
+   "name": "Cozy"
+  }
+ ],
  "reader": 2,
  "revision": 2,
  "rig": "cna-avatar-71"

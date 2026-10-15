@@ -53,6 +53,23 @@ Shot shotFor(Framing framing,const std::vector<Xna::Vector3>& joints,float heigh
         const float half=std::max(height*0.56f,height*0.30f/aspect);
         return Shot{Xna::Vector3(0,height*0.49f,0),Xna::Vector3(0.45f,height*0.07f,half/std::tan(fov/2)),fov};
     }
+    case Framing::Face:
+    case Framing::Profile: {
+        // Closer than Head: the face fills the frame (Profile is the same shot of an avatar turned
+        // to show an ear).
+        // The whole head, chin to crown, with a little room either side however narrow the view.
+        const float k=std::max(0.5f,(height-head)/0.36f);
+        return span(head-0.05f*k,height+0.04f*k,0.46f*k,0.42f,0.05f,0.02f);
+    }
+    case Framing::Hands: {
+        // The avatar's right hand and wrist (the avatar is turned to face the camera, so its right
+        // is on +X).
+        constexpr std::size_t WristRight=36;
+        const float wrist=y(WristRight,hips-0.10f);
+        auto shot=span(wrist-0.16f,wrist+0.08f,0.30f,0.45f,0.25f,0.10f);
+        if(WristRight<joints.size())shot.target.X=-joints[WristRight].X*0.95f;
+        return shot;
+    }
     case Framing::Upper: return span(hips-0.08f,head+0.22f,0.9f,0.45f,0.22f,0.05f);
     case Framing::Lower: return span(y(Ankle,0.08f)-0.06f,hips+0.14f,0.55f,0.45f,0.25f,0.10f);
     case Framing::Feet: return span(-0.03f,y(Knee,height*0.28f)*0.7f,0.50f,0.45f,0.35f,0.45f);
@@ -142,7 +159,11 @@ void AvatarPortraits::render(Xna::Graphics::GraphicsDevice& device,double second
         if(entry.live)entry.animation->Update(System::TimeSpan::FromTicks(static_cast<SharpRuntime::longcs>(std::fmod(seconds,60.0)*1.0e7)),true);
         auto expression=entry.animation->getExpressionProperty();
         if(!entry.live)expression.setMouthProperty(GS::AvatarMouth::Happy);
-        entry.renderer->setWorldProperty(Xna::Matrix::CreateRotationY(entry.framing==Framing::Body?-0.22f:0.18f));
+        // XNA avatars face -Z (AvatarSpace.hpp): a half turn shows the face to this camera on +Z, then
+        // a little more so the portrait is not flat-on (Profile turns far enough to show an ear).
+        constexpr float HalfTurn=3.14159265f;
+        entry.renderer->setWorldProperty(Xna::Matrix::CreateRotationY(HalfTurn+(entry.framing==Framing::Body?-0.22f:
+                                                                                entry.framing==Framing::Profile?1.05f:0.18f)));
         entry.renderer->setViewProperty(Xna::Matrix::CreateLookAt(eye,target,Xna::Vector3::Up));
         entry.renderer->setProjectionProperty(Xna::Matrix::CreatePerspectiveFieldOfView(fov,aspect,0.05f,20.0f));
         Xna::Vector3 light(-0.45f,-0.45f,-0.77f);

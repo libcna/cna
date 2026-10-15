@@ -150,7 +150,7 @@ def nose_mesh(body):
     s = SCALE[body]
     root, _, _ = front_point(body, 0.0, NOSE_ROOT_Y * s, -0.004 * s)
     tip_base, _, _ = front_point(body, 0.0, NOSE_TIP_Y * s)
-    tip = add(tip_base, (0.0, 0.002 * s, 0.016 * s))
+    tip = add(tip_base, (0.0, 0.002 * s, 0.012 * s))
     m = Mesh()
     path = [lerp(root, tip, k / 5.0) for k in range(6)]
     radii = [0.0068 * s, 0.0074 * s, 0.0082 * s, 0.0096 * s, 0.0114 * s, 0.0128 * s]

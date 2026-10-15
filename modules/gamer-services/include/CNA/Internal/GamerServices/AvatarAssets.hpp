@@ -78,6 +78,8 @@ struct CatalogItem {
     AvatarItemSlot slot=AvatarItemSlot::Hair;
     /** @brief Item name. */
     std::string name;
+    /** @brief What the editor calls it ("Bob with bangs"); empty to derive it from the name. */
+    std::string label;
     /** @brief Model per body type (female, male); empty for a face style. */
     std::array<std::string,2> assets;
     /** @brief Relative chance random avatars get it, per body type (0 = never). */

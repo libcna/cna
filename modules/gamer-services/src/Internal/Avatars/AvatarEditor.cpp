@@ -13,10 +13,15 @@ constexpr int SliderStep=16;
 constexpr int HeightStep=10;
 // Face shapes read clearly on a small card: each preset's moves are applied a little stronger.
 constexpr float PresetStrength=1.35f;
+// A body preset's height moves this far from the authored height at either end.
+constexpr int PresetHeightRange=250;
 
 std::size_t at(AvatarColorSlot slot){return static_cast<std::size_t>(slot);}
-std::size_t at(AvatarItemSlot slot){return static_cast<std::size_t>(slot);}
-bool optionalSlot(AvatarItemSlot slot){return slot==AvatarItemSlot::Glasses||slot==AvatarItemSlot::Hat;}
+bool optionalEntry(AvatarItemSlot slot)
+{
+    return slot==AvatarItemSlot::Glasses||slot==AvatarItemSlot::Hat||slot==AvatarItemSlot::FacialHair||
+        (slot>=AvatarItemSlot::Earrings&&slot<=AvatarItemSlot::Rings)||slot>=AvatarItemSlot::EyeShadow;
+}
 
 std::uint8_t stepSlider(std::uint8_t value,int delta)
 {
@@ -48,66 +53,64 @@ std::string readable(std::string_view name)
 // Face features by what a person calls them, with the catalog control each one drives. A slider's
 // two ends are named too ("Narrow"/"Wide"), so its value reads as a shape rather than a number.
 struct Feature {const char* control;const char* label;const char* less;const char* more;};
-constexpr Feature FaceFeatures[]{
-    {"headWidth","Head width","Narrow","Wide"},{"headHeight","Head length","Short","Long"},{"jawWidth","Jaw","Narrow","Broad"},
-    {"chinSize","Chin","Small","Strong"},{"cheekFullness","Cheeks","Lean","Full"},{"earSize","Ears","Small","Large"}};
-constexpr Feature EyeFeatures[]{
-    {"eyeSize","Eye size","Small","Large"},{"eyeSpacing","Eye spacing","Close","Wide"},{"eyeHeight","Eye height","Low","High"},
-    {"eyeTilt","Eye tilt","Down","Up"},{"browHeight","Brows","Low","High"}};
-constexpr Feature NoseMouthFeatures[]{
-    {"noseSize","Nose size","Small","Large"},{"noseWidth","Nose width","Narrow","Wide"},{"noseHeight","Nose height","Low","High"},
-    {"mouthWidth","Mouth width","Narrow","Wide"},{"mouthHeight","Mouth height","Low","High"}};
+constexpr Feature FaceSliders[]{
+    {"headWidth","Head width","Narrow","Wide"},{"headHeight","Head length","Short","Long"},{"foreheadHeight","Forehead","Low","High"},
+    {"cheekboneWidth","Cheekbones","Narrow","Wide"},{"cheekFullness","Cheeks","Lean","Full"},{"jawWidth","Jaw","Narrow","Broad"},
+    {"jawTaper","Jaw taper","Square","Tapered"},{"jawAngle","Jaw corners","Soft","Wide"},{"chinSize","Chin","Small","Strong"},
+    {"chinHeight","Chin length","Short","Long"},{"chinProjection","Chin depth","Receding","Forward"}};
+constexpr Feature EyeSliders[]{
+    {"eyeSize","Eye size","Small","Large"},{"eyeShape","Eye shape","Narrow","Round"},{"eyeSpacing","Eye spacing","Close","Wide"},
+    {"eyeHeight","Eye height","Low","High"},{"eyeTilt","Eye tilt","Down","Up"}};
+constexpr Feature BrowSliders[]{
+    {"browHeight","Height","Low","High"},{"browSpacing","Spacing","Close","Apart"},{"browAngle","Angle","Flat","Lifted"},
+    {"browThickness","Thickness","Fine","Bold"}};
+constexpr Feature EarSliders[]{{"earSize","Size","Small","Large"},{"earHeight","Height","Low","High"},{"earAngle","Angle","Flat","Out"}};
+constexpr Feature NoseSliders[]{
+    {"noseSize","Size","Small","Large"},{"noseWidth","Width","Narrow","Wide"},{"noseHeight","Height","Low","High"},
+    {"noseBridge","Bridge","Fine","Strong"},{"noseTip","Tip","Down","Up"}};
+constexpr Feature MouthSliders[]{
+    {"mouthWidth","Width","Narrow","Wide"},{"mouthHeight","Height","Low","High"},{"upperLip","Upper lip","Thin","Full"},
+    {"lowerLip","Lower lip","Thin","Full"}};
 
-// Named shapes, each a few features moved together (-1..1 of their range). "Balanced" is the
-// authored face.
-struct Preset {const char* label;std::array<std::pair<const char*,float>,5> moves;};
-constexpr Preset FacePresets[]{
-    {"Balanced",{}},
-    {"Round",{{{"headWidth",0.35f},{"headHeight",-0.25f},{"jawWidth",0.25f},{"chinSize",-0.3f},{"cheekFullness",0.5f}}}},
-    {"Long",{{{"headWidth",-0.25f},{"headHeight",0.4f},{"jawWidth",-0.2f},{"chinSize",0.3f},{"cheekFullness",-0.25f}}}},
-    {"Heart",{{{"headWidth",0.2f},{"jawWidth",-0.45f},{"chinSize",-0.35f},{"cheekFullness",0.3f}}}},
-    {"Square",{{{"headWidth",0.15f},{"jawWidth",0.55f},{"chinSize",0.35f},{"cheekFullness",-0.2f}}}},
-    {"Soft",{{{"jawWidth",-0.1f},{"chinSize",-0.15f},{"cheekFullness",0.45f}}}}};
-constexpr Preset EyePresets[]{
-    {"Balanced",{}},
-    {"Bright",{{{"eyeSize",0.45f},{"browHeight",0.2f}}}},
-    {"Narrow",{{{"eyeSize",-0.4f},{"eyeSpacing",-0.1f}}}},
-    {"Wide-set",{{{"eyeSpacing",0.5f},{"eyeSize",0.1f}}}},
-    {"Upturned",{{{"eyeTilt",0.55f},{"browHeight",0.15f}}}},
-    {"Downturned",{{{"eyeTilt",-0.5f},{"browHeight",-0.2f}}}}};
-constexpr Preset NoseMouthPresets[]{
-    {"Balanced",{}},
-    {"Button nose",{{{"noseSize",-0.35f},{"noseWidth",-0.1f},{"noseHeight",0.15f}}}},
-    {"Broad nose",{{{"noseSize",0.25f},{"noseWidth",0.55f}}}},
-    {"Long nose",{{{"noseSize",0.35f},{"noseWidth",-0.2f},{"noseHeight",-0.3f}}}},
-    {"Wide smile",{{{"mouthWidth",0.5f},{"mouthHeight",0.1f}}}},
-    {"Small mouth",{{{"mouthWidth",-0.45f}}}}};
-
-std::span<const Feature> featuresOf(EditorCategory category)
+std::span<const Feature> slidersOf(EditorCategory category)
 {
     switch(category) {
-    case EditorCategory::Face: return FaceFeatures;
-    case EditorCategory::Eyes: return EyeFeatures;
-    case EditorCategory::NoseAndMouth: return NoseMouthFeatures;
+    case EditorCategory::Face: return FaceSliders;
+    case EditorCategory::Eyes: return EyeSliders;
+    case EditorCategory::Eyebrows: return BrowSliders;
+    case EditorCategory::Ears: return EarSliders;
+    case EditorCategory::Nose: return NoseSliders;
+    case EditorCategory::Mouth: return MouthSliders;
     default: return {};
     }
 }
-std::span<const Preset> presetsOf(EditorCategory category)
+// The catalog facePresets group a category's shape row offers, and that row's name.
+std::pair<const char*,const char*> presetsOf(EditorCategory category)
 {
     switch(category) {
-    case EditorCategory::Face: return FacePresets;
-    case EditorCategory::Eyes: return EyePresets;
-    case EditorCategory::NoseAndMouth: return NoseMouthPresets;
-    default: return {};
+    case EditorCategory::Body: return {"body","Body shape"};
+    case EditorCategory::Face: return {"face","Face shape"};
+    case EditorCategory::Eyes: return {"eyes","Eye shape"};
+    case EditorCategory::Eyebrows: return {"brows","Placement"};
+    case EditorCategory::Ears: return {"ears","Placement"};
+    case EditorCategory::Nose: return {"nose","Nose shape"};
+    case EditorCategory::Mouth: return {"mouth","Mouth shape"};
+    default: return {nullptr,nullptr};
     }
 }
+constexpr const char* SideNames[]{"Both","Left","Right"};
 }
 
 const char* editorCategoryName(EditorCategory category)
 {
-    static const char* const names[EditorCategoryCount]{"Body","Skin","Face","Eyes","Nose & mouth","Hair","Facial hair","Tops","Bottoms",
-        "Shoes","Glasses","Headwear"};
+    static const char* const names[EditorCategoryCount]{"Body","Skin","Face","Eyes","Eyebrows","Ears","Nose","Mouth","Hair","Facial hair",
+        "Makeup","Outfits","Tops","Bottoms","Shoes","Headwear","Glasses","Earrings","Wristwear","Gloves","Rings"};
     return names[static_cast<int>(category)];
+}
+
+const char* editorCategoryGroup(EditorCategory category)
+{
+    return static_cast<int>(category)<EditorFeatureCategoryCount?"Features":"Style";
 }
 
 AvatarEditorModel::AvatarEditorModel(std::shared_ptr<const CatalogManifest> catalog,std::vector<std::uint8_t> current,std::uint32_t seed)
@@ -120,112 +123,150 @@ AvatarEditorModel::AvatarEditorModel(std::shared_ptr<const CatalogManifest> cata
 
 AvatarDescriptor AvatarEditorModel::fitted(const AvatarDescriptor& source) const
 {
-    // The avatar as the edited catalog can express it: ids it does not have become the slot's
-    // first item (or none), and a catalog without face controls keeps the authored face.
+    // The avatar as the edited catalog can express it: entries it does not have become the kind's
+    // first entry (or none), and a catalog without face controls keeps the authored face.
     AvatarDescriptor result=source;
     result.catalogVersion=catalog_->version;
     const int body=result.bodyType==1?1:0;
-    for(std::size_t slot=0;slot<AvatarItemSlotCount;++slot) {
-        const auto kind=static_cast<AvatarItemSlot>(slot);
-        const auto* item=catalog_->item(result.items[slot]);
-        if(item&&item->slot==kind)continue;
-        const auto offered=choices(kind);
-        result.items[slot]=optionalSlot(kind)||offered.empty()?0:offered.front();
+    for(int kind=0;kind<static_cast<int>(AvatarItemKindCount);++kind) {
+        const auto slot=static_cast<AvatarItemSlot>(kind);
+        const auto id=entryOf(result,slot);
+        if(id==0||catalog_->item(id,slot))continue;
+        const auto offered=choices(slot);
+        setEntry(result,slot,optionalEntry(slot)||offered.empty()?0:offered.front());
     }
-    if(result.facialHair&&!catalog_->featureItem(result.facialHair))result.facialHair=0;
-    if(catalog_->faceControls[body].empty())result.face.fill(NeutralFaceParameter);
+    if(catalog_->faceControls[body].empty()) {
+        result.face.fill(NeutralFaceParameter);
+        result.proportion=NeutralFaceParameter;
+    }
     return result;
+}
+
+std::uint16_t AvatarEditorModel::entryOf(const AvatarDescriptor& descriptor,AvatarItemSlot slot) const
+{
+    if(static_cast<std::size_t>(slot)<AvatarItemSlotCount)return descriptor.items[static_cast<std::size_t>(slot)];
+    switch(slot) {
+    case AvatarItemSlot::FacialHair: return descriptor.facialHair;
+    case AvatarItemSlot::Ears: return descriptor.ears;
+    case AvatarItemSlot::Eyebrows: return descriptor.eyebrows;
+    default: break;
+    }
+    if(slot>=AvatarItemSlot::Earrings&&slot<=AvatarItemSlot::Rings)return descriptor.accessories[accessoryIndex(slot)];
+    return descriptor.makeup[makeupIndex(slot)];
+}
+
+void AvatarEditorModel::setEntry(AvatarDescriptor& descriptor,AvatarItemSlot slot,std::uint16_t id) const
+{
+    if(static_cast<std::size_t>(slot)<AvatarItemSlotCount) {
+        descriptor.items[static_cast<std::size_t>(slot)]=id;
+        return;
+    }
+    switch(slot) {
+    case AvatarItemSlot::FacialHair: descriptor.facialHair=id; return;
+    case AvatarItemSlot::Ears: {
+        // The first ear shape is the catalog's default, which a description names as 0.
+        const auto ears=catalog_->itemsOf(AvatarItemSlot::Ears);
+        descriptor.ears=!ears.empty()&&ears.front()->id==id?0:id;
+        return;
+    }
+    case AvatarItemSlot::Eyebrows: descriptor.eyebrows=id; return;
+    default: break;
+    }
+    if(slot>=AvatarItemSlot::Earrings&&slot<=AvatarItemSlot::Rings) {
+        const auto index=accessoryIndex(slot);
+        descriptor.accessories[index]=id;
+        if(id==0||slot==AvatarItemSlot::Gloves)descriptor.sides[index]=AvatarSides::Both;
+        return;
+    }
+    descriptor.makeup[makeupIndex(slot)]=id;
 }
 
 std::vector<std::uint16_t> AvatarEditorModel::choices(AvatarItemSlot slot) const
 {
     std::vector<std::uint16_t> ids;
-    if(slot==AvatarItemSlot::FacialHair) {
-        for(const auto* item:catalog_->itemsOf(AvatarItemSlot::FacialHair))ids.push_back(item->id);
-    } else {
-        for(const auto& item:catalog_->items)if(item.slot==slot)ids.push_back(item.id);
-    }
-    std::ranges::sort(ids);
-    if(optionalSlot(slot)||slot==AvatarItemSlot::FacialHair)ids.insert(ids.begin(),0);
+    // Optional kinds start with none; eyebrows with the classic brows every description without a
+    // style has; ears have no "none".
+    if(optionalEntry(slot)||slot==AvatarItemSlot::Eyebrows)ids.push_back(0);
+    for(const auto* entry:catalog_->itemsOf(slot))ids.push_back(entry->id);
     return ids;
 }
 
-std::string AvatarEditorModel::itemName(std::uint16_t id,bool feature) const
+std::string AvatarEditorModel::entryName(std::uint16_t id,AvatarItemSlot slot) const
 {
-    if(id==0)return "None";
-    const auto* item=feature?catalog_->featureItem(id):catalog_->item(id);
-    if(!item)return "Item "+std::to_string(id);
-    std::string_view name=item->name;
-    // Catalog names carry their slot as a prefix ("top_hoodie", "facial_beard").
+    if(id==0) {
+        if(slot==AvatarItemSlot::Eyebrows)return "Classic";
+        if(slot==AvatarItemSlot::Ears) {
+            const auto ears=catalog_->itemsOf(AvatarItemSlot::Ears);
+            return ears.empty()?"Default":entryName(ears.front()->id,slot);
+        }
+        return "None";
+    }
+    const auto* entry=catalog_->entry(id);
+    if(!entry)return "Item "+std::to_string(id);
+    if(!entry->label.empty())return entry->label;
+    std::string_view name=entry->name;
+    // Catalog names carry their kind as a prefix ("top_hoodie", "facial_beard").
     if(const auto underscore=name.find('_');underscore!=std::string_view::npos)name.remove_prefix(underscore+1);
-    // Names whose file-name spelling reads badly.
-    static constexpr std::pair<std::string_view,std::string_view> spoken[]{
-        {"tshirt","T-shirt"},{"longsleeve","Long sleeve"},{"sidepart","Side part"},{"longskirt","Long skirt"},{"buzz","Buzz cut"}};
-    for(const auto& [file,label]:spoken)if(name==file)return std::string(label);
     return readable(name);
-}
-
-int AvatarEditorModel::faceParameter(std::string_view name) const
-{
-    for(const auto& control:catalog_->faceControls[working_.bodyType==1?1:0])
-        if(control.name==name)return control.parameter;
-    return -1;
 }
 
 std::vector<AvatarEditorModel::Row> AvatarEditorModel::rows() const
 {
     std::vector<Row> list;
-    auto item=[&](AvatarItemSlot slot,const char* label){list.push_back({Kind::Item,static_cast<int>(slot),label});};
+    const int body=working_.bodyType==1?1:0;
+    auto entry=[&](AvatarItemSlot slot,const char* label){if(!catalog_->itemsOf(slot).empty())list.push_back({Kind::Entry,static_cast<int>(slot),label});};
     auto color=[&](AvatarColorSlot slot,const char* label){list.push_back({Kind::Color,static_cast<int>(slot),label});};
-    const bool shaped=!catalog_->faceControls[working_.bodyType==1?1:0].empty();
+    auto worn=[&](AvatarItemSlot slot){return entryOf(working_,slot)!=0;};
+    auto shape=[&] {
+        const auto [group,label]=presetsOf(category_);
+        if(group&&std::ranges::any_of(catalog_->facePresets,[&](const FacePreset& preset){return preset.group==group;}))
+            list.push_back({Kind::Preset,0,label});
+        for(const auto& feature:slidersOf(category_))
+            if(const int parameter=catalog_->faceParameter(body,feature.control);parameter>=0)list.push_back({Kind::Face,parameter,feature.label});
+    };
+    const bool shaped=!catalog_->faceControls[body].empty();
     switch(category_) {
     case EditorCategory::Body:
-        list.push_back({Kind::BodyType,0,"Body"});
+        list.push_back({Kind::BodyType,0,"Body type"});
+        if(shaped)shape();
         list.push_back({Kind::Height,0,"Height"});
         list.push_back({Kind::Build,0,"Build"});
+        if(shaped)list.push_back({Kind::Proportion,0,"Proportions"});
         break;
-    case EditorCategory::Skin:
-        color(AvatarColorSlot::Skin,"Skin tone");
+    case EditorCategory::Skin: color(AvatarColorSlot::Skin,"Skin tone"); break;
+    case EditorCategory::Face: if(shaped)shape(); break;
+    case EditorCategory::Eyes: color(AvatarColorSlot::Eyes,"Eye color"); if(shaped)shape(); break;
+    case EditorCategory::Eyebrows: entry(AvatarItemSlot::Eyebrows,"Style"); if(shaped)shape(); break;
+    case EditorCategory::Ears: entry(AvatarItemSlot::Ears,"Shape"); if(shaped)shape(); break;
+    case EditorCategory::Nose: case EditorCategory::Mouth: if(shaped)shape(); break;
+    case EditorCategory::Hair: entry(AvatarItemSlot::Hair,"Hairstyle"); color(AvatarColorSlot::Hair,"Hair color"); break;
+    case EditorCategory::FacialHair: entry(AvatarItemSlot::FacialHair,"Style"); color(AvatarColorSlot::Hair,"Color"); break;
+    case EditorCategory::Makeup:
+        entry(AvatarItemSlot::EyeShadow,"Eye shadow");
+        if(worn(AvatarItemSlot::EyeShadow))color(AvatarColorSlot::EyeShadow,"Shadow color");
+        entry(AvatarItemSlot::Eyeliner,"Eyeliner");
+        entry(AvatarItemSlot::Blush,"Blush");
+        if(worn(AvatarItemSlot::Blush))color(AvatarColorSlot::Blush,"Blush color");
+        entry(AvatarItemSlot::Lips,"Lips");
+        if(worn(AvatarItemSlot::Lips))color(AvatarColorSlot::Lips,"Lip color");
         break;
-    case EditorCategory::Face:
-    case EditorCategory::Eyes:
-    case EditorCategory::NoseAndMouth:
-        if(category_==EditorCategory::Eyes)color(AvatarColorSlot::Eyes,"Eye color");
-        if(!shaped)break;
-        list.push_back({Kind::Preset,0,category_==EditorCategory::Face?"Face shape":category_==EditorCategory::Eyes?"Eye shape":"Shape"});
-        for(const auto& feature:featuresOf(category_)) {
-            const int parameter=faceParameter(feature.control);
-            if(parameter>=0)list.push_back({Kind::Face,parameter,feature.label});
-        }
+    case EditorCategory::Outfits: if(!catalog_->outfits.empty())list.push_back({Kind::Outfit,0,"Outfit"}); break;
+    case EditorCategory::Tops: entry(AvatarItemSlot::Top,"Top"); color(AvatarColorSlot::Top,"Color"); break;
+    case EditorCategory::Bottoms: entry(AvatarItemSlot::Bottom,"Bottoms"); color(AvatarColorSlot::Bottom,"Color"); break;
+    case EditorCategory::Shoes: entry(AvatarItemSlot::Shoes,"Shoes"); color(AvatarColorSlot::Shoes,"Color"); break;
+    case EditorCategory::Headwear: entry(AvatarItemSlot::Hat,"Headwear"); color(AvatarColorSlot::Accessory,"Color"); break;
+    case EditorCategory::Glasses: entry(AvatarItemSlot::Glasses,"Glasses"); color(AvatarColorSlot::Accessory,"Frame color"); break;
+    case EditorCategory::Earrings: case EditorCategory::Wristwear: case EditorCategory::Gloves: case EditorCategory::Rings: {
+        const auto slot=category_==EditorCategory::Earrings?AvatarItemSlot::Earrings:category_==EditorCategory::Wristwear?
+            AvatarItemSlot::Wristwear:category_==EditorCategory::Gloves?AvatarItemSlot::Gloves:AvatarItemSlot::Rings;
+        entry(slot,editorCategoryName(category_));
+        if(!worn(slot))break;
+        if(slot!=AvatarItemSlot::Gloves)list.push_back({Kind::Sides,static_cast<int>(accessoryIndex(slot)),"Worn on"});
+        if(slot==AvatarItemSlot::Gloves)color(AvatarColorSlot::Gloves,"Color");
+        else color(AvatarColorSlot::Jewelry,"Metal");
+        if(slot==AvatarItemSlot::Wristwear)color(AvatarColorSlot::Accessory,"Band color");
         break;
-    case EditorCategory::Hair:
-        item(AvatarItemSlot::Hair,"Hairstyle");
-        color(AvatarColorSlot::Hair,"Hair color");
-        break;
-    case EditorCategory::FacialHair:
-        if(!catalog_->itemsOf(AvatarItemSlot::FacialHair).empty())list.push_back({Kind::FacialHair,0,"Style"});
-        color(AvatarColorSlot::Hair,"Color");
-        break;
-    case EditorCategory::Tops:
-        item(AvatarItemSlot::Top,"Top");
-        color(AvatarColorSlot::Top,"Color");
-        break;
-    case EditorCategory::Bottoms:
-        item(AvatarItemSlot::Bottom,"Bottoms");
-        color(AvatarColorSlot::Bottom,"Color");
-        break;
-    case EditorCategory::Shoes:
-        item(AvatarItemSlot::Shoes,"Shoes");
-        color(AvatarColorSlot::Shoes,"Color");
-        break;
-    case EditorCategory::Glasses:
-        item(AvatarItemSlot::Glasses,"Glasses");
-        color(AvatarColorSlot::Accessory,"Frame color");
-        break;
-    case EditorCategory::Headwear:
-        item(AvatarItemSlot::Hat,"Headwear");
-        color(AvatarColorSlot::Accessory,"Color");
-        break;
+    }
     }
     return list;
 }
@@ -244,12 +285,16 @@ void AvatarEditorModel::turnPage(int delta)
 EditorView AvatarEditorModel::view() const
 {
     switch(category_) {
-    case EditorCategory::Face: case EditorCategory::Eyes: case EditorCategory::NoseAndMouth: case EditorCategory::Hair:
-    case EditorCategory::FacialHair: case EditorCategory::Glasses: case EditorCategory::Headwear:
+    case EditorCategory::Face: case EditorCategory::Eyes: case EditorCategory::Eyebrows: case EditorCategory::Nose:
+    case EditorCategory::Mouth: case EditorCategory::Makeup:
+        return EditorView::Face;
+    case EditorCategory::Hair: case EditorCategory::FacialHair: case EditorCategory::Glasses: case EditorCategory::Headwear:
         return EditorView::Head;
+    case EditorCategory::Ears: case EditorCategory::Earrings: return EditorView::Profile;
     case EditorCategory::Tops: return EditorView::Upper;
     case EditorCategory::Bottoms: return EditorView::Lower;
     case EditorCategory::Shoes: return EditorView::Feet;
+    case EditorCategory::Wristwear: case EditorCategory::Gloves: case EditorCategory::Rings: return EditorView::Hands;
     default: return EditorView::Body;
     }
 }
@@ -271,7 +316,7 @@ EditorField AvatarEditorModel::field(std::size_t index) const
     const auto list=rows();
     if(index>=list.size())return {};
     const auto& row=list[index];
-    EditorField result{row.label,{},EditorRowKind::Cards,std::nullopt,std::nullopt};
+    EditorField result{row.label,{},EditorRowKind::Cards,std::nullopt,std::nullopt,{}};
     // "Average", "A little wide", "Wide", "Very wide".
     auto sliderText=[&](std::uint8_t value,const char* less,const char* more) {
         const int steps=static_cast<int>(std::lround((value-NeutralFaceParameter)/static_cast<double>(SliderStep)));
@@ -300,37 +345,77 @@ EditorField AvatarEditorModel::field(std::size_t index) const
         result.kind=EditorRowKind::Slider;
         result.slider=sliderPosition(working_.build);
         break;
+    case Kind::Proportion:
+        result.value=sliderText(working_.proportion,"Compact","Long-limbed");
+        result.kind=EditorRowKind::Slider;
+        result.slider=sliderPosition(working_.proportion);
+        break;
     case Kind::Color: {
-        const auto& color=working_.colors[static_cast<std::size_t>(row.index)];
-        const auto palette=colorPalette(static_cast<AvatarColorSlot>(row.index));
+        const auto slot=static_cast<AvatarColorSlot>(row.index);
+        const auto color=drawnColor(working_,slot);
+        const auto palette=colorPalette(slot);
         const auto found=std::ranges::find(palette,color);
         result.value=found==palette.end()?"Custom":std::to_string(found-palette.begin()+1)+" of "+std::to_string(palette.size());
         result.kind=EditorRowKind::Swatches;
         result.swatch=color;
+        if(category_==EditorCategory::FacialHair)result.note="Facial hair and eyebrows take the hair color.";
         break;
     }
-    case Kind::Item:
-        result.value=itemName(working_.items[static_cast<std::size_t>(row.index)],false);
+    case Kind::Entry: {
+        const auto slot=static_cast<AvatarItemSlot>(row.index);
+        result.value=entryName(entryOf(working_,slot),slot);
+        if(slot==AvatarItemSlot::Eyebrows)result.note="Eyebrows take the hair color.";
+        if(slot==AvatarItemSlot::Rings&&working_.accessories[accessoryIndex(AvatarItemSlot::Gloves)])result.note="Gloves hide rings.";
         break;
-    case Kind::FacialHair:
-        result.value=itemName(working_.facialHair,true);
+    }
+    case Kind::Sides:
+        result.value=SideNames[static_cast<int>(working_.sides[static_cast<std::size_t>(row.index)])];
+        result.kind=EditorRowKind::Chips;
         break;
     case Kind::Face: {
         const auto value=working_.face[static_cast<std::size_t>(row.index)];
+        const int body=working_.bodyType==1?1:0;
         const Feature* feature=nullptr;
-        for(const auto& candidate:featuresOf(category_))if(faceParameter(candidate.control)==row.index)feature=&candidate;
+        for(const auto& candidate:slidersOf(category_))if(catalog_->faceParameter(body,candidate.control)==row.index)feature=&candidate;
         result.value=feature?sliderText(value,feature->less,feature->more):std::to_string(value);
         result.kind=EditorRowKind::Slider;
         result.slider=sliderPosition(value);
         break;
     }
-    case Kind::Preset: {
-        result.kind=EditorRowKind::Presets;
-        result.value="Custom";
+    case Kind::Preset:
+    case Kind::Outfit:
+        result.kind=row.kind==Kind::Preset?EditorRowKind::Presets:EditorRowKind::Cards;
+        result.value=row.kind==Kind::Preset?"Custom":"Your own";
         for(const auto& option:options(index))if(option.current)result.value=option.label;
         break;
     }
+    return result;
+}
+
+AvatarDescriptor AvatarEditorModel::withPreset(const AvatarDescriptor& source,const FacePreset& preset) const
+{
+    auto result=source;
+    const int body=result.bodyType==1?1:0;
+    auto value=[&](std::string_view name){
+        for(const auto& [control,amount]:preset.values)if(control==name)return amount;
+        return 0.0f;
+    };
+    if(preset.group=="body") {
+        const int authored=catalog_->authoredHeightMillimeters[body];
+        const int height=authored+static_cast<int>(std::lround(value("height")*PresetHeightRange/HeightStep))*HeightStep;
+        result.heightMillimeters=static_cast<std::uint16_t>(std::clamp<int>(height,MinimumHeightMillimeters,MaximumHeightMillimeters));
+        result.build=sliderValue(value("build"));
+        if(!catalog_->faceControls[body].empty())result.proportion=sliderValue(value("proportion"));
+        return result;
     }
+    // Every control of the page is set (0 when the preset leaves it), and any other control the
+    // preset names too.
+    for(const auto& feature:slidersOf(category_))
+        if(const int parameter=catalog_->faceParameter(body,feature.control);parameter>=0)
+            result.face[static_cast<std::size_t>(parameter)]=sliderValue(std::clamp(value(feature.control)*PresetStrength,-1.0f,1.0f));
+    for(const auto& [control,amount]:preset.values)
+        if(const int parameter=catalog_->faceParameter(body,control);parameter>=0)
+            result.face[static_cast<std::size_t>(parameter)]=sliderValue(std::clamp(amount*PresetStrength,-1.0f,1.0f));
     return result;
 }
 
@@ -349,46 +434,65 @@ std::vector<EditorOption> AvatarEditorModel::options(std::size_t index) const
                 result.bodyType=body;
                 result.heightMillimeters=static_cast<std::uint16_t>(std::clamp<int>(catalog_->authoredHeightMillimeters[body]+offset,
                     MinimumHeightMillimeters,MaximumHeightMillimeters));
-                if(catalog_->faceControls[body].empty())result.face.fill(NeutralFaceParameter);
+                if(catalog_->faceControls[body].empty()) {
+                    result.face.fill(NeutralFaceParameter);
+                    result.proportion=NeutralFaceParameter;
+                }
             }
             out.push_back({body==1?"Male":"Female",result,working_.bodyType==body,std::nullopt});
         }
         break;
     case Kind::Color: {
-        auto& color=working_.colors[static_cast<std::size_t>(row.index)];
-        for(const auto& candidate:colorPalette(static_cast<AvatarColorSlot>(row.index))) {
+        const auto slot=static_cast<AvatarColorSlot>(row.index);
+        const auto current=drawnColor(working_,slot);
+        for(const auto& candidate:colorPalette(slot)) {
             auto result=working_;
-            result.colors[static_cast<std::size_t>(row.index)]=candidate;
-            out.push_back({{},result,candidate==color,candidate});
+            result.colors[at(slot)]=candidate;
+            out.push_back({{},result,candidate==current,candidate});
         }
         break;
     }
-    case Kind::Item:
-    case Kind::FacialHair: {
-        const auto slot=row.kind==Kind::Item?static_cast<AvatarItemSlot>(row.index):AvatarItemSlot::FacialHair;
+    case Kind::Entry: {
+        const auto slot=static_cast<AvatarItemSlot>(row.index);
+        auto current=entryOf(working_,slot);
+        if(slot==AvatarItemSlot::Ears&&current==0)
+            if(const auto ears=catalog_->itemsOf(AvatarItemSlot::Ears);!ears.empty())current=ears.front()->id;
         for(auto id:choices(slot)) {
             auto result=working_;
-            (row.kind==Kind::Item?result.items[static_cast<std::size_t>(row.index)]:result.facialHair)=id;
-            const auto current=row.kind==Kind::Item?working_.items[static_cast<std::size_t>(row.index)]:working_.facialHair;
-            out.push_back({itemName(id,row.kind==Kind::FacialHair),result,id==current,std::nullopt});
+            setEntry(result,slot,id);
+            out.push_back({entryName(id,slot),result,id==current,std::nullopt});
         }
         break;
     }
-    case Kind::Preset:
-        for(const auto& preset:presetsOf(category_)) {
+    case Kind::Sides:
+        for(std::uint8_t side=0;side<3;++side) {
             auto result=working_;
-            for(const auto& feature:featuresOf(category_)) {
-                const int parameter=faceParameter(feature.control);
-                if(parameter<0)continue;
-                float move=0.0f;
-                for(const auto& [control,amount]:preset.moves)if(control&&std::string_view(control)==feature.control)move=amount;
-                result.face[static_cast<std::size_t>(parameter)]=sliderValue(std::clamp(move*PresetStrength,-1.0f,1.0f));
-            }
-            out.push_back({preset.label,result,result.face==working_.face,std::nullopt});
+            result.sides[static_cast<std::size_t>(row.index)]=static_cast<AvatarSides>(side);
+            out.push_back({SideNames[side],result,working_.sides[static_cast<std::size_t>(row.index)]==static_cast<AvatarSides>(side),std::nullopt});
+        }
+        break;
+    case Kind::Preset: {
+        const auto group=presetsOf(category_).first;
+        for(const auto& preset:catalog_->facePresets) {
+            if(preset.group!=group)continue;
+            auto result=withPreset(working_,preset);
+            const bool current=preset.group=="body"?result.heightMillimeters==working_.heightMillimeters&&result.build==working_.build&&
+                result.proportion==working_.proportion:result.face==working_.face;
+            out.push_back({preset.name,std::move(result),current,std::nullopt});
+        }
+        break;
+    }
+    case Kind::Outfit:
+        for(const auto& outfit:catalog_->outfits) {
+            auto result=working_;
+            for(const auto& [slot,id]:outfit.items)setEntry(result,slot,id);
+            for(const auto& [slot,color]:outfit.colors)result.colors[at(slot)]=color;
+            out.push_back({outfit.name,result,result==working_,std::nullopt});
         }
         break;
     case Kind::Height:
     case Kind::Build:
+    case Kind::Proportion:
     case Kind::Face:
         break;
     }
@@ -401,6 +505,10 @@ bool AvatarEditorModel::choose(std::size_t row,std::size_t option)
     if(option>=list.size())return false;
     const auto before=working_;
     working_=list[option].result;
+    // Makeup's first look in a colour: the palette's first rather than unset black.
+    for(auto [style,color]:{std::pair{AvatarItemSlot::EyeShadow,AvatarColorSlot::EyeShadow},{AvatarItemSlot::Blush,AvatarColorSlot::Blush},
+                            {AvatarItemSlot::Lips,AvatarColorSlot::Lips}})
+        if(working_.makeup[makeupIndex(style)]&&working_.colors[at(color)]==AvatarColor{})working_.colors[at(color)]=drawnColor(working_,color);
     selection_=std::min(row,fieldCount()-1);
     return !(working_==before);
 }
@@ -419,18 +527,20 @@ bool AvatarEditorModel::adjust(int delta)
     case Kind::Build:
         working_.build=stepSlider(working_.build,delta);
         break;
+    case Kind::Proportion:
+        working_.proportion=stepSlider(working_.proportion,delta);
+        break;
     case Kind::Face:
         working_.face[static_cast<std::size_t>(row.index)]=stepSlider(working_.face[static_cast<std::size_t>(row.index)],delta);
         break;
     default: {
-        // Cards, swatches and presets step to the neighbouring choice, wrapping.
+        // Cards, swatches, presets and chips step to the neighbouring choice, wrapping.
         const auto choicesList=options(selection_);
         if(choicesList.empty())break;
         const auto current=std::ranges::find_if(choicesList,&EditorOption::current);
         const int count=static_cast<int>(choicesList.size());
         const int index=current==choicesList.end()?(delta>0?-1:0):static_cast<int>(current-choicesList.begin());
-        working_=choicesList[static_cast<std::size_t>(((index+delta)%count+count)%count)].result;
-        break;
+        return choose(selection_,static_cast<std::size_t>(((index+delta)%count+count)%count));
     }
     }
     selection_=std::min(selection_,fieldCount()-1);
@@ -439,94 +549,122 @@ bool AvatarEditorModel::adjust(int delta)
 
 AvatarDescriptor AvatarEditorModel::coherentRandom(std::uint8_t bodyType)
 {
-    auto result=randomDescriptor(*catalog_,bodyType,random_);
-    std::uniform_real_distribution<float> unit(0.0f,1.0f);
-    auto chance=[&](float p){return unit(random_)<p;};
-    auto pick=[&](auto range){return range[std::uniform_int_distribution<std::size_t>(0,range.size()-1)(random_)];};
-    // Natural hair and eye colours mostly (the palettes list them first); a fun one now and then.
-    const auto hair=colorPalette(AvatarColorSlot::Hair);
-    result.colors[at(AvatarColorSlot::Hair)]=chance(0.88f)?hair[std::uniform_int_distribution<std::size_t>(0,std::min<std::size_t>(6,hair.size())-1)(random_)]:pick(hair);
-    const auto eyes=colorPalette(AvatarColorSlot::Eyes);
-    result.colors[at(AvatarColorSlot::Eyes)]=pick(eyes);
-    // Clothes that go together: a top colour, bottoms in a neutral or a colour two steps round the
-    // wheel from it, shoes neutral mostly, accessories matching the top or neutral.
-    const auto cloth=colorPalette(AvatarColorSlot::Top);
-    const std::vector<std::size_t> neutrals{8,9,10};  // white, charcoal, brown
-    const auto top=std::uniform_int_distribution<std::size_t>(0,cloth.size()-1)(random_);
-    result.colors[at(AvatarColorSlot::Top)]=cloth[top];
-    // The first eight cloth colours are a hue wheel.
-    const auto around=[&](std::size_t from,int steps){return cloth[(from+static_cast<std::size_t>(8+steps))%8];};
-    result.colors[at(AvatarColorSlot::Bottom)]=chance(0.6f)?cloth[pick(neutrals)]:top<8?around(top,chance(0.5f)?2:-2):cloth[pick(neutrals)];
-    result.colors[at(AvatarColorSlot::Shoes)]=chance(0.7f)?cloth[pick(neutrals)]:cloth[top];
-    result.colors[at(AvatarColorSlot::Accessory)]=chance(0.5f)?cloth[top]:cloth[pick(neutrals)];
-    // A face within its usual range: nothing at an extreme.
-    if(!catalog_->faceControls[result.bodyType].empty()) {
-        std::normal_distribution<float> spread(0.0f,0.22f);
-        for(auto& value:result.face)value=sliderValue(std::clamp(spread(random_),-0.55f,0.55f));
-    }
-    auto sometimes=[&](AvatarItemSlot slot,float p) {
-        const auto offered=choices(slot);
-        result.items[at(slot)]=offered.size()>1&&chance(p)?offered[std::uniform_int_distribution<std::size_t>(1,offered.size()-1)(random_)]:0;
-    };
-    sometimes(AvatarItemSlot::Glasses,0.2f);
-    sometimes(AvatarItemSlot::Hat,0.15f);
-    if(bodyType==0)result.facialHair=0;
-    else if(const auto facial=catalog_->itemsOf(AvatarItemSlot::FacialHair);!facial.empty())
-        result.facialHair=chance(0.35f)?facial[std::uniform_int_distribution<std::size_t>(0,facial.size()-1)(random_)]->id:0;
-    return result;
+    return randomDescriptor(*catalog_,bodyType,random_);
 }
 
 void AvatarEditorModel::randomize()
 {
     working_=coherentRandom(working_.bodyType);
-    selection_=std::min(selection_,fieldCount()-1);
+    selection_=std::min(selection_,fieldCount()?fieldCount()-1:0);
+}
+
+void AvatarEditorModel::takeCategory(const AvatarDescriptor& source)
+{
+    const int body=working_.bodyType==1?1:0;
+    auto takeColor=[&](AvatarColorSlot slot){working_.colors[at(slot)]=source.colors[at(slot)];};
+    auto takeEntry=[&](AvatarItemSlot slot) {
+        setEntry(working_,slot,entryOf(source,slot));
+        if(slot>=AvatarItemSlot::Earrings&&slot<=AvatarItemSlot::Rings)working_.sides[accessoryIndex(slot)]=source.sides[accessoryIndex(slot)];
+    };
+    auto takeSliders=[&] {
+        for(const auto& feature:slidersOf(category_))
+            if(const int parameter=catalog_->faceParameter(body,feature.control);parameter>=0)
+                working_.face[static_cast<std::size_t>(parameter)]=source.face[static_cast<std::size_t>(parameter)];
+    };
+    switch(category_) {
+    case EditorCategory::Body:
+        working_.heightMillimeters=source.heightMillimeters;working_.build=source.build;working_.proportion=source.proportion;break;
+    case EditorCategory::Skin: takeColor(AvatarColorSlot::Skin); break;
+    case EditorCategory::Face: case EditorCategory::Nose: case EditorCategory::Mouth: takeSliders(); break;
+    case EditorCategory::Eyes: takeSliders(); takeColor(AvatarColorSlot::Eyes); break;
+    case EditorCategory::Eyebrows: takeSliders(); takeEntry(AvatarItemSlot::Eyebrows); break;
+    case EditorCategory::Ears: takeSliders(); takeEntry(AvatarItemSlot::Ears); break;
+    case EditorCategory::Hair: takeEntry(AvatarItemSlot::Hair); takeColor(AvatarColorSlot::Hair); break;
+    case EditorCategory::FacialHair: takeEntry(AvatarItemSlot::FacialHair); break;
+    case EditorCategory::Makeup:
+        for(auto slot:{AvatarItemSlot::EyeShadow,AvatarItemSlot::Eyeliner,AvatarItemSlot::Blush,AvatarItemSlot::Lips})takeEntry(slot);
+        for(auto slot:{AvatarColorSlot::EyeShadow,AvatarColorSlot::Blush,AvatarColorSlot::Lips})takeColor(slot);
+        break;
+    case EditorCategory::Outfits:
+        for(auto slot:{AvatarItemSlot::Top,AvatarItemSlot::Bottom,AvatarItemSlot::Shoes,AvatarItemSlot::Hat,AvatarItemSlot::Gloves})takeEntry(slot);
+        for(auto slot:{AvatarColorSlot::Top,AvatarColorSlot::Bottom,AvatarColorSlot::Shoes,AvatarColorSlot::Accessory,AvatarColorSlot::Gloves})
+            takeColor(slot);
+        break;
+    case EditorCategory::Tops: takeEntry(AvatarItemSlot::Top); takeColor(AvatarColorSlot::Top); break;
+    case EditorCategory::Bottoms: takeEntry(AvatarItemSlot::Bottom); takeColor(AvatarColorSlot::Bottom); break;
+    case EditorCategory::Shoes: takeEntry(AvatarItemSlot::Shoes); takeColor(AvatarColorSlot::Shoes); break;
+    case EditorCategory::Headwear: takeEntry(AvatarItemSlot::Hat); takeColor(AvatarColorSlot::Accessory); break;
+    case EditorCategory::Glasses: takeEntry(AvatarItemSlot::Glasses); takeColor(AvatarColorSlot::Accessory); break;
+    case EditorCategory::Earrings: takeEntry(AvatarItemSlot::Earrings); takeColor(AvatarColorSlot::Jewelry); break;
+    case EditorCategory::Wristwear: takeEntry(AvatarItemSlot::Wristwear); takeColor(AvatarColorSlot::Jewelry); takeColor(AvatarColorSlot::Accessory); break;
+    case EditorCategory::Gloves: takeEntry(AvatarItemSlot::Gloves); takeColor(AvatarColorSlot::Gloves); break;
+    case EditorCategory::Rings: takeEntry(AvatarItemSlot::Rings); takeColor(AvatarColorSlot::Jewelry); break;
+    }
 }
 
 void AvatarEditorModel::randomizeCategory()
 {
-    // Only what the category shown covers changes.
-    const auto fresh=coherentRandom(working_.bodyType);
-    auto takeColor=[&](AvatarColorSlot slot){working_.colors[at(slot)]=fresh.colors[at(slot)];};
-    auto takeItem=[&](AvatarItemSlot slot){working_.items[at(slot)]=fresh.items[at(slot)];};
-    auto takeFeatures=[&] {
-        for(const auto& feature:featuresOf(category_))
-            if(const int parameter=faceParameter(feature.control);parameter>=0)
-                working_.face[static_cast<std::size_t>(parameter)]=fresh.face[static_cast<std::size_t>(parameter)];
+    // Only what the category shown covers changes. A category that is mostly "none" in a random
+    // avatar (accessories, makeup) always gets something here: the player asked for one.
+    auto fresh=coherentRandom(working_.bodyType);
+    std::uniform_real_distribution<float> unit(0.0f,1.0f);
+    auto pick=[&](AvatarItemSlot slot) {
+        const auto offered=choices(slot);
+        std::vector<std::uint16_t> real;
+        for(auto id:offered)if(id)real.push_back(id);
+        if(real.empty())return std::uint16_t{0};
+        return real[std::uniform_int_distribution<std::size_t>(0,real.size()-1)(random_)];
+    };
+    auto palette=[&](AvatarColorSlot slot,std::size_t natural) {
+        const auto colors=colorPalette(slot);
+        return colors[std::uniform_int_distribution<std::size_t>(0,std::min(natural,colors.size())-1)(random_)];
     };
     switch(category_) {
-    case EditorCategory::Body: working_.heightMillimeters=fresh.heightMillimeters;working_.build=fresh.build;break;
-    case EditorCategory::Skin: takeColor(AvatarColorSlot::Skin);break;
-    case EditorCategory::Face: takeFeatures();break;
-    case EditorCategory::Eyes: takeFeatures();takeColor(AvatarColorSlot::Eyes);break;
-    case EditorCategory::NoseAndMouth: takeFeatures();break;
-    case EditorCategory::Hair: takeItem(AvatarItemSlot::Hair);takeColor(AvatarColorSlot::Hair);break;
-    case EditorCategory::FacialHair: {
-        const auto facial=catalog_->itemsOf(AvatarItemSlot::FacialHair);
-        working_.facialHair=working_.bodyType==1&&!facial.empty()?facial[std::uniform_int_distribution<std::size_t>(0,facial.size()-1)(random_)]->id:0;
+    case EditorCategory::Makeup:
+        for(auto slot:{AvatarItemSlot::EyeShadow,AvatarItemSlot::Eyeliner,AvatarItemSlot::Blush,AvatarItemSlot::Lips})
+            setEntry(fresh,slot,unit(random_)<0.65f?pick(slot):0);
+        fresh.colors[at(AvatarColorSlot::EyeShadow)]=palette(AvatarColorSlot::EyeShadow,8);
+        fresh.colors[at(AvatarColorSlot::Blush)]=palette(AvatarColorSlot::Blush,5);
+        fresh.colors[at(AvatarColorSlot::Lips)]=palette(AvatarColorSlot::Lips,8);
+        break;
+    case EditorCategory::Outfits:
+        if(!catalog_->outfits.empty()) {
+            const auto& outfit=catalog_->outfits[std::uniform_int_distribution<std::size_t>(0,catalog_->outfits.size()-1)(random_)];
+            for(const auto& [slot,id]:outfit.items)setEntry(fresh,slot,id);
+            for(const auto& [slot,color]:outfit.colors)fresh.colors[at(slot)]=color;
+        }
+        break;
+    case EditorCategory::Headwear: setEntry(fresh,AvatarItemSlot::Hat,pick(AvatarItemSlot::Hat)); break;
+    case EditorCategory::Glasses: setEntry(fresh,AvatarItemSlot::Glasses,pick(AvatarItemSlot::Glasses)); break;
+    case EditorCategory::FacialHair: if(working_.bodyType==1)setEntry(fresh,AvatarItemSlot::FacialHair,pick(AvatarItemSlot::FacialHair)); break;
+    case EditorCategory::Earrings: case EditorCategory::Wristwear: case EditorCategory::Gloves: case EditorCategory::Rings: {
+        const auto slot=category_==EditorCategory::Earrings?AvatarItemSlot::Earrings:category_==EditorCategory::Wristwear?
+            AvatarItemSlot::Wristwear:category_==EditorCategory::Gloves?AvatarItemSlot::Gloves:AvatarItemSlot::Rings;
+        setEntry(fresh,slot,pick(slot));
+        if(slot!=AvatarItemSlot::Gloves&&fresh.accessories[accessoryIndex(slot)])
+            fresh.sides[accessoryIndex(slot)]=slot==AvatarItemSlot::Earrings?AvatarSides::Both:
+                static_cast<AvatarSides>(std::uniform_int_distribution<int>(0,2)(random_));
+        fresh.colors[at(AvatarColorSlot::Jewelry)]=palette(AvatarColorSlot::Jewelry,6);
+        fresh.colors[at(AvatarColorSlot::Gloves)]=palette(AvatarColorSlot::Gloves,24);
         break;
     }
-    case EditorCategory::Tops: takeItem(AvatarItemSlot::Top);takeColor(AvatarColorSlot::Top);break;
-    case EditorCategory::Bottoms: takeItem(AvatarItemSlot::Bottom);takeColor(AvatarColorSlot::Bottom);break;
-    case EditorCategory::Shoes: takeItem(AvatarItemSlot::Shoes);takeColor(AvatarColorSlot::Shoes);break;
-    case EditorCategory::Glasses: {
-        const auto offered=choices(AvatarItemSlot::Glasses);
-        working_.items[at(AvatarItemSlot::Glasses)]=offered[std::uniform_int_distribution<std::size_t>(0,offered.size()-1)(random_)];
-        takeColor(AvatarColorSlot::Accessory);
-        break;
+    default: break;
     }
-    case EditorCategory::Headwear: {
-        const auto offered=choices(AvatarItemSlot::Hat);
-        working_.items[at(AvatarItemSlot::Hat)]=offered[std::uniform_int_distribution<std::size_t>(0,offered.size()-1)(random_)];
-        takeColor(AvatarColorSlot::Accessory);
-        break;
-    }
-    }
+    takeCategory(fresh);
+}
+
+bool AvatarEditorModel::resetCategory()
+{
+    const auto before=working_;
+    takeCategory(start_);
+    selection_=std::min(selection_,fieldCount()?fieldCount()-1:0);
+    return !(working_==before);
 }
 
 void AvatarEditorModel::revert()
 {
     working_=start_;
-    selection_=std::min(selection_,fieldCount()-1);
+    selection_=std::min(selection_,fieldCount()?fieldCount()-1:0);
 }
 
 void AvatarEditorModel::markSaved()

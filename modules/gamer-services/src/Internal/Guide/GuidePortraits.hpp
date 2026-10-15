@@ -20,7 +20,7 @@ class AvatarRenderer;
 namespace CNA::Internal::GamerServices::GuideUi {
 /** @brief How an avatar is framed: head and shoulders, the whole avatar, or the part a kind of
  * clothing covers (top, bottoms, shoes). */
-enum class Framing : std::uint8_t { Head, Body, Upper, Lower, Feet };
+enum class Framing : std::uint8_t { Head, Body, Upper, Lower, Feet, Face, Profile, Hands };
 
 /** @brief A camera for an avatar view: it looks at target from target + offset. */
 struct Shot {

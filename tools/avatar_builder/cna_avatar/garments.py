@@ -1041,7 +1041,8 @@ def wristwear(body_type, style):
         entry = parts.setdefault((key, side), (Mesh(), tint, kind, colour, {"cnaSide": SIDE_NAMES[side]}))
         entry[0].append(mesh)
     for side, _ in rig.SIDES:
-        t = 0.955
+        # Just past every sleeve's cuff (long sleeves end by t = 0.95), so long sleeves never hide it.
+        t = 0.978
         centre, axis, back, w, d, wt = _wrist_frame(body_type, side, t)
         u, v, _ = frame_from_axis(axis, back)
         weights = lambda q, wt=wt: wt
@@ -1073,13 +1074,13 @@ def wristwear(body_type, style):
                                        lambda q_, v_, u_, wt=wt: wt))
             add_part("beads", beads, "accessory", "plain", (1.0, 1.0, 1.0), side)
         elif style == "wrist_band":
-            add_part("band", body.arm(body_type, side, inflate=0.006, t_range=(0.90, 0.99)), "accessory", "rib", (1.0, 1.0, 1.0), side)
-            add_part("band", _limb_ring(body_type, side, "arm", 0.90, 0.006, 0.004), "accessory", "rib", (1.0, 1.0, 1.0), side)
-            add_part("band", _limb_ring(body_type, side, "arm", 0.99, 0.006, 0.004), "accessory", "rib", (1.0, 1.0, 1.0), side)
+            add_part("band", body.arm(body_type, side, inflate=0.006, t_range=(0.955, 0.995)), "accessory", "rib", (1.0, 1.0, 1.0), side)
+            add_part("band", _limb_ring(body_type, side, "arm", 0.955, 0.006, 0.004), "accessory", "rib", (1.0, 1.0, 1.0), side)
+            add_part("band", _limb_ring(body_type, side, "arm", 0.995, 0.006, 0.004), "accessory", "rib", (1.0, 1.0, 1.0), side)
         elif style == "wrist_cuff":
-            add_part("metal", body.arm(body_type, side, inflate=0.005, t_range=(0.925, 0.975)), "jewelry", "plain", (1.0, 1.0, 1.0), side)
-            add_part("metal", _limb_ring(body_type, side, "arm", 0.925, 0.005, 0.0022), "jewelry", "plain", (1.0, 1.0, 1.0), side)
-            add_part("metal", _limb_ring(body_type, side, "arm", 0.975, 0.005, 0.0022), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+            add_part("metal", body.arm(body_type, side, inflate=0.005, t_range=(0.955, 0.995)), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+            add_part("metal", _limb_ring(body_type, side, "arm", 0.955, 0.005, 0.0022), "jewelry", "plain", (1.0, 1.0, 1.0), side)
+            add_part("metal", _limb_ring(body_type, side, "arm", 0.995, 0.005, 0.0022), "jewelry", "plain", (1.0, 1.0, 1.0), side)
         else:
             raise ValueError(style)
     return list(parts.values())

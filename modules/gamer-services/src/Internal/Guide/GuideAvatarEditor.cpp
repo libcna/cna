@@ -39,9 +39,12 @@ using Av::EditorRowKind;
 struct CategoryEntry {EditorCategory category;Icon icon;};
 constexpr CategoryEntry Categories[]{
     {EditorCategory::Body,Icon::Figure},{EditorCategory::Skin,Icon::Drop},{EditorCategory::Face,Icon::Face},
-    {EditorCategory::Eyes,Icon::Eye},{EditorCategory::NoseAndMouth,Icon::Mouth},{EditorCategory::Hair,Icon::Hair},
-    {EditorCategory::FacialHair,Icon::Beard},{EditorCategory::Tops,Icon::Shirt},{EditorCategory::Bottoms,Icon::Trousers},
-    {EditorCategory::Shoes,Icon::Shoe},{EditorCategory::Glasses,Icon::Glasses},{EditorCategory::Headwear,Icon::Hat}};
+    {EditorCategory::Eyes,Icon::Eye},{EditorCategory::Eyebrows,Icon::Brow},{EditorCategory::Ears,Icon::Ear},
+    {EditorCategory::Nose,Icon::Nose},{EditorCategory::Mouth,Icon::Mouth},{EditorCategory::Hair,Icon::Hair},
+    {EditorCategory::FacialHair,Icon::Beard},{EditorCategory::Makeup,Icon::Makeup},{EditorCategory::Outfits,Icon::Hanger},
+    {EditorCategory::Tops,Icon::Shirt},{EditorCategory::Bottoms,Icon::Trousers},{EditorCategory::Shoes,Icon::Shoe},
+    {EditorCategory::Headwear,Icon::Hat},{EditorCategory::Glasses,Icon::Glasses},{EditorCategory::Earrings,Icon::Earring},
+    {EditorCategory::Wristwear,Icon::Watch},{EditorCategory::Gloves,Icon::Glove},{EditorCategory::Rings,Icon::Ring}};
 static_assert(std::size(Categories)==static_cast<std::size_t>(Av::EditorCategoryCount));
 
 constexpr int VisibleCards=4;
@@ -59,6 +62,9 @@ Framing framingOf(Av::EditorView view)
     case Av::EditorView::Upper: return Framing::Upper;
     case Av::EditorView::Lower: return Framing::Lower;
     case Av::EditorView::Feet: return Framing::Feet;
+    case Av::EditorView::Face: return Framing::Face;
+    case Av::EditorView::Profile: return Framing::Profile;
+    case Av::EditorView::Hands: return Framing::Hands;
     case Av::EditorView::Body: break;
     }
     return Framing::Body;
@@ -186,6 +192,14 @@ public:
         const auto rows=model_->fieldCount();
         if(rows==0){content_=false;return;}
         row_=std::min(row_,rows-1);
+        if(resetFocus_) {
+            // The category's Reset button, above its first row.
+            if(ui.input(Command::Accept)){model_->resetCategory();note_="Put back as it was when you started.";option_=currentOption(row_);}
+            if(ui.input(Command::Down))resetFocus_=false;
+            if(ui.input(Command::Left)||back){resetFocus_=false;content_=false;}
+            return;
+        }
+        if(ui.input(Command::Up)&&row_==0){resetFocus_=true;return;}
         if(ui.input(Command::Up)&&row_>0)enterContent(row_-1);
         if(ui.input(Command::Down)&&row_+1<rows)enterContent(row_+1);
         const bool slider=model_->field(row_).kind==EditorRowKind::Slider;
@@ -221,6 +235,7 @@ public:
         }
         std::vector<Hint> out;
         if(!content_)out.push_back({Command::Accept,"Choose"});
+        else if(resetFocus_)out.push_back({Command::Accept,"Reset"});
         else if(model_->field(row_).kind!=EditorRowKind::Slider)out.push_back({Command::Accept,"Select"});
         out.push_back({Command::X,"Shuffle"});
         out.push_back({Command::Y,"Random"});
@@ -236,6 +251,7 @@ public:
             for(const auto& entry:Categories)out.push_back(Av::editorCategoryName(entry.category));
             return out;
         }
+        if(resetFocus_)out.push_back("Reset "+std::string(Av::editorCategoryName(model_->category())));
         for(std::size_t row=0;row<model_->fieldCount();++row) {
             const auto field=model_->field(row);
             auto text=field.label+": "+field.value;
@@ -270,6 +286,8 @@ public:
         const float usable=(usableBottom-usableTop)/static_cast<float>(stageHeight_);
         const auto joints=bindJoints(*shown_);
         auto shot=shotFor(framingOf(view),joints,height,aspect*usable);
+        // Ears and earrings: the avatar turns to show its ear, then back.
+        const float turn=view==Av::EditorView::Profile?1.05f:0.0f;
         if(view==Av::EditorView::Head&&joints.size()>19) {
             // Head and shoulders with room for hair and a hat: wider than a portrait's head.
             const float head=joints[19].Y,span=height-head,bottom=head-0.44f*span,top=head+1.06f*span;
@@ -288,8 +306,9 @@ public:
         cameraTarget_=cameraTarget_+(shot.target-cameraTarget_)*follow;
         cameraOffset_=cameraOffset_+(shot.offset-cameraOffset_)*follow;
         cameraFov_+=(shot.fov-cameraFov_)*follow;
+        viewTurn_+=(turn-viewTurn_)*follow;
         const auto eye=cameraTarget_+cameraOffset_*zoom_;
-        const auto world=Xna::Matrix::CreateRotationY(yaw_);
+        const auto world=Xna::Matrix::CreateRotationY(yaw_+viewTurn_);
         const auto viewMatrix=Xna::Matrix::CreateLookAt(eye,cameraTarget_,Xna::Vector3::Up);
         const auto projection=Xna::Matrix::CreatePerspectiveFieldOfView(cameraFov_,aspect,0.05f,30.0f);
         shown_->setWorldProperty(world);
@@ -402,7 +421,7 @@ public:
 private:
     enum class Stage : std::uint8_t { Loading, Editing, Saving, Failed };
     struct Hit {
-        enum class Kind : std::uint8_t { Category, Option, Slider, Stage } kind;
+        enum class Kind : std::uint8_t { Category, Option, Slider, Stage, Reset } kind;
         std::size_t row=0;
         int index=0;
         Box box;
@@ -504,6 +523,7 @@ private:
 
     // ---- Navigation ----------------------------------------------------------------------
     void setCategory(int index) {
+        resetFocus_=false;
         model_->setCategory(Categories[static_cast<std::size_t>(index)].category);
         strips_.clear();
         row_=0;
@@ -516,6 +536,7 @@ private:
     }
     void enterContent(std::size_t row) {
         content_=true;
+        resetFocus_=false;
         row_=row;
         option_=currentOption(row);
     }
@@ -580,6 +601,9 @@ private:
                     sliderDrag_=static_cast<int>(hit.row);
                     setSlider(hit.row,std::clamp((mouse.X-hit.box.x)/hit.box.w*2.0f-1.0f,-1.0f,1.0f));
                 }
+                break;
+            case Hit::Kind::Reset:
+                if(ui.input.click){model_->resetCategory();note_="Put back as it was when you started.";option_=currentOption(row_);}
                 break;
             case Hit::Kind::Stage:
                 if(ui.input.click){dragging_=true;dragFrom_=mouse;}
@@ -691,20 +715,31 @@ private:
     void drawRail(Ui& ui,const Box& rail) {
         ui.style.shadow(ui.batch,rail,ui.px(18),ui.px(20),Xna::Color(0,0,0,110));
         ui.style.rounded(ui.batch,rail,ui.px(18),Palette::panel());
-        const float rowH=std::min(ui.px(44),(rail.h-ui.px(16))/static_cast<float>(std::size(Categories)));
+        // Two groups, Features and Style, each under its heading.
+        const float headerH=ui.px(26);
+        const float rowH=std::min(ui.px(40),(rail.h-ui.px(16)-2*headerH)/static_cast<float>(std::size(Categories)));
         float y=rail.y+ui.px(8);
+        const char* group=nullptr;
         for(int index=0;const auto& entry:Categories) {
+            if(const char* own=Av::editorCategoryGroup(entry.category);own!=group) {
+                group=own;
+                ui.style.text(ui.batch,Font::Caption,group,Xna::Vector2(rail.x+ui.px(22),y+ui.px(4)),Palette::faint());
+                y+=headerH;
+            }
             const Box row{rail.x+ui.px(8),y,rail.w-ui.px(16),rowH-ui.px(2)};
             const bool current=entry.category==model_->category();
             if(current&&!content_)rowBackground(ui,row,true);
             else if(current) {
                 ui.style.rounded(ui.batch,row,ui.px(12),Palette::surface());
-                ui.style.rounded(ui.batch,Box{row.x,row.y+ui.px(9),ui.px(4),row.h-ui.px(18)},ui.px(2),Palette::accent());
+                ui.style.rounded(ui.batch,Box{row.x,row.y+ui.px(7),ui.px(4),row.h-ui.px(14)},ui.px(2),Palette::accent());
             }
-            const float s=ui.px(22);
+            const float s=std::min(ui.px(22),row.h*0.62f);
             ui.style.icon(ui.batch,entry.icon,Box{row.x+ui.px(14),row.y+(row.h-s)/2,s,s},current?Palette::accent():Palette::muted());
-            const float h=ui.style.measure(Font::Body,"Ag").Y;
-            ui.style.text(ui.batch,current?Font::BodyBold:Font::Body,Av::editorCategoryName(entry.category),
+            // Short rows (a small window) take the caption face so names keep clear of each other.
+            const bool small=row.h<ui.px(32);
+            const Font font=small?Font::Caption:current?Font::BodyBold:Font::Body;
+            const float h=ui.style.measure(font,"Ag").Y;
+            ui.style.text(ui.batch,font,Av::editorCategoryName(entry.category),
                 Xna::Vector2(row.x+ui.px(46),row.y+(row.h-h)/2),current?Palette::text():Palette::muted());
             hits_.push_back({Hit::Kind::Category,0,index++,row});
             y+=rowH;
@@ -715,13 +750,14 @@ private:
         const float label=ui.px(30);
         switch(field.kind) {
         case EditorRowKind::Cards:
-        case EditorRowKind::Presets: return label+cardWidth(ui,width)+ui.px(30)+ui.px(16);
+        case EditorRowKind::Presets: return label+cardWidth(ui,width)+ui.px(30)+ui.px(16)+(field.note.empty()?0.0f:ui.px(20));
         case EditorRowKind::Swatches: {
             const int columns=swatchColumns(ui,width);
             const int rows=(static_cast<int>(options)+columns-1)/columns;
             return label+static_cast<float>(rows)*ui.px(48)+ui.px(10);
         }
-        case EditorRowKind::Slider: return ui.px(72);
+        case EditorRowKind::Slider: return ui.px(72)+(field.note.empty()?0.0f:ui.px(20));
+        case EditorRowKind::Chips: return label+ui.px(46);
         }
         return label;
     }
@@ -733,6 +769,16 @@ private:
         ui.style.rounded(ui.batch,content,ui.px(18),Palette::panel());
         ui.style.text(ui.batch,Font::Heading,Av::editorCategoryName(model_->category()),Xna::Vector2(content.x+ui.px(22),content.y+ui.px(16)),
             Palette::text());
+        {
+            // Reset: puts this category back as editing started (above the first row for a pad).
+            const float w=ui.style.measure(Font::Caption,"Reset").X+ui.px(50);
+            const Box button{content.right()-ui.px(22)-w,content.y+ui.px(18),w,ui.px(32)};
+            if(resetFocus_)ui.style.rounded(ui.batch,button.inset(-ui.px(3)),ui.px(16),Palette::accent());
+            ui.style.rounded(ui.batch,button,ui.px(14),Palette::surface());
+            ui.style.icon(ui.batch,Icon::Reset,Box{button.x+ui.px(12),button.y+ui.px(8),ui.px(16),ui.px(16)},resetFocus_?Palette::accent():Palette::muted());
+            ui.style.text(ui.batch,Font::Caption,"Reset",Xna::Vector2(button.x+ui.px(34),button.y+ui.px(6)),Palette::text());
+            hits_.push_back({Hit::Kind::Reset,0,0,button});
+        }
         const Box inner{content.x+ui.px(18),content.y+ui.px(62),content.w-ui.px(36),content.h-ui.px(74)};
         const auto count=model_->fieldCount();
         if(count==0) {
@@ -773,6 +819,8 @@ private:
             value="Trying "+optionName(options,option_);
         ui.style.text(ui.batch,Font::BodyBold,field.label,Xna::Vector2(box.x,box.y),focusedRow?Palette::text():Palette::muted());
         ui.style.text(ui.batch,Font::Caption,value,Xna::Vector2(box.right(),box.y+ui.px(3)),focusedRow?Palette::accent():Palette::muted(),Align::Right);
+        if(!field.note.empty())
+            ui.style.text(ui.batch,Font::Caption,field.note,Xna::Vector2(box.x,box.bottom()-ui.px(20)),Palette::faint());
         const float top=box.y+ui.px(30);
         switch(field.kind) {
         case EditorRowKind::Cards:
@@ -784,8 +832,9 @@ private:
             const int focus=focusedRow?option_:currentOption(row);
             first=std::clamp(first,std::max(0,focus-VisibleCards+1),focus);
             first=std::clamp(first,0,std::max(0,total-VisibleCards));
-            const Framing framing=field.kind==EditorRowKind::Presets?Framing::Head:model_->category()==EditorCategory::Body?Framing::Body:
-                                  framingOf(model_->view());
+            const auto category=model_->category();
+            const Framing framing=category==EditorCategory::Body||category==EditorCategory::Outfits?Framing::Body:
+                                  field.kind==EditorRowKind::Presets?Framing::Face:framingOf(model_->view());
             for(int i=first;i<std::min(total,first+VisibleCards);++i) {
                 const auto& option=options[static_cast<std::size_t>(i)];
                 const Box card{box.x+static_cast<float>(i-first)*(cw+ui.px(10)),top,cw,ch};
@@ -821,6 +870,22 @@ private:
                 const auto color=option.color.value_or(Av::AvatarColor{});
                 ui.style.disc(ui.batch,c,size/2,Xna::Color(color.r,color.g,color.b));
                 hits_.push_back({Hit::Kind::Option,row,i,Box{c.X-size/2-ui.px(4),c.Y-size/2-ui.px(4),size+ui.px(8),size+ui.px(8)}});
+            }
+            break;
+        }
+        case EditorRowKind::Chips: {
+            float x=box.x;
+            for(int i=0;i<static_cast<int>(options.size());++i) {
+                const auto& option=options[static_cast<std::size_t>(i)];
+                const float w=ui.style.measure(Font::Caption,option.label).X+ui.px(36);
+                const Box chip{x,top+ui.px(4),w,ui.px(34)};
+                const bool focused=focusedRow&&i==option_;
+                if(focused)ui.style.rounded(ui.batch,chip.inset(-ui.px(3)),ui.px(17),Palette::accent());
+                ui.style.rounded(ui.batch,chip,ui.px(15),option.current?Palette::accent():Palette::surface());
+                ui.style.text(ui.batch,Font::Caption,option.label,Xna::Vector2(chip.x+w/2,chip.y+ui.px(7)),
+                    option.current?Palette::panel():Palette::text(),Align::Center);
+                hits_.push_back({Hit::Kind::Option,row,i,chip});
+                x+=w+ui.px(10);
             }
             break;
         }
@@ -882,7 +947,8 @@ private:
     int stageWidth_=0,stageHeight_=0;
     bool stageDrawn_=false,cameraSet_=false;
     Xna::Vector3 cameraTarget_,cameraOffset_;
-    float cameraFov_=0.5f,yaw_=3.44159265f,zoom_=1.0f;
+    float cameraFov_=0.5f,yaw_=3.44159265f,zoom_=1.0f,viewTurn_=0.0f;
+    bool resetFocus_=false;
     Xna::Vector2 look_,floor_;
     float floorRadius_=0;
     double lastRender_=-1,lastDraw_=-1;

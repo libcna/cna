@@ -8,6 +8,7 @@
 #include "../../../../../src/Internal/Guide/GuideSystem.hpp"
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/GamerServices/AvatarEditor.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/LocalProfiles.hpp"
@@ -47,7 +48,8 @@ std::vector<unsigned char> Avatar(std::uint8_t body, std::uint32_t seed) {
 }
 
 std::vector<std::string> CategoryNames() {
-    return {"Body", "Skin", "Face", "Eyes", "Nose & mouth", "Hair", "Facial hair", "Tops", "Bottoms", "Shoes", "Glasses", "Headwear"};
+    return {"Body", "Skin", "Face", "Eyes", "Eyebrows", "Ears", "Nose", "Mouth", "Hair", "Facial hair", "Makeup", "Outfits", "Tops",
+            "Bottoms", "Shoes", "Headwear", "Glasses", "Earrings", "Wristwear", "Gloves", "Rings"};
 }
 
 class GuideAvatarEditorTest : public ::testing::Test {
@@ -132,10 +134,10 @@ TEST_F(GuideAvatarEditorTest, OpensFromHomeOnTheCategories) {
 TEST_F(GuideAvatarEditorTest, CategoriesWrapAndChoicesAreTriedOnBeforeTheyAreKept) {
     ASSERT_TRUE(Open());
     Ui::sendForTesting(Ui::Command::Up);
-    EXPECT_EQ(11, Ui::focusForTesting());
+    EXPECT_EQ(20, Ui::focusForTesting());
     Ui::sendForTesting(Ui::Command::Next);
     EXPECT_EQ(0, Ui::focusForTesting());
-    Category(5);
+    Category(8);
     Ui::sendForTesting(Ui::Command::Accept);
     // Hair: the style row is focused on the style worn now.
     ASSERT_EQ(2u, Ui::labelsForTesting().size());
@@ -165,17 +167,53 @@ TEST_F(GuideAvatarEditorTest, SlidersMoveWithLeftAndRight) {
     ASSERT_TRUE(Open());
     Ui::sendForTesting(Ui::Command::Accept);
     Ui::sendForTesting(Ui::Command::Down);
-    ASSERT_TRUE(Label(1).starts_with("Height: ")) << Label(1);
+    Ui::sendForTesting(Ui::Command::Down);
+    ASSERT_TRUE(Label(2).starts_with("Height: ")) << Label(2);
     // Alice's stored height is drawn by std::uniform_int_distribution, whose output for a seed the
     // standard library decides: libstdc++ draws 1691 mm here, libc++ 1676 mm. Off the slider's
     // 10 mm grid a first step only snaps onto it, and from 1676 mm that leaves the label at
     // "1.68 m", so the test starts from the grid.
     Ui::sendForTesting(Ui::Command::Right);
-    const auto before = Label(1);
+    const auto before = Label(2);
     Ui::sendForTesting(Ui::Command::Right);
-    EXPECT_NE(before, Label(1));
+    EXPECT_NE(before, Label(2));
     Ui::sendForTesting(Ui::Command::Left);
-    EXPECT_EQ(before, Label(1));
+    EXPECT_EQ(before, Label(2));
+}
+
+TEST_F(GuideAvatarEditorTest, ResetAboveTheFirstRowPutsTheCategoryBack) {
+    ASSERT_TRUE(Open());
+    Category(8);
+    Ui::sendForTesting(Ui::Command::Accept);
+    const auto worn = Label(0);
+    // Try on and keep the next hairstyle, then reset the category from the button above the rows.
+    Ui::sendForTesting(Ui::Command::Right);
+    Ui::sendForTesting(Ui::Command::Accept);
+    ASSERT_NE(worn, Label(0));
+    Ui::sendForTesting(Ui::Command::Up);
+    EXPECT_EQ("Reset Hair", Label(0));
+    Ui::sendForTesting(Ui::Command::Accept);
+    Ui::sendForTesting(Ui::Command::Down);
+    EXPECT_EQ(worn, Label(0));
+}
+
+TEST_F(GuideAvatarEditorTest, EveryCategoryOpensAndEveryRowCanBeFocused) {
+    // Controller navigation reaches every row of every category, and none is a dead end.
+    ASSERT_TRUE(Open());
+    for (int category = 0; category < Avatars::EditorCategoryCount; ++category) {
+        Category(category);
+        Ui::sendForTesting(Ui::Command::Accept);
+        const auto rows = Ui::labelsForTesting().size();
+        ASSERT_GT(rows, 0u) << category;
+        for (std::size_t row = 1; row < rows; ++row) {
+            Ui::sendForTesting(Ui::Command::Down);
+            EXPECT_EQ(static_cast<int>(row), Ui::focusForTesting()) << category;
+        }
+        // Back to the categories with the focus where it was.
+        Ui::sendForTesting(Ui::Command::Back);
+        EXPECT_EQ(category, Ui::focusForTesting());
+        EXPECT_EQ(CategoryNames(), Ui::labelsForTesting());
+    }
 }
 
 TEST_F(GuideAvatarEditorTest, SavingStoresTheAvatarOnTheServiceAndLeaves) {
@@ -240,10 +278,10 @@ TEST_F(GuideAvatarEditorTest, AnAvatarChangedElsewhereWhileOpenIsShown) {
     options.refreshSeconds = 0;
     ASSERT_TRUE(Open(PlayerIndex::One, std::move(options)));
     Ui::sendForTesting(Ui::Command::Accept);
-    ASSERT_EQ("Body: Female", Label(0));
+    ASSERT_EQ("Body type: Female", Label(0));
     // Another computer saves a masculine avatar: an editor without changes shows it.
     Service::setFakeAvatar(*service_, "a", Avatar(1, 9));
-    EXPECT_TRUE(Settle([] { return Label(0) == "Body: Male"; }));
+    EXPECT_TRUE(Settle([] { return Label(0) == "Body type: Male"; }));
 }
 
 TEST_F(GuideAvatarEditorTest, ALocalProfileSavesToThisComputer) {

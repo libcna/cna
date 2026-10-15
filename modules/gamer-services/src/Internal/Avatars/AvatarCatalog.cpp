@@ -385,6 +385,8 @@ CatalogManifest parseManifestJson(std::string_view text)
         if(listOf(entry.slot)!=list)malformed("item slot in the wrong list");
         entry.name=item.at("name").get<std::string>();
         if(entry.name.empty()||entry.name.size()>64)malformed("item name");
+        entry.label=item.value("label",std::string());
+        if(entry.label.size()>40)malformed("item label");
         if(list==ListKind::Styles) {
             const auto& tiles=item.at("tiles");
             if(!tiles.is_array()||tiles.size()!=styleTiles(entry.slot))malformed("face style tiles");
