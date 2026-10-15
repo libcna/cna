@@ -366,6 +366,7 @@ namespace
             "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureCubeContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.SoundEffectContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.SongContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.VideoContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteFontContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.CompiledEffectContent",
         };

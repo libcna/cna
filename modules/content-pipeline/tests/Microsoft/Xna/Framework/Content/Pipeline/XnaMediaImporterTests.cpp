@@ -22,6 +22,7 @@
 
 #include "CNA/TestSupport/OracleCorpus.hpp"
 #include "CNA/Content/Pipeline/BuildTimeMediaDecoder.hpp"
+#include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
@@ -29,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Mp3Importer.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/VideoProcessor.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentCompiler.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/VideoContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/VideoImporter.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/WavImporter.hpp"
@@ -546,6 +548,46 @@ TEST(XnaVideoProcessor, DefaultsAndProcessMatchXna)
               "throws ArgumentNullException: Value cannot be null.\r\nParameter name: input");
     ProcessorContext context;
     EXPECT_THROW((void)processor.Process(nullptr, context), System::ArgumentNullException);
+}
+
+TEST(XnaVideoPipeline, AProcessedVideoBecomesAnXnbWithEveryMetadataField)
+{
+    if (!MediaAvailable())
+    {
+        GTEST_SKIP() << "this build has no media decoder";
+    }
+    ImporterContext importing;
+    Xna::WmvImporter importer;
+    const std::shared_ptr<Xna::VideoContent> input =
+        importer.Import(Fixture("wmv_320x240_30fps_stereo.wmv").string(), importing);
+    Processors::VideoProcessor processor;
+    processor.setVideoSoundtrackTypeProperty(VideoSoundtrackType::Dialog);
+    ProcessorContext processing;
+    const std::shared_ptr<Xna::VideoContent> output = processor.Process(input, processing);
+
+    Xna::Serialization::Compiler::ContentCompiler compiler;
+    Xna::Serialization::Compiler::CompileOptions options;
+    options.assetName = "video";
+    const CNA::Internal::Xnb::XnbAssetWriteResult written =
+        compiler.Compile<Xna::VideoContent>(output, options);
+    const std::filesystem::path path = std::filesystem::temp_directory_path() /
+        ("cna-video-writer-" + std::to_string(reinterpret_cast<std::uintptr_t>(&written)) + ".xnb");
+    {
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(written.bytes.data()),
+                     static_cast<std::streamsize>(written.bytes.size()));
+    }
+    const CNA::Internal::Xnb::XnbCanonicalAsset asset =
+        CNA::Internal::Xnb::DecodeXnbCanonicalAsset(path);
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+    const auto& video = std::get<CNA::Internal::Xnb::XnbVideoData>(asset.value);
+    EXPECT_EQ(video.mediaPath, "wmv_320x240_30fps_stereo.wmv");
+    EXPECT_EQ(video.durationMs, static_cast<std::int32_t>(output->getDurationProperty().getTotalMillisecondsProperty()));
+    EXPECT_EQ(video.width, 320);
+    EXPECT_EQ(video.height, 240);
+    EXPECT_NEAR(video.framesPerSecond, 30.0f, 0.01f);
+    EXPECT_EQ(video.soundtrackType, static_cast<std::int32_t>(VideoSoundtrackType::Dialog));
 }
 
 TEST(XnaVideoProcessor, TheEnumValuesMatchXna)

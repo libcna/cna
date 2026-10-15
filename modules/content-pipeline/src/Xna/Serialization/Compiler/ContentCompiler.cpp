@@ -5,6 +5,7 @@
 
 #include "CNA/Content/Pipeline/XnaModelBridge.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInWriters.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
@@ -18,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/CompiledEffectContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/SpriteFontContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/VideoContent.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
@@ -554,6 +556,20 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                 Xnb::XnbSongData data;
                 data.mediaPath = song.FileName();
                 data.durationMs = static_cast<std::int32_t>(song.Duration().getTotalMillisecondsProperty());
+                return data;
+            });
+        addCanonical.template operator()<VideoContent, Xnb::XnbVideoData>(
+            [](const VideoContent& video) {
+                Xnb::XnbVideoData data;
+                data.mediaPath = CNA::Internal::PathToUtf8(
+                    CNA::Internal::PathFromUtf8(video.getFilenameProperty()).filename());
+                data.durationMs = static_cast<std::int32_t>(
+                    video.getDurationProperty().getTotalMillisecondsProperty());
+                data.width = video.getWidthProperty();
+                data.height = video.getHeightProperty();
+                data.framesPerSecond = video.getFramesPerSecondProperty();
+                data.soundtrackType = static_cast<std::int32_t>(
+                    video.getVideoSoundtrackTypeProperty());
                 return data;
             });
         addCanonical.template operator()<Processors::SpriteFontContent, Xnb::XnbSpriteFontData>(
