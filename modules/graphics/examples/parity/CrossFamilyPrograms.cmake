@@ -50,7 +50,7 @@ function(cna_register_cross_family_programs)
         cmake_parse_arguments(F "SOURCE_ROOT_WORKING_DIRECTORY" "NAME;SOURCE;TIMEOUT" "FAMILIES"
             ${ARGN})
         if(P_FAMILY IN_LIST F_FAMILIES)
-            set(_cna_cf_source "${CMAKE_SOURCE_DIR}/modules/${F_SOURCE}")
+            set(_cna_cf_source "${CNA_SOURCE_DIR}/modules/${F_SOURCE}")
             if(NOT EXISTS "${_cna_cf_source}")
                 message(FATAL_ERROR
                     "cna_register_cross_family_programs: ${F_NAME} names a missing source "
@@ -60,7 +60,7 @@ function(cna_register_cross_family_programs)
             set(_cna_cf_target "cna_crossfamily_${_cna_cf_lower}_${_cna_cf_suffix}")
             cmake_language(CALL ${P_BUILDER} ${_cna_cf_target} "${_cna_cf_source}")
             target_include_directories(${_cna_cf_target} PRIVATE
-                "${CNA_CROSS_FAMILY_PROGRAM_DIR}/.." "${CMAKE_SOURCE_DIR}/tests/support")
+                "${CNA_CROSS_FAMILY_PROGRAM_DIR}/.." "${CNA_SOURCE_DIR}/tests/support")
             set(_cna_cf_timeout "${F_TIMEOUT}")
             if(NOT _cna_cf_timeout)
                 set(_cna_cf_timeout 60)
@@ -71,7 +71,7 @@ function(cna_register_cross_family_programs)
                 ENVIRONMENT ${P_ENVIRONMENT})
             if(F_SOURCE_ROOT_WORKING_DIRECTORY)
                 # The golden-image programs read examples/golden/*.png relative to the checkout.
-                list(APPEND _cna_cf_args WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+                list(APPEND _cna_cf_args WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
             endif()
             cna_register_renderer_test(${_cna_cf_args})
             if(P_FAIL_REGULAR_EXPRESSION)

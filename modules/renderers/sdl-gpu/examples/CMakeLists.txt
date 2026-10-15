@@ -89,7 +89,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         # nor an accidental WineD3D/non-D3D12 fallback can count as Windows evidence.
         if(CMAKE_CROSSCOMPILING AND WIN32)
             set_target_properties(${target} PROPERTIES CROSSCOMPILING_EMULATOR
-                "${CMAKE_COMMAND};-E;env;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d-headless.sh")
+                "${CMAKE_COMMAND};-E;env;bash;${CNA_SOURCE_DIR}/scripts/run-wine-vkd3d-headless.sh")
         endif()
     endmacro()
 
@@ -162,7 +162,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # SamplerState values are unrestricted. Keep the cache bounded and prove an evicted state can
     # be recreated after the recording that used its old handle has submitted.
     cna_sdlgpu_test(cna_test_sdlgpu_sampler_cache
-        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuSamplerCacheTests.cpp)
+        ${CNA_SOURCE_DIR}/modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuSamplerCacheTests.cpp)
     target_link_libraries(cna_test_sdlgpu_sampler_cache PRIVATE gtest_main)
     cna_register_renderer_test(NAME SdlGpu_SamplerCacheLifetime
         COMMAND cna_test_sdlgpu_sampler_cache
@@ -204,14 +204,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # cna_sdlgpu_test supplies the isolated dummy/Xvfb D3D12 environment.
     if(CNA_SDL_GPU_COMPILED_EFFECTS)
         cna_sdlgpu_test(cna_test_sdlgpu_compiled_effect_runtime
-            ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectTests.cpp)
+            ${CNA_SOURCE_DIR}/modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectTests.cpp)
         target_link_libraries(cna_test_sdlgpu_compiled_effect_runtime PRIVATE gtest_main)
         target_include_directories(cna_test_sdlgpu_compiled_effect_runtime PRIVATE
-            "${CMAKE_SOURCE_DIR}/tests/support")
+            "${CNA_SOURCE_DIR}/tests/support")
         cna_register_renderer_test(NAME SdlGpu_CompiledEffectRuntime
             COMMAND cna_test_sdlgpu_compiled_effect_runtime
             TIMEOUT 600 LABELS "SdlGpu;Parity"
-            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}"
             ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
         set_tests_properties(SdlGpu_CompiledEffectRuntime PROPERTIES
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
@@ -244,7 +244,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             depthstencilstate_stencil_twosided
             graphicsdevice_reference_stencil)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${state_oracle_test}
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${state_oracle_test}_test.cpp)
+                        ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${state_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${state_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_oracle_${state_oracle_test}
             TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -261,7 +261,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             skinnedeffect_preferperpixellighting
             skinnedeffect_weightspervertex)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_${stock_effect_oracle_test}
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${stock_effect_oracle_test}_test.cpp)
+                        ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${stock_effect_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${stock_effect_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_${stock_effect_oracle_test}
             TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -281,7 +281,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             model_two_meshes_effects
             model_skinned_animation_playback)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${model_oracle_test}
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${model_oracle_test}_test.cpp)
+                        ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${model_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${model_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_oracle_${model_oracle_test}
             TIMEOUT 300 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -309,7 +309,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             vertexbuffer_indexbuffer_getdata
             vertexbuffer_setdata)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_${buffer_draw_oracle_test}
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${buffer_draw_oracle_test}_test.cpp)
+                        ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${buffer_draw_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${buffer_draw_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_${buffer_draw_oracle_test}
             TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -423,7 +423,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # SDLGPU-72: compile the exact EasyGL public constructor/property/Rgba64 readback oracle under
     # SDL GPU. The renderer-neutral HDR half-tint fixture is in the central SDLGPU-81 registry.
     cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_rendertarget2d_properties
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_properties_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_properties_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_rendertarget2d_properties
         COMMAND cna_test_sdlgpu_easygl_oracle_rendertarget2d_properties
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -443,12 +443,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_rendertargetcube_formats
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_rendertargetcube_properties
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_properties_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_properties_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_rendertargetcube_properties
         COMMAND cna_test_sdlgpu_easygl_oracle_rendertargetcube_properties
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_rendertargetcube_depthformat
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_depthformat_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_depthformat_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_rendertargetcube_depthformat
         COMMAND cna_test_sdlgpu_easygl_oracle_rendertargetcube_depthformat
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -500,7 +500,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # plans/plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
     cna_sdlgpu_test(cna_test_sdlgpu_mrt sdlgpu_mrt_test.cpp)
     target_include_directories(cna_test_sdlgpu_mrt PRIVATE
-        "${CMAKE_SOURCE_DIR}/tests/support")
+        "${CNA_SOURCE_DIR}/tests/support")
     cna_register_renderer_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     # Pixels alone were always correct; a color-attachment render-pass
@@ -542,7 +542,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             texture3d_partial_box_readback
             texture3d_mip)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${texture3d_oracle_test}
-            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texture3d_oracle_test}_test.cpp)
+            ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texture3d_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${texture3d_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_oracle_${texture3d_oracle_test}
             TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -590,11 +590,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # defect (STREETW-0001/0004/0005) and its two witnesses use nothing but the XNA API, so they
     # are compiled again here rather than copied.
     cna_sdlgpu_test(cna_test_sdlgpu_instanced_pbr3d
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_instanced_pbr3d_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_instanced_pbr3d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_InstancedPbr3D COMMAND cna_test_sdlgpu_instanced_pbr3d
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     cna_sdlgpu_test(cna_test_sdlgpu_instanced_stock_families
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_instanced_stock_families_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_instanced_stock_families_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_InstancedStockFamilies
         COMMAND cna_test_sdlgpu_instanced_stock_families
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -604,12 +604,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # two renderer-agnostic witnesses, compiled again: BasicEffect's unlit COLOR0 (the retired Vulkan renderer's VULKAN-197) and
     # EnvironmentMapEffect's COLOR1 amount (VULKAN-196, already clamped here since SDLGPU-81).
     cna_sdlgpu_test(cna_test_sdlgpu_basiceffect_diffuse_color_clamp
-        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp)
+        ${CNA_SOURCE_DIR}/modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_BasicEffect_DiffuseColorClamp
         COMMAND cna_test_sdlgpu_basiceffect_diffuse_color_clamp
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
     cna_sdlgpu_test(cna_test_sdlgpu_environmentmapeffect_amount_clamp
-        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp)
+        ${CNA_SOURCE_DIR}/modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_EnvironmentMapEffect_AmountClamp
         COMMAND cna_test_sdlgpu_environmentmapeffect_amount_clamp
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -631,14 +631,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
 
     # GLTF-213: exact PBR sRGB transfer witnesses on rigid and identity-skinned pipelines.
     cna_sdlgpu_test(cna_test_sdlgpu_pbr_srgb_transfer
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Pbr_SrgbTransfer COMMAND cna_test_sdlgpu_pbr_srgb_transfer
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
     # GLTF-343/344: KHR_materials_ior and factor-only KHR_materials_specular must alter both
     # dielectric Schlick endpoints on rigid and identity-skinned PBR pipelines.
     cna_sdlgpu_test(cna_test_sdlgpu_pbr_fresnel_factors
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Pbr_FresnelFactors COMMAND cna_test_sdlgpu_pbr_fresnel_factors
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
@@ -753,7 +753,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             presentation_parameters
             real_window_resize)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${presentation_oracle_test}
-            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${presentation_oracle_test}_test.cpp)
+            ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${presentation_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${presentation_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_oracle_${presentation_oracle_test}
             TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -770,7 +770,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             packed16_format
             surface_format_throws)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${texture2d_format_oracle_test}
-            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texture2d_format_oracle_test}_test.cpp)
+            ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texture2d_format_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${texture2d_format_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_oracle_${texture2d_format_oracle_test}
             TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -813,7 +813,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             texturecube_mip
             texturecube_content_load)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${texturecube_oracle_test}
-            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texturecube_oracle_test}_test.cpp)
+            ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texturecube_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${texturecube_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_oracle_${texturecube_oracle_test}
             TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -847,7 +847,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # The renderer-neutral WEBGPU-144 fixture already discriminates DDS and XNB content-loader
     # policy, four authored mip levels and real SpriteBatch sampling. Reuse it unchanged here.
     cna_sdlgpu_test(cna_test_sdlgpu_compressed_content
-        ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_compressed_content_test.cpp)
+        ${CNA_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_compressed_content_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_CompressedContent
         COMMAND cna_test_sdlgpu_compressed_content
         TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -1400,7 +1400,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
 
     foreach(viewport_oracle_test IN ITEMS viewport_state viewport_subregion scissor)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${viewport_oracle_test}
-                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${viewport_oracle_test}_test.cpp)
+                        ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${viewport_oracle_test}_test.cpp)
         cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${viewport_oracle_test}
             COMMAND cna_test_sdlgpu_easygl_oracle_${viewport_oracle_test}
             TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
