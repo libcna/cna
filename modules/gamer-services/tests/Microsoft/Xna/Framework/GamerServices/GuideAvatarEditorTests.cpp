@@ -7,6 +7,7 @@
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "../../../../../src/Internal/Guide/GuideSystem.hpp"
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
+#include "../../../../../src/Internal/Guide/GuidePortraits.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/AvatarEditor.hpp"
 #include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
@@ -548,4 +549,67 @@ TEST_F(GuideAvatarEditorDeviceTest, AMouseReachesEveryPartOfTheEditor) {
     Mouse({stage.X + 80.0f, stage.Y}, true, 120);
     Mouse({stage.X + 80.0f, stage.Y}, false, 120);
     EXPECT_NE(View().first, yaw);
+}
+
+TEST(GuideAvatarEditorFramingTest, TheHandsViewFramesTheStandingHand) {
+    // The Gloves, Wristwear and Rings views aim at the right hand as the avatar stands (2026-10-15:
+    // they aimed at the bind pose's wrist, wider and higher than a hanging hand, which left the hand
+    // at the edge of the stage). Framed as the editor's stage frames it -- its usable band between
+    // the header and the footer, the avatar turned to face the camera at the editor's starting
+    // turn -- the standing avatar's hand, wrist to fingertip, lies well inside that band.
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Quaternion;
+    using Microsoft::Xna::Framework::Vector3;
+    using Microsoft::Xna::Framework::Vector4;
+    const auto& library = Avatars::clipLibrary();
+    const auto& parents = Avatars::parentBones();
+    const auto stand = std::ranges::find(library.clips, std::string("Stand0"), &Avatars::AvatarClip::name);
+    ASSERT_NE(stand, library.clips.end());
+    constexpr float StartingTurn = 3.44159265f;  // GuideAvatarEditor's yaw_
+    constexpr float UsableTop = 0.17f, UsableBottom = 0.91f, Aspect = 0.89f;
+    for (std::uint8_t body = 0; body < 2; ++body) {
+        Avatars::AvatarDescriptor descriptor;
+        descriptor.catalogVersion = Avatars::BaseCatalogVersion;
+        descriptor.bodyType = body;
+        descriptor.heightMillimeters = body ? 1800 : 1680;
+        descriptor.items = {1, 20, 40, 60, 0, 0};
+        const auto model = Avatars::buildAvatarModel(descriptor);
+        // The catalog's joints, and the same in XNA coordinates (AvatarRenderer.BindPose).
+        std::vector<Vector3> joints(Avatars::BoneCount), xnaJoints(Avatars::BoneCount);
+        for (int bone = 0; bone < Avatars::BoneCount; ++bone) {
+            joints[bone] = (parents[bone] < 0 ? Vector3::Zero : joints[static_cast<std::size_t>(parents[bone])]) +
+                           model->bindTranslations[bone];
+            xnaJoints[bone] = Vector3(-joints[bone].X, joints[bone].Y, -joints[bone].Z);
+        }
+        std::array<Quaternion, Avatars::BoneCount> rotations;
+        Vector3 root;
+        Avatars::sampleClip(*stand, 0.0, rotations, root);
+        std::array<Matrix, Avatars::BoneCount> world;
+        for (int bone = 0; bone < Avatars::BoneCount; ++bone) {
+            const Matrix local = Matrix::CreateFromQuaternion(rotations[bone]) *
+                                 Matrix::CreateTranslation(bone == 0 ? root : model->bindTranslations[bone]);
+            world[bone] = parents[bone] < 0 ? local : local * world[parents[bone]];
+        }
+        // GuideAvatarEditor::render's camera for a view.
+        const float usable = UsableBottom - UsableTop;
+        auto shot = Ui::shotFor(Ui::Framing::Hands, xnaJoints, model->height, Aspect * usable);
+        shot.offset.X = 0.0f;
+        shot.offset = shot.offset / usable;
+        const float perUnit = 2.0f * shot.offset.Length() * std::tan(shot.fov / 2.0f);
+        shot.target.Y += ((UsableTop + UsableBottom) / 2.0f - 0.5f) * perUnit;
+        const Matrix view = Matrix::CreateLookAt(shot.target + shot.offset, shot.target, Vector3::Up);
+        const Matrix projection = Matrix::CreatePerspectiveFieldOfView(shot.fov, Aspect, 0.05f, 30.0f);
+        // Catalog space to XNA space, then the editor's turn.
+        const Matrix placement = Matrix::CreateScale(-1.0f, 1.0f, -1.0f) * Matrix::CreateRotationY(StartingTurn);
+        for (const char* bone : {"WristRight", "FingerMiddle3Right"}) {
+            const auto p = Vector3::Transform(world[static_cast<std::size_t>(Avatars::boneIndex(bone))].getTranslationProperty(),
+                                              placement);
+            const auto clip = Vector4::Transform(p, view * projection);
+            // Screen position, 0 at the top of the stage and 1 at the bottom.
+            const float x = clip.X / clip.W, y = 0.5f - 0.5f * clip.Y / clip.W;
+            EXPECT_LT(std::fabs(x), 0.6f) << bone << " body " << int(body);
+            EXPECT_GT(y, UsableTop + 0.05f) << bone << " body " << int(body);
+            EXPECT_LT(y, UsableBottom - 0.05f) << bone << " body " << int(body);
+        }
+    }
 }

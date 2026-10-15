@@ -1558,13 +1558,13 @@
   },
   {
    "name": "top_hoodie.female.glb",
-   "sha256": "65d74fc1dcde70a516007ebff5ce6132b7c8161635380c0282fd65bb6572e6b2",
-   "size": 203920
+   "sha256": "90819ca62e28fd9fd47b62216599843bf7f83e7c0b5f471347eddeb14a5e42e3",
+   "size": 205508
   },
   {
    "name": "top_hoodie.male.glb",
-   "sha256": "376216beca4bb6f6531cdbe35af2187bb9727e12dfbdf832146d83def4194194",
-   "size": 203908
+   "sha256": "fe4c56fcc8bb6ad1dbfc50bea99a27369aa701b9534224a93eaa127a68c8660b",
+   "size": 205500
   },
   {
    "name": "top_jacket.female.glb",
@@ -1608,12 +1608,12 @@
   },
   {
    "name": "top_polo.female.glb",
-   "sha256": "7414d353755701e2e8766e2b47133978f53016de2a8d6137c0df1f4b0ce49745",
+   "sha256": "ef0c22a920f2c6148d4ad59103d6e1d660ffaf7df4d155e294638d287881e4c7",
    "size": 172772
   },
   {
    "name": "top_polo.male.glb",
-   "sha256": "a8ccae3b10df7fc09d0c7d4af58a64bcb279d9dffde87b8ac2391bb414369b90",
+   "sha256": "e7c3fb339db351cf815887072f52f357fe468b3e679ed82415d5a9a719e26cff",
    "size": 172760
   },
   {
@@ -1628,13 +1628,13 @@
   },
   {
    "name": "top_puffervest.female.glb",
-   "sha256": "3382f94c5f499bd1837a47bb99434449abfe1164fdd607df15e66a35bb15aa58",
-   "size": 245920
+   "sha256": "178f99d6de71f3073615a77c50338a34024f0ea0b0136fb548920498d14a91e2",
+   "size": 242352
   },
   {
    "name": "top_puffervest.male.glb",
-   "sha256": "39e037c35de3e7295032814239d5791f76a10ee0c88faeb33243be9c5cb30435",
-   "size": 245904
+   "sha256": "2f3620beba6b5d1c91503c2fab794d7b14b22d49ba2c8187f8ddeefb499a71a7",
+   "size": 242336
   },
   {
    "name": "top_quarterzip.female.glb",
@@ -1728,13 +1728,13 @@
   },
   {
    "name": "top_vest.female.glb",
-   "sha256": "cf05025fc3c98b9904b437411f2a8ec30cbe0102288eb33a22826d4ddb7d5b6f",
-   "size": 235316
+   "sha256": "b6d71a1a3ff9bf8c0c379334fc1d44d6e86b19c7624cbedb6f78727e51573b79",
+   "size": 231748
   },
   {
    "name": "top_vest.male.glb",
-   "sha256": "c9bf06124055f1ccdadf4c06f0bfc2214459d2aabb5ec66dfdec30226fe96821",
-   "size": 235308
+   "sha256": "c32ff619b2bca7f354ebd6322903b0fa29d7817e7c591c76922f68422f445799",
+   "size": 231740
   },
   {
    "name": "top_vneck.female.glb",

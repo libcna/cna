@@ -861,7 +861,7 @@ def top(body_type, style):
         else:
             main.append(_collar(body_type, 0.016, spread=0.55, garment=0.017, fit=0.45))
             for k in range(2):
-                trim.append(_button(body_type, 9, 0.022, -0.028 - 0.03 * k, tw))
+                trim.append(_button_at(body_type, 0.017, row_y(body_type, 9) - 0.028 - 0.03 * k, tw, fit=0.45))
         parts.append((main, "top", "knit", (1.0, 1.0, 1.0)))
     elif style == "top_longsleeve":
         main.append(shell(body_type, 0.017, (1, 10), lower=0.03, flare=0.028, folds=hang_folds(body_type, 22, 0.006)))
@@ -881,9 +881,14 @@ def top(body_type, style):
         pocket_y = row_y(body_type, 3) - 0.035
         main.append(kangaroo_pocket(body_type, 0.028, pocket_y, 0.10, 0.105, 0.078, tw))
         for sx in (0.024, -0.024):
-            p = front_point(body_type, 10, 0.03, sx)
-            trim.append(tube([add(p, (0.0, 0.0, 0.012)), add(p, (0.0, -0.05, 0.024)), add(p, (sx * 0.2, -0.10, 0.03))],
-                             [0.0035] * 3, 6, tw, round_end=True))
+            # Drawstrings from the neck band down the front of the hoodie as it hangs.
+            top_y = row_y(body_type, 10) - 0.004
+            path = []
+            for k in range(6):
+                y = top_y - 0.11 * k / 5
+                x = sx * (1.0 - 0.15 * k / 5)
+                path.append((x, y, front_z(body_type, 0.028, x, y, 0.65) + 0.004))
+            trim.append(tube(path, [0.0035] * len(path), 6, tw, round_end=True))
         parts.append((main, "top", "fleece", (1.0, 1.0, 1.0)))
     elif style == "top_tank":
         # The body up to the chest, then a scooped neckline and armholes, with flat straps.
@@ -997,12 +1002,6 @@ def _scoop(body_type, row, inflate):
         p = front_point(body_type, row, inflate, x)
         loop.append((p[0], p[1] + 0.012 - 0.04 * math.cos(a), p[2] + 0.002))
     return tube(loop, [0.006] * len(loop), 6, tw)
-
-
-def _button(body_type, row, inflate, dy, weights):
-    p = front_point(body_type, row, inflate, 0.0)
-    return ellipsoid(add(p, (0.0, dy, 0.003)), ((1, 0, 0), (0, 1, 0), (0, 0, 1)), (0.006, 0.006, 0.0025), 8, 5,
-                     lambda q, v, u: weights(q))
 
 
 def _button_at(body_type, inflate, y, weights, fit=0.45, x=0.0):
@@ -1371,12 +1370,14 @@ def revised_top(body_type, style):
         if style in ("top_blazer", "top_vest"):
             inner.append(_collar(body_type, 0.016, spread=0.8, garment=0.017))
             for side, _ in rig.SIDES:
-                inner.append(sleeve(body_type, side, 0.015, 0.95, cuff=0.007) if style == "top_vest" else Mesh())
+                # Under a waistcoat the shirt's sleeve comes out of its armhole, below the shoulder.
+                inner.append(sleeve(body_type, side, 0.015, 0.95, cuff=0.007, start=0.05, seam=False) if style == "top_vest"
+                             else Mesh())
         else:
             inner.append(neck_rib(body_type, 0.009, 0.008, drop=0.004))
             if style == "top_puffervest":
                 for side, _ in rig.SIDES:
-                    inner.append(sleeve(body_type, side, 0.015, 0.95, cuff=0.008))
+                    inner.append(sleeve(body_type, side, 0.015, 0.95, cuff=0.008, start=0.05, seam=False))
         inner_texture = "canvas" if style in ("top_blazer", "top_vest") else "knit"
         inner_parts = [(inner, "accessory", inner_texture, (1.0, 1.0, 1.0))]
         if style == "top_cardigan":
@@ -1419,8 +1420,10 @@ def revised_top(body_type, style):
             # Waistcoat or puffer vest: sleeveless over the inner shirt.
             puffy = style == "top_puffervest"
             inflate = 0.040 if puffy else 0.024
-            main.append(_open_shell(body_type, inflate, (1, 9), gap=0.10, lower=0.03 if puffy else 0.05, flare=0.010))
-            main.append(_hem(body_type, inflate, 0.010, 0.03 if puffy else 0.05, 0.006))
+            # Over the shoulders like a jacket, with an armhole round each arm.
+            main.append(_open_shell(body_type, inflate, (1, 10), gap=0.10 if puffy else 0.36, lower=0.03 if puffy else 0.05,
+                                    flare=0.010))
+            main.append(_hem(body_type, inflate, 0.010, 0.03 if puffy else 0.05, 0.006, fit=0.7))
             if puffy:
                 main.append(_collar_stand(body_type, inflate))
                 trim.append(placket(body_type, inflate, 9, row_y(body_type, 1) - 0.03, 0.003, tw, fit=0.7))
