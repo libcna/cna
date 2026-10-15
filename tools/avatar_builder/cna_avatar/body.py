@@ -33,16 +33,16 @@ LEG = {
                (1.00, 0.035, 0.036)],
 }
 # Catalog v3's limbs: the base sections scaled up, sturdier in the same shapes.
-_LIMB = {"male": 1.17, "female": 1.14}
+_LIMB = {"male": 1.24, "female": 1.17}
 ARM = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in ARM.items()}
 LEG = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in LEG.items()}
-NECK = {"male": 0.056, "female": 0.049}
+NECK = {"male": 0.064, "female": 0.054}
 FOOT = {"male": (0.034, 0.032, 0.090), "female": (0.031, 0.030, 0.082)}
 # Palm (half-width, half-thickness, length) and finger/thumb radii, before the hand scale. The
 # palm is as wide as the finger row it carries (v3: the fingers used to fuse into a mitten on a palm
 # twice their span).
-HAND = {"male": dict(palm=(0.0375, 0.0135, 0.080), finger=0.0086, thumb=0.0098),
-        "female": dict(palm=(0.0345, 0.0122, 0.074), finger=0.0079, thumb=0.0090)}
+HAND = {"male": dict(palm=(0.0390, 0.0145, 0.078), finger=0.0098, thumb=0.0110),
+        "female": dict(palm=(0.0355, 0.0130, 0.072), finger=0.0088, thumb=0.0100)}
 
 # Torso sections from the crotch to the base of the neck: (anchor, offset, half-width, half-depth,
 # centre z, squareness exponent). Anchors are rig heights.
@@ -68,14 +68,21 @@ def anchors(body):
             "upper": p["back_upper"], "collar": p["collar"][1], "neck": p["neck"]}
 
 
-# Catalog v3: a slightly broader, deeper chest and belly.
+# Revision 2: a broader, deeper torso for the adult figure (male shoulders and chest most).
 TORSO_SCALE = (1.04, 1.03)
+TORSO_WIDEN = {"male": (1.0, 1.06, 1.12), "female": (1.0, 1.03, 1.06)}  # hips, waist, chest/shoulders
+
+
+def _widen(body, anchor):
+    hips, waist, chest = TORSO_WIDEN[body]
+    return {"hip": hips, "lower": waist, "waist": waist, "upper": chest, "collar": chest, "neck": 1.0}[anchor]
 
 
 def torso_sections(body, inflate=0.0, scale=1.0):
     """(centre, half-width, half-depth, squareness) rows, crotch to neck."""
     a = anchors(body)
-    return [((0.0, a[anchor] + offset, z), rx * TORSO_SCALE[0] * scale + inflate, rz * TORSO_SCALE[1] * scale + inflate, n)
+    return [((0.0, a[anchor] + offset, z), rx * TORSO_SCALE[0] * _widen(body, anchor) * scale + inflate,
+             rz * TORSO_SCALE[1] * (1.0 + 0.5 * (_widen(body, anchor) - 1.0)) * scale + inflate, n)
             for anchor, offset, rx, rz, z, n in TORSO[body]]
 
 

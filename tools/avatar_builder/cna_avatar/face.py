@@ -556,9 +556,9 @@ def atlas():
 
 FEATURES = {
     # name: (x centre, y centre, width, height) in head-local metres on the face (male scale)
-    "eyeLeft": (0.054, -0.004, 0.080, 0.074), "eyeRight": (-0.054, -0.004, 0.080, 0.074),
+    "eyeLeft": (0.054, -0.004, 0.076, 0.070), "eyeRight": (-0.054, -0.004, 0.076, 0.070),
     "eyebrowLeft": (0.056, 0.056, 0.080, 0.044), "eyebrowRight": (-0.056, 0.056, 0.080, 0.044),
-    "mouth": (0.0, -0.084, 0.136, 0.080),
+    "mouth": (0.0, -0.078, 0.136, 0.080),
 }
 # Makeup patches: eye shadow on a raised, larger copy of the eye patch (the shadow tiles place the
 # eye opening at y = -0.26), eyeliner on the eye patch itself, blush on the cheeks, lips on the mouth.

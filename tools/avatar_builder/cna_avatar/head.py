@@ -15,16 +15,17 @@ from .mesh import Mesh, tube
 I = rig.INDEX
 HEAD = lambda *args: {I["Head"]: 1.0}
 
-# The male head in head-local metres; the female head is the same shape at 0.96 of its size
-# with a slightly narrower jaw. Catalog v3: larger and rounder, a softer jaw.
-RADII = (0.150, 0.172, 0.152)
-SCALE = {"male": 1.30, "female": 1.24}
-JAW = {"male": 0.15, "female": 0.19}
+# The male head in head-local metres; the female head is the same shape a little smaller with a
+# narrower jaw. Revision 2: an adult face -- a rounded cranium over cheekbones, a jaw that tapers
+# to a defined chin.
+RADII = (0.148, 0.172, 0.150)
+SCALE = {"male": 1.12, "female": 1.08}
+JAW = {"male": 0.27, "female": 0.32}
 
 # Feature anchors in head-local metres (male scale): eye centres, brows, nose, mouth, ears.
 EYE = (0.054, -0.004)           # |x|, y on the face surface
 BROW = (0.056, 0.056)
-MOUTH_Y = -0.082
+MOUTH_Y = -0.076
 NOSE_ROOT_Y, NOSE_TIP_Y = -0.006, -0.028
 EAR = (-0.012, -0.014)          # y, z of the ear centre; x is on the side surface
 
@@ -50,21 +51,30 @@ def _base_point(body, theta, phi):
     s = SCALE[body]
     d = (math.sin(theta) * math.sin(phi), math.cos(theta), math.sin(theta) * math.cos(phi))
     x, y, z = d[0] * RADII[0], d[1] * RADII[1], d[2] * RADII[2]
-    # An egg: the jaw narrows below the eyes, the chin stays forward.
-    below = smoothstep(0.05, -1.0, d[1])
-    x *= 1.0 - JAW[body] * below
-    z *= 1.0 - 0.06 * below
-    # A flatter face plane between the brow and the chin.
-    front = smoothstep(0.35, 0.95, d[2]) * (1.0 - smoothstep(0.45, 0.85, abs(d[1])))
-    z *= 1.0 - 0.07 * front
-    # Soft cheeks, brow, chin and the back of the skull, pushed along the direction.
+    front = max(d[2], 0.0)
+    below = smoothstep(-0.10, -0.95, d[1])
+    # The jaw tapers toward a defined chin; at the jaw's angle, under the ears, it stays wider.
+    x *= 1.0 - JAW[body] * below * (0.45 + 0.55 * smoothstep(-0.2, 0.8, d[2]))
+    # The lower face is shallower at its sides than the cranium: the jaw recedes from the chin.
+    z *= 1.0 - 0.14 * below * smoothstep(0.15, 0.75, abs(d[0]))
+    # The underside of the jaw rises behind the chin, so the jaw line reads and the neck has room.
+    y *= 1.0 - 0.10 * smoothstep(-0.55, -1.0, d[1]) * smoothstep(0.55, -0.2, d[2])
+    # The face comes forward of the cranium between the brow and the chin; the sides of the
+    # cranium flatten a little above the ears.
+    face = smoothstep(0.25, 0.9, d[2]) * (1.0 - smoothstep(0.55, 0.95, d[1]))
+    z *= 1.0 + 0.04 * face
+    x *= 1.0 - 0.035 * smoothstep(0.55, 0.95, abs(d[0])) * smoothstep(-0.2, 0.4, d[1])
+    # Seen from above the head is an egg, narrower at the face: the nose leads the cheeks.
+    x *= 1.0 - 0.10 * smoothstep(0.15, 1.0, d[2]) * (1.0 - smoothstep(0.55, 1.0, d[1]))
+    # Cheekbones, brow, chin and soft eye sockets, pushed along the direction.
     push = 0.0
     for side in (1.0, -1.0):
-        push += 0.015 * _bump(d, (side * 0.55, -0.30, 0.78), 6.0, 36.0)
-        push -= 0.0040 * _bump(d, (side * EYE[0] / 0.13, EYE[1] / 0.13, 1.0), 3.0, 17.0)
-        push += 0.0030 * _bump(d, (side * 0.36, 0.34, 0.86), 4.0, 22.0)
-    push += 0.009 * _bump(d, (0.0, -0.78, 0.62), 4.0, 28.0)
-    push += 0.008 * _bump(d, (0.0, -0.10, -1.0), 10.0, 60.0)
+        push += 0.011 * _bump(d, (side * 0.62, -0.06, 0.78), 5.0, 30.0)
+        push -= 0.0045 * _bump(d, (side * EYE[0] / 0.13, EYE[1] / 0.13, 1.0), 3.0, 16.0)
+        push += 0.0035 * _bump(d, (side * 0.36, 0.34, 0.86), 4.0, 22.0)
+    push += 0.012 * _bump(d, (0.0, -0.78, 0.63), 4.0, 24.0)
+    push += 0.004 * _bump(d, (0.0, 0.30, 0.95), 6.0, 30.0)
+    push -= 0.006 * _bump(d, (0.0, -0.10, -1.0), 10.0, 70.0)
     x, y, z = x + d[0] * push, y + d[1] * push, z + d[2] * push
     return (x * s, y * s, z * s)
 
@@ -135,19 +145,20 @@ def head_mesh(body, segments=64, rings=46):
 
 
 def nose_mesh(body):
-    """A small rounded button nose: a short soft bridge into a ball tip with little wings."""
+    """A rounded nose: a soft bridge from between the eyes into a ball tip that leads the face, with
+    small wings either side."""
     s = SCALE[body]
-    root, _, _ = front_point(body, 0.0, NOSE_ROOT_Y * s, -0.006 * s)
+    root, _, _ = front_point(body, 0.0, NOSE_ROOT_Y * s, -0.004 * s)
     tip_base, _, _ = front_point(body, 0.0, NOSE_TIP_Y * s)
-    tip = add(tip_base, (0.0, 0.002 * s, 0.009 * s))
+    tip = add(tip_base, (0.0, 0.002 * s, 0.016 * s))
     m = Mesh()
-    path = [lerp(root, tip, k / 4.0) for k in range(5)]
-    radii = [0.0075 * s, 0.0082 * s, 0.0096 * s, 0.0122 * s, 0.0145 * s]
+    path = [lerp(root, tip, k / 5.0) for k in range(6)]
+    radii = [0.0068 * s, 0.0074 * s, 0.0082 * s, 0.0096 * s, 0.0114 * s, 0.0128 * s]
     m.append(tube(path, radii, 14, HEAD, round_end=True))
-    m.append(_blob(add(tip, (0.0, -0.001 * s, -0.002 * s)), (0.0158 * s, 0.0132 * s, 0.0126 * s), 14, 10))
+    m.append(_blob(add(tip, (0.0, -0.0015 * s, -0.004 * s)), (0.0142 * s, 0.0120 * s, 0.0120 * s), 14, 10))
     for side in (1.0, -1.0):
-        wing = add(tip_base, (side * 0.0142 * s, 0.0003 * s, 0.001 * s))
-        m.append(_blob(wing, (0.0094 * s, 0.0082 * s, 0.0090 * s)))
+        wing = add(tip_base, (side * 0.0128 * s, -0.0004 * s, 0.002 * s))
+        m.append(_blob(wing, (0.0082 * s, 0.0074 * s, 0.0086 * s)))
     return m
 
 
@@ -184,15 +195,22 @@ def ear_meshes(body, shape="round"):
         back = (0.0, math.sin(tilt), math.cos(tilt))
         out = normalize((side, 0.0, -0.30 - 0.5 * (e["out"] - 0.30)))
         centre_pt = add(surface, mul(out, (0.004 + 0.004 * (e["out"] - 0.30)) * s))
-        m.append(ellipsoid(centre_pt, (out, up, back), (e["d"] * s, e["h"] * s, e["w"] * s), 14, 12, HEAD))
-        rim = []
+        # The shell, its rolled rim (helix) along the back and top, and a softer inner ridge
+        # (antihelix): a filled ear, not a hoop.
+        m.append(ellipsoid(centre_pt, (out, up, back), (e["d"] * 1.25 * s, e["h"] * s, e["w"] * s), 14, 12, HEAD))
+        rim, ridge = [], []
         rh, rw = e["rim"]
         for k in range(18):
             a = math.pi * (0.08 + 1.72 * k / 17)
             h = rh * s * math.cos(a) + 0.002 * s
             w = rw * s * math.sin(a)
-            rim.append(add(add(add(centre_pt, mul(up, h)), mul(back, -w)), mul(out, 0.0065 * s)))
+            rim.append(add(add(add(centre_pt, mul(up, h)), mul(back, -w)), mul(out, 0.0050 * s)))
+        for k in range(10):
+            a = math.pi * (0.30 + 1.05 * k / 9)
+            ridge.append(add(add(add(centre_pt, mul(up, rh * 0.55 * s * math.cos(a) + 0.003 * s)),
+                                 mul(back, -rw * 0.55 * s * math.sin(a))), mul(out, 0.0058 * s)))
         m.append(tube(rim, [e["rim_r"] * s] * len(rim), 8, HEAD, round_end=True))
+        m.append(tube(ridge, [e["rim_r"] * 0.62 * s] * len(ridge), 6, HEAD, round_end=True))
         if e["lobe"] > 0.0:
             lobe = add(add(centre_pt, mul(up, -(e["h"] * 0.82 + e["lobe"] * 0.5) * s)), mul(back, 0.002 * s))
             m.append(ellipsoid(lobe, (out, up, back), (e["d"] * 0.8 * s, (0.006 + e["lobe"] * 0.6) * s, 0.0085 * s), 12, 8, HEAD))
