@@ -296,10 +296,10 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
         const char* digest;
     };
     const Case cases[] = {
-        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "1a227a245b0b3ec10745756ac555bc47d66116010644c9cfeb1e9183f7420a7e"},
+        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "e4e1c2fc1b9284c509052727f6983f40274c167de18a4ca79d74468a1266d294"},
         {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "ddc02f4284fb4896f417e36f149e7296af58f8b257f0e78022dcacf27d422dfd"},
         {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "df45f7d6021f35a9aaf7a10e3e31093cb89a40129814178028c9cb40fba535cb"},
-        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "157c80076319dde61add4d598e0e40c76ecf851ac01989a5f414d18a861f315d"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "c08376c060d30dac54af08c03c186f88796615cff599aff1d01bd89e6dad1f6e"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;

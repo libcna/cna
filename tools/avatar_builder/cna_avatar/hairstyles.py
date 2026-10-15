@@ -231,9 +231,16 @@ def _parted(body, ob, s, start, end, count, seed, hem, thickness, line_, gravity
     main = Flow(gravity=gravity, lift=0.0015 * s, cling_below=0.0, avoid_face=line_, behind=90.0,
                 until=lambda p: p[1] < level(p))
     front = Flow(gravity=4.0, lift=0.0015 * s, stop=lambda phi: line_(phi) * 1.02, body=False, avoid_face=line_)
-    flows = _per_root(roots, {"front": front, "*": main})
-    lengths = _per_root(roots, {"front": front_length * s, "*": 1.2 * s})
-    return shell(ob, roots, lengths, flows, thickness, seed, **kw)
+    # The mass hangs from both sides of the part and round the crown; the fan at the front of the
+    # part, which ends at the hairline, is a little shell of its own (in one loop with the long
+    # strands, the clumps between a short and a long strand would be slivers, and gape).
+    hang = [r for r in roots if r[2] != "front"]
+    locks = shell(ob, hang, 1.2 * s, main, thickness, seed, closed=False, **kw)
+    fan = [r for r in roots if r[2] == "front"]
+    if len(fan) >= 2 and front_length > 0.03:
+        fan_kw = {k: v for k, v in kw.items() if k not in ("wave", "bumps", "curl", "flick")}
+        locks.append(shell(ob, fan, front_length * s, front, thickness, seed + 1, closed=False, **fan_kw))
+    return locks
 
 
 def _crown(body, ob, s, theta, phi, count, seed, line_, thickness, scale=1.0, gravity=4.0, **kw):

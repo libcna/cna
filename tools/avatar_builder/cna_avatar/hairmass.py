@@ -473,8 +473,11 @@ def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=3, samples=24, 
             col_n.append(n)
         outward.append(col_n)
     # Waves, curl and flick bend the whole sheet together.
+    # Every offset is continuous across the clumps: a wave's phase is set per strand and blended
+    # across each clump, and a flick swings a clump's middle, never its edges (each edge is a strand
+    # the neighbouring clump shares, so offsets that differ there would crack the hair open).
     for c, (k, f, t_end, scale) in enumerate(columns):
-        phase = 0.6 * jitter(seed, k, 31)
+        phase = 0.6 * (jitter(seed, k, 31) + (jitter(seed, nxt(k), 31) - jitter(seed, k, 31)) * f)
         metres = lengths_m[k] + (lengths_m[nxt(k)] - lengths_m[k]) * f
         for i, tn in enumerate(ts):
             t = tn * t_end
@@ -488,7 +491,7 @@ def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=3, samples=24, 
                 offset = add(offset, mul(outward[c][i], -curl * smoothstep(0.65, 1.0, t) ** 2))
             if flick:
                 side = normalize(cross(outward[c][i], along[c][i]))
-                offset = add(offset, mul(side, flick * (1.0 if k % 2 else -1.0) * smoothstep(0.75, 1.0, t) ** 2))
+                offset = add(offset, mul(side, flick * (1.0 if k % 2 else -1.0) * math.sin(PI * f) * smoothstep(0.75, 1.0, t) ** 2))
             if offset != (0.0, 0.0, 0.0):
                 inner[c][i] = add(inner[c][i], offset)
     # The slab: outer rows root to tip, a rounded tip, inner rows back to the root (every other
