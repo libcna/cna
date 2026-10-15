@@ -1712,9 +1712,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::RequireStockEffectInputs(
         const CNA::Internal::Renderers::GpuDrawParams& p) const
     {
-        // Compiled (authentic XNA) effects and CNA's PBR extension carry their own input
-        // contracts; the legacy empty-declaration route has no elements to check against.
-        if (p.compiledEffectRuntime != nullptr || p.pbr) return;
+        // Compiled (authentic XNA) effects, a custom ShaderEffect (its source decides which inputs it reads, and SpriteBatch-style
+        // sources name a colour input a 3D mesh never supplies) and CNA's PBR extension carry their own input contracts; the
+        // legacy empty-declaration route has no elements to check against.
+        if (p.compiledEffectRuntime != nullptr || p.customEffectRenderer != nullptr || p.customEffectRequested || p.pbr) return;
         // The streams the draw reads, the same way FillVertexStreamBindings resolves them: the
         // SetVertexBuffers list when it describes the bound buffer, otherwise that buffer alone.
         // Every stream counts, per-instance ones included: Direct3D 9 validates the shader's
