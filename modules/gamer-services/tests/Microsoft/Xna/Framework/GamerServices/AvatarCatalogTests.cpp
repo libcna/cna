@@ -296,10 +296,10 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
         const char* digest;
     };
     const Case cases[] = {
-        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "a599b88836e52944c8e2db4500f4788502f741f4b097689a975832638c7fc136"},
-        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "cd593cef1e0eea4099895870fcb8790fc95a9dc6aeea1edea1818905893e717c"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "dc3baa222c40d624eb0ce61ae7d5c7f635e27b7deafdc972fe9d0b8b0bbe3210"},
-        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "42e921569fcf5c8de79856fe17beb1296208aa8c3481e807236d3330cddd837a"},
+        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "9a8d5fbb7d043727e1c0c96eaeb2d1677719bcfd809528431b13e454108bf1f4"},
+        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "63a3569b382f3ce49a2b6d406ad30bf92b8161d7844f73dbf0bca2480ab05839"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "f1d3c50afdf0d8446f118bbea6ce6f0b4bd95aae3eef812a575e9b36982b2230"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "21adba064086314409c5cd6f80087a322a0156050f9ba8e101cd37dbf861a204"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;

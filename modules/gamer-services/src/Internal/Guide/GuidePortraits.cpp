@@ -63,16 +63,17 @@ Shot shotFor(Framing framing,const std::vector<Xna::Vector3>& joints,float heigh
     }
     case Framing::Hands: {
         // The avatar's right hand and wrist (the avatar is turned to face the camera, so its right
-        // is on +X).
+        // is on +X). Standing, the arms hang closer to the body and lower than in the bind pose the
+        // joints are read from, and the hand reaches well below the wrist.
         constexpr std::size_t WristRight=36;
         const float wrist=y(WristRight,hips-0.10f);
-        auto shot=span(wrist-0.16f,wrist+0.08f,0.30f,0.45f,0.25f,0.10f);
-        if(WristRight<joints.size())shot.target.X=-joints[WristRight].X*0.95f;
+        auto shot=span(wrist-0.24f,wrist+0.04f,0.30f,0.45f,0.25f,0.10f);
+        if(WristRight<joints.size())shot.target.X=-joints[WristRight].X*0.82f;
         return shot;
     }
     case Framing::Upper: return span(hips-0.08f,head+0.22f,0.9f,0.45f,0.22f,0.05f);
     case Framing::Lower: return span(y(Ankle,0.08f)-0.06f,hips+0.14f,0.55f,0.45f,0.25f,0.10f);
-    case Framing::Feet: return span(-0.03f,y(Knee,height*0.28f)*0.7f,0.50f,0.45f,0.35f,0.45f);
+    case Framing::Feet: return span(-0.05f,y(Knee,height*0.28f)*0.55f,0.50f,0.45f,0.35f,0.30f);
     }
     return {};
 }

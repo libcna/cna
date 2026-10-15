@@ -373,18 +373,25 @@ def hand(body, side, sign, inflate=0.0, finger_segments=3, wrist_start=None):
     for i in range(steps + 1):
         t = i / steps
         c = add(wrist, mul(along, start + t * (end - start)))
-        # Width reaches the palm's quickly; thickness slowly, so the forearm's rounded end stays inside.
-        width = wrist_w + (pw - wrist_w) * smoothstep(0.0, 0.38, t) + inflate
+        # The back of the hand widens from the wrist to the knuckles, its sides a little full;
+        # thickness grows slowly, so the forearm's rounded end stays inside.
+        width = wrist_w + (pw - wrist_w) * (0.55 * smoothstep(0.0, 0.30, t) + 0.45 * smoothstep(0.15, 0.95, t)) + inflate
         thick = (wrist_d + (pt * (1.0 + 0.16 * math.sin(math.pi * min(t * 1.3, 1.0))) - wrist_d) * smoothstep(0.0, 0.62, t)) \
             * (1.0 - 0.12 * smoothstep(0.8, 1.0, t)) + inflate
         ring = []
         for s in range(24):
             a = 2.0 * math.pi * s / 24
             ca, sa = math.cos(a), math.sin(a)
-            # A rounded box: thick right out to the edges, where the outer fingers leave it.
-            x = width * math.copysign(abs(ca) ** 0.6, ca)
-            y = thick * math.copysign(abs(sa) ** 0.6, sa)
-            ring.append(add(c, add(mul(spread, x), mul(normal, y))))
+            # A soft rounded box, the back of the hand domed and the palm a little cupped; the
+            # little-finger edge thinner than the thumb's.
+            x = width * math.copysign(abs(ca) ** 0.78, ca)
+            edge = 1.0 - 0.18 * max(0.0, -ca * sign) * smoothstep(0.3, 0.9, t)
+            y = thick * edge * math.copysign(abs(sa) ** 0.72, sa)
+            if sa * 1.0 > 0.0:
+                y *= 1.0 + 0.10 * (1.0 - abs(ca)) * smoothstep(0.2, 0.8, t)
+            # The knuckles lie on an arc, the middle finger's furthest out.
+            reach = 0.012 * k * (1.0 - (x / max(width, 1e-6)) ** 2) * smoothstep(0.55, 1.0, t)
+            ring.append(add(add(c, add(mul(spread, x), mul(normal, y))), mul(along, reach)))
         rows.append(ring)
     # Close both ends with shallow domes.
     def dome(ring, direction, depth):
@@ -394,7 +401,7 @@ def hand(body, side, sign, inflate=0.0, finger_segments=3, wrist_start=None):
         centre = mul(centre, 1.0 / len(ring))
         return [[add(add(centre, mul(sub(q, centre), math.cos(math.pi * 0.5 * j / 3) + 1e-4)),
                      mul(direction, depth * math.sin(math.pi * 0.5 * j / 3))) for q in ring] for j in (1, 2, 3)]
-    rows = list(reversed(dome(rows[0], mul(along, -1.0), 0.006 * k))) + rows + dome(rows[-1], along, 0.007 * k)
+    rows = list(reversed(dome(rows[0], mul(along, -1.0), 0.006 * k))) + rows + dome(rows[-1], along, 0.011 * k)
     palm = Mesh().grid(rows, lambda q, v, u: {wr: 1.0})
     m.append(palm)
     # Thumb pad (thenar), toward the thumb side of the palm.

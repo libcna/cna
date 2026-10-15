@@ -318,7 +318,7 @@ def curl_bumps(seed, size, strength):
     return field
 
 
-def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=4, samples=24, rows=16, groove=0.62, tip=0.35,
+def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=3, samples=24, rows=14, groove=0.62, tip=0.35,
           tip_round=0.75, wave=None, curl=0.0, flick=0.0, length_jitter=0.10, thick_jitter=0.18, closed=True,
           axis=None, bumps=None, paths=None, notch=0.06):
     """A slab of hair over clumps between consecutive roots.

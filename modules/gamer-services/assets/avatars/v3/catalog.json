@@ -38,17 +38,17 @@
  "assets": [
   {
    "name": "animations.glb",
-   "sha256": "c2584d89738b6a34c6fae31647ce6f17361a171adad93738f2761bf6bbad550e",
+   "sha256": "32781108dff2a0a1288e2f963665d2046f4080eb3b35760c5cb13859dcf30b58",
    "size": 714916
   },
   {
    "name": "body.female.glb",
-   "sha256": "c543ffccaa7c2f69d03b405c3d441ce6c9689ca88f32b5398f9dc26e777f570f",
-   "size": 800508
+   "sha256": "f9d7fb0181b13bd9cc500e9e466eb9b20ec2e50e7d74be61dededd17026093eb",
+   "size": 800532
   },
   {
    "name": "body.male.glb",
-   "sha256": "18be7ca3f50e91c51a0ad98376adb421ec94c0bde92dec4d0719267a9e9da7c0",
+   "sha256": "cbd1a8459a861674a54ddf402eb6b26478a856d69b743a5deb26eb77a92205eb",
    "size": 800652
   },
   {
@@ -608,43 +608,43 @@
   },
   {
    "name": "gloves_fingerless.female.glb",
-   "sha256": "5566aaf69ed6f81dc2419c8b600612f3431ab3bdf096613c7514dde37c8d967b",
-   "size": 110556
+   "sha256": "7a158a50a0c94f6308dc10413700451d553139b5fc567dcbdb040b31ad79614e",
+   "size": 110580
   },
   {
    "name": "gloves_fingerless.male.glb",
-   "sha256": "c32562d16e9051a85ad86c4e173f01e2567fc6b226ca0729feea6c7841297f58",
+   "sha256": "386f16dcf200b93de0dc5c14dabf05677cfdf86a8492c93cc379d49d3326821d",
    "size": 110588
   },
   {
    "name": "gloves_formal.female.glb",
-   "sha256": "df12d1645ddce6835f0d538d5f8be49eb4742e7e2adb8509f9eec9bf3302e4ac",
+   "sha256": "37e3d70f5b453a8c1c35a9e7894fce6257f48a883f7b1e4dd34a0375e703b041",
    "size": 158080
   },
   {
    "name": "gloves_formal.male.glb",
-   "sha256": "2e47f0ac31fe581a1455406e013e6c8556c8bfbc88a0d9c3359b728861845904",
+   "sha256": "a810c6da9faa557c2ead6eace7cb90ab40e10947955475e90d927dae5b1fa543",
    "size": 158116
   },
   {
    "name": "gloves_knit.female.glb",
-   "sha256": "71ac8209e8b072c639b912bf4263e28205ceec62153f39c5afec9835aa866b51",
+   "sha256": "9e6cb5bdc400e64869f7fdde00941423631d035fe7333b9b61856f25f5ca534f",
    "size": 156616
   },
   {
    "name": "gloves_knit.male.glb",
-   "sha256": "bf6e3251b6578964cacd2e8a82c6790ca42a3af873b006b2c800d2a890cd499c",
-   "size": 156648
+   "sha256": "72d4b95c4712d2515950b6b12a7ba431996ccf2f7ff974a85879f2da93385265",
+   "size": 156672
   },
   {
    "name": "gloves_work.female.glb",
-   "sha256": "7757bff17140f6fb9455e13c26b6877f3eccec0a7b8e21e780a4ca2a02d18f0c",
+   "sha256": "e278c90d35aa2ab36dbeda4157c0b08b9613dcfe3957d90879a4f6b29a191e7d",
    "size": 156604
   },
   {
    "name": "gloves_work.male.glb",
-   "sha256": "165a6b3d08d584dff0005e79c51be169002adca3aa5adc1b22642b703b6553db",
-   "size": 156636
+   "sha256": "a23b636ba4031310ffcb904805f4befa20f618a5471b55fb0f1f47ce7650c589",
+   "size": 156660
   },
   {
    "name": "hair_afro.female.glb",
