@@ -12,7 +12,7 @@ import math
 from . import head
 from .hair import cap, band_cap, hairline, weights_for, jitter
 from .hairmass import (Obstacles, Flow, shell, crown_roots, part_roots, hairline_roots, surface_dir, march, resample,
-                       curl_bumps, strand_paths, ringlets)
+                       curl_bumps, strand_paths, ringlets, keep_apart)
 from .mathutil import add, sub, mul, normalize, smoothstep, lerp, length, cross, dot, clamp
 from .mesh import Mesh, ellipsoid, tube
 
@@ -228,14 +228,20 @@ def _parted(body, ob, s, start, end, count, seed, hem, thickness, line_, gravity
     fan at the front of the part sweeps aside at the hairline."""
     roots = part_roots(ob, start, end, count, seed=seed, front_fan=0.08)
     level = lambda p: ob.c[1] + (hem - front_hem * max(0.0, normalize(sub(p, ob.c))[2])) * s
-    main = Flow(gravity=gravity, lift=0.0015 * s, cling_below=0.0, avoid_face=line_, behind=90.0,
-                until=lambda p: p[1] < level(p))
     front = Flow(gravity=4.0, lift=0.0015 * s, stop=lambda phi: line_(phi) * 1.02, body=False, avoid_face=line_)
     # The mass hangs from both sides of the part and round the crown; the fan at the front of the
     # part, which ends at the hairline, is a little shell of its own (in one loop with the long
     # strands, the clumps between a short and a long strand would be slivers, and gape).
     hang = [r for r in roots if r[2] != "front"]
-    locks = shell(ob, hang, 1.2 * s, main, thickness, seed, closed=False, **kw)
+    # The strands from the front of the part all meet the face's edge; each keeps a little further
+    # from it than the strand in front of it, so they come down beside the face in the order they
+    # started (hair from the front of the part in front) instead of crossing, which folds the sheet.
+    rank = lambda k: min(k, len(hang) - 1 - k)
+    main = [Flow(gravity=gravity, lift=0.0015 * s, cling_below=0.0, avoid_face=line_, behind=90.0,
+                 until=lambda p: p[1] < level(p), face_margin=0.04 * min(rank(k), 4)) for k in range(len(hang))]
+    paths = keep_apart(ob, strand_paths(ob, hang, 1.2 * s, lambda k: main[k], seed,
+                                        length_jitter=kw.get("length_jitter", 0.10)), 0.004 * s)
+    locks = shell(ob, hang, 1.2 * s, lambda k: main[k], thickness, seed, closed=False, paths=paths, **kw)
     fan = [r for r in roots if r[2] == "front"]
     if len(fan) >= 2 and front_length > 0.03:
         fan_kw = {k: v for k, v in kw.items() if k not in ("wave", "bumps", "curl", "flick")}

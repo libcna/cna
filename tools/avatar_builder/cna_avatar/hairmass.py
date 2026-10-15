@@ -114,15 +114,17 @@ class Flow:
     strand lies, and an optional stop at a hairline (theta as a function of phi)."""
 
     def __init__(self, gravity=12.0, attract=None, attract_gain=0.0, lift=0.0015, stop=None, step=0.004, rise=0.0,
-                 body=True, sweep=None, until=None, cling=1.0, cling_below=0.05, avoid_face=None, behind=0.0):
+                 body=True, sweep=None, until=None, cling=1.0, cling_below=0.05, avoid_face=None, behind=0.0,
+                 face_margin=0.0):
         self.gravity, self.attract, self.attract_gain = gravity, attract, attract_gain
         self.lift, self.stop, self.step, self.rise, self.body = lift, stop, step, rise, body
         self.sweep, self.until = sweep, until
         # Hair lies on the head where the head is under it (its direction from the head centre
         # above cling_below); below that it hangs free.
         self.cling, self.cling_below = cling, cling_below
-        # A front hairline (theta of phi): strands that would fall over the face turn aside round it.
-        self.avoid_face = avoid_face
+        # A front hairline (theta of phi): strands that would fall over the face turn aside round it,
+        # face_margin further back (in the forward share of their direction from the head centre).
+        self.avoid_face, self.face_margin = avoid_face, face_margin
         # How firmly hair reaching the shoulders is turned to fall behind them (long hair rests on
         # the back, not on top of the shoulders or over the arms).
         self.behind = behind
@@ -161,9 +163,13 @@ def march(ob, root, direction, length_, flow):
         if flow.avoid_face is not None:
             theta, phi = ob.head_angles(p)
             v = normalize(sub(p, ob.c))
-            near = smoothstep(0.15, 0.45, v[2]) * smoothstep(flow.avoid_face(phi) - 0.06, flow.avoid_face(phi) + 0.02, theta)
+            m = flow.face_margin
+            near = smoothstep(0.15 - m, 0.45 - m, v[2]) * smoothstep(flow.avoid_face(phi) - 0.06, flow.avoid_face(phi) + 0.02, theta)
             if near > 0.0:
-                aside = normalize((1.0 if v[0] >= 0.0 else -1.0, 0.0, -0.35))
+                # Aside and back along the head, not out from it (that leaves a lock standing off
+                # the cheek).
+                aside = (1.0 if v[0] >= 0.0 else -1.0, 0.0, -0.35)
+                aside = normalize(sub(aside, mul(v, max(0.0, dot(aside, v)))))
                 turn = add(turn, mul(sub(aside, d), min(1.0, 60.0 * near * step)))
         if flow.behind and p[1] < ob.collar_y + 0.09 and abs(p[0]) > ob.neck_r * 0.8:
             reach = smoothstep(ob.collar_y + 0.09, ob.collar_y - 0.02, p[1]) * smoothstep(ob.neck_r * 0.8, ob.neck_r * 2.0, abs(p[0]))
@@ -327,6 +333,76 @@ def strand_paths(ob, roots, lengths, flow, seed, samples=24, length_jitter=0.10)
         l *= 1.0 + 0.5 * length_jitter * jitter(seed, k, 11)
         paths.append(resample(march(ob, root[0], root[1], l, fl), samples))
     return paths
+
+
+def keep_apart(ob, paths, spacing):
+    """An open shell's strands kept in order round the body where they hang (below the head centre):
+    working out from the middle strand toward each end, a strand that has come within `spacing`
+    metres of its inner neighbour, or crossed it, is turned round the vertical axis to lie `spacing`
+    beyond it. Strands crowded together beside the face otherwise cross, and the sheet between them
+    folds into a crumpled strip."""
+    n = len(paths)
+    if n < 3:
+        return paths
+    mid = n // 2
+    cx, cz = ob.c[0], ob.c[2]
+    angle = lambda q: math.atan2(q[0] - cx, -(q[2] - cz))      # 0 behind the head, + toward its left
+    hang = lambda q: smoothstep(ob.c[1] + 0.02, ob.c[1] - 0.02, q[1])
+    # Which way round each half runs (from the middle toward its end), from where the ends hang.
+    sides = []
+    for end in (0, n - 1):
+        total = sum(math.remainder(angle(paths[end][i]) - angle(paths[mid][i]), 2.0 * PI) * hang(paths[end][i])
+                    for i in range(len(paths[end])))
+        sides.append(1.0 if total >= 0.0 else -1.0)
+
+    def turned(q, turn):
+        # Round the vertical axis, keeping its height over the head where it lies on the head (a
+        # strand moved toward the face follows the jaw in rather than standing off it).
+        c, s_ = math.cos(turn), math.sin(turn)
+        dx, dz = q[0] - cx, -(q[2] - cz)
+        p = (cx + dx * c + dz * s_, q[1], cz - (-dx * s_ + dz * c))
+        before, after = sub(q, ob.c), sub(p, ob.c)
+        r = length(after)
+        if r < 1e-9:
+            return p
+        d_before, d_after = mul(before, 1.0 / length(before)), mul(after, 1.0 / r)
+        near = smoothstep(0.03 * ob.s, 0.0, length(before) - ob.radius(d_before))
+        return add(ob.c, mul(d_after, r + near * (ob.radius(d_after) - ob.radius(d_before))))
+
+    def enforce(out):
+        moved = [[0.0] * len(p) for p in out]
+        for i in range(len(out[0])):
+            for sign, ks, step in ((sides[0], range(mid - 1, -1, -1), 1), (sides[1], range(mid + 1, n), -1)):
+                for k in ks:
+                    q, ref = out[k][i], out[k + step][i]
+                    w = hang(q)
+                    if w <= 0.0:
+                        continue
+                    r = max(math.hypot(q[0] - cx, q[2] - cz), 1e-3)
+                    a_ref = angle(ref)
+                    a = a_ref + math.remainder(angle(q) - a_ref, 2.0 * PI)
+                    need = a_ref + sign * spacing / r
+                    if sign * (a - need) < 0.0:
+                        turn = (need - a) * w
+                        out[k][i] = turned(q, turn)
+                        moved[k][i] = turn
+        return moved
+
+    out = [list(p) for p in paths]
+    moved = enforce(out)
+    # The turns blended along each strand, so a strand bends smoothly where it was moved, then
+    # order checked once more.
+    out = [list(p) for p in paths]
+    for k in range(n):
+        turns = moved[k]
+        for _ in range(3):
+            turns = [0.25 * turns[max(i - 1, 0)] + 0.5 * turns[i] + 0.25 * turns[min(i + 1, len(turns) - 1)]
+                     for i in range(len(turns))]
+        for i, turn in enumerate(turns):
+            if turn:
+                out[k][i] = turned(out[k][i], turn)
+    enforce(out)
+    return out
 
 
 def ringlets(ob, paths, seed, start=0.12, radius=0.010, pitch=0.034, thick=0.0065, turns_per_step=5, which=None,
