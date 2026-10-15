@@ -230,7 +230,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         [[nodiscard]] std::filesystem::path ResolveIgnoringCase(const std::filesystem::path& path)
         {
             std::error_code error;
+            // On a case-folding filesystem (Windows) the project's spelling "exists" whatever the
+            // directory entry is called, and the build keys its outputs by the name on disk, so
+            // the real spelling is read from the directory there every time.
+#if !defined(_WIN32)
             if (std::filesystem::exists(path, error) && !error) { return path; }
+#endif
             std::filesystem::path resolved = path.root_path();
             if (resolved.empty()) { resolved = std::filesystem::path("."); }
             for (const std::filesystem::path& part : path.relative_path())
@@ -238,11 +243,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
                 if (part.empty() || part == ".") { continue; }
                 if (part == "..") { resolved = resolved / part; continue; }
                 const std::filesystem::path candidate = resolved / part;
+#if !defined(_WIN32)
                 if (std::filesystem::exists(candidate, error) && !error)
                 {
                     resolved = candidate;
                     continue;
                 }
+#endif
                 const std::string wanted = CNA::Internal::PathToUtf8(part);
                 std::filesystem::path match;
                 std::size_t matches = 0u;

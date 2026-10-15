@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "CNA/Content/Pipeline/XmaEncoderService.hpp"
+#include "CNA/Internal/HostProcess.hpp"
 #include <iterator>
 #include "Microsoft/Xna/Framework/Content/Pipeline/Audio/AudioContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -160,6 +161,22 @@ namespace
 #endif
     }
 
+    /**
+     * @brief Whether the interpreter the stubs need can be started on this host.
+     *
+     * Without it (a Windows without Python, Wine) the seam under test cannot be reached, and the
+     * failure would be the host's, not the service's.
+     */
+    [[nodiscard]] bool StubLauncherRuns(const Build::ExternalXmaEncoderOptions& options)
+    {
+#if defined(_WIN32)
+        return CNA::Internal::RunHostProcess(options.launcher, {"--version"}).started;
+#else
+        (void)options;
+        return true;
+#endif
+    }
+
     /** @brief The stub that behaves. */
     const char* kGoodStub = R"(#!/usr/bin/env python3
 import struct, sys
@@ -250,6 +267,8 @@ TEST(XmaEncoderService, AnAttachedEncoderIsDrivenByTheDocumentedContract)
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", kGoodStub);
     UseStubLauncher(options);
+    if (!StubLauncherRuns(options))
+        GTEST_SKIP() << "the stub encoders need a Python interpreter this host cannot start";
     const std::shared_ptr<const Build::XmaEncoderService> encoder =
         Build::MakeExternalXmaEncoder(options);
     ASSERT_TRUE(encoder->Available()) << encoder->UnavailableReason();
@@ -279,6 +298,8 @@ TEST(XmaEncoderService, AnEncoderThatWritesSomethingElseIsRefused)
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", kWrongStub);
     UseStubLauncher(options);
+    if (!StubLauncherRuns(options))
+        GTEST_SKIP() << "the stub encoders need a Python interpreter this host cannot start";
     const AttachedEncoder attached(Build::MakeExternalXmaEncoder(options));
 
     Audio::AudioContent audio(WriteWav(scratch.Path(), "tone.wav"), Audio::AudioFileType::Wav);
@@ -301,6 +322,8 @@ TEST(XmaEncoderService, AnEncoderThatFailsIsReportedInItsOwnWords)
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", kFailingStub);
     UseStubLauncher(options);
+    if (!StubLauncherRuns(options))
+        GTEST_SKIP() << "the stub encoders need a Python interpreter this host cannot start";
     const AttachedEncoder attached(Build::MakeExternalXmaEncoder(options));
 
     Audio::AudioContent audio(WriteWav(scratch.Path(), "tone.wav"), Audio::AudioFileType::Wav);
@@ -340,6 +363,8 @@ sys.stderr.write('quality=' + quality + '\n')
     Build::ExternalXmaEncoderOptions options;
     options.executable = WriteStubEncoder(scratch.Path(), "stub-encoder", stub);
     UseStubLauncher(options);
+    if (!StubLauncherRuns(options))
+        GTEST_SKIP() << "the stub encoders need a Python interpreter this host cannot start";
     options.arguments = {"--quality", "{quality}", "--in", "{input}", "--out", "{output}"};
     const std::shared_ptr<const Build::XmaEncoderService> encoder =
         Build::MakeExternalXmaEncoder(options);

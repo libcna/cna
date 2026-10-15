@@ -256,7 +256,10 @@ TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResol
     texture.SetMetadata("Processor", "TextureProcessor");
     task.setSourceAssetsProperty({texture});
     ASSERT_TRUE(task.Execute()) << (task.ErrorsEXT().empty() ? "" : task.ErrorsEXT().front());
-    ASSERT_EQ(task.getOutputContentFilesProperty().size(), 1u);
+    std::string log;
+    for (const std::string& line : task.WarningsEXT()) log += "warning: " + line + "\n";
+    for (const std::string& line : task.MessagesEXT()) log += line + "\n";
+    ASSERT_EQ(task.getOutputContentFilesProperty().size(), 1u) << log;
     // The item's own `Name` decides the output, so the project's spelling survives the resolution.
     EXPECT_NE(task.getOutputContentFilesProperty().front().getItemSpecProperty().find("tree.xnb"),
               std::string::npos)

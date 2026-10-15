@@ -274,6 +274,10 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     {
         return;
     }
+    // A host without the interpreter (a Windows without Python, Wine) cannot run the comparison
+    // at all; that is the host's answer, not the builds'.
+    if (std::system(CompareCommand("--version").c_str()) != 0)
+        GTEST_SKIP() << "no Python interpreter for compare.py on this host";
     const std::string command = CompareCommand(compare.string() + " --xna " + xnaSide.string() +
                                                " --cna " + publishRoot.string());
     const int status = std::system(command.c_str());

@@ -129,7 +129,9 @@ TEST(LargeModelScalingTest, TheGeneratedScalesDescribeTheSizesTheyClaim)
     // silently produced the same model twice would make every scaling conclusion below vacuous.
     const CNA::Internal::HostProcessResult listed =
         CNA::Internal::RunHostProcess(Python(), {"tools/xnb/generate_large_model.py", "--list"});
-    ASSERT_TRUE(listed.started) << listed.failure;
+    if (!listed.started)
+        GTEST_SKIP() << "the Python interpreter for the fixture generator cannot be started: "
+                     << listed.failure;
     ASSERT_EQ(listed.exitCode, 0) << listed.standardError;
 
     // small, medium and large, each roughly an order of magnitude apart.
@@ -159,7 +161,12 @@ TEST(LargeModelScalingTest, ALargeModelBuildsToXnbAndItsOutputScalesWithItsInput
 
     // `large` is deliberately not built here: it is a ten-second build, and this is a correctness
     // test rather than the benchmark. `docs/content-pipeline-benchmark.md` records all three.
-    ASSERT_TRUE(GenerateAndBuild("small", scratch.Path(), "xnb", small, failure)) << failure;
+    if (!GenerateAndBuild("small", scratch.Path(), "xnb", small, failure))
+    {
+        if (failure.find("could not be run") != std::string::npos)
+            GTEST_SKIP() << failure;  // no Python interpreter for the fixture generator here
+        FAIL() << failure;
+    }
     ASSERT_TRUE(GenerateAndBuild("medium", scratch.Path(), "xnb", medium, failure)) << failure;
 
     ASSERT_GT(small.outputBytes, 0u);
@@ -191,6 +198,11 @@ TEST(LargeModelScalingTest, TheSameLargeSourceAlsoBuildsToCnb)
     ScratchDirectory scratch("cnb");
     Measurement medium;
     std::string failure;
-    ASSERT_TRUE(GenerateAndBuild("medium", scratch.Path(), "cnb", medium, failure)) << failure;
+    if (!GenerateAndBuild("medium", scratch.Path(), "cnb", medium, failure))
+    {
+        if (failure.find("could not be run") != std::string::npos)
+            GTEST_SKIP() << failure;  // no Python interpreter for the fixture generator here
+        FAIL() << failure;
+    }
     EXPECT_GT(medium.outputBytes, 0u);
 }

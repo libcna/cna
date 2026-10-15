@@ -1200,9 +1200,11 @@ TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
 
     // The scale is exact in both, and it is what the near-zero entries carry.
     EXPECT_FLOAT_EQ(transform.M11, 2.54f);
-    // cos(pi/2) in double, times that scale. Written as the literal XNA's own file holds.
-    EXPECT_EQ(transform.M22, 1.555301383669155e-16f);
-    EXPECT_EQ(transform.M33, 1.555301383669155e-16f);
+    // cos(pi/2) in double, times that scale. Written as the literal XNA's own file holds; the
+    // tolerance is a few ulps of the double cos, which differs between C runtimes (msvcrt answers
+    // 1.55525e-16) and is still ten orders of magnitude from a float cos.
+    EXPECT_NEAR(transform.M22, 1.555301383669155e-16f, 1e-19f);
+    EXPECT_NEAR(transform.M33, 1.555301383669155e-16f, 1e-19f);
     // And not what a float `cos` answers, which is where this used to be.
     EXPECT_NE(transform.M22, 2.54f * std::cos(1.5707964f));
 }

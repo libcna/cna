@@ -470,6 +470,11 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_fake_effect_compiler
         tools/content/fake_effect_compiler.cpp
     )
+    # The tests copy this program to directories of their own (a path with spaces, a non-ASCII
+    # path) and run it there, so on MinGW it must not look for libstdc++-6.dll next to itself.
+    if(MINGW)
+        target_link_options(cna_fake_effect_compiler PRIVATE -static-libgcc -static-libstdc++)
+    endif()
 endif()
 
 # plans/plan_windows_portability_closeout.md WINCLOSE-0003: reports its own argument vector, so
@@ -480,6 +485,9 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_argv_echo
         tools/content/argv_echo.cpp
     )
+    if(MINGW)
+        target_link_options(cna_argv_echo PRIVATE -static-libgcc -static-libstdc++)
+    endif()
 endif()
 
 # GS-003/004: isolated deterministic backend and real-service client probe.

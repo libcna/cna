@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/VertexTypeRegistryEXT.hpp"
 
-#include <map>
+#include <unordered_map>
 #include <mutex>
 #include <typeindex>
 
@@ -29,9 +29,12 @@ namespace CNA::Graphics
             return mutex;
         }
 
-        std::map<std::type_index, VertexDeclaration>& Registry()
+        // Hashed, not ordered: libstdc++ orders std::type_index by pointer for types local to a
+        // translation unit and by name otherwise where type-info names are not merged (MinGW), which
+        // is not a strict weak ordering, so a std::map can miss a key it holds.
+        std::unordered_map<std::type_index, VertexDeclaration>& Registry()
         {
-            static std::map<std::type_index, VertexDeclaration> registry;
+            static std::unordered_map<std::type_index, VertexDeclaration> registry;
             return registry;
         }
 

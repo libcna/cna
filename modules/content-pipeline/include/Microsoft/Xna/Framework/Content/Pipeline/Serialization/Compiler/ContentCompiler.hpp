@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <unordered_map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -216,8 +217,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         {
             CNA::Internal::Xnb::XnbTypeWriterRegistry registry;
             std::vector<std::shared_ptr<CNA::Internal::Xnb::XnbTypeWriterBase>> workers;
-            std::map<std::type_index, const XnaTypeWorker*> byCarrier;
-            std::map<std::type_index, const XnaTypeWorker*> byType;
+            // Hashed, not ordered: libstdc++'s std::type_index ordering mixes pointer order (for
+            // types local to a translation unit, such as a game's writers in an anonymous
+            // namespace) with name order on targets without merged type-info names (MinGW), which
+            // is not a strict weak ordering, and a std::map then fails to find a key it holds.
+            std::unordered_map<std::type_index, const XnaTypeWorker*> byCarrier;
+            std::unordered_map<std::type_index, const XnaTypeWorker*> byType;
             std::map<const ContentTypeWriterBase*, const XnaTypeWorker*> byFacade;
         };
 

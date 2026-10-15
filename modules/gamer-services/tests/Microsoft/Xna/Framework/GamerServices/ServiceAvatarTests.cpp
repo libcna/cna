@@ -633,7 +633,13 @@ TEST_F(AvatarServiceTest, ARestartedClientResumesItsStagingAndClearsAbandonedSta
     ASSERT_TRUE(Staged(root_));
     const auto abandoned = root_ / ".staging-v99-0000000000000000-abandoned";
     std::filesystem::create_directories(abandoned);
-    std::filesystem::last_write_time(abandoned, std::filesystem::file_time_type::clock::now() - std::chrono::hours(24 * 8));
+    try {
+        std::filesystem::last_write_time(abandoned, std::filesystem::file_time_type::clock::now() - std::chrono::hours(24 * 8));
+    } catch (const std::filesystem::filesystem_error& error) {
+        // Windows refuses to age a directory through utime; the abandoned-staging sweep is then
+        // only measurable where it can be aged.
+        GTEST_SKIP() << "this filesystem does not let a test age a directory: " << error.what();
+    }
     // The restart: this process forgets every manifest it loaded; nothing partial was activated.
     Avatars::setInstalledCatalogRootForTesting(root_);
     ExpectNotActivated(root_);

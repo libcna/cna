@@ -282,19 +282,24 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     defines (a half-pixel offset), and `TEXBEM`/`TEXBEML` read zero bump matrices because neither
     adapter fills the two float4s per sampler MojoShader appends to the uniform block. Shared with
     every SPIR-V backend; the oracles are EasyGL's Shader Model 1-3 compiled-effect sections.
-14. **First Windows run of the GamerServices and content-pipeline gtests** (the MinGW-w64
-    cross-build compiles every test binary since 2026-10-15: the POSIX `setenv`/`unsetenv`/`getpid`
-    calls went through `System::Environment`, the fork-based child tests include their POSIX headers
-    only on POSIX, and the net harness polls stdin with `_kbhit` on Windows). Under Wine,
-    `CnaGamerServicesTests.exe` needs `libcurl-x64.dll` from `~/deps/curl-mingw-8.22.0/.../bin`
-    on `WINEPATH` and then passes 623 with 4 failures (`AvatarServiceTest` staging resume,
-    `GamerServicesDispatcherTest.IsInitializedDefaultsFalse`, `GuideTest` show methods,
-    `AssetDiskCacheTest.ALinkIsNeverFollowed`); `CnaContentPipelineTests.exe` passes 428 with 10
-    failures (the four `XmaEncoderService` cases, `XnaFbxImporter` quarter-turn float composition,
-    `XnaBuildContent` include resolution, `XnaContentWriter`/`XnaXnbOutput`/`XnaDifferentialBuild`
-    reporting no `ContentTypeWriter` for `TestGame.Waypoint`, `LargeModelScalingTest`). Both suites
-    pass completely on Linux (658 and the full content-pipeline run); none of the Windows failures
-    has been looked at yet.
+14. **The MinGW-w64 cross-build compiles and runs every test binary** (2026-10-15; before, the
+    POSIX `setenv`/`unsetenv`/`getpid` calls in the GamerServices and content-pipeline tests stopped
+    `CnaTests.exe` compiling). Those calls go through `System::Environment`, the fork-based child
+    tests include their POSIX headers only on POSIX, the net harness polls stdin with `_kbhit` on
+    Windows, `libcurl-x64.dll` is copied next to the executables at configure time, and the two
+    helper programs the tests copy elsewhere (`cna_fake_effect_compiler`, `cna_argv_echo`) link
+    libstdc++ statically. First Windows runs under Wine: `CnaGamerServicesTests.exe` 623 pass,
+    `CnaContentPipelineTests.exe` 434 pass, no failures; the tests that need a Python interpreter
+    (XMA stub encoders, the large-model generator, `compare.py`) skip where none can be started.
+    Two Windows defects came out of it: the compiler's writer registries were `std::map` keyed by
+    `std::type_index`, whose libstdc++ ordering mixes pointer and name order for translation-unit
+    local types on MinGW and is not a strict weak ordering (a user writer registered in an anonymous
+    namespace was "not registered"; now hashed, as is the vertex type registry), and `BuildContent`
+    keyed an asset by the project's spelling where the case-folding filesystem said it existed, so
+    the build keyed by the name on disk produced nothing (the real spelling is now read from the
+    directory on Windows). The remaining Windows-only skips: `/dev/full`, a renderer without 3D,
+    aging a directory through `utime`, symbolic links, and the ordering guard for tests that need
+    an uninitialized `GamerServicesDispatcher`.
 
 15. **`DIRECTX9` under Wine+DXVK: one teardown flake and one content gtest failure remain**
     (re-measured 2026-10-15). The `DIRECTX9` ctest suite passes 58/58 and `CnaGraphicsTests.exe`

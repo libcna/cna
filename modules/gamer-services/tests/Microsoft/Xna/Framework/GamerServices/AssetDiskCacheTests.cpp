@@ -130,7 +130,11 @@ TEST_F(AssetDiskCacheTest, ALinkIsNeverFollowed) {
     const auto hash = hashOf(bytes);
     std::filesystem::create_directories(root_);
     {std::ofstream target(root_ / "elsewhere", std::ios::binary); target.write(reinterpret_cast<const char*>(bytes.data()), 64);}
-    std::filesystem::create_symlink(root_ / "elsewhere", root_ / hash);
+    try {
+        std::filesystem::create_symlink(root_ / "elsewhere", root_ / hash);
+    } catch (const std::filesystem::filesystem_error& error) {
+        GTEST_SKIP() << "this filesystem creates no symbolic links: " << error.what();
+    }
     EXPECT_FALSE(cache.read(hash).has_value());
 }
 
