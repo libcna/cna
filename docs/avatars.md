@@ -172,7 +172,8 @@ PNG of each step; with `CNA_GAMER_SERVICES_AUTO_SIGN_IN` naming a profile and
   the next update observes `Ready` before the next draw consumes animation transforms.
 - **Device.** The graphics device comes from the `IGraphicsDeviceService` of the service provider
   given to the dispatcher (XNA's rule); drawing before gamer services are initialized throws
-  `InvalidOperationException`.
+  `InvalidOperationException`. A renderer's buffers and textures belong to that device: when it is
+  disposed they are released with it, and a renderer drawn on a new device builds them again there.
 
 ## Animations
 
