@@ -1,10 +1,15 @@
 #include "AvatarDemo.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -27,6 +32,32 @@ namespace
         return AvatarBodyType::Male;
     }
 
+    // --description takes an avatar's 1021 bytes as 2042 hex digits, or a file holding them raw or
+    // as hex (what the CNA avatar editor or the service stores).
+    std::vector<SharpRuntime::bytecs> ParseDescription(std::string text)
+    {
+        if (text.size() != 2042)
+        {
+            std::ifstream file(text, std::ios::binary);
+            text.assign(std::istreambuf_iterator<char>(file), {});
+            if (text.size() == 1021)
+            {
+                return {text.begin(), text.end()};
+            }
+            while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
+        }
+        std::vector<SharpRuntime::bytecs> bytes;
+        for (std::size_t i = 0; i + 1 < text.size() && text.size() == 2042; i += 2)
+        {
+            bytes.push_back(static_cast<SharpRuntime::bytecs>(std::stoi(text.substr(i, 2), nullptr, 16)));
+        }
+        if (bytes.size() != 1021)
+        {
+            std::fprintf(stderr, "cna_demo_avatar: --description needs 1021 bytes (2042 hex digits or a file)\n");
+            std::exit(64);
+        }
+        return bytes;
+    }
 }
 
 int main(int argc, char* argv[])
@@ -41,6 +72,9 @@ int main(int argc, char* argv[])
     std::string screenshotPath;
     std::string clipName;
     bool showHelp = false;
+    int lineup = 1;
+    std::string viewName;
+    std::vector<SharpRuntime::bytecs> description;
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--smoke") == 0)
@@ -59,6 +93,18 @@ int main(int argc, char* argv[])
         else if (std::strcmp(argv[i], "--clip") == 0 && i + 1 < argc)
         {
             clipName = argv[++i];
+        }
+        else if (std::strcmp(argv[i], "--lineup") == 0 && i + 1 < argc)
+        {
+            lineup = std::clamp(std::atoi(argv[++i]), 1, 9);
+        }
+        else if (std::strcmp(argv[i], "--view") == 0 && i + 1 < argc)
+        {
+            viewName = argv[++i];
+        }
+        else if (std::strcmp(argv[i], "--description") == 0 && i + 1 < argc)
+        {
+            description = ParseDescription(argv[++i]);
         }
         else if (std::strcmp(argv[i], "--show-help") == 0)
         {
@@ -89,6 +135,19 @@ int main(int argc, char* argv[])
     if (showHelp)
     {
         game->SetShowHelpForTestingEXT(true);
+    }
+    game->SetLineupEXT(lineup);
+    if (!description.empty())
+    {
+        game->SetDescriptionEXT(std::move(description));
+    }
+    const char* views[] = {"body", "head", "hands", "feet"};
+    for (int view = 0; view < 4; ++view)
+    {
+        if (viewName == views[view])
+        {
+            game->SetViewEXT(static_cast<AvatarDemo::View>(view));
+        }
     }
     game->Run();
     delete game;
