@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "CNA/Content/Pipeline/XnaModelBridge.hpp"
+#include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInWriters.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
@@ -15,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/SpriteFontContent.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
@@ -404,6 +406,36 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                 Xnb::XnbSongData data;
                 data.mediaPath = song.FileName();
                 data.durationMs = static_cast<std::int32_t>(song.Duration().getTotalMillisecondsProperty());
+                return data;
+            });
+        addCanonical.template operator()<Processors::SpriteFontContent, Xnb::XnbSpriteFontData>(
+            [](const Processors::SpriteFontContent& font) {
+                const CNA::Content::Cnb::CnbSpriteFontData& source = font.Data();
+                if (source.atlas.representations.empty())
+                {
+                    throw PipelineException(
+                        "ContentCompiler: a sprite font atlas carries no pixel representation.");
+                }
+                const CNA::Content::Cnb::CnbTextureRepresentation& representation =
+                    source.atlas.representations.front();
+                Xnb::XnbSpriteFontData data;
+                data.atlas.kind = Xnb::XnbTextureKind::Texture2D;
+                data.atlas.surfaceFormat =
+                    CNA::Content::Cnb::CnbTextureFormatToSurfaceFormat(representation.format);
+                data.atlas.width = source.atlas.width;
+                data.atlas.height = source.atlas.height;
+                data.atlas.depth = source.atlas.depth;
+                data.atlas.faceCount = source.atlas.faceCount;
+                data.atlas.mipCount = source.atlas.mipCount;
+                data.atlas.platform = 'w';
+                data.atlas.levels = representation.levels;
+                data.glyphs = source.glyphBounds;
+                data.cropping = source.cropping;
+                data.characters = source.characters;
+                data.lineSpacing = source.lineSpacing;
+                data.spacing = source.spacing;
+                data.kerning = source.kerning;
+                data.defaultCharacter = source.defaultCharacter;
                 return data;
             });
     }

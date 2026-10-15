@@ -46,6 +46,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/EffectProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/VertexChannelNames.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/SpriteFontContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/MaterialProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
@@ -2305,6 +2306,60 @@ TEST(XnaAudioPipeline, AProcessedSoundAndSongBecomeXnbFilesCnaReadsBack)
     const auto readSong = std::get<CNA::Internal::Xnb::XnbSongData>(CNA::Internal::Xnb::DecodeXnbCanonicalAsset(write("theme.xnb", songFile)).value);
     EXPECT_EQ(readSong.mediaPath, "music/theme.wma");
     EXPECT_EQ(readSong.durationMs, 1500);
+}
+
+// The processed font is not a runtime SpriteFont yet: ContentCompiler must preserve its embedded
+// atlas and every parallel glyph table while changing the public pipeline carrier into the XNB
+// SpriteFontReader's canonical payload.
+TEST(XnaFontPipeline, AProcessedSpriteFontBecomesAnXnbCnaReadsBack)
+{
+    CNA::Content::Cnb::CnbSpriteFontData source;
+    source.atlas = CNA::Content::Cnb::MakeRgba8Texture2DData(
+        2u, 1u, std::vector<std::uint8_t>{255, 0, 0, 255, 0, 255, 0, 255});
+    source.glyphBounds = {Microsoft::Xna::Framework::Rectangle(0, 0, 1, 1),
+                          Microsoft::Xna::Framework::Rectangle(1, 0, 1, 1)};
+    source.cropping = {Microsoft::Xna::Framework::Rectangle(0, 1, 1, 1),
+                       Microsoft::Xna::Framework::Rectangle(0, 2, 1, 1)};
+    source.characters = {u'A', u'?'};
+    std::sort(source.characters.begin(), source.characters.end());
+    source.kerning = {Vector3(0.0f, 1.0f, 0.25f), Vector3(0.5f, 1.0f, 0.0f)};
+    // Keep all four per-glyph arrays in the same order after sorting the intentionally reversed
+    // declaration above. Their values are distinct so the readback checks ordering as well.
+    std::swap(source.glyphBounds[0], source.glyphBounds[1]);
+    std::swap(source.cropping[0], source.cropping[1]);
+    std::swap(source.kerning[0], source.kerning[1]);
+    source.lineSpacing = 7;
+    source.spacing = 1.25f;
+    source.defaultCharacter = u'?';
+
+    auto font = std::make_shared<Processors::SpriteFontContent>(source);
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler compiler;
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::CompileOptions options;
+    options.assetName = "Fonts/tiny";
+    const CNA::Internal::Xnb::XnbAssetWriteResult written =
+        compiler.Compile<Processors::SpriteFontContent>(font, options);
+
+    ScratchDirectory scratch("sprite-font");
+    const std::filesystem::path path = scratch.Path() / "tiny.xnb";
+    {
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(written.bytes.data()),
+                  static_cast<std::streamsize>(written.bytes.size()));
+    }
+    const CNA::Internal::Xnb::XnbCanonicalAsset asset =
+        CNA::Internal::Xnb::DecodeXnbCanonicalAsset(path);
+    const auto& read = std::get<CNA::Internal::Xnb::XnbSpriteFontData>(asset.value);
+    EXPECT_EQ(read.atlas.width, 2u);
+    EXPECT_EQ(read.atlas.height, 1u);
+    ASSERT_EQ(read.atlas.levels.size(), 1u);
+    EXPECT_EQ(read.atlas.levels[0], source.atlas.representations[0].levels[0]);
+    EXPECT_EQ(read.glyphs, source.glyphBounds);
+    EXPECT_EQ(read.cropping, source.cropping);
+    EXPECT_EQ(read.characters, source.characters);
+    EXPECT_EQ(read.kerning, source.kerning);
+    EXPECT_EQ(read.lineSpacing, 7);
+    EXPECT_FLOAT_EQ(read.spacing, 1.25f);
+    EXPECT_EQ(read.defaultCharacter, std::optional<SharpRuntime::charcs>(u'?'));
 }
 
 

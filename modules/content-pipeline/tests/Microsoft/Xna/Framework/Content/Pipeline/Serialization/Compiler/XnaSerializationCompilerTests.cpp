@@ -364,6 +364,7 @@ namespace
             "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.SoundEffectContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.SongContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteFontContent",
         };
         std::sort(names.begin(), names.end());
         std::sort(expected.begin(), expected.end());
