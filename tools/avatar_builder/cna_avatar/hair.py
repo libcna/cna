@@ -28,15 +28,18 @@ def jitter(*keys):
     return (h & 0xffff) / 32767.5 - 1.0
 
 
-def hairline(front, temple, side, back):
-    """theta_max(phi): the lowest angle of the cap at the face (phi 0), temples, sides and nape."""
+def hairline(front, temple, side, back, wrap=(0.56, 0.70)):
+    """theta_max(phi): the lowest angle of the cap at the face (phi 0), temples, sides and nape.
+    Behind the ear a hairline wraps down to the nape at once (`wrap`: from where to where, in
+    turns of pi), as a real one does, so no bare scalp shows between the ear and the back of the
+    head; a hat's edge passes round more gradually."""
     def fn(phi):
         a = abs(((phi + PI) % (2 * PI)) - PI)
         if a < 0.30 * PI:
             return lerp((front, 0, 0), (temple, 0, 0), smoothstep(0.0, 0.30 * PI, a))[0]
         if a < 0.55 * PI:
             return lerp((temple, 0, 0), (side, 0, 0), smoothstep(0.30 * PI, 0.55 * PI, a))[0]
-        return lerp((side, 0, 0), (back, 0, 0), smoothstep(0.55 * PI, PI, a))[0]
+        return lerp((side, 0, 0), (back, 0, 0), smoothstep(wrap[0] * PI, wrap[1] * PI, a))[0]
     return fn
 
 
@@ -466,7 +469,8 @@ def build_revised(body, style):
                         start=(0.02, 0.18), phi_range=0.85 * PI)
         return locks, cap(body, std, 0.0028 * s)
     if style == "hair_shaved":
-        return Mesh(), cap(body, _side_line(0.31, 0.39, 0.50, 0.72), 0.0016 * s)
+        # A cap this close to the head needs fine facets, or the head shows between them.
+        return Mesh(), cap(body, _side_line(0.31, 0.39, 0.50, 0.72), 0.0022 * s, segments=72, rings=20)
     if style == "hair_balding":
         def lo(phi):
             a = abs(((phi + PI) % (2 * PI)) - PI)
@@ -486,7 +490,8 @@ def build_revised(body, style):
         locks = Mesh()
         for k in range(16):
             phi = -0.75 * PI + 1.5 * PI * (k + 0.5) / 16
-            way = [("s", std(phi) * 0.92, phi * 0.9, 0.004 * s), ("s", 0.18 * PI, phi * 0.6, 0.012 * s),
+            # Roots along the front and sides, never below the top of the ear.
+            way = [("s", min(std(phi) * 0.92, 0.48 * PI), phi * 0.9, 0.004 * s), ("s", 0.18 * PI, phi * 0.6, 0.012 * s),
                    ("s", 0.45 * PI, PI if phi >= 0 else -PI, 0.008 * s)]
             locks.append(lock(body, surface_path(body, way, 4), taper(0.028 * s, 0.4), taper(0.007 * s, 0.4)))
         return locks, cap(body, std, 0.007 * s)

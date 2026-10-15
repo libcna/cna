@@ -118,7 +118,7 @@ def glasses(body_type, style):
 # ----- hats ---------------------------------------------------------------------------------------
 
 def hat_line(front, side, back):
-    return hair.hairline(front, (front + side) * 0.5, side, back)
+    return hair.hairline(front, (front + side) * 0.5, side, back, wrap=(0.55, 1.0))
 
 
 def crown(body_type, line, lift, bulge=lambda theta, phi: 0.0, segments=48, rings=12):

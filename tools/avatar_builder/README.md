@@ -64,7 +64,8 @@ The jobs cover a female and a male avatar from the front, three-quarter, profile
 head, hand (front and back) and feet close-ups (close-ups keep their distance in proportion to the avatar's own head,
 so catalogs with different head sizes are framed alike); 24 seeded random avatars; every face
 control at both ends; every hairstyle, top, bottom, shoe, headwear, facial-hair style, accessory
-and makeup style on the body it is weighted for; every ear shape in profile on both bodies; four
+and makeup style on the body it is weighted for, every hairstyle also from behind; every ear shape
+in profile on both bodies; four
 key frames of every preset; and every eye, eyebrow and mouth
 state plus independent left/right combinations. `cna_avatar_review`
 (`modules/gamer-services/examples/avatar_review/`) draws them through the standard XNA avatar API

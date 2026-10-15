@@ -229,6 +229,10 @@ def catalog_jobs(catalogs, library, manifest, version, heroes):
             sheet = "hair" if slot == "hair" else "headwear"
             jobs.append(job("%s-%03d" % (sheet, item["id"]), sheet, d, (0.30 * k, head + 0.02 * k, 0.88 * k), (0.0, head - 0.05 * k, 0.0),
                             0.55, yaw=-20.0, label=item["name"]))
+            if slot == "hair":
+                # And from behind, where gaps between hair and scalp show.
+                jobs.append(job("hairback-%03d" % item["id"], "hairback", d, (0.30 * k, head + 0.02 * k, 0.88 * k),
+                                (0.0, head - 0.05 * k, 0.0), 0.55, yaw=150.0, label=item["name"]))
         elif slot in ("top", "bottom", "shoes"):
             eye, target, fov = full_body(h)
             jobs.append(job("wardrobe-%03d" % item["id"], "wardrobe", d, eye, target, fov, -25.0, label=item["name"]))
@@ -315,7 +319,7 @@ def cmd_sheets(args):
     from PIL import Image, ImageDraw
     data = json.loads(args.jobs.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
-    columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8, "hair": 8, "headwear": 8,
+    columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8, "hair": 8, "hairback": 8, "headwear": 8,
                "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8}
     cell = args.cell
     sheets = {}
