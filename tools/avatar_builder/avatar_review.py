@@ -155,11 +155,11 @@ def build_jobs(catalogs, version):
         d = heroes[1]
         head, span = head_height(catalogs, library, d.encode())
         k = span / REFERENCE_SPAN
-        close = ((0.0, head + 0.01 * k, 0.80 * k), (0.0, head - 0.02 * k, 0.0), 0.5)
+        close = ((0.0, head - 0.02 * k, 0.86 * k), (0.0, head - 0.05 * k, 0.0), 0.5)
         names = [c["name"] for c in manifest["faceControls"]["male"]]
         for index, name in enumerate(names):
             for value in (0, 255):
-                face = [128] * 16
+                face = [128] * len(names)
                 face[index] = value
                 v = Descriptor(d.body_type, d.height_mm, d.build, version, d.colors, d.items, 0, face)
                 jobs.append(job("faces-%02d-%d" % (index, value), "faces", v, *close, yaw=-15.0, label="%s %s" % (name, "-" if value == 0 else "+")))
@@ -167,7 +167,7 @@ def build_jobs(catalogs, version):
             v = seeded(manifest, 100 + seed, version)
             h, span = head_height(catalogs, library, v.encode())
             k = span / REFERENCE_SPAN
-            jobs.append(job("faces-random-%02d" % seed, "faces", v, (0.0, h + 0.01 * k, 0.80 * k), (0.0, h - 0.02 * k, 0.0), 0.5, yaw=-15.0,
+            jobs.append(job("faces-random-%02d" % seed, "faces", v, (0.0, h - 0.02 * k, 0.86 * k), (0.0, h - 0.05 * k, 0.0), 0.5, yaw=-15.0,
                             label="random face %d" % seed))
     presets = manifest["animations"]["presets"]
     for index, preset in enumerate(presets):
