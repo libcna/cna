@@ -508,8 +508,9 @@ def shoe(body_type, side, style, socks):
     (upper if style in ("shoes_dress", "shoes_flats") else trim).append(sole)
     # Upper: a dome over the footprint, low at the toe and full over the heel.
     cz = heel_z + L * 0.46
-    toe_h = {"shoes_dress": 0.040, "shoes_flats": 0.030}.get(style, 0.046) * scale
-    heel_h = {"shoes_flats": 0.048, "shoes_dress": 0.070}.get(style, 0.080) * scale
+    # Every toe box stands clear of the toes (the flats' too: they show the instep, not the toes).
+    toe_h = {"shoes_dress": 0.040, "shoes_flats": 0.058}.get(style, 0.046) * scale
+    heel_h = {"shoes_flats": 0.058, "shoes_dress": 0.070}.get(style, 0.080) * scale
 
     def height(z):
         return toe_h + (heel_h - toe_h) * smoothstep(0.78, 0.32, (z - heel_z) / L)
@@ -879,7 +880,7 @@ SHOE_SPECS = {
                             sock=None, texture="plain", trim=None),
     "shoes_skate": dict(L=0.30, sole=0.026, toe=0.050, heel=0.080, rubber=0.016, laces=4, collar=True, shaft=None,
                         sock=(0.94, 0.94, 0.92), texture="canvas", trim=(0.95, 0.95, 0.92)),
-    "shoes_maryjanes": dict(L=0.255, sole=0.012, toe=0.040, heel=0.058, rubber=0.0, laces=0, collar=False, shaft=None,
+    "shoes_maryjanes": dict(L=0.255, sole=0.014, toe=0.056, heel=0.058, rubber=0.0, laces=0, collar=False, shaft=None,
                             sock=(0.94, 0.94, 0.92), texture="leather", trim=None, strap=True),
 }
 
@@ -955,7 +956,8 @@ def _spec_shoe(body_type, side, spec, socks, accent):
         z = heel_z + L * 0.42
         strap = [(cx + (0.040 * scale) * math.cos(PI * k / 10), sole_t + height(z) * 0.95 * math.sin(PI * k / 10) + 0.004, z)
                  for k in range(11)]
-        upper.append(tube(strap, [0.004 * scale] * 11, 6, weights))
+        # In the trim colour, so the strap reads against the shoe.
+        trim.append(tube(strap, [0.0045 * scale] * 11, 6, weights))
     return upper, trim
 
 

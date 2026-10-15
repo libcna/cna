@@ -298,7 +298,7 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
     const Case cases[] = {
         {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "f0c7e3d31a0cf96ab9805e859f1dba70a5f8c823c0c2836383c252ed3773a24c"},
         {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "003335eced5fc66a378f44b33598c2e607441f6a0a4fb53dd5b3b1549a3778fa"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "a2f33f389eb0cea3866f2ca69e850c8b0b9e7fa17c6336eb5d3a2048e4ce9e3a"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "be2639b9269dc06d19e957e87a1a23194239b502b988584c338946712bd965b6"},
         {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "26929b77626e8e602ffa9ed6900103b668079947e5f8bd7df7a480fe9cb18cf0"},
     };
     for (const auto& c : cases) {

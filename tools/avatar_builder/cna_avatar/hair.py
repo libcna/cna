@@ -63,7 +63,10 @@ def weights_for(body):
 
 
 def cap(body, theta_max, lift, bulge=lambda theta, phi: 0.0, segments=36, rings=10):
-    """The scalp shell down to theta_max(phi), its rim tucked in so the edge never shows."""
+    """The scalp shell down to theta_max(phi), its rim tucked in so the edge never shows. A thin
+    shell gets finer facets, or the head shows between them."""
+    if lift < 0.0095:
+        segments, rings = max(segments, 56), max(rings, 16)
     rows = []
     for r in range(rings + 2):
         ring = []

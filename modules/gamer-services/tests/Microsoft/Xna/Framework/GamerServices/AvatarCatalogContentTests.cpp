@@ -13,6 +13,7 @@
 #include <random>
 #include <set>
 #include <string>
+#include <iostream>
 #include <tuple>
 
 namespace Avatars = CNA::Internal::GamerServices::Avatars;
@@ -380,4 +381,78 @@ TEST(AvatarCatalogContentTest, AFormat3DescriptionIsAnOrdinaryXnaAvatarDescripti
     EXPECT_FLOAT_EQ(description.getHeightProperty(), 1.8f);
     const auto back = description.getDescriptionProperty();
     EXPECT_TRUE(std::equal(back.begin(), back.end(), bytes.begin(), bytes.end()));
+}
+
+TEST(AvatarCatalogContentTest, EveryModelMovesSoundlyInEveryAnimation) {
+    // Every body, item, feature item and accessory skinned by every preset (at a third and two
+    // thirds of it): positions stay finite and with the avatar, and no triangle is torn apart by
+    // its weights. A weight on a wrong bone tears an edge to ten times its length and more; the
+    // outer side of a sharply bent elbow in a thick garment reaches about three times by geometry
+    // alone (2026-10-15: 3.3, a puffer jacket), so an edge of a centimetre or more may not pass
+    // four times its bind length. Millimetre edges at hems are left out: tripling them shows nothing.
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Quaternion;
+    const auto manifest = catalog();
+    const auto& library = Avatars::clipLibrary();
+    const auto& parents = Avatars::parentBones();
+    std::vector<std::string> models{manifest->bodies[0], manifest->bodies[1]};
+    for (const auto* list : {&manifest->items, &manifest->featureItems}) {
+        for (const auto& entry : *list) {
+            models.push_back(entry.assets[0]);
+            models.push_back(entry.assets[1]);
+        }
+    }
+    float worstStretch = 0.0f;
+    std::string worstAt;
+    for (const auto& name : models) {
+        const auto glb = Avatars::parseAvatarGlb(Avatars::resolveAsset(*manifest, name)->view);
+        std::array<Vector3, Avatars::BoneCount> bind{};
+        for (int bone = 0; bone < Avatars::BoneCount; ++bone) {
+            bind[bone] = (parents[bone] < 0 ? Vector3::Zero : bind[parents[bone]]) + glb.bindTranslations[bone];
+        }
+        for (std::size_t preset = 0; preset < library.clips.size(); ++preset) {
+            for (const double at : {1.0 / 3.0, 2.0 / 3.0}) {
+                std::array<Quaternion, Avatars::BoneCount> rotations;
+                Vector3 root;
+                Avatars::sampleClip(library.clips[preset], library.clips[preset].duration * at, rotations, root);
+                std::array<Matrix, Avatars::BoneCount> world, skin;
+                for (int bone = 0; bone < Avatars::BoneCount; ++bone) {
+                    const Matrix local = Matrix::CreateFromQuaternion(rotations[bone]) *
+                                         Matrix::CreateTranslation(bone == 0 ? root : glb.bindTranslations[bone]);
+                    world[bone] = parents[bone] < 0 ? local : local * world[parents[bone]];
+                    skin[bone] = Matrix::CreateTranslation(-bind[bone]) * world[bone];
+                }
+                for (const auto& primitive : glb.primitives) {
+                    std::vector<Vector3> posed(primitive.vertices.size());
+                    for (std::size_t v = 0; v < primitive.vertices.size(); ++v) {
+                        const auto& vertex = primitive.vertices[v];
+                        const float weights[4]{vertex.weights.X, vertex.weights.Y, vertex.weights.Z, vertex.weights.W};
+                        Vector3 p = Vector3::Zero;
+                        for (int k = 0; k < 4; ++k) {
+                            p += Vector3::Transform(vertex.position, skin[vertex.joints[k]]) * weights[k];
+                        }
+                        posed[v] = p;
+                        const auto offset = p - root;
+                        ASSERT_TRUE(std::isfinite(p.X) && std::isfinite(p.Y) && std::isfinite(p.Z)) << name;
+                        ASSERT_TRUE(std::abs(offset.X) < 1.6f && std::abs(offset.Z) < 1.6f && p.Y > -0.5f && p.Y < 2.6f)
+                            << name << " leaves the avatar in " << library.clips[preset].name;
+                    }
+                    for (std::size_t t = 0; t < primitive.indices.size(); t += 3) {
+                        for (int e = 0; e < 3; ++e) {
+                            const auto a = primitive.indices[t + e], b = primitive.indices[t + (e + 1) % 3];
+                            const float rest = Vector3::Distance(primitive.vertices[a].position, primitive.vertices[b].position);
+                            if (rest < 0.01f) continue;
+                            const float stretch = Vector3::Distance(posed[a], posed[b]) / rest;
+                            if (stretch > worstStretch) {
+                                worstStretch = stretch;
+                                worstAt = name + " in " + library.clips[preset].name;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    EXPECT_LT(worstStretch, 4.0f) << worstAt;
+    std::cout << "worst edge stretch " << worstStretch << " (" << worstAt << ")\n";
 }

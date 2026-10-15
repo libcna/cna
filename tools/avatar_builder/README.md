@@ -47,6 +47,15 @@ supported; Git history keeps them.
 `generate_avatar_catalog.py` itself writes the files and `catalog.json`, which lists every file
 with its size and SHA-256.
 
+## Audit
+
+`avatar_audit.py <catalogs> --version 3` measures what review sheets cannot: each body's proportions
+(recorded in `docs/avatar-art-direction.md`), each kind's triangle, vertex and byte budget, and for
+each garment, shoe, hat, glove and hairstyle how much skin pokes out through it in the bind pose
+(exit status 1 past a threshold; a few vertices at a waistband or a tucked rim are allowed). The
+content tests (`AvatarCatalogContentTests`) check the rest: sound geometry, every reference, and every
+model skinned through every animation preset.
+
 ## Review
 
 `avatar_review.py` renders one deterministic job list two ways, so art changes are judged on the

@@ -45,12 +45,26 @@ artifacts, and vice versa.
 
 ## Catalog v3 revision 2 (2026-10-15)
 
-Measured from the generated bodies: the female is 1.68 m and about 4.6 head-heights tall, the male
-1.80 m and about 4.8 (the first release was about 3.9 and 4.0). Still clearly more head-heavy than
-realistic proportion and in the console era's friendly, stylized category, but reading as adults:
-a sculpted head with a tapered jaw, cheekbones and chin, a neck that carries it, shoulders and a
-torso broad enough for the head. The table below predates the generator and is kept as the record
-of that pass; the bodies no longer follow its 6.0 head-heights.
+Measured by `tools/avatar_builder/avatar_audit.py` from the generated bodies (the first release
+was about 3.9 and 4.0 head-heights tall):
+
+| | Female | Male |
+|---|---|---|
+| Height | 1.68 m, 4.64 heads | 1.80 m, 4.79 heads |
+| Head, chin to crown / width | 0.362 m / 0.88 heads | 0.375 m / 0.88 heads |
+| Shoulder width | 1.38 heads | 1.52 heads |
+| Arm, shoulder to wrist | 1.30 heads | 1.35 heads |
+| Leg, hip to ankle | 1.99 heads (0.43 of height) | 2.04 heads (0.43 of height) |
+| Hand / foot | 0.48 / 0.48 heads | 0.50 / 0.50 heads |
+| Arm span / height | 0.86 | 0.88 |
+
+Still clearly more head-heavy than realistic proportion (about 7.5 heads, legs about half the
+height, arm span equal to it) and in the console era's friendly, stylized category, but reading as
+adults: a sculpted head with a tapered jaw, cheekbones and chin, a neck that carries it, shoulders
+and a torso broad enough for the head; the big head shortens arms, legs, hands and feet against
+the height together, so no part reads as out of scale with the others. The table below predates
+the generator and is kept as the record of that pass; the bodies no longer follow its 6.0
+head-heights.
 
 ## Proportion targets
 
