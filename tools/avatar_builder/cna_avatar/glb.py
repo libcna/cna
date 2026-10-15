@@ -53,7 +53,7 @@ class GlbBuilder:
         translations = rig.local_translations(body)
         base = len(self.gltf["nodes"])
         for i in range(rig.BONE_COUNT):
-            node = {"name": rig.NAMES[i], "translation": [quantize(c) for c in translations[i]]}
+            node = {"name": rig.NAMES[i], "translation": [round(quantize(c), 5) for c in translations[i]]}
             children = [base + c for c in range(rig.BONE_COUNT) if rig.PARENTS[c] == i]
             if children:
                 node["children"] = children
@@ -76,17 +76,23 @@ class GlbBuilder:
         self.gltf.setdefault("textures", []).append({"sampler": 0, "source": len(self.gltf["images"]) - 1})
         return len(self.gltf["textures"]) - 1
 
-    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None, specular=None):
-        """specular scales the renderer's highlight for this material (cnaSpecular; 1 when absent)."""
-        pbr = {"baseColorFactor": [color[0], color[1], color[2], 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.9}
+    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None, specular=None, texture_file=None):
+        """specular scales the renderer's highlight for this material (cnaSpecular; 1 when absent);
+        texture_file names a catalog texture file shared by many assets (cnaTexture) instead of an
+        embedded texture."""
+        pbr = {"baseColorFactor": [round(color[0], 4), round(color[1], 4), round(color[2], 4), 1.0], "metallicFactor": 0.0,
+               "roughnessFactor": 0.9}
         if texture is not None:
             pbr["baseColorTexture"] = {"index": texture}
         material = {"name": name, "pbrMetallicRoughness": pbr, "extras": dict({"cnaTint": tint}, **(extras or {}))}
+        if texture_file:
+            material["extras"]["cnaTexture"] = texture_file
         if specular is not None and specular != 1.0:
             material["extras"]["cnaSpecular"] = specular
         self.gltf.setdefault("materials", []).append(material)
-        if extras and "cnaFeature" in extras:
-            # Face decals are textured at runtime with the expression's atlas tile.
+        if (extras and "cnaFeature" in extras) or texture_file:
+            # Face decals are textured at runtime with the expression's atlas tile, shared textures
+            # from their catalog file.
             self.textured_materials.add(len(self.gltf["materials"]) - 1)
         return len(self.gltf["materials"]) - 1
 

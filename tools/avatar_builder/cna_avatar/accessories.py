@@ -233,10 +233,16 @@ def hat(body_type, style):
     return parts
 
 
-HAT_COVER = {  # the head region each hat covers, for squashing hair under it
-    "hat_cap": (0.36 * PI, 0.44 * PI, 0.46 * PI), "hat_beanie": (0.40 * PI, 0.46 * PI, 0.50 * PI),
-    "hat_bucket": (0.40 * PI, 0.45 * PI, 0.47 * PI), "hat_fedora": (0.38 * PI, 0.43 * PI, 0.45 * PI),
+# The head region each covering hat flattens the hair in (the catalog's hairCover): its lowest
+# angle from the crown as a fraction of pi at the face, temples, sides and nape -- each hat's own
+# crown line, reaching a little lower so hair never shows through the crown's edge -- and how far
+# above the head surface the flattened hair lies (head-local metres at male scale; inside every
+# crown, which is HAT_LIFT out).
+HAT_COVER = {
+    "hat_cap": (0.40, 0.45, 0.47, 0.50), "hat_beanie": (0.42, 0.47, 0.50, 0.52),
+    "hat_bucket": (0.42, 0.46, 0.48, 0.50), "hat_fedora": (0.41, 0.45, 0.47, 0.49),
 }
+UNDER_HAT_LIFT = 0.019
 
 
 # ----- facial hair ------------------------------------------------------------------------------

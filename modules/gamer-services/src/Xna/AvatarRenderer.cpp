@@ -91,6 +91,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::unique_ptr<Graphics::SkinnedEffect> effect;
         std::vector<GpuPart> parts;
         std::vector<std::unique_ptr<Graphics::Texture2D>> images;
+        // Texture of each model image (several images may share one upload).
+        std::vector<Graphics::Texture2D*> imageTextures;
         std::map<int, std::unique_ptr<Graphics::Texture2D>> tiles;
         std::unique_ptr<Graphics::Texture2D> white;
         std::unique_ptr<Graphics::BasicEffect> loadingEffect;
@@ -104,6 +106,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             effect.reset();
             parts.clear();
             images.clear();
+            imageTextures.clear();
             tiles.clear();
             white.reset();
             loadingEffect.reset();
@@ -149,10 +152,19 @@ namespace Microsoft::Xna::Framework::GamerServices
             auto newEffect = std::make_unique<Graphics::SkinnedEffect>(*device);
             auto newWhite = std::make_unique<Graphics::Texture2D>(Graphics::Texture2D::CreateFromPixels(*device, 1, 1, {255, 255, 255, 255}));
             std::vector<std::unique_ptr<Graphics::Texture2D>> newImages;
+            // A texture several parts share is uploaded once.
+            std::map<const Avatars::AvatarImage*, Graphics::Texture2D*> uploaded;
+            std::vector<Graphics::Texture2D*> newImageTextures;
             for (const auto& image : model->images)
             {
-                newImages.push_back(std::make_unique<Graphics::Texture2D>(
-                    Graphics::Texture2D::CreateFromPixels(*device, image.width, image.height, image.rgba)));
+                auto found = uploaded.find(image.get());
+                if (found == uploaded.end())
+                {
+                    newImages.push_back(std::make_unique<Graphics::Texture2D>(
+                        Graphics::Texture2D::CreateFromPixels(*device, image->width, image->height, image->rgba)));
+                    found = uploaded.emplace(image.get(), newImages.back().get()).first;
+                }
+                newImageTextures.push_back(found->second);
             }
             std::vector<GpuPart> newParts;
             for (const auto& part : model->parts)
@@ -174,6 +186,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
             white = std::move(newWhite);
             images = std::move(newImages);
+            imageTextures = std::move(newImageTextures);
             parts = std::move(newParts);
             effect = std::move(newEffect);
         }
@@ -205,6 +218,13 @@ namespace Microsoft::Xna::Framework::GamerServices
             Graphics::RasterizerState rasterizer;
             Graphics::SamplerState sampler;
         };
+
+        // Eye states drawn as a shut lid (laughing, yawning, sleeping, blinking).
+        bool Closed(int eye)
+        {
+            return eye == static_cast<int>(AvatarEye::Laughing) || eye == static_cast<int>(AvatarEye::Yawning) ||
+                eye == static_cast<int>(AvatarEye::Sleeping) || eye == static_cast<int>(AvatarEye::Blink);
+        }
 
         template <typename TEnum>
         int StateIndex(TEnum value, int count)
@@ -429,27 +449,36 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             const auto& part = model.parts[index];
             Graphics::Texture2D* texture = resources_->white.get();
-            if (part.feature == Avatars::AvatarFeature::None)
+            if (part.image >= 0)
             {
-                if (part.image >= 0)
-                {
-                    texture = resources_->images[static_cast<std::size_t>(part.image)].get();
-                }
+                texture = resources_->imageTextures[static_cast<std::size_t>(part.image)];
+            }
+            if (part.feature == Avatars::AvatarFeature::None && !part.blend)
+            {
                 device.setBlendStateProperty(Graphics::BlendState::Opaque);
                 device.setDepthStencilStateProperty(Graphics::DepthStencilState::Default);
             }
             else
             {
-                int tile = 0;
+                int tile = -1;
                 switch (part.feature)
                 {
                 case Avatars::AvatarFeature::EyeLeft: tile = face.eyes[eyes[0]][0][part.layer]; break;
                 case Avatars::AvatarFeature::EyeRight: tile = face.eyes[eyes[1]][1][part.layer]; break;
-                case Avatars::AvatarFeature::EyebrowLeft: tile = face.eyebrows[brows[0]][0]; break;
-                case Avatars::AvatarFeature::EyebrowRight: tile = face.eyebrows[brows[1]][1]; break;
-                default: tile = face.mouths[mouth]; break;
+                case Avatars::AvatarFeature::EyebrowLeft: tile = model.eyebrowTiles[brows[0]][0]; break;
+                case Avatars::AvatarFeature::EyebrowRight: tile = model.eyebrowTiles[brows[1]][1]; break;
+                case Avatars::AvatarFeature::Mouth: tile = face.mouths[mouth]; break;
+                case Avatars::AvatarFeature::Lips: tile = model.lipTiles[mouth]; break;
+                case Avatars::AvatarFeature::Static:
+                    // Eyeliner follows the lid of an eye that is shut.
+                    tile = part.closedTile >= 0 && Closed(eyes[static_cast<std::size_t>(part.eye)]) ? part.closedTile : part.tile;
+                    break;
+                case Avatars::AvatarFeature::None: break;
                 }
-                texture = resources_->Tile(tile);
+                if (tile >= 0)
+                {
+                    texture = resources_->Tile(tile);
+                }
                 if (!decals)
                 {
                     device.setBlendStateProperty(Graphics::BlendState::AlphaBlend);
@@ -458,6 +487,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                 }
             }
             effect.setDiffuseColorProperty(part.color);
+            effect.setAlphaProperty(part.alpha);
             // Materials scale the one light's faint highlight: hair and leather shine a little, cloth barely.
             effect.setSpecularColorProperty(Vector3(part.specular, part.specular, part.specular));
             effect.setTextureProperty(texture);

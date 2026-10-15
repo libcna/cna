@@ -141,7 +141,7 @@ std::vector<std::uint16_t> AvatarEditorModel::choices(AvatarItemSlot slot) const
 {
     std::vector<std::uint16_t> ids;
     if(slot==AvatarItemSlot::FacialHair) {
-        for(const auto& item:catalog_->featureItems)ids.push_back(item.id);
+        for(const auto* item:catalog_->itemsOf(AvatarItemSlot::FacialHair))ids.push_back(item->id);
     } else {
         for(const auto& item:catalog_->items)if(item.slot==slot)ids.push_back(item.id);
     }
@@ -203,7 +203,7 @@ std::vector<AvatarEditorModel::Row> AvatarEditorModel::rows() const
         color(AvatarColorSlot::Hair,"Hair color");
         break;
     case EditorCategory::FacialHair:
-        if(!catalog_->featureItems.empty())list.push_back({Kind::FacialHair,0,"Style"});
+        if(!catalog_->itemsOf(AvatarItemSlot::FacialHair).empty())list.push_back({Kind::FacialHair,0,"Style"});
         color(AvatarColorSlot::Hair,"Color");
         break;
     case EditorCategory::Tops:
@@ -471,8 +471,8 @@ AvatarDescriptor AvatarEditorModel::coherentRandom(std::uint8_t bodyType)
     sometimes(AvatarItemSlot::Glasses,0.2f);
     sometimes(AvatarItemSlot::Hat,0.15f);
     if(bodyType==0)result.facialHair=0;
-    else if(!catalog_->featureItems.empty())
-        result.facialHair=chance(0.35f)?catalog_->featureItems[std::uniform_int_distribution<std::size_t>(0,catalog_->featureItems.size()-1)(random_)].id:0;
+    else if(const auto facial=catalog_->itemsOf(AvatarItemSlot::FacialHair);!facial.empty())
+        result.facialHair=chance(0.35f)?facial[std::uniform_int_distribution<std::size_t>(0,facial.size()-1)(random_)]->id:0;
     return result;
 }
 
@@ -500,8 +500,11 @@ void AvatarEditorModel::randomizeCategory()
     case EditorCategory::Eyes: takeFeatures();takeColor(AvatarColorSlot::Eyes);break;
     case EditorCategory::NoseAndMouth: takeFeatures();break;
     case EditorCategory::Hair: takeItem(AvatarItemSlot::Hair);takeColor(AvatarColorSlot::Hair);break;
-    case EditorCategory::FacialHair: working_.facialHair=working_.bodyType==1&&!catalog_->featureItems.empty()?
-        catalog_->featureItems[std::uniform_int_distribution<std::size_t>(0,catalog_->featureItems.size()-1)(random_)].id:0;break;
+    case EditorCategory::FacialHair: {
+        const auto facial=catalog_->itemsOf(AvatarItemSlot::FacialHair);
+        working_.facialHair=working_.bodyType==1&&!facial.empty()?facial[std::uniform_int_distribution<std::size_t>(0,facial.size()-1)(random_)]->id:0;
+        break;
+    }
     case EditorCategory::Tops: takeItem(AvatarItemSlot::Top);takeColor(AvatarColorSlot::Top);break;
     case EditorCategory::Bottoms: takeItem(AvatarItemSlot::Bottom);takeColor(AvatarColorSlot::Bottom);break;
     case EditorCategory::Shoes: takeItem(AvatarItemSlot::Shoes);takeColor(AvatarColorSlot::Shoes);break;

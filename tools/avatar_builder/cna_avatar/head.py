@@ -156,28 +156,59 @@ def _blob(c, r, segments=12, rings=8):
     return ellipsoid(c, ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)), r, segments, rings, HEAD)
 
 
-def ear_meshes(body):
-    """Ears: a flattened lobe tilted back on each side of the head, with a rolled rim."""
+# Ear shapes: (height, width, depth of the lobe shell, rim height and width, rim thickness, how far
+# the ear stands out from the head (0 flat .. 1), tilt back in degrees, lobe (extra drop and size of
+# a separate lobe; 0 = attached)).
+EAR_SHAPES = {
+    "round": dict(h=0.031, w=0.019, d=0.0085, rim=(0.028, 0.016), rim_r=0.0046, out=0.30, tilt=14.0, lobe=0.0),
+    "small": dict(h=0.025, w=0.016, d=0.0075, rim=(0.022, 0.0135), rim_r=0.0040, out=0.22, tilt=12.0, lobe=0.0),
+    "large": dict(h=0.036, w=0.022, d=0.0095, rim=(0.033, 0.019), rim_r=0.0052, out=0.34, tilt=15.0, lobe=0.0),
+    "longLobe": dict(h=0.033, w=0.018, d=0.0085, rim=(0.028, 0.016), rim_r=0.0046, out=0.28, tilt=12.0, lobe=0.010),
+    "attached": dict(h=0.029, w=0.019, d=0.0080, rim=(0.027, 0.016), rim_r=0.0044, out=0.20, tilt=16.0, lobe=-0.004),
+    "protruding": dict(h=0.032, w=0.020, d=0.0085, rim=(0.029, 0.017), rim_r=0.0048, out=0.62, tilt=10.0, lobe=0.0),
+}
+EAR_ORDER = ("round", "small", "large", "longLobe", "attached", "protruding")
+
+
+def ear_meshes(body, shape="round"):
+    """Ears: a flattened shell tilted back on each side of the head, a rolled rim and, for some
+    shapes, a hanging lobe. Each ear is skinned to the Head joint."""
     from .mesh import ellipsoid
+    e = EAR_SHAPES[shape]
     s = SCALE[body]
     m = Mesh()
     for side in (1.0, -1.0):
         surface = side_point(body, side, EAR[0] * s, EAR[1] * s)[0]
-        tilt = math.radians(14.0)
+        tilt = math.radians(e["tilt"])
         up = (0.0, math.cos(tilt), -math.sin(tilt))
         back = (0.0, math.sin(tilt), math.cos(tilt))
-        out = normalize((side, 0.0, -0.30))
-        centre_pt = add(surface, mul(out, 0.004 * s))
-        axes = (normalize(cross(up, back)) if side > 0 else mul(normalize(cross(up, back)), -1.0), up, back)
-        m.append(ellipsoid(centre_pt, (out, up, back), (0.0085 * s, 0.031 * s, 0.019 * s), 14, 12, HEAD))
+        out = normalize((side, 0.0, -0.30 - 0.5 * (e["out"] - 0.30)))
+        centre_pt = add(surface, mul(out, (0.004 + 0.004 * (e["out"] - 0.30)) * s))
+        m.append(ellipsoid(centre_pt, (out, up, back), (e["d"] * s, e["h"] * s, e["w"] * s), 14, 12, HEAD))
         rim = []
+        rh, rw = e["rim"]
         for k in range(18):
             a = math.pi * (0.08 + 1.72 * k / 17)
-            h = 0.028 * s * math.cos(a) + 0.002 * s
-            w = 0.016 * s * math.sin(a)
+            h = rh * s * math.cos(a) + 0.002 * s
+            w = rw * s * math.sin(a)
             rim.append(add(add(add(centre_pt, mul(up, h)), mul(back, -w)), mul(out, 0.0065 * s)))
-        m.append(tube(rim, [0.0046 * s] * len(rim), 8, HEAD, round_end=True))
+        m.append(tube(rim, [e["rim_r"] * s] * len(rim), 8, HEAD, round_end=True))
+        if e["lobe"] > 0.0:
+            lobe = add(add(centre_pt, mul(up, -(e["h"] * 0.82 + e["lobe"] * 0.5) * s)), mul(back, 0.002 * s))
+            m.append(ellipsoid(lobe, (out, up, back), (e["d"] * 0.8 * s, (0.006 + e["lobe"] * 0.6) * s, 0.0085 * s), 12, 8, HEAD))
     return m
+
+
+def ear_lobe(body, side, shape="round"):
+    """Where an earring hangs from: the bottom of the ear's lobe on one side (1 left, -1 right)."""
+    e = EAR_SHAPES[shape]
+    s = SCALE[body]
+    surface = side_point(body, side, EAR[0] * s, EAR[1] * s)[0]
+    tilt = math.radians(e["tilt"])
+    up = (0.0, math.cos(tilt), -math.sin(tilt))
+    out = normalize((side, 0.0, -0.30 - 0.5 * (e["out"] - 0.30)))
+    centre_pt = add(surface, mul(out, (0.004 + 0.004 * (e["out"] - 0.30)) * s))
+    return add(add(centre_pt, mul(up, -(e["h"] * 0.80 + max(e["lobe"], 0.0)) * s)), mul(out, 0.004 * s)), out, up
 
 
 def anchors(body):

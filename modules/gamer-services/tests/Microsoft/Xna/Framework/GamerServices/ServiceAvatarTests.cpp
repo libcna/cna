@@ -242,7 +242,7 @@ std::string Digest(const Avatars::AvatarModel& model) {
         put(part.color.X), put(part.color.Y), put(part.color.Z);
     }
     for (const auto& image : model.images) {
-        bytes.insert(bytes.end(), image.rgba.begin(), image.rgba.end());
+        bytes.insert(bytes.end(), image->rgba.begin(), image->rgba.end());
     }
     return Avatars::sha256Hex(bytes);
 }

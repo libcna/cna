@@ -453,7 +453,7 @@ DRESSED_LEG_START = 0.12
 
 
 def build(body, dressed=True):
-    """(skin Mesh without the head, head Mesh, nose/ears Mesh); `dressed` leaves out the skin every
+    """(skin Mesh without the head, head Mesh, nose Mesh); `dressed` leaves out the skin every
     bottom covers."""
     skin = Mesh()
     if dressed:
@@ -466,5 +466,6 @@ def build(body, dressed=True):
         skin.append(hand(body, side, sign))
         skin.append(leg(body, side, t_range=(DRESSED_LEG_START, 1.0), cap_end=True) if dressed else leg(body, side))
         skin.append(foot(body, side))
-    details = Mesh().append(head.nose_mesh(body)).append(head.ear_meshes(body))
+    # The ears are feature items of their own (catalog.FEATURE_ITEMS), in several shapes.
+    details = Mesh().append(head.nose_mesh(body))
     return skin, head.head_mesh(body), details

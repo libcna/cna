@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: MS-PL
-"""Assembles the catalog's assets into GLB files."""
+"""The catalog's entries and their GLB files.
+
+Catalog v3 revision 2 keeps every id of the first v3 release in its kind (format 1 and 2
+descriptions name only those) and adds entries only format 3 descriptions name ("format": 3).
+Textures shared by many assets are catalog files of their own (TEXTURES), named by each material.
+"""
 from . import rig, body, textures
 from .glb import GlbBuilder
 
@@ -11,28 +16,59 @@ SPECULAR = {"eyeLeft": (2.5, 3.0), "eyeRight": (2.5, 3.0), "eyebrowLeft": (0.4,)
 CLOTH_SPECULAR = {"knit": 0.35, "rib": 0.35, "cable": 0.3, "fleece": 0.25, "denim": 0.45, "canvas": 0.5, "pleat": 0.4,
                   "leather": 2.0, "plain": 1.0, "strands": 2.0}
 HAIR_SPECULAR = 2.2
+# Makeup decals: (tint, specular, layer).
+MAKEUP_DECALS = {"shadowLeft": ("eyeShadow", 0.6, 0), "shadowRight": ("eyeShadow", 0.6, 0), "blushLeft": ("blush", 0.2, 0),
+                 "blushRight": ("blush", 0.2, 0), "lips": ("lips", 1.8, 0), "linerLeft": ("none", 1.0, 1),
+                 "linerRight": ("none", 1.0, 1)}
+
+
+def texture_file(kind):
+    """The catalog file of a shared texture."""
+    return "tex_%s.png" % kind
+
+
+def texture_bytes(kind):
+    if kind == "hair_clump":
+        return textures.hair_clump()
+    if kind == "hair_cap":
+        return textures.hair_cap()
+    if kind == "skin_head":
+        return textures.skin_head()
+    return textures.cloth(kind)
 
 
 def body_glb(body_type):
-    """Body, head and the face-feature decal patches (drawn with the expression's atlas tiles)."""
+    """Body, head and the face-feature and makeup decal patches (drawn with atlas tiles)."""
     from . import face
     skin, head, details = body.build(body_type)
     builder = GlbBuilder({"cna": {"asset": "body", "bodyType": body_type, "rig": "cna-avatar-71",
                                   "authoredHeight": rig.PROPORTIONS[body_type]["height"]}})
     skin_index = builder.add_rig(body_type)
-    head_tex = builder.add_image("head", textures.skin_head())
     skin_material = builder.add_material("skin", "skin")
-    parts = [(skin, skin_material), (head, builder.add_material("head", "skin", texture=head_tex)), (details, skin_material)]
-    for feature, mesh in face.build_decals(body_type).items():
+    parts = [(skin, skin_material), (head, builder.add_material("head", "skin", texture_file=texture_file("skin_head"))),
+             (details, skin_material)]
+    decals = face.build_decals(body_type)
+    makeup = face.build_makeup(body_type)
+
+    def decal(name, mesh, tint, specular, layer):
+        parts.append((mesh, builder.add_material("%s%d" % (name, layer), tint, specular=specular,
+                                                 extras={"cnaFeature": name, "cnaLayer": layer})))
+    # Draw order within a layer is this order: makeup under the features it frames.
+    for name in ("shadowLeft", "shadowRight", "blushLeft", "blushRight"):
+        decal(name, makeup[name], *MAKEUP_DECALS[name])
+    for feature in ("eyeLeft", "eyeRight", "eyebrowLeft", "eyebrowRight"):
         for layer, tint in enumerate(FEATURE_TINTS[feature]):
-            parts.append((mesh, builder.add_material("%s%d" % (feature, layer), tint, specular=SPECULAR[feature][layer],
-                                                     extras={"cnaFeature": feature, "cnaLayer": layer})))
+            decal(feature, decals[feature], tint, SPECULAR[feature][layer], layer)
+    decal("lips", makeup["lips"], *MAKEUP_DECALS["lips"])
+    decal("mouth", decals["mouth"], "none", SPECULAR["mouth"][0], 0)
+    for name in ("linerLeft", "linerRight"):
+        decal(name, makeup[name], *MAKEUP_DECALS[name])
     builder.add_skinned_mesh("body", parts, skin_index)
-    return builder.build()
+    return builder.build(), ["skin_head"]
 
 
-# (id, slot, name, CreateRandom weight for female, male). The baseline catalog v3 froze these ids
-# and slots: every later catalog keeps them.
+# (id, slot, name, CreateRandom weight for female, male[, extras]). Ids of the first v3 release
+# (1-123) keep their kind; everything since needs format 3.
 ITEMS = [
     (1, "hair", "hair_short", 0.6, 1.4), (2, "hair", "hair_spiky", 0.4, 1.0), (3, "hair", "hair_bob", 1.4, 0.4),
     (4, "hair", "hair_ponytail", 1.4, 0.3), (5, "hair", "hair_buzz", 0.3, 1.2), (6, "hair", "hair_long", 1.4, 0.3),
@@ -46,49 +82,79 @@ ITEMS = [
     (45, "bottom", "bottom_longskirt", 0.8, 0.02),
     (60, "shoes", "shoes_sneakers", 1.2, 1.2), (61, "shoes", "shoes_boots", 1.0, 1.0), (62, "shoes", "shoes_hightops", 1.0, 1.0),
     (63, "shoes", "shoes_dress", 0.6, 1.0), (64, "shoes", "shoes_flats", 1.0, 0.05),
-    (80, "glasses", "glasses_round", 1.0, 1.0), (81, "glasses", "glasses_square", 1.0, 1.0),
-    (82, "glasses", "glasses_aviator", 1.0, 1.0), (83, "glasses", "glasses_browline", 1.0, 1.0),
+    (80, "glasses", "glasses_round", 1.0, 1.0, {"follow": "eyes"}), (81, "glasses", "glasses_square", 1.0, 1.0, {"follow": "eyes"}),
+    (82, "glasses", "glasses_aviator", 1.0, 1.0, {"follow": "eyes"}),
+    (83, "glasses", "glasses_browline", 1.0, 1.0, {"follow": "eyes"}),
     (100, "hat", "hat_cap", 1.0, 1.0), (101, "hat", "hat_beanie", 1.0, 1.0), (102, "hat", "hat_bucket", 1.0, 1.0),
     (103, "hat", "hat_fedora", 0.8, 1.0), (104, "hat", "hat_headband", 1.0, 0.3),
 ]
-# Personal features a CNA format 2 description can name (facial hair).
+# Personal features: facial hair (format 2) and ear shapes (format 3).
 FEATURE_ITEMS = [
     (120, "facialHair", "facial_mustache", 0.0, 1.0), (121, "facialHair", "facial_goatee", 0.0, 1.0),
     (122, "facialHair", "facial_beard", 0.0, 1.0), (123, "facialHair", "facial_chinstrap", 0.0, 1.0),
-]
-# Hats that cover the hair: hair styles get a variant flattened under them.
-COVERING_HATS = ("hat_cap", "hat_beanie", "hat_bucket", "hat_fedora")
+] + [(500 + k, "ears", "ears_" + shape.lower(), 1.0, 1.0) for k, shape in enumerate(
+    ("round", "small", "large", "longLobe", "attached", "protruding"))]
+EAR_SHAPE_OF = {"ears_" + shape.lower(): shape for shape in ("round", "small", "large", "longLobe", "attached", "protruding")}
 
 
-def item_glb(body_type, item_id, slot, name, under_hat=False):
-    """One item fitted to one body; `under_hat` gives a hair style's variant for covering hats."""
-    from . import hair, garments, accessories
+def face_styles(styles):
+    """Face style entries from the atlas's style tiles: eyebrows, eye shadow, eyeliner, blush, lips."""
+    from . import face
+    out = []
+    brow_ids = {name: 600 + k for k, name in enumerate(n for n in face.BROW_STYLES if n != "classic")}
+    brow_weights = {"natural": (1.4, 1.2), "straight": (0.6, 1.2), "softArch": (1.2, 0.5), "highArch": (0.8, 0.2),
+                    "thin": (0.8, 0.3), "thick": (0.6, 1.2), "short": (0.5, 0.6), "long": (0.6, 0.5), "angled": (0.5, 0.5),
+                    "rounded": (0.8, 0.5), "bushy": (0.2, 0.9), "lowFlat": (0.4, 1.0)}
+    for name, id_ in brow_ids.items():
+        out.append({"id": id_, "slot": "eyebrows", "name": "brows_" + name.lower(), "tiles": styles[("eyebrows", name)],
+                    "random": dict(zip(("female", "male"), brow_weights[name])), "format": 3})
+    for k, name in enumerate(face.SHADOW_STYLES):
+        out.append({"id": 640 + k, "slot": "eyeShadow", "name": "shadow_" + name, "tiles": styles[("eyeShadow", name)],
+                    "random": {"female": 1.0, "male": 0.1}, "format": 3, "opacity": 0.85})
+    for k, name in enumerate(face.LINER_STYLES):
+        out.append({"id": 650 + k, "slot": "eyeliner", "name": "liner_" + name, "tiles": styles[("eyeliner", name)],
+                    "random": {"female": 1.0, "male": 0.1}, "format": 3})
+    for k, name in enumerate(face.BLUSH_STYLES):
+        out.append({"id": 660 + k, "slot": "blush", "name": "blush_" + name, "tiles": styles[("blush", name)],
+                    "random": {"female": 1.0, "male": 0.1}, "format": 3, "opacity": 0.75})
+    for k, (name, opacity) in enumerate((("tint", 0.45), ("color", 0.75), ("bold", 0.95))):
+        out.append({"id": 670 + k, "slot": "lips", "name": "lips_" + name, "tiles": styles[("lips", "mask")],
+                    "random": {"female": 1.0, "male": 0.05}, "format": 3, "opacity": opacity})
+    return out
+
+
+def item_glb(body_type, item_id, slot, name):
+    """One item fitted to one body. Returns (GLB bytes, shared texture kinds it names)."""
+    from . import hair, garments, accessories, head
     builder = GlbBuilder({"cna": {"asset": "item", "id": item_id, "slot": slot, "name": name, "bodyType": body_type,
-                                  "rig": "cna-avatar-71", "underHat": under_hat}})
+                                  "rig": "cna-avatar-71"}})
     skin_index = builder.add_rig(body_type)
     parts = []
+    used = []
+
+    def material(part_name, tint, kind, colour=(1.0, 1.0, 1.0), specular=None, extras=None):
+        if kind not in used:
+            used.append(kind)
+        return builder.add_material(part_name, tint, color=colour, texture_file=texture_file(kind), specular=specular, extras=extras)
     if slot == "hair":
         locks, scalp = hair.build(body_type, name)
-        if under_hat:
-            locks, scalp = hair.under_hat(body_type, locks), hair.under_hat(body_type, scalp)
         if scalp.positions:
-            parts.append((scalp, builder.add_material(name + "_scalp", "hair", specular=HAIR_SPECULAR,
-                                                      texture=builder.add_image("scalp", textures.hair_cap()))))
+            parts.append((scalp, material(name + "_scalp", "hair", "hair_cap", specular=HAIR_SPECULAR)))
         if locks.positions:
-            parts.append((locks, builder.add_material(name, "hair", specular=HAIR_SPECULAR,
-                                                      texture=builder.add_image("strands", textures.hair_clump()))))
+            parts.append((locks, material(name, "hair", "hair_clump", specular=HAIR_SPECULAR)))
+    elif slot == "ears":
+        parts.append((head.ear_meshes(body_type, EAR_SHAPE_OF[name]), builder.add_material(name, "skin")))
     else:
         built = {"top": garments.top, "bottom": garments.bottom, "shoes": garments.shoes, "glasses": accessories.glasses,
                  "hat": accessories.hat, "facialHair": accessories.facial_hair}[slot](body_type, name)
-        images = {}
-        for index, (mesh, tint, kind, colour) in enumerate(built):
-            if kind not in images:
-                images[kind] = builder.add_image(kind, textures.hair_clump() if kind == "strands" else textures.cloth(kind))
+        for index, part in enumerate(built):
+            mesh, tint, kind, colour = part[:4]
+            extras = part[4] if len(part) > 4 else None
+            texture = "hair_clump" if kind == "strands" else kind
             specular = 2.5 if slot == "glasses" else CLOTH_SPECULAR.get(kind, 1.0)
-            parts.append((mesh, builder.add_material("%s_%d" % (name, index), tint, color=colour, texture=images[kind],
-                                                     specular=specular)))
+            parts.append((mesh, material("%s_%d" % (name, index), tint, texture, colour, specular, extras)))
     builder.add_skinned_mesh(name, parts, skin_index)
-    return builder.build()
+    return builder.build(), used
 
 
 from . import animations  # noqa: E402

@@ -6,11 +6,10 @@
     python3 tools/avatar_builder/generate_avatar_catalog.py --check    # verify it byte for byte
 
 Everything is procedural and original; nothing is downloaded or derived from third-party or
-Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/, CNA's baseline avatar
-catalog (docs/avatars.md). Catalog v3 is released and frozen; a new catalog is a new version (change
-CATALOG_VERSION and the output directory). The development catalogs v1 and v2 that preceded it are
-not shipped or supported; Git history keeps them (v1 from this tool's predecessor at commit
-6ca06d069, v2 from this tool at commit d1730d4f3).
+Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/, CNA's avatar catalog
+(docs/avatars.md), revision CATALOG_REVISION: a revision keeps every id of the previous one in its
+kind. The development catalogs v1 and v2 that preceded v3 are not shipped or supported; Git history
+keeps them (v1 from this tool's predecessor at commit 6ca06d069, v2 from this tool at commit d1730d4f3).
 """
 import argparse
 import hashlib
@@ -27,39 +26,79 @@ from cna_avatar import catalog, face, facecontrols, rig, animations  # noqa: E40
 
 DEFAULT_OUT = HERE.parent.parent / "modules" / "gamer-services" / "assets" / "avatars" / "v3"
 CATALOG_VERSION = 3
+# Revision 2 (2026-10): the first v3 release's ids keep their kinds, and everything added since is
+# named only by format 3 descriptions (docs/avatars.md).
+CATALOG_REVISION = 2
+# The catalog contract level a reader needs: 2 adds shared texture files, face styles, accessories,
+# ear shapes, hair covers, anchors and the head surface.
+READER = 2
+
+
+def _round(values, digits=5):
+    return [round(v, digits) for v in values]
+
+
+def head_surface(body_type):
+    """The head surface as radii around its centre on a grid (HeadSurface in AvatarAssets.hpp)."""
+    from cna_avatar import head
+    rings, segments = 32, 48
+    radii = []
+    for r in range(rings + 1):
+        theta = math.pi * r / rings
+        for k in range(segments):
+            phi = -math.pi + 2.0 * math.pi * k / segments
+            p = head.local_point(body_type, theta, phi)
+            radii.append(round(math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]), 5))
+    return {"centre": _round(head.centre(body_type)), "rings": rings, "segments": segments, "radii": radii}
+
+
+def face_anchors(body_type):
+    from cna_avatar import head
+    a = head.anchors(body_type)
+    return {name: _round(a[name]) for name in ("eyeLeft", "eyeRight", "earLeft", "earRight")}
 
 
 def build():
+    from cna_avatar import accessories, head
     files = {}
+    textures_used = set()
     items, features = [], []
     for body_type in rig.BODY_TYPES:
-        files["body.%s.glb" % body_type] = catalog.body_glb(body_type)
-    for item_id, slot, name, female, male in catalog.ITEMS + catalog.FEATURE_ITEMS:
+        files["body.%s.glb" % body_type], used = catalog.body_glb(body_type)
+        textures_used.update(used)
+    for entry_def in catalog.ITEMS + catalog.FEATURE_ITEMS:
+        item_id, slot, name, female, male = entry_def[:5]
+        extras = entry_def[5] if len(entry_def) > 5 else {}
         entry = {"id": item_id, "slot": slot, "name": name, "random": {"female": female, "male": male},
                  "assets": {b: "%s.%s.glb" % (name, b) for b in rig.BODY_TYPES}}
         for body_type in rig.BODY_TYPES:
-            files["%s.%s.glb" % (name, body_type)] = catalog.item_glb(body_type, item_id, slot, name)
-            if slot == "hair":
-                files["%s.hat.%s.glb" % (name, body_type)] = catalog.item_glb(body_type, item_id, slot, name, under_hat=True)
-        if slot == "hair":
-            entry["hatAssets"] = {b: "%s.hat.%s.glb" % (name, b) for b in rig.BODY_TYPES}
-        if name in catalog.COVERING_HATS:
-            entry["coversHair"] = True
-        (features if slot == "facialHair" else items).append(entry)
-    atlas, layout = face.atlas()
+            files["%s.%s.glb" % (name, body_type)], used = catalog.item_glb(body_type, item_id, slot, name)
+            textures_used.update(used)
+        if name in accessories.HAT_COVER:
+            entry["hairCover"] = {"line": list(accessories.HAT_COVER[name]),
+                                  "lift": round(accessories.UNDER_HAT_LIFT * max(head.SCALE.values()), 5)}
+        entry.update(extras)
+        (features if slot in ("facialHair", "ears") else items).append(entry)
+    for kind in sorted(textures_used):
+        files[catalog.texture_file(kind)] = catalog.texture_bytes(kind)
+    atlas, layout, styles = face.atlas()
     files["face_features.png"] = atlas
     files["animations.glb"] = catalog.animations_glb()
     assets = [{"name": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
               for name, data in sorted(files.items())]
     manifest = {
-        "format": 1, "catalogVersion": CATALOG_VERSION, "rig": "cna-avatar-71",
+        "format": 1, "catalogVersion": CATALOG_VERSION, "revision": CATALOG_REVISION, "reader": READER,
+        "rig": "cna-avatar-71",
         "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",
         "bodies": {b: {"asset": "body.%s.glb" % b,
                        "authoredHeightMillimeters": int(round(rig.PROPORTIONS[b]["height"] * 1000))}
                    for b in rig.BODY_TYPES},
         "items": items,
         "featureItems": features,
+        "faceStyles": catalog.face_styles(styles),
         "faceControls": {b: facecontrols.controls(b) for b in rig.BODY_TYPES},
+        "faceAnchors": {b: face_anchors(b) for b in rig.BODY_TYPES},
+        "headSurface": {b: head_surface(b) for b in rig.BODY_TYPES},
         "face": {"asset": "face_features.png", "layout": layout},
         "animations": {"asset": "animations.glb", "presets": animations.PRESETS},
         "assets": assets,
