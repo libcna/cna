@@ -43,6 +43,15 @@ All three must be addressed for Task 7.11's "no mesh explosions, no distorted li
 be genuinely met — proportion/topology fixes alone (mesh-craft geometry) will not fix the ring
 artifacts, and vice versa.
 
+## Catalog v3 revision 2 (2026-10-15)
+
+Measured from the generated bodies: the female is 1.68 m and about 4.6 head-heights tall, the male
+1.80 m and about 4.8 (the first release was about 3.9 and 4.0). Still clearly more head-heavy than
+realistic proportion and in the console era's friendly, stylized category, but reading as adults:
+a sculpted head with a tapered jaw, cheekbones and chin, a neck that carries it, shoulders and a
+torso broad enough for the head. The table below predates the generator and is kept as the record
+of that pass; the bodies no longer follow its 6.0 head-heights.
+
 ## Proportion targets
 
 Expressed in **head-heights** (the classic, non-proprietary figure-drawing/character-design unit —

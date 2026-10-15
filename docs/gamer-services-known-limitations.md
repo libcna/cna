@@ -190,6 +190,8 @@ These are outside CNA's identity even where the XNA-facing API has a CNA equival
 - **XNA / Xbox:** the console drew avatars from Microsoft's own assets, installed with system updates.
 - **CNA now:** every mesh, texture and animation is original CNA work
   (`tools/avatar_builder/`), in CNA's own 1,021-byte description encoding; see 41 for how v3 looks.
+  Nothing of Microsoft's (models, textures, animations, marketplace items, artwork) was extracted,
+  traced or used as reference geometry.
 - **Reason:** proprietary assets; the project forbids them.
 - **Observable impact:** avatars look like CNA avatars, not Xbox 360 avatars; the XNA API behaves
   the same.
@@ -781,20 +783,25 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 ### 41. Visual fidelity of catalog v3
 
 - **Status:** implementation differs by design (art direction).
-- **CNA now:** original assets in the Xbox 360-era style (large head, short limbs, fitted clothes,
-  decal faces). Known deficiencies: no baked occlusion (40); garments are fitted surfaces with
-  hems, cuffs and pockets but no modelled folds; a preset authored for one body lets a planted foot
-  drift 1-3 cm on the other; in the deepest crouch (FemaleIdleFixShoe) a few millimetres of trouser
-  front can show above a shirt hem.
+- **CNA now:** original assets in a stylized, friendly Xbox 360-era style (revision 2: adult
+  proportions of about 4.7 heads, a sculpted head, fitted clothes, decal faces and makeup). Known
+  deficiencies: no baked occlusion (40); garments are fitted surfaces with hems, cuffs, pockets and
+  quilting but no modelled folds; hair is shaped clumps and shells, so curls, coils and twists read
+  as a stylized mass rather than strands; earrings hang from the ear anchor moved by the ear
+  controls, not refitted to each of the six ear shapes; rings are legible only in the editor's
+  Hands view; makeup does not follow the eye expressions, except eyeliner, which has closed-eye
+  tiles; a preset authored for one body lets a planted foot drift 1-3 cm on the other; in the
+  deepest crouch (FemaleIdleFixShoe) a few millimetres of trouser front can show above a shirt hem.
 - **Porting impact:** none; functional compatibility does not depend on likeness.
-- **Future work:** a later catalog version (v3 is released and does not change).
+- **Future work:** a later revision or catalog version.
 
 ### 42. Catalog and description-format edge cases
 
 - **Status:** partially implemented.
-- **CNA now:** description formats 1 and 2 exist (format 2 adds facial hair and face shape); no
-  newer format. Catalog v3 is the baseline and the only catalog shipped, released and pinned by
-  hash tests; the development catalogs 1 and 2 are not supported. A description is always drawn
+- **CNA now:** description formats 1, 2 and 3 exist (format 2 adds facial hair and face shape,
+  format 3 eyebrows, ears, accessories, makeup, colours, proportions and more face shape); every
+  description uses the lowest format that says it. Catalog v3 is the baseline and the only catalog
+  shipped, at revision 2, pinned by hash tests; the development catalogs 1 and 2 are not supported. A description is always drawn
   from exactly the catalog version it names, and same-named files of different versions are told
   apart by size and SHA-256. Edges:
   - a description naming catalog 1 or 2 is not a CNA description (height 0, female body type, a
@@ -817,8 +824,13 @@ per-user models. A server catalog pack is only the update path for a catalog a c
     catalog changes nothing about how v3 descriptions look (`ServiceAvatarTests`, GSH-09);
   - installed packs are kept, never evicted or uninstalled; the server's file route allows each
     account 1 GiB of downloads per title and hour;
-  - CNA builds older than format 2 read a format 2 description exchanged directly as invalid; the
-    service gives them a format 1 copy.
+  - CNA builds older than a format read a description of it exchanged directly as invalid; the
+    service gives them a copy in a format they read (format 3's additions left out, an item only
+    format 3 names replaced by its slot's lowest older item);
+  - a CNA build from before revision 2 draws avatars against a service that imported it, but its
+    avatar editor cannot open there (the revision 2 manifest needs contract level 2 and is larger
+    than one service message); a service from before revision 2 cannot import it and refuses a
+    format 3 save, which the editor explains.
 - **Reason:** exact-version resolution never reads ids against another catalog, and a client
   cannot draw a format it does not know.
 - **Observable impact:** a player without the catalog sees a projected or default avatar.
