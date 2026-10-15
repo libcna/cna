@@ -4,11 +4,15 @@
 #include <algorithm>
 
 #include "CNA/Content/Pipeline/XnaModelBridge.hpp"
+#include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInWriters.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/BitmapContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MipmapChain.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -111,6 +115,71 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                 }
                 const Xnb::XnbModelData data = CNA::Content::Pipeline::ToCanonicalModel(*value);
                 output.Output().WriteRawObject(*canonical_, &data);
+            }
+
+        private:
+            const Xnb::XnbTypeWriterBase* canonical_;
+        };
+
+        /// A processed `Texture2DContent` is written the way XNA's Texture2DWriter writes it: the mip chain's surface format and
+        /// every level's bytes go to the canonical Texture2D writer, which is the only one there is.
+        class Texture2DContentTypeWriter final : public ContentTypeWriter<Graphics::Texture2DContent>
+        {
+        public:
+            explicit Texture2DContentTypeWriter(const Xnb::XnbTypeWriterBase& canonical) : canonical_(&canonical) {}
+
+            [[nodiscard]] std::int32_t getTypeVersionProperty() const override
+            {
+                return canonical_->ReaderIdentity().readerVersion;
+            }
+
+            [[nodiscard]] std::string GetRuntimeReader(TargetPlatform targetPlatform) const override
+            {
+                return Xnb::FormatXnbReaderName(canonical_->ReaderIdentity(),
+                                                Xnb::XnbReaderNameStyle::Xna40,
+                                                ContainerPlatform(targetPlatform));
+            }
+
+            [[nodiscard]] std::string GetRuntimeType(TargetPlatform targetPlatform) const override
+            {
+                (void)targetPlatform;
+                return canonical_->ReaderIdentity().targetBaseName;
+            }
+
+        protected:
+            void Write(ContentWriter& output, const Carrier<Graphics::Texture2DContent>& value) override
+            {
+                if (value == nullptr)
+                {
+                    throw PipelineException("ContentCompiler: a null texture cannot be compiled.");
+                }
+                const Graphics::MipmapChain& chain = value->getMipmapsProperty();
+                if (chain.getCountProperty() == 0)
+                {
+                    throw PipelineException("ContentCompiler: a texture with no mipmap levels cannot be compiled.");
+                }
+                Xnb::XnbTexture2DContent wrapper;
+                Xnb::XnbTextureData& texture = wrapper.texture;
+                texture.kind = Xnb::XnbTextureKind::Texture2D;
+                texture.width = static_cast<std::uint32_t>(chain[0]->getWidthProperty());
+                texture.height = static_cast<std::uint32_t>(chain[0]->getHeightProperty());
+                texture.mipCount = static_cast<std::uint32_t>(chain.getCountProperty());
+                texture.platform = 'w';
+                if (!chain[0]->TryGetFormat(texture.surfaceFormat))
+                {
+                    throw PipelineException("ContentCompiler: the texture's bitmap type has no surface format to write.");
+                }
+                for (std::int32_t level = 0; level < chain.getCountProperty(); ++level)
+                {
+                    Microsoft::Xna::Framework::Graphics::SurfaceFormat format{};
+                    if (!chain[level]->TryGetFormat(format) || format != texture.surfaceFormat)
+                    {
+                        throw PipelineException("ContentCompiler: every level of a texture must have the same surface format.");
+                    }
+                    const auto data = chain[level]->GetPixelData();
+                    texture.levels.emplace_back(data.begin(), data.end());
+                }
+                output.Output().WriteRawObject(*canonical_, &wrapper);
             }
 
         private:
@@ -240,6 +309,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                    [facade, this](TargetPlatform platform)
                                        -> std::shared_ptr<Xnb::XnbTypeWriterBase>
                                    { return std::make_shared<Adapter<Processors::ModelContent>>(
+                                         facade, platform, this); }});
+        }
+        // A processed texture likewise reaches the canonical Texture2D writer (XNA's ContentCompiler writes Texture2DContent too).
+        if (const Xnb::XnbTypeWriterBase* texture = builtIns.Find(Xnb::XnbTypeKey<Xnb::XnbTexture2DContent>::Id()))
+        {
+            auto facade = std::make_shared<Texture2DContentTypeWriter>(*texture);
+            facade->Initialize(*this);
+            known_.push_back(Known{std::type_index(typeid(Graphics::Texture2DContent)),
+                                   std::type_index(typeid(Carrier<Graphics::Texture2DContent>)), true,
+                                   ContentTypeName<Graphics::Texture2DContent>::Name(), facade,
+                                   [facade, this](TargetPlatform platform)
+                                       -> std::shared_ptr<Xnb::XnbTypeWriterBase>
+                                   { return std::make_shared<Adapter<Graphics::Texture2DContent>>(
                                          facade, platform, this); }});
         }
     }

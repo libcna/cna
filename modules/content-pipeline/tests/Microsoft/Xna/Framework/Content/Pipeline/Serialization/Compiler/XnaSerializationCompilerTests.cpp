@@ -361,6 +361,7 @@ namespace
             "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
             "System.Collections.Generic.Dictionary`2[[System.String],[System.String]]",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent",
         };
         std::sort(names.begin(), names.end());
         std::sort(expected.begin(), expected.end());

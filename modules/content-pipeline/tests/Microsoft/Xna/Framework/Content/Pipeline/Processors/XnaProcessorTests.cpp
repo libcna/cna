@@ -2223,6 +2223,47 @@ TEST(XnaModelPipeline, AProcessorsOwnSceneBecomesAnXnbCnaReadsBack)
     EXPECT_FLOAT_EQ(effect.diffuseColor.Z, 0.125f);
 }
 
+// ContentCompiler writes a processed Texture2DContent the way XNA's Texture2DWriter does: the surface format, the size and every
+// mip level go to the canonical Texture2D writer, and the file reads back through CNA's own reader with the same pixels.
+TEST(XnaTexturePipeline, AProcessedTextureBecomesAnXnbCnaReadsBack)
+{
+    auto texture = std::make_shared<Graphics::Texture2DContent>();
+    texture->getMipmapsProperty().Add(Gradient(4, 2));
+    texture->getMipmapsProperty().Add(Gradient(2, 1));
+    texture->getMipmapsProperty().Add(Gradient(1, 1));
+
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler compiler;
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::CompileOptions options;
+    options.assetName = "Textures/gradient";
+    options.targetProfile = Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef;
+    const CNA::Internal::Xnb::XnbAssetWriteResult written =
+        compiler.Compile<Graphics::Texture2DContent>(texture, options);
+    EXPECT_EQ(written.rootReaderName,
+              "Microsoft.Xna.Framework.Content.Texture2DReader, Microsoft.Xna.Framework.Graphics, "
+              "Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553");
+
+    ScratchDirectory scratch("texture");
+    const std::filesystem::path path = scratch.Path() / "gradient.xnb";
+    {
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(written.bytes.data()),
+                  static_cast<std::streamsize>(written.bytes.size()));
+    }
+    const CNA::Internal::Xnb::XnbCanonicalAsset asset = CNA::Internal::Xnb::DecodeXnbCanonicalAsset(path);
+    const auto& read = std::get<CNA::Internal::Xnb::XnbTextureData>(asset.value);
+    EXPECT_EQ(read.kind, CNA::Internal::Xnb::XnbTextureKind::Texture2D);
+    EXPECT_EQ(read.surfaceFormat, Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    EXPECT_EQ(read.width, 4u);
+    EXPECT_EQ(read.height, 2u);
+    EXPECT_EQ(read.mipCount, 3u);
+    ASSERT_EQ(read.levels.size(), 3u);
+    EXPECT_EQ(read.levels[0].size(), 4u * 2u * 4u);
+    EXPECT_EQ(read.levels[1].size(), 2u * 1u * 4u);
+    EXPECT_EQ(read.levels[2].size(), 1u * 1u * 4u);
+    const auto expected = Gradient(4, 2)->GetPixelData();
+    EXPECT_EQ(read.levels[0], std::vector<std::uint8_t>(expected.begin(), expected.end()));
+}
+
 
 // ---- XNAPP-190: the effect importer, and what DebugMode.Auto decides --------------------------
 
