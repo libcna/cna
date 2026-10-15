@@ -8,9 +8,11 @@ AvatarRenderer (cna_avatar_review), then laid out as contact sheets.
     python3 tools/avatar_builder/avatar_review.py preview jobs.json OUT/preview --catalogs $A
     cna_avatar_review jobs.json OUT/renderer                  # the real renderer, same jobs
     python3 tools/avatar_builder/avatar_review.py sheets jobs.json OUT/renderer OUT/sheets
+    python3 tools/avatar_builder/avatar_review.py compare jobs.json OUT/OPENGL33 OUT/SOFTWARE   # renderer vs renderer
 
 Sheets: `views` (front, three-quarter, profile, back, head, hand from the front and the back, feet of a female and a male
-avatar), `diverse` (seeded random avatars), `animations` (key frames of every preset) and
+avatar), `diverse` (seeded random avatars), `faces` (every face control at both ends), `hair` and `hairback`,
+`wardrobe`, `headwear`, `facial`, `ears`, `accessories`, `makeup`, `animations` (key frames of every preset) and
 `expressions` (every eye, eyebrow and mouth state, and independent left/right states).
 """
 import argparse
@@ -251,9 +253,11 @@ def catalog_jobs(catalogs, library, manifest, version, heroes):
         else:
             wrist, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "WristRight")
             tip, _ = posed_joint(catalogs, library, data, "Stand0", 0.0, "FingerMiddle3Right")
-            hand = (wrist * 0.85 + tip * 0.15)
-            jobs.append(job("accessories-%03d" % item["id"], "accessories", d, hand + np.array([-0.30, 0.06, 0.30]), hand, 0.45,
-                            label=item["name"]))
+            # A ring sits on the finger: framed lower and closer than a watch or a glove.
+            ring = slot == "rings"
+            hand = wrist * 0.45 + tip * 0.55 if ring else wrist * 0.85 + tip * 0.15
+            jobs.append(job("accessories-%03d" % item["id"], "accessories", d, hand + np.array([-0.30, 0.06, 0.30]) * (0.6 if ring else 1.0),
+                            hand, 0.45, label=item["name"]))
     makeup_colors = {"eyeShadow": (150, 96, 140), "eyeliner": (0, 0, 0), "blush": (228, 120, 120), "lips": (190, 50, 70)}
     for item in manifest.get("faceStyles", []):
         slot = item["slot"]
@@ -344,6 +348,36 @@ def cmd_sheets(args):
         print("sheet %s: %d cells" % (sheet, len(jobs)))
 
 
+def cmd_compare(args):
+    """Each job's renders against the reference renderer's: the mean absolute difference (0-255)
+    and how much of the avatar's silhouette both agree on (pixels that differ from the background)."""
+    from PIL import Image
+    data = json.loads(args.jobs.read_text())
+    background = np.array(data["background"][:3], dtype=np.float32)
+    worst_diff, worst_overlap, compared, missing = (-1.0, ""), (2.0, ""), 0, []
+    sheets = {}
+    for j in data["jobs"]:
+        a, b = args.reference / (j["name"] + ".png"), args.renders / (j["name"] + ".png")
+        if not a.is_file() or not b.is_file():
+            missing.append(j["name"])
+            continue
+        x = np.asarray(Image.open(a).convert("RGB"), dtype=np.float32)
+        y = np.asarray(Image.open(b).convert("RGB"), dtype=np.float32)
+        diff = float(np.abs(x - y).mean())
+        sx, sy = np.abs(x - background).max(axis=2) > 12, np.abs(y - background).max(axis=2) > 12
+        overlap = float((sx & sy).sum()) / max(1.0, float((sx | sy).sum()))
+        worst_diff = max(worst_diff, (diff, j["name"]))
+        worst_overlap = min(worst_overlap, (overlap, j["name"]))
+        sheet = sheets.setdefault(j["sheet"], [0.0, 1.0])
+        sheet[0], sheet[1] = max(sheet[0], diff), min(sheet[1], overlap)
+        compared += 1
+    for sheet, (diff, overlap) in sorted(sheets.items()):
+        print("%-12s worst mean difference %.2f/255, worst silhouette overlap %.4f" % (sheet, diff, overlap))
+    print("%d jobs compared, %d missing; worst %.2f/255 (%s), worst overlap %.4f (%s)" %
+          (compared, len(missing), worst_diff[0], worst_diff[1], worst_overlap[0], worst_overlap[1]))
+    return 1 if missing else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -366,8 +400,13 @@ def main():
     p.add_argument("--cell", type=int, default=200)
     p.add_argument("--title")
     p.set_defaults(fn=cmd_sheets)
+    p = sub.add_parser("compare")
+    p.add_argument("jobs", type=Path)
+    p.add_argument("reference", type=Path)
+    p.add_argument("renders", type=Path)
+    p.set_defaults(fn=cmd_compare)
     args = parser.parse_args()
-    args.fn(args)
+    sys.exit(args.fn(args) or 0)
 
 
 if __name__ == "__main__":

@@ -664,13 +664,16 @@ been run.
 ### 33. `AvatarRenderer` on other renderers
 
 - **Status:** not independently validated.
-- **CNA now:** on 2026-09-30 the full avatar review (257 frames: views, hands, feet, faces, every
-  expression, key frames of every animation; catalog v3) ran on OpenGL 3.3, Vulkan (retired
-  2026-10-13), SOFTWARE, SDL_GPU (Vulkan backend) and WebGPU, one multi-renderer build, each
-  renderer confirmed by its log. Against OpenGL 3.3 the mean absolute pixel difference is at most
-  0.10/255 and silhouette overlap at least 0.9995 in every frame; sheets inspected by eye agree.
-  The XNA AvatarShadows sample runs on OpenGL ES 3 (Mesa software). HEADLESS runs the API tests.
-  Not measured: `DIRECTX9` (no Windows host), FNA3D, and SDL_GPU's Direct3D 12 and Metal backends.
+- **CNA now:** on 2026-10-15 the full avatar review of catalog v3 revision 2 (521 frames: views,
+  hands, feet, every face control, every hairstyle from the front and from behind, every garment,
+  headwear, facial-hair style, ear shape, accessory and makeup style, key frames of every
+  animation, every expression) ran on OpenGL 3.3, OpenGL ES 3, SOFTWARE, SDL_GPU (Vulkan), WebGPU
+  and FNA3D (its SDL_GPU Vulkan driver), one multi-renderer build, each confirmed by its log, all
+  frames rendered. Against OpenGL 3.3 (`avatar_review.py compare`) the worst mean absolute pixel
+  difference is 0.09/255 (WebGPU) and the worst silhouette overlap 0.9994 (SOFTWARE); OpenGL ES 3
+  is identical. The XNA AvatarShadows sample ran on OpenGL ES 3 (Mesa software) on 2026-09-30, not
+  re-run for revision 2. HEADLESS runs the API tests. Not measured: `DIRECTX9` (no Windows host; the gamer-services library cross-builds
+  with MinGW), and SDL_GPU's Direct3D 12 and Metal backends.
 - **Reason:** the remaining renderers need another host or a separate build.
 - **Observable impact:** unknown on those; none found on the ones measured.
 - **Porting impact:** none known.
