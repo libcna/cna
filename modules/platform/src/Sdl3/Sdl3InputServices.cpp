@@ -280,10 +280,13 @@ namespace CNA::Platform::Sdl3 {
             return {};
         }
 
+        // SDL reports fractional motion on some hosts (a browser's pointer lock on a scaled
+        // display, a high-resolution wheel-less touchpad). The whole counts go out; the fraction
+        // stays for the next read so slow movement is not truncated away to nothing.
         const MouseDelta result{static_cast<int>(relativeDeltaX_),
                                 static_cast<int>(relativeDeltaY_)};
-        relativeDeltaX_ = 0.0f;
-        relativeDeltaY_ = 0.0f;
+        relativeDeltaX_ -= static_cast<float>(result.x);
+        relativeDeltaY_ -= static_cast<float>(result.y);
         return result;
     }
 
