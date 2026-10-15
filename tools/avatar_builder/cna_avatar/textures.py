@@ -79,30 +79,36 @@ def image_rgba(width, height, fn):
     return png.encode_rgba(width, height, pixels)
 
 
-def stubble(density):
-    """Short hairs as soft dots (white, tinted by the hair colour), fading at the beard's edge
-    (v runs from the cheeks down over the jaw, u around the face)."""
-    def fn(u, v):
-        grain = fbm(u * 160.0, v * 60.0, 41, 2, wrap_x=160)
-        # Fades out toward the top edge of the beard area (v near 0).
-        edge = smoothstep(0.0, 0.35, v)
-        return (1.0, 1.0, 1.0, density * edge * (0.42 + 0.30 * (grain - 0.5)))
-    return image_rgba(256, 64, fn)
-
-
 def hair_coil():
-    """Tightly coiled hair: small round curls packed over the surface."""
+    """Tightly coiled hair: small round curls packed irregularly over the surface (jittered cells,
+    so no rows or grid show)."""
     def fn(u, v):
-        cx, cy = u * 40.0, v * 20.0
-        best = 1.0
+        cx, cy = u * 36.0, v * 18.0
+        best, second = 9.0, 9.0
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 ix, iy = math.floor(cx) + dx, math.floor(cy) + dy
-                px = ix + 0.5 + 0.35 * (_hash(ix % 40, iy, 31) - 0.5)
-                py = iy + 0.5 + 0.35 * (_hash(ix % 40, iy, 37) - 0.5)
-                best = min(best, math.hypot(cx - px, cy - py))
-        return 0.62 + 0.36 * smoothstep(0.75, 0.15, best)
+                px = ix + 0.5 + 0.9 * (_hash(ix % 36, iy, 31) - 0.5)
+                py = iy + 0.5 + 0.9 * (_hash(ix % 36, iy, 37) - 0.5)
+                d = math.hypot(cx - px, cy - py)
+                if d < best:
+                    best, second = d, best
+                elif d < second:
+                    second = d
+        # Lighter on each curl's crown, darker where curls meet.
+        edge = smoothstep(0.0, 0.35, second - best)
+        return 0.60 + 0.30 * smoothstep(0.85, 0.10, best) * (0.6 + 0.4 * edge) + 0.08 * edge
     return image(128, 64, fn)
+
+
+def hair_twist():
+    """Twisted locks: u across a lock (0.5 its crest), v along it; diagonal ridges where the strands
+    wrap round, darker toward the lock's edges."""
+    def fn(u, v):
+        crest = math.sin(math.pi * u)
+        ridge = 0.5 + 0.5 * math.cos(2.0 * math.pi * (v * 9.0 + u * 1.2))
+        return 0.58 + 0.30 * crest * (0.55 + 0.45 * ridge) + 0.06 * (fbm(u * 8.0, v * 24.0, 61, 2) - 0.5)
+    return image(64, 128, fn)
 
 
 def hair_cap():

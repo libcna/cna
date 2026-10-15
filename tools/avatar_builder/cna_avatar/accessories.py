@@ -386,22 +386,6 @@ def revised_hat(body_type, style):
 
 # ----- facial hair ------------------------------------------------------------------------------
 
-def _face_shell(body_type, region, lift, rows=10, cols=28):
-    """A shell over the face where region(x, y) (head-local, male scale) > 0, following the head."""
-    s = head.SCALE[body_type]
-    grid = []
-    for r in range(rows + 1):
-        theta = PI * (0.50 + 0.36 * r / rows)
-        row = []
-        for k in range(cols + 1):
-            phi = -0.62 * PI + 1.24 * PI * k / cols
-            local = head.local_point(body_type, theta, phi)
-            inside = region(local[0] / s, local[1] / s)
-            row.append(head.point(body_type, theta, phi, lift * inside))
-        grid.append(row)
-    return grid
-
-
 def _beard_region(my, full, chin_only=False, sideburns=False, mutton=False, chin_strap=False):
     """region(x, y, z) in head-local male-scale metres: 1 where a beard of this shape grows."""
     def region(x, y, z):
@@ -427,113 +411,221 @@ def _beard_region(my, full, chin_only=False, sideburns=False, mutton=False, chin
     return region
 
 
-def _beard_shell(body_type, region, thick, under=0.004):
+def _face_shell(body_type, region, thick, under=0.004, grooves=0.0, spacing=0.011, rows=40, columns=84, lift=0.0,
+                theta=(0.46, 0.92), phi=0.66, drop=True):
+    """A shell over the lower face where region(x, y, z) (head-local male metres) is 1, `thick`
+    above the skin, diving under it outside the region so its edge grows out of the skin.
+    grooves: how deep the soft vertical channels between beard clumps are (0 smooth), `spacing`
+    apart, bending outward toward the jaw; drop: leave out what lies wholly outside the region.
+    u runs across the face and v down it over the shell's (theta, phi) range."""
     s = head.SCALE[body_type]
     c = head.centre(body_type)
-    grid = []
-    for r in range(20):
-        theta = PI * (0.48 + 0.40 * r / 19)
-        row = []
-        for k in range(47):
-            phi = -0.64 * PI + 1.28 * PI * k / 46
-            local = head.local_point(body_type, theta, phi)
-            inside = region(local[0] / s, local[1] / s, local[2] / s)
-            # Outside the region the shell dives under the skin, so its edge grows out of it.
-            row.append(head.point(body_type, theta, phi, thick * inside - under * s * (1.0 - inside)))
+    grid, inside_of, uvs = [], [], []
+    for r in range(rows):
+        th = PI * (theta[0] + (theta[1] - theta[0]) * r / (rows - 1))
+        row, ins, uv_row = [], [], []
+        for k in range(columns):
+            ph = -phi * PI + 2.0 * phi * PI * k / (columns - 1)
+            local = head.local_point(body_type, th, ph)
+            x, y, z = local[0] / s, local[1] / s, local[2] / s
+            inside = region(x, y, z)
+            h = thick * inside
+            if grooves:
+                # Clumps of hair growing down and a little outward along the jaw.
+                lean = x + 0.35 * x * smoothstep(-0.02, -0.12, y)
+                band = 0.5 + 0.5 * math.cos(2.0 * PI * lean / spacing + 0.8 * hair.jitter(int(lean / spacing * 4.0), 7))
+                h *= 1.0 - grooves * band ** 2 * smoothstep(0.0, 0.6, inside)
+            row.append(head.point(body_type, th, ph, lift * s + h - under * s * (1.0 - inside)))
+            ins.append(inside)
+            uv_row.append((k / (columns - 1), r / (rows - 1)))
         grid.append(row)
+        inside_of.append(ins)
+        uvs.append(uv_row)
     shell = Mesh()
     shell.patch_origin = c
-    return shell.grid(grid, HEADW, wrap=False)
+    shell.grid(grid, HEADW, wrap=False)
+    shell.uvs = [uv for row in uvs for uv in row]
+    if drop:
+        flat = [v for row in inside_of for v in row]
+        kept = []
+        for t in range(0, len(shell.indices), 3):
+            tri = shell.indices[t:t + 3]
+            if max(flat[i] for i in tri) > 0.02:
+                kept += tri
+        shell.indices = kept
+        shell.compact()
+    return shell
+
+
+def _mustache_region(my, width=0.044, height=0.014, centre_gap=0.0, droop=0.0, taper=1.0):
+    """1 over the upper lip: from under the nose down to the lip, following the lip's curve out
+    past the mouth's corners to `width` each side (male metres), thinning toward its ends; `droop`
+    carries the ends down beside the mouth."""
+    nose_bottom = head.NOSE_TIP_Y - 0.011
+    def region(x, y, z):
+        ax = abs(x)
+        u = min(ax / width, 1.0)
+        # Full in the middle, thinning toward the ends (the shell shows where this is above ~0.3).
+        end = (1.0 - 0.72 * u * u) * smoothstep(1.0, 1.0 - 0.12 * taper, u)
+        top = nose_bottom - 0.002 - 0.010 * u * u - droop * smoothstep(0.55, 1.0, u)
+        bottom = top - height * (1.0 - 0.45 * u * u) - droop * 1.4 * smoothstep(0.45, 1.0, u)
+        band = smoothstep(bottom - 0.0015, bottom + 0.0025, y) * smoothstep(top + 0.0015, top - 0.0025, y)
+        gap = smoothstep(centre_gap * 0.5, centre_gap * 0.5 + 0.003, ax) if centre_gap else 1.0
+        return band * end * gap * smoothstep(0.02, 0.06, z)
+    return region
+
+
+def _union(*regions):
+    return lambda x, y, z: max(r(x, y, z) for r in regions)
+
+
+STUBBLE_THETA, STUBBLE_PHI = (0.46, 0.92), 0.66
+
+
+def stubble_region(body_type):
+    s = head.SCALE[body_type]
+    my = sub(head.anchors(body_type)["mouth"], head.centre(body_type))[1] / s
+    return _union(_beard_region(my, True), _mustache_region(my, width=0.044, height=0.020))
+
+
+def stubble_texture(body_type, density, width=384, height=192):
+    """The stubble texture of one body: fine soft dots where the beard grows, over the stubble
+    shell's (u, v) -- u across the face, v from the cheeks down under the jaw."""
+    from . import textures
+    s = head.SCALE[body_type]
+    region = stubble_region(body_type)
+    rows = []
+    for py in range(height):
+        v = (py + 0.5) / height
+        th = PI * (STUBBLE_THETA[0] + (STUBBLE_THETA[1] - STUBBLE_THETA[0]) * v)
+        row = []
+        for px in range(width):
+            u = (px + 0.5) / width
+            ph = -STUBBLE_PHI * PI + 2.0 * STUBBLE_PHI * PI * u
+            local = head.local_point(body_type, th, ph)
+            row.append(region(local[0] / s, local[1] / s, local[2] / s))
+        rows.append(row)
+
+    def fn(u, v):
+        inside = rows[min(int(v * height), height - 1)][min(int(u * width), width - 1)]
+        if inside <= 0.0:
+            return (1.0, 1.0, 1.0, 0.0)
+        cx, cy = u * 260.0, v * 130.0
+        best = 1.0
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                ix, iy = math.floor(cx) + dx, math.floor(cy) + dy
+                qx = ix + 0.5 + 0.8 * (textures._hash(ix, iy, 41) - 0.5)
+                qy = iy + 0.5 + 0.8 * (textures._hash(ix, iy, 43) - 0.5)
+                best = min(best, math.hypot(cx - qx, cy - qy))
+        dots = smoothstep(0.45, 0.12, best)
+        return (1.0, 1.0, 1.0, density * smoothstep(0.0, 0.6, inside) * (0.28 + 0.30 * dots))
+    return textures.image_rgba(width, height, fn)
+
+
+def _hanging_beard(body_type, from_y, half_width, length_, seed, thick, count=7):
+    """A beard grown long: strands from under the chin and along the jaw hanging down onto the
+    chest and drawn together toward a rounded point (a hair mass), from head-local height from_y
+    across half_width each side."""
+    from .hairmass import Obstacles, Flow, shell
+    s = head.SCALE[body_type]
+    ob = Obstacles(body_type)
+    roots = []
+    for k in range(count):
+        x = -half_width + 2.0 * half_width * k / (count - 1)
+        p, _, _ = head.front_point(body_type, x * s, from_y * s, 0.002 * s)
+        roots.append((p, normalize((x * 0.4, -1.0, 0.35)), "beard"))
+    point = add(head.front_point(body_type, 0.0, from_y * s, 0.0)[0], (0.0, -length_ * s, 0.035 * s))
+    flow = Flow(gravity=10.0, lift=0.003 * s, cling=0.0, body=True, attract=point, attract_gain=16.0)
+    return shell(ob, roots, length_ * s, flow, lambda t: thick * s * (1.0 - 0.55 * t), seed, closed=False, tip=0.9,
+                 notch=0.04 * s, tip_round=0.75, groove=0.78, sub_columns=5)
 
 
 def facial_hair(body_type, style):
     s = head.SCALE[body_type]
     a = head.anchors(body_type)
     c = head.centre(body_type)
-    locks = Mesh()
-    mouth = sub(a["mouth"], c)
-    my = mouth[1] / s
-
-    def mustache(count=3, length=0.022, thick=0.011, droop=0.0, curl=0.0, spread=0.010):
-        m = Mesh()
-        for side in (1.0, -1.0):
-            for k in range(count):
-                x0 = side * (0.004 + spread * k) * s
-                start = head.front_point(body_type, x0, mouth[1] + 0.027 * s, 0.004 * s)[0]
-                end = head.front_point(body_type, x0 + side * length * s, mouth[1] + (0.006 - droop - 0.004 * k) * s, 0.004 * s)[0]
-                if curl:
-                    end = add(end, (side * curl * s * 0.5, curl * s, 0.002 * s))
-                mid = add(lerp(start, end, 0.5), (0.0, 0.003 * s, 0.006 * s))
-                m.append(hair.lock(body_type, hair._catmull([start, mid, end], 4), hair.taper(thick * s, 0.2),
-                                   hair.taper(thick * 0.55 * s, 0.3)))
-        return m
-
-    def chin_locks(count, top, bottom, width, length_down, spacing=0.010):
-        m = Mesh()
-        for k in range(count):
-            x = (k - (count - 1) / 2.0) * spacing * s
-            start = head.front_point(body_type, x, mouth[1] - top * s, 0.003 * s)[0]
-            end = head.front_point(body_type, x * 0.7, mouth[1] - bottom * s, 0.008 * s)[0]
-            end = add(end, (0.0, -length_down * s, 0.006 * s))
-            m.append(hair.lock(body_type, hair._catmull([start, lerp(start, end, 0.5), end], 4), hair.taper(width * s, 0.25),
-                               hair.taper(width * 0.58 * s, 0.3)))
-        return m
-
+    my = sub(a["mouth"], c)[1] / s
+    beard_tex = "hair_cap"
     parts = []
-    if style in ("facial_stubble", "facial_heavystubble"):
-        # Stubble is a translucent shading over the skin, not a shell.
-        beard = _beard_region(my, True)
 
-        def region(x, y, z):
-            lip = smoothstep(0.034, 0.022, abs(x)) * smoothstep(my + 0.002, my + 0.010, y) * smoothstep(my + 0.034, my + 0.024, y)
-            return max(beard(x, y, z), lip * smoothstep(0.02, 0.06, z))
-        shell = _beard_shell(body_type, region, 0.0009 * s, under=0.0)
-        texture = "stubble" if style == "facial_stubble" else "stubble_heavy"
+    def add_part(mesh, texture=beard_tex, colour=(1.0, 1.0, 1.0)):
+        if not (mesh.positions and mesh.indices):
+            return
+        # Pieces of one material are one part (one draw).
+        for existing in parts:
+            if existing[2] == texture and existing[3] == colour:
+                existing[0].append(mesh)
+                return
+        parts.append((mesh, "hair", texture, colour))
+
+    if style in ("facial_stubble", "facial_heavystubble"):
+        # Stubble is a translucent shading over the skin, not a shell: a texture over the lower
+        # face holding both the grain and where the beard grows, so it fades out at its edge.
+        shell = _face_shell(body_type, stubble_region(body_type), 0.0, under=0.0, lift=0.0007, theta=STUBBLE_THETA,
+                            phi=STUBBLE_PHI)
+        texture = ("stubble" if style == "facial_stubble" else "stubble_heavy") + "_" + body_type
         return [(shell, "hair", texture, (1.0, 1.0, 1.0), {"cnaBlend": "alpha"})]
-    if style == "facial_mustache":
-        locks.append(mustache())
-    elif style == "facial_pencil":
-        locks.append(mustache(count=2, length=0.024, thick=0.0055, spread=0.012))
-    elif style == "facial_handlebar":
-        locks.append(mustache(count=3, length=0.030, thick=0.012, curl=0.010))
-    elif style == "facial_horseshoe":
-        locks.append(mustache(count=3, length=0.024, thick=0.011, droop=0.004))
-        for side in (1.0, -1.0):
-            top = head.front_point(body_type, side * 0.034 * s, mouth[1] + 0.004 * s, 0.005 * s)[0]
-            bottom = head.front_point(body_type, side * 0.036 * s, mouth[1] - 0.046 * s, 0.006 * s)[0]
-            locks.append(hair.lock(body_type, hair._catmull([top, lerp(top, bottom, 0.5), bottom], 4), hair.taper(0.011 * s, 0.5),
-                                   hair.taper(0.007 * s, 0.5)))
-    elif style == "facial_goatee":
-        locks.append(mustache())
-        locks.append(chin_locks(5, 0.030, 0.065, 0.012, 0.012))
-    elif style == "facial_vandyke":
-        locks.append(mustache(count=2, length=0.026, thick=0.010, curl=0.004))
-        locks.append(chin_locks(4, 0.034, 0.070, 0.011, 0.018, spacing=0.009))
-    elif style == "facial_soulpatch":
-        locks.append(chin_locks(3, 0.022, 0.044, 0.008, 0.002, spacing=0.006))
-    elif style == "facial_chinbeard":
-        locks.append(_beard_shell(body_type, _beard_region(my, False, chin_only=True), 0.010 * s))
-        locks.append(chin_locks(5, 0.040, 0.075, 0.014, 0.010))
-    elif style in ("facial_beard", "facial_chinstrap", "facial_shortbeard", "facial_longbeard"):
-        full = style != "facial_chinstrap"
-        thick = {"facial_beard": 0.012, "facial_chinstrap": 0.006, "facial_shortbeard": 0.007, "facial_longbeard": 0.014}[style]
-        locks.append(_beard_shell(body_type, _beard_region(my, full, chin_strap=not full), thick * s))
-        if style == "facial_beard":
-            locks.append(mustache())
-            locks.append(chin_locks(7, 0.040, 0.080, 0.016, 0.014, spacing=0.013))
-        elif style == "facial_shortbeard":
-            locks.append(mustache(thick=0.009))
-        elif style == "facial_longbeard":
-            locks.append(mustache(thick=0.012))
-            locks.append(chin_locks(8, 0.040, 0.090, 0.020, 0.060, spacing=0.012))
+    mustaches = {
+        "facial_mustache": dict(width=0.046, height=0.015),
+        "facial_pencil": dict(width=0.040, height=0.0055, centre_gap=0.005),
+        "facial_handlebar": dict(width=0.044, height=0.013),
+        "facial_horseshoe": dict(width=0.046, height=0.014, droop=0.010),
+        "facial_goatee": dict(width=0.040, height=0.013),
+        "facial_vandyke": dict(width=0.042, height=0.011, centre_gap=0.004),
+        "facial_beard": dict(width=0.048, height=0.016, droop=0.012),
+        "facial_shortbeard": dict(width=0.046, height=0.014, droop=0.012),
+        "facial_longbeard": dict(width=0.048, height=0.016, droop=0.012),
+        "facial_muttonchops": dict(width=0.046, height=0.015),
+    }
+    region = None
+    thick = 0.0
+    if style in ("facial_beard", "facial_chinstrap", "facial_shortbeard", "facial_longbeard"):
+        region = _beard_region(my, style != "facial_chinstrap", chin_strap=style == "facial_chinstrap")
+        thick = {"facial_beard": 0.011, "facial_chinstrap": 0.006, "facial_shortbeard": 0.006, "facial_longbeard": 0.012}[style]
     elif style in ("facial_sideburns", "facial_muttonchops"):
-        mutton = style == "facial_muttonchops"
-        locks.append(_beard_shell(body_type, _beard_region(my, False, sideburns=not mutton, mutton=mutton), 0.008 * s))
-        if mutton:
-            locks.append(mustache(thick=0.010))
-    else:
+        region = _beard_region(my, False, sideburns=style == "facial_sideburns", mutton=style == "facial_muttonchops")
+        thick = 0.007
+    elif style in ("facial_goatee", "facial_vandyke", "facial_chinbeard"):
+        region = _beard_region(my, False, chin_only=True)
+        thick = 0.010 if style != "facial_vandyke" else 0.009
+    elif style == "facial_soulpatch":
+        def region(x, y, z):
+            return smoothstep(0.010, 0.006, abs(x)) * smoothstep(my - 0.012, my - 0.016, y) * \
+                smoothstep(my - 0.036, my - 0.030, y) * smoothstep(0.02, 0.06, z)
+        thick = 0.006
+    elif style == "facial_horseshoe":
+        def region(x, y, z):
+            ax = abs(x)
+            return smoothstep(0.044, 0.040, ax) * smoothstep(0.026, 0.030, ax) * smoothstep(my + 0.006, my - 0.002, y) * \
+                smoothstep(my - 0.058, my - 0.050, y) * smoothstep(0.02, 0.06, z)
+        thick = 0.008
+    if region is not None:
+        add_part(_face_shell(body_type, region, thick * s, grooves=0.45, spacing=0.012))
+    if style in mustaches:
+        m = mustaches[style]
+        add_part(_face_shell(body_type, _mustache_region(my, **m), (0.0075 if style != "facial_pencil" else 0.0040) * s,
+                             under=0.003, grooves=0.30, spacing=0.007, theta=(0.52, 0.66), phi=0.26, rows=30, columns=64))
+    if style == "facial_handlebar":
+        # The waxed ends curl up off each side.
+        curls = Mesh()
+        for side in (1.0, -1.0):
+            start = head.front_point(body_type, side * 0.034 * s, (head.NOSE_TIP_Y - 0.026) * s, 0.004 * s)[0]
+            mid = add(head.front_point(body_type, side * 0.046 * s, (head.NOSE_TIP_Y - 0.030) * s, 0.006 * s)[0], (0.0, 0.0, 0.004 * s))
+            end = add(mid, (side * 0.006 * s, 0.010 * s, 0.002 * s))
+            curls.append(hair.lock(body_type, hair._catmull([start, mid, end], 4), hair.taper(0.007 * s, 0.2),
+                                   hair.taper(0.005 * s, 0.3)))
+        add_part(curls, "hair_clump")
+    if style == "facial_longbeard":
+        add_part(_hanging_beard(body_type, my - 0.055, 0.050, 0.11, 491, 0.012), "hair_clump")
+    elif style in ("facial_goatee", "facial_vandyke"):
+        add_part(_hanging_beard(body_type, my - 0.052, 0.018, 0.022 if style == "facial_goatee" else 0.040, 492, 0.008),
+                 "hair_clump")
+    elif style == "facial_chinbeard":
+        add_part(_hanging_beard(body_type, my - 0.052, 0.026, 0.030, 493, 0.010), "hair_clump")
+    if not parts:
         raise ValueError(style)
-    return [(locks, "hair", "strands", (1.0, 1.0, 1.0))]
+    return parts
 
 
 # ----- earrings (catalog v3 revision 2, format 3) ---------------------------------------------------

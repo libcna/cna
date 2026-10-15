@@ -34,10 +34,12 @@ def texture_bytes(kind):
         return textures.hair_cap()
     if kind == "hair_coil":
         return textures.hair_coil()
-    if kind == "stubble":
-        return textures.stubble(0.55)
-    if kind == "stubble_heavy":
-        return textures.stubble(0.85)
+    if kind == "hair_twist":
+        return textures.hair_twist()
+    if kind.startswith("stubble"):
+        from . import accessories
+        heavy, body_type = kind.startswith("stubble_heavy"), kind.rsplit("_", 1)[1]
+        return accessories.stubble_texture(body_type, 0.85 if heavy else 0.55)
     if kind == "skin_head":
         return textures.skin_head()
     return textures.cloth(kind)
@@ -364,15 +366,18 @@ def item_glb(body_type, item_id, slot, name):
             used.append(kind)
         return builder.add_material(part_name, tint, color=colour, texture_file=texture_file(kind), specular=specular, extras=extras)
     if slot == "hair":
-        locks, scalp = hair.build(body_type, name)
+        locks, scalp, bands = hair.build_parts(body_type, name)
         if scalp.positions:
-            # Under locks the scalp shell is in their shade: darker, so the gaps between them read
+            # Under the hair the scalp shell is in its shade: darker, so a part or a hairline reads
             # as depth (the shared textures and the renderer have no occlusion of their own).
-            shade = (0.86, 0.86, 0.86) if locks.positions else (1.0, 1.0, 1.0)
+            shade = (0.88, 0.88, 0.88) if locks.positions else (1.0, 1.0, 1.0)
             parts.append((scalp, material(name + "_scalp", "hair", "hair_cap", colour=shade, specular=HAIR_SPECULAR)))
         if locks.positions:
-            texture = "hair_coil" if name in hair.COILED else "hair_clump"
-            parts.append((locks, material(name, "hair", texture, specular=HAIR_SPECULAR * (0.5 if texture == "hair_coil" else 1.0))))
+            texture = hair.TEXTURE.get(name, "hair_clump")
+            parts.append((locks, material(name, "hair", texture, specular=HAIR_SPECULAR * (0.5 if texture != "hair_clump" else 1.0))))
+        if bands.positions:
+            # Hair ties: a darker band of the hair's own colour where it is gathered.
+            parts.append((bands, material(name + "_tie", "hair", "hair_cap", colour=(0.42, 0.40, 0.40), specular=1.2)))
     elif slot == "ears":
         shell, folds = head.ear_meshes(body_type, EAR_SHAPE_OF[name])
         # The shell is in the shade of the rim and folds round it.
@@ -387,7 +392,7 @@ def item_glb(body_type, item_id, slot, name):
             extras = part[4] if len(part) > 4 else None
             texture = "hair_clump" if kind == "strands" else kind
             specular = 2.5 if slot == "glasses" else 0.2 if kind.startswith("stubble") else \
-                3.0 if tint == "jewelry" else CLOTH_SPECULAR.get(kind, 1.0)
+                HAIR_SPECULAR * 0.45 if slot == "facialHair" else 3.0 if tint == "jewelry" else CLOTH_SPECULAR.get(kind, 1.0)
             parts.append((mesh, material("%s_%d" % (name, index), tint, texture, colour, specular, extras)))
     builder.add_skinned_mesh(name, parts, skin_index)
     return builder.build(), used

@@ -31,6 +31,19 @@ class Mesh:
         for joints, weights in self.skin:
             assert sum(weights) == 255 and all(0 <= j < 71 for j in joints)
 
+    def compact(self):
+        """Drop the vertices no triangle uses (after triangles were left out)."""
+        used = sorted(set(self.indices))
+        if len(used) == len(self.positions):
+            return self
+        remap = {old: new for new, old in enumerate(used)}
+        self.positions = [self.positions[i] for i in used]
+        self.normals = [self.normals[i] for i in used]
+        self.uvs = [self.uvs[i] for i in used]
+        self.skin = [self.skin[i] for i in used]
+        self.indices = [remap[i] for i in self.indices]
+        return self
+
     def append(self, other):
         base = len(self.positions)
         self.positions += other.positions

@@ -33,7 +33,9 @@ supported; Git history keeps them.
 | `cna_avatar/body.py` | The two bodies: superellipse torso, single-loft arms and legs, sculpted hands. |
 | `cna_avatar/face.py` | The expression atlas (anti-aliased signed-distance shapes): eyes, mouths, the eyebrow styles and makeup tiles, and the decal placement. |
 | `cna_avatar/facecontrols.py` | What each of the 32 face-shape bytes (formats 2 and 3) does, and the named face presets. |
-| `cna_avatar/hair.py` | Scalp caps, clumps and shells: the 37 hairstyles (hats fit them at run time from `hairCover`). |
+| `cna_avatar/hairmass.py` | Hair as sculpted masses: strand paths marched over the head under a style's flow (gravity, a tie, lift), colliding with the head, neck and torso; a closed slab of clumped locks between neighbouring paths, with grooves, thickness, waves, curl bumps and pointed tips. |
+| `cna_avatar/hairstyles.py` | The 37 hairstyles as masses -- where their strands start (crown, part, hairline, fringe), how they flow and where they end -- with tails, wound buns, braids, spiky locks and hair ties (hats fit them at run time from `hairCover`). |
+| `cna_avatar/hair.py` | The scalp cap, hairlines, hair skin weights and the tapering lock facial hair is made of. |
 | `cna_avatar/garments.py` | Tops, bottoms and shoes as offset lofts over the body, with fabrics. |
 | `cna_avatar/accessories.py` | Glasses, headwear, facial hair, earrings, wristwear, gloves and rings. |
 | `cna_avatar/textures.py` | Procedural texture multipliers (skin, hair, fabrics). |
