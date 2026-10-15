@@ -46,6 +46,11 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -269,6 +274,95 @@ protected:
         check(threwOverCeiling,
               "Texture2D(dev, 4097, 4097) under GraphicsProfile.HiDef: throws "
               "System::NotSupportedException -- one pixel past HiDef's own 4096 ceiling");
+
+        // Native Texture2D format storage: each format is classified honestly and survives a real
+        // D3D9 CreateTexture/LockRect upload through the public transfer API.
+        // The museum's tex-formats room renders the same five witnesses side by side.
+        {
+            using CNA::Internal::Renderers::RendererFormatVerdict;
+            using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
+            const auto classified = [&](SurfaceFormat format) {
+                return dev.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                       RendererFormatVerdict::Supported;
+            };
+            check(classified(SurfaceFormat::Bgr565) &&
+                  classified(SurfaceFormat::Bgra4444) &&
+                  classified(SurfaceFormat::Alpha8) &&
+                  classified(SurfaceFormat::HalfVector4),
+                  "DirectX9 ClassifySurfaceFormatEXT: the four non-Color tex-formats witnesses "
+                  "are supported by this device");
+
+            bool uploaded = true;
+            try
+            {
+                Texture2D bgr(dev, 2, 2, false, SurfaceFormat::Bgr565);
+                const Bgr565 bgrPixels[4] = {
+                    Bgr565(1.0f, 0.0f, 0.0f), Bgr565(0.0f, 1.0f, 0.0f),
+                    Bgr565(0.0f, 0.0f, 1.0f), Bgr565(1.0f, 1.0f, 1.0f)};
+                bgr.SetData(bgrPixels, 4);
+
+                Texture2D bgra(dev, 2, 2, false, SurfaceFormat::Bgra4444);
+                const Bgra4444 bgraPixels[4] = {
+                    Bgra4444(1.0f, 0.0f, 0.0f, 1.0f),
+                    Bgra4444(0.0f, 1.0f, 0.0f, 1.0f),
+                    Bgra4444(0.0f, 0.0f, 1.0f, 1.0f),
+                    Bgra4444(1.0f, 1.0f, 1.0f, 1.0f)};
+                bgra.SetData(bgraPixels, 4);
+
+                Texture2D alpha(dev, 2, 2, false, SurfaceFormat::Alpha8);
+                const Alpha8 alphaPixels[4] = {
+                    Alpha8(0.0f), Alpha8(0.33f), Alpha8(0.67f), Alpha8(1.0f)};
+                alpha.SetData(alphaPixels, 4);
+
+                Texture2D half(dev, 2, 2, false, SurfaceFormat::HalfVector4);
+                const HalfVector4 halfPixels[4] = {
+                    HalfVector4(1.0f, 0.0f, 0.0f, 1.0f),
+                    HalfVector4(0.0f, 1.0f, 0.0f, 1.0f),
+                    HalfVector4(0.0f, 0.0f, 1.0f, 1.0f),
+                    HalfVector4(1.0f, 1.0f, 1.0f, 1.0f)};
+                half.SetData(halfPixels, 4);
+            }
+            catch (const std::exception&)
+            {
+                uploaded = false;
+            }
+            check(uploaded,
+                  "Texture2D native formats: Bgr565, Bgra4444, Alpha8 and HalfVector4 create "
+                  "and upload without RGBA8 substitution");
+
+            bool everyAdvertisedClassicFormatCreates = true;
+            for (int ordinal = static_cast<int>(SurfaceFormat::Color);
+                 ordinal <= static_cast<int>(SurfaceFormat::HdrBlendable); ++ordinal)
+            {
+                if (dev.GetRenderer().ClassifySurfaceFormatEXT(ordinal) !=
+                    RendererFormatVerdict::Supported)
+                {
+                    continue;
+                }
+                try
+                {
+                    // Four-by-four is valid for both ordinary texels and DXT's complete block.
+                    Texture2D texture(dev, 4, 4, false, static_cast<SurfaceFormat>(ordinal));
+                }
+                catch (const std::exception&)
+                {
+                    everyAdvertisedClassicFormatCreates = false;
+                    break;
+                }
+            }
+            check(everyAdvertisedClassicFormatCreates,
+                  "DirectX9 classic Texture2D capability agreement: every format classified "
+                  "Supported creates and accepts its zero-filled level without substitution");
+
+            check(dev.GetRenderer().ClassifyTextureCubeFormatEXT(
+                      static_cast<int>(SurfaceFormat::Bgr565)) ==
+                      RendererFormatVerdict::Unsupported &&
+                  dev.GetRenderer().ClassifyTexture3DFormatEXT(
+                      static_cast<int>(SurfaceFormat::Bgr565)) ==
+                      RendererFormatVerdict::Unsupported,
+                  "DirectX9 cube/volume format classifiers do not inherit Texture2D's broader "
+                  "native-format promise");
+        }
 
         // Check K: MaxRenderTargets under HiDef -- the SAME 2-target request Check J refused
         // under Reach now succeeds (HiDef's own ceiling is 4).

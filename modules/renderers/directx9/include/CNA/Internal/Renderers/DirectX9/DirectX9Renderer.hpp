@@ -186,6 +186,12 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // ---- IGraphicsRenderer: real (Phase D9-5, D9-50/D9-51) ----
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const override;
         /// D9-51: CubeMap creation is gated on the real D3DCAPS9 (D3DPTEXTURECAPS_CUBEMAP) queried
         /// at device-creation time -- returns nullptr (IGraphicsRenderer's own "unsupported"
         /// convention) rather than assuming support, unlike CreateTexture() above.

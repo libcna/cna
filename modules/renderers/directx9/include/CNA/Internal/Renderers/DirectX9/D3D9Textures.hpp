@@ -2,10 +2,10 @@
 
 // plans/plan_dx9.md Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.
 //
-// RGBA8 storage only (D3DFMT_A8B8G8R8), the simplification the retired D3D11 renderer also made:
-// textures are treated as RGBA8 regardless of the XNA SurfaceFormat/`surfaceFormat` ordinal a
-// caller passes; CreateTexture3D/CreateTextureCube's own `surfaceFormat` parameter is accepted for
-// interface-signature compatibility only.
+// Texture2D uses the requested classic XNA SurfaceFormat through D3D9FormatMapping. Volume and
+// cube textures remain RGBA8-only for now; their `surfaceFormat` parameter is accepted for
+// interface-signature compatibility only and their independent capability classifiers keep that
+// limitation visible to callers.
 //
 // D3DPOOL_MANAGED (not DEFAULT) for all three -- design decision 2's own payoff, confirmed for
 // real by D9-4's spike: MANAGED textures survive Reset() with no re-upload needed and are
@@ -49,6 +49,7 @@ namespace CNA::Internal::Renderers::DirectX9
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
     };
 
     /// Real D3D9 cube-map texture renderer (D9-51). Face order (0..5) is D3D9's own native

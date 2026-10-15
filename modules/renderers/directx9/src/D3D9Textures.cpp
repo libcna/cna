@@ -1,4 +1,8 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
+#include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9FormatMapping.hpp"
+
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -28,6 +32,33 @@ namespace CNA::Internal::Renderers::DirectX9
             }
             return levels;
         }
+
+        bool IsBlockCompressed(int surfaceFormat)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+            return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                   format == SurfaceFormat::Dxt5;
+        }
+
+        int BlockBytes(int surfaceFormat)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Dxt1 ? 8 : 16;
+        }
+
+        std::size_t RowBytes(int surfaceFormat, int width)
+        {
+            if (IsBlockCompressed(surfaceFormat))
+                return static_cast<std::size_t>((width + 3) / 4) * BlockBytes(surfaceFormat);
+            return static_cast<std::size_t>(width) *
+                   CNA::Internal::Graphics::SurfaceFormatDecoder::BytesPerTexel(surfaceFormat);
+        }
+
+        int StorageRows(int surfaceFormat, int height)
+        {
+            return IsBlockCompressed(surfaceFormat) ? std::max(1, (height + 3) / 4) : height;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -38,32 +69,40 @@ namespace CNA::Internal::Renderers::DirectX9
         : device_(device)
         , width_(data.width), height_(data.height)
         , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
+        , surfaceFormat_(data.surfaceFormat)
     {
+        const D3DFORMAT nativeFormat = SurfaceFormatToD3D9(surfaceFormat_);
+        if (nativeFormat == D3DFMT_UNKNOWN)
+            throw std::runtime_error(
+                "D3D9TextureRenderer: requested SurfaceFormat has no D3D9 mapping");
         const HRESULT hr = device_->CreateTexture(
             static_cast<UINT>(width_), static_cast<UINT>(height_), static_cast<UINT>(mipLevels_),
-            0, D3DFMT_A8B8G8R8, D3DPOOL_MANAGED, texture_.GetAddressOf(), nullptr);
+            0, nativeFormat, D3DPOOL_MANAGED, texture_.GetAddressOf(), nullptr);
         if (FAILED(hr))
             throw std::runtime_error("D3D9TextureRenderer: CreateTexture failed, hr=" + FormatHr(hr));
 
         if (!data.pixels.empty())
-            UpdatePixels(data.pixels.data(), width_ * 4);
+            UpdatePixels(data.pixels.data(), static_cast<int>(RowBytes(surfaceFormat_, width_)));
     }
 
     void D3D9TextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
-        const std::size_t rowBytes = stride > 0 ? static_cast<std::size_t>(stride)
-                                                  : static_cast<std::size_t>(width_) * 4;
+        const std::size_t sourceRowBytes = stride > 0
+            ? static_cast<std::size_t>(stride)
+            : RowBytes(surfaceFormat_, width_);
+        const std::size_t copyBytes = RowBytes(surfaceFormat_, width_);
+        const int rows = StorageRows(surfaceFormat_, height_);
         D3DLOCKED_RECT locked{};
         const HRESULT hr = texture_->LockRect(0, &locked, nullptr, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9TextureRenderer::UpdatePixels: LockRect failed, hr=" + FormatHr(hr));
 
         auto* dst = static_cast<uint8_t*>(locked.pBits);
-        for (int row = 0; row < height_; ++row)
+        for (int row = 0; row < rows; ++row)
         {
             std::memcpy(dst + static_cast<std::size_t>(row) * locked.Pitch,
-                        rgba + static_cast<std::size_t>(row) * rowBytes,
-                        static_cast<std::size_t>(width_) * 4);
+                        rgba + static_cast<std::size_t>(row) * sourceRowBytes,
+                        copyBytes);
         }
         texture_->UnlockRect(0);
     }
@@ -78,8 +117,9 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::runtime_error("D3D9TextureRenderer::UpdatePixelsLevel: LockRect failed, hr=" + FormatHr(hr));
 
         auto* dst = static_cast<uint8_t*>(locked.pBits);
-        const std::size_t rowBytes = static_cast<std::size_t>(levelW) * 4;
-        for (int row = 0; row < levelH; ++row)
+        const std::size_t rowBytes = RowBytes(surfaceFormat_, levelW);
+        const int rows = StorageRows(surfaceFormat_, levelH);
+        for (int row = 0; row < rows; ++row)
         {
             std::memcpy(dst + static_cast<std::size_t>(row) * locked.Pitch,
                         rgba + static_cast<std::size_t>(row) * rowBytes, rowBytes);
