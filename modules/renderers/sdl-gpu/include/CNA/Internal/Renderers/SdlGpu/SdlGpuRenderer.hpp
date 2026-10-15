@@ -532,19 +532,34 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// retained past it.
         [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
                                    const void* data, int dataLength) override;
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override
+        {
+            return SetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
         /// True only once the download fence has signalled and the whole requested
         /// box has been copied out of the transfer buffer; false for an empty request. Every other
         /// failure already throws, and the shared layer converts false into a deterministic
         /// System::NotSupportedException rather than fabricating a volume.
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override
+        {
+            return GetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
 
         /**
          * @brief Returns the SurfaceFormat ordinal used to create this volume. Test-only CNAEXT.
          *
          * @return The exact format ordinal forwarded by the public Texture3D constructor.
          */
-        CNAEXT [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
+        CNAEXT [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        {
+            return surfaceFormat_;
+        }
 
         /** @brief Returns this volume as a deferred-lifetime-safe sampled resource. CNAEXT. */
         CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const
@@ -559,6 +574,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// Mip levels SDL really allocated for this volume.
         int levelCount_ = 1;
         int surfaceFormat_ = 0;
+        Uint32 bytesPerTexel_ = 4;
     };
 
     // Real architectural fix for a render-target-destroyed-before-flush use-after-free: this
