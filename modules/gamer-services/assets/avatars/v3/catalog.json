@@ -1488,13 +1488,13 @@
   },
   {
    "name": "top_blazer.female.glb",
-   "sha256": "1d535bbf842ee0f50cb29fbf8e9d81891e505c2aacfdfc1e2cc91834cd8a78d4",
-   "size": 263204
+   "sha256": "f99ede9b6cf2e627e7646ac87e58de776a1bfef411fc44cbbc3622176669534a",
+   "size": 264048
   },
   {
    "name": "top_blazer.male.glb",
-   "sha256": "976ba3338941bf59d3e03895f04725d2627f1fca7ed0e21a5def09fb20d368e0",
-   "size": 263192
+   "sha256": "775416fc616532c5f81dcfd5feef5e3c02fc22e33d2aeac94a9e643b7d331098",
+   "size": 264032
   },
   {
    "name": "top_blouse.female.glb",

@@ -442,48 +442,6 @@ def collar(body_type, inflate, gap=0.5, stand=0.024, fall=0.034, points=0.020, t
     return m
 
 
-def lapels(body_type, inflate, gap, bottom_y, width=0.050, notch=0.30, weights=None, thick=0.003):
-    """A jacket's lapels: the fronts folded back from the collar down to the top button at
-    bottom_y, widest below the collar (where a notch cuts them), lying on the jacket."""
-    weights = weights or hem_weights(body_type)
-    m = Mesh()
-    opening = neck_opening(body_type, inflate, ease=0.016)[0]
-    for side in (1.0, -1.0):
-        a_edge = side * gap * 0.5
-        path = surface_path(body_type, inflate, a_edge, opening, fit=0.7)
-        pts, lengths, normals = path
-        # Down the front edge from the opening to bottom_y.
-        rows_outer, rows_inner = [], []
-        steps = 14
-        total = None
-        for i in range(len(pts)):
-            if pts[i][1] <= bottom_y:
-                total = lengths[i]
-                break
-        total = total or lengths[-1]
-        for j in range(steps + 1):
-            f = j / steps
-            p, n = _along(path, total * f)
-            # Width: grows from the bottom point up to the notch, then narrows to the collar.
-            up = 1.0 - f
-            w = width * (smoothstep(0.0, 0.75, up) * (1.0 - 0.45 * smoothstep(1.0 - notch, 1.0, up)))
-            # Outward from the opening edge toward the side.
-            side_dir = normalize(cross(n, (0.0, 1.0, 0.0)))
-            if dot(side_dir, (side, 0.0, 0.0)) < 0.0:
-                side_dir = mul(side_dir, -1.0)
-            edge = add(p, mul(n, 0.0015))
-            outer = add(add(p, mul(side_dir, w)), mul(n, thick + 0.0015))
-            inner_edge = add(edge, mul(n, thick + 0.0015))
-            rows_outer.append([edge, inner_edge, outer, add(outer, mul(n, -thick))])
-        grid = [[r[k] for r in rows_outer] for k in range(4)]
-        grid.append(grid[0])
-        lap = Mesh()
-        lap.patch_origin = add(pts[0], (side * 0.05, -0.1, 0.0))
-        lap.grid(grid, lambda q, v, u: weights(q), wrap=False)
-        m.append(lap)
-    return m
-
-
 def _envelope(profile):
     """A limb profile made to only narrow toward its end: cloth hangs over a limb's hollows."""
     out = []
@@ -1011,18 +969,31 @@ def _button_at(body_type, inflate, y, weights, fit=0.45, x=0.0):
                      lambda q, v, u: weights(q))
 
 
-def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004, fit=0.7, folds=None):
+def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004, fit=0.7, folds=None, v_neck=None, lapel=0.0):
     """A jacket body open down the front: draped like a top over every angle except `gap` radians,
-    closing over the shoulders to its collar, its hem turned in and its front edges rolled."""
+    closing over the shoulders to its collar, its hem turned in and its front edges rolled.
+    v_neck: (bottom y, gap there) -- the opening narrows from `gap` at the chest to that gap at that
+    height and stays so below it (a buttoned jacket's V); lapel: the width of lapels folded back
+    along the V's edges (they roll outward, so they read)."""
     clear = top_clearance(body_type, inflate)
     sections = drape_sections(body_type, inflate, rows, fit, lower, flare)
     tw = hem_weights(body_type)
     columns = 41
-    angles = [gap * 0.5 + (2.0 * PI - gap) * k / (columns - 1) for k in range(columns)]
+    chest_y = body.torso_sections(body_type)[CHEST_ROW][0][1]
+
+    def gap_at(y):
+        if v_neck is None:
+            return gap
+        bottom, closed = v_neck
+        return closed + (gap - closed) * smoothstep(bottom, chest_y + 0.06, y)
+
+    def angles_at(y):
+        g = gap_at(y)
+        return [g * 0.5 + (2.0 * PI - g) * k / (columns - 1) for k in range(columns)]
     grid = []
     for c, rx, rz, n in sections:
         ring = []
-        for a in angles:
+        for a in angles_at(c[1]):
             s_, co = math.sin(a), math.cos(a)
             p = (c[0] + rx * math.copysign(abs(s_) ** (2.0 / n), s_), c[1], c[2] + rz * math.copysign(abs(co) ** (2.0 / n), co))
             if folds is not None:
@@ -1042,7 +1013,7 @@ def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004, fit=0.7, 
         outer_ring = grid[-1]
         for f in (0.3, 0.62, 1.0):
             ring = []
-            for a, p0 in zip(angles, outer_ring):
+            for a, p0 in zip(angles_at(sections[-1][0][1]), outer_ring):
                 p1 = opening(a)
                 s2 = f * f * (3.0 - 2.0 * f)
                 ring.append(clear((p0[0] + (p1[0] - p0[0]) * f, p0[1] + (p1[1] - p0[1]) * s2 + 0.004 * math.sin(PI * f),
@@ -1053,7 +1024,42 @@ def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004, fit=0.7, 
     for index in (0, columns - 1):
         edge = [ring[index] for ring in grid[3:]]
         outer.append(tube(edge, [0.005] * len(edge), 6, tw))
+    if lapel and v_neck is not None:
+        outer.append(_lapels(grid[3:], lapel, v_neck[0], tw))
     return outer
+
+
+def _lapels(rows, width, bottom, weights):
+    """Lapels folded back along both edges of a jacket's V, from the neck down to the button at
+    `bottom`: widest below the collar, each lying on the jacket and rolling up off it toward its
+    outer edge. rows: the jacket's rings, hem to neck, edge columns first and last."""
+    m = Mesh()
+    for side in (0, -1):
+        step = 1 if side == 0 else -1
+        lapel_rows = []
+        for ring in rows:
+            edge = ring[side]
+            if edge[1] < bottom - 0.005:
+                continue
+            inward = ring[side + step * 3]
+            along = normalize(sub(inward, edge))
+            centre = (0.0, edge[1], -0.02)
+            out = normalize((edge[0] - centre[0], 0.0, edge[2] - centre[2]))
+            top = rows[-1][side][1]
+            f = clamp((edge[1] - bottom) / max(top - bottom, 1e-6), 0.0, 1.0)
+            w = width * smoothstep(0.0, 0.35, f) * (1.0 - 0.45 * smoothstep(0.75, 1.0, f))
+            fold = add(edge, mul(out, 0.0035))
+            tip = add(add(edge, mul(along, w)), mul(out, 0.0035 + 0.006 * smoothstep(0.0, 0.4, f)))
+            under = add(add(edge, mul(along, w * 0.92)), mul(out, 0.002))
+            lapel_rows.append([edge, fold, add(lerp(fold, tip, 0.5), mul(out, 0.0015)), tip, under])
+        if len(lapel_rows) < 2:
+            continue
+        grid = [[r[k] for r in lapel_rows] for k in range(5)]
+        lap = Mesh()
+        lap.patch_origin = (0.0, lapel_rows[len(lapel_rows) // 2][0][1], -0.05)
+        lap.grid(grid, lambda q, v, u: weights(q), wrap=False)
+        m.append(lap)
+    return m
 
 
 def _seam_on(body_type, inflate, points_xy, front=True, radius=0.0014, lift=0.0006):
@@ -1391,10 +1397,11 @@ def revised_top(body_type, style):
                                       (0.006, 0.006, 0.0025), 8, 5, lambda q, v, u: tw(q)))
             texture = "cable"
         elif style == "top_blazer":
-            main.append(_open_shell(body_type, 0.030, (1, 10), gap=0.62, lower=0.085, flare=0.034))
-            main.append(collar(body_type, 0.030, gap=1.1, stand=0.020, fall=0.030, points=0.0, flare=0.006, ease=0.016,
+            button_y = row_y(body_type, 3) + 0.03
+            main.append(_open_shell(body_type, 0.030, (1, 10), gap=1.05, lower=0.085, flare=0.034, v_neck=(button_y, 0.10),
+                                    lapel=0.052))
+            main.append(collar(body_type, 0.030, gap=1.2, stand=0.020, fall=0.028, points=0.0, flare=0.006, ease=0.016,
                                garment=0.030, fit=0.7))
-            main.append(lapels(body_type, 0.030, 0.62, row_y(body_type, 3) + 0.03))
             for side, _ in rig.SIDES:
                 main.append(sleeve(body_type, side, 0.027, 0.95, cuff=0.006))
             for sx in (0.090, -0.090):
