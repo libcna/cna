@@ -250,6 +250,7 @@ namespace CNA::Internal::Renderers::Fna3d
             // afterward. Resolve the final XNA-visible slot at draw time, matching FNA's device
             // state application instead of retaining the native binding from pass application.
             BindCompiledPixelTexturesEXT(params);
+            BindCompiledVertexTexturesEXT(params);
         }
         ApplyVertexBindingsEXT(vb, params, baseVertex);
     }
@@ -417,6 +418,55 @@ namespace CNA::Internal::Renderers::Fna3d
             FNA3D_VerifySampler(device_, slot, native,
                                 &samplerStates_[static_cast<std::size_t>(slot)]);
             boundPixelTextures_[static_cast<std::size_t>(slot)] = native;
+        }
+    }
+
+    void Fna3dRenderer::BindCompiledVertexTexturesEXT(const GpuDrawParams& params)
+    {
+        const auto* textures = params.compiledDeviceVertexTextures;
+        const auto* samplers = params.compiledDeviceVertexSamplerStates;
+        if (textures == nullptr || samplers == nullptr) return;
+
+        // The public collection reports four vertex-stage slots in HiDef and none in Reach.
+        // Using that count avoids indexing a deliberately empty Reach collection.
+        const int publicSlots = samplers->ActiveSamplerCount();
+        for (int slot = 0; slot < publicSlots; ++slot)
+        {
+            Texture* texture = (*textures)[slot];
+            if (maxVertexTextureSlots_ <= 0 || slot >= maxVertexTextureSlots_)
+            {
+                if (texture != nullptr)
+                    throw std::runtime_error(
+                        "FNA3D renderer: a vertex texture was bound to sampler slot " +
+                        std::to_string(slot) + ", but the running driver exposes only " +
+                        std::to_string(std::max(maxVertexTextureSlots_, 0)) +
+                        " vertex texture slots.");
+                continue;
+            }
+
+            const Fna3dSampledTexture* sampled = GetSampledTexture(texture);
+            if (texture != nullptr &&
+                (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_))
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: a compiled effect vertex texture was not created by this "
+                    "graphics device.");
+            }
+
+            const auto& state = (*samplers)[slot];
+            FNA3D_SamplerState native = vertexSamplerStates_[static_cast<std::size_t>(slot)];
+            native.filter = static_cast<FNA3D_TextureFilter>(state.getFilterProperty());
+            native.addressU = static_cast<FNA3D_TextureAddressMode>(state.getAddressUProperty());
+            native.addressV = static_cast<FNA3D_TextureAddressMode>(state.getAddressVProperty());
+            native.addressW = static_cast<FNA3D_TextureAddressMode>(state.getAddressWProperty());
+            native.mipMapLevelOfDetailBias = state.getMipMapLevelOfDetailBiasProperty();
+            native.maxMipLevel = state.getMaxMipLevelProperty();
+            native.maxAnisotropy = state.getMaxAnisotropyProperty();
+            FNA3D_Texture* nativeTexture = sampled != nullptr ? sampled->GetFna3dTextureEXT()
+                                                              : nullptr;
+            FNA3D_VerifyVertexSampler(device_, slot, nativeTexture, &native);
+            vertexSamplerStates_[static_cast<std::size_t>(slot)] = native;
+            boundVertexTextures_[static_cast<std::size_t>(slot)] = nativeTexture;
         }
     }
 

@@ -204,6 +204,10 @@ public:
                   static_cast<int>(SurfaceFormat::NormalizedByte4)) ==
                   RendererFormatVerdict::Supported,
               "NormalizedByte4 is exposed through the public Texture2D format gate");
+        Check(renderer.ClassifySurfaceFormatEXT(
+                  static_cast<int>(SurfaceFormat::Vector4)) ==
+                  RendererFormatVerdict::Supported,
+              "Vector4 is exposed for HiDef vertex-texture sampling");
         Check(renderer.ClassifySurfaceFormatEXT(99) == RendererFormatVerdict::Unsupported,
               "an invalid SurfaceFormat ordinal is not advertised as native storage");
 
