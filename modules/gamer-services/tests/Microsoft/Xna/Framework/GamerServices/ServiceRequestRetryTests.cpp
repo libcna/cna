@@ -69,6 +69,8 @@ public:
     void drop(const std::string& op,int count) {std::lock_guard lock(mutex_);drops_[op]=count;}
     std::vector<std::string> ids(const std::string& op) {std::lock_guard lock(mutex_);return seen_[op];}
     std::vector<Json> arguments(const std::string& op) {std::lock_guard lock(mutex_);return args_[op];}
+    // Offers avatars and catalog packs; avatars.catalog answers with `newest` as the newest catalog.
+    void avatars(long long newest) {std::lock_guard lock(mutex_);avatars_=true;newestCatalog_=newest;}
 private:
     void serve() {
         while(!stop_) {
@@ -119,6 +121,7 @@ private:
             if(outcomes_)capabilities.push_back("request-outcomes");
             if(refresh_)capabilities.push_back("session-refresh");
             if(privacy_)for(const auto* name:{"privacy","friend-voice","heartbeat","policy-refresh"})capabilities.push_back(name);
+            {std::lock_guard lock(mutex_);if(avatars_)for(const auto* name:{"avatars","avatar-catalog-packs","files"})capabilities.push_back(name);}
             return {{"version",1},{"capabilities",capabilities},{"maxMessageBytes",65536}};
         }
         if(op=="auth.login"||op=="auth.refresh") {
@@ -145,9 +148,16 @@ private:
                 {"trade",false},{"purchase",true},{"premium",false}}},{"blocked",blocked_}};
         }
         if(op=="achievements.award")return {{"awarded",true},{"name","First"}};
+        if(op=="avatars.get") {
+            Json avatars=Json::array();
+            for(const auto& id:args.at("userIds"))avatars.push_back({{"userId",id},{"description",nullptr},{"revision",0}});
+            return {{"avatars",avatars}};
+        }
+        if(op=="avatars.catalog") {std::lock_guard lock(mutex_);return {{"version",args.value("version",newestCatalog_)},{"manifest",Json::object()}};}
+        if(op=="avatars.catalogPack")return {{"version",args.at("version")}};
         return Json::object();
     }
-    bool outcomes_,privacy_,refresh_,revokePing_=false;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
+    bool outcomes_,privacy_,refresh_,revokePing_=false,avatars_=false;long long newestCatalog_=3;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
     std::string assetCode_="OK", communication_="friends";
     Json blocked_=Json::array({"Bob","Carol"});
     std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_;std::map<std::string,std::vector<Json>> args_;
@@ -174,6 +184,23 @@ protected:
     }
     std::shared_ptr<Service::IGamerServicesBackend> previous;
 };
+}
+
+TEST_F(ServiceRequestRetryTest, ADevelopmentCatalogIsNeverAskedForOrAccepted) {
+    // Catalog v3 is the baseline: the client never asks the service for catalog 1 or 2, and a
+    // service whose newest catalog is one is not a catalog this client edits against.
+    LoopbackService service(true);
+    service.avatars(2);
+    const auto backend=signedIn(service);
+    for(int legacy:{1,2}) {
+        EXPECT_THROW((void)backend->avatarCatalogPack(legacy),Unavailable) << legacy;
+        EXPECT_THROW((void)backend->avatarCatalog(legacy),Unavailable) << legacy;
+    }
+    EXPECT_TRUE(service.arguments("avatars.catalogPack").empty());
+    EXPECT_THROW((void)backend->avatarCatalog(0),Unavailable);
+    ASSERT_EQ(1u,service.arguments("avatars.catalog").size());
+    EXPECT_NO_THROW((void)backend->avatarCatalogPack(3));
+    EXPECT_NO_THROW((void)backend->avatarCatalog(3));
 }
 
 TEST_F(ServiceRequestRetryTest, ALostResponseIsAskedForOnceMoreUnderTheSameRequestId) {

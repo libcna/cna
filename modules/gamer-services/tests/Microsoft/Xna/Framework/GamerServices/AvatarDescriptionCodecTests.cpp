@@ -59,7 +59,7 @@ TEST(AvatarDescriptionCodecTest, RejectsForeignVersionsAndReservedData) {
     EXPECT_FALSE(Avatars::decode(newer).has_value());
     EXPECT_FALSE(Avatars::decode(std::vector<std::uint8_t>(Avatars::DescriptionSize, 0)).has_value());
     EXPECT_FALSE(Avatars::decode(std::vector<std::uint8_t>(20, 1)).has_value());
-    // A reserved byte with a matching checksum is still not a v1 avatar.
+    // A reserved byte with a matching checksum is still not a format 1 avatar.
     auto reserved = bytes;
     reserved[600] = 1;
     const auto crc = Avatars::crc32(std::span(reserved).first(Avatars::DescriptionSize - 4));
@@ -90,6 +90,62 @@ TEST(AvatarDescriptionCodecTest, RefusesUnencodableDescriptors) {
     EXPECT_THROW((void)Avatars::encode(naked), std::invalid_argument);
 }
 
+TEST(AvatarDescriptionCodecTest, ANewDescriptorNamesTheBaselineCatalog) {
+    EXPECT_EQ(Avatars::AvatarDescriptor{}.catalogVersion, Avatars::BaseCatalogVersion);
+    EXPECT_EQ(Avatars::BaseCatalogVersion, 3);
+    const auto bytes = Avatars::encode(sample());
+    EXPECT_EQ(bytes[8] | bytes[9] << 8, 3);
+}
+
+TEST(AvatarDescriptionCodecTest, DescriptionsNamingDevelopmentCatalogsAreRefused) {
+    // Catalogs 1 and 2 were development catalogs: a description naming one is not a CNA avatar,
+    // in either description format, and is never reinterpreted as catalog 3.
+    for (std::uint16_t version : {std::uint16_t{0}, std::uint16_t{1}, std::uint16_t{2}}) {
+        auto plain = sample();
+        plain.catalogVersion = version;
+        EXPECT_FALSE(Avatars::isEncodable(plain)) << version;
+        EXPECT_THROW((void)Avatars::encode(plain), std::invalid_argument) << version;
+    }
+    auto face = sample();
+    face.facialHair = 122;
+    face.face[3] = 40;
+    for (const auto& descriptor : {sample(), face}) {
+        const auto good = Avatars::encode(descriptor);
+        ASSERT_TRUE(Avatars::decode(good).has_value());
+        for (std::uint8_t version : {std::uint8_t{1}, std::uint8_t{2}}) {
+            auto bytes = good;
+            bytes[8] = version;
+            bytes[9] = 0;
+            const auto crc = Avatars::crc32(std::span(bytes).first(Avatars::DescriptionSize - 4));
+            for (int shift = 0; shift < 4; ++shift) {
+                bytes[Avatars::DescriptionSize - 4 + shift] = static_cast<std::uint8_t>(crc >> (shift * 8));
+            }
+            EXPECT_FALSE(Avatars::decode(bytes).has_value()) << "format " << int(bytes[0]) << " catalog " << int(version);
+        }
+    }
+}
+
+TEST(AvatarDescriptionCodecTest, TheCatalogVersionSurvivesEncoding) {
+    // Bytes 8-9 carry the catalog version, little endian, for the baseline and for any later one.
+    for (std::uint16_t version : {std::uint16_t{3}, std::uint16_t{4}, std::uint16_t{0x1234}, std::uint16_t{0xffff}}) {
+        for (bool face : {false, true}) {
+            auto descriptor = sample();
+            descriptor.catalogVersion = version;
+            if (face) {
+                descriptor.face[9] = 7;
+            }
+            const auto bytes = Avatars::encode(descriptor);
+            EXPECT_EQ(bytes[0], face ? Avatars::FaceFormatVersion : Avatars::FormatVersion);
+            EXPECT_EQ(bytes[8], version & 0xff);
+            EXPECT_EQ(bytes[9], version >> 8);
+            const auto decoded = Avatars::decode(bytes);
+            ASSERT_TRUE(decoded.has_value());
+            EXPECT_EQ(decoded->catalogVersion, version);
+            EXPECT_EQ(*decoded, descriptor);
+        }
+    }
+}
+
 TEST(AvatarDescriptionCodecTest, NewerCatalogItemsAreCarriedForTheResolver) {
     auto newer = sample();
     newer.catalogVersion = static_cast<std::uint16_t>(Avatars::newestEmbeddedManifest().version + 1);
@@ -100,7 +156,7 @@ TEST(AvatarDescriptionCodecTest, NewerCatalogItemsAreCarriedForTheResolver) {
 }
 
 TEST(AvatarDescriptionCodecTest, ItemsAreCheckedAgainstTheCatalogVersionTheyName) {
-    // Item 100 is a hat in catalog v1; naming it for another slot is refused whatever newer
+    // Item 100 is a hat in catalog v3; naming it for another slot is refused whatever newer
     // catalogs are compiled in.
     auto hatAsTop = sample();
     hatAsTop.catalogVersion = Avatars::BaseCatalogVersion;
@@ -149,7 +205,7 @@ std::vector<std::uint8_t> withChecksum(std::vector<std::uint8_t> bytes)
 Avatars::AvatarDescriptor shaped()
 {
     auto descriptor = sample();
-    descriptor.catalogVersion = 2;
+    descriptor.catalogVersion = Avatars::BaseCatalogVersion;
     descriptor.facialHair = 122;
     for (std::size_t index = 0; index < Avatars::FaceParameterCount; ++index) {
         descriptor.face[index] = static_cast<std::uint8_t>(index * 16 + 3);
@@ -167,9 +223,9 @@ TEST(AvatarDescriptionCodecTest, AShapedFaceOrFacialHairIsFormat2AndRoundTrips) 
     auto plain = descriptor;
     plain.facialHair = 0;
     plain.face.fill(Avatars::NeutralFaceParameter);
-    const auto v1 = Avatars::encode(plain);
-    EXPECT_EQ(v1[0], Avatars::FormatVersion);
-    EXPECT_TRUE(std::equal(bytes.begin() + 1, bytes.begin() + 43, v1.begin() + 1));
+    const auto formatOne = Avatars::encode(plain);
+    EXPECT_EQ(formatOne[0], Avatars::FormatVersion);
+    EXPECT_TRUE(std::equal(bytes.begin() + 1, bytes.begin() + 43, formatOne.begin() + 1));
     EXPECT_EQ(bytes[43] | bytes[44] << 8, 122);
     EXPECT_EQ(bytes[45], 3);
     EXPECT_EQ(bytes[60], 15 * 16 + 3);
@@ -200,9 +256,9 @@ TEST(AvatarDescriptionCodecTest, Format2RefusesWhatItCannotMean) {
     auto unknown = shaped();
     unknown.facialHair = 40;
     EXPECT_FALSE(Avatars::isEncodable(unknown));
-    auto v1Beard = shaped();
-    v1Beard.catalogVersion = 1;
-    EXPECT_FALSE(Avatars::isEncodable(v1Beard));
+    auto wardrobeItem = shaped();
+    wardrobeItem.facialHair = 100;  // a hat, not a feature item
+    EXPECT_FALSE(Avatars::isEncodable(wardrobeItem));
     // ...unless that catalog is not compiled in, when the service and resolver check it.
     auto newer = shaped();
     newer.catalogVersion = static_cast<std::uint16_t>(Avatars::newestEmbeddedManifest().version + 1);

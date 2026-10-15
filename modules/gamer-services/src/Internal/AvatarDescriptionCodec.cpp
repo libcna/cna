@@ -56,11 +56,13 @@ bool AvatarDescriptor::usesFaceFormat() const
 
 bool isEncodable(const AvatarDescriptor& descriptor)
 {
-    if(descriptor.bodyType>1||descriptor.catalogVersion==0)return false;
+    // A development catalog below the baseline is not a catalog any CNA build has, so its ids mean
+    // nothing; it is refused rather than read against another version.
+    if(descriptor.bodyType>1||!isSupportedCatalogVersion(descriptor.catalogVersion))return false;
     if(descriptor.heightMillimeters<MinimumHeightMillimeters||descriptor.heightMillimeters>MaximumHeightMillimeters)return false;
     for(std::size_t slot=0;slot<AvatarItemSlotCount;++slot)
         if(descriptor.items[slot]==0&&!optionalSlot(static_cast<AvatarItemSlot>(slot)))return false;
-    // Ids of a catalog this build does not compile in are checked by the service and the resolver.
+    // Ids of a later catalog this build does not compile in are checked by the service and the resolver.
     const auto manifest=embeddedManifest(descriptor.catalogVersion);
     if(!manifest)return true;
     for(std::size_t slot=0;slot<AvatarItemSlotCount;++slot) {

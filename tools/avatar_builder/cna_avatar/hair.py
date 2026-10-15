@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
-"""Catalog v3 hair: a scalp cap inside the style's hairline, covered by sculpted locks -- fewer,
-broader clumps than v2's so a style reads as one shaped mass.
+"""Catalog v3 hair: a scalp cap inside the style's hairline, covered by sculpted locks -- few,
+broad clumps so a style reads as one shaped mass.
 
 A lock is a flattened, tapering tube along a path that follows the head (waypoints in the head's
 (theta, phi) angles with a lift above the surface) and may continue through head-local space

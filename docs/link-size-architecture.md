@@ -42,7 +42,7 @@ dependency is not real.
 
 | Subsystem | Lives in | Reached only by |
 |---|---|---|
-| Built-in avatar catalog (~30 MB) | library `cna_gamerservices_avatar_catalog` (`EmbeddedAvatarCatalog.cpp`) | `AvatarCatalog.cpp`: avatar API and the system Guide |
+| Built-in avatar catalog (~13 MB, catalog v3) | library `cna_gamerservices_avatar_catalog` (`EmbeddedAvatarCatalog.cpp`) | `AvatarCatalog.cpp`: avatar API and the system Guide |
 | System Guide: home, friends, party, messages, achievements, leaderboards, players, settings, avatar views | `GuideSocial.cpp`, `GuideParty.cpp`, `GuideLeaderboards.cpp`, `GuidePortraits.cpp`, installed by `installSystemGuide()` (`GuideSystemShell.cpp`) | `GamerServicesDispatcher::Initialize` (hence `GamerServicesComponent`), the social `Guide.Show*` calls, the Guide button |
 | Guide frame, dialogs, license | `GuideScreens.cpp`, `GuideDialogs.cpp`, `Guide.cpp`, `GuideMarketplace.cpp`, `GuideContent.cpp` | any Guide use; reaches the system Guide only through installed hooks |
 | Gamer Services service client | `GamerServicesBackend.cpp` (test fake: `GamerServicesFakeBackend.cpp`) | service requests (`GamerRequests.cpp`, `SignedInGamerRequests.cpp`), the dispatcher, sign-in |
@@ -251,7 +251,8 @@ An external `avatar_catalog` pack was considered and not adopted. The catalog is
 library that only avatar code references, so a program that does not draw avatars no longer
 contains it, which was the defect. A game with a `GamerServicesComponent` does draw them: its
 players open the system Guide with Home or the Guide button, and its panels show their avatars,
-in all three catalog versions an existing profile may use (~30 MB, no duplicate files). Keeping it embedded preserves single-file deployment and
+drawn from the baseline catalog v3 (~13 MB; the 30 MB measured above also held development
+catalogs 1 and 2, no longer shipped). Keeping it embedded preserves single-file deployment and
 offline avatars for programs that do use them. External packs already exist for catalog *updates*
 (`installedCatalogRoot()`, `CNA_GAMER_SERVICES_CATALOGS_DIR`), verified by size and SHA-256.
 

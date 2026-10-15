@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Assembles catalog v2 assets into GLB files."""
+"""Assembles the catalog's assets into GLB files."""
 from . import rig, body, textures
 from .glb import GlbBuilder
 
@@ -31,8 +31,8 @@ def body_glb(body_type):
     return builder.build()
 
 
-# (id, slot, name, CreateRandom weight for female, male). Ids 1-101 are catalog v1's items in
-# their v2 form (a catalog keeps every earlier id and slot); the rest are new in v2.
+# (id, slot, name, CreateRandom weight for female, male). The baseline catalog v3 froze these ids
+# and slots: every later catalog keeps them.
 ITEMS = [
     (1, "hair", "hair_short", 0.6, 1.4), (2, "hair", "hair_spiky", 0.4, 1.0), (3, "hair", "hair_bob", 1.4, 0.4),
     (4, "hair", "hair_ponytail", 1.4, 0.3), (5, "hair", "hair_buzz", 0.3, 1.2), (6, "hair", "hair_long", 1.4, 0.3),

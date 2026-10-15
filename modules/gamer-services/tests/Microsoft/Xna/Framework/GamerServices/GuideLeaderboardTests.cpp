@@ -22,9 +22,11 @@ struct Provider final : System::IServiceProvider {
     void* GetService(const std::type_info&) const override { return nullptr; }
 };
 
+// Any real PNG will do: the baseline avatar catalog's face atlas.
 std::vector<unsigned char> Picture() {
+    const auto name = "v" + std::to_string(Avatars::BaseCatalogVersion) + "/face_features.png";
     for (const auto& file : Avatars::embeddedCatalogFiles())
-        if (std::string_view(file.name) == "v1/face_features.png") return {file.data, file.data + file.size};
+        if (std::string_view(file.name) == name) return {file.data, file.data + file.size};
     return {};
 }
 

@@ -793,16 +793,20 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 
 - **Status:** partially implemented.
 - **CNA now:** description formats 1 and 2 exist (format 2 adds facial hair and face shape); no
-  newer format. Catalogs v1 and v2 are frozen and pinned by hash tests, v3 is the current catalog,
-  also released and pinned; a description is always drawn from exactly the catalog version it
-  names, and same-named files of different versions are told apart by size and SHA-256. Edges:
+  newer format. Catalog v3 is the baseline and the only catalog shipped, released and pinned by
+  hash tests; the development catalogs 1 and 2 are not supported. A description is always drawn
+  from exactly the catalog version it names, and same-named files of different versions are told
+  apart by size and SHA-256. Edges:
+  - a description naming catalog 1 or 2 is not a CNA description (height 0, female body type, a
+    renderer `Unavailable`), stale development packs on disk are ignored, and the service refuses
+    both;
   - a description in an unknown future format is not a CNA description: height 0, female body type,
     and a renderer `Unavailable` (XNA's "results are undefined" case);
-  - a catalog neither compiled in nor installed, with no service or with updates off
+  - a later catalog neither compiled in nor installed, with no service or with updates off
     (`CNA_AVATAR_CATALOG_UPDATES=0`) or larger than `maxAvatarCatalogBytes` (64 MiB by default): a
     service description comes as the service's marked projection onto a catalog the client has; a
     description exchanged directly between games draws as the deterministic default avatar (the
-    newest body with the description's body type, height, build and colours, every item its slot
+    baseline body with the description's body type, height, build and colours, every item its slot
     default); ids are never read against another version;
   - a pack that fails to download or validate is discarded and not asked for again for a minute;
     an interrupted one (a lost connection, a restarted service or client) leaves only a staging
@@ -810,7 +814,7 @@ per-user models. A server catalog pack is only the update path for a catalog a c
   - installs of one catalog version are serialized by an operating-system lock, across threads and
     processes: several accounts or games needing the same pack at once install it once;
   - a pack whose manifest names another version is refused, never substituted; installing a newer
-    catalog changes nothing about how v1, v2 or v3 descriptions look (`ServiceAvatarTests`, GSH-09);
+    catalog changes nothing about how v3 descriptions look (`ServiceAvatarTests`, GSH-09);
   - installed packs are kept, never evicted or uninstalled; the server's file route allows each
     account 1 GiB of downloads per title and hour;
   - CNA builds older than format 2 read a format 2 description exchanged directly as invalid; the

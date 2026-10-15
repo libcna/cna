@@ -50,6 +50,7 @@ namespace
     {
         namespace Avatars = CNA::Internal::GamerServices::Avatars;
         Avatars::AvatarDescriptor d;
+        d.catalogVersion = Avatars::BaseCatalogVersion;
         d.bodyType = 1;
         d.heightMillimeters = 1800;
         d.build = 128;
@@ -251,9 +252,10 @@ namespace
             shocked.setRightEyebrowProperty(AvatarEyebrow::Raised);
             const auto expressive = Render(*renderer_, &stand, &shocked);
             Snapshot("expression", expressive);
-            const Vector3 faceCentre(0, 1.6f, 0.14f);
-            Check(Changed(standing, expressive, faceCentre, 14) > 20, "a different expression changes the face");
-            Check(ChangedOutside(standing, expressive, faceCentre, 14) == 0, "an expression changes only the face");
+            // The face of a 1.80 m male on the baseline catalog v3: brows to the open mouth.
+            const Vector3 faceCentre(0, 1.55f, 0.14f);
+            Check(Changed(standing, expressive, faceCentre, 15) > 20, "a different expression changes the face");
+            Check(ChangedOutside(standing, expressive, faceCentre, 15) == 0, "an expression changes only the face");
 
             AvatarAnimation wave(AvatarAnimationPreset::Wave);
             wave.Update(System::TimeSpan::FromSeconds(1.2), false);

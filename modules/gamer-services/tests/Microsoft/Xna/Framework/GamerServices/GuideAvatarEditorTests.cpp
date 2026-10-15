@@ -281,3 +281,17 @@ TEST_F(GuideAvatarEditorTest, WithoutAProfileOrACatalogItExplains) {
     ASSERT_TRUE(Open());
     EXPECT_EQ(std::vector<std::string>{"Avatar catalog 99 unavailable"}, Ui::labelsForTesting());
 }
+
+TEST_F(GuideAvatarEditorTest, AServiceWhoseNewestCatalogIsADevelopmentCatalogIsNotEditedAgainstIt) {
+    // A development service still offering catalog 2 as its newest: the editor neither edits
+    // against it nor tries to install it, and explains that the avatar is not available.
+    auto text = CatalogText(Avatars::BaseCatalogVersion);
+    const auto at = text.find("\"catalogVersion\"");
+    ASSERT_NE(at, std::string::npos);
+    const auto end = text.find_first_of(",}", at);
+    text.replace(at, end - at, "\"catalogVersion\": 2");
+    Service::setFakeAvatarCatalog(*service_, text, {});
+    ASSERT_TRUE(Open());
+    EXPECT_EQ(std::vector<std::string>{"Avatar not available"}, Ui::labelsForTesting());
+    EXPECT_EQ(Service::fakeAvatarTraffic(*service_).packReads, 0);
+}

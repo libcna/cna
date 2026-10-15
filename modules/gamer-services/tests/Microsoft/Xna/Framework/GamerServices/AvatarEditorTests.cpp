@@ -16,7 +16,18 @@ using Avatars::EditorCategory;
 
 namespace {
 std::shared_ptr<const Avatars::CatalogManifest> newest() {return Avatars::embeddedCatalogs().back();}
-std::shared_ptr<const Avatars::CatalogManifest> first() {return Avatars::embeddedManifest(Avatars::BaseCatalogVersion);}
+std::shared_ptr<const Avatars::CatalogManifest> baseline() {return Avatars::embeddedManifest(Avatars::BaseCatalogVersion);}
+
+// A future catalog grown from the baseline as a v4 would be: every v3 item kept, one hat added.
+std::shared_ptr<const Avatars::CatalogManifest> nextCatalog() {
+    auto next=std::make_shared<Avatars::CatalogManifest>(*baseline());
+    next->version=static_cast<std::uint16_t>(Avatars::BaseCatalogVersion+1);
+    auto crown=*next->item(100);
+    crown.id=105;
+    crown.name="hat_crown";
+    next->items.push_back(crown);
+    return next;
+}
 
 std::vector<std::uint8_t> storedAvatar(const std::shared_ptr<const Avatars::CatalogManifest>& catalog,std::uint32_t seed) {
     std::mt19937 random(seed);
@@ -53,18 +64,22 @@ TEST(AvatarEditorTest, StartsFromTheStoredAvatarInTheCatalogItEdits) {
     EXPECT_EQ(model.descriptor(),*Avatars::decode(stored));
 }
 
-TEST(AvatarEditorTest, AnOlderCatalogsAvatarIsCarriedIntoTheEditedCatalog) {
-    if(newest()->version==Avatars::BaseCatalogVersion)GTEST_SKIP()<<"only catalog 1 is compiled in";
-    const auto stored=storedAvatar(first(),11);
+TEST(AvatarEditorTest, ABaselineAvatarIsCarriedIntoALaterCatalog) {
+    // Editing against a v4 the service has imported: the v3 avatar keeps every item, since a later
+    // catalog keeps every id and slot of the baseline, and names the edited catalog.
+    const auto later=nextCatalog();
+    const auto stored=storedAvatar(baseline(),11);
     const auto before=*Avatars::decode(stored);
-    AvatarEditorModel model(newest(),stored,1);
-    EXPECT_EQ(model.descriptor().catalogVersion,newest()->version);
+    AvatarEditorModel model(later,stored,1);
+    EXPECT_EQ(model.descriptor().catalogVersion,later->version);
     EXPECT_EQ(model.descriptor().colors,before.colors);
     EXPECT_EQ(model.descriptor().heightMillimeters,before.heightMillimeters);
+    EXPECT_EQ(model.descriptor().items,before.items);
+    EXPECT_EQ(model.descriptor().facialHair,before.facialHair);
+    EXPECT_EQ(model.descriptor().face,before.face);
     for(std::size_t slot=0;slot<Avatars::AvatarItemSlotCount;++slot) {
         const auto id=model.descriptor().items[slot];
-        if(newest()->item(before.items[slot]))EXPECT_EQ(id,before.items[slot]);
-        if(id)EXPECT_EQ(static_cast<std::size_t>(newest()->item(id)->slot),slot);
+        if(id)EXPECT_EQ(static_cast<std::size_t>(later->item(id)->slot),slot);
     }
     // Saving would store the carried-over avatar; nothing is written until the player saves.
     EXPECT_TRUE(model.differsFromStored());
@@ -75,8 +90,35 @@ TEST(AvatarEditorTest, WithoutAStoredAvatarItStartsFromARandomOne) {
         AvatarEditorModel model(newest(),stored,3);
         EXPECT_TRUE(Avatars::decode(model.encoded()).has_value());
         EXPECT_EQ(model.descriptor().catalogVersion,newest()->version);
+        EXPECT_EQ(model.descriptor().catalogVersion,Avatars::BaseCatalogVersion);
         EXPECT_TRUE(model.differsFromStored());
     }
+}
+
+TEST(AvatarEditorTest, AStoredDevelopmentCatalogAvatarIsNotCarriedOver) {
+    // A profile still holding a catalog 2 description from development: it is not an avatar CNA
+    // reads, so the editor starts exactly as it does with no avatar at all.
+    auto stored=storedAvatar(baseline(),21);
+    stored[8]=2;
+    stored[9]=0;
+    const auto crc=Avatars::crc32(std::span(stored).first(Avatars::DescriptionSize-4));
+    for(int shift=0;shift<4;++shift)stored[Avatars::DescriptionSize-4+shift]=static_cast<std::uint8_t>(crc>>(shift*8));
+    ASSERT_FALSE(Avatars::decode(stored).has_value());
+    AvatarEditorModel model(baseline(),stored,5);
+    AvatarEditorModel fresh(baseline(),{},5);
+    EXPECT_EQ(model.descriptor(),fresh.descriptor());
+    EXPECT_EQ(model.descriptor().catalogVersion,Avatars::BaseCatalogVersion);
+    EXPECT_TRUE(model.differsFromStored());
+}
+
+TEST(AvatarEditorTest, EveryEditNamesTheEditedCatalog) {
+    AvatarEditorModel model(baseline(),storedAvatar(baseline(),13),2);
+    model.randomize();
+    EXPECT_EQ(model.descriptor().catalogVersion,Avatars::BaseCatalogVersion);
+    pageTo(model,EditorCategory::Hair);
+    model.randomizeCategory();
+    EXPECT_EQ(model.descriptor().catalogVersion,Avatars::BaseCatalogVersion);
+    EXPECT_EQ(model.encoded()[8]|model.encoded()[9]<<8,Avatars::BaseCatalogVersion);
 }
 
 TEST(AvatarEditorTest, CategoriesOfferWhatTheirNameSays) {
@@ -135,8 +177,13 @@ TEST(AvatarEditorTest, RowsSayHowTheyAreShown) {
     for(const auto& option:styles)EXPECT_TRUE(Avatars::isEncodable(option.result))<<option.label;
 }
 
-TEST(AvatarEditorTest, CatalogOneOffersNoFaceShapeOrFacialHair) {
-    AvatarEditorModel model(first(),storedAvatar(first(),5),1);
+TEST(AvatarEditorTest, ACatalogWithoutFaceControlsOrFacialHairOffersNone) {
+    // The manifest makes both optional; a catalog without them offers no face shapes or styles.
+    auto plain=std::make_shared<Avatars::CatalogManifest>(*nextCatalog());
+    plain->featureItems.clear();
+    plain->faceControls[0].clear();
+    plain->faceControls[1].clear();
+    AvatarEditorModel model(plain,storedAvatar(plain,5),1);
     pageTo(model,EditorCategory::Face);
     EXPECT_TRUE(labels(model).empty());
     pageTo(model,EditorCategory::Eyes);

@@ -34,7 +34,7 @@ namespace CNA::Internal::GamerServices::Avatars {
 namespace {
 namespace fs = std::filesystem;
 
-// Far above any real catalog (v2 is 14 MB), so a hostile descriptor cannot fill a disk.
+// Far above any real catalog (v3 is 13 MB), so a hostile descriptor cannot fill a disk.
 constexpr std::uint64_t HardMaximumPackBytes=std::uint64_t{256}<<20;
 // Staging left by an interrupted install is reused by a retry; after a week it is abandoned.
 constexpr auto AbandonedStagingAge=std::chrono::hours(24*7);
@@ -130,7 +130,7 @@ CatalogPack parseCatalogPack(std::string_view text)
     try {
         const auto json=nlohmann::json::parse(text);
         const int version=json.at("version").get<int>();
-        if(version<1||version>0xffff)invalid("version");
+        if(!isSupportedCatalogVersion(version))invalid("version");
         pack.version=static_cast<std::uint16_t>(version);
         pack.packFormat=json.at("packFormat").get<int>();
         pack.reader=json.at("reader").get<int>();
@@ -229,6 +229,8 @@ void setInstalledCatalogRootForTesting(fs::path root)
 
 std::shared_ptr<const CatalogManifest> installedManifest(std::uint16_t version)
 {
+    // A stale pack of a development catalog left on disk is ignored, never resolved.
+    if(!isSupportedCatalogVersion(version))return nullptr;
     const auto root=installedCatalogRoot();
     if(root.empty())return nullptr;
     {
@@ -244,7 +246,7 @@ std::shared_ptr<const CatalogManifest> installedManifest(std::uint16_t version)
 std::optional<std::vector<std::uint8_t>> installedCatalogFile(std::uint16_t version,const CatalogAsset& asset)
 {
     const auto root=installedCatalogRoot();
-    if(root.empty()||!isHash(asset.sha256))return std::nullopt;
+    if(root.empty()||!isSupportedCatalogVersion(version)||!isHash(asset.sha256))return std::nullopt;
     return readVerified(versionDirectory(root,version)/asset.sha256,asset);
 }
 
@@ -259,7 +261,7 @@ std::vector<std::uint16_t> availableCatalogVersions()
             const auto name=entry->path().filename().string();
             if(name.size()<2||name[0]!='v'||name.find_first_not_of("0123456789",1)!=std::string::npos||name.size()>6)continue;
             const auto version=std::stoul(name.substr(1));
-            if(version<1||version>0xffff||std::ranges::find(versions,version)!=versions.end())continue;
+            if(!isSupportedCatalogVersion(static_cast<long long>(version))||std::ranges::find(versions,version)!=versions.end())continue;
             if(installedManifest(static_cast<std::uint16_t>(version)))versions.push_back(static_cast<std::uint16_t>(version));
         }
     std::ranges::sort(versions);
@@ -278,6 +280,8 @@ CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumB
         if(error)*error=why;
         return outcome;
     };
+    if(!isSupportedCatalogVersion(pack.version))
+        return fail(CatalogInstall::Refused,"catalog "+std::to_string(pack.version)+" is a development catalog below the baseline");
     const auto root=installedCatalogRoot();
     if(root.empty())return fail(CatalogInstall::Refused,"no catalog directory is configured");
     if(pack.packFormat!=CatalogPackFormat)return fail(CatalogInstall::Refused,"unknown pack format");
@@ -290,7 +294,7 @@ CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumB
     } catch(const std::runtime_error& failure) {
         return fail(CatalogInstall::Failed,failure.what());
     }
-    if(manifest.version!=pack.version||manifest.version==0)return fail(CatalogInstall::Failed,"manifest describes another version");
+    if(manifest.version!=pack.version)return fail(CatalogInstall::Failed,"manifest describes another version");
     if(embeddedManifest(pack.version))return CatalogInstall::AlreadyInstalled;
     const auto final=versionDirectory(root,pack.version);
     std::error_code fsError;

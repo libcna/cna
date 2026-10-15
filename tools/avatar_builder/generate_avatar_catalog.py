@@ -6,9 +6,11 @@
     python3 tools/avatar_builder/generate_avatar_catalog.py --check    # verify it byte for byte
 
 Everything is procedural and original; nothing is downloaded or derived from third-party or
-Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/. Catalogs v1 and v2 (the
-directories next to it) are released and frozen and are never regenerated: v1 was written by this
-tool's predecessor (Git history, commit 6ca06d069), v2 by this tool at commit d1730d4f3.
+Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/, CNA's baseline avatar
+catalog (docs/avatars.md). Catalog v3 is released and frozen; a new catalog is a new version (change
+CATALOG_VERSION and the output directory). The development catalogs v1 and v2 that preceded it are
+not shipped or supported; Git history keeps them (v1 from this tool's predecessor at commit
+6ca06d069, v2 from this tool at commit d1730d4f3).
 """
 import argparse
 import hashlib

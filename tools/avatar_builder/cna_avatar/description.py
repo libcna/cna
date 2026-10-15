@@ -13,10 +13,12 @@ OPTIONAL_SLOTS = ("glasses", "hat")
 COLORS = ("skin", "hair", "eyes", "top", "bottom", "shoes", "accessory")
 FACE_PARAMETERS = 16
 NEUTRAL = 128
+# The baseline avatar catalog (BaseCatalogVersion): catalogs below it were development catalogs.
+BASE_CATALOG_VERSION = 3
 
 
 class Descriptor:
-    def __init__(self, body_type=0, height_mm=1700, build=128, catalog_version=1, colors=None, items=None,
+    def __init__(self, body_type=0, height_mm=1700, build=128, catalog_version=BASE_CATALOG_VERSION, colors=None, items=None,
                  facial_hair=0, face=None):
         self.body_type = body_type
         self.height_mm = height_mm
@@ -64,7 +66,7 @@ def decode(data):
     height, build, catalog = struct.unpack_from("<HBH", data, 5)
     colors = {name: tuple(data[10 + i * 3:13 + i * 3]) for i, name in enumerate(COLORS)}
     items = {name: struct.unpack_from("<H", data, 31 + i * 2)[0] for i, name in enumerate(SLOTS)}
-    if data[4] > 1 or not 1450 <= height <= 2050 or catalog == 0:
+    if data[4] > 1 or not 1450 <= height <= 2050 or catalog < BASE_CATALOG_VERSION:
         return None
     if data[0] == 2:
         return Descriptor(data[4], height, build, catalog, colors, items, struct.unpack_from("<H", data, 43)[0],

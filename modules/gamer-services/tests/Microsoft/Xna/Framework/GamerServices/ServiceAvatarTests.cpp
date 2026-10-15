@@ -48,10 +48,12 @@ std::vector<unsigned char> Encoded(std::uint8_t body, std::uint16_t height, std:
     return {bytes.begin(), bytes.end()};
 }
 
-// A catalog one version past everything compiled in: v1 plus one hat the library does not have.
+// A catalog one version past everything compiled in (a v4 grown from the baseline v3): every v3
+// item plus one hat the library does not have.
 const std::uint16_t Newer = static_cast<std::uint16_t>(Avatars::newestEmbeddedManifest().version + 1);
+// The hat only the newer catalog has.
+constexpr std::uint16_t CrownId = 105;
 
-// A catalog one version past everything compiled in: v1 plus one hat the library does not have.
 struct NewerCatalog {
     nlohmann::json json;
     std::map<std::string, std::vector<unsigned char>> assets;
@@ -71,7 +73,7 @@ struct NewerCatalog {
     std::string manifest() const { return json.dump(); }
 };
 
-std::vector<unsigned char> EmbeddedV1File(const std::string& name) {
+std::vector<unsigned char> EmbeddedBaselineFile(const std::string& name) {
     const auto embedded = Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
     const auto bytes = Avatars::resolveAsset(*embedded, name);
     return {bytes->view.begin(), bytes->view.end()};
@@ -88,15 +90,16 @@ std::vector<unsigned char> Renamed(std::vector<unsigned char> bytes, const std::
 
 NewerCatalog MakeNewerCatalog() {
     const auto& files = Avatars::embeddedCatalogFiles();
-    auto manifestFile = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "v1/catalog.json"; });
+    const auto baseline = "v" + std::to_string(Avatars::BaseCatalogVersion) + "/catalog.json";
+    auto manifestFile = std::find_if(files.begin(), files.end(), [&](const auto& file) { return std::string_view(file.name) == baseline; });
     NewerCatalog catalog;
     catalog.json = nlohmann::json::parse(std::string(reinterpret_cast<const char*>(manifestFile->data), manifestFile->size));
     catalog.json["catalogVersion"] = Newer;
     for (const char* body : {"female", "male"}) {
         // A distinct file: the cap renamed inside its JSON chunk, so its contents and hash are new.
-        catalog.put(std::string("hat_crown.") + body + ".glb", Renamed(EmbeddedV1File(std::string("hat_cap.") + body + ".glb"), "hat_cap", "hat_crn"));
+        catalog.put(std::string("hat_crown.") + body + ".glb", Renamed(EmbeddedBaselineFile(std::string("hat_cap.") + body + ".glb"), "hat_cap", "hat_crn"));
     }
-    catalog.json["items"].push_back({{"id", 102}, {"slot", "hat"}, {"name", "hat_crown"},
+    catalog.json["items"].push_back({{"id", CrownId}, {"slot", "hat"}, {"name", "hat_crown"},
                                      {"assets", {{"female", "hat_crown.female.glb"}, {"male", "hat_crown.male.glb"}}}});
     return catalog;
 }
@@ -249,11 +252,11 @@ std::string Digest(const Avatars::AvatarModel& model) {
 void ExpectNotActivated(const std::filesystem::path& root) {
     EXPECT_FALSE(Installed(root));
     EXPECT_EQ(Avatars::installedManifest(Newer), nullptr);
-    const auto descriptor = Avatars::decode(Encoded(0, 1650, Newer, 102));
+    const auto descriptor = Avatars::decode(Encoded(0, 1650, Newer, CrownId));
     const auto model = WhilePumping([&] { return Avatars::buildAvatarModel(*descriptor); });
     EXPECT_TRUE(model->catalogUnavailable);
-    const auto v1 = Avatars::decode(Encoded(1, 1800));
-    EXPECT_FALSE(Avatars::buildAvatarModel(*v1)->catalogUnavailable);
+    const auto baseline = Avatars::decode(Encoded(1, 1800));
+    EXPECT_FALSE(Avatars::buildAvatarModel(*baseline)->catalogUnavailable);
 }
 }
 
@@ -294,7 +297,7 @@ TEST_F(AvatarServiceTest, AMissingCatalogIsInstalledOnceAsOneValidatedPack) {
     auto traffic = Service::fakeAvatarTraffic(*service_);
     EXPECT_EQ(traffic.packReads, 1);
     EXPECT_EQ(traffic.fileDownloads, 3);
-    const auto descriptor = Avatars::decode(Encoded(0, 1650, Newer, 102));
+    const auto descriptor = Avatars::decode(Encoded(0, 1650, Newer, CrownId));
     const auto model = Avatars::buildAvatarModel(*descriptor);
     EXPECT_FALSE(model->catalogUnavailable);
     EXPECT_TRUE(model->substitutedItems.empty());
@@ -368,7 +371,7 @@ TEST_F(AvatarServiceTest, AnUnreadableModelIsNeverActivated) {
 TEST_F(AvatarServiceTest, AModelOnAnotherSkeletonIsNeverActivated) {
     auto catalog = MakeNewerCatalog();
     // Valid glTF, but one joint is not an XNA avatar bone.
-    catalog.put("hat_crown.male.glb", Renamed(EmbeddedV1File("hat_cap.male.glb"), "ElbowLeft", "ElbowLeff"));
+    catalog.put("hat_crown.male.glb", Renamed(EmbeddedBaselineFile("hat_cap.male.glb"), "ElbowLeft", "ElbowLeff"));
     Service::setFakeAvatarCatalog(*service_, catalog.manifest(), catalog.assets);
     EXPECT_EQ(WhilePumping([] { return Avatars::catalogManifest(Newer); }), nullptr);
     ExpectNotActivated(root_);
@@ -377,7 +380,7 @@ TEST_F(AvatarServiceTest, AModelOnAnotherSkeletonIsNeverActivated) {
 TEST_F(AvatarServiceTest, AnimationsWithoutEveryPresetAreNeverActivated) {
     auto catalog = MakeNewerCatalog();
     // The animations file replaced by a model with no clips.
-    catalog.put("animations.glb", EmbeddedV1File("hat_cap.male.glb"));
+    catalog.put("animations.glb", EmbeddedBaselineFile("hat_cap.male.glb"));
     Service::setFakeAvatarCatalog(*service_, catalog.manifest(), catalog.assets);
     EXPECT_EQ(WhilePumping([] { return Avatars::catalogManifest(Newer); }), nullptr);
     ExpectNotActivated(root_);
@@ -402,11 +405,11 @@ TEST_F(AvatarServiceTest, AClientThatDeclinesUpdatesDrawsTheDefaultAvatarAndRead
     Service::setFakeAvatarCatalogPolicy(*service_, Service::AvatarCatalogPolicy{false, 64u << 20});
     EXPECT_EQ(WhilePumping([] { return Avatars::catalogManifest(Newer); }), nullptr);
     EXPECT_EQ(Service::fakeAvatarTraffic(*service_).packReads, 0);
-    const auto descriptor = Avatars::decode(Encoded(1, 1900, Newer, 102));
+    const auto descriptor = Avatars::decode(Encoded(1, 1900, Newer, CrownId));
     const auto first = WhilePumping([&] { return Avatars::buildAvatarModel(*descriptor); });
     const auto second = WhilePumping([&] { return Avatars::buildAvatarModel(*descriptor); });
     EXPECT_TRUE(first->catalogUnavailable);
-    EXPECT_EQ(first->substitutedItems, (std::vector<std::uint16_t>{1, 20, 40, 60, 102}));
+    EXPECT_EQ(first->substitutedItems, (std::vector<std::uint16_t>{1, 20, 40, 60, CrownId}));
     EXPECT_FLOAT_EQ(first->height, 1.9f);
     EXPECT_EQ(Digest(*first), Digest(*second));
 }
@@ -414,7 +417,7 @@ TEST_F(AvatarServiceTest, AClientThatDeclinesUpdatesDrawsTheDefaultAvatarAndRead
 TEST_F(AvatarServiceTest, TwoClientsWithTheSameCatalogAndDescriptionBuildTheSameAvatar) {
     const auto catalog = MakeNewerCatalog();
     Service::setFakeAvatarCatalog(*service_, catalog.manifest(), catalog.assets);
-    const auto descriptor = Avatars::decode(Encoded(1, 1720, Newer, 102));
+    const auto descriptor = Avatars::decode(Encoded(1, 1720, Newer, CrownId));
     ASSERT_NE(WhilePumping([] { return Avatars::catalogManifest(Newer); }), nullptr);
     const auto first = Digest(*Avatars::buildAvatarModel(*descriptor));
     // A second client: its own, empty catalog directory, installing the same pack.
@@ -426,8 +429,8 @@ TEST_F(AvatarServiceTest, TwoClientsWithTheSameCatalogAndDescriptionBuildTheSame
     Avatars::setInstalledCatalogRootForTesting(root_);
     std::filesystem::remove_all(other);
     // And the compiled-in path is as deterministic.
-    const auto v1 = Avatars::decode(Encoded(0, 1600));
-    EXPECT_EQ(Digest(*Avatars::buildAvatarModel(*v1)), Digest(*Avatars::buildAvatarModel(*v1)));
+    const auto baseline = Avatars::decode(Encoded(0, 1600));
+    EXPECT_EQ(Digest(*Avatars::buildAvatarModel(*baseline)), Digest(*Avatars::buildAvatarModel(*baseline)));
 }
 
 namespace {
@@ -617,7 +620,7 @@ TEST_F(AvatarServiceTest, ConcurrentRequestsForOnePackInstallItOnce) {
     int versions = 0;
     for (const auto& entry : std::filesystem::directory_iterator(root_)) versions += entry.path().filename().string().starts_with("v");
     EXPECT_EQ(1, versions);
-    const auto model = Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, Newer, 102)));
+    const auto model = Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, Newer, CrownId)));
     EXPECT_FALSE(model->catalogUnavailable);
     EXPECT_TRUE(model->substitutedItems.empty());
 }
@@ -659,7 +662,7 @@ TEST_F(AvatarServiceTest, AnUnavailableUpdateDrawsTheDefaultAvatarAndIsNotAskedA
     Service::setFakeAvatarCatalog(*service_, MakeNewerCatalog().manifest(), {});
     const auto missing = static_cast<std::uint16_t>(Newer + 1);
     EXPECT_EQ(WhilePumping([&] { return Avatars::catalogManifest(missing); }), nullptr);
-    const auto model = WhilePumping([&] { return Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, missing, 102))); });
+    const auto model = WhilePumping([&] { return Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, missing, CrownId))); });
     EXPECT_TRUE(model->catalogUnavailable);
     EXPECT_EQ(Service::fakeAvatarTraffic(*service_).packReads, 1);
     EXPECT_EQ(WhilePumping([&] { return Avatars::catalogManifest(missing); }), nullptr);
@@ -685,15 +688,23 @@ TEST_F(AvatarServiceTest, APackClaimingAnotherVersionIsNeverSubstituted) {
     ExpectNotActivated(root_);
 }
 
-// An installed newer catalog does not change how a description of an older, frozen catalog looks:
-// v1, v2 and v3 descriptions build exactly the same avatar before and after.
+// An installed newer catalog does not change how a description of the frozen baseline looks: v3
+// descriptions, format 1 and format 2, build exactly the same avatar before and after.
 TEST_F(AvatarServiceTest, InstallingANewCatalogDoesNotChangeOlderDescriptions) {
     std::vector<std::vector<unsigned char>> older;
     for (std::uint16_t version = Avatars::BaseCatalogVersion; version < Newer; ++version) {
         older.push_back(Encoded(0, 1650, version));
         older.push_back(Encoded(1, 1830, version));
     }
-    ASSERT_GE(older.size(), 6u) << "catalogs v1, v2 and v3 are compiled in";
+    ASSERT_EQ(older.size(), 2u) << "the baseline catalog v3 is the one compiled in";
+    {
+        auto bearded = *Avatars::decode(Encoded(1, 1830));
+        bearded.facialHair = 121;
+        bearded.face[2] = 60;
+        const auto bytes = Avatars::encode(bearded);
+        ASSERT_EQ(bytes[0], Avatars::FaceFormatVersion);
+        older.emplace_back(bytes.begin(), bytes.end());
+    }
     std::vector<std::uint64_t> before;
     for (const auto& bytes : older) {
         const auto model = Avatars::buildAvatarModel(*Avatars::decode(bytes));
@@ -720,6 +731,126 @@ TEST_F(AvatarServiceTest, ADescriptionInAnUnknownFormatIsNotDrawnAsAnything) {
     const AvatarDescription description(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()));
     EXPECT_FLOAT_EQ(0.0f, description.getHeightProperty());
     EXPECT_EQ(AvatarBodyType::Female, description.getBodyTypeProperty());
+}
+
+namespace {
+// A description naming development catalog `version`, otherwise well formed (checksum included).
+std::vector<unsigned char> OnDevelopmentCatalog(std::vector<unsigned char> bytes, std::uint8_t version) {
+    bytes[8] = version;
+    bytes[9] = 0;
+    const auto crc = Avatars::crc32(std::span(bytes).first(Avatars::DescriptionSize - 4));
+    for (int shift = 0; shift < 4; ++shift) {
+        bytes[Avatars::DescriptionSize - 4 + shift] = static_cast<std::uint8_t>(crc >> (shift * 8));
+    }
+    return bytes;
+}
+
+// The text of the baseline manifest relabelled as another catalog version.
+std::string BaselineManifestAs(std::uint16_t version) {
+    auto json = MakeNewerCatalog().json;
+    for (auto entry = json["items"].begin(); entry != json["items"].end(); ++entry) {
+        if ((*entry)["id"] == CrownId) {
+            json["items"].erase(entry);
+            break;
+        }
+    }
+    json["catalogVersion"] = version;
+    return json.dump();
+}
+}
+
+// Catalogs 1 and 2 were development catalogs: a description naming one, format 1 or format 2, is not
+// an avatar this client draws -- XNA's undefined case again, never read against catalog 3.
+TEST_F(AvatarServiceTest, ADescriptionNamingADevelopmentCatalogIsNotDrawnAsAnything) {
+    auto beard = *Avatars::decode(Encoded(1, 1830));
+    beard.facialHair = 122;
+    const auto formatTwo = Avatars::encode(beard);
+    for (const auto& base : {Encoded(1, 1830), std::vector<unsigned char>(formatTwo.begin(), formatTwo.end())}) {
+        for (std::uint8_t version : {std::uint8_t{1}, std::uint8_t{2}}) {
+            const auto bytes = OnDevelopmentCatalog(base, version);
+            EXPECT_FALSE(Avatars::decode(bytes)) << int(version);
+            AvatarDescription description(std::vector<SharpRuntime::bytecs>(bytes.begin(), bytes.end()));
+            // XNA's IsValid looks only at the first byte.
+            EXPECT_TRUE(description.getIsValidProperty());
+            EXPECT_FLOAT_EQ(0.0f, description.getHeightProperty());
+            EXPECT_EQ(AvatarBodyType::Female, description.getBodyTypeProperty());
+            AvatarRenderer renderer(&description);
+            EXPECT_EQ(renderer.getStateProperty(), AvatarRendererState::Unavailable);
+        }
+    }
+    // The service handing one out changes nothing: the bytes arrive as stored and are not drawn.
+    const auto stored = OnDevelopmentCatalog(Encoded(0, 1700), 2);
+    Service::setFakeAvatar(*service_, "a", stored);
+    std::unique_ptr<System::IAsyncResult> result(AvatarDescription::BeginGetFromGamer(gamer(0), {}, {}));
+    while (!result->getIsCompletedProperty()) {
+        GamerServicesDispatcher::Update();
+    }
+    auto description = AvatarDescription::EndGetFromGamer(result.get());
+    EXPECT_EQ(description.getDescriptionProperty(), std::vector<SharpRuntime::bytecs>(stored.begin(), stored.end()));
+    AvatarRenderer renderer(&description);
+    EXPECT_EQ(renderer.getStateProperty(), AvatarRendererState::Unavailable);
+}
+
+// A developer machine may still hold packs of catalogs 1 and 2 installed by earlier development
+// builds. They stay on disk untouched and are never enumerated, resolved or asked for again.
+TEST_F(AvatarServiceTest, StaleDevelopmentCatalogPacksOnDiskAreIgnored) {
+    for (std::uint16_t version : {std::uint16_t{1}, std::uint16_t{2}}) {
+        const auto manifest = BaselineManifestAs(version);
+        const auto directory = root_ / ("v" + std::to_string(version));
+        std::filesystem::create_directories(directory);
+        std::ofstream(directory / "catalog.json", std::ios::binary) << manifest;
+        const nlohmann::json record{{"packFormat", Avatars::CatalogPackFormat}, {"version", version}, {"reader", 1},
+            {"manifestSha256", Avatars::sha256Hex(std::vector<unsigned char>(manifest.begin(), manifest.end()))}, {"totalBytes", 0}};
+        std::ofstream(directory / "pack.json", std::ios::binary) << record.dump();
+    }
+    // The service offers one too, as an old development server might.
+    Service::setFakeAvatarCatalog(*service_, BaselineManifestAs(2), MakeNewerCatalog().assets);
+    Avatars::setInstalledCatalogRootForTesting(root_);
+    EXPECT_EQ(Avatars::availableCatalogVersions(), (std::vector<std::uint16_t>{Avatars::BaseCatalogVersion}));
+    EXPECT_EQ(Avatars::clientCatalogs().versions, (std::vector<std::uint16_t>{Avatars::BaseCatalogVersion}));
+    for (std::uint16_t version : {std::uint16_t{1}, std::uint16_t{2}}) {
+        EXPECT_EQ(Avatars::installedManifest(version), nullptr);
+        EXPECT_EQ(WhilePumping([version] { return Avatars::catalogManifest(version); }), nullptr);
+        EXPECT_TRUE(std::filesystem::exists(root_ / ("v" + std::to_string(version)) / "pack.json"));
+    }
+    const auto traffic = Service::fakeAvatarTraffic(*service_);
+    EXPECT_EQ(traffic.packReads, 0);
+    EXPECT_EQ(traffic.fileDownloads, 0);
+}
+
+// No pack of a development catalog is ever installed, whatever its descriptor and manifest say.
+TEST_F(AvatarServiceTest, ADevelopmentCatalogPackIsNeverInstalled) {
+    const auto text = R"({"version":%V%,"packFormat":1,"reader":1,"descriptionFormats":[1,2],"manifestSha256":")" +
+        std::string(64, 'a') + R"(","manifestSize":10,"totalBytes":10})";
+    auto as = [&](int version) {
+        auto copy = text;
+        copy.replace(copy.find("%V%"), 3, std::to_string(version));
+        return copy;
+    };
+    EXPECT_EQ(Avatars::parseCatalogPack(as(3)).version, 3);
+    EXPECT_EQ(Avatars::parseCatalogPack(as(4)).version, 4);
+    EXPECT_THROW((void)Avatars::parseCatalogPack(as(1)), std::runtime_error);
+    EXPECT_THROW((void)Avatars::parseCatalogPack(as(2)), std::runtime_error);
+    // installCatalogPack refuses it before reading the manifest or fetching anything.
+    const auto manifest = BaselineManifestAs(2);
+    Avatars::CatalogPack pack;
+    pack.version = 2;
+    pack.packFormat = 1;
+    pack.reader = 1;
+    pack.descriptionFormats = {1, 2};
+    pack.manifest = manifest;
+    pack.manifestSha256 = Avatars::sha256Hex(std::vector<unsigned char>(manifest.begin(), manifest.end()));
+    pack.manifestSize = manifest.size();
+    int fetched = 0;
+    std::string error;
+    const auto outcome = Avatars::installCatalogPack(pack, std::uint64_t{64} << 20, [&](const Avatars::CatalogAsset&) {
+        ++fetched;
+        return std::vector<std::uint8_t>{};
+    }, &error);
+    EXPECT_EQ(outcome, Avatars::CatalogInstall::Refused);
+    EXPECT_NE(error.find("development catalog"), std::string::npos) << error;
+    EXPECT_EQ(fetched, 0);
+    EXPECT_FALSE(std::filesystem::exists(root_ / "v2"));
 }
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -769,7 +900,7 @@ TEST(AvatarCatalogProcessTest, TwoProcessesInstallingOnePackActivateItOnce) {
     EXPECT_TRUE(Installed(root / "catalogs"));
     EXPECT_FALSE(Staged(root / "catalogs"));
     Avatars::setInstalledCatalogRootForTesting(root / "catalogs");
-    const auto model = Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, Newer, 102)));
+    const auto model = Avatars::buildAvatarModel(*Avatars::decode(Encoded(0, 1650, Newer, CrownId)));
     EXPECT_FALSE(model->catalogUnavailable);
     Avatars::setInstalledCatalogRootForTesting({});
     std::filesystem::remove_all(root);

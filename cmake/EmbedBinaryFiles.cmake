@@ -6,7 +6,7 @@
 # generates <output.cpp> defining, in <namespace>,
 #   std::span<const CNA::Internal::EmbeddedFile> <function>();
 # whose records are sorted by name: the file name, or with BASE the path relative to <dir>
-# ("v1/catalog.json"). Invoked with -P this file is the generator itself.
+# ("v3/catalog.json"). Invoked with -P this file is the generator itself.
 
 if(CMAKE_SCRIPT_MODE_FILE)
     # Script mode: OUTPUT, NAMESPACE, FUNCTION, FILES_LIST (a file that sets FILES), optional BASE.

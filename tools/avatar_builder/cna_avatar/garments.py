@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Catalog v2 clothing: tops, bottoms and shoes, built as offset lofts over the body's own
+"""The catalog's clothing: tops, bottoms and shoes, built as offset lofts over the body's own
 sections and skin weights so they deform with it, with the details that make a garment read as
 one: rolled necklines, collars, hoods, pockets, cuffs, hems, waistbands, soles and laces.
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""The catalog's face-shape controls (catalog v3: each reaches about half again as far as v2's): what each byte of a format 2 description's face block does.
+"""The catalog's face-shape controls (catalog v3): what each byte of a format 2 description's face block does.
 
 A control holds deformers, each a scale, move or rotation about a centre, weighted 1 inside an
 ellipsoid's `inner` fraction and fading to 0 at its surface (smoothstep). A parameter byte b gives

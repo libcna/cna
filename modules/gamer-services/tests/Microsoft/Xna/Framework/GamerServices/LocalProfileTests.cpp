@@ -164,6 +164,29 @@ TEST(LocalProfileStoreTest, MalformedEntriesAreSkippedAndALostAvatarIsReplaced) 
     EXPECT_EQ(repaired.avatar, Service::loadLocalProfiles()[1].avatar);
 }
 
+TEST(LocalProfileStoreTest, ADevelopmentCatalogAvatarIsReplacedByANewBaselineAvatar) {
+    // A profile written by a development build still names catalog 2. That is not an avatar CNA
+    // reads, so the profile is treated as having lost its avatar and gets a new one on catalog 3.
+    std::mt19937 random(11);
+    auto bytes = Avatars::encode(Avatars::randomDescriptor(std::nullopt, random));
+    bytes[8] = 2;
+    bytes[9] = 0;
+    const auto crc = Avatars::crc32(std::span(bytes).first(Avatars::DescriptionSize - 4));
+    for (int shift = 0; shift < 4; ++shift) bytes[Avatars::DescriptionSize - 4 + shift] = static_cast<std::uint8_t>(crc >> (shift * 8));
+    std::string text;
+    constexpr char digits[] = "0123456789abcdef";
+    for (auto byte : bytes) { text += digits[byte >> 4]; text += digits[byte & 15]; }
+    ProfileEnvironment environment;
+    environment.Write(R"({"version":1,"profiles":[{"gamertag":"Old","avatar":")" + text + R"("}]})");
+    ASSERT_EQ(1u, Service::loadLocalProfiles().size());
+    EXPECT_TRUE(Service::loadLocalProfiles()[0].avatar.empty());
+    const auto repaired = Service::openLocalProfile("Old");
+    const auto decoded = Avatars::decode(repaired.avatar);
+    ASSERT_TRUE(decoded.has_value());
+    EXPECT_EQ(decoded->catalogVersion, Avatars::BaseCatalogVersion);
+    EXPECT_EQ(repaired.avatar, Service::loadLocalProfiles()[0].avatar);
+}
+
 TEST(LocalProfileStoreTest, AutomaticSignInNamesComeFromTheEnvironment) {
     ProfileEnvironment environment;
     environment.Set("CNA_GAMER_SERVICES_AUTO_SIGN_IN", " Ann , Ben Two");

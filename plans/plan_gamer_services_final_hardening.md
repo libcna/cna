@@ -198,7 +198,8 @@ LockFileEx); 0 of 20 afterwards, and 5 of 6 fail with the lock removed. Tests ad
 two processes, a client restarted mid-install (staging reused, week-old staging removed), an
 unavailable update, a pack claiming another version, v1-v3 descriptions unchanged by a newer
 catalog (geometry fingerprints), an unknown description format. v1, v2 and v3 stay pinned by the
-existing `CatalogV1/2/3IsFrozen`.
+existing `CatalogV1/2/3IsFrozen`. (Superseded 2026-10-15: the development catalogs 1 and 2 were
+removed and v3 is the baseline, pinned by `CatalogV3IsFrozen`; see `docs/avatars.md`.)
 
 ## GSH-10 Benchmarks
 

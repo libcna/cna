@@ -3,7 +3,8 @@
 #include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
 #include "CNA/Internal/GamerServices/ContentHash.hpp"
-// Header-only: CatalogReaderLevel. The service client must not call into the avatar catalog.
+// Header-only: CatalogReaderLevel, isSupportedCatalogVersion. The service client must not call into
+// the avatar catalog.
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/BackendConfiguration.hpp"
 #include "CNA/GamerServices/Configuration.hpp"
@@ -453,10 +454,12 @@ public:
     }
     std::string avatarCatalog(int version) override {
         if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
-        if(version<0||version>65535)throw Unavailable("Invalid avatar catalog version.");
+        // 0 asks for the newest; a development catalog below the baseline is never asked for or accepted.
+        if(version!=0&&!Avatars::isSupportedCatalogVersion(version))throw Unavailable("Invalid avatar catalog version.");
         Json args=Json::object();if(version)args["version"]=version;
         const auto result=request("avatars.catalog",args,tokenFor({}));
         if(!result.contains("version")||!result["version"].is_number_integer()||(version&&result["version"]!=version)||
+           !Avatars::isSupportedCatalogVersion(result["version"].get<long long>())||
            !result.contains("manifest")||!result["manifest"].is_object())throw Unavailable("Invalid avatar catalog response.");
         return result["manifest"].dump();
     }
@@ -498,7 +501,7 @@ public:
         return bytes;
     }
     std::string avatarCatalogPack(int version) override {
-        if(version<1||version>65535)throw Unavailable("Invalid avatar catalog version.");
+        if(!Avatars::isSupportedCatalogVersion(version))throw Unavailable("Invalid avatar catalog version.");
         return request("avatars.catalogPack",{{"version",version}},tokenFor({})).dump();
     }
     std::vector<unsigned char> catalogFile(const std::string& hash,std::size_t size) override {

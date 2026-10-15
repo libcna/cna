@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Catalog v2 glasses, hats and facial hair, fitted to head.py's face.
+"""The catalog's glasses, hats and facial hair, fitted to head.py's face.
 
 Hats are built outside the hat envelope (the head surface plus HAT_LIFT down to each hat's line),
 which is also where hair.squash_under_hat() flattens a style, so every hat fits every hair.

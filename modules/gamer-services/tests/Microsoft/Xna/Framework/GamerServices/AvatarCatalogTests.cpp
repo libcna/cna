@@ -50,66 +50,161 @@ TEST(AvatarCatalogTest, EveryEmbeddedCatalogResolvesToExactlyItsVersion) {
     }
 }
 
-TEST(AvatarCatalogTest, CatalogV1IsFrozen) {
-    // The v1 manifest is released: descriptions name it, so its bytes never change.
+TEST(AvatarCatalogTest, TheBaselineCatalogV3IsTheOnlyCatalogThisReleaseShips) {
+    // Catalogs 1 and 2 were development catalogs and are not shipped: v3 is the baseline and, until
+    // a v4 is released, the only catalog compiled in.
+    EXPECT_EQ(Avatars::BaseCatalogVersion, 3);
+    const auto& catalogs = Avatars::embeddedCatalogs();
+    ASSERT_EQ(catalogs.size(), 1u);
+    EXPECT_EQ(catalogs.front()->version, 3);
+    EXPECT_EQ(&Avatars::newestEmbeddedManifest(), catalogs.front().get());
     const auto& files = Avatars::embeddedCatalogFiles();
-    auto manifest = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "v1/catalog.json"; });
-    ASSERT_NE(manifest, files.end());
-    EXPECT_EQ(Avatars::sha256Hex(manifest->bytes()), "d794cc4152895876a1f6e3bfcfa494751986fc5b40997f0e42fde94875d63c0b");
-    const auto v1 = Avatars::embeddedManifest(1);
-    ASSERT_NE(v1, nullptr);
-    EXPECT_EQ(v1->items.size(), 18u);
-    EXPECT_EQ(v1->authoredHeightMillimeters[0], 1680);
-    EXPECT_EQ(v1->authoredHeightMillimeters[1], 1800);
+    EXPECT_EQ(files.size(), 111u);  // 110 listed assets and catalog.json
+    for (const auto& file : files) {
+        EXPECT_TRUE(std::string_view(file.name).starts_with("v3/")) << file.name;
+    }
+    EXPECT_EQ(Avatars::availableCatalogVersions(), (std::vector<std::uint16_t>{3}));
 }
 
-TEST(AvatarCatalogTest, CatalogV2IsFrozen) {
-    // Accounts, the service's golden fixtures and released builds name catalog 2: its manifest,
-    // and through it every file it lists, never changes. New art goes into a new catalog version.
-    const auto& files = Avatars::embeddedCatalogFiles();
-    auto manifest = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "v2/catalog.json"; });
-    ASSERT_NE(manifest, files.end());
-    EXPECT_EQ(Avatars::sha256Hex(manifest->bytes()), "7a27a9d657efdc903e128736b22a1be381dc627c5631b6c7926c9535cf4c2ae1");
-    const auto v2 = Avatars::embeddedManifest(2);
-    ASSERT_NE(v2, nullptr);
-    EXPECT_EQ(v2->items.size(), 39u);
-    EXPECT_EQ(v2->featureItems.size(), 4u);
-    EXPECT_EQ(v2->authoredHeightMillimeters[0], 1680);
-    EXPECT_EQ(v2->authoredHeightMillimeters[1], 1800);
+TEST(AvatarCatalogTest, DevelopmentCatalogsBelowTheBaselineAreNeverResolved) {
+    for (long long version : {0LL, 1LL, 2LL, 65536LL}) {
+        EXPECT_FALSE(Avatars::isSupportedCatalogVersion(version)) << version;
+    }
+    for (long long version : {3LL, 4LL, 65535LL}) {
+        EXPECT_TRUE(Avatars::isSupportedCatalogVersion(version)) << version;
+    }
+    for (std::uint16_t version : {std::uint16_t{1}, std::uint16_t{2}}) {
+        EXPECT_EQ(Avatars::embeddedManifest(version), nullptr);
+        EXPECT_EQ(Avatars::installedManifest(version), nullptr);
+        EXPECT_EQ(Avatars::catalogManifest(version), nullptr);
+        const auto load = Avatars::loadCatalogAsync(version);
+        std::lock_guard guard(load->lock);
+        EXPECT_TRUE(load->done);
+        EXPECT_EQ(load->manifest, nullptr);
+    }
+    // A description naming one is not drawn as anything, not even the default avatar; its ids are
+    // never read against catalog 3, although catalog 3 has every one of them.
+    for (std::uint16_t version : {std::uint16_t{1}, std::uint16_t{2}}) {
+        Avatars::AvatarDescriptor descriptor;
+        descriptor.catalogVersion = version;
+        descriptor.items = {3, 22, 42, 61, 80, 101};
+        EXPECT_THROW((void)Avatars::buildAvatarModel(descriptor), std::runtime_error) << version;
+        const auto load = Avatars::loadAvatarAsync(descriptor);
+        std::lock_guard guard(load->lock);
+        EXPECT_TRUE(load->done);
+        EXPECT_EQ(load->model, nullptr);
+        EXPECT_FALSE(load->error.empty());
+    }
 }
 
 TEST(AvatarCatalogTest, CatalogV3IsFrozen) {
-    // Released in next on 2026-09-30: profiles and accounts name catalog 3 and a service refuses a
-    // different catalog under an imported version, so it never changes. New art goes into catalog 4.
+    // Released in next on 2026-09-30 and CNA's baseline: profiles and accounts name catalog 3 and a
+    // service refuses a different catalog under an imported version, so it never changes. New art
+    // goes into catalog 4.
     const auto& files = Avatars::embeddedCatalogFiles();
     auto manifest = std::find_if(files.begin(), files.end(), [](const auto& file) { return std::string_view(file.name) == "v3/catalog.json"; });
     ASSERT_NE(manifest, files.end());
     EXPECT_EQ(Avatars::sha256Hex(manifest->bytes()), "5c347f38cbadce2a77b6766f3339b480623bf2b2f81ec1318669e97eb751a0af");
     const auto v3 = Avatars::embeddedManifest(3);
     ASSERT_NE(v3, nullptr);
+    EXPECT_EQ(v3->assets.size(), 110u);
     EXPECT_EQ(v3->items.size(), 39u);
     EXPECT_EQ(v3->featureItems.size(), 4u);
+    EXPECT_EQ(v3->authoredHeightMillimeters[0], 1680);
+    EXPECT_EQ(v3->authoredHeightMillimeters[1], 1800);
+}
+
+TEST(AvatarCatalogTest, CatalogV3HasTheBaselineItemFeatureAndAnimationContract) {
+    // The ids and slots every later catalog keeps: what a v3 description names means the same item
+    // in v4 and after.
+    const auto v3 = Avatars::embeddedManifest(3);
+    ASSERT_NE(v3, nullptr);
+    using Slot = Avatars::AvatarItemSlot;
+    const std::vector<std::pair<Slot, std::vector<std::uint16_t>>> expected{
+        {Slot::Hair, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},  {Slot::Top, {20, 21, 22, 23, 24, 25, 26, 27, 28}},
+        {Slot::Bottom, {40, 41, 42, 43, 44, 45}},      {Slot::Shoes, {60, 61, 62, 63, 64}},
+        {Slot::Glasses, {80, 81, 82, 83}},             {Slot::Hat, {100, 101, 102, 103, 104}}};
+    for (const auto& [slot, ids] : expected) {
+        std::vector<std::uint16_t> found;
+        for (const auto& item : v3->items) {
+            if (item.slot == slot) {
+                found.push_back(item.id);
+            }
+        }
+        EXPECT_EQ(found, ids) << static_cast<int>(slot);
+    }
+    std::vector<std::uint16_t> facial;
+    for (const auto& feature : v3->featureItems) {
+        EXPECT_EQ(feature.slot, Slot::FacialHair);
+        EXPECT_TRUE(feature.name.starts_with("facial_")) << feature.name;
+        // Facial hair is drawn at random for male bodies only.
+        EXPECT_EQ(feature.randomWeight[0], 0.0f) << feature.name;
+        facial.push_back(feature.id);
+    }
+    EXPECT_EQ(facial, (std::vector<std::uint16_t>{120, 121, 122, 123}));
+    EXPECT_EQ(v3->item(1)->name, "hair_short");
+    EXPECT_EQ(v3->item(20)->name, "top_tshirt");
+    EXPECT_EQ(v3->item(100)->name, "hat_cap");
+    EXPECT_EQ(v3->featureItem(122)->name, "facial_beard");
+    for (int body = 0; body < 2; ++body) {
+        ASSERT_EQ(v3->faceControls[body].size(), Avatars::FaceParameterCount);
+        for (std::size_t index = 0; index < Avatars::FaceParameterCount; ++index) {
+            EXPECT_EQ(v3->faceControls[body][index].parameter, static_cast<int>(index));
+            EXPECT_FALSE(v3->faceControls[body][index].deformers.empty());
+        }
+    }
+    std::vector<std::uint16_t> covering;
+    for (const auto& item : v3->items) {
+        EXPECT_EQ(!item.hatAssets[0].empty(), item.slot == Slot::Hair) << item.name;
+        if (item.coversHair) {
+            covering.push_back(item.id);
+        }
+    }
+    EXPECT_EQ(covering, (std::vector<std::uint16_t>{100, 101, 102, 103}));
+    EXPECT_EQ(v3->animationsAsset, "animations.glb");
+    EXPECT_EQ(v3->faceAsset, "face_features.png");
+    EXPECT_EQ(Avatars::clipLibrary().clips.size(), 31u);
+}
+
+TEST(AvatarCatalogTest, AManifestMustNameASupportedCatalogVersion) {
+    const auto& files = Avatars::embeddedCatalogFiles();
+    auto file = std::find_if(files.begin(), files.end(), [](const auto& entry) { return std::string_view(entry.name) == "v3/catalog.json"; });
+    ASSERT_NE(file, files.end());
+    const std::string text(reinterpret_cast<const char*>(file->data), file->size);
+    auto as = [&](int version) {
+        auto copy = text;
+        const auto at = copy.find("\"catalogVersion\": 3");
+        EXPECT_NE(at, std::string::npos);
+        copy.replace(at, std::string_view("\"catalogVersion\": 3").size(), "\"catalogVersion\": " + std::to_string(version));
+        return copy;
+    };
+    EXPECT_EQ(Avatars::parseManifest(text).version, 3);
+    EXPECT_THROW((void)Avatars::parseManifest(as(1)), std::runtime_error);
+    EXPECT_THROW((void)Avatars::parseManifest(as(2)), std::runtime_error);
+    EXPECT_THROW((void)Avatars::parseManifest(as(0)), std::runtime_error);
+    // A later catalog is a future version, read like the baseline.
+    EXPECT_EQ(Avatars::parseManifest(as(4)).version, 4);
 }
 
 TEST(AvatarCatalogTest, EmbeddedAssetsResolveByContentNotByName) {
-    const auto v1 = Avatars::embeddedManifest(1);
+    const auto v3 = Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
     // A manifest naming "body.female.glb" with the male body's contents gets the male body; one
     // whose listed contents are compiled in nowhere gets nothing (no service here).
-    auto swapped = *v1;
+    auto swapped = *v3;
     swapped.assets.at("body.female.glb") = swapped.assets.at("body.male.glb");
     swapped.assets.at("body.female.glb").name = "body.female.glb";
-    const auto male = Avatars::resolveAsset(*v1, "body.male.glb");
+    const auto male = Avatars::resolveAsset(*v3, "body.male.glb");
     const auto resolved = Avatars::resolveAsset(swapped, "body.female.glb");
     ASSERT_TRUE(resolved.has_value());
     EXPECT_EQ(resolved->view.data(), male->view.data());
-    auto foreign = *v1;
+    auto foreign = *v3;
     foreign.assets.at("hair_bob.female.glb").sha256 = std::string(64, 'a');
     EXPECT_FALSE(Avatars::resolveAsset(foreign, "hair_bob.female.glb").has_value());
 }
 
 TEST(AvatarCatalogTest, AnUnavailableCatalogNeverReadsItsIdsAgainstAnotherVersion) {
     // No service is configured, so a version past the compiled-in ones cannot be obtained. Its
-    // ids (which happen to exist in v1) must not be looked up in any other version.
+    // ids (which happen to exist in v3) must not be looked up in any other version.
     Avatars::AvatarDescriptor descriptor;
     descriptor.catalogVersion = static_cast<std::uint16_t>(Avatars::newestEmbeddedManifest().version + 7);
     descriptor.items = {3, 22, 42, 61, 80, 101};
@@ -171,29 +266,36 @@ std::string ModelDigest(const Avatars::AvatarModel& model) {
 }
 }
 
-TEST(AvatarCatalogTest, V1DescriptionsAssembleExactlyAsReleased) {
-    // Pinned while v1 was the only compiled-in catalog (GSP-B1): embedding later catalogs must
-    // not change what a v1 description draws.
+TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsReleased) {
+    // Catalog v3 is released and frozen: a v3 description, format 1 or format 2, draws the same
+    // model on every machine and in every later release.
     struct Case {
         std::uint8_t body;
         std::uint16_t height;
         std::uint8_t build;
         std::array<std::uint16_t, 6> items;
+        std::uint16_t facialHair;
+        std::uint8_t faceValue;
         const char* digest;
     };
     const Case cases[] = {
-        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, "0091f3f492961f6d35b7f55ed0baf3d5466123651495664f01fe1ea2fca7fb04"},
-        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, "9f3391987a16bc85c6b28f783c34903c8d362f3af884883cbd4261cd3e4f8c3f"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 101}, "460b636b899667d54ae3a2654d28fe73a7497cef0e9d0bccae4d683d252f89d1"},
+        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "7a14162b1551d64492c77bdbd0d4ae74ad1d5717487349b6f64475eed58cb0bd"},
+        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "5e184584e3807da799ae2d28a3e99a105cf9589772dd6d6019e62658613b833e"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "afd0309d33c6767875bfc1db7a7839c0ffbf14f696f71ec8076985b77b858428"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "15dc13c2113ca433c7cba65deab1eb9b8d9788201e089ee894d11a1e23d848ac"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;
-        descriptor.catalogVersion = 1;
+        descriptor.catalogVersion = 3;
         descriptor.bodyType = c.body;
         descriptor.heightMillimeters = c.height;
         descriptor.build = c.build;
         descriptor.colors = {{{224, 172, 128}, {74, 48, 30}, {60, 110, 160}, {50, 150, 200}, {60, 80, 180}, {240, 240, 236}, {220, 60, 56}}};
         descriptor.items = c.items;
+        descriptor.facialHair = c.facialHair;
+        descriptor.face[0] = c.faceValue;  // head width
+        descriptor.face[5] = c.faceValue;  // eye size
+        ASSERT_EQ(Avatars::encode(descriptor)[0], descriptor.usesFaceFormat() ? Avatars::FaceFormatVersion : Avatars::FormatVersion);
         const auto model = Avatars::buildAvatarModel(descriptor);
         EXPECT_FALSE(model->catalogUnavailable);
         EXPECT_TRUE(model->substitutedItems.empty());
@@ -265,7 +367,7 @@ TEST(AvatarCatalogTest, MalformedAssetsAreRejected) {
 TEST(AvatarCatalogTest, MalformedManifestsAreRejected) {
     EXPECT_THROW((void)Avatars::parseManifest("not json"), std::runtime_error);
     EXPECT_THROW((void)Avatars::parseManifest("{}"), std::runtime_error);
-    EXPECT_THROW((void)Avatars::parseManifest(R"({"format":1,"rig":"cna-avatar-71","catalogVersion":1,"assets":[{"name":"../x.glb","sha256":"00","size":1}]})"),
+    EXPECT_THROW((void)Avatars::parseManifest(R"({"format":1,"rig":"cna-avatar-71","catalogVersion":3,"assets":[{"name":"../x.glb","sha256":"00","size":1}]})"),
                  std::runtime_error);
 }
 
@@ -302,10 +404,10 @@ TEST(AvatarCatalogTest, AnAssembledAvatarUsesItsDescription) {
 }
 
 namespace {
-Avatars::AvatarDescriptor catalog2(std::uint8_t body, std::array<std::uint16_t, 6> items)
+Avatars::AvatarDescriptor baseline(std::uint8_t body, std::array<std::uint16_t, 6> items)
 {
     Avatars::AvatarDescriptor descriptor;
-    descriptor.catalogVersion = 2;
+    descriptor.catalogVersion = Avatars::BaseCatalogVersion;
     descriptor.bodyType = body;
     descriptor.heightMillimeters = body ? 1800 : 1680;
     descriptor.items = items;
@@ -322,42 +424,14 @@ std::size_t vertices(const Avatars::AvatarModel& model)
 }
 }
 
-TEST(AvatarCatalogTest, CatalogV2DescribesFeaturesFaceControlsAndHatHair) {
-    const auto v2 = Avatars::embeddedManifest(2);
-    ASSERT_NE(v2, nullptr);
-    EXPECT_GE(v2->items.size(), 35u);
-    EXPECT_GE(v2->featureItems.size(), 4u);
-    for (const auto& feature : v2->featureItems) {
-        EXPECT_EQ(feature.slot, Avatars::AvatarItemSlot::FacialHair);
-        EXPECT_EQ(feature.randomWeight[0], 0.0f) << feature.name;
-    }
-    for (int body = 0; body < 2; ++body) {
-        ASSERT_EQ(v2->faceControls[body].size(), Avatars::FaceParameterCount);
-        for (std::size_t index = 0; index < Avatars::FaceParameterCount; ++index) {
-            EXPECT_EQ(v2->faceControls[body][index].parameter, static_cast<int>(index));
-            EXPECT_FALSE(v2->faceControls[body][index].deformers.empty());
-        }
-    }
-    int covering = 0;
-    for (const auto& item : v2->items) {
-        EXPECT_EQ(!item.hatAssets[0].empty(), item.slot == Avatars::AvatarItemSlot::Hair) << item.name;
-        covering += item.coversHair;
-    }
-    EXPECT_GE(covering, 3);
-    // v1 has none of it.
-    const auto v1 = Avatars::embeddedManifest(1);
-    EXPECT_TRUE(v1->featureItems.empty());
-    EXPECT_TRUE(v1->faceControls[0].empty() && v1->faceControls[1].empty());
-}
-
 TEST(AvatarCatalogTest, FacialHairAndFaceShapeChangeOnlyTheHead) {
-    const auto plain = Avatars::buildAvatarModel(catalog2(1, {1, 20, 40, 60, 0, 0}));
-    auto bearded = catalog2(1, {1, 20, 40, 60, 0, 0});
+    const auto plain = Avatars::buildAvatarModel(baseline(1, {1, 20, 40, 60, 0, 0}));
+    auto bearded = baseline(1, {1, 20, 40, 60, 0, 0});
     bearded.facialHair = 122;
     const auto withBeard = Avatars::buildAvatarModel(bearded);
     EXPECT_TRUE(withBeard->substitutedItems.empty());
     EXPECT_EQ(withBeard->parts.size(), plain->parts.size() + 1);
-    auto wide = catalog2(1, {1, 20, 40, 60, 0, 0});
+    auto wide = baseline(1, {1, 20, 40, 60, 0, 0});
     wide.face[0] = 255;  // head width
     wide.face[5] = 255;  // eye size
     const auto shaped = Avatars::buildAvatarModel(wide);
@@ -378,23 +452,23 @@ TEST(AvatarCatalogTest, FacialHairAndFaceShapeChangeOnlyTheHead) {
     EXPECT_GT(moved, 1000);
     EXPECT_EQ(movedOffHead, 0);
     // A neutral face is exactly the unshaped avatar.
-    auto neutral = catalog2(1, {1, 20, 40, 60, 0, 0});
+    auto neutral = baseline(1, {1, 20, 40, 60, 0, 0});
     EXPECT_EQ(ModelDigest(*Avatars::buildAvatarModel(neutral)), ModelDigest(*plain));
 }
 
 TEST(AvatarCatalogTest, HairUnderACoveringHatUsesItsHatVariant) {
-    const auto v2 = Avatars::embeddedManifest(2);
+    const auto v3 = Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
     std::uint16_t covering = 0, open = 0;
-    for (const auto& item : v2->items) {
+    for (const auto& item : v3->items) {
         if (item.slot == Avatars::AvatarItemSlot::Hat) {
             (item.coversHair ? covering : open) = item.id;
         }
     }
     ASSERT_NE(covering, 0);
     ASSERT_NE(open, 0);
-    const auto bare = Avatars::buildAvatarModel(catalog2(0, {3, 20, 40, 60, 0, 0}));
-    const auto capped = Avatars::buildAvatarModel(catalog2(0, {3, 20, 40, 60, 0, covering}));
-    const auto banded = Avatars::buildAvatarModel(catalog2(0, {3, 20, 40, 60, 0, open}));
+    const auto bare = Avatars::buildAvatarModel(baseline(0, {3, 20, 40, 60, 0, 0}));
+    const auto capped = Avatars::buildAvatarModel(baseline(0, {3, 20, 40, 60, 0, covering}));
+    const auto banded = Avatars::buildAvatarModel(baseline(0, {3, 20, 40, 60, 0, open}));
     // The covered style drops what the hat hides; a headband keeps the whole style.
     EXPECT_LT(vertices(*capped), vertices(*banded));
     EXPECT_GT(vertices(*banded), vertices(*bare));

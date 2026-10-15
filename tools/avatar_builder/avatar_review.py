@@ -4,7 +4,7 @@
 AvatarRenderer (cna_avatar_review), then laid out as contact sheets.
 
     A=modules/gamer-services/assets/avatars
-    python3 tools/avatar_builder/avatar_review.py jobs --catalogs $A --version 1 --out jobs.json
+    python3 tools/avatar_builder/avatar_review.py jobs --catalogs $A --version 3 --out jobs.json
     python3 tools/avatar_builder/avatar_review.py preview jobs.json OUT/preview --catalogs $A
     cna_avatar_review jobs.json OUT/renderer                  # the real renderer, same jobs
     python3 tools/avatar_builder/avatar_review.py sheets jobs.json OUT/renderer OUT/sheets
@@ -97,12 +97,13 @@ PRESETS = []
 
 def head_height(catalogs, library, description):
     """(height to frame the face at, the head's span from its joint to the top): close-ups keep
-    their distance in proportion to the head, so a larger head is framed as a v2 head was."""
+    their distance in proportion to the head, so heads of every size are framed alike."""
     joint, height = posed_joint(catalogs, library, description, "Stand0", 0.0, "Head")
     return joint[1] + 0.52 * (height - joint[1]), height - joint[1]
 
 
-# Catalog v2's head span (Head joint to the top of a 1.80 m male), the close-ups' reference.
+# The close-ups' reference head span (Head joint to the top of a 1.80 m male), measured on an
+# earlier development catalog and kept so that framing does not change.
 REFERENCE_SPAN = 0.36
 
 

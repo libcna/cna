@@ -192,6 +192,7 @@ CatalogManifest parseManifestJson(std::string_view text)
     CatalogManifest manifest;
     const auto version=json.value("catalogVersion",0);
     if(version<1||version>0xffff)malformed("catalog version");
+    if(!isSupportedCatalogVersion(version))malformed("catalog version "+std::to_string(version)+" is a development catalog below the baseline");
     manifest.version=static_cast<std::uint16_t>(version);
     if(!json.contains("assets")||!json["assets"].is_array()||json["assets"].size()>256)malformed("asset list");
     for(const auto& asset:json["assets"]) {
@@ -298,6 +299,9 @@ const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs()
         }
         if(out.empty())throw std::runtime_error("the avatar catalog is not compiled into this build");
         std::ranges::sort(out,{},[](const auto& manifest){return manifest->version;});
+        // Every build draws baseline descriptions offline; later catalogs come after it.
+        if(out.front()->version!=BaseCatalogVersion)
+            throw std::runtime_error("avatar catalog: the baseline catalog v"+std::to_string(BaseCatalogVersion)+" is not compiled into this build");
         return out;
     }();
     return catalogs;

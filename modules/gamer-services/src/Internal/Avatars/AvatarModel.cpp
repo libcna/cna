@@ -166,6 +166,9 @@ constexpr auto UpdateRetryDelay=std::chrono::seconds(60);
 
 std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version)
 {
+    // A development catalog below the baseline is never resolved: not compiled in, not read from a
+    // stale pack on disk, not asked of the service.
+    if(!isSupportedCatalogVersion(version))return nullptr;
     // Layer A: the catalogs of this release, then the packs installed before.
     if(auto embedded=embeddedManifest(version))return embedded;
     if(auto installed=installedManifest(version))return installed;
@@ -213,6 +216,9 @@ void forgetCatalogUpdateFailures()
 
 std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& descriptor)
 {
+    // Not even the default avatar: a development catalog's description is not a CNA avatar.
+    if(!isSupportedCatalogVersion(descriptor.catalogVersion))
+        throw std::runtime_error("avatar description names development catalog "+std::to_string(descriptor.catalogVersion)+", below the baseline");
     auto catalog=catalogManifest(descriptor.catalogVersion);
     auto model=std::make_shared<AvatarModel>();
     if(!catalog) {
@@ -393,6 +399,10 @@ Loader& loader()
 std::shared_ptr<CatalogLoad> loadCatalogAsync(std::uint16_t version)
 {
     auto load=std::make_shared<CatalogLoad>();
+    if(!isSupportedCatalogVersion(version)) {
+        load->done=true;
+        return load;
+    }
     if(auto local=embeddedManifest(version)) {
         load->manifest=std::move(local);
         load->done=true;
@@ -410,6 +420,11 @@ std::shared_ptr<CatalogLoad> loadCatalogAsync(std::uint16_t version)
 std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor)
 {
     auto load=std::make_shared<AvatarLoad>();
+    if(!isEncodable(descriptor)) {
+        load->error="avatar description is not encodable";
+        load->done=true;
+        return load;
+    }
     const auto key=encode(descriptor);
     {
         std::lock_guard guard(cacheLock);

@@ -140,11 +140,13 @@ struct CatalogManifest {
     const CatalogItem* featureItem(std::uint16_t id) const;
 };
 
-/** @brief Parses and validates a manifest; every name, size and hash is checked. @param json Text.
- * @return Manifest. @throws std::runtime_error when malformed. */
+/** @brief Parses and validates a manifest; every name, size and hash is checked, and the catalog
+ * version must be supported (isSupportedCatalogVersion). @param json Text.
+ * @return Manifest. @throws std::runtime_error when malformed or below the baseline. */
 CatalogManifest parseManifest(std::string_view json);
-/** @brief Every catalog compiled into the library, oldest first; each "v<N>/catalog.json" must
- * describe version N. @return Manifests. @throws std::runtime_error when an embedded manifest is malformed. */
+/** @brief Every catalog compiled into the library, oldest first: the baseline (BaseCatalogVersion),
+ * then any later one; each "v<N>/catalog.json" must describe version N. @return Manifests.
+ * @throws std::runtime_error when an embedded manifest is malformed or the baseline is missing. */
 const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs();
 /** @brief The compiled-in manifest of exactly one catalog version. @param version Catalog version.
  * @return Manifest, or null when this build does not embed that version. */
@@ -165,7 +167,8 @@ template<typename T>
 std::optional<T> onServiceExecutor(std::function<T(IGamerServicesBackend&)> work);
 /** @brief The manifest of exactly the catalog version a description names: compiled in, or the
  * service's (cached per process). Never another version's. @param version Catalog version.
- * @return Manifest, or null when neither the library nor the service has that version. */
+ * @return Manifest, or null when neither the library nor the service has that version, and always
+ * for a version below the baseline. */
 std::shared_ptr<const CatalogManifest> catalogManifest(std::uint16_t version);
 
 /** @brief Tests: forgets which catalog versions recently failed to install (they are otherwise
@@ -246,10 +249,11 @@ std::filesystem::path installedCatalogRoot();
  * forgets every installed manifest this process loaded. @param root Directory. */
 void setInstalledCatalogRootForTesting(std::filesystem::path root);
 /** @brief An installed pack's manifest, checked against its pack record (format, version,
- * manifest SHA-256). @param version Catalog version. @return Manifest, or null when not installed. */
+ * manifest SHA-256). @param version Catalog version. @return Manifest, or null when not installed
+ * or below the baseline (a stale development pack on disk is ignored). */
 std::shared_ptr<const CatalogManifest> installedManifest(std::uint16_t version);
-/** @brief Every catalog version drawable without a download: compiled in, then installed.
- * @return Versions, ascending. */
+/** @brief Every catalog version drawable without a download: compiled in, then installed; never
+ * one below the baseline. @return Versions, ascending. */
 std::vector<std::uint16_t> availableCatalogVersions();
 /** @brief What this client can draw, sent with every avatar read
  * (IGamerServicesBackend::avatars): the available catalog versions and whether a pack could be
@@ -262,7 +266,8 @@ enum class CatalogInstall : std::uint8_t {
     Installed,
     /** @brief Already installed (by this or another process); nothing was downloaded. */
     AlreadyInstalled,
-    /** @brief This client cannot use it (pack format, reader level, size limit, no store). */
+    /** @brief This client cannot use it (a version below the baseline, pack format, reader level,
+     * size limit, no store). */
     Refused,
     /** @brief A download failed or the pack was invalid; nothing was activated. */
     Failed
@@ -424,7 +429,8 @@ struct AvatarModel {
 };
 
 /** @brief Assembles an avatar from the catalog. @param descriptor Description.
- * @return Model. @throws std::runtime_error when the body cannot be resolved. */
+ * @return Model. @throws std::runtime_error when the description names a catalog below the
+ * baseline or the body cannot be resolved. */
 std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& descriptor);
 
 /** @brief Progress of a background avatar load. */
@@ -439,7 +445,8 @@ struct AvatarLoad {
     std::string error;
 };
 /** @brief Starts assembling an avatar on the shared avatar loader thread (a cached model completes
- * at once). @param descriptor Description. @return Progress. */
+ * at once, and an unencodable description at once with an error). @param descriptor Description.
+ * @return Progress. */
 std::shared_ptr<AvatarLoad> loadAvatarAsync(const AvatarDescriptor& descriptor);
 
 /** @brief Progress of a background catalog lookup. */

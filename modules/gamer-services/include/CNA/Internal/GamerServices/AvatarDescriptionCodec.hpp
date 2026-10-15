@@ -20,8 +20,18 @@ inline constexpr std::uint8_t FaceFormatVersion = 2;
 inline constexpr std::size_t FaceParameterCount = 16;
 /** @brief The face-shape byte that leaves a face as authored. */
 inline constexpr std::uint8_t NeutralFaceParameter = 128;
-/** @brief The first catalog version, compiled into every build for good. */
-inline constexpr std::uint16_t BaseCatalogVersion = 1;
+/** @brief The baseline avatar catalog: the oldest catalog version CNA supports, compiled into every
+ * build. Versions below it were development catalogs that never shipped; a description, manifest or
+ * catalog pack naming one is refused, never read against another catalog. Later versions are
+ * future immutable catalogs, drawable when compiled in or installed as a pack. */
+inline constexpr std::uint16_t BaseCatalogVersion = 3;
+/** @brief Whether a catalog version can be supported at all: the baseline or a later version.
+ * @param version Catalog version as read (any integer). @return False below the baseline and
+ * outside the 16-bit range a description encodes. */
+constexpr bool isSupportedCatalogVersion(long long version)
+{
+    return version >= BaseCatalogVersion && version <= 0xffff;
+}
 /** @brief Shortest encodable avatar, feet to top of head. */
 inline constexpr std::uint16_t MinimumHeightMillimeters = 1450;
 /** @brief Tallest encodable avatar, feet to top of head. */
@@ -81,9 +91,9 @@ struct AvatarDescriptor {
 /** @brief IEEE CRC-32 of a byte range. @param bytes Input. @return Checksum. */
 std::uint32_t crc32(std::span<const std::uint8_t> bytes);
 
-/** @brief Checks field ranges, and item/slot agreement when the catalog version the descriptor
- * names is compiled in (other versions are checked by the service and the asset resolver).
- * @param descriptor Candidate. @return True when encodable. */
+/** @brief Checks field ranges, a supported catalog version (isSupportedCatalogVersion), and
+ * item/slot agreement when that catalog is compiled in (later versions are checked by the service
+ * and the asset resolver). @param descriptor Candidate. @return True when encodable. */
 bool isEncodable(const AvatarDescriptor& descriptor);
 
 /** @brief Encodes a descriptor into a public 1021-byte description: format 1 when it uses only
@@ -91,7 +101,8 @@ bool isEncodable(const AvatarDescriptor& descriptor);
  * @throws std::invalid_argument for an unencodable descriptor. */
 std::vector<std::uint8_t> encode(const AvatarDescriptor& descriptor);
 
-/** @brief Decodes a CNA description; foreign, damaged or newer-format buffers decode to nothing.
+/** @brief Decodes a CNA description; foreign, damaged or newer-format buffers, and descriptions
+ * naming a catalog below the baseline, decode to nothing.
  * @param bytes Public buffer. @return Descriptor, or empty when the buffer is not a CNA avatar. */
 std::optional<AvatarDescriptor> decode(std::span<const std::uint8_t> bytes);
 

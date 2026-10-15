@@ -33,7 +33,7 @@ TINTS = ("skin", "hair", "eyes", "top", "bottom", "shoes", "accessory")
 # ----- catalogs ---------------------------------------------------------------------------------
 
 class Catalogs:
-    """Catalog directories under one root (v1/, v2/, ...), resolved by exact version."""
+    """Catalog directories under one root (v3/, ...), resolved by exact version."""
 
     def __init__(self, root):
         self.root = Path(root)

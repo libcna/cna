@@ -4,7 +4,7 @@ add_library(CNA::GamerServices ALIAS CNA_GamerServices)
 target_link_libraries(CNA_GamerServices PUBLIC cna_build_config)
 target_include_directories(CNA_GamerServices PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # A released avatar description must assemble the same model on every machine; the digests in
-# AvatarCatalogTest.V1DescriptionsAssembleExactlyAsReleased pin it. Clang 14+ and GCC contract
+# AvatarCatalogTest.V3DescriptionsAssembleExactlyAsReleased pin it. Clang 14+ and GCC contract
 # `a * b + c` into a fused multiply-add wherever the target has one, which every arm64 machine
 # does, and on Apple silicon that moved assembled vertices across the digest's quantization step.
 # An x86-64 build without -mfma has no FMA to contract into, so this changes nothing there.
@@ -44,17 +44,38 @@ endif()
 if(WIN32)
     target_link_libraries(CNA_GamerServices PRIVATE crypt32)
 endif()
-# GS-009/GSP-B1: every original avatar catalog version (tools/avatar_builder) is compiled in as
+# GS-009/GSP-B1: the avatar catalogs this release ships (tools/avatar_builder) are compiled in as
 # "v<N>/<file>", so standard avatars render offline and each description resolves against exactly
-# the catalog version it names.
+# the catalog version it names. Catalog v3 is the baseline: the oldest version CNA supports
+# (Avatars::BaseCatalogVersion), and today the only one. Catalogs 1 and 2 were development
+# catalogs and are not supported. A future catalog is added by generating its directory and
+# appending its version here; every catalog in the list stays compiled in once released.
 #
-# Link boundary (docs/link-size-architecture.md): the catalog is ~30 MB of GLB and PNG data, so it
+# Link boundary (docs/link-size-architecture.md): the catalog is ~13 MB of GLB and PNG data, so it
 # is a library of its own whose one symbol, embeddedCatalogFiles(), only the avatar catalog code
 # (src/Internal/Avatars/AvatarCatalog.cpp) references. A program reaches it by drawing or editing
 # avatars -- AvatarDescription, AvatarRenderer, or the system Guide GamerServicesDispatcher installs
 # -- never through Guide.IsTrialMode, a message box or the service client.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/EmbedBinaryFiles.cmake")
-file(GLOB CNA_AVATAR_CATALOG_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v*/*")
+set(CNA_AVATAR_CATALOG_VERSIONS 3)
+set(CNA_AVATAR_CATALOG_FILES)
+foreach(_version IN LISTS CNA_AVATAR_CATALOG_VERSIONS)
+    set(_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/v${_version}")
+    if(NOT EXISTS "${_directory}/catalog.json")
+        message(FATAL_ERROR "CNA: avatar catalog v${_version} is listed in CNA_AVATAR_CATALOG_VERSIONS but ${_directory}/catalog.json is missing")
+    endif()
+    file(GLOB _files CONFIGURE_DEPENDS "${_directory}/*")
+    list(APPEND CNA_AVATAR_CATALOG_FILES ${_files})
+endforeach()
+# A catalog directory outside the list would be checked in but never shipped.
+file(GLOB _catalog_directories LIST_DIRECTORIES true RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars"
+    CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars/*")
+foreach(_entry IN LISTS _catalog_directories)
+    string(REGEX REPLACE "^v" "" _version "${_entry}")
+    if(NOT _version IN_LIST CNA_AVATAR_CATALOG_VERSIONS)
+        message(FATAL_ERROR "CNA: assets/avatars/${_entry} is not a catalog this release ships (CNA_AVATAR_CATALOG_VERSIONS: ${CNA_AVATAR_CATALOG_VERSIONS})")
+    endif()
+endforeach()
 add_library(cna_gamerservices_avatar_catalog STATIC)
 add_library(CNA::GamerServicesAvatarCatalog ALIAS cna_gamerservices_avatar_catalog)
 cna_embed_binary_files(cna_gamerservices_avatar_catalog CNA::Internal::GamerServices::Avatars embeddedCatalogFiles

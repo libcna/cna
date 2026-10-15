@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Procedural textures for catalog v2: near-white multipliers the runtime tints with a
+"""Procedural textures for the catalog: near-white multipliers the runtime tints with a
 description colour (skin, hair, clothing), carrying soft shading and detail.
 
 Deterministic integer-hash value noise only; every texture is small and low-frequency enough to

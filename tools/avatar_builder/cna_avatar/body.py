@@ -32,7 +32,7 @@ LEG = {
                (0.52, 0.052, 0.054), (0.60, 0.053, 0.056), (0.70, 0.054, 0.057), (0.86, 0.042, 0.043),
                (1.00, 0.035, 0.036)],
 }
-# Catalog v3: sturdier limbs than v2's, in the same shapes.
+# Catalog v3's limbs: the base sections scaled up, sturdier in the same shapes.
 _LIMB = {"male": 1.17, "female": 1.14}
 ARM = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in ARM.items()}
 LEG = {b: [(t, w * _LIMB[b], d * _LIMB[b]) for t, w, d in rows] for b, rows in LEG.items()}
