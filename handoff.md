@@ -306,6 +306,12 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     `SDL_GPU` selected at run time the same case segfaults in the Debug multi-renderer tree and all
     seven teardown cases pass in the Release one (`build-probe`, 2026-10-14). Every other C API case
     passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with the extension layer.
+17. **Three C API graphics smoke tests fail at `757924d35`** (`cmake-build-multi`, OPENGLES3
+    default, private display, 2026-10-15): `CApi_VertexBufferSmoke` (its `validate_all_typed`
+    stage), `CApi_IndexBufferSmoke` and `CApi_TextureSmoke`. They fail identically with and without
+    the avatar-baseline commits, so they come before them; the stock-effect vertex-declaration check
+    of `e7bd98e46`/`757924d35` is the likely cause and is unconfirmed. The other 107 `CApi_*` cases
+    pass.
 ### 5.2 Limitations
 
 - `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves
