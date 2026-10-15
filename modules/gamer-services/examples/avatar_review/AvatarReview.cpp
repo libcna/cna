@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // cna_avatar_review JOBS.json OUTDIR
+// cna_avatar_review --random COUNT     (prints COUNT AvatarDescription::CreateRandom() descriptions as hex)
 //
 // Renders every job of an avatar review list (tools/avatar_builder/avatar_review.py) through the
 // standard XNA avatar API -- AvatarDescription, AvatarAnimation, AvatarRenderer -- into
@@ -22,6 +23,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -203,9 +205,26 @@ namespace
 
 int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string(argv[1]) == "--random")
+    {
+        // The random avatars games get, for review sheets of them.
+        const int count = std::atoi(argv[2]);
+        for (int i = 0; i < count; ++i)
+        {
+            std::string hex;
+            for (const auto byte : AvatarDescription::CreateRandom().getDescriptionProperty())
+            {
+                char digits[3];
+                std::snprintf(digits, sizeof(digits), "%02x", static_cast<unsigned>(byte));
+                hex += digits;
+            }
+            std::printf("%s\n", hex.c_str());
+        }
+        return 0;
+    }
     if (argc != 3)
     {
-        std::fprintf(stderr, "usage: cna_avatar_review JOBS.json OUTDIR\n");
+        std::fprintf(stderr, "usage: cna_avatar_review JOBS.json OUTDIR | cna_avatar_review --random COUNT\n");
         return 2;
     }
     std::ifstream in(argv[1]);

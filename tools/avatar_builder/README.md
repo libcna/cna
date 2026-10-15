@@ -82,6 +82,10 @@ in profile on both bodies; four
 key frames of every preset; and every eye, eyebrow and mouth
 state plus independent left/right combinations. `cna_avatar_review`
 (`modules/gamer-services/examples/avatar_review/`) draws them through the standard XNA avatar API
-only. The CPU preview (`cna_avatar/preview.py`) assembles descriptions, samples animations,
+only. Further sheets serve the art review: `portraits` (twelve avatars from the front, three-quarter,
+profile, above and below with a portrait lens), `presets` (every face preset on both bodies) and
+`bodies` (builds and proportions from three sides). `cna_avatar_review --random N` prints N
+`AvatarDescription.CreateRandom()` descriptions, and `avatar_review.py jobs --random FILE` makes
+`random`/`randomface` sheets of exactly the avatars games get. The CPU preview (`cna_avatar/preview.py`) assembles descriptions, samples animations,
 textures and the expression atlas, and lights pixels the way the runtime does; it is a
 development aid and the renderer captures are the reference.

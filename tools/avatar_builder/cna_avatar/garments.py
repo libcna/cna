@@ -151,7 +151,7 @@ def garment_torso(body_type, inflate, rows, fit=0.5, lower=0.0, flare=0.0, folds
     source = {}
     if cap_bottom is None and lip:
         c = sections[0][0]
-        lining = _lip_rows(grid[0], c, lip, (0.0, 0.03, 0.0))
+        lining = _lip_rows(grid[0], c, lip, (0.0, 0.012, 0.0))
         # The lining moves with the hem it turns in from.
         for row in lining:
             for q, edge in zip(row, grid[0]):
@@ -552,7 +552,7 @@ def garment_limb(body_type, side, kind, inflate, t_range, ease=0.0, flare=0.0, f
         rows = list(reversed(extra)) + rows
         ts = [ts[0]] * 4 + ts
     if lip:
-        lining = _lip_rows(rows[-1], centres[-1], lip, mul(axes[-1], -0.03))
+        lining = _lip_rows(rows[-1], centres[-1], lip, mul(axes[-1], -0.015))
         rows += lining
         ts += [ts[-1]] * len(lining)
     last = len(rows) - 1
@@ -912,8 +912,8 @@ def top(body_type, style):
     elif style == "top_jacket":
         # An open zip jacket (top colour) over a crew shirt (accessory colour).
         inner = Mesh()
-        inner.append(shell(body_type, 0.017, (1, 10), lower=0.02, flare=0.026))
-        inner.append(_hem(body_type, 0.017, 0.026, 0.02, 0.005))
+        inner.append(shell(body_type, 0.017, (1, 10), lower=0.02, flare=0.004, fit=0.3))
+        inner.append(_hem(body_type, 0.017, 0.004, 0.02, 0.003, fit=0.3))
         inner.append(neck_rib(body_type, 0.009, 0.008, drop=0.004))
         parts.append((inner, "accessory", "knit", (1.0, 1.0, 1.0)))
         main.append(_open_shell(body_type, 0.030, (1, 10), gap=0.34, lower=0.04, flare=0.030))
@@ -1002,7 +1002,7 @@ def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004, fit=0.7, 
             ring.append(clear(p))
         grid.append(ring)
     source = {}
-    lining = _lip_rows(grid[0], sections[0][0], 0.004, (0.0, 0.03, 0.0))
+    lining = _lip_rows(grid[0], sections[0][0], 0.004, (0.0, 0.012, 0.0))
     for row in lining:
         for q, edge in zip(row, grid[0]):
             source[q] = edge
@@ -1335,8 +1335,8 @@ def revised_top(body_type, style):
         texture = {"top_quarterzip": "jersey", "top_windbreaker": "canvas", "top_puffer": "quilt"}[style]
     elif style in ("top_cardigan", "top_blazer", "top_denimjacket", "top_vest", "top_puffervest"):
         inner = Mesh()
-        inner.append(shell(body_type, 0.017, (1, 10), lower=0.02, flare=0.026))
-        inner.append(_hem(body_type, 0.017, 0.026, 0.02, 0.005))
+        inner.append(shell(body_type, 0.017, (1, 10), lower=0.02, flare=0.004, fit=0.3))
+        inner.append(_hem(body_type, 0.017, 0.004, 0.02, 0.003, fit=0.3))
         if style in ("top_blazer", "top_vest"):
             inner.append(_collar(body_type, 0.016, spread=0.8, garment=0.017))
             for side, _ in rig.SIDES:
@@ -1536,7 +1536,7 @@ def _skirt(body_type, length_offset, flare, texture, pleats=0, seed=0):
         ys.append(y)
     rows.reverse()
     hem_centre = (0.0, ys[-1], 0.0)
-    lining = _lip_rows(rows[0], hem_centre, 0.003, (0.0, 0.03, 0.0))
+    lining = _lip_rows(rows[0], hem_centre, 0.003, (0.0, 0.012, 0.0))
     source = {q: edge for row in lining for q, edge in zip(row, rows[0])}
     rows = list(reversed(lining)) + rows
 

@@ -405,8 +405,38 @@ def quality_jobs(catalogs, library, manifest, version):
     return jobs
 
 
+def random_jobs(catalogs, version, descriptions):
+    """Review jobs of CreateRandom() avatars (cna_avatar_review --random): each full length and
+    its face close."""
+    manifest = catalogs.manifest(version)
+    use_catalog(manifest)
+    library = preview.ClipLibrary(catalogs.glb(version, manifest["animations"]["asset"]))
+    PRESETS[:] = manifest["animations"]["presets"]
+    jobs = []
+    for index, hexed in enumerate(descriptions):
+        data = bytes.fromhex(hexed)
+        d = preview.decode(data)
+        eye, target, fov = full_body(1.9)
+        jobs.append({**job("random-%03d" % index, "random", d, eye, target, fov, -20.0, label="random %d" % index),
+                     "description": hexed})
+        head, span = head_height(catalogs, library, data)
+        k = span / REFERENCE_SPAN
+        c = head_centre(catalogs, library, data, -25.0)
+        jobs.append({**job("randomface-%03d" % index, "randomface", d, (c[0], head, c[2] + 1.85 * k), (c[0], head - 0.04 * k, c[2]),
+                           0.28, yaw=-25.0, label="random %d" % index), "description": hexed})
+    return jobs
+
+
 def cmd_jobs(args):
     catalogs = preview.Catalogs(args.catalogs)
+    if args.random:
+        descriptions = [line.strip() for line in args.random.read_text().split() if line.strip()]
+        data = {"size": 320, "background": BACKGROUND, "catalogVersion": args.version,
+                "jobs": random_jobs(catalogs, args.version, descriptions)}
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(data, indent=1) + "\n")
+        print("%d jobs -> %s" % (len(data["jobs"]), args.out))
+        return
     data = build_jobs(catalogs, args.version)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(data, indent=1) + "\n")
@@ -434,7 +464,7 @@ def cmd_sheets(args):
     data = json.loads(args.jobs.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
     columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8, "hair": 8, "hairback": 8, "headwear": 8,
-               "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8, "portraits": 10, "presets": 9, "bodies": 6}
+               "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8, "portraits": 10, "presets": 9, "bodies": 6, "random": 10, "randomface": 10}
     cell = args.cell
     sheets = {}
     for j in data["jobs"]:
@@ -495,6 +525,7 @@ def main():
     p.add_argument("--catalogs", type=Path, required=True)
     p.add_argument("--version", type=int, required=True)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--random", type=Path, help="jobs for these CreateRandom() descriptions (cna_avatar_review --random N)")
     p.set_defaults(fn=cmd_jobs)
     p = sub.add_parser("preview")
     p.add_argument("jobs", type=Path)
