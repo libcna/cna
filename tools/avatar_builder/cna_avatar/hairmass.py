@@ -318,6 +318,59 @@ def curl_bumps(seed, size, strength):
     return field
 
 
+def strand_paths(ob, roots, lengths, flow, seed, samples=24, length_jitter=0.10):
+    """The paths shell() marches for these roots (so a caller can build on them too)."""
+    paths = []
+    for k, root in enumerate(roots):
+        fl = flow(k) if callable(flow) else flow
+        l = lengths(k) if callable(lengths) else lengths
+        l *= 1.0 + 0.5 * length_jitter * jitter(seed, k, 11)
+        paths.append(resample(march(ob, root[0], root[1], l, fl), samples))
+    return paths
+
+
+def ringlets(ob, paths, seed, start=0.12, radius=0.010, pitch=0.034, thick=0.0065, turns_per_step=5, which=None,
+             lift=0.008, segments=5):
+    """Spiral ringlet curls hanging along strand paths: each a tube coiling round its path from
+    `start` metres on, `radius` out and a turn per `pitch` metres, `lift` outside the hair, tapering
+    to a rounded end. which(k) picks the paths that carry one."""
+    from .mesh import tube
+    w = weights_for(ob.body)
+    out = Mesh()
+    for k, path in enumerate(paths):
+        if which is not None and not which(k):
+            continue
+        acc = [0.0]
+        for a_, b_ in zip(path, path[1:]):
+            acc.append(acc[-1] + length(sub(b_, a_)))
+        total = acc[-1]
+        if total < start + pitch:
+            continue
+        span = total - start
+        steps = max(8, int(span / pitch * turns_per_step))
+        phase = 2.0 * PI * (0.5 + 0.5 * jitter(seed, k, 41))
+        pts, radii = [], []
+        j = 0
+        for i in range(steps + 1):
+            x = start + span * i / steps
+            while j < len(path) - 2 and acc[j + 1] < x:
+                j += 1
+            f = (x - acc[j]) / max(acc[j + 1] - acc[j], 1e-9)
+            p = lerp(path[j], path[j + 1], clamp(f, 0.0, 1.0))
+            along = normalize(sub(path[j + 1], path[j]))
+            away = (p[0] - ob.c[0], 0.0, p[2] - ob.c[2]) if p[1] < ob.c[1] - 0.10 * ob.s else sub(p, ob.c)
+            n = normalize(sub(away, mul(along, dot(away, along))))
+            side = normalize(cross(n, along))
+            a = phase + 2.0 * PI * (x - start) / pitch
+            grow = smoothstep(0.0, 0.5, (x - start) / pitch)
+            r = radius * grow * (1.0 - 0.25 * (x - start) / span)
+            centre = add(p, mul(n, lift))
+            pts.append(add(centre, add(mul(n, r * math.sin(a)), mul(side, r * math.cos(a)))))
+            radii.append(thick * (0.6 + 0.4 * grow) * (1.0 - 0.35 * (x - start) / span))
+        out.append(tube(pts, radii, segments, lambda q: w(q), round_end=True))
+    return out
+
+
 def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=3, samples=24, rows=14, groove=0.62, tip=0.35,
           tip_round=0.75, wave=None, curl=0.0, flick=0.0, length_jitter=0.10, thick_jitter=0.18, closed=True,
           axis=None, bumps=None, paths=None, notch=0.06):
@@ -337,6 +390,7 @@ def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=3, samples=24, 
     axis: a function of a point giving the point the hair surrounds there (a tail's core),
       instead of the head and body;
     bumps: an outward offset field (curl_bumps) over the outer face.
+    paths: the strands' paths, when the caller marched them already (strand_paths).
     Returns a Mesh."""
     count = len(roots)
     clumps = count if closed else count - 1

@@ -12,7 +12,7 @@ import math
 from . import head
 from .hair import cap, band_cap, hairline, weights_for, jitter
 from .hairmass import (Obstacles, Flow, shell, crown_roots, part_roots, hairline_roots, surface_dir, march, resample,
-                       curl_bumps)
+                       curl_bumps, strand_paths, ringlets)
 from .mathutil import add, sub, mul, normalize, smoothstep, lerp, length, cross, dot, clamp
 from .mesh import Mesh, ellipsoid, tube
 
@@ -341,8 +341,8 @@ def _crop(body, ob, s):
 
 
 def _curlyshort(body, ob, s):
-    locks = _crown(body, ob, s, 0.16 * PI, PI, 22, 138, line(*SHORT_LINE), taper_thickness(0.016 * s, 0.008 * s), tip=0.3,
-                   tip_round=0.8, groove=0.85, bumps=curl_bumps(138, 0.022 * s, 0.011 * s))
+    locks = _crown(body, ob, s, 0.16 * PI, PI, 22, 138, line(*SHORT_LINE), taper_thickness(0.020 * s, 0.012 * s), tip=0.3,
+                   tip_round=0.8, groove=0.85, bumps=curl_bumps(138, 0.026 * s, 0.017 * s))
     return locks, cap(body, line(*STANDARD), 0.004 * s)
 
 
@@ -487,10 +487,20 @@ def _curly(body, ob, s):
 
 
 def _longcurly(body, ob, s):
-    locks = _parted(body, ob, s, (0.18 * PI, 0.0), (0.08 * PI, PI * 0.95), 26, 154, -0.46,
-                    taper_thickness(0.026 * s, 0.018 * s), line(*LONG_LINE), gravity=13.0, tip=0.25, tip_round=0.8,
-                    groove=0.8, wave=(0.012 * s, 0.07 * s, 0.07 * s), bumps=curl_bumps(154, 0.028 * s, 0.013 * s))
-    return locks, cap(body, line(*LONG_LINE), 0.006 * s)
+    std = line(*LONG_LINE)
+    roots = part_roots(ob, (0.18 * PI, 0.0), (0.08 * PI, PI * 0.95), 26, seed=154, front_fan=0.08)
+    level = lambda p: ob.c[1] - 0.40 * s
+    main = Flow(gravity=13.0, lift=0.0015 * s, cling_below=0.0, avoid_face=std, behind=90.0, until=lambda p: p[1] < level(p))
+    front = Flow(gravity=4.0, lift=0.0015 * s, stop=lambda phi: std(phi) * 1.02, body=False, avoid_face=std)
+    flows = _per_root(roots, {"front": front, "*": main})
+    lengths = _per_root(roots, {"front": 0.10 * s, "*": 1.2 * s})
+    paths = strand_paths(ob, roots, lengths, flows, 154)
+    # A soft wavy mass, and spiral ringlets hanging over it from about the ears down.
+    locks = shell(ob, roots, lengths, flows, taper_thickness(0.022 * s, 0.014 * s), 154, tip=0.3, tip_round=0.8, groove=0.6,
+                  wave=(0.008 * s, 0.06 * s, 0.06 * s), paths=paths, bumps=curl_bumps(154, 0.024 * s, 0.006 * s))
+    locks.append(ringlets(ob, paths, 155, start=0.14 * s, radius=0.010 * s, pitch=0.036 * s, thick=0.0075 * s,
+                          which=lambda k: roots[k][2] != "front", lift=0.014 * s))
+    return locks, cap(body, std, 0.006 * s)
 
 
 def _ponytail(body, ob, s):
