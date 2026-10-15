@@ -253,7 +253,7 @@ the visual language):
   where the beard grows) named by materials and stored once;
 - `face_features.png`, an atlas of every eye, eyebrow, mouth and makeup tile at 128 pixels per
   tile; `animations.glb` with the 31 presets as glTF cubic-spline rotation curves;
-- `catalog.json`, listing every file (359 in all, 44.8 MB) with its SHA-256. Compiled in, the
+- `catalog.json`, listing every file (359 in all, 45.2 MB) with its SHA-256. Compiled in, the
   files are deflated (`cna_embed_binary_files ... COMPRESS`) to a 21.4 MB library
   (`cna_gamerservices_avatar_catalog`), inflated once when first used; only programs that use
   avatars link the catalog. (Revision 2 was 32.9 MB, 14.1 MB deflated: revision 3's hair, clothing

@@ -292,13 +292,18 @@ def neck_opening(body_type, inflate, ease=0.010, depth=0.0, v=False, width=1.0):
     return point, (c11[0], cy, c11[2])
 
 
+# Where a top's yoke rows lie between its chest-and-shoulder ring (0) and its neck opening (1):
+# close enough together that the yoke follows the shoulder it wraps over.
+YOKE_ROWS = (0.12, 0.26, 0.42, 0.60, 0.80, 1.0)
+
+
 def yoke_rows(body_type, inflate, segments, opening):
     """Rows from a top's chest-and-shoulder ring (section row 10) in over the tops of the shoulders
     to its neck opening, clear of the skin below."""
     c10, rx10, rz10, n10 = body.torso_sections(body_type, inflate)[10]
     outer = body.superellipse_ring(c10, rx10, rz10, n10, segments)
     rows = []
-    for f in (0.3, 0.62, 1.0):
+    for f in YOKE_ROWS:
         ring = []
         for k in range(segments):
             a = 2.0 * PI * k / segments
@@ -515,6 +520,11 @@ def garment_limb(body_type, side, kind, inflate, t_range, ease=0.0, flare=0.0, f
         lining = _lip_rows(rows[-1], centres[-1], lip, mul(axes[-1], -0.015))
         rows += lining
         ts += [ts[-1]] * len(lining)
+    if kind == "arm":
+        # The sleeve's cap stays outside the shoulder's dome too, half as far out as a top's yoke,
+        # which covers it.
+        shoulder = clear_of_shoulders(body_type, inflate * 0.5)
+        rows = [[shoulder(p) for p in ring] for ring in rows]
     last = len(rows) - 1
     return Mesh().grid(rows, lambda p, vv, uu: weights(ts[int(round(vv * last))]), uv_seam=True)
 
@@ -1011,7 +1021,7 @@ def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004, fit=0.7, 
     if rows[1] == 10:
         opening = neck_opening(body_type, inflate, ease=0.016)[0]
         outer_ring = grid[-1]
-        for f in (0.3, 0.62, 1.0):
+        for f in YOKE_ROWS:
             ring = []
             for a, p0 in zip(angles_at(sections[-1][0][1]), outer_ring):
                 p1 = opening(a)

@@ -86,8 +86,9 @@ authored stylized character rather than as procedural parts. The rules the gener
 
 Measured by `avatar_audit.py` on revision 3: the female body 1.68 m and 4.78 heads tall (head 0.351 m,
 shoulders 1.42 heads), the male 1.80 m and 4.94 heads (head 0.364 m, shoulders 1.56 heads); limbs,
-hands and feet as revision 2. No garment, shoe, hat or hairstyle lets more than 2 % of the skin under
-it show through in the bind pose; `AvatarCatalogContentTest` checks layers and details in every pose.
+hands and feet as revision 2. `avatar_audit.py` passes: no garment, shoe, hat or hairstyle lets more
+than 2 % and 30 vertices of the skin under it show through in the bind pose (open sandals show the
+foot by design); `AvatarCatalogContentTest` checks layers and details in every pose.
 
 Review it with the `portraits`, `presets` and `bodies` sheets of `avatar_review.py` (five angles
 with a portrait lens, every face preset, every build) and with `random` sheets of
