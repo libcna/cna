@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -12,6 +13,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <type_traits>
 #include <vector>
@@ -51,12 +53,12 @@ namespace
 {
     // Builds a SoundEffect from a small silent PCM buffer under the SDL dummy driver.
     // Returns nullptr if no audio device can be opened (the caller should skip).
-    std::unique_ptr<SoundEffect> makeEffect()
+    std::unique_ptr<SoundEffect> makeEffect(const std::size_t frames = 1024)
     {
         System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         try
         {
-            std::vector<unsigned char> pcm(4 * 1024, 0); // 1024 stereo S16 frames
+            std::vector<unsigned char> pcm(4 * frames, 0); // stereo S16 frames
             return std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
         }
         catch (...)
@@ -875,6 +877,26 @@ TEST(SoundEffectTest, PlayWithHardPanDoesNotCrash)
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_TRUE(fx->Play(1.0f, 0.0f, 1.0f));
     EXPECT_TRUE(fx->Play(1.0f, 0.0f, -1.0f));
+}
+
+// Regression for a TSan-confirmed race between reclaiming a finished fire-and-forget pan state
+// in the next Play() and SDL3_mixer's final cooked callback still reading that state. Very short
+// sounds plus repeated Play() calls exercise the stopped -> final-cooked callback window; under
+// TSan this used to report a delete/read race in PendingPanStateCleanup/FireAndForgetPanCallback.
+TEST(SoundEffectTest, RepeatedShortFireAndForgetPlaySafelyReclaimsPanState)
+{
+    auto fx = makeEffect(64); // 64 stereo S16 frames (~1.5 ms)
+    if (!fx) GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+
+    for (int i = 0; i < 200; ++i)
+    {
+        ASSERT_TRUE(fx->Play(1.0f, 0.0f, (i & 1) ? 1.0f : -1.0f));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    // Let the last short track stop, then make one final Play() reclaim its queued pan state.
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    EXPECT_TRUE(fx->Play());
 }
 
 TEST(SoundEffectTest, PlayThrowsOnPanOutOfRange)

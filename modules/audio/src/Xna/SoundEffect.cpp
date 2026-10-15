@@ -174,9 +174,10 @@ namespace Microsoft::Xna::Framework::Audio
         // ("destroying a track from the mixer thread itself... will cause it to be destroyed as
         // soon as this iteration of the mixer thread is not using it") solves this
         // exact problem for the *track* -- panState needs the same deferred treatment, which
-        // the engine has no equivalent API for app-owned userdata, so it is deferred to the next
-        // fire-and-forget Play() call instead (DrainPendingPanStateCleanup, below), which is
-        // always safely later than any mixer-thread activity for this track/iteration.
+        // the engine has no equivalent API for app-owned userdata, so it is deferred to a later
+        // fire-and-forget Play() call instead. That call crosses MixerLock before reclaiming the
+        // state: merely being a later Play() is not sufficient, because it can overlap the tiny
+        // stopped-callback -> final cooked-callback window on the mixer thread.
         //
         // Wrapped in a struct with its own destructor (rather than bare namespace-scope statics)
         // so a static-duration instance frees any still-pending entries at program exit too --
@@ -208,11 +209,7 @@ namespace Microsoft::Xna::Framework::Audio
                 }
             }
 
-            // Called from Play() (main/calling thread) before creating a new fire-and-forget
-            // track -- by the time any NEW Play() call happens, the mixer thread has long since
-            // finished processing whatever iteration queued these for cleanup, so freeing them
-            // here is safe.
-            void Drain()
+            void DrainClaimed()
             {
                 FireAndForgetPanState* node = head.exchange(nullptr, std::memory_order_acquire);
                 while (node)
@@ -223,9 +220,20 @@ namespace Microsoft::Xna::Framework::Audio
                 }
             }
 
+            // Queue() runs inside the stopped callback, but SDL3_mixer may still invoke the
+            // cooked callback with the final buffer after that callback returns. MixerLock is a
+            // callback barrier: once acquired, the iteration that queued every currently-visible
+            // node has finished and its cooked callback can no longer read the node.
+            void DrainAfterMixerBarrier()
+            {
+                if (!head.load(std::memory_order_acquire)) return;
+                CNA::Internal::Audio::MixerLock barrier;
+                DrainClaimed();
+            }
+
             ~PendingPanStateCleanup()
             {
-                Drain();
+                DrainClaimed();
             }
         };
 
@@ -571,7 +579,7 @@ namespace Microsoft::Xna::Framework::Audio
         // finished fire-and-forget track -- see PendingPanStateCleanup's own comment for why
         // this can't happen directly in OnFireAndForgetStopped (a real ASan-caught
         // heap-use-after-free otherwise).
-        g_pendingPanStateCleanup.Drain();
+        g_pendingPanStateCleanup.DrainAfterMixerBarrier();
 
         auto* audio = static_cast<CNA::Internal::Audio::MixerAudio*>(getNativeAudioHandle());
         if (!audio)
