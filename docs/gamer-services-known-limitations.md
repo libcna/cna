@@ -777,8 +777,11 @@ per-user models. A server catalog pack is only the update path for a catalog a c
 - **XNA / Xbox:** the console's avatar renderer took `LightDirection`, `LightColor` and
   `AmbientLightColor` and drew with its own internal shading.
 - **CNA now:** exactly those three inputs plus a per-material highlight; textures carry some
-  painted shading, but there is no baked ambient occlusion, no contact shadowing between garments
-  and body and no self-shadowing. This is not the XNA AvatarShadows sample's shadow, which the game
+  painted shading, and the parts that sit in shade are drawn darker (the scalp shell under hair
+  locks, the inside of the ear), but there is no baked ambient occlusion, no contact shadowing
+  between garments and body and no self-shadowing: the renderer draws with XNA's `SkinnedEffect`,
+  which has no per-vertex colour, and the catalog's textures are shared and tiled, so occlusion
+  could only be baked into per-item textures at a large size cost. This is not the XNA AvatarShadows sample's shadow, which the game
   draws itself and which works (SAMPLE-087).
 - **Reason:** occlusion would have to be generated per catalog item and fed through the renderer
   families; XNA's `AvatarRenderer` has no input for it and CNA adds no public property for it.

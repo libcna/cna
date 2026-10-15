@@ -183,11 +183,12 @@ EAR_ORDER = ("round", "small", "large", "longLobe", "attached", "protruding")
 
 def ear_meshes(body, shape="round"):
     """Ears: a flattened shell tilted back on each side of the head, a rolled rim and, for some
-    shapes, a hanging lobe. Each ear is skinned to the Head joint."""
+    shapes, a hanging lobe. Each ear is skinned to the Head joint. Returns (shell, folds): the
+    shell sits in the folds' shade."""
     from .mesh import ellipsoid
     e = EAR_SHAPES[shape]
     s = SCALE[body]
-    m = Mesh()
+    shell, m = Mesh(), Mesh()
     for side in (1.0, -1.0):
         surface = side_point(body, side, EAR[0] * s, EAR[1] * s)[0]
         tilt = math.radians(e["tilt"])
@@ -199,7 +200,7 @@ def ear_meshes(body, shape="round"):
         # a hoop. The helix is open at the front as an ear's is: it starts above the ear's opening,
         # rolls over the top and down the back, and fades into the lobe; a small tragus guards the
         # opening, and the antihelix forks towards the top.
-        m.append(ellipsoid(centre_pt, (out, up, back), (e["d"] * 1.25 * s, e["h"] * s, e["w"] * s), 14, 12, HEAD))
+        shell.append(ellipsoid(centre_pt, (out, up, back), (e["d"] * 1.25 * s, e["h"] * s, e["w"] * s), 14, 12, HEAD))
         rh, rw = e["rim"]
 
         def on_ear(a, scale, lift, raise_=0.0):
@@ -220,7 +221,7 @@ def ear_meshes(body, shape="round"):
         if e["lobe"] > 0.0:
             lobe = add(add(centre_pt, mul(up, -(e["h"] * 0.82 + e["lobe"] * 0.5) * s)), mul(back, 0.002 * s))
             m.append(ellipsoid(lobe, (out, up, back), (e["d"] * 0.8 * s, (0.006 + e["lobe"] * 0.6) * s, 0.0085 * s), 12, 8, HEAD))
-    return m
+    return shell, m
 
 
 def ear_lobe(body, side, shape="round"):

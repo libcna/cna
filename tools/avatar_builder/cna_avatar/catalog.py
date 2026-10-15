@@ -359,12 +359,18 @@ def item_glb(body_type, item_id, slot, name):
     if slot == "hair":
         locks, scalp = hair.build(body_type, name)
         if scalp.positions:
-            parts.append((scalp, material(name + "_scalp", "hair", "hair_cap", specular=HAIR_SPECULAR)))
+            # Under locks the scalp shell is in their shade: darker, so the gaps between them read
+            # as depth (the shared textures and the renderer have no occlusion of their own).
+            shade = (0.86, 0.86, 0.86) if locks.positions else (1.0, 1.0, 1.0)
+            parts.append((scalp, material(name + "_scalp", "hair", "hair_cap", colour=shade, specular=HAIR_SPECULAR)))
         if locks.positions:
             texture = "hair_coil" if name in hair.COILED else "hair_clump"
             parts.append((locks, material(name, "hair", texture, specular=HAIR_SPECULAR * (0.5 if texture == "hair_coil" else 1.0))))
     elif slot == "ears":
-        parts.append((head.ear_meshes(body_type, EAR_SHAPE_OF[name]), builder.add_material(name, "skin")))
+        shell, folds = head.ear_meshes(body_type, EAR_SHAPE_OF[name])
+        # The shell is in the shade of the rim and folds round it.
+        parts.append((shell, builder.add_material(name + "_shell", "skin", color=(0.86, 0.84, 0.84))))
+        parts.append((folds, builder.add_material(name, "skin")))
     else:
         built = {"top": garments.top, "bottom": garments.bottom, "shoes": garments.shoes, "glasses": accessories.glasses,
                  "hat": accessories.hat, "facialHair": accessories.facial_hair, "earrings": accessories.earrings,
