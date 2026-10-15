@@ -1,11 +1,14 @@
 #include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
+#include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <sstream>
 
 namespace CNA::Internal::Renderers::Headless
@@ -43,6 +46,35 @@ namespace CNA::Internal::Renderers::Headless
             // the same public contract instead of requiring a resource the effect API makes
             // optional. Ordinary BasicEffect draws remain strict.
             return params.alphaTestEffect || params.skinned || params.pbr;
+        }
+
+        int CubeMipLevels(int size, bool mipMap)
+        {
+            int levels = 1;
+            while (mipMap && size > 1)
+            {
+                size = std::max(1, size / 2);
+                ++levels;
+            }
+            return levels;
+        }
+
+        std::size_t CubeRegionRowBytes(int surfaceFormat, int width)
+        {
+            using namespace CNA::Internal::Graphics::SurfaceFormatDecoder;
+            if (IsDxt(surfaceFormat))
+            {
+                const std::size_t blockBytes = RawByteCount(surfaceFormat, 4, 4);
+                return static_cast<std::size_t>((width + 3) / 4) * blockBytes;
+            }
+            return static_cast<std::size_t>(width) * BytesPerTexel(surfaceFormat);
+        }
+
+        int CubeRegionRows(int surfaceFormat, int height)
+        {
+            return CNA::Internal::Graphics::SurfaceFormatDecoder::IsDxt(surfaceFormat)
+                ? std::max(1, (height + 3) / 4)
+                : height;
         }
     }
 
@@ -316,13 +348,24 @@ namespace CNA::Internal::Renderers::Headless
 
     HeadlessTextureCubeRenderer::HeadlessTextureCubeRenderer(std::shared_ptr<HeadlessSharedState> state, int size, bool mipMap,
                                                     int surfaceFormat)
-        : state_(std::move(state)), size_(size), mipMap_(mipMap), surfaceFormat_(surfaceFormat)
+        : state_(std::move(state)), size_(size), mipLevels_(CubeMipLevels(size, mipMap)),
+          mipMap_(mipMap), surfaceFormat_(surfaceFormat)
     {
         resourceId_ = state_->registry.Register("TextureCube", state_->CurrentDebugLabel());
         state_->stats.textureCubesCreated++;
-        // The six zero-filled face buffers this constructor used to allocate were
-        // never written by SetData and existed only to be handed back by GetData, i.e. they were
-        // the fabrication itself. GetData now refuses instead, so the storage has no purpose.
+        mipFacePixels_.resize(static_cast<std::size_t>(mipLevels_) * 6u);
+        for (int level = 0; level < mipLevels_; ++level)
+        {
+            const int levelSize = std::max(1, size_ >> level);
+            const std::size_t byteCount =
+                CNA::Internal::Graphics::SurfaceFormatDecoder::RawByteCount(
+                    surfaceFormat_, levelSize, levelSize);
+            for (int face = 0; face < 6; ++face)
+            {
+                mipFacePixels_[static_cast<std::size_t>(level * 6 + face)]
+                    .assign(byteCount, 0u);
+            }
+        }
         state_->RecordTrace("CreateTextureCube", "size=" + std::to_string(size));
     }
 
@@ -341,10 +384,89 @@ namespace CNA::Internal::Renderers::Headless
                "HeadlessTextureCubeRenderer::SetData: negative rectangle");
         Require(state_, dataLength >= 0, "HeadlessTextureCubeRenderer::SetData: negative dataLength");
         state_->RecordTrace("TextureCube::SetData", "face=" + std::to_string(face));
-        // The trace entry above is the whole of what happens here -- no pixel data is
-        // stored anywhere, so this call has never been a completed write and now says so.
-        (void)data;
-        return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= mipLevels_ || data == nullptr ||
+            w <= 0 || h <= 0 || dataLength < 0)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        const bool compressed =
+            CNA::Internal::Graphics::SurfaceFormatDecoder::IsDxt(surfaceFormat_);
+        const bool aligned = !compressed ||
+            ((x % 4) == 0 && (y % 4) == 0 &&
+             ((w % 4) == 0 || x + w == levelSize) &&
+             ((h % 4) == 0 || y + h == levelSize));
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize || !aligned)
+            return false;
+
+        const std::size_t rowBytes = CubeRegionRowBytes(surfaceFormat_, w);
+        const int rows = CubeRegionRows(surfaceFormat_, h);
+        const std::size_t requiredBytes = rowBytes * static_cast<std::size_t>(rows);
+        if (static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
+
+        auto& destination = mipFacePixels_[static_cast<std::size_t>(level * 6 + face)];
+        const std::size_t destinationRowBytes = CubeRegionRowBytes(surfaceFormat_, levelSize);
+        const std::size_t blockBytes = compressed
+            ? CNA::Internal::Graphics::SurfaceFormatDecoder::RawByteCount(surfaceFormat_, 4, 4)
+            : static_cast<std::size_t>(
+                  CNA::Internal::Graphics::SurfaceFormatDecoder::BytesPerTexel(surfaceFormat_));
+        const std::size_t destinationOffset = compressed
+            ? static_cast<std::size_t>(y / 4) * destinationRowBytes +
+                  static_cast<std::size_t>(x / 4) * blockBytes
+            : static_cast<std::size_t>(y) * destinationRowBytes +
+                  static_cast<std::size_t>(x) * blockBytes;
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        for (int row = 0; row < rows; ++row)
+        {
+            std::memcpy(destination.data() + destinationOffset +
+                            static_cast<std::size_t>(row) * destinationRowBytes,
+                        source + static_cast<std::size_t>(row) * rowBytes, rowBytes);
+        }
+        return true;
+    }
+
+    bool HeadlessTextureCubeRenderer::GetData(
+        int face, int level, int x, int y, int w, int h, void* data, int dataLength) const
+    {
+        if (face < 0 || face >= 6 || level < 0 || level >= mipLevels_ || data == nullptr ||
+            w <= 0 || h <= 0 || dataLength < 0)
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        const bool compressed =
+            CNA::Internal::Graphics::SurfaceFormatDecoder::IsDxt(surfaceFormat_);
+        const bool aligned = !compressed ||
+            ((x % 4) == 0 && (y % 4) == 0 &&
+             ((w % 4) == 0 || x + w == levelSize) &&
+             ((h % 4) == 0 || y + h == levelSize));
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize || !aligned)
+            return false;
+
+        const std::size_t rowBytes = CubeRegionRowBytes(surfaceFormat_, w);
+        const int rows = CubeRegionRows(surfaceFormat_, h);
+        const std::size_t requiredBytes = rowBytes * static_cast<std::size_t>(rows);
+        if (static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
+
+        const auto& source = mipFacePixels_[static_cast<std::size_t>(level * 6 + face)];
+        const std::size_t sourceRowBytes = CubeRegionRowBytes(surfaceFormat_, levelSize);
+        const std::size_t blockBytes = compressed
+            ? CNA::Internal::Graphics::SurfaceFormatDecoder::RawByteCount(surfaceFormat_, 4, 4)
+            : static_cast<std::size_t>(
+                  CNA::Internal::Graphics::SurfaceFormatDecoder::BytesPerTexel(surfaceFormat_));
+        const std::size_t sourceOffset = compressed
+            ? static_cast<std::size_t>(y / 4) * sourceRowBytes +
+                  static_cast<std::size_t>(x / 4) * blockBytes
+            : static_cast<std::size_t>(y) * sourceRowBytes +
+                  static_cast<std::size_t>(x) * blockBytes;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < rows; ++row)
+        {
+            std::memcpy(destination + static_cast<std::size_t>(row) * rowBytes,
+                        source.data() + sourceOffset +
+                            static_cast<std::size_t>(row) * sourceRowBytes,
+                        rowBytes);
+        }
+        return true;
     }
 
     // ---- HeadlessTexture3DRenderer ----
@@ -628,6 +750,43 @@ namespace CNA::Internal::Renderers::Headless
                                                                                 int surfaceFormat)
     {
         return std::make_unique<HeadlessTextureCubeRenderer>(state_, size, mipMap, surfaceFormat);
+    }
+
+    RendererFormatVerdict HeadlessRenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Unsupported;
+        }
+    }
+
+    bool HeadlessRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
     }
 
     std::unique_ptr<IRenderTargetRenderer> HeadlessRenderer::CreateRenderTarget2D(

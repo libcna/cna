@@ -377,9 +377,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS")
         COMMAND cna_test_headless_texture2d_getdata_transfer_range
         TIMEOUT 30 LABELS "Headless")
 
-    # The TextureCube/Texture3D half of the finding. This renderer is the
-    # one that must REJECT both -- its cube SetData is a trace entry rather than a write, and
-    # pre-fix its cube GetData actively `std::fill_n`'d the caller's destination with zeros.
+    # The TextureCube/Texture3D half of the finding. Plain cube resources preserve their authored
+    # CPU data; Texture3D remains unavailable because Headless exposes no volume capability.
     cna_headless_test(cna_test_headless_cube_volume_getdata_contract
                       ${CNA_GRAPHICS_EXAMPLES_DIR}/texturecube_texture3d_getdata_contract_test.cpp)
     cna_register_renderer_test(NAME Headless_CubeVolume_GetDataContract

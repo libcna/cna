@@ -334,43 +334,40 @@ namespace CNA::Internal::Renderers::Headless
         HeadlessTextureCubeRenderer(std::shared_ptr<HeadlessSharedState> state, int size, bool mipMap, int surfaceFormat);
         ~HeadlessTextureCubeRenderer() override;
 
-        /**
-         * @brief Validates and traces a cube-face upload, then reports that nothing was stored.
-         *
-         * The write-side counterpart of `GetData` below. This renderer stores no
-         * pixel data at all by design, so it has always been unable to keep an upload -- pre-fix it
-         * simply had no way to say so, and `TextureCube::SetData` returned normally after the data
-         * had been validated, recorded in the trace and dropped. The validation and the trace entry
-         * are the value this renderer provides and are unchanged; the return value now tells the
-         * truth about the storage.
-         *
-         * @return Always false.
-         */
+        /** @brief Stores a complete format-native cube rectangle in CPU validation storage. */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
-        /**
-         * @brief Reports that this renderer cannot read a cube face back.
-         *
-         * Stated explicitly rather than inherited, for the same reviewed reason
-         * `HeadlessRenderTargetRenderer::GetData` states it: this renderer stores no pixel data at
-         * all -- `SetData` above validates its arguments and records a trace entry, it does not
-         * write anything -- so a cube face's content does not exist here in any form it could
-         * return. Pre-fix this method did the opposite and actively `std::fill_n`'d the caller's
-         * whole destination with zeros, which is indistinguishable from a real readback of a cube
-         * that genuinely holds transparent black. The six zero-filled `facePixels_` buffers that
-         * backed that answer are gone with it: diagnostic storage no successful `SetData` ever
-         * wrote must never be offered as content.
-         *
-         * @return Always false.
-         */
-        [[nodiscard]] bool GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/,
-                                   int /*w*/, int /*h*/,
-                                   void* /*data*/, int /*dataLength*/) const override
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override
         {
-            return false;
+            return SetData(face, level, x, y, w, h, data, dataLength);
+        }
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override
+        {
+            return SetData(face, level, x, y, w, h, data, dataLength);
+        }
+        /** @brief Reads a complete format-native cube rectangle from CPU validation storage. */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override
+        {
+            return GetData(face, level, x, y, w, h, data, dataLength);
+        }
+        [[nodiscard]] bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override
+        {
+            return GetData(face, level, x, y, w, h, data, dataLength);
         }
 
         [[nodiscard]] int Size() const { return size_; }
+        [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
     private:
         /// Unbinds every currently bound render target and forgets them.
@@ -379,8 +376,10 @@ namespace CNA::Internal::Renderers::Headless
         std::shared_ptr<HeadlessSharedState> state_;
         std::uint64_t resourceId_;
         int size_ = 0;
+        int mipLevels_ = 1;
         bool mipMap_ = false;
         int surfaceFormat_ = 0;
+        std::vector<std::vector<std::uint8_t>> mipFacePixels_;
     };
 
     class HeadlessTexture3DRenderer final : public ITexture3DRenderer
@@ -612,6 +611,10 @@ namespace CNA::Internal::Renderers::Headless
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override;
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat,
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
