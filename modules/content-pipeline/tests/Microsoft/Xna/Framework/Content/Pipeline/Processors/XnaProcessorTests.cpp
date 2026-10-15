@@ -48,6 +48,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ModelProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/MaterialProcessor.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/PassThroughProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/ProcessorEnums.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp"
@@ -2262,6 +2263,48 @@ TEST(XnaTexturePipeline, AProcessedTextureBecomesAnXnbCnaReadsBack)
     EXPECT_EQ(read.levels[2].size(), 1u * 1u * 4u);
     const auto expected = Gradient(4, 2)->GetPixelData();
     EXPECT_EQ(read.levels[0], std::vector<std::uint8_t>(expected.begin(), expected.end()));
+}
+
+
+// The processors' sound and song outputs compile too, through the canonical SoundEffect and Song writers.
+TEST(XnaAudioPipeline, AProcessedSoundAndSongBecomeXnbFilesCnaReadsBack)
+{
+    using Processors::SongContent;
+    using Processors::SoundEffectContent;
+    const std::vector<SharpRuntime::bytecs> samples = {1, 2, 3, 4, 5, 6, 7, 8};
+    auto sound = std::make_shared<SoundEffectContent>(std::make_shared<Xna::Audio::AudioFormat>(1, 1, 22050, 44100, 2, 16), samples, 1, 2,
+                                                      System::TimeSpan::FromMilliseconds(250.0));
+    auto song = std::make_shared<SongContent>("music/theme.wma", System::TimeSpan::FromMilliseconds(1500.0));
+
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler compiler;
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::CompileOptions options;
+    options.assetName = "Audio/blip";
+    const CNA::Internal::Xnb::XnbAssetWriteResult soundFile = compiler.Compile<SoundEffectContent>(sound, options);
+    options.assetName = "Audio/theme";
+    const CNA::Internal::Xnb::XnbAssetWriteResult songFile = compiler.Compile<SongContent>(song, options);
+
+    ScratchDirectory scratch("audio");
+    const auto write = [&](const char* name, const CNA::Internal::Xnb::XnbAssetWriteResult& result) {
+        const std::filesystem::path path = scratch.Path() / name;
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(result.bytes.data()), static_cast<std::streamsize>(result.bytes.size()));
+        return path;
+    };
+    const auto readSound = std::get<CNA::Internal::Xnb::XnbSoundEffectData>(CNA::Internal::Xnb::DecodeXnbCanonicalAsset(write("blip.xnb", soundFile)).value);
+    EXPECT_EQ(readSound.formatTag, 1u);
+    EXPECT_EQ(readSound.channels, 1u);
+    EXPECT_EQ(readSound.sampleRate, 22050u);
+    EXPECT_EQ(readSound.averageBytesPerSecond, 44100u);
+    EXPECT_EQ(readSound.blockAlign, 2u);
+    EXPECT_EQ(readSound.bitsPerSample, 16u);
+    EXPECT_EQ(readSound.samples, std::vector<std::uint8_t>(samples.begin(), samples.end()));
+    EXPECT_EQ(readSound.loopStart, 1);
+    EXPECT_EQ(readSound.loopLength, 2);
+    EXPECT_EQ(readSound.storedDurationMs, 250u);
+
+    const auto readSong = std::get<CNA::Internal::Xnb::XnbSongData>(CNA::Internal::Xnb::DecodeXnbCanonicalAsset(write("theme.xnb", songFile)).value);
+    EXPECT_EQ(readSong.mediaPath, "music/theme.wma");
+    EXPECT_EQ(readSong.durationMs, 1500);
 }
 
 

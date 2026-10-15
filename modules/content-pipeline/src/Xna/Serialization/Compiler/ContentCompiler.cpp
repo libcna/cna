@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MipmapChain.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
@@ -186,6 +187,49 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
             const Xnb::XnbTypeWriterBase* canonical_;
         };
 
+        /// A processed sound or song reaches the canonical writer for it the same way: the pipeline's content object becomes the
+        /// canonical data (what the .xnb holds), and the canonical writer writes it. `Convert` does the one conversion that differs.
+        template<typename TContent, typename TCanonical, typename TConvert>
+        class CanonicalContentTypeWriter final : public ContentTypeWriter<TContent>
+        {
+        public:
+            CanonicalContentTypeWriter(const Xnb::XnbTypeWriterBase& canonical, TConvert convert)
+                : canonical_(&canonical), convert_(std::move(convert)) {}
+
+            [[nodiscard]] std::int32_t getTypeVersionProperty() const override
+            {
+                return canonical_->ReaderIdentity().readerVersion;
+            }
+
+            [[nodiscard]] std::string GetRuntimeReader(TargetPlatform targetPlatform) const override
+            {
+                return Xnb::FormatXnbReaderName(canonical_->ReaderIdentity(),
+                                                Xnb::XnbReaderNameStyle::Xna40,
+                                                ContainerPlatform(targetPlatform));
+            }
+
+            [[nodiscard]] std::string GetRuntimeType(TargetPlatform targetPlatform) const override
+            {
+                (void)targetPlatform;
+                return canonical_->ReaderIdentity().targetBaseName;
+            }
+
+        protected:
+            void Write(ContentWriter& output, const Carrier<TContent>& value) override
+            {
+                if (value == nullptr)
+                {
+                    throw PipelineException("ContentCompiler: a null asset cannot be compiled.");
+                }
+                const TCanonical data = convert_(*value);
+                output.Output().WriteRawObject(*canonical_, &data);
+            }
+
+        private:
+            const Xnb::XnbTypeWriterBase* canonical_;
+            TConvert convert_;
+        };
+
         /// The worker view of a built-in canonical type writer: the registry already holds the
         /// canonical writer, so this bundle is never registered, only consulted.
         template<typename T>
@@ -324,6 +368,44 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                    { return std::make_shared<Adapter<Graphics::Texture2DContent>>(
                                          facade, platform, this); }});
         }
+        // A processed sound effect and a processed song, through the same canonical writers a runtime asset uses.
+        const auto addCanonical = [this, &builtIns]<typename TContent, typename TCanonical, typename TConvert>(TConvert convert) {
+            const Xnb::XnbTypeWriterBase* canonical = builtIns.Find(Xnb::XnbTypeKey<TCanonical>::Id());
+            if (canonical == nullptr) { return; }
+            auto facade = std::make_shared<CanonicalContentTypeWriter<TContent, TCanonical, TConvert>>(*canonical, std::move(convert));
+            facade->Initialize(*this);
+            known_.push_back(Known{std::type_index(typeid(TContent)), std::type_index(typeid(Carrier<TContent>)), true,
+                                   ContentTypeName<TContent>::Name(), facade,
+                                   [facade, this](TargetPlatform platform) -> std::shared_ptr<Xnb::XnbTypeWriterBase>
+                                   { return std::make_shared<Adapter<TContent>>(facade, platform, this); }});
+        };
+        addCanonical.template operator()<Processors::SoundEffectContent, Xnb::XnbSoundEffectData>(
+            [](const Processors::SoundEffectContent& sound) {
+                Xnb::XnbSoundEffectData data;
+                data.platform = 'w';
+                const Audio::AudioFormat& format = *sound.Format();
+                data.formatTag = static_cast<std::uint16_t>(format.getFormatProperty());
+                data.channels = static_cast<std::uint16_t>(format.getChannelCountProperty());
+                data.sampleRate = static_cast<std::uint32_t>(format.getSampleRateProperty());
+                data.averageBytesPerSecond = static_cast<std::uint32_t>(format.getAverageBytesPerSecondProperty());
+                data.blockAlign = static_cast<std::uint16_t>(format.getBlockAlignProperty());
+                data.bitsPerSample = static_cast<std::uint16_t>(format.getBitsPerSampleProperty());
+                const auto& native = format.getNativeWaveFormatProperty();
+                // The native WAVEFORMATEX is 18 bytes (through cbSize); what follows is the codec's extension data.
+                if (native.size() > 18u) { data.extensionData.assign(native.begin() + 18, native.end()); }
+                data.samples.assign(sound.Data().begin(), sound.Data().end());
+                data.loopStart = sound.LoopStart();
+                data.loopLength = sound.LoopLength();
+                data.storedDurationMs = static_cast<std::uint32_t>(sound.Duration().getTotalMillisecondsProperty());
+                return data;
+            });
+        addCanonical.template operator()<Processors::SongContent, Xnb::XnbSongData>(
+            [](const Processors::SongContent& song) {
+                Xnb::XnbSongData data;
+                data.mediaPath = song.FileName();
+                data.durationMs = static_cast<std::int32_t>(song.Duration().getTotalMillisecondsProperty());
+                return data;
+            });
     }
 
     const ContentCompiler::PlatformRegistry& ContentCompiler::Platform(const TargetPlatform platform) const
