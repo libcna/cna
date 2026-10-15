@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/CompiledEffectContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/SpriteFontContent.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -583,6 +584,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                 data.spacing = source.spacing;
                 data.kerning = source.kerning;
                 data.defaultCharacter = source.defaultCharacter;
+                return data;
+            });
+        addCanonical.template operator()<Processors::CompiledEffectContent,
+                                         Xnb::XnbCompiledEffectContent>(
+            [](const Processors::CompiledEffectContent& effect) {
+                Xnb::XnbCompiledEffectContent data;
+                data.bytecode.assign(effect.GetEffectCode().begin(), effect.GetEffectCode().end());
                 return data;
             });
     }

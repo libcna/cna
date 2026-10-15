@@ -2436,6 +2436,26 @@ TEST(XnaFontPipeline, AProcessedSpriteFontBecomesAnXnbCnaReadsBack)
     EXPECT_EQ(read.defaultCharacter, std::optional<SharpRuntime::charcs>(u'?'));
 }
 
+TEST(XnaEffectPipeline, ACompiledEffectBecomesAnXnbWithItsBytecodeUnchanged)
+{
+    const std::vector<std::uint8_t> bytecode = {0xCF, 0x0B, 0xF0, 0xBC, 1, 2, 3, 4};
+    auto effect = std::make_shared<Processors::CompiledEffectContent>(bytecode);
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler compiler;
+    Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::CompileOptions options;
+    options.assetName = "Effects/tiny";
+    const CNA::Internal::Xnb::XnbAssetWriteResult written =
+        compiler.Compile<Processors::CompiledEffectContent>(effect, options);
+
+    EXPECT_EQ(written.rootReaderName,
+              "Microsoft.Xna.Framework.Content.EffectReader, Microsoft.Xna.Framework.Graphics, "
+              "Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553");
+    ASSERT_GE(written.bytes.size(), bytecode.size());
+    EXPECT_EQ(std::vector<std::uint8_t>(written.bytes.end() -
+                                            static_cast<std::ptrdiff_t>(bytecode.size()),
+                                        written.bytes.end()),
+              bytecode);
+}
+
 
 // ---- XNAPP-190: the effect importer, and what DebugMode.Auto decides --------------------------
 
