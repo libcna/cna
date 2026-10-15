@@ -50,6 +50,10 @@ def through(model_points, model_normals, body_points, body_normals, radius=0.004
     under the foot, so neither counts; skin next to an open shoe or under a fringe has nothing of
     the model along its normal and is simply uncovered."""
     covered = poking = 0
+    # Only skin near the model can be covered by it (or poke through it).
+    low, high = model_points.min(axis=0) - 0.04, model_points.max(axis=0) + 0.04
+    near_model = np.all((body_points >= low) & (body_points <= high), axis=1)
+    body_points, body_normals = body_points[near_model], body_normals[near_model]
     # Returns (share, vertices).
     for start in range(0, len(body_points), chunk):
         b, n = body_points[start:start + chunk], body_normals[start:start + chunk]

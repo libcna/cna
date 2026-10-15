@@ -537,8 +537,10 @@ def _hanging_beard(body_type, from_y, half_width, length_, seed, thick, count=7)
         roots.append((p, normalize((x * 0.4, -1.0, 0.35)), "beard"))
     point = add(head.front_point(body_type, 0.0, from_y * s, 0.0)[0], (0.0, -length_ * s, 0.035 * s))
     flow = Flow(gravity=10.0, lift=0.003 * s, cling=0.0, body=True, attract=point, attract_gain=16.0)
-    return shell(ob, roots, length_ * s, flow, lambda t: thick * s * (1.0 - 0.55 * t), seed, closed=False, tip=0.9,
-                 notch=0.04 * s, tip_round=0.75, groove=0.78, sub_columns=5)
+    # Short beards end in soft rounded clumps, long ones taper to points.
+    pointed = smoothstep(0.03, 0.09, length_)
+    return shell(ob, roots, length_ * s, flow, lambda t: thick * s * (1.0 - 0.55 * t), seed, closed=False,
+                 tip=0.15 + 0.75 * pointed, notch=(0.008 + 0.032 * pointed) * s, tip_round=0.85, groove=0.78, sub_columns=5)
 
 
 def facial_hair(body_type, style):

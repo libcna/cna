@@ -36,7 +36,8 @@ supported; Git history keeps them.
 | `cna_avatar/hairmass.py` | Hair as sculpted masses: strand paths marched over the head under a style's flow (gravity, a tie, lift), colliding with the head, neck and torso; a closed slab of clumped locks between neighbouring paths, with grooves, thickness, waves, curl bumps and pointed tips. |
 | `cna_avatar/hairstyles.py` | The 37 hairstyles as masses -- where their strands start (crown, part, hairline, fringe), how they flow and where they end -- with tails, wound buns, braids, spiky locks and hair ties (hats fit them at run time from `hairCover`). |
 | `cna_avatar/hair.py` | The scalp cap, hairlines, hair skin weights and the tapering lock facial hair is made of. |
-| `cna_avatar/garments.py` | Tops, bottoms and shoes as offset lofts over the body, with fabrics. |
+| `cna_avatar/garments.py` | Tops and bottoms built like garments: torsos that hang from the chest (`fit`) in soft folds, a yoke to the neck opening, neck bands, collars (stand, fall, points), a folded hood, lapels, sleeves and trouser legs over the limbs' envelope with folds, cuffs and turned-in hems, waistbands, belt loops, flies, pockets lying on the cloth, skirts that clear hips and thighs (pleated or draping); wristwear, gloves and rings. |
+| `cna_avatar/shoes.py` | Footwear on a last: uppers that hold the foot and ankle, soles with lip, toe spring and heel blocks, welts, toe caps, tongues and laces, collars, heel tabs, gussets, shafts under trousers, socks. |
 | `cna_avatar/accessories.py` | Glasses, headwear, facial hair, earrings, wristwear, gloves and rings. |
 | `cna_avatar/textures.py` | Procedural texture multipliers (skin, hair, fabrics). |
 | `cna_avatar/posing.py` | Forward kinematics, two-bone IK (hands reach targets, feet stay planted) and finger curl. |
