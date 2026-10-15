@@ -642,7 +642,8 @@ namespace CNA::Internal::Renderers::WebGPU
     class WebGPUTexture3DRenderer final : public ITexture3DRenderer
     {
     public:
-        WebGPUTexture3DRenderer(WebGPURenderer& owner, int width, int height, int depth, bool mipMap);
+        WebGPUTexture3DRenderer(WebGPURenderer& owner, int width, int height, int depth,
+                                bool mipMap, int surfaceFormat);
         ~WebGPUTexture3DRenderer() override;
 
         WebGPUTexture3DRenderer(const WebGPUTexture3DRenderer&) = delete;
@@ -652,6 +653,12 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool SetData(int level, int x, int y, int z,
                                    int w, int h, int depth,
                                    const void* data, int dataLength) override;
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override
+        {
+            return SetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
         /// Same staged-copy/row-alignment/async-map technique as `WebGPUTextureRenderer::GetData()`
         /// (WEBGPU-51), extended to a 3rd (depth) dimension: the whole requested level is copied
         /// to a temporary readback buffer sized `alignedBytesPerRow * levelHeight * levelDepth`,
@@ -661,6 +668,14 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool GetData(int level, int x, int y, int z,
                                    int w, int h, int depth,
                                    void* data, int dataLength) const override;
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override
+        {
+            return GetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
+
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         /**
@@ -685,6 +700,9 @@ namespace CNA::Internal::Renderers::WebGPU
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        int bytesPerTexel_ = 4;
+        WGPUTextureFormat wgpuFormat_ = WGPUTextureFormat_RGBA8Unorm;
     };
 
     /**
@@ -2166,6 +2184,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /** @brief WEBGPU-144: the BC formats this renderer stores natively are Supported; else Defer. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /** @brief Classifies the Color, Single and Vector4 formats backed by native 3D storage. */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const override;
         /**
          * @brief Whether a half-float colour texture can be sampled with linear filtering.
          *

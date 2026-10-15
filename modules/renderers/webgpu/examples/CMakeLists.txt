@@ -17,13 +17,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # through a preflight/retry launcher so a headless / no-adapter host SKIPs (CTest code 77) instead
     # of producing dozens of abort failures, while real failures and expected aborts propagate. Set
     # before any cna_register_renderer_test call so the shared macro (cmake/TestHelpers.cmake) sees it.
-    set(CNA_RENDERER_GPU_TEST_LAUNCHER "${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/webgpu_test_launcher.sh")
+    set(CNA_RENDERER_GPU_TEST_LAUNCHER "${CNA_SOURCE_DIR}/modules/renderers/webgpu/webgpu_test_launcher.sh")
     add_test(NAME WebGPU_LauncherSelfTest COMMAND sh
-        "${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/webgpu_launcher_selftest.sh"
+        "${CNA_SOURCE_DIR}/modules/renderers/webgpu/webgpu_launcher_selftest.sh"
         "${CNA_RENDERER_GPU_TEST_LAUNCHER}")
     set_tests_properties(WebGPU_LauncherSelfTest PROPERTIES TIMEOUT 30 LABELS "WebGPU")
     if(TARGET cna_demo_2d)
-        cna_register_renderer_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CMAKE_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
+        cna_register_renderer_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CNA_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
             TIMEOUT 70 LABELS "GraphicsSmoke;WebGPU" SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
     else()
         message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
@@ -33,28 +33,28 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # CMake test (no GPU/display): it drives cmake/WebGPUChecksum.cmake with a good archive, a corrupt
     # archive (must fail closed and remove the archive + stamp) and an unknown/empty hash.
     cna_register_renderer_test(NAME WebGPU_ChecksumVerification COMMAND ${CMAKE_COMMAND}
-        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
-        -DCHILD=${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_checksum_verify_once.cmake
+        -DMODULE=${CNA_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
+        -DCHILD=${CNA_SOURCE_DIR}/cmake/tests/webgpu_checksum_verify_once.cmake
         -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_checksum_tmp
-        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_checksum_test.cmake
+        -P ${CNA_SOURCE_DIR}/cmake/tests/webgpu_checksum_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
     # WEBGPU-151: integration test of the real ThirdPartyWebGPU cache logic (cna_webgpu_prepare_cache
     # + the versioned/hashed stamp + purge helpers): old/legacy stamp migration, correct new stamp,
     # wrong hash (purge), changed version/asset, interrupted extraction, no archive. Pure CMake.
     cna_register_renderer_test(NAME WebGPU_CacheMigration COMMAND ${CMAKE_COMMAND}
-        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
+        -DMODULE=${CNA_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
         -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_cache_tmp
-        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_cache_test.cmake
+        -P ${CNA_SOURCE_DIR}/cmake/tests/webgpu_cache_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
     # The official package can live outside a cross compiler's target sysroot. Verify that the
     # explicit package root remains authoritative even when find-root modes are all ONLY.
     cna_register_renderer_test(NAME WebGPU_CrossRootPackageDiscovery COMMAND ${CMAKE_COMMAND}
-        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/ThirdPartyWebGPU.cmake
-        -DPROBE_SOURCE=${CMAKE_SOURCE_DIR}/cmake/tests/webgpu-discovery-probe
+        -DMODULE=${CNA_SOURCE_DIR}/cmake/ThirdPartyWebGPU.cmake
+        -DPROBE_SOURCE=${CNA_SOURCE_DIR}/cmake/tests/webgpu-discovery-probe
         -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_discovery_tmp
-        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_discovery_test.cmake
+        -P ${CNA_SOURCE_DIR}/cmake/tests/webgpu_discovery_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
     # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
@@ -397,7 +397,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # GLTF-213: exact mid-grey sRGB transfer and linear base+emissive composition, repeated on
     # both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_srgb_transfer
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
     # plans/plan_webgpu_modern_graphics.md WMG-0024: guarded, because CNA_ENABLE_SDL=OFF is a
     # configuration that has to exist -- these two borrow an EasyGL source that reaches for SDL3
     # itself, and an unconditional link failed the whole CONFIGURE of an SDL-free tree.
@@ -410,7 +410,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # GLTF-343/344: IOR-derived dielectric F0 and factor-only KHR_materials_specular F0/F90,
     # repeated on both rigid and identity-skinned WebGPU PBR pipelines.
     cna_webgpu_test(cna_test_webgpu_pbr_fresnel_factors
-                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
     if(TARGET SDL3::SDL3)  # WMG-0024, as above
         target_link_libraries(cna_test_webgpu_pbr_fresnel_factors PRIVATE SDL3::SDL3)
     endif()
@@ -1169,7 +1169,7 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
         # page needs no preloaded asset -- which is what keeps it drivable by the same harness as
         # every other page here.
         target_include_directories(cna_webgpu_compiled_effect_page PRIVATE
-            "${CMAKE_SOURCE_DIR}/tests/support")
+            "${CNA_SOURCE_DIR}/tests/support")
         # Same reason cna_webgpu_coverage_page needs it: this page includes the renderer's own
         # public headers, which include webgpu.h and (for the compiled-effect half) mojoshader.h,
         # and CNA keeps both PRIVATE on the renderer target.

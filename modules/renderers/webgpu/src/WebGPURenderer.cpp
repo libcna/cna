@@ -152,6 +152,8 @@ namespace CNA::Internal::Renderers::WebGPU
             // eight bytes per texel are stored exactly and mip generation works as for RGBA8.
             case SurfaceFormat::HalfVector4:
             case SurfaceFormat::HdrBlendable:    return {WGPUTextureFormat_RGBA16Float, false, 8};
+            case SurfaceFormat::Single:           return {WGPUTextureFormat_R32Float, false, 4};
+            case SurfaceFormat::Vector4:          return {WGPUTextureFormat_RGBA32Float, false, 16};
             default:                         return {WGPUTextureFormat_RGBA8Unorm, false, 4};
             }
         }
@@ -2638,13 +2640,25 @@ namespace CNA::Internal::Renderers::WebGPU
     // level count follows XNA's complete D3D9 volume chain, including depth. wgpu-native halves
     // every per-level extent automatically.
     WebGPUTexture3DRenderer::WebGPUTexture3DRenderer(WebGPURenderer& owner, int width, int height,
-                                                    int depth, bool mipMap)
+                                                    int depth, bool mipMap, int surfaceFormat)
         : owner_(&owner), width_(width), height_(height), depth_(depth)
+        , surfaceFormat_(surfaceFormat)
     {
-        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss refuses while one is alive.
-        owner.CountUnrecoverableResourceEXT(1);
         if (width_ <= 0 || height_ <= 0 || depth_ <= 0)
             throw std::invalid_argument("CNA WebGPU: Texture3D dimensions must be positive");
+
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat requested = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (requested != SurfaceFormat::Color && requested != SurfaceFormat::Single &&
+            requested != SurfaceFormat::Vector4)
+        {
+            throw std::invalid_argument(
+                "CNA WebGPU: Texture3D received unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat_));
+        }
+        const WebGPUTexFormatInfo formatInfo = ClassifyWebGPUTextureFormat(surfaceFormat_);
+        wgpuFormat_ = formatInfo.format;
+        bytesPerTexel_ = formatInfo.blockBytes;
 
         mipLevels_ = 1;
         if (mipMap)
@@ -2665,12 +2679,16 @@ namespace CNA::Internal::Renderers::WebGPU
         descriptor.dimension = WGPUTextureDimension_3D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_),
                                        static_cast<std::uint32_t>(depth_)};
-        descriptor.format = WGPUTextureFormat_RGBA8Unorm;
+        descriptor.format = wgpuFormat_;
         descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
         descriptor.sampleCount = 1;
         texture_ = wgpuDeviceCreateTexture(owner.Device(), &descriptor);
         if (texture_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create Texture3D");
+        // WEBGPU-182: this kind cannot rebuild itself on a new device, so a simulated loss
+        // refuses while one is alive. Count only after construction succeeds: a rejected format
+        // or native allocation failure has no destructor that could balance an earlier count.
+        owner.CountUnrecoverableResourceEXT(1);
     }
 
     WebGPUTexture3DRenderer::~WebGPUTexture3DRenderer()
@@ -2700,7 +2718,8 @@ namespace CNA::Internal::Renderers::WebGPU
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
         const std::size_t required =
-            static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * static_cast<std::size_t>(depth) * 4u;
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+            static_cast<std::size_t>(depth) * static_cast<std::size_t>(bytesPerTexel_);
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
         WGPUTexelCopyTextureInfo destination{};
@@ -2711,7 +2730,7 @@ namespace CNA::Internal::Renderers::WebGPU
         destination.aspect = WGPUTextureAspect_All;
 
         WGPUTexelCopyBufferLayout layout{};
-        layout.bytesPerRow = static_cast<std::uint32_t>(w * 4);
+        layout.bytesPerRow = static_cast<std::uint32_t>(w * bytesPerTexel_);
         layout.rowsPerImage = static_cast<std::uint32_t>(h);
         const WGPUExtent3D extent{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
                                   static_cast<std::uint32_t>(depth)};
@@ -2736,7 +2755,8 @@ namespace CNA::Internal::Renderers::WebGPU
         const int levelW = MipDim(width_, level);
         const int levelH = MipDim(height_, level);
         const int levelDepth = MipDim(depth_, level);
-        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelW) * 4u);
+        const auto bytesPerRow = AlignBytesPerRow(
+            static_cast<std::uint32_t>(levelW * bytesPerTexel_));
         const std::uint64_t sliceBytes = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelH);
         const std::uint64_t bufferSize = sliceBytes * static_cast<std::uint64_t>(levelDepth);
 
@@ -2793,7 +2813,8 @@ namespace CNA::Internal::Renderers::WebGPU
             wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength =
-            static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * static_cast<std::size_t>(depth) * 4u;
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+            static_cast<std::size_t>(depth) * static_cast<std::size_t>(bytesPerTexel_);
         // This branch used to memset the caller's destination to zero and return as
         // if the readback had succeeded. Report the failure instead; likewise a box that reaches
         // outside the level is refused rather than padded with zeros.
@@ -2810,16 +2831,15 @@ namespace CNA::Internal::Renderers::WebGPU
             for (int row = 0; row < h; ++row)
             {
                 const int sy = y + row;
-                for (int col = 0; col < w; ++col)
-                {
-                    const int sx = x + col;
-                    std::uint8_t* d = out + (static_cast<std::size_t>(slice) * w * h +
-                                             static_cast<std::size_t>(row) * w + col) * 4;
-                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sz) * sliceBytes +
-                                            static_cast<std::size_t>(sy) * bytesPerRow +
-                                            static_cast<std::size_t>(sx) * 4;
-                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
-                }
+                std::uint8_t* destination =
+                    out + (static_cast<std::size_t>(slice) * h + row) *
+                              static_cast<std::size_t>(w) * bytesPerTexel_;
+                const std::uint8_t* source =
+                    mapped + static_cast<std::size_t>(sz) * sliceBytes +
+                    static_cast<std::size_t>(sy) * bytesPerRow +
+                    static_cast<std::size_t>(x) * bytesPerTexel_;
+                std::memcpy(destination, source,
+                            static_cast<std::size_t>(w) * bytesPerTexel_);
             }
         }
         wgpuBufferUnmap(readbackBuffer);
@@ -10178,7 +10198,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             WGPUTextureViewDescriptor descriptor{};
             descriptor.label = StringView("CNA WebGPU Texture3D SampledView");
-            descriptor.format = WGPUTextureFormat_RGBA8Unorm;
+            descriptor.format = wgpuFormat_;
             descriptor.dimension = WGPUTextureViewDimension_3D;
             descriptor.baseMipLevel = 0;
             descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
@@ -11819,6 +11839,33 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 return RendererFormatVerdict::Supported;
         }
         return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict WebGPURenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector4:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
     }
 
     RendererFormatVerdict WebGPURenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
@@ -13505,9 +13552,10 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     }
 
     std::unique_ptr<ITexture3DRenderer> WebGPURenderer::CreateTexture3D(
-        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
-        return std::make_unique<WebGPUTexture3DRenderer>(*this, w, h, depth, mipMap);
+        return std::make_unique<WebGPUTexture3DRenderer>(
+            *this, w, h, depth, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<IVertexBufferRenderer> WebGPURenderer::CreateVertexBuffer(int vertexCapacity)
