@@ -158,7 +158,7 @@ def garment_torso(body_type, inflate, rows, fit=0.5, lower=0.0, flare=0.0, folds
                 source[q] = edge
         grid = list(reversed(lining)) + grid
     if opening is not None and rows[1] == 10:
-        grid += yoke_rows(body_type, inflate, segments, opening)
+        grid += [[adjust(q) for q in ring] for ring in yoke_rows(body_type, inflate, segments, opening)]
     return Mesh().grid(grid, lambda p, v, u: weights(source.get(p, p)), uv_seam=True)
 
 
@@ -530,9 +530,11 @@ def garment_limb(body_type, side, kind, inflate, t_range, ease=0.0, flare=0.0, f
             ang = 2.0 * PI * c / segments
             ca, sa = math.cos(ang), math.sin(ang)
             r_w, r_d = w + inflate + grow, d + inflate + grow
-            if kind == "arm" and t < 0.16:
-                # Over the top of the shoulder the cap sits close (u points outward-up at angle 0).
-                top = max(0.0, ca) ** 2 * smoothstep(0.16, 0.02, t)
+            if kind == "arm" and t < 0.20:
+                # Over the top of the shoulder the cap sits close (u points outward-up at angle 0)
+                # and narrows toward the body, so the shoulder slopes into the sleeve instead of
+                # standing up in a puff.
+                top = max(0.0, ca) ** 2 * smoothstep(0.20, 0.02, t)
                 r_w -= inflate * snug_cap * top
                 r_d -= inflate * snug_cap * top
             off = folds(ang, t) if folds else 0.0
@@ -542,12 +544,12 @@ def garment_limb(body_type, side, kind, inflate, t_range, ease=0.0, flare=0.0, f
         centres.append(centre)
         axes.append(axis)
     if cap and kind == "arm":
-        # A rounded cap closing the top over the shoulder's own round (as high as the skin's).
+        # A low rounded cap closing the top, under the shoulder line (the yoke covers above it).
         c0, r0 = centres[0], rows[0]
         extra = []
         for j in (1, 2, 3, 4):
             a = PI * 0.5 * j / 4
-            extra.append([add(add(c0, mul(sub(p, c0), math.cos(a) + 1e-4)), mul(axes[0], -0.9 * length(sub(p, c0)) * math.sin(a)))
+            extra.append([add(add(c0, mul(sub(p, c0), math.cos(a) + 1e-4)), mul(axes[0], -0.45 * length(sub(p, c0)) * math.sin(a)))
                           for p in r0])
         rows = list(reversed(extra)) + rows
         ts = [ts[0]] * 4 + ts
@@ -718,12 +720,41 @@ def _limb_ring(body_type, side, kind, t, inflate, radius):
 HIP_CLEARANCE = 0.004
 
 
+def clear_of_shoulders(body_type, clearance):
+    """A point adjustment moving a top's points out of the rounded tops of the arms (the shoulders'
+    domes, which stand above the torso's sections), to `clearance` beyond them: the yoke wraps over
+    the shoulder and the sleeve hangs from it."""
+    pos = rig.joint_positions(body_type)
+    caps = []
+    for side, _ in rig.SIDES:
+        sh, el, wr = pos[I["Shoulder" + side]], pos[I["Elbow" + side]], pos[I["Wrist" + side]]
+        axis = normalize(sub(el, sh))
+        total = length(sub(el, sh)) + length(sub(wr, el))
+        _, w, d = body._profile_at(body.ARM[body_type], 0.02)
+        r = max(w, d)
+        caps.append((add(sh, mul(axis, 0.02 * total)), axis, r))
+
+    def adjust(p):
+        for centre, axis, r in caps:
+            rel = sub(p, centre)
+            along = dot(rel, axis)
+            # The dome above the cap's ring (along -axis) is 0.9 r high; below it the arm is a tube.
+            height = 0.9 * r if along < 0.0 else r * 4.0
+            radial = sub(rel, mul(axis, along))
+            q = math.sqrt(dot(radial, radial) / (r + clearance) ** 2 + (along / (height + clearance)) ** 2)
+            if 1e-6 < q < 1.0 and along < 0.25 * r:
+                p = add(centre, mul(rel, 1.0 / q))
+        return p
+    return adjust
+
+
 def top_clearance(body_type, inflate):
     """A top's point adjustment: clear of the hips' outline above the hip joints and of the thighs
     below them, far enough that it covers every bottom's waist and legs (and a skirt's top)."""
     hips = body.clear_of_hips(body_type, inflate + HIP_CLEARANCE)
     thighs = clear_of_thighs(body_type, max(inflate + HIP_CLEARANCE + 0.004, 0.022))
-    return lambda p: thighs(hips(p))
+    shoulders = clear_of_shoulders(body_type, inflate * 0.8)
+    return lambda p: shoulders(thighs(hips(p)))
 
 def patch(body_type, centre, size, normal, weights, depth=0.004, segments=12):
     """A thin rounded slab (pocket, label) lying on a surface facing `normal`."""
@@ -1015,8 +1046,8 @@ def _open_shell(body_type, inflate, rows, gap, lower=0.0, flare=0.004, fit=0.7, 
             for a, p0 in zip(angles, outer_ring):
                 p1 = opening(a)
                 s2 = f * f * (3.0 - 2.0 * f)
-                ring.append((p0[0] + (p1[0] - p0[0]) * f, p0[1] + (p1[1] - p0[1]) * s2 + 0.004 * math.sin(PI * f),
-                             p0[2] + (p1[2] - p0[2]) * f))
+                ring.append(clear((p0[0] + (p1[0] - p0[0]) * f, p0[1] + (p1[1] - p0[1]) * s2 + 0.004 * math.sin(PI * f),
+                                   p0[2] + (p1[2] - p0[2]) * f)))
             grid.append(ring)
     outer = Mesh().grid(grid, lambda p, v, u: tw(source.get(p, p)), wrap=False)
     # Front edges: a rolled border along both edges of the opening.
