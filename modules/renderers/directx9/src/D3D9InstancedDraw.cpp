@@ -76,11 +76,13 @@ namespace CNA::Internal::Renderers::DirectX9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
-        // D9-83: no per-instance VB means this isn't really an instanced draw at all.
+        // D9-83: without a per-instance stream D3D9 has nothing to drive SetStreamSourceFreq with, so
+        // the instance count is honoured the way XNA's own fallback does: the same draw repeated.
         const auto* instanceStream = FirstInstanceStream(params);
         if (instanceStream == nullptr)
         {
-            DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            for (int instance = 0; instance < std::max(1, instanceCount); ++instance)
+                DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
 

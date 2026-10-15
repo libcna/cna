@@ -402,6 +402,14 @@ TEST(DrawRouteValidation, EveryVertexElementFormatIsBoundOrRefusedByName)
             device.SetVertexBuffer(nullptr);
             continue;   // refused by name, which is a legal answer
         }
+        catch (const System::InvalidOperationException&)
+        {
+            // XNA's own answer when the declaration lacks an element the stock shader reads: "The
+            // current vertex declaration does not include all the elements required by the
+            // current vertex shader."
+            device.SetVertexBuffer(nullptr);
+            continue;
+        }
         catch (const std::exception& exception)
         {
             device.SetVertexBuffer(nullptr);

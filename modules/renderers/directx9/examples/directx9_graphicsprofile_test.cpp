@@ -46,6 +46,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdio>
@@ -117,19 +118,29 @@ protected:
                   "returns false");
         }
 
-        // Check E: the SAME SurfaceFormat.Single request, under HiDef, must be ALLOWED --
-        // D9-104's own required HiDef counterpart to Check D.
+        // Check E: the SAME SurfaceFormat.Single request under HiDef passes the profile table
+        // (the half of the decision Check D exercised) and is then refused for the renderer's own
+        // reason: D3D9RenderTargets stores every render target as A8B8G8R8, so the adapter answers
+        // what RenderTarget2D will apply -- Color.
         {
+            check(CNA::Internal::Renderers::DirectX9::IsValidTextureFormatForProfileEXT(
+                      static_cast<int>(GraphicsProfile::HiDef),
+                      static_cast<int>(SurfaceFormat::Single)) &&
+                  !CNA::Internal::Renderers::DirectX9::IsValidTextureFormatForProfileEXT(
+                      static_cast<int>(GraphicsProfile::Reach),
+                      static_cast<int>(SurfaceFormat::Single)),
+                  "IsValidTextureFormatForProfileEXT: Single is HiDef-only -- the profile table, "
+                  "not hardware support, is what refused Check D");
             SurfaceFormat selectedFormat;
             DepthFormat selectedDepth;
             int selectedMs;
             const bool accepted = adapter.QueryRenderTargetFormat(
                 GraphicsProfile::HiDef, SurfaceFormat::Single, DepthFormat::None, 0,
                 selectedFormat, selectedDepth, selectedMs);
-            check(accepted && selectedFormat == SurfaceFormat::Single,
+            check(!accepted && selectedFormat == SurfaceFormat::Color,
                   "GraphicsAdapter::QueryRenderTargetFormat(HiDef, SurfaceFormat.Single, ...): "
-                  "ALLOWED -- the SAME request Check D refused, now accepted under HiDef, proving "
-                  "the profile (not just hardware support) genuinely gates the decision");
+                  "falls back to Color -- this renderer builds Color render targets only, and the "
+                  "adapter agrees with what RenderTarget2D(dev, ..., Single) selects");
         }
 
         // Check F/G: Texture2D size enforcement under Reach (D9-103). The exact-ceiling case

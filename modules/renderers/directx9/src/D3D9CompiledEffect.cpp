@@ -61,8 +61,11 @@ namespace CNA::Internal::Renderers::DirectX9
             const MOJOSHADER_parseData* parsed = nullptr;
             try
             {
+                // Reflection only: the device receives the original Direct3D 9 tokens below, so
+                // the profile that copies them through is the one that accepts every shader model
+                // they can carry (the HLSL re-emitter has no TEXCRD and other ps_1_x instructions).
                 parsed = MOJOSHADER_parse(
-                    MOJOSHADER_PROFILE_HLSL, mainFunction, tokens, tokenBytes, swizzles,
+                    MOJOSHADER_PROFILE_BYTECODE, mainFunction, tokens, tokenBytes, swizzles,
                     swizzleCount, samplerMap, samplerMapCount, nullptr, nullptr, nullptr);
                 if (parsed == nullptr)
                 {
@@ -660,15 +663,21 @@ namespace CNA::Internal::Renderers::DirectX9
             passActive_ = false;
         }
 
+        // Only the slots the device exposes can be read back: a Reach device has no vertex
+        // samplers at all, and indexing past ActiveSamplerCount() is XNA's ArgumentOutOfRange.
         if (deviceState.samplerStates != nullptr)
         {
-            for (std::size_t slot = 0; slot < kPixelSamplerSlots; ++slot)
+            const std::size_t active = static_cast<std::size_t>(
+                std::max(0, deviceState.samplerStates->ActiveSamplerCount()));
+            for (std::size_t slot = 0; slot < std::min(kPixelSamplerSlots, active); ++slot)
                 if (!samplerAssigned_[slot])
                     boundSamplers_[slot] = (*deviceState.samplerStates)[static_cast<int>(slot)];
         }
         if (deviceState.vertexSamplerStates != nullptr)
         {
-            for (std::size_t slot = 0; slot < kVertexSamplerSlots; ++slot)
+            const std::size_t active = static_cast<std::size_t>(
+                std::max(0, deviceState.vertexSamplerStates->ActiveSamplerCount()));
+            for (std::size_t slot = 0; slot < std::min(kVertexSamplerSlots, active); ++slot)
                 if (!vertexSamplerAssigned_[slot])
                     boundVertexSamplers_[slot] =
                         (*deviceState.vertexSamplerStates)[static_cast<int>(slot)];

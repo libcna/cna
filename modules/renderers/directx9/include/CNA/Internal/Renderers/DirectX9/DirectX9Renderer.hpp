@@ -678,6 +678,12 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-128: format of the currently bound depth-stencil surface. Offscreen targets can
         /// differ from the presentation format, and native clear flags must follow this value.
         int activeDepthStencilFormatOrdinal_ = 0;
+        /// The depth/stencil tests XNA asked for. They reach D3DRS_ZENABLE/D3DRS_STENCILENABLE only
+        /// while the bound target has a depth-stencil surface (DepthFormat::None disables both).
+        bool requestedDepthEnable_ = true;
+        bool requestedDepthWriteEnable_ = true;
+        bool requestedStencilEnable_ = false;
+        void PushDepthStencilEnablesEXT(const char* context);
         bool isFullScreen_ = false;
         int swapInterval_ = 1;
         /// D9-32: the game's requested Microsoft::Xna::Framework::Graphics::GraphicsProfile

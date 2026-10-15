@@ -48,6 +48,14 @@ namespace CNA::Internal::Renderers::DirectX9
             return buf;
         }
 
+        /// D3DCOLOR_COLORVALUE truncates to 8 bits, so a component above 1 wraps (4.0 -> 252)
+        /// instead of saturating as XNA's Clear(Vector4) does on an 8-bit target.
+        D3DCOLOR SaturatedColorValue(float r, float g, float b, float a)
+        {
+            const auto unit = [](float v) { return std::clamp(v, 0.0f, 1.0f); };
+            return D3DCOLOR_COLORVALUE(unit(r), unit(g), unit(b), unit(a));
+        }
+
         const char* HResultName(HRESULT hr)
         {
             switch (hr)
@@ -790,7 +798,7 @@ namespace CNA::Internal::Renderers::DirectX9
     void DirectX9Renderer::Clear(float r, float g, float b, float a)
     {
         EnsureRenderReadyEXT();
-        HRESULT hr = ClearWholeTargetEXT(D3DCLEAR_TARGET, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f, 0);
+        HRESULT hr = ClearWholeTargetEXT(D3DCLEAR_TARGET, SaturatedColorValue(r, g, b, a), 1.0f, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 Clear failed, hr=" + FormatHr(hr));
     }
@@ -822,7 +830,7 @@ namespace CNA::Internal::Renderers::DirectX9
         EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
-        HRESULT hr = ClearWholeTargetEXT(flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth, 0);
+        HRESULT hr = ClearWholeTargetEXT(flags, SaturatedColorValue(r, g, b, a), depth, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearColorAndDepth failed, hr=" + FormatHr(hr));
     }
@@ -861,7 +869,7 @@ namespace CNA::Internal::Renderers::DirectX9
         EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
-        HRESULT hr = ClearWholeTargetEXT(flags, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f,
+        HRESULT hr = ClearWholeTargetEXT(flags, SaturatedColorValue(r, g, b, a), 1.0f,
                                      static_cast<DWORD>(stencil));
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearColorAndStencil failed, hr=" + FormatHr(hr));
@@ -874,7 +882,7 @@ namespace CNA::Internal::Renderers::DirectX9
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
         if (HasStencilBuffer(activeDepthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
-        HRESULT hr = ClearWholeTargetEXT(flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth,
+        HRESULT hr = ClearWholeTargetEXT(flags, SaturatedColorValue(r, g, b, a), depth,
                                      static_cast<DWORD>(stencil));
         if (FAILED(hr))
             throw std::runtime_error("D3D9 ClearColorDepthAndStencil failed, hr=" + FormatHr(hr));
@@ -971,8 +979,27 @@ namespace CNA::Internal::Renderers::DirectX9
     // is a direct, single SetRenderState call -- no field-tracking struct needed.
     void DirectX9Renderer::SetDepthTestEnabled(bool enabled)
     {
-        SetRenderStateCheckedEXT(D3DRS_ZENABLE, enabled ? D3DZB_TRUE : D3DZB_FALSE,
-                                 kUnsafeDepthState, "SetDepthTestEnabled(D3DRS_ZENABLE)");
+        requestedDepthEnable_ = enabled;
+        PushDepthStencilEnablesEXT("SetDepthTestEnabled");
+    }
+
+    // A target without a depth-stencil surface has no depth or stencil test to run: XNA draws into
+    // a DepthFormat::None target as if both were off, and Direct3D 9 leaves a draw with
+    // D3DRS_ZENABLE and no surface undefined. The requested values come back with the next target
+    // that has a surface.
+    void DirectX9Renderer::PushDepthStencilEnablesEXT(const char* context)
+    {
+        const bool hasDepth = HasDepthBuffer(activeDepthStencilFormatOrdinal_);
+        const bool hasStencil = HasStencilBuffer(activeDepthStencilFormatOrdinal_);
+        SetRenderStateCheckedEXT(D3DRS_ZENABLE,
+                                 requestedDepthEnable_ && hasDepth ? D3DZB_TRUE : D3DZB_FALSE,
+                                 kUnsafeDepthState, context);
+        SetRenderStateCheckedEXT(D3DRS_ZWRITEENABLE,
+                                 requestedDepthWriteEnable_ && hasDepth ? TRUE : FALSE,
+                                 kUnsafeDepthState, context);
+        SetRenderStateCheckedEXT(D3DRS_STENCILENABLE,
+                                 requestedStencilEnable_ && hasStencil ? TRUE : FALSE,
+                                 kUnsafeDepthState, context);
     }
 
     // Deliberate no-op: a bare "enable blending" has no defined blend factors in XNA -- real blend
@@ -982,8 +1009,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::SetDepthWriteEnabled(bool enabled)
     {
-        SetRenderStateCheckedEXT(D3DRS_ZWRITEENABLE, enabled ? TRUE : FALSE,
-                                 kUnsafeDepthState, "SetDepthWriteEnabled(D3DRS_ZWRITEENABLE)");
+        requestedDepthWriteEnable_ = enabled;
+        PushDepthStencilEnablesEXT("SetDepthWriteEnabled");
     }
 
     std::unique_ptr<IVertexBufferRenderer> DirectX9Renderer::CreateVertexBuffer(int vertex_capacity)
@@ -1360,7 +1387,11 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         MarkStateKnownEXT(kUnsafeTargetBinding);
+        const bool depthChanged =
+            HasDepthBuffer(activeDepthStencilFormatOrdinal_) != HasDepthBuffer(depthStencilFormat) ||
+            HasStencilBuffer(activeDepthStencilFormatOrdinal_) != HasStencilBuffer(depthStencilFormat);
         activeDepthStencilFormatOrdinal_ = depthStencilFormat;
+        if (depthChanged) PushDepthStencilEnablesEXT(context);
     }
 
     void DirectX9Renderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
@@ -1558,7 +1589,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::SetBlendFactor(float r, float g, float b, float a)
     {
-        SetRenderStateCheckedEXT(D3DRS_BLENDFACTOR, D3DCOLOR_COLORVALUE(r, g, b, a),
+        SetRenderStateCheckedEXT(D3DRS_BLENDFACTOR, SaturatedColorValue(r, g, b, a),
                                  kUnsafeBlendState, "SetBlendFactor(D3DRS_BLENDFACTOR)");
     }
 
@@ -1571,14 +1602,12 @@ namespace CNA::Internal::Renderers::DirectX9
                                                       int ccwStencilFunc, int ccwStencilPass,
                                                       int ccwStencilFail, int ccwStencilDepthFail)
     {
-        SetRenderStateCheckedEXT(D3DRS_ZENABLE, depthEnable ? D3DZB_TRUE : D3DZB_FALSE,
-                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_ZENABLE)");
-        SetRenderStateCheckedEXT(D3DRS_ZWRITEENABLE, depthWriteEnable ? TRUE : FALSE,
-                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_ZWRITEENABLE)");
+        requestedDepthEnable_ = depthEnable;
+        requestedDepthWriteEnable_ = depthWriteEnable;
+        requestedStencilEnable_ = stencilEnable;
+        PushDepthStencilEnablesEXT("ApplyDepthStencilState");
         SetRenderStateCheckedEXT(D3DRS_ZFUNC, CompareFunctionToD3D9(depthFunc), kUnsafeDepthState,
                                  "ApplyDepthStencilState(D3DRS_ZFUNC)");
-        SetRenderStateCheckedEXT(D3DRS_STENCILENABLE, stencilEnable ? TRUE : FALSE,
-                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_STENCILENABLE)");
         SetRenderStateCheckedEXT(D3DRS_STENCILFUNC, CompareFunctionToD3D9(stencilFunc), kUnsafeDepthState,
                                  "ApplyDepthStencilState(D3DRS_STENCILFUNC)");
         SetRenderStateCheckedEXT(D3DRS_STENCILPASS, StencilOperationToD3D9(stencilPass), kUnsafeDepthState,
@@ -1712,7 +1741,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::SetContextRecoveryEnabled(bool)
     {
-        NotYetImplemented("DIRECTX9", "SetContextRecoveryEnabled");
+        // Nothing to switch off: D3D9 textures live in D3DPOOL_MANAGED, which the runtime itself
+        // restores after a Reset, so this renderer keeps no recovery registry or CPU shadow of its
+        // own. The framework-level shadow (Texture2D) is GraphicsDevice's to free.
     }
 
     void DirectX9Renderer::SetStringMarkerEXT(const char* marker)

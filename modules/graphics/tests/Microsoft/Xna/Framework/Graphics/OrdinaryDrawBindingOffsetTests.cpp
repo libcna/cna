@@ -866,6 +866,10 @@ TEST_F(OrdinaryDrawBindingOffsetTest, MultipleStreamsUseOnlyTheGeometryStreamsOw
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
+    // Two per-vertex streams need MultiStreamVertexInput; a renderer without it refuses the draw
+    // with System::NotSupportedException (OrdinaryDrawMultiStreamTests pins that refusal).
+    if (!device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
+        GTEST_SKIP() << "Renderer reports GraphicsCapability::MultiStreamVertexInput = false";
 
     const GridLayout layout = TargetLayout();
     const std::vector<VertexPositionColor> mesh = BuildPrefixedMesh(layout, kLiveBand);

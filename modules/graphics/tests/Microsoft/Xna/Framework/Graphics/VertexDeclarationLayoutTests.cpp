@@ -161,9 +161,10 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
     // plans/plan_apple_m4.md AM4-092: SDL_GPU builds its vertex input from the declaration since
-    // SDLGPU-59; the arm predates it.
+    // SDLGPU-59; the arm predates it. D3D9 builds its IDirect3DVertexDeclaration9 from the
+    // declaration and its stock effects accept any layout that supplies the elements they read.
     return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Software,
-                           SdlGpu);
+                           SdlGpu, DirectX9);
 }
 
 

@@ -48,6 +48,11 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             if (!IsValidTextureFormatForProfileEXT(graphicsProfile, surfaceFormat))
                 return false;
+            // D3D9RenderTargets stores every render target as A8B8G8R8 (the renderer's
+            // ClassifyRenderTargetFormatEXT defers, which admits Color alone), so the adapter must
+            // not promise a format RenderTarget2D would then substitute.
+            if (surfaceFormat != 0 /* SurfaceFormat::Color */)
+                return false;
             const D3DFORMAT requested = SurfaceFormatToD3D9(surfaceFormat);
             return requested != D3DFMT_UNKNOWN
                 && IsRenderTargetFormatSupportedByHardwareEXT(requested);

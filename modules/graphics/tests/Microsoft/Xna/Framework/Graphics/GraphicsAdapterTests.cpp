@@ -522,8 +522,13 @@ TEST_F(GraphicsAdapterTest, QueryBackBufferFormatSubstitutesNonColorFormat)
         GraphicsProfile::HiDef, SurfaceFormat::Bgr565, DepthFormat::None, 0,
         selectedFormat, selectedDepthFormat, selectedMultiSampleCount);
 
-    EXPECT_FALSE(accepted);
-    EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
+    // XNA keeps a 16-bit back buffer where the display adapter presents one (Direct3D 9's
+    // CheckDeviceType, which DIRECTX9 asks); everywhere else the query substitutes Color. Either
+    // way the selected format must match the verdict.
+    if (accepted)
+        EXPECT_EQ(selectedFormat, SurfaceFormat::Bgr565);
+    else
+        EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
 }
 
 // --- Display-less fallback (Task 346 / PLAT-63) ---

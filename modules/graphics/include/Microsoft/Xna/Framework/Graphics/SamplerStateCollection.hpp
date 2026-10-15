@@ -42,10 +42,16 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void operator()(int index, const SamplerState& value);
 
+        /**
+         * @brief The number of slots this collection exposes on its device: every pixel slot, and
+         *        for the vertex stage 4 on HiDef and none on Reach.
+         *
+         * @return The count of indexable slots; operator[] throws at or beyond it.
+         */
+        CNAEXT [[nodiscard]] int ActiveSamplerCount() const;
+
     private:
         SamplerStateCollection(GraphicsDevice* graphicsDevice, bool vertexStage);
-
-        [[nodiscard]] int ActiveSamplerCount() const;
 
         std::vector<SamplerState> samplers_;
         GraphicsDevice* graphicsDevice_ = nullptr;

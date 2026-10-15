@@ -330,6 +330,21 @@ function(cna_configure_mojoshader)
     # MOJOSHADER_USE_SDL_STDLIB   -- matches the switch FNA3D's own build compiles MojoShader with,
     #                                so the header CNA sees is the header the archive was built from
     #                                (absent, like the archive's, in a CNA_ENABLE_SDL=OFF build).
+    if(TARGET mojoshader)
+        # FNA3D compiles MojoShader's "bytecode" profile out. The DIRECTX9 renderer feeds an
+        # effect's Direct3D 9 shader tokens to the device unchanged and asks MojoShader only for
+        # their reflection, which that profile provides for every shader model the tokens can hold
+        # (the HLSL profile stops at ps_1_x instructions it never learnt to re-emit, TEXCRD among
+        # them).
+        get_property(_cna_fna3d_definitions DIRECTORY "${fna3d_SOURCE_DIR}"
+                     PROPERTY COMPILE_DEFINITIONS)
+        list(REMOVE_ITEM _cna_fna3d_definitions SUPPORT_PROFILE_BYTECODE=0)
+        set_property(DIRECTORY "${fna3d_SOURCE_DIR}"
+                     PROPERTY COMPILE_DEFINITIONS "${_cna_fna3d_definitions}")
+        target_sources(mojoshader PRIVATE
+            "${fna3d_SOURCE_DIR}/MojoShader/profiles/mojoshader_profile_bytecode.c")
+    endif()
+
     add_library(cna_mojoshader INTERFACE)
     if(TARGET mojoshader)
         target_link_libraries(cna_mojoshader INTERFACE mojoshader)

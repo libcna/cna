@@ -339,8 +339,12 @@ TEST(RenderTargetFormatAgreement, ASixteenBitFloatTargetsContentIsSamplableBack)
     // Color defer to the shared rule (a Color target): promoting the float ones is measured but not
     // done -- its SDL_GPU driver has no channel swizzle, Metal refuses Bgra4444 as an attachment,
     // and float cubes and partial transfers have their own gaps.
-    if (measured == 0 && CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Fna3d))
-        GTEST_SKIP() << "FNA3D promotes no 16-bit float render target (declared boundary)";
+    // DIRECTX9 stores every render target as A8B8G8R8 (D3D9RenderTargets) and says so through
+    // SupportsSurfaceFormatAsRenderTargetEXT; its float targets are the same declared boundary.
+    if (measured == 0 && CNA::Testing::ActiveRendererIsAnyOf({CNA::GraphicsRendererType::Fna3d,
+                                                              CNA::GraphicsRendererType::DirectX9}))
+        GTEST_SKIP() << RendererName()
+                     << " promotes no 16-bit float render target (declared boundary)";
     EXPECT_GT(measured, 0)
         << RendererName() << " reports no 16-bit float render target at all, so this measures "
            "nothing -- if that is genuinely true here the test needs its own declared boundary";
@@ -474,7 +478,8 @@ TEST(RenderTargetFormatAgreement, EveryRenderableClassicNumericFormatReadsBackEx
     }
 
     // AM4-189: FNA3D's declared boundary, as in ASixteenBitFloatTargetsContentIsSamplableBack.
-    if (measured == 0 && CNA::Testing::ActiveRendererIsAnyOf({CNA::GraphicsRendererType::Fna3d}))
+    if (measured == 0 && CNA::Testing::ActiveRendererIsAnyOf({CNA::GraphicsRendererType::Fna3d,
+                                                              CNA::GraphicsRendererType::DirectX9}))
         GTEST_SKIP() << "this renderer has no classic numeric render target (declared boundary)";
     EXPECT_GT(measured, 0) << RendererName() << " exposes no classic numeric render target";
 }

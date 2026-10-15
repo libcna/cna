@@ -321,13 +321,24 @@ namespace
     /// way to observe them.
     void SampleTargetToBackbuffer(GraphicsDevice& device, RenderTarget2D& target)
     {
+        // Direct3D 9 puts pixel centres on integer coordinates, so a quad spanning the clip volume
+        // exactly samples every texel on its boundary and point sampling drops some texels. XNA
+        // games on Direct3D 9 offset such quads by half a pixel; this does the same there.
+        float dx = 0.0f;
+        float dy = 0.0f;
+        if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::DirectX9))
+        {
+            const auto& viewport = device.getViewportProperty();
+            dx = -1.0f / static_cast<float>(viewport.getWidthProperty());
+            dy = 1.0f / static_cast<float>(viewport.getHeightProperty());
+        }
         const std::array<VertexPositionTexture, 6> quad{
-            VertexPositionTexture(Vector3(-1.0f, 1.0f, 0.0f), Vector2(0.0f, 0.0f)),
-            VertexPositionTexture(Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f)),
-            VertexPositionTexture(Vector3(1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f)),
-            VertexPositionTexture(Vector3(-1.0f, 1.0f, 0.0f), Vector2(0.0f, 0.0f)),
-            VertexPositionTexture(Vector3(1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f)),
-            VertexPositionTexture(Vector3(1.0f, 1.0f, 0.0f), Vector2(1.0f, 0.0f)),
+            VertexPositionTexture(Vector3(-1.0f + dx, 1.0f + dy, 0.0f), Vector2(0.0f, 0.0f)),
+            VertexPositionTexture(Vector3(-1.0f + dx, -1.0f + dy, 0.0f), Vector2(0.0f, 1.0f)),
+            VertexPositionTexture(Vector3(1.0f + dx, -1.0f + dy, 0.0f), Vector2(1.0f, 1.0f)),
+            VertexPositionTexture(Vector3(-1.0f + dx, 1.0f + dy, 0.0f), Vector2(0.0f, 0.0f)),
+            VertexPositionTexture(Vector3(1.0f + dx, -1.0f + dy, 0.0f), Vector2(1.0f, 1.0f)),
+            VertexPositionTexture(Vector3(1.0f + dx, 1.0f + dy, 0.0f), Vector2(1.0f, 0.0f)),
         };
         device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
         BasicEffect sampleEffect(device);

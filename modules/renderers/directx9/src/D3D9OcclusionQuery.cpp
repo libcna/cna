@@ -35,13 +35,16 @@ namespace CNA::Internal::Renderers::DirectX9
 
     bool D3D9OcclusionQueryRenderer::IsComplete() const
     {
-        return query_->GetData(nullptr, 0, 0) == S_OK;
+        // D3DGETDATA_FLUSH: without it the command buffer holding the query's draws is only
+        // submitted at Present(), so a game polling IsComplete between its draws never sees the
+        // result. XNA's OcclusionQuery.IsComplete passes the same flag.
+        return query_->GetData(nullptr, 0, D3DGETDATA_FLUSH) == S_OK;
     }
 
     int D3D9OcclusionQueryRenderer::PixelCount() const
     {
         DWORD count = 0;
-        const HRESULT hr = query_->GetData(&count, sizeof(count), 0);
+        const HRESULT hr = query_->GetData(&count, sizeof(count), D3DGETDATA_FLUSH);
         if (hr != S_OK) return 0;
         return static_cast<int>(count);
     }

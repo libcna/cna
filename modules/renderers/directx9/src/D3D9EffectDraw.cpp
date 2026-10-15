@@ -32,6 +32,7 @@
 #include "CNA/Internal/Renderers/DirectX9/shaders/D3D9ShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -690,7 +691,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (params.textureEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord";
         if (!missing.empty())
         {
-            throw std::runtime_error(
+            throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (BasicEffect): stride " + std::to_string(stride) +
                 " with lighting=" + (params.lightingEnabled ? "true" : "false") +
                 " vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
@@ -864,7 +865,7 @@ namespace CNA::Internal::Renderers::DirectX9
         IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0) || !DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0) ||
             (params.vertexColorEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_COLOR, 0)))
-            throw std::runtime_error(
+            throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (AlphaTestEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
                 " has no matching CNA vertex layout: AlphaTestEffect reads Position and TexCoord" +
