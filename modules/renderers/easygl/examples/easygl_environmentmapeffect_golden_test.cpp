@@ -7,13 +7,18 @@
 // Recreates Task 399's exact combined scene: a 1x1 (200,100,50) texture, a solid translucent
 // cube map (alpha=128), EmissiveColor=(0.5,0.5,0.5), EnvironmentMapAmount=1,
 // EnvironmentMapSpecular=(0.4,0.4,0.4), FresnelFactor=1 (real FNA default), a non-identity
-// World=CreateScale(2,1,1), and a real (non-identity) View/Projection camera. Expected
-// (Task 399's own derivation): baseColor=EmissiveColor*Texture=(100,50,25); Fresnel-suppressed
-// blend is negligible at this near-head-on view; rgb ~= baseColor + EnvironmentMapSpecular *
-// envmap.a * combinedAlpha ~= (100,50,25) + (51,51,51) = (151,101,76). See Task 399's own file
-// for the full per-term derivation.
+// World=CreateScale(2,1,1), and a real (non-identity) View/Projection camera.
 //
-// Reuses Task 399's own tolerance=20.
+// Expected, from EnvironmentMapEffect.fx's per-vertex math. DirectionalLight0 (the effect's
+// default) points down and does not reach a +Z normal, so the vertex diffuse is EmissiveColor and
+// the base colour is EmissiveColor*Texture = (0.392,0.196,0.098). The Fresnel term is computed at
+// the VERTICES: every corner of the scaled quad, (+-2,+-1,0), sees the eye at (0,0,3) at the same
+// angle, |cos| = 3/sqrt(14), so the interpolated factor is 1-3/sqrt(14) = 0.198 across the whole
+// face -- not negligible, as the scene's first derivation assumed from the head-on centre. Then
+// rgb = lerp(base, envmap.rgb = 0, 0.198) + EnvironmentMapSpecular * envmap.a
+//     = base * 0.802 + 0.4 * 128/255 = (131,91,71).
+// The old expectation, (151,101,76) at tolerance 20, sat exactly at its tolerance, which is how a
+// stale golden stayed green; both comparisons are held to 2 now.
 
 #include "common/PixelTestGame.hpp"
 
@@ -98,14 +103,14 @@ protected:
         fx.Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
 
-        // Cross-check against Task 399's own derived expected value, independent of the golden
-        // PNG's own contents (same rationale as Tasks 464-468).
-        ExpectPixel("combined-scene-vs-task399-expected", Rectangle(kSize / 2, kSize / 2, 1, 1),
-                    Color(151, 101, 76, 255), /*tolerance=*/20);
+        // Cross-check against the value derived above, independent of the golden PNG's own
+        // contents (same rationale as Tasks 464-468).
+        ExpectPixel("combined-scene-vs-derived-expected", Rectangle(kSize / 2, kSize / 2, 1, 1),
+                    Color(131, 91, 71, 255), /*tolerance=*/2);
         CompareGoldenImage("environmentmapeffect-combined-scene",
                             Rectangle(kSize / 2 - 4, kSize / 2 - 4, 8, 8),
                             "examples/golden/easygl_environmentmapeffect_golden_test.png",
-                            /*tolerance=*/20);
+                            /*tolerance=*/2);
     }
 
 public:

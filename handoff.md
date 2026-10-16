@@ -189,13 +189,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     so the back of a leaf is shaded with the normal of the side facing away. Each needs the flag,
     the mirror sign and its own front-facing input checked against its winding convention; the
     oracle is `easygl_pbr_double_sided_test`. (`GSC-0010`, living-room-simulator R-3.)
-11. **Test defect: the EasyGL `EnvironmentMapEffect` golden is stale and its tolerance hides it.**
-    `examples/golden/easygl_environmentmapeffect_golden_test.png` predates `FX-123`/`FX-124`, which
-    moved EasyGL's environment-map program to D3D9's vertex-colour clamp and precision.
-    `EasyGL_EnvironmentMapEffect_Golden` (tolerance 20) measured a maximum difference of 20 on
-    2026-09-07, one step from failing; the other golden scenes measure 0-1. Confirm today's render
-    is the corrected picture, re-capture with `CNA_UPDATE_GOLDEN=1` and lower the tolerance in the
-    same commit. (`VULKAN-186`, finding F-33.)
 13. **Compiled XNA effects on the MojoShader SPIR-V route (`SDL_GPU`, `WEBGPU`) get two Shader
     Model 1-3 cases wrong** (found 2026-10-08 by `AM4-144` on the retired `METAL` route, fixed only
     in that renderer's adapter, not re-measured since): `vPos` is not the integer pixel Direct3D 9

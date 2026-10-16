@@ -23,15 +23,15 @@
 //     job is to confirm the rest of the pipeline still works correctly with a real non-identity
 //     World in play, not to re-litigate the normal-matrix fix itself.
 //
-// Expected value derivation:
-//   baseColor = EmissiveColor * Texture = (0.5,0.5,0.5) * (200,100,50) = (100,50,25)
+// Expected value derivation (EnvironmentMapEffect.fx, which computes the Fresnel term per VERTEX):
+//   baseColor = EmissiveColor * Texture = (0.5,0.5,0.5) * (200,100,50) = (100,50,25); the default
+//     DirectionalLight0 points down and does not reach the +Z normal
 //   combinedAlpha = texColor.a * DiffuseColor.a = 1 * 1 = 1
-//   blendFactor ~= 0 (Fresnel-suppressed at near-head-on view; negligible perturbation, see
-//     above -- computed to be ~0.00004 accounting for the actual pixel-center sample offset,
-//     which shifts the (151,101,76) result by less than 0.01 in any channel)
-//   rgb = mix(baseColor, envColor, blendFactor~=0) + EnvironmentMapSpecular * envmap.a * combinedAlpha
-//       ~= baseColor + (0.4,0.4,0.4) * (128/255) * 1
-//       ~= (100,50,25) + (51,51,51) = (151,101,76)
+//   blendFactor = 1 - 3/sqrt(14) = 0.198 -- every corner of the scaled quad, (+-2,+-1,0), sees the
+//     eye at (0,0,3) at the same angle, so the interpolated factor is that everywhere. (An earlier
+//     derivation took the per-pixel angle at the head-on centre, ~0, which XNA never computes.)
+//   rgb = mix(baseColor, envColor = 0, 0.198) + EnvironmentMapSpecular * envmap.a * combinedAlpha
+//       = (100,50,25) * 0.802 + (0.4,0.4,0.4) * (128/255) = (131,91,71)
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -159,9 +159,9 @@ protected:
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
         Color got = readCenter(dev);
 
-        check(colourMatch(got, Color(151, 101, 76, 255)),
+        check(colourMatch(got, Color(131, 91, 71, 255), /*tol=*/2),
               "combined scene (lerp+specular+Fresnel+EyePosition+non-identity World)",
-              got, Color(151, 101, 76, 255));
+              got, Color(131, 91, 71, 255));
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();
