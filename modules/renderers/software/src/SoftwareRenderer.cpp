@@ -1967,7 +1967,8 @@ namespace CNA::Internal::Renderers::Software
         void SampleCubeMap(const SoftwareCubeSurface& cube, const SoftwareSamplerState& sampler,
                           bool magnify, float lambda, const Vector3& dir,
                           float& r, float& g, float& b, float& a,
-                          const TextureFootprint* footprint = nullptr)
+                          const TextureFootprint* footprint = nullptr,
+                          bool traceSample = true)
         {
             int face = 0;
             float s = 0.5f, t = 0.5f;
@@ -1979,7 +1980,7 @@ namespace CNA::Internal::Renderers::Software
             const long long fetchesBefore = g_samplerTrace.texelFetches;
             SampleTexture(surface, cubeSampler, magnify, lambda, s, t, r, g, b, a, footprint);
 
-            if (g_cubeTrace.enabled)
+            if (traceSample && g_cubeTrace.enabled)
             {
                 // Re-derive the level selection for the trace from the SAME helpers the sample just
                 // used, so the reported stages cannot describe a different decision than the one
@@ -4928,6 +4929,9 @@ namespace CNA::Internal::Renderers::Software
             const SoftwareColorSurface* shadowMap;
             const SoftwareCubeSurface* punctualShadowCube;
             const SoftwareColorSurface* punctualShadowMap;
+            const SoftwareCubeSurface* iblIrradiance;
+            const SoftwareCubeSurface* iblPrefilteredSpecular;
+            const SoftwareColorSurface* iblBrdfLut;
             /// Normal, metallic-roughness, emissive, occlusion, specular-strength and
             /// specular-colour maps. PBR uses the ordinary slot-0 sampler state on this CPU path.
             std::array<const SoftwareColorSurface*, 6> pbrTextures;
@@ -4947,6 +4951,9 @@ namespace CNA::Internal::Renderers::Software
             // classification for each (only XNA filters 5..8 read it).
             SoftwareSamplerState sampler0;
             SoftwareSamplerState sampler1;
+            SoftwareSamplerState iblIrradianceSampler;
+            SoftwareSamplerState iblSpecularSampler;
+            SoftwareSamplerState iblBrdfSampler;
             bool magnify0;
             bool magnify1;
             // This triangle's level-of-detail for each bound texture, log2 of the
@@ -5047,6 +5054,71 @@ namespace CNA::Internal::Renderers::Software
                     (1.0f - fresnel) * albedo[channel] * (1.0f - metallic) / kPi;
                 sum[channel] +=
                     (diffuse + specular) * lightColor[channel] * nDotL * visibility;
+            }
+        }
+
+        void ComputePbrIblAmbient(const ShadedContext& ctx,
+                                  const Vector3& normal, const Vector3& view,
+                                  const float (&albedo)[3], const float (&f0)[3],
+                                  float roughness, float metallic, float occlusion,
+                                  float (&ambient)[3])
+        {
+            if (!ctx.params.iblEnabled || ctx.iblIrradiance == nullptr ||
+                ctx.iblPrefilteredSpecular == nullptr || ctx.iblBrdfLut == nullptr)
+            {
+                for (int channel = 0; channel < 3; ++channel)
+                    ambient[channel] =
+                        ctx.params.ambientColor[channel] * albedo[channel] * occlusion;
+                return;
+            }
+
+            const float rawNormalDotView =
+                normal.X * view.X + normal.Y * view.Y + normal.Z * view.Z;
+            const float nDotV = std::clamp(rawNormalDotView, 1e-4f, 1.0f);
+            const float fresnelWeight = std::pow(1.0f - nDotV, 5.0f);
+            float kS[3];
+            float kD[3];
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                const float grazing = std::max(1.0f - roughness, f0[channel]);
+                kS[channel] = f0[channel] + (grazing - f0[channel]) * fresnelWeight;
+                kD[channel] = (1.0f - kS[channel]) * (1.0f - metallic);
+            }
+
+            float irradianceR = 0.0f, irradianceG = 0.0f;
+            float irradianceB = 0.0f, irradianceA = 1.0f;
+            SampleCubeMap(*ctx.iblIrradiance, ctx.iblIrradianceSampler,
+                          true, 0.0f, normal,
+                          irradianceR, irradianceG, irradianceB, irradianceA,
+                          nullptr, false);
+
+            const Vector3 reflection(
+                2.0f * rawNormalDotView * normal.X - view.X,
+                2.0f * rawNormalDotView * normal.Y - view.Y,
+                2.0f * rawNormalDotView * normal.Z - view.Z);
+            const float lod = roughness * static_cast<float>(
+                std::max(ctx.params.iblPrefilteredMipCount - 1, 0));
+            float specularR = 0.0f, specularG = 0.0f;
+            float specularB = 0.0f, specularA = 1.0f;
+            SampleCubeMap(*ctx.iblPrefilteredSpecular, ctx.iblSpecularSampler,
+                          !(lod > 0.0f), lod, reflection,
+                          specularR, specularG, specularB, specularA,
+                          nullptr, false);
+
+            float brdfScale = 0.0f, brdfBias = 0.0f;
+            float brdfBlue = 0.0f, brdfAlpha = 1.0f;
+            SampleTexture(*ctx.iblBrdfLut, ctx.iblBrdfSampler,
+                          true, 0.0f, nDotV, roughness,
+                          brdfScale, brdfBias, brdfBlue, brdfAlpha);
+            const float irradiance[3] = {irradianceR, irradianceG, irradianceB};
+            const float prefiltered[3] = {specularR, specularG, specularB};
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                const float diffuse = irradiance[channel] * albedo[channel] * kD[channel];
+                const float specular = prefiltered[channel] *
+                    (kS[channel] * brdfScale + brdfBias);
+                ambient[channel] = (diffuse + specular) *
+                    ctx.params.iblIntensity * occlusion;
             }
         }
 
@@ -5269,11 +5341,14 @@ namespace CNA::Internal::Renderers::Software
                     emissiveG = SrgbToLinear(emissiveG);
                     emissiveB = SrgbToLinear(emissiveB);
                 }
-                r = ctx.params.ambientColor[0] * albedo[0] * occlusion + direct[0] +
+                float ambient[3] = {0.0f, 0.0f, 0.0f};
+                ComputePbrIblAmbient(ctx, normal, view, albedo, f0,
+                                     roughness, metallic, occlusion, ambient);
+                r = ambient[0] + direct[0] +
                     punctual[0] * albedo[0] + ctx.params.emissiveColor[0] * emissiveR;
-                g = ctx.params.ambientColor[1] * albedo[1] * occlusion + direct[1] +
+                g = ambient[1] + direct[1] +
                     punctual[1] * albedo[1] + ctx.params.emissiveColor[1] * emissiveG;
-                b = ctx.params.ambientColor[2] * albedo[2] * occlusion + direct[2] +
+                b = ambient[2] + direct[2] +
                     punctual[2] * albedo[2] + ctx.params.emissiveColor[2] * emissiveB;
             }
             else if (UsesClassicEffectLighting(ctx.params))
@@ -5474,6 +5549,9 @@ namespace CNA::Internal::Renderers::Software
             const std::array<float, 4>& blendFactor, int colorWriteMask,
             unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
             const SoftwareSamplerState& sampler1,
+            const SoftwareSamplerState& iblIrradianceSampler,
+            const SoftwareSamplerState& iblSpecularSampler,
+            const SoftwareSamplerState& iblBrdfSampler,
             SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
@@ -5484,6 +5562,12 @@ namespace CNA::Internal::Renderers::Software
                 dynamic_cast<const SoftwareCubeSurface*>(params.punctualShadowCube);
             const auto* punctualShadowMap =
                 dynamic_cast<const SoftwareColorSurface*>(params.punctualShadowMap);
+            const auto* iblIrradiance =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblIrradiance);
+            const auto* iblPrefilteredSpecular =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblPrefilteredSpecular);
+            const auto* iblBrdfLut =
+                dynamic_cast<const SoftwareColorSurface*>(params.iblBrdfLut);
             const std::array<const SoftwareColorSurface*, 6> pbrTextures = {
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrNormalMap),
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrMetallicRoughnessMap),
@@ -5495,10 +5579,12 @@ namespace CNA::Internal::Renderers::Software
             const bool useEnvMap = params.envMapping;
             const bool needUV = useDualTexture || useEnvMap || params.textureEnabled || params.pbr;
             return ShadedContext{params, texture0, texture1, envMap,
-                                 shadowMap, punctualShadowCube, punctualShadowMap, pbrTextures,
+                                 shadowMap, punctualShadowCube, punctualShadowMap,
+                                 iblIrradiance, iblPrefilteredSpecular, iblBrdfLut, pbrTextures,
                                  useDualTexture, useEnvMap,
                                  needUV, blendState, blendFactor, depthState, stencilState,
                                  colorWriteMask, multiSampleMask, occlusionQuery, sampler0, sampler1,
+                                 iblIrradianceSampler, iblSpecularSampler, iblBrdfSampler,
                                  true, true, 0.0f, 0.0f, {}, {}, true, 0.0f, {}};
         }
 
@@ -5511,11 +5597,15 @@ namespace CNA::Internal::Renderers::Software
             const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
             int colorWriteMask, unsigned int multiSampleMask,
             const SoftwareSamplerState& sampler0, const SoftwareSamplerState& sampler1,
+            const SoftwareSamplerState& iblIrradianceSampler,
+            const SoftwareSamplerState& iblSpecularSampler,
+            const SoftwareSamplerState& iblBrdfSampler,
             SoftwareOcclusionQueryRenderer* occlusionQuery, bool multiSampleAntiAlias)
         {
             const ShadedContext ctx = MakeLinearShadedContext(
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
-                multiSampleMask, sampler0, sampler1, occlusionQuery);
+                multiSampleMask, sampler0, sampler1, iblIrradianceSampler,
+                iblSpecularSampler, iblBrdfSampler, occlusionQuery);
             WalkRasterLine(fb, multiSampleAntiAlias, clip, a, b,
                            [&](int x, int y, float t, unsigned int coverageMask,
                                const std::array<float, 4>* sampleTs) {
@@ -5561,13 +5651,17 @@ namespace CNA::Internal::Renderers::Software
             const RasterClipRect& clip, const RasterVertex& point, int colorWriteMask,
             unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
             const SoftwareSamplerState& sampler1,
+            const SoftwareSamplerState& iblIrradianceSampler,
+            const SoftwareSamplerState& iblSpecularSampler,
+            const SoftwareSamplerState& iblBrdfSampler,
             SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             if (!std::isfinite(point.x) || !std::isfinite(point.y))
                 return;
             const ShadedContext ctx = MakeLinearShadedContext(
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
-                multiSampleMask, sampler0, sampler1, occlusionQuery);
+                multiSampleMask, sampler0, sampler1, iblIrradianceSampler,
+                iblSpecularSampler, iblBrdfSampler, occlusionQuery);
             WriteShadedFragment(fb, ctx, clip,
                                 static_cast<int>(std::floor(point.x)),
                                 static_cast<int>(std::floor(point.y)),
@@ -5601,6 +5695,9 @@ namespace CNA::Internal::Renderers::Software
                                      int colorWriteMask, unsigned int multiSampleMask,
                                      const SoftwareSamplerState& sampler0,
                                      const SoftwareSamplerState& sampler1,
+                                     const SoftwareSamplerState& iblIrradianceSampler,
+                                     const SoftwareSamplerState& iblSpecularSampler,
+                                     const SoftwareSamplerState& iblBrdfSampler,
                                      SoftwareOcclusionQueryRenderer* occlusionQuery,
                                      bool multiSampleAntiAlias,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
@@ -5624,6 +5721,12 @@ namespace CNA::Internal::Renderers::Software
                 dynamic_cast<const SoftwareCubeSurface*>(params.punctualShadowCube);
             const auto* punctualShadowMap =
                 dynamic_cast<const SoftwareColorSurface*>(params.punctualShadowMap);
+            const auto* iblIrradiance =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblIrradiance);
+            const auto* iblPrefilteredSpecular =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblPrefilteredSpecular);
+            const auto* iblBrdfLut =
+                dynamic_cast<const SoftwareColorSurface*>(params.iblBrdfLut);
             const std::array<const SoftwareColorSurface*, 6> pbrTextures = {
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrNormalMap),
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrMetallicRoughnessMap),
@@ -5662,11 +5765,14 @@ namespace CNA::Internal::Renderers::Software
                 : TextureFootprint{};
             const float rhoCube = footprintCube.isotropicRate;
             const ShadedContext ctx{params, texture0, texture1, envMap,
-                                    shadowMap, punctualShadowCube, punctualShadowMap, pbrTextures,
+                                    shadowMap, punctualShadowCube, punctualShadowMap,
+                                    iblIrradiance, iblPrefilteredSpecular, iblBrdfLut, pbrTextures,
                                     useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
                                     depthState, faceStencil, colorWriteMask, multiSampleMask,
-                                    occlusionQuery, sampler0, sampler1, magnify0, magnify1,
+                                    occlusionQuery, sampler0, sampler1,
+                                    iblIrradianceSampler, iblSpecularSampler, iblBrdfSampler,
+                                    magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     footprint0, footprint1,
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube), footprintCube};
@@ -6610,7 +6716,9 @@ namespace CNA::Internal::Renderers::Software
                     vertices[static_cast<std::size_t>(fan)],
                     vertices[static_cast<std::size_t>(fan + 1)],
                     GetColorWriteMask(), GetMultiSampleMask(),
-                    spriteSampler, spriteSampler, activeOcclusionQuery_,
+                    spriteSampler, spriteSampler,
+                    GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                    activeOcclusionQuery_,
                     IsMultiSampleAntiAliasEnabled(), wire, edgeMask);
             }
         };
@@ -7069,7 +7177,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizePointShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params,
                             clip, vertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_);
                 }
                 continue;
             }
@@ -7109,7 +7219,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizeLineShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params, clip,
                             firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_,
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_,
                             multiSampleAntiAlias_);
                 }
                 continue;
@@ -7162,7 +7274,9 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), activeOcclusionQuery_,
+                                        GetSamplerState(1), GetSamplerState(10),
+                                        GetSamplerState(11), GetSamplerState(12),
+                                        activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
         }
@@ -7331,7 +7445,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizePointShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params,
                             clip, vertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_);
                 }
                 continue;
             }
@@ -7371,7 +7487,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizeLineShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params, clip,
                             firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_,
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_,
                             multiSampleAntiAlias_);
                 }
                 continue;
@@ -7424,7 +7542,9 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), activeOcclusionQuery_,
+                                        GetSamplerState(1), GetSamplerState(10),
+                                        GetSamplerState(11), GetSamplerState(12),
+                                        activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
         }

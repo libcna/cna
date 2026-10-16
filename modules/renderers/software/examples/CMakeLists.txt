@@ -87,6 +87,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_ShadowSampling
         COMMAND cna_test_software_shadow_sampling TIMEOUT 30 LABELS "Software")
 
+    # The split-sum PBR environment term consumes cube mips and the BRDF LUT through public
+    # sampler slots 10/11/12, replacing (not adding to) the flat ambient term.
+    cna_software_test(cna_test_software_ibl_sampling software_ibl_sampling_test.cpp)
+    cna_register_renderer_test(NAME Software_ImageBasedLighting
+        COMMAND cna_test_software_ibl_sampling TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_effects software_effects_test.cpp)
     cna_register_renderer_test(NAME Software_Effects COMMAND cna_test_software_effects
         TIMEOUT 30 LABELS "Software")

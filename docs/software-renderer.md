@@ -626,8 +626,14 @@ can execute an opcode and still accept invalid classic bytecode.
   Rigid and skinned tangent frames use inverse-transpose normals and fold World, instance and joint
   determinant signs into tangent handedness. The shared hand-derived oracle matches `(91,91,91)`,
   `(97,0,0)`, `(27,4,4)` and the mirrored-joint normal-map result `(79,79,79)` exactly; the
-  1,600-draw parameter-ring and five-case vertex-colour tests also pass. Image-based lighting
-  remains intentionally absent and capability-gated.
+  1,600-draw parameter-ring and five-case vertex-colour tests also pass.
+- **PBR image-based lighting is complete.** The CPU fragment path evaluates the same split-sum
+  equation as EasyGL/WebGPU: normal-indexed diffuse irradiance, reflection-indexed prefiltered
+  specular with `roughness * (mipCount - 1)` LOD, and the N.V/roughness BRDF LUT. Public sampler
+  slots 10/11/12 control those three products, IBL replaces rather than adds to flat ambient,
+  occlusion and intensity apply once to the complete environment contribution, and the skinned
+  path uses its post-bone tangent frame. The deterministic analytic oracle passes 8/8, including
+  exact mip selection and point-versus-linear mip filtering.
 - **Classic and PBR shadow reception is complete.** The CPU fragment path samples single and
   cascaded directional maps with configurable 1/9/25-tap PCF, cascade blending/debug tint, point
   cube maps and spot 2D maps. Directional and punctual visibility attenuate only their respective
