@@ -4277,28 +4277,32 @@
    "group": "face",
    "name": "Round",
    "values": {
-    "cheekFullness": 0.6,
-    "chinHeight": -0.3,
-    "chinSize": -0.45,
-    "headHeight": -0.35,
-    "headWidth": 0.35,
-    "jawAngle": -0.35,
+    "cheekFullness": 0.68,
+    "chinHeight": -0.4,
+    "chinProjection": -0.15,
+    "chinSize": -0.55,
+    "foreheadHeight": -0.1,
+    "headHeight": -0.45,
+    "headWidth": 0.45,
+    "jawAngle": -0.55,
     "jawTaper": -0.55,
-    "jawWidth": 0.4
+    "jawWidth": 0.45
    }
   },
   {
    "group": "face",
    "name": "Long",
    "values": {
-    "cheekFullness": -0.4,
-    "chinHeight": 0.6,
-    "chinSize": 0.2,
-    "foreheadHeight": 0.35,
-    "headHeight": 0.6,
-    "headWidth": -0.3,
-    "jawWidth": -0.25,
-    "noseSize": 0.15
+    "cheekFullness": -0.45,
+    "cheekboneWidth": -0.1,
+    "chinHeight": 0.68,
+    "chinProjection": 0.15,
+    "chinSize": 0.25,
+    "foreheadHeight": 0.45,
+    "headHeight": 0.68,
+    "headWidth": -0.4,
+    "jawTaper": 0.15,
+    "jawWidth": -0.3
    }
   },
   {
@@ -4306,120 +4310,138 @@
    "name": "Square",
    "values": {
     "cheekFullness": -0.3,
-    "cheekboneWidth": 0.15,
-    "chinSize": 0.45,
-    "headWidth": 0.15,
-    "jawAngle": 0.6,
-    "jawTaper": -0.6,
-    "jawWidth": 0.6
+    "cheekboneWidth": 0.1,
+    "chinHeight": 0.1,
+    "chinProjection": 0.1,
+    "chinSize": 0.55,
+    "foreheadHeight": -0.15,
+    "headWidth": 0.25,
+    "jawAngle": 0.68,
+    "jawTaper": -0.68,
+    "jawWidth": 0.68
    }
   },
   {
    "group": "face",
    "name": "Heart",
    "values": {
-    "cheekboneWidth": 0.55,
-    "chinProjection": 0.2,
-    "chinSize": -0.35,
-    "foreheadHeight": 0.4,
-    "headWidth": 0.25,
-    "jawAngle": -0.45,
-    "jawTaper": 0.6,
-    "jawWidth": -0.6
+    "cheekFullness": 0.1,
+    "cheekboneWidth": 0.68,
+    "chinHeight": 0.15,
+    "chinProjection": 0.25,
+    "chinSize": -0.45,
+    "foreheadHeight": 0.5,
+    "headWidth": 0.3,
+    "jawAngle": -0.55,
+    "jawTaper": 0.68,
+    "jawWidth": -0.68
    }
   },
   {
    "group": "face",
    "name": "Oval",
    "values": {
-    "cheekboneWidth": 0.3,
-    "chinHeight": 0.2,
-    "headHeight": 0.3,
-    "headWidth": -0.15,
-    "jawTaper": 0.3
+    "cheekFullness": -0.15,
+    "cheekboneWidth": 0.4,
+    "chinHeight": 0.3,
+    "chinSize": -0.05,
+    "foreheadHeight": 0.15,
+    "headHeight": 0.4,
+    "headWidth": -0.2,
+    "jawAngle": -0.2,
+    "jawTaper": 0.4,
+    "jawWidth": -0.2
    }
   },
   {
    "group": "face",
    "name": "Soft",
    "values": {
-    "cheekFullness": 0.6,
-    "chinProjection": -0.3,
-    "chinSize": -0.2,
-    "jawAngle": -0.55,
-    "jawTaper": -0.2,
-    "noseSize": -0.15
+    "cheekFullness": 0.55,
+    "cheekboneWidth": -0.25,
+    "chinHeight": -0.15,
+    "chinProjection": -0.55,
+    "chinSize": -0.35,
+    "foreheadHeight": 0.25,
+    "headHeight": -0.1,
+    "jawAngle": -0.65,
+    "jawTaper": -0.35,
+    "jawWidth": 0.15
    }
   },
   {
    "group": "face",
    "name": "Angular",
    "values": {
-    "cheekFullness": -0.6,
-    "cheekboneWidth": 0.6,
-    "chinProjection": 0.55,
-    "chinSize": 0.3,
-    "jawAngle": 0.6,
-    "jawTaper": 0.3,
-    "noseBridge": 0.45
+    "cheekFullness": -0.68,
+    "cheekboneWidth": 0.68,
+    "chinHeight": 0.15,
+    "chinProjection": 0.65,
+    "chinSize": 0.4,
+    "foreheadHeight": -0.1,
+    "jawAngle": 0.68,
+    "jawTaper": 0.4,
+    "jawWidth": 0.1
    }
   },
   {
    "group": "face",
    "name": "Broad",
    "values": {
-    "cheekboneWidth": 0.5,
+    "cheekFullness": 0.2,
+    "cheekboneWidth": 0.6,
+    "chinSize": 0.15,
+    "foreheadHeight": -0.15,
     "headHeight": -0.2,
-    "headWidth": 0.6,
-    "jawWidth": 0.5,
-    "mouthWidth": 0.3,
-    "noseWidth": 0.35
+    "headWidth": 0.68,
+    "jawTaper": -0.25,
+    "jawWidth": 0.6
    }
   },
   {
    "group": "face",
    "name": "Narrow",
    "values": {
-    "cheekboneWidth": -0.45,
-    "eyeSpacing": -0.25,
-    "headHeight": 0.3,
-    "headWidth": -0.6,
-    "jawWidth": -0.45,
-    "noseWidth": -0.3
+    "cheekFullness": -0.25,
+    "cheekboneWidth": -0.55,
+    "chinHeight": 0.2,
+    "chinSize": -0.1,
+    "headHeight": 0.35,
+    "headWidth": -0.68,
+    "jawTaper": 0.25,
+    "jawWidth": -0.55
    }
   },
   {
    "group": "face",
    "name": "Youthful",
    "values": {
-    "browHeight": 0.2,
-    "cheekFullness": 0.5,
-    "chinSize": -0.35,
-    "eyeSize": 0.5,
-    "foreheadHeight": 0.45,
-    "headHeight": -0.3,
-    "jawWidth": -0.3,
-    "mouthWidth": -0.2,
-    "noseSize": -0.45,
-    "noseTip": 0.35
+    "cheekFullness": 0.55,
+    "cheekboneWidth": -0.1,
+    "chinHeight": -0.3,
+    "chinProjection": -0.1,
+    "chinSize": -0.45,
+    "foreheadHeight": 0.55,
+    "headHeight": -0.35,
+    "jawAngle": -0.4,
+    "jawTaper": 0.2,
+    "jawWidth": -0.35
    }
   },
   {
    "group": "face",
    "name": "Mature",
    "values": {
-    "browHeight": -0.3,
-    "cheekFullness": -0.45,
-    "chinProjection": 0.35,
-    "eyeShape": -0.3,
-    "eyeSize": -0.3,
-    "headHeight": 0.25,
-    "jawAngle": 0.35,
-    "jawWidth": 0.35,
-    "lowerLip": -0.25,
-    "noseBridge": 0.35,
-    "noseSize": 0.45,
-    "upperLip": -0.35
+    "cheekFullness": -0.55,
+    "cheekboneWidth": 0.3,
+    "chinHeight": 0.25,
+    "chinProjection": 0.4,
+    "chinSize": 0.3,
+    "foreheadHeight": -0.1,
+    "headHeight": 0.3,
+    "jawAngle": 0.45,
+    "jawTaper": -0.15,
+    "jawWidth": 0.4
    }
   },
   {
