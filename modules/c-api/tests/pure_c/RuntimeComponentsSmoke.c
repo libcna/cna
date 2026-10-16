@@ -8,6 +8,7 @@
 
 typedef struct ComponentsSmokeState {
     int validated;
+    int update_calls;
 } ComponentsSmokeState;
 
 typedef struct BehaviorState {
@@ -519,6 +520,7 @@ static CNA_Result on_update(
     if (game_time == 0) {
         return CNA_RESULT_INVALID_STATE;
     }
+    ++state->update_calls;
     /* CBIND-068: this suite runs more than one frame now, and the validators below are a
        one-shot -- they remove services and destroy components, so a second pass would fail on the
        state the first one deliberately left behind. */
@@ -576,6 +578,7 @@ int main(void)
         CNA_GameComponentHandle component = CNA_INVALID_HANDLE;
         int frame = 0;
         int updates_after_first = 0;
+        int game_updates_after_first = 0;
         int draws_after_first = 0;
 
         if (cna_game_component_callbacks_init(&ticker_callbacks) != CNA_RESULT_SUCCESS) {
@@ -595,6 +598,7 @@ int main(void)
             return CNA_TEST_FAIL(5);
         }
         updates_after_first = ticker.update_calls;
+        game_updates_after_first = smoke_state.update_calls;
         draws_after_first = ticker.draw_calls;
         if (updates_after_first < 1) {
             return CNA_TEST_FAIL(6);
@@ -604,8 +608,12 @@ int main(void)
                 return CNA_TEST_FAIL(7);
             }
         }
-        /* One update per frame, exactly -- a fixed-timestep frame runs Update once. */
-        if (ticker.update_calls != updates_after_first + 3) {
+        /* One component update per game Update, exactly. A fixed-timestep frame runs Update at
+           least once and catches up with more when the machine ran it late, so the frame count
+           only bounds it from below. */
+        if (ticker.update_calls - updates_after_first !=
+                smoke_state.update_calls - game_updates_after_first ||
+            ticker.update_calls < updates_after_first + 3) {
             return CNA_TEST_FAIL(8);
         }
         /* And drawing reaches it too, which is Game::Draw's own pass over visible components. A
