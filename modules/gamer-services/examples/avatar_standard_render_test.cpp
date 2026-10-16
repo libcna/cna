@@ -240,7 +240,8 @@ namespace
             Snapshot("stand0", standing);
             Check(Dominant(At(standing, Vector3(0, 1.12f, 0.12f)), 0), "the chest shows the red shirt");
             Check(Dominant(At(standing, Vector3(0.1f, 0.62f, 0.08f)), 2), "the thigh shows the blue trousers");
-            const Color cheek = At(standing, Vector3(-0.075f, 1.6f, 0.11f));
+            // Below the eye: on catalog v3's adult head y = 1.6 is the eye white, not the cheek.
+            const Color cheek = At(standing, Vector3(-0.075f, 1.55f, 0.11f));
             Check(cheek.getRProperty() > 120 && cheek.getRProperty() > cheek.getBProperty() + 20, "the face shows the skin color");
             Check(standing[0] == Background && standing[Size * Size - 1] == Background, "the background is untouched");
 
