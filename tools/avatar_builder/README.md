@@ -16,7 +16,7 @@ python3 tools/avatar_builder/generate_avatar_catalog.py --jobs 8  # build the GL
 It writes catalog v3, CNA's baseline avatar catalog, to `modules/gamer-services/assets/avatars/v3/`,
 which the gamer-services library embeds (`CNA_AVATAR_CATALOG_VERSIONS` in
 `modules/gamer-services/CMakeLists.txt`, `cmake/EmbedBinaryFiles.cmake`), deflated. It writes
-revision 3 of catalog v3: a revision may improve every item's art and add entries, but every id
+revision 4 of catalog v3: a revision may improve every item's art and add entries, but every id
 keeps its kind and description format, and every added entry is `"format": 3`
 (`AvatarCatalogTest.CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3Entries`; the rules
 and how to add an entry are in `docs/avatars.md`, "Assets"). The generator removes catalog files it
@@ -29,7 +29,7 @@ supported; Git history keeps them.
 |---|---|
 | `cna_avatar/rig.py` | The canonical rig: XNA's 71 slots and parent table, joint names, bind positions per body type, identity bind rotations. |
 | `cna_avatar/mesh.py` | Parametric grids (ellipsoids, capsules, lofts, tubes) with analytic skin weights. |
-| `cna_avatar/head.py` | The sculpted head: three silhouettes (face profile, back, front outline) joined by superellipse sections, with the face's relief -- nose, sockets, brow, cheekbones, muzzle, lips, chin -- in the surface itself and facets crowded onto the face; the six ear shapes as sculpted forms; feature anchors, the head surface radii and conforming decal patches. |
+| `cna_avatar/head.py` | The sculpted head: three silhouettes (face profile, back, front outline) joined by superellipse sections, with the face's relief -- nose, sockets, brow, cheekbones, muzzle, chin, and the lids and lips sculpted round exactly what the atlas paints -- in the surface itself and facets crowded onto the eyes and mouth; the six ear shapes as sculpted forms; feature anchors, the head surface radii and decal patches on the head's own facets. |
 | `cna_avatar/body.py` | The two bodies: superellipse torso, single-loft arms and legs, sculpted hands. |
 | `cna_avatar/face.py` | The expression atlas (anti-aliased signed-distance shapes): eyes, mouths, the eyebrow styles and makeup tiles, and the decal placement. |
 | `cna_avatar/facecontrols.py` | What each of the 32 face-shape bytes (formats 2 and 3) does, and the named face presets. |

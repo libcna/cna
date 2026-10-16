@@ -94,6 +94,24 @@ Review it with the `portraits`, `presets` and `bodies` sheets of `avatar_review.
 with a portrait lens, every face preset, every build) and with `random` sheets of
 `cna_avatar_review --random` avatars.
 
+## Catalog v3 revision 4 (2026-10-16): refinement
+
+Revision 4 keeps every entry and refines what still read as procedural:
+
+| Area | Rule |
+|---|---|
+| Eyes | The socket, an eyeball dome, an upper lid that rolls over it into a soft crease and a slimmer lower lid are sculpted round exactly the opening the atlas paints; the paint lies on the head's own facets, so the eye sits in the face in profile. Iris 0.44 of the eye tile; no painted crease. |
+| Mouth | Sculpted upper and fuller lower lips on the painted parting line, a parting groove into tucked corners, a faint philtrum. Lip colour is deeper than any skin and feathered, never a cut-out. |
+| Brows | Hair strokes rising at the head and lying along the tail, a darker core, a hair-broken edge centred on the stroke's edge (the style keeps its width). |
+| Shading | The head texture carries the face's hollows measured from the relief (lid crease, inner corners, beside the nose, nostrils, mouth corners, under the lip, round the ears), never under the eyes. Each material family sets its highlight's sharpness (`cnaShininess`): skin 14, cloth 6-14, hair 20, leather 32, glasses 48, metal 60. |
+| Face shapes | Each moves the skull, cheeks, jaw and chin together, so no two read alike from the front or in profile; values stay under 0.7. |
+| Hair | Hair hanging past the ears is tucked behind them (the ear and an earring show whole); under short hair the scalp shell stays under the locks; long curls hang as one ordered sheet. |
+| Facial hair | Grown hair is cut where it meets the skin (a clean edge, flush); mustaches rounded in section; sideburns and mutton chops grow from under the hairline in front of the ear. |
+| Hands | The palm keeps its thickness to the knuckles so the fingers grow out of it; the thumb pad stops short of the wrist. |
+
+Review it with the focus sheets of `avatar_review.py`: `eyes`, `mouth`, `temples`, `profiles`,
+`hands` and `presetgroups`.
+
 ## Proportion targets
 
 Expressed in **head-heights** (the classic, non-proprietary figure-drawing/character-design unit —

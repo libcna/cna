@@ -202,9 +202,10 @@ manifest or catalog pack naming one is refused: the description decodes to nothi
 renderer `Unavailable`), it is never drawn from catalog 3, and stale packs of them left on a
 developer's disk are ignored.
 
-**Revisions.** Catalog v3 was first released on 2026-09-30; revision 2 added entries, and
-**revision 3** (manifest `"revision": 3`), the current content of the same version, reworks the
-art of the same entries for visual quality. A revision may improve the art of
+**Revisions.** Catalog v3 was first released on 2026-09-30; revision 2 added entries, revision 3
+reworked their art, and **revision 4** (manifest `"revision": 4`), the current content of the same
+version, refines it: sculpted lids, lips and brows with the face's paint on the head's own facets,
+face shapes that differ, hair tucked behind the ears, clean beard edges. A revision may improve the art of
 every item and add entries, but every first-release id keeps its kind and its description format
 1 (hair 1–10, tops 20–28, bottoms 40–45, shoes 60–64, glasses 80–83, hats 100–104, facial hair
 120–123), and everything a revision adds is marked `"format": 3`, so only a format 3 description
@@ -222,7 +223,7 @@ every item replaced by its slot default (its ids are not read against another ve
 animations are system data, not part of a description, and come from the newest compiled-in
 catalog.
 
-Catalog v3 revision 3 has the entries revision 2 added, with their art reworked for visual
+Catalog v3 revision 4 has the entries revision 2 added, with their art reworked for visual
 quality (the generator's modules say how each kind is built; `docs/avatar-art-direction.md` records
 the visual language):
 
@@ -253,13 +254,16 @@ the visual language):
   where the beard grows) named by materials and stored once;
 - `face_features.png`, an atlas of every eye, eyebrow, mouth and makeup tile at 128 pixels per
   tile; `animations.glb` with the 31 presets as glTF cubic-spline rotation curves;
-- `catalog.json`, listing every file (359 in all, 45.2 MB) with its SHA-256. Compiled in, the
-  files are deflated (`cna_embed_binary_files ... COMPRESS`) to a 21.6 MB library
+- `catalog.json`, listing every file (359 in all, 46.1 MB) with its SHA-256. Compiled in, the
+  files are deflated (`cna_embed_binary_files ... COMPRESS`) to a 22.3 MB library
   (`cna_gamerservices_avatar_catalog`), inflated once when first used; only programs that use
-  avatars link the catalog. (Revision 2 was 32.9 MB, 14.1 MB deflated: revision 3's hair, clothing
-  and shoes are sculpted rather than lofted. Assembling an avatar from the compiled-in catalog took
-  about 345 ms cold and 185 ms warm in a Debug build, against 235 and 110 ms for revision 2; an
-  avatar already assembled is reused at once.)
+  avatars link the catalog. (Revision 2 was 32.9 MB, 14.1 MB deflated, revision 3 45.2 and 21.6 MB:
+  its hair, clothing and shoes are sculpted rather than lofted. Revision 4's face has about twice
+  revision 3's vertices, and face controls work out a description's deformers once, so assembling
+  and drawing 300 random avatars in a Debug build takes 21 s against revision 3's 27 s; the first
+  avatar of a process, which parses the larger body model and atlas, is ready in about 450-500 ms
+  and the next in about 200-230 ms (revision 3: 345 and 185 ms); an avatar already assembled is
+  reused at once.)
 
 **Compatibility rules are data**, not code: a hat's `hairCover` gives the line where its brim
 meets the head and how far hair under it is lifted, and the assembly removes the hair the hat hides
@@ -278,16 +282,18 @@ caller's `World`, so attachments computed from the public bones and bind pose ag
 drawn body. The Guide editor and GPU art-review utility orient their own camera view accordingly.
 Joints XNA leaves unnamed are helpers named `SlotNN`,
 never skinned or animated. Materials are a base color factor, an embedded base-color PNG or a
-shared catalog texture (`cnaTexture`; a near-white multiplier carrying shading and fabric detail)
-and a description color tint (skin, hair, eyes, the three clothing colours, accessory, lips, eye
-shadow, blush, jewellery, gloves). The reader refuses anything outside that contract: external
+shared catalog texture (`cnaTexture`; a near-white multiplier carrying shading and fabric detail),
+a description color tint (skin, hair, eyes, the three clothing colours, accessory, lips, eye
+shadow, blush, jewellery, gloves), and optionally the strength and the sharpness of the one light's
+highlight (`cnaSpecular`, `cnaShininess`: SkinnedEffect's specular colour scale and specular power;
+an asset without them draws as before). The reader refuses anything outside that contract: external
 URIs, other rigs, non-identity bind rotations, out-of-range indices or weights, and oversized data.
 Revision 2 needs contract level 2 (`CatalogReaderLevel`): the kinds, styles, rules and material
 extras above. Every renderer draws it with the same two paths it already had (opaque parts, then
 translucent decals); nothing in the catalog is renderer-specific.
 `GamerServices_AvatarCatalogUpToDate` regenerates catalog v3 and compares it byte for byte (on a C library other than glibc, every
 byte except catalog v3's six `FemaleShocked` arm rotations, which a non-convergent head solve froze
-from glibc's libm and are checked structurally there; plans/plan_apple_m4.md AM4-166).
+from glibc's libm until revision 4 and are still checked only structurally there; plans/plan_apple_m4.md AM4-166).
 `AvatarCatalogTest.CatalogV3HasTheItemFeatureStyleAndAnimationContract` and
 `V3DescriptionsAssembleExactlyAsRevised` pin the content; `AvatarCatalogContentTests` check every
 model's geometry, every manifest reference and how accessories, makeup, ears and proportions
