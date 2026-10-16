@@ -5535,7 +5535,11 @@ namespace CNA::Internal::Renderers::WebGPU
         // SAMPLE-002: a declaration that names a Normal is a lit vertex at ANY
         // stride, and one that does not is not a lit vertex at any stride either. Whether it also
         // carries a UV or a colour changes which attributes are bound, not which family it is.
-        if (hasNormal)
+        // An UNLIT draw is the exception: the Normal means nothing to it, so it takes the program
+        // the same record without one would. The lit program's unlit branch does not saturate the
+        // vertex colour at the vertex (Direct3D 9's oD0), and two unlit coloured records would
+        // otherwise disagree by stride. A Position+Normal record with neither keeps it.
+        if (hasNormal && (params.lightingEnabled || (!hasUv && !hasColor)))
             return vertexLit ? StockVertexShapeEXT::LitVertexLit : StockVertexShapeEXT::Lit;
         if (hasUv)
         {
