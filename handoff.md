@@ -131,14 +131,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
 1. **`DIRECTX9` `BasicEffect` draws 12 of its 32 shader variants.** The other 20 (Position-only,
    untextured lighting, lit with vertex colour) throw a named `std::runtime_error` from
    `D3D9EffectDraw.cpp`. Every register table exists; only the dispatch is missing.
-2. **Test defects, not renderer defects.** With `SDL_GPU` as the default renderer, two
-   `SdlGpuIndexedDrawRangeTest` buffer-rewrite cases fail, and with `WEBGPU` two cases of the same
-   class: they rewrite a buffer that is still bound, which the device correctly refuses
-   (`RRC-026`, `a18a5d374`).
-5. *(Fixed 2026-10-14.)* `WEBGPU` counted only the draws after a `Clear` inside one occlusion
-   run, because a query slot may be written once per resolve and the Clear splits the run across
-   render passes; a later run now records into a fresh slot and the readback sums the query's
-   slots (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`).
 7. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
     The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
     of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites, measured on Linux through
