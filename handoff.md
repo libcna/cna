@@ -81,17 +81,20 @@ route changed); CNA.NET names none of them and must admit 0.48.0 before it moves
 planned.
 
 **Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. Latest full Debug
-runs, 2026-10-14 after the renderer-retirement close-out (RRC-040..RRC-053, which added the shared
-conformance and cross-family registrations), through the private runner on RADV:
-`cmake-build-multi` (`OPENGLES3` default with `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`,
-`HEADLESS`, `STUB`; C API) 11,340 tests, 6 failed, 210 skipped; `cmake-build-sdlgpu` 11,189, 27
-failed; `cmake-build-software` 10,888, 8 failed; `cmake-build-headless` 8,680, 6 failed;
-`cmake-build-fna3d` (its OpenGL driver) 10,707, 5 failed; `cmake-build-webgpu` 10,872, 8 failed.
-Every failure is a §5.1 entry (items 5, 6, 7 and 16), except cases that failed once and pass alone:
-a GamerServices keyring case in the multi run, `XnaDifferentialBuildTest` (a Wine-hosted XNA build,
-which §7 says to run outside the private runtime) in the SDL_GPU run, and in the SOFTWARE run four
-ENet/SystemLink discovery cases and `CnaInputTests`, which ran while another ENet test held the
-machine-wide discovery port. CI: `general-tests-ci.yml` runs the unfiltered suite for
+runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
+`cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
+`OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1
+failed (`EasyGL_Conformance_render_target_own_msaa`, §5.1 item 1), 195 skipped;
+`cmake-build-sdlgpu` 11,284, none failed, 256 skipped; `cmake-build-webgpu` 10,964, none failed, 256
+skipped; `cmake-build-software` 10,982, none failed, 101 skipped; `cmake-build-fna3d` (its OpenGL
+driver) 10,806, 2 failed, 400 skipped -- `ContentPipelineCliTest.ContentBuildGraphReportsALongCycleDeterministically`
+and `Sdl3InputTest.MouseReadsThePointerBesideTheWindowAsXnaDoes`, which pass alone (three of three);
+the second reads the pointer of the private display that parallel tests also move, and failed the
+same way once in an earlier SOFTWARE run. Under Wine, `cmake-build-mingw` (Release, `DIRECTX9` with
+DXVK): `CnaGraphicsTests.exe` in eight shards 2,688/2,688, and the `DIRECTX9` ctest suite 59/59
+without `DirectX9_CompiledEffects` (§5.1 item 2). `cmake-build-headless` was not re-run. Every run
+excluded `XnaPipelineGenuineRuntime` and `XnaDifferentialBuildTest` (Wine-hosted XNA builds), which
+§7 says to run outside the private runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 `OPENGLES3` and fails on a dirty checkout; the other workflows are subsystem- or platform-specific.
 
 ## 3. Where current information lives
@@ -122,9 +125,8 @@ machine-wide discovery port. CI: `general-tests-ci.yml` runs the unfiltered suit
 
 ## 5. Known bugs and limitations
 
-The single authoritative list. Every entry below was checked against the code between 2026-10-10
-and 2026-10-14; an entry measured or re-measured after 2026-10-10 says when (the renderer
-retirement and its close-out, RRC-030..RRC-052, added and re-measured several on 2026-10-13/14).
+The single authoritative list. Every 5.1 entry was re-checked against the code on 2026-10-16/17,
+when the stabilization pass fixed or removed the rest; an entry says when it was last measured.
 
 ### 5.1 Defects
 
