@@ -1198,6 +1198,20 @@ namespace CNA::Internal::Renderers::DirectX9
                                  : RendererFormatVerdict::Unsupported;
     }
 
+    bool DirectX9Renderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::HalfVector4)) !=
+            RendererFormatVerdict::Supported)
+            return false;
+        D3DDISPLAYMODE mode{};
+        if (FAILED(d3d9_->GetAdapterDisplayMode(D3DADAPTER_DEFAULT, &mode)))
+            return false;
+        return SUCCEEDED(d3d9_->CheckDeviceFormat(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, mode.Format,
+                                                  D3DUSAGE_QUERY_FILTER, D3DRTYPE_TEXTURE,
+                                                  D3DFMT_A16B16G16R16F));
+    }
+
     RendererFormatVerdict DirectX9Renderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;

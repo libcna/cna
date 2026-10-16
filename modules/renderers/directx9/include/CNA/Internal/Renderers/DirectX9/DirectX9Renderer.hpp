@@ -188,6 +188,9 @@ namespace CNA::Internal::Renderers::DirectX9
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;
+        /// Whether the device linearly filters a sampled half-float texture: the HalfVector4
+        /// storage exists and CheckDeviceFormat with D3DUSAGE_QUERY_FILTER accepts it.
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
             int surfaceFormat) const override;
         [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
