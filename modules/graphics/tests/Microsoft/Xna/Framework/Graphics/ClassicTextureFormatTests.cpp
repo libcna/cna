@@ -933,7 +933,12 @@ TEST(ClassicTextureFormat, VolumeGenericTransfersUseTotalByteSize)
     std::vector<Vector4> wrongCount(2);
     EXPECT_THROW(volume.GetData(wrongCount.data(), 1), System::ArgumentException);
 
-    Texture3D vector2Volume(device, 1, 1, 1, false, SurfaceFormat::Vector2);
-    Vector4 tooWide;
-    EXPECT_THROW(vector2Volume.SetData(&tooWide, 1), System::ArgumentException);
+    // Vector4 volume storage does not imply Vector2 (SDL_GPU stores the one and refuses the other).
+    if (device.GetRenderer().ClassifyTexture3DFormatEXT(
+            static_cast<int>(SurfaceFormat::Vector2)) == RendererFormatVerdict::Supported)
+    {
+        Texture3D vector2Volume(device, 1, 1, 1, false, SurfaceFormat::Vector2);
+        Vector4 tooWide;
+        EXPECT_THROW(vector2Volume.SetData(&tooWide, 1), System::ArgumentException);
+    }
 }
