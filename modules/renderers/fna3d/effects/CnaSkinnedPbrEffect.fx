@@ -5,6 +5,7 @@
 //   fxc /nologo /Op /T fx_2_0 /Fo CnaSkinnedPbrEffect.fxb CnaSkinnedPbrEffect.fx
 
 #define CNA_D3D9_IBL 1
+#define CNA_D3D9_DOUBLE_SIDED 1
 #include "../../directx9/src/shaders/cna/PbrSkinned3D.hlsl"
 
 technique CnaSkinnedPbr

@@ -124,6 +124,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_ImageBasedLighting
         COMMAND cna_test_fna3d_ibl_sampling TIMEOUT 120 LABELS "Fna3d")
 
+    # Public rigid/skinned PBR draws must reverse the complete tangent basis on a double-sided
+    # back face, including when a mirroring World reverses the rasterized winding.
+    cna_fna3d_test(cna_test_fna3d_pbr_double_sided
+                   ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_double_sided_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_Pbr_DoubleSided
+        COMMAND cna_test_fna3d_pbr_double_sided TIMEOUT 120 LABELS "Fna3d")
+
     # RRC-045: the renderer-neutral conformance programs, through FNA3D's own driver. They run under
     # the same FNA3D_FORCE_DRIVER as the rest of this directory (set below).
     include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)

@@ -198,7 +198,11 @@ float4 PunctualDirectionKind   : register(c31); // xyz=spot direction, w=0 none 
 float4 PunctualDiffuse         : register(c32); // xyz=linear colour/intensity
 float4 PunctualCone            : register(c33); // x=cos(inner), y=cos(outer)
 #if CNA_D3D9_IBL
-float4 IblParams               : register(c34); // x=enabled, y=mip count, z=intensity
+// Kept above the shadow block's c34-c75 range so FNA3D can compose both extensions later.
+float4 IblParams               : register(c76); // x=enabled, y=mip count, z=intensity
+#endif
+#if CNA_D3D9_DOUBLE_SIDED
+float4 PbrDoubleSidedParams    : register(c77); // x=0 single-sided, +/-1 world orientation
 #endif
 
 #if CNA_D3D9_SHADOWS
@@ -322,7 +326,11 @@ float3 CnaIblAmbient(float3 N, float3 V, float3 albedo, float3 F0, float roughne
 }
 #endif
 
+#if CNA_D3D9_DOUBLE_SIDED
+float4 PSPbrSkinned3D(PSInput pin, float face : VFACE) : SV_Target0
+#else
 float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
+#endif
 {
     float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(pin.UV, 0));
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
@@ -339,6 +347,14 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     float3 N = normalize(pin.Normal);
     float3 T = normalize(pin.TangentWS.xyz - N * dot(N, pin.TangentWS.xyz));
     float3 B = cross(N, T) * pin.TangentWS.w;
+#if CNA_D3D9_DOUBLE_SIDED
+    if (PbrDoubleSidedParams.x != 0.0 && face * PbrDoubleSidedParams.x < 0.0)
+    {
+        N = -N;
+        T = -T;
+        B = -B;
+    }
+#endif
     float3x3 TBN = float3x3(T, B, N);
 
     float3 sampledNormal = tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0;

@@ -787,6 +787,18 @@ namespace CNA::Internal::Renderers::Fna3d
                                            ? params.iblPrefilteredMipCount : 1),
                     params.iblIntensity, 0.0f
                 };
+                float doubleSidedOrientation = 0.0f;
+                if (params.pbrDoubleSided)
+                {
+                    const float determinant =
+                        world.M11 * (world.M22 * world.M33 - world.M23 * world.M32) -
+                        world.M12 * (world.M21 * world.M33 - world.M23 * world.M31) +
+                        world.M13 * (world.M21 * world.M32 - world.M22 * world.M31);
+                    doubleSidedOrientation = determinant < 0.0f ? -1.0f : 1.0f;
+                }
+                const float doubleSidedParams[4] = {
+                    doubleSidedOrientation, 0.0f, 0.0f, 0.0f
+                };
 
                 effect.SetFloats("AmbientColor", ambient, 4);
                 effect.SetFloats("EmissiveColor", emissive, 4);
@@ -812,6 +824,7 @@ namespace CNA::Internal::Renderers::Fna3d
                 effect.SetFloats("PunctualDiffuse", punctualDiffuse, 4);
                 effect.SetFloats("PunctualCone", punctualCone, 4);
                 effect.SetFloats("IblParams", iblParams, 4);
+                effect.SetFloats("PbrDoubleSidedParams", doubleSidedParams, 4);
 
                 effect.Apply(device_, useVertexColor ? 1 : 0);
                 const auto bindPbrTexture = [&](const char* samplerName,

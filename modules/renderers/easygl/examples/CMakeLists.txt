@@ -275,7 +275,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         # living-room-simulator R-3: a double-sided material shades its back face with the normal reversed.
         cna_easygl_test(cna_test_easygl_pbr_double_sided
-                        easygl_pbr_double_sided_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_double_sided_test.cpp)
         cna_register_renderer_test(NAME EasyGL_Pbr_DoubleSided COMMAND cna_test_easygl_pbr_double_sided
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

@@ -1306,6 +1306,25 @@ TEST(GltfRendererPbrFallbackPolicy, Fna3dSamplesSplitSumImageBasedLighting)
     }
 }
 
+TEST(GltfRendererPbrFallbackPolicy, Fna3dFlipsDoubleSidedPbrTangentBasis)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "fna3d");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "params.pbrDoubleSided",
+             "effect.SetFloats(\"PbrDoubleSidedParams\", doubleSidedParams, 4)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing FNA3D double-sided upload/compile evidence: " << evidence;
+    }
+    EXPECT_EQ(2u, CountOccurrences(
+                      source,
+                      Normalize("face * PbrDoubleSidedParams.x < 0.0")))
+        << "both FNA3D PBR shaders must reverse the tangent basis from VFACE";
+}
+
 TEST(GltfRendererPbrFallbackPolicy, SdlGpuSamplesBothKhrMaterialsSpecularTextures)
 {
     const std::string source = RendererSlotText(

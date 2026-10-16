@@ -824,8 +824,8 @@ TEST(Fna3dCompiledEffectTest, CnaExtensionFixtureHashesMatchDocumentedBuilds)
 {
     constexpr std::pair<const char*, const char*> fixtures[] = {
         {"CnaPunctualEffect.fxb", "f3ef1bdacf48d4f85452a0abb7a24034bc64acdd5582ecc9f5489950ad1f3678"},
-        {"CnaPbrEffect.fxb", "0fec6a3cb26995a4c8fb1a2d87e39c733522defd373811159464423b9cbc19c2"},
-        {"CnaSkinnedPbrEffect.fxb", "8dc38cca2982d4382b6e42de1817692e885f65fa0f61790f9a3ff81a9ccfdaaf"},
+        {"CnaPbrEffect.fxb", "14e2838697b2af17d7f9cc073f164ded7c578138688327f795483138d486cae5"},
+        {"CnaSkinnedPbrEffect.fxb", "b1e83343c413d372a601bbd481f0166034a04f444893f3a814c499225217c544"},
     };
     for (const auto& [name, expected] : fixtures)
     {
