@@ -5,6 +5,7 @@
 
 #if defined(CNA_RENDERER_SOFTWARE)
 
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -84,14 +85,14 @@ TEST_F(SoftwareColorMatrixEffect, NonFiniteMatrixCoefficientsAreRefused)
 {
     std::array<float, 16> matrix = effect.GetColorMatrix();
     matrix[0] = std::numeric_limits<float>::quiet_NaN();
-    EXPECT_THROW(effect.SetColorMatrix(matrix), std::invalid_argument);
+    EXPECT_THROW(effect.SetColorMatrix(matrix), System::ArgumentException);
 }
 
 TEST_F(SoftwareColorMatrixEffect, NonFiniteOffsetComponentsAreRefused)
 {
     EXPECT_THROW(
         effect.SetColorOffset(Vector4(std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 0.0f)),
-        std::invalid_argument);
+        System::ArgumentException);
 }
 
 TEST_F(SoftwareColorMatrixEffect, GrayscaleUsesRec709WeightsAndKeepsAlpha)

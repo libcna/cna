@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/InvalidOperationException.hpp"
 
@@ -160,17 +161,23 @@ class SoftwareOcclusionQueryContractTest final : public Game
               "scissor leaves exactly its 3x4 surviving pixels");
 
         BeginTarget(device, singleSampleTarget_.get());
+        // AlphaTestEffect always reads TextureCoordinate0, so its geometry declares one.
+        Texture2D white(device, 1, 1);
+        const Color whiteTexel = Color::White;
+        white.SetData(&whiteTexel, 1);
         AlphaTestEffect rejected(device);
+        rejected.setTextureProperty(&white);
         rejected.setVertexColorEnabledProperty(true);
         rejected.setAlphaFunctionProperty(CompareFunction::Never);
         rejected.Apply();
-        const std::array<VertexPositionColor, 6> vertices{{
-            {Vector3(-1,  1, 0.2f), Color::White},
-            {Vector3( 1,  1, 0.2f), Color::White},
-            {Vector3( 1, -1, 0.2f), Color::White},
-            {Vector3(-1,  1, 0.2f), Color::White},
-            {Vector3( 1, -1, 0.2f), Color::White},
-            {Vector3(-1, -1, 0.2f), Color::White},
+        const Vector2 uv(0.0f, 0.0f);
+        const std::array<VertexPositionColorTexture, 6> vertices{{
+            {Vector3(-1,  1, 0.2f), Color::White, uv},
+            {Vector3( 1,  1, 0.2f), Color::White, uv},
+            {Vector3( 1, -1, 0.2f), Color::White, uv},
+            {Vector3(-1,  1, 0.2f), Color::White, uv},
+            {Vector3( 1, -1, 0.2f), Color::White, uv},
+            {Vector3(-1, -1, 0.2f), Color::White, uv},
         }};
         Check(Measure(device, [&] {
                   rejected.Apply();
