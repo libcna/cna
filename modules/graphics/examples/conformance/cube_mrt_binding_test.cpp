@@ -200,13 +200,20 @@ class CubeMrtBindingTest final : public Game
         Check(Near(got, kFaceInit), label + " keeps its initial clear " + Show(got));
     }
 
-    /// Runs one rendering leg; an exception is that leg's FAIL, not the end of the program.
+    /// Runs one rendering leg; an exception is that leg's FAIL, not the end of the program. A
+    /// set the renderer refuses by name (NotSupportedException -- SDL_GPU and DIRECTX9 bind no
+    /// cube face among several targets) is a missing capability, so a [SKIP], as the header says.
     template <typename Fn>
     void Leg(const char* name, Fn&& fn)
     {
         try
         {
             fn();
+        }
+        catch (const System::NotSupportedException& e)
+        {
+            getGraphicsDeviceProperty().SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::printf("[SKIP] %s: the renderer refuses the set: %s\n", name, e.what());
         }
         catch (const std::exception& e)
         {
