@@ -114,8 +114,8 @@ MojoShader receives no unsupported preshader operands:
 
 | File | Bytes | SHA-256 |
 |---|---:|---|
-| `CnaPbrEffect.fxb` | 65,776 | `f776871ba4520f9c8ed30d168918cc9c23a6190fa9acb5aa30c10c6e05f8e6ba` |
-| `CnaSkinnedPbrEffect.fxb` | 92,224 | `9bd3f716aa88673e74487e0a886046624734311c31bf4076431bc97b6aea343c` |
+| `CnaPbrEffect.fxb` | 65,776 | `d7c0b0902f7253d16b516d505c91f27d89371b62cdc0edc081e5ed932e54ac1c` |
+| `CnaSkinnedPbrEffect.fxb` | 92,192 | `7d3a500876a07f32f084cbeb673a73f167ce37bae5c2a1a5004e7ca2a414f8bd` |
 
 ```bash
 fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPbrEffect.fxb CnaPbrEffect.fx

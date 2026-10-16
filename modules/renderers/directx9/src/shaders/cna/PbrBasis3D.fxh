@@ -5,10 +5,13 @@
 // zero vector fails, so a World scaled by 1e5 is not taken for a singular one. Every select below
 // chooses between finite values, so no NaN appears even where vs_3_0 blends both sides.
 
-// normalize() that keeps a zero vector zero.
+// normalize() that keeps a zero vector zero. The divisor is the largest component, or 1 for a zero
+// vector: no tiny epsilon, whose reciprocal fxc would fold into a constant MojoShader's GLSL output
+// cannot print (1e30 overflows its 32-byte number buffer).
 float3 CnaPbrDirectionOrZero(float3 v)
 {
-    float3 u = v / max(max(max(abs(v.x), abs(v.y)), abs(v.z)), 1e-30);
+    float scale = max(max(abs(v.x), abs(v.y)), abs(v.z));
+    float3 u = v / (scale + (scale == 0.0 ? 1.0 : 0.0));
     return u * rsqrt(max(dot(u, u), 1.0));
 }
 

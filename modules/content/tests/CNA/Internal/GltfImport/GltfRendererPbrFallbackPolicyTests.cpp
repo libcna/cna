@@ -1220,12 +1220,12 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX9SamplesBothKhrMaterialsSpecularTextu
              // regenerated from the HLSL beside it rather than left behind by an edit. It moved from
              // 5588 to 5688 when GLTF-465 added the COLOR_0 product and its VertexColorFlags
              // register, to 6472 when the PBR pixel shaders gained punctual lights and shadow
-             // sampling, and to 7236 with the degenerate-basis guard and glTF doubleSided; the byte
+             // sampling, and to 7200 with the degenerate-basis guard and glTF doubleSided; the byte
              // count is the only part of an opaque blob a source audit can read -- so it is updated
              // deliberately here, alongside the register table below, rather than loosened into
              // "some bytecode exists".
-             "kPbr3DPSBytecode[7236]",
-             "kPbrSkinned3DPSBytecode[7236]"})
+             "kPbr3DPSBytecode[7200]",
+             "kPbrSkinned3DPSBytecode[7200]"})
     {
         EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
             << "missing DirectX 9 specular binding evidence: " << evidence;
