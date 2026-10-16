@@ -1,0 +1,45 @@
+--- a/profiles/mojoshader_profile_spirv.c
++++ b/profiles/mojoshader_profile_spirv.c
+@@ -1759,6 +1759,7 @@
+     // fine to leave the z and w attributes in that
+     // SpvBuiltInFragCoord gives.
+ 
++    uint32 tid_float = spv_get_type(ctx, STI_FLOAT);
+     uint32 tid_vec4 = spv_get_type(ctx, STI_VEC4);
+     uint32 tid_pvec4i = spv_get_type(ctx, STI_PTR_VEC4_I);
+     uint32 tid_pvec4p = spv_get_type(ctx, STI_PTR_VEC4_P);
+@@ -1767,10 +1768,18 @@
+     uint32 id_var_vpos = id;
+ 
+     uint32 id_fragcoord = spv_bumpid(ctx);
++    uint32 id_fragcoord_x = spv_bumpid(ctx);
++    uint32 id_fragcoord_y = spv_bumpid(ctx);
++    uint32 id_vpos_x = spv_bumpid(ctx);
++    uint32 id_vpos_y = spv_bumpid(ctx);
++    uint32 id_vpos_tmp = spv_bumpid(ctx);
+     uint32 id_vpos = spv_bumpid(ctx);
+ 
++    // Direct3D 9's vPos is the pixel's integer position; Vulkan's FragCoord is its centre, half
++    // a pixel further. The GLSL profile floors gl_FragCoord for the same reason (CNA's
++    // glsl-raster-inputs patch); this profile copied it straight through. -CNA
+     // vec4 gl_FragCoord = <compiler magic builtin>;
+-    // vec4 ps_vPos = gl_FragCoord;
++    // vec4 ps_vPos = vec4(floor(gl_FragCoord.x), floor(gl_FragCoord.y), gl_FragCoord.zw);
+ 
+     push_output(ctx, &ctx->mainline_intro);
+     // Define all variables involved.
+@@ -1783,7 +1792,13 @@
+     // Initialize vPos using built in FragCoord.
+     push_output(ctx, &ctx->mainline_top);
+     spv_emit(ctx, 4, SpvOpLoad, tid_vec4, id_fragcoord, id_var_fragcoord);
+-    spv_emit(ctx, 3, SpvOpStore, id_var_vpos, id_fragcoord);
++    spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_fragcoord_x, id_fragcoord, 0);
++    spv_emit(ctx, 5, SpvOpCompositeExtract, tid_float, id_fragcoord_y, id_fragcoord, 1);
++    spv_emit(ctx, 5 + 1, SpvOpExtInst, tid_float, id_vpos_x, spv_getext(ctx), GLSLstd450Floor, id_fragcoord_x);
++    spv_emit(ctx, 5 + 1, SpvOpExtInst, tid_float, id_vpos_y, spv_getext(ctx), GLSLstd450Floor, id_fragcoord_y);
++    spv_emit(ctx, 6, SpvOpCompositeInsert, tid_vec4, id_vpos_tmp, id_vpos_x, id_fragcoord, 0);
++    spv_emit(ctx, 6, SpvOpCompositeInsert, tid_vec4, id_vpos, id_vpos_y, id_vpos_tmp, 1);
++    spv_emit(ctx, 3, SpvOpStore, id_var_vpos, id_vpos);
+     pop_output(ctx);
+ 
+     ctx->spirv.id_var_fragcoord = id_var_fragcoord;

@@ -10838,7 +10838,13 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
 
         CompiledEffectDrawCommand command;
-        command.linked = runtime->LinkAndGetShadersEXT(declaredStreams);
+        // XNA's integer pixel centres, as the stock programs get them; SpriteBatch's projection
+        // already owns its own convention.
+        const Matrix pixelCenter = spriteTextureOverride == nullptr
+                                       ? XnaPixelCenterCorrectionEXT(primitive)
+                                       : Matrix::getIdentityProperty();
+        command.linked = runtime->LinkAndGetShadersEXT(declaredStreams, pixelCenter.M41,
+                                                       pixelCenter.M42);
         runtime->CaptureUniformSnapshotEXT(command.vertexUniforms, command.pixelUniforms);
 
         command.streams.resize(sources.size());
@@ -10876,10 +10882,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             bool assigned = false;
             runtime->GetBoundSamplerEXT(sampler.slot, /*vertexStage=*/false, texture, state,
                                         &assigned);
-            if (texture == nullptr && params.compiledDeviceTextures != nullptr &&
+            // Apply() publishes the pass's textures to the device slots, and a texture the game
+            // sets on a device slot afterwards is the one XNA samples, so a filled device slot
+            // takes precedence over the texture the effect captured (as on DIRECTX9).
+            if (params.compiledDeviceTextures != nullptr &&
                 sampler.slot < static_cast<std::uint32_t>(
                                    Microsoft::Xna::Framework::Graphics::
-                                       TextureCollection::MaxTextures))
+                                       TextureCollection::MaxTextures) &&
+                (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)] != nullptr)
             {
                 texture = (*params.compiledDeviceTextures)[static_cast<int>(sampler.slot)];
             }

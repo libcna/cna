@@ -98,6 +98,8 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief Direct3D 9 Shader Model 3's own constant-register ceilings. */
         static constexpr int kMaxBoolRegisters = 16;
 
+        /** @brief The texture stages' TEXBEM/TEXBEML state, which compiled passes assign. */
+        std::array<CompiledEffectLegacyBumpMapEnvState, 16> bumpEnvironment{};
         /** @brief Currently bound vertex shader, or null. */
         WebGPUCompiledShaderEXT* boundVertex = nullptr;
         /** @brief Currently bound pixel shader, or null. */
@@ -349,13 +351,17 @@ namespace CNA::Internal::Renderers::WebGPU
          *
          * @param streams The caller's bound streams, per-vertex first. A shader input is claimed
          *        by the first stream whose declaration carries its usage and usage index.
+         * @param clipOffsetX Clip-space x the vertex shader's position moves per unit of w: XNA's
+         *        pixel-centre correction, which a viewport cannot carry here.
+         * @param clipOffsetY Clip-space y counterpart of @p clipOffsetX.
          * @return The linked pass.
          * @throws std::runtime_error if no pass is applied or linking fails.
          * @throws System::NotSupportedException if no stream supplies an input the vertex shader
          *         consumes, or if the pass declares a vertex-stage sampler.
          */
         CNAEXT [[nodiscard]] LinkedPassEXT LinkAndGetShadersEXT(
-            const std::vector<CompiledVertexStreamEXT>& streams) const;
+            const std::vector<CompiledVertexStreamEXT>& streams, float clipOffsetX = 0.0f,
+            float clipOffsetY = 0.0f) const;
 
     private:
         WebGPUCompiledEffect(WebGPURenderer& renderer, const WebGPUCompiledEffect& cloneSource);

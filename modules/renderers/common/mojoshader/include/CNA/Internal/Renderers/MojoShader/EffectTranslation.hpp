@@ -18,6 +18,7 @@
 
 #include "mojoshader.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -141,4 +142,58 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
         const std::vector<Texture*>& textures,
         const CompiledEffectDeviceState& deviceState,
         CompiledEffectPassStateChanges& changes);
+
+    /** @brief Each texture stage's TEXBEM/TEXBEML/BEM values: device state, as in Direct3D 9. */
+    using LegacyBumpMapEnvironment = std::array<CompiledEffectLegacyBumpMapEnvState, 16>;
+
+    /**
+     * @brief Folds a pass's partial bump-environment assignments into the device's state.
+     *
+     * Only the components a pass assigned change; the rest keep what an earlier pass left, as the
+     * texture-stage state of a Direct3D 9 device does.
+     *
+     * @param environment The device's per-stage state.
+     * @param changes What the applied pass assigned (CompiledEffectPassStateChanges::legacyBumpMapEnvs).
+     */
+    void ApplyLegacyBumpMapEnvChanges(
+        LegacyBumpMapEnvironment& environment,
+        const std::vector<CompiledEffectLegacyBumpMapEnvChange>& changes);
+
+    /** @brief One shader stage's register files, with how many registers each holds. */
+    struct SpirvRegisterFiles
+    {
+        /** @brief The float4 registers, four floats each. */
+        const float* floats = nullptr;
+        /** @brief Number of float4 registers @ref floats holds. */
+        std::size_t float4Count = 0;
+        /** @brief The int4 registers, four ints each. */
+        const int* ints = nullptr;
+        /** @brief Number of int4 registers @ref ints holds. */
+        std::size_t int4Count = 0;
+        /** @brief The bool registers, one byte each. */
+        const unsigned char* bools = nullptr;
+        /** @brief Number of bool registers @ref bools holds. */
+        std::size_t boolCount = 0;
+    };
+
+    /**
+     * @brief Packs one shader's uniform block as MojoShader's SPIR-V profile declares it.
+     *
+     * The block is the float4 registers the shader uses, then two float4s for each sampler a
+     * ps_1_x TEXBEM/TEXBEML reads -- its BUMPENVMAT00/01/10/11, then its luminance scale and offset
+     * -- then the int4 registers, then one 16-byte slot per bool register
+     * (mojoshader_profile_spirv.c allocates the bump pairs after every float uniform, in sampler
+     * order). Leaving the pairs out zeroed TEXBEM's matrix and moved every int and bool register
+     * of such a shader two slots early.
+     *
+     * @param parseData The shader's parse data; null packs nothing.
+     * @param registers The stage's register files.
+     * @param environment The device's bump-environment state, or null to leave the pairs zero.
+     * @param out Receives the packed block; empty when the shader declares no uniform.
+     */
+    void PackSpirvUniformBlock(
+        const MOJOSHADER_parseData* parseData,
+        const SpirvRegisterFiles& registers,
+        const LegacyBumpMapEnvironment* environment,
+        std::vector<std::uint8_t>& out);
 }

@@ -4828,7 +4828,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     void SdlGpuRenderer::ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
-                                                    int targetWidth, int targetHeight) const
+                                                    int targetWidth, int targetHeight,
+                                                    float pixelCenterOffset) const
     {
         SDL_GPUViewport vp{};
         if (ref.viewportSet && ref.viewportW > 0 && ref.viewportH > 0)
@@ -4855,6 +4856,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             vp.min_depth = 0.0f;
             vp.max_depth = 1.0f;
         }
+        vp.x += pixelCenterOffset;
+        vp.y += pixelCenterOffset;
         SDL_SetGPUViewport(pass, &vp);
     }
 
@@ -8285,6 +8288,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         const SdlGpuSampledTextureEXT* spriteTextureOverride)
     {
         CompiledEffectBinding binding;
+        // The linked fragment module keeps only the colour outputs this pass has attachments for
+        // (TransformPixelSpirv): Direct3D 9 discards a write to an unbound render target, and
+        // Vulkan reports a fragment output no attachment consumes.
+        {
+            SdlGpuColorTargetFormatsEXT formats{};
+            SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1;
+            SDL_GPUTextureFormat depthStencil = SDL_GPU_TEXTUREFORMAT_INVALID;
+            int colorTargets = 1;
+            ResolveActiveTargetFormatsEXT(formats, samples, depthStencil, colorTargets);
+            MOJOSHADER_sdlSetColorTargetCount(GetMojoShaderContextEXT(),
+                                              static_cast<unsigned int>(colorTargets));
+        }
         SdlGpuCompiledEffectVertexLayoutEXT vertexLayout =
             effect.LinkAndGetShadersMultiEXT(streams, binding.vertexShader, binding.pixelShader);
         binding.programIdentity = effect.LinkedProgramIdentityEXT();
@@ -8353,10 +8368,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool samplerAssigned = false;
             effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState,
                                       &samplerAssigned);
-            if (boundTexture == nullptr && params != nullptr &&
-                params->compiledDeviceTextures != nullptr &&
+            // Apply() publishes the pass's textures to the device slots, and a texture the game
+            // sets on a device slot afterwards is the one XNA samples, so a filled device slot
+            // takes precedence over the texture the effect captured (as on DIRECTX9).
+            if (params != nullptr && params->compiledDeviceTextures != nullptr &&
                 slot < static_cast<unsigned int>(
-                           Microsoft::Xna::Framework::Graphics::TextureCollection::MaxTextures))
+                           Microsoft::Xna::Framework::Graphics::TextureCollection::MaxTextures) &&
+                (*params->compiledDeviceTextures)[static_cast<int>(slot)] != nullptr)
             {
                 boundTexture =
                     (*params->compiledDeviceTextures)[static_cast<int>(slot)];
@@ -9876,8 +9894,21 @@ namespace CNA::Internal::Renderers::SdlGpu
                 {
                     const CompiledEffectDrawCommand& c = compiledEffectDrawCommands_[ref.index];
                     if (c.uploadedVertexBuffer != nullptr && c.target == target)
+                    {
+                        // A compiled vertex shader computes its own clip position, so XNA's integer
+                        // pixel centres (ApplyXnaPixelCenter) move the viewport instead, by the
+                        // same 63/128 px, for filled primitives at one sample -- FNA3D's SDL_GPU
+                        // driver's correction for the same MojoShader output.
+                        const bool filled = c.topology == SDL_GPU_PRIMITIVETYPE_TRIANGLELIST ||
+                                            c.topology == SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+                        if (filled && sampleCount == SDL_GPU_SAMPLECOUNT_1)
+                        {
+                            ApplyViewportForRef(pass, ref, static_cast<int>(viewportSize[0]),
+                                                static_cast<int>(viewportSize[1]), 63.0f / 128.0f);
+                        }
                         IssueCompiledEffectDraw(pass, cmd, c, colorFormat, sampleCount,
                                                depthStencilFormat, colorTargetCount, boundPipeline);
+                    }
                     break;
                 }
 #endif

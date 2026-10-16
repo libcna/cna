@@ -171,6 +171,9 @@ function(cna_configure_mojoshader)
         # plans/plan_apple_m4.md AM4-144: the SPIR-V profile ignored a TEXKILL predicate and
         # killed unconditionally (WebGPU and SDL_GPU compiled effects alike).
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-predicated-texkill.patch"
+        # Direct3D 9's vPos is the integer pixel; the SPIR-V profile's Vulkan mode passed FragCoord,
+        # the pixel centre, straight through (SDL_GPU and WebGPU compiled effects alike).
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vpos-pixel-corner.patch"
         # plans/plan_apple_m4.md AM4-192: the Metal profile -- which FNA3D's SDL_GPU driver uses on
         # Apple -- had neither the TEXCRD opcode nor D3D9's oD# clamp; the GLSL/SPIR-V profiles got
         # both above (glsl-texcrd, spirv-texcrd, vertex-color-clamp).
@@ -179,7 +182,10 @@ function(cna_configure_mojoshader)
         # The same oD# clamp for desktop GLSL (FNA3D's OpenGL driver drew BasicEffect's lit colour
         # unclamped on Mesa) and for SPIR-V (FNA3D's SDL_GPU driver): plans/plan_fna3d.md FNA3D-55.
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-desktop-vertex-color-clamp.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vertex-color-clamp.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vertex-color-clamp.patch"
+        # A linked SDL_GPU program is keyed by the number of color targets it draws into, which
+        # its SPIR-V transform receives: Vulkan reports a fragment output without an attachment.
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sdlgpu-color-target-count.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
     # In order, each patch made on top of the previous ones; a new one is appended at the end

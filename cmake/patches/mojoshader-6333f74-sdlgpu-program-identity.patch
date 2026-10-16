@@ -2,7 +2,7 @@ diff --git a/mojoshader.h b/mojoshader.h
 --- a/mojoshader.h
 +++ b/mojoshader.h
 @@ -2209,6 +2209,9 @@ DECLSPEC MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(MOJOSHADER_sdlContext
- /* Returns non-zero when the currently linked program's fragment module was transformed. */
+ /* Returns non-zero when the linked program's fragment module gained the second uniform buffer. */
  DECLSPEC int MOJOSHADER_sdlGetPixelSpirvTransformApplied(MOJOSHADER_sdlContext *context);
  
 +/* Returns a non-zero context-lifetime identity for the currently linked program. */

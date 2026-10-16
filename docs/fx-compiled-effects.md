@@ -287,13 +287,20 @@ the renderer supports elsewhere but this draw route cannot preserve. `plans/plan
 limitation: FNA3D, SDL_GPU and EasyGL all pass the compiled cube-sampler contract.
 
 Running EasyGL's Shader Model 1-3 sections on the MojoShader SPIR-V route (`plans/plan_apple_m4.md`
-AM4-144) found three silent wrong-pixel defects shared by every SPIR-V backend. A predicated
-`TEXKILL` that killed unconditionally is fixed for all of them by
-`mojoshader-6333f74-spirv-predicated-texkill.patch`. The other two remain open on `SDL_GPU` and
-`WEBGPU`: `vPos` is not the integer pixel Direct3D 9 defines, and `TEXBEM`/`TEXBEML` read zero bump
-matrices because no SPIR-V adapter fills the two float4s per sampler MojoShader appends to the
-uniform block. `plans/plan_fx.md` Phase G tracks the rollout, and its own section 10.3 -- not the
-one below, which belongs to this page -- classifies every renderer identity.
+AM4-144) found silent wrong-pixel defects shared by every SPIR-V backend, all fixed for `SDL_GPU`
+and `WEBGPU`: a predicated `TEXKILL` that killed unconditionally
+(`mojoshader-6333f74-spirv-predicated-texkill.patch`), `vPos` at the pixel centre rather than
+Direct3D 9's integer pixel (`mojoshader-6333f74-spirv-vpos-pixel-corner.patch`), and `TEXBEM`/
+`TEXBEML` with zero bump matrices (`MojoShaderEffect::PackSpirvUniformBlock` fills the two float4s
+per sampler MojoShader appends to the uniform block). Three more are the pipeline's, and
+`MojoShaderEffect`'s SPIR-V adaptations (`SpirvPipelineAdaptation.hpp`) fit the module to it: `vFace`
+is mirrored because both renderers keep counter-clockwise as the native front face; a colour output
+with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
+and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
+by XNA's pixel-centre correction (SDL_GPU moves the viewport, as FNA3D's SDL_GPU driver does).
+ps_1_4 `BEM` stays refused by name: the SPIR-V profile has no implementation of it.
+`plans/plan_fx.md` Phase G tracks the rollout, and its own section 10.3 -- not the one below, which
+belongs to this page -- classifies every renderer identity.
 
 ### What "passes the shared contract" means
 

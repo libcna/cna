@@ -490,6 +490,40 @@ TEST(WebGPUCompiledEffectDrawTest, SpriteBatchAlternatesCompiledAndStockAcrossBa
     CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
 }
 
+// Shader Model 1-3 on the MojoShader SPIR-V route, which SDL_GPU and WebGPU share (EasyGL's
+// sections are the oracle): ps_3_0's vPos is D3D9's integer pixel, not the pixel centre FragCoord
+// carries; vFace is positive on XNA's clockwise front face although this renderer's native front
+// face is counter-clockwise; and TEXBEM/TEXBEML read the texture stage's bump-environment matrix
+// from the two float4s MojoShader appends to the uniform block.
+TEST(WebGPUCompiledEffectDrawTest, SharedRasterInputContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectRasterInputContract(device);
+}
+
+// The contract's TEXBEM and TEXBEML legs run first and must pass. Its last leg is ps_1_4 BEM,
+// which MojoShader's SPIR-V profile cannot express, so that effect refuses by name instead of
+// drawing without the matrix; a route that starts drawing it fails here and belongs in the contract.
+TEST(WebGPUCompiledEffectDrawTest, SharedLegacyBumpEnvironmentContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    try
+    {
+        CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
+        ADD_FAILURE() << "ps_1_4 BEM drew instead of refusing";
+    }
+    catch (const std::exception& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("BEM unimplemented in spirv profile"),
+                  std::string::npos)
+            << "BEM refused for another reason: " << error.what();
+    }
+}
+
 TEST(WebGPUCompiledEffectDrawTest, SharedHalfPixelCoverageContract)
 {
     GraphicsDevice device;

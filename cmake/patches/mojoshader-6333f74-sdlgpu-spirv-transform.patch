@@ -1,24 +1,26 @@
 diff --git a/mojoshader.h b/mojoshader.h
 --- a/mojoshader.h
 +++ b/mojoshader.h
-@@ -2030,6 +2030,16 @@ typedef struct MOJOSHADER_sdlContext MOJOSHADER_sdlContext;
+@@ -2030,6 +2030,18 @@ typedef struct MOJOSHADER_sdlContext MOJOSHADER_sdlContext;
  typedef struct MOJOSHADER_sdlShaderData MOJOSHADER_sdlShaderData;
  typedef struct MOJOSHADER_sdlProgram MOJOSHADER_sdlProgram;
  
 +/*
 + * Optional CNA integration hook for transforming linked fragment SPIR-V before SDL_gpu creates
 + * its native shader. Return NULL on success or a stable error string on failure. A successful
-+ * rewrite allocates (*output) with (m); the adapter frees it with its paired allocator.
++ * rewrite allocates (*output) with (m); the adapter frees it with its paired allocator. A rewrite
++ * whose module reads a second fragment uniform buffer sets (*added_uniform_buffer) non-zero.
 + */
 +typedef const char *(MOJOSHADERCALL *MOJOSHADER_sdlSpirvTransform)(
 +    const unsigned char *input, unsigned int input_len,
 +    unsigned char **output, unsigned int *output_len,
++    int *added_uniform_buffer,
 +    MOJOSHADER_malloc m, void *malloc_d, void *userdata);
 +
  #ifndef SDL_GPU_H
  typedef struct SDL_GPUDevice SDL_GPUDevice;
  typedef struct SDL_GPUShader SDL_GPUShader;
-@@ -2079,6 +2089,11 @@ DECLSPEC MOJOSHADER_sdlContext *MOJOSHADER_sdlCreateContext(SDL_GPUDevice *devic
+@@ -2079,6 +2091,11 @@ DECLSPEC MOJOSHADER_sdlContext *MOJOSHADER_sdlCreateContext(SDL_GPUDevice *devic
                                                              MOJOSHADER_free f,
                                                              void *malloc_d);
  
@@ -30,11 +32,11 @@ diff --git a/mojoshader.h b/mojoshader.h
  /* CNA test hook: force an available ShaderCross path on a SPIR-V-capable device. */
  DECLSPEC int MOJOSHADER_sdlSetShaderCrossTestMode(MOJOSHADER_sdlContext *context,
                                                    int enabled);
-@@ -2192,6 +2207,9 @@ DECLSPEC MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(MOJOSHADER_sdlContext
+@@ -2192,6 +2209,9 @@ DECLSPEC MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(MOJOSHADER_sdlContext
                                                            MOJOSHADER_vertexAttribute *vertexAttributes,
                                                            int vertexAttributeCount);
  
-+/* Returns non-zero when the currently linked program's fragment module was transformed. */
++/* Returns non-zero when the linked program's fragment module gained the second uniform buffer. */
 +DECLSPEC int MOJOSHADER_sdlGetPixelSpirvTransformApplied(MOJOSHADER_sdlContext *context);
 +
  /*
@@ -90,7 +92,7 @@ diff --git a/mojoshader_sdlgpu.c b/mojoshader_sdlgpu.c
  const char *MOJOSHADER_sdlGetError(
      MOJOSHADER_sdlContext *ctx
  ) {
-@@ -551,12 +568,44 @@ static MOJOSHADER_sdlProgram *compile_program(
+@@ -551,12 +568,49 @@ static MOJOSHADER_sdlProgram *compile_program(
      char *pshaderSource = (char*) pshader->parseData->output;
      size_t vshaderCodeSize = vshader->parseData->output_len;
      size_t pshaderCodeSize = pshader->parseData->output_len;
@@ -107,11 +109,13 @@ diff --git a/mojoshader_sdlgpu.c b/mojoshader_sdlgpu.c
 +        {
 +            unsigned char *transformed = NULL;
 +            unsigned int transformed_len = 0;
++            int added_uniform_buffer = 0;
 +            const char *transform_error = ctx->spirv_transform(
 +                (const unsigned char *) pshaderSource,
 +                (unsigned int) pshaderCodeSize,
 +                &transformed,
 +                &transformed_len,
++                &added_uniform_buffer,
 +                ctx->malloc_fn,
 +                ctx->malloc_data,
 +                ctx->spirv_transform_data
@@ -128,6 +132,9 @@ diff --git a/mojoshader_sdlgpu.c b/mojoshader_sdlgpu.c
 +            {
 +                pshaderSource = (char *) transformed;
 +                pshaderCodeSize = transformed_len;
++            } // if
++            if ((transformed != NULL) && added_uniform_buffer)
++            {
 +                pixelUniformBufferCount = 2;
 +                program->pixelSpirvTransformApplied = 1;
 +            } // if
@@ -135,7 +142,7 @@ diff --git a/mojoshader_sdlgpu.c b/mojoshader_sdlgpu.c
      } // if
      else if (shader_format == SDL_GPU_SHADERFORMAT_MSL)
      {
-@@ -726,6 +775,7 @@ static MOJOSHADER_sdlProgram *compile_program(
+@@ -726,6 +780,7 @@ static MOJOSHADER_sdlProgram *compile_program(
          createInfo.format = shader_format;
          createInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
          createInfo.num_samplers = pshader->samplerSlots;
@@ -143,7 +150,7 @@ diff --git a/mojoshader_sdlgpu.c b/mojoshader_sdlgpu.c
  
          program->pixelShader = SDL_CreateGPUShader(
              ctx->device,
-@@ -826,6 +876,13 @@ MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(
+@@ -826,6 +881,13 @@ MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(
      return program;
  } // MOJOSHADER_sdlLinkProgram
  

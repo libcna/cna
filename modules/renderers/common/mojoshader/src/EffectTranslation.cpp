@@ -1046,4 +1046,111 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                               samplerTextureParameters, textures, deviceState, changes);
         }
     }
+
+    void ApplyLegacyBumpMapEnvChanges(
+        LegacyBumpMapEnvironment& environment,
+        const std::vector<CompiledEffectLegacyBumpMapEnvChange>& changes)
+    {
+        for (const auto& change : changes)
+        {
+            if (change.slot >= environment.size()) continue;
+            auto& state = environment[change.slot];
+            for (std::size_t component = 0; component < state.matrix.size(); ++component)
+                if ((change.assignedMask & (1u << component)) != 0u)
+                    state.matrix[component] = change.state.matrix[component];
+            if ((change.assignedMask & (1u << 4u)) != 0u)
+                state.luminanceScale = change.state.luminanceScale;
+            if ((change.assignedMask & (1u << 5u)) != 0u)
+                state.luminanceOffset = change.state.luminanceOffset;
+        }
+    }
+
+    void PackSpirvUniformBlock(
+        const MOJOSHADER_parseData* parseData,
+        const SpirvRegisterFiles& registers,
+        const LegacyBumpMapEnvironment* environment,
+        std::vector<std::uint8_t>& out)
+    {
+        out.clear();
+        if (parseData == nullptr) return;
+        std::size_t floats = 0, ints = 0, bools = 0, bumpPairs = 0;
+        for (int i = 0; i < parseData->uniform_count; ++i)
+        {
+            const MOJOSHADER_uniform& uniform = parseData->uniforms[i];
+            const std::size_t span =
+                uniform.array_count > 0 ? static_cast<std::size_t>(uniform.array_count) : 1u;
+            if (uniform.type == MOJOSHADER_UNIFORM_FLOAT) floats += span;
+            else if (uniform.type == MOJOSHADER_UNIFORM_INT) ints += span;
+            else if (uniform.type == MOJOSHADER_UNIFORM_BOOL) bools += span;
+        }
+        for (int i = 0; i < parseData->sampler_count; ++i)
+            if (parseData->samplers[i].texbem != 0) ++bumpPairs;
+        const std::size_t total = (floats + 2u * bumpPairs + ints + bools) * 16u;
+        if (total == 0) return;
+        out.assign(total, 0u);
+
+        std::size_t floatSlot = 0;
+        std::size_t intSlot = floats + 2u * bumpPairs;
+        std::size_t boolSlot = intSlot + ints;
+        for (int i = 0; i < parseData->uniform_count; ++i)
+        {
+            const MOJOSHADER_uniform& uniform = parseData->uniforms[i];
+            const std::size_t span =
+                uniform.array_count > 0 ? static_cast<std::size_t>(uniform.array_count) : 1u;
+            const int index = uniform.index;
+            if (uniform.type == MOJOSHADER_UNIFORM_FLOAT)
+            {
+                if (index >= 0 && registers.floats != nullptr &&
+                    static_cast<std::size_t>(index) + span <= registers.float4Count)
+                {
+                    std::memcpy(out.data() + floatSlot * 16u,
+                                registers.floats + 4 * static_cast<std::size_t>(index), span * 16u);
+                }
+                floatSlot += span;
+            }
+            else if (uniform.type == MOJOSHADER_UNIFORM_INT)
+            {
+                if (index >= 0 && registers.ints != nullptr &&
+                    static_cast<std::size_t>(index) + span <= registers.int4Count)
+                {
+                    std::memcpy(out.data() + intSlot * 16u,
+                                registers.ints + 4 * static_cast<std::size_t>(index), span * 16u);
+                }
+                intSlot += span;
+            }
+            else if (uniform.type == MOJOSHADER_UNIFORM_BOOL)
+            {
+                // A bool occupies only the low four bytes of its own 16-byte slot.
+                for (std::size_t j = 0; j < span; ++j)
+                {
+                    if (index >= 0 && registers.bools != nullptr &&
+                        static_cast<std::size_t>(index) + j < registers.boolCount)
+                    {
+                        const std::int32_t value =
+                            registers.bools[static_cast<std::size_t>(index) + j] != 0 ? 1 : 0;
+                        std::memcpy(out.data() + (boolSlot + j) * 16u, &value, sizeof(value));
+                    }
+                }
+                boolSlot += span;
+            }
+        }
+
+        std::size_t pair = 0;
+        for (int i = 0; i < parseData->sampler_count; ++i)
+        {
+            const MOJOSHADER_sampler& sampler = parseData->samplers[i];
+            if (sampler.texbem == 0) continue;
+            float slot[8] = {};
+            if (environment != nullptr && sampler.index >= 0 &&
+                static_cast<std::size_t>(sampler.index) < environment->size())
+            {
+                const auto& state = (*environment)[static_cast<std::size_t>(sampler.index)];
+                slot[0] = state.matrix[0]; slot[1] = state.matrix[1];
+                slot[2] = state.matrix[2]; slot[3] = state.matrix[3];
+                slot[4] = state.luminanceScale; slot[5] = state.luminanceOffset;
+            }
+            std::memcpy(out.data() + (floats + 2u * pair) * 16u, slot, sizeof(slot));
+            ++pair;
+        }
+    }
 }

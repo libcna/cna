@@ -10,6 +10,7 @@
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
+#include "CNA/Internal/Renderers/MojoShader/SpirvPipelineAdaptation.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
@@ -34,31 +35,57 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// Adds XNA's per-register sampler LOD bias before SDL_gpu/ShaderCross create the native
         /// fragment module. SDL documents the native sampler field as a no-op on Metal, so the
         /// compiled route uses the same bounded SPIR-V rewrite as WebGPU while keeping
-        /// MojoShader's original combined samplers intact.
-        const char* MOJOSHADERCALL TransformPixelSamplerLodBias(
+        /// MojoShader's original combined samplers intact. It also mirrors vFace, because this
+        /// renderer's pipelines keep counter-clockwise as the native front face (see ToCullMode),
+        /// and keeps only the colour outputs the pass has attachments for.
+        const char* MOJOSHADERCALL TransformPixelSpirv(
             const unsigned char* input, unsigned int inputLength,
-            unsigned char** output, unsigned int* outputLength,
-            MOJOSHADER_malloc allocate, void* allocatorData, void*)
+            unsigned char** output, unsigned int* outputLength, int* addedUniformBuffer,
+            unsigned int colorTargetCount, MOJOSHADER_malloc allocate, void* allocatorData, void*)
         {
             static thread_local std::string error;
             error.clear();
-            if (output == nullptr || outputLength == nullptr || allocate == nullptr)
+            if (output == nullptr || outputLength == nullptr || addedUniformBuffer == nullptr ||
+                allocate == nullptr)
             {
                 error = "CNA SDL_GPU: invalid MojoShader SPIR-V transform arguments";
                 return error.c_str();
             }
             *output = nullptr;
             *outputLength = 0;
+            *addedUniformBuffer = 0;
             if (input == nullptr || inputLength % sizeof(std::uint32_t) != 0)
             {
                 error = "CNA SDL_GPU: compiled effect produced misaligned SPIR-V";
                 return error.c_str();
             }
 
+            MojoShaderEffect::SpirvPipelineAdaptationResult mirrored =
+                MojoShaderEffect::MirrorFrontFacing(
+                    reinterpret_cast<const std::uint32_t*>(input),
+                    inputLength / sizeof(std::uint32_t));
+            if (!mirrored.error.empty())
+            {
+                error = "CNA SDL_GPU: could not mirror a compiled effect's vFace: " +
+                        mirrored.error;
+                return error.c_str();
+            }
+            MojoShaderEffect::SpirvPipelineAdaptationResult attached;
+            attached.words = std::move(mirrored.words);
+            if (colorTargetCount > 0)
+            {
+                attached = MojoShaderEffect::DropUnattachedColorOutputs(
+                    attached.words.data(), attached.words.size(), colorTargetCount);
+                if (!attached.error.empty())
+                {
+                    error = "CNA SDL_GPU: could not fit a compiled effect's outputs to its targets: " +
+                            attached.error;
+                    return error.c_str();
+                }
+            }
             MojoShaderEffect::SpirvLodBiasResult transformed =
                 MojoShaderEffect::InjectSamplerLodBias(
-                    reinterpret_cast<const std::uint32_t*>(input),
-                    inputLength / sizeof(std::uint32_t),
+                    attached.words.data(), attached.words.size(),
                     /*samplerDescriptorSet=*/2u, /*uniformDescriptorSet=*/3u,
                     /*binding=*/1u);
             if (!transformed.error.empty())
@@ -67,7 +94,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                         transformed.error;
                 return error.c_str();
             }
-            if (!transformed.changed) return nullptr;
+            if (!mirrored.changed && !attached.changed && !transformed.changed) return nullptr;
 
             const std::size_t byteCount = transformed.words.size() * sizeof(std::uint32_t);
             if (byteCount > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
@@ -86,6 +113,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::memcpy(bytes, transformed.words.data(), byteCount);
             *output = bytes;
             *outputLength = static_cast<unsigned int>(byteCount);
+            *addedUniformBuffer = transformed.changed ? 1 : 0;
             return nullptr;
         }
 
@@ -386,6 +414,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         MojoShaderEffect::TranslateLegacySamplerAssignments(
             effectData_, stateChanges_, maxSlots, samplerTextureParameters_, textures_,
             deviceState, changes);
+        MojoShaderEffect::ApplyLegacyBumpMapEnvChanges(
+            renderer_.compiledLegacyBumpMapEnvsEXT_, changes.legacyBumpMapEnvs);
 
         // FX-071: fold this pass's assignments into the persistent per-slot state a draw route
         // reads through GetBoundSamplerEXT. Matches real XNA behavior -- a slot this pass does not
@@ -539,58 +569,23 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     namespace
     {
-        /// Mirrors mojoshader_sdlgpu.c's own `update_uniform_buffer`, sourced from the register
-        /// files `MOJOSHADER_sdlMapUniformBufferMemory` exposes rather than that private function.
+        /// The SPIR-V uniform block MojoShader declares (MojoShaderEffect::PackSpirvUniformBlock),
+        /// from the register files `MOJOSHADER_sdlMapUniformBufferMemory` exposes. mojoshader_sdlgpu.c
+        /// sizes them MAX_REG_FILE_F/I/B.
         void PackUniformBuffer(const MOJOSHADER_sdlShaderData* shader,
                                const float* regF, const int* regI, const unsigned char* regB,
+                               const MojoShaderEffect::LegacyBumpMapEnvironment& bumpEnvironment,
                                std::vector<std::uint8_t>& out)
         {
             out.clear();
             if (shader == nullptr) return;
             const MOJOSHADER_parseData* parseData = MOJOSHADER_sdlGetShaderParseData(
                 const_cast<MOJOSHADER_sdlShaderData*>(shader));
-            if (parseData == nullptr || parseData->uniform_count <= 0 || parseData->uniforms == nullptr)
-                return;
-
-            std::size_t offset = 0;
-            for (int i = 0; i < parseData->uniform_count; ++i)
-            {
-                const int size = parseData->uniforms[i].array_count > 0
-                                     ? parseData->uniforms[i].array_count
-                                     : 1;
-                offset += static_cast<std::size_t>(size) * 16u;
-            }
-            out.assign(offset, 0u);
-
-            offset = 0;
-            for (int i = 0; i < parseData->uniform_count; ++i)
-            {
-                const MOJOSHADER_uniform& uniform = parseData->uniforms[i];
-                const int index = uniform.index;
-                const int size = uniform.array_count > 0 ? uniform.array_count : 1;
-                switch (uniform.type)
-                {
-                    case MOJOSHADER_UNIFORM_FLOAT:
-                        std::memcpy(out.data() + offset, &regF[4 * index],
-                                   static_cast<std::size_t>(size) * 16u);
-                        break;
-                    case MOJOSHADER_UNIFORM_INT:
-                        std::memcpy(out.data() + offset, &regI[4 * index],
-                                   static_cast<std::size_t>(size) * 16u);
-                        break;
-                    case MOJOSHADER_UNIFORM_BOOL:
-                        for (int j = 0; j < size; ++j)
-                        {
-                            std::uint32_t bit = regB[index + j];
-                            std::memcpy(out.data() + offset + static_cast<std::size_t>(j) * 16u,
-                                       &bit, sizeof(bit));
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                offset += static_cast<std::size_t>(size) * 16u;
-            }
+            MojoShaderEffect::SpirvRegisterFiles registers;
+            registers.floats = regF; registers.float4Count = 8192;
+            registers.ints = regI; registers.int4Count = 2047;
+            registers.bools = regB; registers.boolCount = 2047;
+            MojoShaderEffect::PackSpirvUniformBlock(parseData, registers, &bumpEnvironment, out);
         }
     }
 
@@ -610,8 +605,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         float* psf = nullptr; int* psi = nullptr; unsigned char* psb = nullptr;
         MOJOSHADER_sdlMapUniformBufferMemory(context_, &vsf, &vsi, &vsb, &psf, &psi, &psb);
 
-        PackUniformBuffer(vertex, vsf, vsi, vsb, vertexBytes);
-        PackUniformBuffer(pixel, psf, psi, psb, pixelBytes);
+        PackUniformBuffer(vertex, vsf, vsi, vsb, renderer_.compiledLegacyBumpMapEnvsEXT_, vertexBytes);
+        PackUniformBuffer(pixel, psf, psi, psb, renderer_.compiledLegacyBumpMapEnvsEXT_, pixelBytes);
 
         MOJOSHADER_sdlUnmapUniformBufferMemory(context_);
     }
@@ -628,7 +623,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             mojoShaderContext_ = MOJOSHADER_sdlCreateContext(device_, nullptr, nullptr, nullptr);
             if (mojoShaderContext_ != nullptr &&
                 !MOJOSHADER_sdlSetSpirvTransform(
-                    mojoShaderContext_, TransformPixelSamplerLodBias, nullptr))
+                    mojoShaderContext_, TransformPixelSpirv, nullptr))
             {
                 MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
                 mojoShaderContext_ = nullptr;

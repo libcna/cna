@@ -158,14 +158,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
       and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
       them. A capability boundary, reported as such.
-    - SDL_GPU compiled XNA effects (`SdlGpuCompiledEffectDrawTest`, the shared helpers in
-      `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`): a quad covering pixels 1-2
-      under Direct3D 9's pixel-centre convention lands half a pixel up and left
-      (`SharedHalfPixelCoverageContract`); a texture set on the device slot after `Apply()` is not
-      the one the draw samples (`SharedDeviceTextureSlotAfterApplyContract`); a pixel shader writing
-      `COLOR2` into a one-target pass draws with a Vulkan validation warning, which fails
-      `SdlGpu_CompiledEffectRuntime`. WebGPU's compiled effects (`CNA_WEBGPU_COMPILED_EFFECTS`, off
-      by default) fail the same two contracts on the same MojoShader SPIR-V route.
     - WebGPU: a `ShaderEffect` disposed after `End()` and before the flush drops its draw
       (`deferred_effect_query_lifetime` E2-E4; `webgpu_effect_outlived_by_draw_test` Check B asserts
       the drop, contrary to XNA); two vertex streams into a `ShaderEffect` are refused, and a missing
@@ -186,12 +178,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     so the back of a leaf is shaded with the normal of the side facing away. Each needs the flag,
     the mirror sign and its own front-facing input checked against its winding convention; the
     oracle is `easygl_pbr_double_sided_test`. (`GSC-0010`, living-room-simulator R-3.)
-13. **Compiled XNA effects on the MojoShader SPIR-V route (`SDL_GPU`, `WEBGPU`) get two Shader
-    Model 1-3 cases wrong** (found 2026-10-08 by `AM4-144` on the retired `METAL` route, fixed only
-    in that renderer's adapter, not re-measured since): `vPos` is not the integer pixel Direct3D 9
-    defines (a half-pixel offset), and `TEXBEM`/`TEXBEML` read zero bump matrices because neither
-    adapter fills the two float4s per sampler MojoShader appends to the uniform block. Shared with
-    every SPIR-V backend; the oracles are EasyGL's Shader Model 1-3 compiled-effect sections.
 14. **The MinGW-w64 cross-build compiles and runs every test binary** (2026-10-15; before, the
     POSIX `setenv`/`unsetenv`/`getpid` calls in the GamerServices and content-pipeline tests stopped
     `CnaTests.exe` compiling). Those calls go through `System::Environment`, the fork-based child

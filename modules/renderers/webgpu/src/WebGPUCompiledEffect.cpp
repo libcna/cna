@@ -12,6 +12,7 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvCombinedSamplerSplit.hpp"
+#include "CNA/Internal/Renderers/MojoShader/SpirvPipelineAdaptation.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -252,63 +253,18 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /// Packs one shader's declared uniforms into MojoShader's own SPIR-V uniform-block layout.
         void PackUniforms(const MOJOSHADER_parseData* parseData, const float* regF, const int* regI,
-                          const unsigned char* regB, std::vector<std::uint8_t>& out)
+                          const unsigned char* regB,
+                          const MojoShaderEffect::LegacyBumpMapEnvironment& bumpEnvironment,
+                          std::vector<std::uint8_t>& out)
         {
-            out.clear();
-            if (parseData == nullptr || parseData->uniform_count <= 0) return;
-            std::size_t total = 0;
-            for (int i = 0; i < parseData->uniform_count; ++i)
-            {
-                const int span = parseData->uniforms[i].array_count
-                                     ? parseData->uniforms[i].array_count : 1;
-                total += static_cast<std::size_t>(span) * 16u;
-            }
-            if (total == 0) return;
-            out.assign(total, 0u);
-            std::size_t offset = 0;
-            for (int i = 0; i < parseData->uniform_count; ++i)
-            {
-                const MOJOSHADER_uniform& uniform = parseData->uniforms[i];
-                const int span = uniform.array_count ? uniform.array_count : 1;
-                const int index = uniform.index;
-                std::uint8_t* dst = out.data() + offset;
-                const std::size_t bytes = static_cast<std::size_t>(span) * 16u;
-                if (uniform.type == MOJOSHADER_UNIFORM_FLOAT)
-                {
-                    if (index >= 0 &&
-                        static_cast<std::size_t>(4 * index) + span * 4u <=
-                            WebGPUMojoShaderContextEXT::kMaxFloat4Registers * 4u)
-                    {
-                        std::memcpy(dst, &regF[4 * index], bytes);
-                    }
-                }
-                else if (uniform.type == MOJOSHADER_UNIFORM_INT)
-                {
-                    if (index >= 0 &&
-                        static_cast<std::size_t>(4 * index) + span * 4u <=
-                            WebGPUMojoShaderContextEXT::kMaxInt4Registers * 4u)
-                    {
-                        std::memcpy(dst, &regI[4 * index], bytes);
-                    }
-                }
-                else if (uniform.type == MOJOSHADER_UNIFORM_BOOL)
-                {
-                    // A bool occupies only the low four bytes of its own 16-byte slot, exactly as
-                    // MojoShader's other adapters pack it.
-                    for (int j = 0; j < span; ++j)
-                    {
-                        if (index < 0 ||
-                            static_cast<std::size_t>(index + j) >=
-                                WebGPUMojoShaderContextEXT::kMaxBoolRegisters)
-                        {
-                            continue;
-                        }
-                        const std::int32_t value = regB[index + j] != 0 ? 1 : 0;
-                        std::memcpy(dst + static_cast<std::size_t>(j) * 16u, &value, sizeof(value));
-                    }
-                }
-                offset += bytes;
-            }
+            MojoShaderEffect::SpirvRegisterFiles registers;
+            registers.floats = regF;
+            registers.float4Count = WebGPUMojoShaderContextEXT::kMaxFloat4Registers;
+            registers.ints = regI;
+            registers.int4Count = WebGPUMojoShaderContextEXT::kMaxInt4Registers;
+            registers.bools = regB;
+            registers.boolCount = WebGPUMojoShaderContextEXT::kMaxBoolRegisters;
+            MojoShaderEffect::PackSpirvUniformBlock(parseData, registers, &bumpEnvironment, out);
         }
 
         /// FNV-1a over the finished SPIR-V, so identical bodies share one shader module.
@@ -548,6 +504,9 @@ namespace CNA::Internal::Renderers::WebGPU
         MojoShaderEffect::TranslateLegacySamplerAssignments(
             effectData_, stateChanges_, boundSamplers_.size(), samplerTextureParameters_, textures_,
             deviceState, changes);
+        if (context_ != nullptr)
+            MojoShaderEffect::ApplyLegacyBumpMapEnvChanges(
+                context_->bumpEnvironment, changes.legacyBumpMapEnvs);
 
         // Persist the per-slot bindings, so a later pass that reassigns nothing keeps them --
         // real XNA behaviour, and what a deferred draw reads back at record time.
@@ -585,12 +544,14 @@ namespace CNA::Internal::Renderers::WebGPU
         if (context_->boundVertex != nullptr)
         {
             PackUniforms(context_->boundVertex->parseData, context_->vsRegF.data(),
-                         context_->vsRegI.data(), context_->vsRegB.data(), vertexBytes);
+                         context_->vsRegI.data(), context_->vsRegB.data(),
+                         context_->bumpEnvironment, vertexBytes);
         }
         if (context_->boundPixel != nullptr)
         {
             PackUniforms(context_->boundPixel->parseData, context_->psRegF.data(),
-                         context_->psRegI.data(), context_->psRegB.data(), pixelBytes);
+                         context_->psRegI.data(), context_->psRegB.data(),
+                         context_->bumpEnvironment, pixelBytes);
         }
     }
 
@@ -619,7 +580,8 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
     WebGPUCompiledEffect::LinkedPassEXT WebGPUCompiledEffect::LinkAndGetShadersEXT(
-        const std::vector<CompiledVertexStreamEXT>& streams) const
+        const std::vector<CompiledVertexStreamEXT>& streams, float clipOffsetX,
+        float clipOffsetY) const
     {
         WebGPUCompiledShaderEXT* vertex = nullptr;
         WebGPUCompiledShaderEXT* pixel = nullptr;
@@ -737,12 +699,34 @@ namespace CNA::Internal::Renderers::WebGPU
                 out.viewDimension = ToViewDimension(binding.dim, binding.arrayed);
                 samplersOut.push_back(out);
             }
+            // vFace: this renderer's pipelines keep counter-clockwise as the native front face,
+            // so FrontFacing is true on XNA's back face; mirrored before the routes diverge.
+            MojoShaderEffect::SpirvPipelineAdaptationResult mirrored =
+                MojoShaderEffect::MirrorFrontFacing(split.words.data(), split.words.size());
+            if (!mirrored.error.empty())
+            {
+                throw std::runtime_error(
+                    "CNA WebGPU: could not mirror a compiled effect's vFace: " + mirrored.error);
+            }
+            // XNA's integer pixel centres: the vertex stage's own clip position moves, because
+            // a WebGPU viewport cannot leave its attachment the way the correction needs.
+            if (lodBiasOut == nullptr)
+            {
+                mirrored = MojoShaderEffect::OffsetClipPosition(
+                    mirrored.words.data(), mirrored.words.size(), clipOffsetX, clipOffsetY);
+                if (!mirrored.error.empty())
+                {
+                    throw std::runtime_error(
+                        "CNA WebGPU: could not move a compiled effect's pixel centres: " +
+                        mirrored.error);
+                }
+            }
             // WEBGPU-208: SamplerState.MipMapLevelOfDetailBias is XNA sampler state that no
             // WebGPU sampler descriptor can carry, so it has to reach the shader. This is the ONE
             // place it is injected, before the native and browser routes diverge, so the two
             // cannot end up with different XNA semantics. It is a no-op for a stage that samples
             // nothing, which is why the vertex stage passes a null flag.
-            std::vector<std::uint32_t> stageWords = std::move(split.words);
+            std::vector<std::uint32_t> stageWords = std::move(mirrored.words);
             if (lodBiasOut != nullptr)
             {
                 MojoShaderEffect::SpirvLodBiasResult biased = MojoShaderEffect::InjectSamplerLodBias(
@@ -773,7 +757,11 @@ namespace CNA::Internal::Renderers::WebGPU
         linked.vertexEntryPoint = vertexData->mainfn != nullptr ? vertexData->mainfn : "main";
         linked.pixelEntryPoint = pixelData->mainfn != nullptr ? pixelData->mainfn : "main";
         linked.vertexHasUniforms = vertexData->uniform_count > 0;
+        // A TEXBEM/TEXBEML sampler's two bump-environment float4s live in the same block, so a
+        // pixel shader with no constants of its own still reads one.
         linked.pixelHasUniforms = pixelData->uniform_count > 0;
+        for (int i = 0; i < pixelData->sampler_count && !linked.pixelHasUniforms; ++i)
+            linked.pixelHasUniforms = pixelData->samplers[i].texbem != 0;
 
         // plans/plan_fx.md FX-109: no CNA renderer routes GraphicsDevice.VertexTextures to a
         // backend, and this one has no vertex-stage sampler binding either. Refuse by name rather

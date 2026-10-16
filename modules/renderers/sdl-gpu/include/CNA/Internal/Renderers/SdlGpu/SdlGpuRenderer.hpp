@@ -4368,8 +4368,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Applies SDL_SetGPUViewport for one queued draw, using the ref's captured
         // viewport if set, otherwise the pass's full render-target extents (byte-identical to the
         // pre-fix implicit full-target viewport). Called per draw from RenderQueuedDraws.
+        // pixelCenterOffset moves the origin right and down by that many pixels.
         void ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
-                                 int targetWidth, int targetHeight) const;
+                                 int targetWidth, int targetHeight,
+                                 float pixelCenterOffset = 0.0f) const;
         // Applies SDL_SetGPUScissor for one queued draw, using the ref's captured
         // scissor rect (clamped to the target's physical extent) if the scissor test was enabled,
         // otherwise the pass's full render-target extents (no clip). Called per draw from
@@ -4388,6 +4390,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         // One MojoShader context per SDL_GPU device, created on first compiled effect.
         MOJOSHADER_sdlContext* mojoShaderContext_ = nullptr;
+        // The texture stages' TEXBEM/TEXBEML state, device state the compiled passes assign.
+        std::array<CompiledEffectLegacyBumpMapEnvState, 16> compiledLegacyBumpMapEnvsEXT_{};
 #endif
         SdlGpuTestHooksEXT testHooks_{};
         bool testFailureInjected_ = false;
