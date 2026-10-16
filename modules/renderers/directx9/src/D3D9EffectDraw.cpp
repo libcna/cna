@@ -650,7 +650,8 @@ namespace CNA::Internal::Renderers::DirectX9
             // SkinnedVertexColor3D custom shader instead of DrawSkinnedEffectEXT. Microsoft's
             // stock shader has no Color input, so merely accepting the extra declaration element
             // would draw without applying the vertex colour.
-            if (stride == 56)
+            const bool punctual = params.punctualKind >= 1 && params.punctualKind <= 2;
+            if (stride == 56 && !punctual)
             {
                 DrawSkinnedVertexColorEXT(vb, ib, world, view, projection, primitive, primitiveCount, params);
                 return;
@@ -1144,10 +1145,20 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord";
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_BLENDWEIGHT, 0)) missing += " BlendWeight";
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_BLENDINDICES, 0)) missing += " BlendIndices";
+        const bool punctual = params.punctualKind >= 1 && params.punctualKind <= 2;
+        if (punctual && params.vertexColorEnabled &&
+            !DeclarationProvidesEXT(layout, D3DDECLUSAGE_COLOR, 0)) missing += " Color";
         if (!missing.empty())
             throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (SkinnedEffect): stride " + std::to_string(stride) +
                 " has no matching CNA vertex layout: the vertex declaration has no" + missing);
+
+        if (punctual)
+        {
+            DrawBasicPunctualEffectEXT(
+                vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
 
         const bool oneLight = ComputeOneLightEXT(params);
         // preferPerPixelLighting now reads GpuDrawParams' real field (plans/plan_dx9.md D9-81 item 1,

@@ -43,6 +43,16 @@ static constexpr D3D9ShaderConstantSlot kBasicPunctual3DVS_Registers[] = {
 };
 static constexpr int kBasicPunctual3DVS_RegistersCount = 4;
 
+static constexpr D3D9ShaderConstantSlot kBasicPunctualSkinned3DVS_Registers[] = {
+    {"WorldViewProj", 'v', 0, 4},
+    {"World", 'v', 4, 3},
+    {"WorldInverseTranspose", 'v', 8, 3},
+    {"FogVector", 'v', 11, 1},
+    {"Bones", 'v', 12, 216},
+    {"SkinningParams", 'v', 228, 1}
+};
+static constexpr int kBasicPunctualSkinned3DVS_RegistersCount = 6;
+
 static constexpr D3D9ShaderConstantSlot kBasicPunctual3DPS_Registers[] = {
     {"DiffuseColor", 'p', 0, 1},
     {"EmissiveColor", 'p', 1, 1},

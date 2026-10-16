@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// CNA-owned SM3 path for BasicEffect's point/spot extension. Ordinary BasicEffect draws keep
+// CNA-owned SM3 path for BasicEffect/SkinnedEffect's point/spot extension. Ordinary draws keep
 // using Microsoft's untouched XNA bytecode; D3D9EffectDraw selects this only for an active lamp.
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
@@ -13,9 +13,12 @@
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX9
 {
@@ -66,6 +69,27 @@ namespace CNA::Internal::Renderers::DirectX9
             transposed.ToColumnMajor(registers);
             TryUploadVertexShaderConstantEXT(device, table, count, name, registers);
         }
+
+        void UploadBonesVS(IDirect3DDevice9* device,
+                           const Shaders::D3D9ShaderConstantSlot* table, int count,
+                           const GpuDrawParams& params)
+        {
+            std::vector<float> registers(72 * 12, 0.0f);
+            const int boneCount = std::min(params.boneCount, 72);
+            for (int i = 0; i < boneCount; ++i)
+            {
+                const float* b = params.boneTransforms + i * 16;
+                const Matrix bone(b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+                                  b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]);
+                const Matrix transposed = Matrix::Transpose(bone);
+                float full[16];
+                transposed.ToColumnMajor(full);
+                std::copy(full, full + 12,
+                          registers.begin() + static_cast<std::ptrdiff_t>(i) * 12);
+            }
+            TryUploadVertexShaderConstantEXT(
+                device, table, count, "Bones", registers.data());
+        }
     }
 
     void DirectX9Renderer::DrawBasicPunctualEffectEXT(
@@ -77,7 +101,17 @@ namespace CNA::Internal::Renderers::DirectX9
 
         ComPtr<IDirect3DVertexShader9>* vertexShader = nullptr;
         const uint8_t* vertexBytecode = nullptr;
-        if (params.textureEnabled && params.vertexColorEnabled)
+        if (params.skinned && params.vertexColorEnabled)
+        {
+            vertexShader = &basicPunctualSkinnedColorVS_;
+            vertexBytecode = kBasicPunctualSkinned3DColorVSBytecode;
+        }
+        else if (params.skinned)
+        {
+            vertexShader = &basicPunctualSkinnedVS_;
+            vertexBytecode = kBasicPunctualSkinned3DVSBytecode;
+        }
+        else if (params.textureEnabled && params.vertexColorEnabled)
         {
             vertexShader = &basicPunctualTextureColorVS_;
             vertexBytecode = kBasicPunctual3DTextureColorVSBytecode;
@@ -122,8 +156,10 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetVertexShader(vertexShader->Get());
         device_->SetPixelShader(pixelShader->Get());
 
-        const auto* vsRegs = kBasicPunctual3DVS_Registers;
-        const int vsCount = kBasicPunctual3DVS_RegistersCount;
+        const auto* vsRegs = params.skinned
+            ? kBasicPunctualSkinned3DVS_Registers : kBasicPunctual3DVS_Registers;
+        const int vsCount = params.skinned
+            ? kBasicPunctualSkinned3DVS_RegistersCount : kBasicPunctual3DVS_RegistersCount;
         const auto* psRegs = kBasicPunctual3DPS_Registers;
         const int psCount = kBasicPunctual3DPS_RegistersCount;
 
@@ -135,6 +171,14 @@ namespace CNA::Internal::Renderers::DirectX9
                                worldInverseTranspose);
         TryUploadVertexShaderConstantEXT(
             device_.Get(), vsRegs, vsCount, "FogVector", params.fogVector);
+        if (params.skinned)
+        {
+            UploadBonesVS(device_.Get(), vsRegs, vsCount, params);
+            const float skinningParams[4] = {
+                static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f};
+            TryUploadVertexShaderConstantEXT(
+                device_.Get(), vsRegs, vsCount, "SkinningParams", skinningParams);
+        }
 
         TryUploadPixelShaderConstantEXT(
             device_.Get(), psRegs, psCount, "DiffuseColor", params.diffuseColor);

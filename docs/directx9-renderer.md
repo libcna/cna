@@ -65,11 +65,12 @@ cmake --build cmake-build-d3d9 -j
 - **Buffers, textures, render targets, MRT, MSAA, occlusion queries, NPOT, hardware instancing,
   all render/blend/depth-stencil/rasterizer state** — real `SetRenderState`/`SetSamplerState`
   sequences (D3D9 has no state objects to cache — design decision 11).
-- **CNA punctual lighting**: `BasicEffect`, `PbrEffect` and `SkinnedPbrEffect` consume the single
-  `PunctualLightEXT` point/spot source, including range and spot-cone attenuation. `BasicEffect`
-  selects a CNA-owned SM3 variant only while the extension is active, leaving Microsoft's stock
-  bytecode untouched for ordinary XNA draws. The focused public BasicEffect regression covers
-  disabled, point, out-of-range and aimed/away spot cases; PBR also covers a skinned draw.
+- **CNA punctual lighting**: `BasicEffect`, `SkinnedEffect`, `PbrEffect` and `SkinnedPbrEffect`
+  consume the single `PunctualLightEXT` point/spot source, including range and spot-cone
+  attenuation. The classic effects select CNA-owned SM3 variants only while the extension is
+  active, leaving Microsoft's stock bytecode untouched for ordinary XNA draws. Focused public
+  BasicEffect and SkinnedEffect regressions cover disabled, point, out-of-range and aimed/away
+  spot cases; PBR also covers a skinned draw.
 
 ## What's not (yet)
 
@@ -87,10 +88,8 @@ cmake --build cmake-build-d3d9 -j
   `GpuDrawParams` gap present on **every** CNA renderer (Divergence 1/4 in `plans/plan_dx9.md`'s own
   "CNA's divergences from XNA 4.0" section) — out of this renderer's authority to fix; measured
   and reported, not silently worked around.
-- **`PunctualLightEXT` on `SkinnedEffect`**: the classic skinned path still runs Microsoft's
-  original XNA bytecode, which has no point/spot-light input. `BasicEffect` has a separate CNA
-  extension variant, but its skinned counterpart has not yet been added. Direct shadow-map
-  sampling is also not implemented in the D3D9 Basic/PBR paths.
+- **Direct shadow-map sampling** is not implemented in the D3D9 Basic/Skinned/PBR paths; their
+  point and spot lights are currently unshadowed.
 - **`SpriteSortMode.Immediate`/`.Texture`**: `Immediate`'s only real behavioral difference from
   `Deferred` isn't pixel-observable by a raster-diff methodology at all; `Texture` sorts by
   `Texture.GetHashCode()` in real FNA, an implementation-defined identity hash with no

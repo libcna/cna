@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// CNA's DirectX 9 BasicEffect extension path. Microsoft's original XNA 4.0 BasicEffect bytecode
-// has no PunctualLightEXT input, so draws with an active point/spot source use this SM3 pair.
-// Draws without the extension continue through the untouched stock bytecode and remain eligible
-// for exact XNA-oracle comparison.
+// CNA's DirectX 9 BasicEffect/SkinnedEffect extension path. Microsoft's original XNA 4.0 stock
+// bytecode has no PunctualLightEXT input, so draws with an active point/spot source use this SM3
+// pair. Draws without the extension continue through the untouched stock bytecode and remain
+// eligible for exact XNA-oracle comparison.
 
 sampler2D Texture : register(s0);
 
@@ -11,6 +11,8 @@ float4x4 WorldViewProj          : register(c0);
 float4x4 World                  : register(c4);
 float3x3 WorldInverseTranspose  : register(c8);
 float4 FogVector                : register(c11);
+float4x3 Bones[72]              : register(c12);
+float4 SkinningParams           : register(c228); // x=weights per vertex
 
 float4 DiffuseColor             : register(c0);
 float4 EmissiveColor            : register(c1);
@@ -59,6 +61,25 @@ struct VSInputNmTxVc
     float4 Color    : COLOR0;
 };
 
+struct VSInputNmTxSkinned
+{
+    float4 Position    : POSITION0;
+    float3 Normal      : NORMAL0;
+    float2 TexCoord    : TEXCOORD0;
+    float4 BoneWeights : BLENDWEIGHT0;
+    int4 BoneIndices   : BLENDINDICES0;
+};
+
+struct VSInputNmTxSkinnedVc
+{
+    float4 Position    : POSITION0;
+    float3 Normal      : NORMAL0;
+    float2 TexCoord    : TEXCOORD0;
+    float4 BoneWeights : BLENDWEIGHT0;
+    int4 BoneIndices   : BLENDINDICES0;
+    float4 Color       : COLOR0;
+};
+
 struct VSOutput
 {
     float4 PositionPS : POSITION0;
@@ -99,6 +120,32 @@ VSOutput VSBasicPunctualTx(VSInputNmTx vin)
 VSOutput VSBasicPunctualTxVc(VSInputNmTxVc vin)
 {
     return BuildOutput(vin.Position, vin.Normal, vin.TexCoord, vin.Color);
+}
+
+VSOutput BuildSkinnedOutput(float4 position, float3 normal, float2 uv, float4 color,
+                            float4 weights, int4 indices)
+{
+    float4x3 skinning = Bones[indices.x] * weights.x;
+    if (SkinningParams.x >= 2.0)
+        skinning += Bones[indices.y] * weights.y;
+    if (SkinningParams.x >= 4.0)
+        skinning += Bones[indices.z] * weights.z + Bones[indices.w] * weights.w;
+    float3 skinnedPosition = mul(position, skinning);
+    float3 skinnedNormal = mul(normal, (float3x3)skinning);
+    return BuildOutput(float4(skinnedPosition, 1.0), skinnedNormal, uv, color);
+}
+
+VSOutput VSBasicPunctualSkinned(VSInputNmTxSkinned vin)
+{
+    return BuildSkinnedOutput(vin.Position, vin.Normal, vin.TexCoord,
+                              float4(1.0, 1.0, 1.0, 1.0),
+                              vin.BoneWeights, vin.BoneIndices);
+}
+
+VSOutput VSBasicPunctualSkinnedVc(VSInputNmTxSkinnedVc vin)
+{
+    return BuildSkinnedOutput(vin.Position, vin.Normal, vin.TexCoord, vin.Color,
+                              vin.BoneWeights, vin.BoneIndices);
 }
 
 float3 DirectionalDiffuse(float3 normal)

@@ -59,6 +59,8 @@ else
       "cna/BasicPunctual3D.hlsl VSBasicPunctualVc vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DColorVSBytecode" \
       "cna/BasicPunctual3D.hlsl VSBasicPunctualTx vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DTextureVSBytecode" \
       "cna/BasicPunctual3D.hlsl VSBasicPunctualTxVc vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DTextureColorVSBytecode" \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctualSkinned vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctualSkinned3DVSBytecode" \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctualSkinnedVc vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctualSkinned3DColorVSBytecode" \
       "cna/BasicPunctual3D.hlsl PSBasicPunctual ps_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DPSBytecode" \
       "cna/BasicPunctual3D.hlsl PSBasicPunctualTx ps_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DTexturePSBytecode" \
       "cna/Pbr3D.hlsl VSPbr3D vs_3_0 d3d9_pbr_shaders.hpp kPbr3DVSBytecode" \
