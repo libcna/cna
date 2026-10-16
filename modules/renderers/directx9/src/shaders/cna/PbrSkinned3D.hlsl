@@ -67,6 +67,31 @@ struct VSInputColor
     float4 Color       : COLOR0;
 };
 
+#if CNA_D3D9_DUAL_UV
+struct VSInputDualUv
+{
+    float3 Position    : POSITION0;
+    float3 Normal      : NORMAL0;
+    float4 Tangent     : TANGENT0;
+    float2 UV          : TEXCOORD0;
+    float4 BoneWeights : BLENDWEIGHT0;
+    int4   BoneIndices : BLENDINDICES0;
+    float2 UV1         : TEXCOORD1;
+};
+
+struct VSInputDualUvColor
+{
+    float3 Position    : POSITION0;
+    float3 Normal      : NORMAL0;
+    float4 Tangent     : TANGENT0;
+    float2 UV          : TEXCOORD0;
+    float4 BoneWeights : BLENDWEIGHT0;
+    int4   BoneIndices : BLENDINDICES0;
+    float2 UV1         : TEXCOORD1;
+    float4 Color       : COLOR0;
+};
+#endif
+
 struct VSOutput
 {
     float4 Position  : SV_Position;
@@ -75,6 +100,9 @@ struct VSOutput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+#if CNA_D3D9_DUAL_UV
+    float2 UV1       : TEXCOORD5;
+#endif
     // Written by both entry points: the authored colour, or opaque white where the layout has none.
     float4 Color     : COLOR0;
 };
@@ -106,7 +134,7 @@ float CnaDirectionHandedness(float3x3 m)
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
 
-VSOutput VSPbrSkinned3DBody(VSInput vin, float4 color)
+VSOutput VSPbrSkinned3DBody(VSInput vin, float2 uv1, float4 color)
 {
     VSOutput vout;
     vout.Color = color;
@@ -135,6 +163,9 @@ VSOutput VSPbrSkinned3DBody(VSInput vin, float4 color)
                             vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat)
                                 * CnaDirectionHandedness(skinNormalMat));
     vout.UV = vin.UV;
+#if CNA_D3D9_DUAL_UV
+    vout.UV1 = uv1;
+#endif
     vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;
     // FNA view-space fog on the POST-skin position (FNA Skin() mutates vin.Position
     // before ComputeFogFactor). keep = 1 - saturate(dot(skinPos, fogVector)); zero vector = no fog.
@@ -146,7 +177,7 @@ VSOutput VSPbrSkinned3DBody(VSInput vin, float4 color)
 VSOutput VSPbrSkinned3D(VSInput vin)
 {
     // Stride 68/76 carry no colour element: opaque white is the multiplier's identity.
-    return VSPbrSkinned3DBody(vin, float4(1.0, 1.0, 1.0, 1.0));
+    return VSPbrSkinned3DBody(vin, vin.UV, float4(1.0, 1.0, 1.0, 1.0));
 }
 
 VSOutput VSPbrSkinned3DColor(VSInputColor vin)
@@ -158,8 +189,34 @@ VSOutput VSPbrSkinned3DColor(VSInputColor vin)
     bare.UV = vin.UV;
     bare.BoneWeights = vin.BoneWeights;
     bare.BoneIndices = vin.BoneIndices;
-    return VSPbrSkinned3DBody(bare, vin.Color);
+    return VSPbrSkinned3DBody(bare, vin.UV, vin.Color);
 }
+
+#if CNA_D3D9_DUAL_UV
+VSOutput VSPbrSkinned3DDualUv(VSInputDualUv vin)
+{
+    VSInput bare;
+    bare.Position = vin.Position;
+    bare.Normal = vin.Normal;
+    bare.Tangent = vin.Tangent;
+    bare.UV = vin.UV;
+    bare.BoneWeights = vin.BoneWeights;
+    bare.BoneIndices = vin.BoneIndices;
+    return VSPbrSkinned3DBody(bare, vin.UV1, float4(1.0, 1.0, 1.0, 1.0));
+}
+
+VSOutput VSPbrSkinned3DDualUvColor(VSInputDualUvColor vin)
+{
+    VSInput bare;
+    bare.Position = vin.Position;
+    bare.Normal = vin.Normal;
+    bare.Tangent = vin.Tangent;
+    bare.UV = vin.UV;
+    bare.BoneWeights = vin.BoneWeights;
+    bare.BoneIndices = vin.BoneIndices;
+    return VSPbrSkinned3DBody(bare, vin.UV1, vin.Color);
+}
+#endif
 
 sampler2D Texture              : register(s0);
 sampler2D NormalMap            : register(s1);
@@ -204,6 +261,10 @@ float4 IblParams               : register(c76); // x=enabled, y=mip count, z=int
 #if CNA_D3D9_DOUBLE_SIDED
 float4 PbrDoubleSidedParams    : register(c77); // x=0 single-sided, +/-1 world orientation
 #endif
+#if CNA_D3D9_DUAL_UV
+float4 PbrTextureCoordinateSets  : register(c78); // base, normal, metallic-roughness, emissive
+float4 PbrTextureCoordinateSets2 : register(c79); // occlusion, specular, specular-colour
+#endif
 
 #if CNA_D3D9_SHADOWS
 #include "ShadowSampling3D.fxh"
@@ -220,8 +281,27 @@ struct PSInput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+#if CNA_D3D9_DUAL_UV
+    float2 UV1       : TEXCOORD5;
+#endif
     float4 Color     : COLOR0;
 };
+
+float2 CnaPbrUv(PSInput pin, int slot)
+{
+#if CNA_D3D9_DUAL_UV
+    float setIndex = slot == 0 ? PbrTextureCoordinateSets.x
+        : slot == 1 ? PbrTextureCoordinateSets.y
+        : slot == 2 ? PbrTextureCoordinateSets.z
+        : slot == 3 ? PbrTextureCoordinateSets.w
+        : slot == 4 ? PbrTextureCoordinateSets2.x
+        : slot == 5 ? PbrTextureCoordinateSets2.y
+                    : PbrTextureCoordinateSets2.z;
+    return setIndex > 0.5 ? pin.UV1 : pin.UV;
+#else
+    return pin.UV;
+#endif
+}
 
 float3 CnaSrgbToLinear(float3 color)
 {
@@ -332,7 +412,7 @@ float4 PSPbrSkinned3D(PSInput pin, float face : VFACE) : SV_Target0
 float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
 #endif
 {
-    float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(pin.UV, 0));
+    float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(CnaPbrUv(pin, 0), 0));
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
     float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
@@ -357,19 +437,21 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
 #endif
     float3x3 TBN = float3x3(T, B, N);
 
-    float3 sampledNormal = tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0;
+    float3 sampledNormal = tex2D(
+        NormalMap, CnaPbrTransformUv(CnaPbrUv(pin, 1), 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= MetallicRoughnessFactor.z;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
-    float4 mr = tex2D(MetallicRoughnessMap, CnaPbrTransformUv(pin.UV, 2));
+    float4 mr = tex2D(
+        MetallicRoughnessMap, CnaPbrTransformUv(CnaPbrUv(pin, 2), 2));
     float roughness = clamp(mr.g * MetallicRoughnessFactor.y, 0.045, 1.0);
     float metallic = clamp(mr.b * MetallicRoughnessFactor.x, 0.0, 1.0);
 
     float3 V = normalize(EyePosition - pin.WorldPos);
     float specularWeight = SpecularFresnelInputs.w
-        * tex2D(SpecularMap, CnaPbrSpecularTransformUv(pin.UV, 0)).a;
+        * tex2D(SpecularMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 5), 0)).a;
     float3 specularColorTex = tex2D(
-        SpecularColorMap, CnaPbrSpecularTransformUv(pin.UV, 1)).rgb;
+        SpecularColorMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 6), 1)).rgb;
     specularColorTex = lerp(
         specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x);
     float3 dielectricF0 = min(SpecularFresnelInputs.xyz * specularColorTex, 1.0)
@@ -385,11 +467,13 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     Lo *= CnaShadowFactor(pin.WorldPos);
     Lo += CnaPunctualLight(pin.WorldPos, finalNormal) * albedo;
 
-    float occlusion = tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r;
+    float occlusion = tex2D(
+        OcclusionMap, CnaPbrTransformUv(CnaPbrUv(pin, 4), 4)).r;
     occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
     float3 ambient = AmbientColor.xyz * albedo * occlusion
         + CnaIblAmbient(finalNormal, V, albedo, F0, roughness, metallic, occlusion);
-    float3 emissiveSample = tex2D(EmissiveMap, CnaPbrTransformUv(pin.UV, 3)).rgb;
+    float3 emissiveSample = tex2D(
+        EmissiveMap, CnaPbrTransformUv(CnaPbrUv(pin, 3), 3)).rgb;
     emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w);
     float3 emissive = EmissiveColor.xyz * emissiveSample;
 

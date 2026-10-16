@@ -175,6 +175,9 @@ namespace CNA::Internal::Renderers::Fna3d
                     need(FNA3D_VERTEXELEMENTUSAGE_TANGENT, 0, "Tangent0");
                     need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0,
                          "TextureCoordinate0");
+                    if (params.pbrTextureCoordinateSetMask != 0)
+                        need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 1,
+                             "TextureCoordinate1");
                     if (kind == StockEffectKind::SkinnedPbr)
                     {
                         need(FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES, 0, "BlendIndices0");
@@ -799,6 +802,19 @@ namespace CNA::Internal::Renderers::Fna3d
                 const float doubleSidedParams[4] = {
                     doubleSidedOrientation, 0.0f, 0.0f, 0.0f
                 };
+                const auto textureCoordinateSet = [&](int slot) {
+                    return (params.pbrTextureCoordinateSetMask &
+                            (std::uint32_t{1} << slot)) != 0
+                        ? 1.0f : 0.0f;
+                };
+                const float textureCoordinateSets[4] = {
+                    textureCoordinateSet(0), textureCoordinateSet(1),
+                    textureCoordinateSet(2), textureCoordinateSet(3)
+                };
+                const float textureCoordinateSets2[4] = {
+                    textureCoordinateSet(4), textureCoordinateSet(5),
+                    textureCoordinateSet(6), 0.0f
+                };
 
                 effect.SetFloats("AmbientColor", ambient, 4);
                 effect.SetFloats("EmissiveColor", emissive, 4);
@@ -825,8 +841,11 @@ namespace CNA::Internal::Renderers::Fna3d
                 effect.SetFloats("PunctualCone", punctualCone, 4);
                 effect.SetFloats("IblParams", iblParams, 4);
                 effect.SetFloats("PbrDoubleSidedParams", doubleSidedParams, 4);
+                effect.SetFloats("PbrTextureCoordinateSets", textureCoordinateSets, 4);
+                effect.SetFloats("PbrTextureCoordinateSets2", textureCoordinateSets2, 4);
 
-                effect.Apply(device_, useVertexColor ? 1 : 0);
+                const bool useDualUv = params.pbrTextureCoordinateSetMask != 0;
+                effect.Apply(device_, (useDualUv ? 2 : 0) + (useVertexColor ? 1 : 0));
                 const auto bindPbrTexture = [&](const char* samplerName,
                                                 const ITextureRenderer* texture) {
                     const int slot = effect.FindPixelSamplerRegister(samplerName);

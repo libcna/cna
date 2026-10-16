@@ -8,6 +8,7 @@
 
 #define CNA_D3D9_IBL 1
 #define CNA_D3D9_DOUBLE_SIDED 1
+#define CNA_D3D9_DUAL_UV 1
 #include "../../directx9/src/shaders/cna/Pbr3D.hlsl"
 
 technique CnaPbr
@@ -20,6 +21,16 @@ technique CnaPbr
     pass RigidColor
     {
         VertexShader = compile vs_3_0 VSPbr3DColor();
+        PixelShader = compile ps_3_0 PSPbr3D();
+    }
+    pass RigidDualUv
+    {
+        VertexShader = compile vs_3_0 VSPbr3DDualUv();
+        PixelShader = compile ps_3_0 PSPbr3D();
+    }
+    pass RigidDualUvColor
+    {
+        VertexShader = compile vs_3_0 VSPbr3DDualUvColor();
         PixelShader = compile ps_3_0 PSPbr3D();
     }
 }

@@ -131,6 +131,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_Pbr_DoubleSided
         COMMAND cna_test_fna3d_pbr_double_sided TIMEOUT 120 LABELS "Fna3d")
 
+    # The shared material-map oracle covers all seven map selectors, channel semantics and
+    # independent UV0/UV1 selection for both rigid and identity-bone skinned PBR draws.
+    cna_fna3d_test(cna_test_fna3d_pbr_material_maps
+                   ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_material_maps_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_Pbr_MaterialMaps
+        COMMAND cna_test_fna3d_pbr_material_maps TIMEOUT 120 LABELS "Fna3d")
+
     # RRC-045: the renderer-neutral conformance programs, through FNA3D's own driver. They run under
     # the same FNA3D_FORCE_DRIVER as the rest of this directory (set below).
     include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)

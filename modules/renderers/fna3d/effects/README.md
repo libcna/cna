@@ -85,11 +85,13 @@ witnesses exercise disabled, in-range/out-of-range point, and aimed/away spot ca
 ## `CnaPbrEffect` / `CnaSkinnedPbrEffect` — CNA's metallic-roughness extensions
 
 XNA has no PBR stock effect. These wrappers compile CNA's existing DirectX 9 Shader Model 3 PBR
-sources into the only shader container FNA3D accepts. Two passes per effect cover declarations
-without and with `COLOR0`; the skinned variant additionally carries the 72-bone palette. Both use
-seven material samplers plus the irradiance cube, prefiltered-specular cube and BRDF LUT for the
-shared split-sum IBL equation. `VFACE` and the World determinant reverse the complete tangent basis
-on a double-sided back face. Physical registers are resolved from MojoShader's applied-pass map
+sources into the only shader container FNA3D accepts. Four passes per effect cover the cross-product
+of declarations without/with `COLOR0` and without/with `TEXCOORD1`; the skinned variant additionally
+carries the 72-bone palette. Both use seven material samplers plus the irradiance cube,
+prefiltered-specular cube and BRDF LUT for the shared split-sum IBL equation. `VFACE` and the World
+determinant reverse the complete tangent basis
+on a double-sided back face. Two selector vectors independently choose UV0 or UV1 before each
+map's affine transform. Physical registers are resolved from MojoShader's applied-pass map
 rather than assumed from source order; the three environment resources retain CNA's public sampler
 slots 10/11/12.
 
@@ -98,8 +100,8 @@ MojoShader receives no unsupported preshader operands:
 
 | File | Bytes | SHA-256 |
 |---|---:|---|
-| `CnaPbrEffect.fxb` | 21,356 | `14e2838697b2af17d7f9cc073f164ded7c578138688327f795483138d486cae5` |
-| `CnaSkinnedPbrEffect.fxb` | 35,960 | `b1e83343c413d372a601bbd481f0166034a04f444893f3a814c499225217c544` |
+| `CnaPbrEffect.fxb` | 41,064 | `667ee38f5decef73a88fb91fa952c1abe6322a9057e2a9679051c2ae0f135e24` |
+| `CnaSkinnedPbrEffect.fxb` | 66,776 | `06528175553a68bb41da27baa29b5a1f9e2e23bed024da4e9303e85b7b7e8480` |
 
 ```bash
 fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPbrEffect.fxb CnaPbrEffect.fx

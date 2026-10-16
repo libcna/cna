@@ -14,10 +14,10 @@ light, fog and skinning. Optional maps receive explicit white or flat-normal fal
 and BRDF-LUT equation used by EasyGL, Software and WebGPU, including explicit roughness mip LOD.
 
 Double-sided materials reverse the complete tangent basis on a back face, including under a
-mirroring World transform. The boundary remains explicit: this variant does not sample shadow maps
-and does not select a second UV stream; those fields follow the renderer contract's
-accepted-and-ignored convention. Custom shader *source* is still unsupported, which is a separate
-capability from these committed compiled effects.
+mirroring World transform. Material maps independently select UV0 or UV1 before their own affine
+texture transform. The boundary remains explicit: this variant does not sample shadow maps; those
+fields follow the renderer contract's accepted-and-ignored convention. Custom shader *source* is
+still unsupported, which is a separate capability from these committed compiled effects.
 
 Until 2026-08-18, FNA3D silently shaded PBR draws with Basic/Skinned. GLTF-477 changed that to an
 honest refusal. The native path above now supersedes the refusal and is pixel-verified on both the
@@ -25,7 +25,8 @@ OpenGL and SDL_GPU/Vulkan drivers: analytic rigid/skinned BRDF 5/5, vertex colou
 declarations 3/3, and a 1,600-draw uniform ring 1,600/1,600. The shared IBL pixel oracle additionally
 checks ambient replacement, analytic diffuse/specular split-sum output, intensity, mip selection,
 sampler-controlled mip interpolation and the skinned path. The shared public double-sided oracle
-adds five front/back/mirrored cases apiece for rigid and skinned PBR.
+adds five front/back/mirrored cases apiece for rigid and skinned PBR. The shared material-map
+oracle adds 21 rigid/skinned checks, including independent base-colour UV0 and emissive UV1.
 
 ## Identity
 
@@ -252,10 +253,10 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 
 | Kind | Status |
 |---|---|
-| Native runtime (Linux, isolated Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all sixteen native `Fna3d_*` CTest binaries pass, including the sequential-device/post-device lifetime regression, punctual-light paths, split-sum IBL and double-sided PBR. The complete `Fna3d` label is 48/48 without failures (46 pass plus two intentional shader-backend skips). |
+| Native runtime (Linux, isolated Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all seventeen native `Fna3d_*` CTest binaries pass, including the sequential-device/post-device lifetime regression, punctual-light paths, split-sum IBL, double-sided PBR and independent UV0/UV1 material maps. The complete `Fna3d` label is 49/49 without failures (47 pass plus two intentional shader-backend skips). |
 | XNA 4.0 oracle corpus (39 scenes vs real XNA reference images) | **Performed** — `Fna3d_XNA_Oracle`; every scene renders, 10/39 exact at the EasyGL baseline. This is the only coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have. See [`fna3d-parity-report.md`](fna3d-parity-report.md) |
 | Unit tests (`CnaTests`, `Fna3d*` plus the generic disposed-`Texture2D` regression) | **Performed** — format-region and shared transfer-contract coverage pass |
-| Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 17 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, SpriteBatch pixels, and a legally reproducible synthetic multi-technique/pass/default/annotation/render-state conformance binary |
+| Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 34 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, SpriteBatch pixels, and a legally reproducible synthetic multi-technique/pass/default/annotation/render-state conformance binary |
 | Sanitizers (ASan + UBSan), renderer suite | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
 | Sanitizers for the new arbitrary compiled-effect path | **Partial** — all 31 targeted FX/XNB/capability tests pass in the ASan/UBSan build with no ASan finding. LeakSanitizer is unavailable under the managed ptrace environment; pinned upstream MojoShader still reports known UBSan findings in float formatting and zero-length clone copies, so the full `plans/plan_fx.md` production gate remains open. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
@@ -275,6 +276,7 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | `Fna3d_State` | AlphaBlend, Additive, colour write masks, BlendFactor, scissor on/off, a non-default depth comparison, stencil write-then-test, viewport sub-rectangle |
 | `Fna3d_Capabilities` | Every capability answer matched against a real factory or a real refusal, and both rejection paths |
 | `Fna3d_Pbr_DoubleSided` | Five front/back/mirrored-World cases each through public rigid and identity-bone skinned PBR effects; the same shared oracle runs on EasyGL |
+| `Fna3d_Pbr_MaterialMaps` | Twenty-one rigid/skinned material-map checks, including channel semantics, normal/occlusion controls and independent UV0/UV1 selection; the same shared oracle runs on EasyGL |
 | `Fna3d_RenderTarget_Advanced` | All six cube faces hold distinct colours and geometry renders into a bound face; two MRT slots are both written and keep their own storage; a mipmapped target's level count, base level and level-1 storage |
 | `Fna3d_Buffers` | POSITION and COLOR split across two real vertex streams (both binding orders), all three `SetDataOptions`, source-window selection, consecutive uploads, both index widths |
 | `Fna3d_Sampler` | Point vs Linear magnification, Clamp/Wrap/Mirror past u=1, independent U/V addressing, Anisotropic, and the LOD controls |

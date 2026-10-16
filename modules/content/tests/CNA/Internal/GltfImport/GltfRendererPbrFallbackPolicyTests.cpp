@@ -1230,8 +1230,8 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX9SamplesBothKhrMaterialsSpecularTextu
     for (const char* evidence : {
              "sampler2D SpecularMap : register(s5)",
              "sampler2D SpecularColorMap : register(s6)",
-             "tex2D(SpecularMap, CnaPbrSpecularTransformUv(pin.UV, 0)).a",
-             "tex2D(SpecularColorMap, CnaPbrSpecularTransformUv(pin.UV, 1)).rgb",
+             "tex2D(SpecularMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 5), 0)).a",
+             "tex2D(SpecularColorMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 6), 1)).rgb",
              "lerp(specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x)",
              "min(SpecularFresnelInputs.xyz * specularColorTex, 1.0) * specularWeight",
              "lerp(float3(specularWeight, specularWeight, specularWeight), "
@@ -1264,8 +1264,8 @@ TEST(GltfRendererPbrFallbackPolicy, Fna3dSamplesBothKhrMaterialsSpecularTextures
     for (const char* evidence : {
              "sampler2D SpecularMap : register(s5)",
              "sampler2D SpecularColorMap : register(s6)",
-             "tex2D(SpecularMap, CnaPbrSpecularTransformUv(pin.UV, 0)).a",
-             "tex2D(SpecularColorMap, CnaPbrSpecularTransformUv(pin.UV, 1)).rgb",
+             "tex2D(SpecularMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 5), 0)).a",
+             "tex2D(SpecularColorMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 6), 1)).rgb",
              "lerp(specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x)",
              "min(SpecularFresnelInputs.xyz * specularColorTex, 1.0) * specularWeight"})
     {
@@ -1323,6 +1323,31 @@ TEST(GltfRendererPbrFallbackPolicy, Fna3dFlipsDoubleSidedPbrTangentBasis)
                       source,
                       Normalize("face * PbrDoubleSidedParams.x < 0.0")))
         << "both FNA3D PBR shaders must reverse the tangent basis from VFACE";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, Fna3dSelectsIndependentPbrTextureCoordinates)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "fna3d");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "params.pbrTextureCoordinateSetMask",
+             "effect.SetFloats(\"PbrTextureCoordinateSets\", textureCoordinateSets, 4)",
+             "effect.SetFloats(\"PbrTextureCoordinateSets2\", textureCoordinateSets2, 4)",
+             "const bool useDualUv = params.pbrTextureCoordinateSetMask != 0",
+             "VSPbr3DDualUv",
+             "VSPbrSkinned3DDualUv"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing FNA3D UV1 upload/pass evidence: " << evidence;
+    }
+    EXPECT_EQ(2u, CountOccurrences(source, Normalize("float2 CnaPbrUv(PSInput pin, int slot)")))
+        << "both FNA3D PBR shaders must select UV0/UV1 independently";
+    EXPECT_EQ(2u, CountOccurrences(
+                      source,
+                      Normalize("PbrTextureCoordinateSets2.z")))
+        << "both FNA3D PBR shaders must carry all seven material-map selectors";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, SdlGpuSamplesBothKhrMaterialsSpecularTextures)
