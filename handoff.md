@@ -5,8 +5,8 @@ and also carried the dated session log of 2026-07 to 2026-10; that log is in Git
 (`git show 8b5564f1e:NEXT.md`).
 
 **§5 is the one authoritative list of current known bugs and limitations.** No other file keeps a
-live bug list: `misc/known_bugs.md` and `misc/known_gaps.md` hold only the measurements behind some
-§5 entries, the plans under `plans/` are history, and capability documents (renderer docs,
+live bug list: `misc/known_gaps.md` holds only the measurements behind some §5 limitations, the
+plans under `plans/` are history, and capability documents (renderer docs,
 `docs/gltf-limitations.md`, `docs/gamer-services-known-limitations.md`, `CHECKLIST.md`'s accepted
 deviations) describe what a subsystem does by design, not what is broken. When a bug is fixed,
 delete its §5 entry (and its measurement record, if it has one) in the same commit.
@@ -135,9 +135,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
    `SdlGpuIndexedDrawRangeTest` buffer-rewrite cases fail, and with `WEBGPU` two cases of the same
    class: they rewrite a buffer that is still bound, which the device correctly refuses
    (`RRC-026`, `a18a5d374`).
-3. **The XACT natural-completion tests are timing-dependent.** `CueTests.cpp`, `SoundBankTests.cpp`
-   and `WaveBankTests.cpp` wait with fixed 50 ms sleeps; under parallel load a rotating subset fails
-   (`misc/known_bugs.md` §5). They pass on an idle machine.
 5. *(Fixed 2026-10-14.)* `WEBGPU` counted only the draws after a `Clear` inside one occlusion
    run, because a query slot may be written once per resolve and the Clear splits the run across
    render passes; a later run now records into a fresh slot and the readback sums the query's

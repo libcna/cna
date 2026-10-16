@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "AudioTestScratch.hpp"
+#include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
@@ -711,9 +712,9 @@ TEST(SoundBankTest, IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes)
                             "could not exercise real playback";
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        EXPECT_FALSE(bank.getIsInUseProperty());
+        // The device thread plays the ~1ms sound out in its own time; wait for that, not a fixed 50ms.
+        EXPECT_TRUE(CnaAudioTest::WaitUntil([&] { return !bank.getIsInUseProperty(); }))
+            << "the fire-and-forget cue never finished playing on its own";
     }
     catch (...)
     {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "AudioTestScratch.hpp"
+#include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
@@ -2560,9 +2561,9 @@ TEST(CueTest, PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes)
                             "could not create a real SoundEffectInstance";
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        EXPECT_TRUE(cue->getIsStoppedProperty());
+        // The device thread plays the ~1ms sound out in its own time; wait for that, not a fixed 50ms.
+        ASSERT_TRUE(CnaAudioTest::WaitUntil([&] { return cue->getIsStoppedProperty(); }))
+            << "the cue never finished playing on its own";
         EXPECT_FALSE(cue->getIsPlayingProperty());
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
     }
@@ -2593,8 +2594,8 @@ TEST(CueTest, PauseAfterNaturalCompletionIsANoOp)
                             "could not create a real SoundEffectInstance";
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        ASSERT_TRUE(cue->getIsStoppedProperty());
+        ASSERT_TRUE(CnaAudioTest::WaitUntil([&] { return cue->getIsStoppedProperty(); }))
+            << "the cue never finished playing on its own";
 
         cue->Pause();
         EXPECT_TRUE(cue->getIsStoppedProperty());

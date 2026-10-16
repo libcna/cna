@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "AudioTestScratch.hpp"
+#include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
@@ -1203,9 +1204,9 @@ TEST(WaveBankTest, IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop)
                             "could not exercise WaveBank playback";
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        EXPECT_FALSE(wb.getIsInUseProperty());
+        // The device thread plays the sound out in its own time; wait for that, not a fixed 50ms.
+        ASSERT_TRUE(CnaAudioTest::WaitUntil([&] { return !wb.getIsInUseProperty(); }))
+            << "the cue never finished playing on its own";
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_FALSE(cue->getIsPlayingProperty());
     }
