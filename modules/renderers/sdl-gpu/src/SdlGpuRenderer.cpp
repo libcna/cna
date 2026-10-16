@@ -7530,8 +7530,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
         // plans/plan_gltf.md GLTF-462/GLTF-463: strides 60 and 80 are the same records with TEXCOORD_1 and
-        // a packed COLOR_0 appended. This renderer's PBR shaders sample one UV set, so the second one
-        // stays unbound; the colour does not, because glTF 3.9.2 makes it a term in base colour.
+        // a packed COLOR_0 appended. Both are bound: each map samples the coordinate set its
+        // material names (GLTF-182/183), and glTF 3.9.2 makes the colour a term in base colour.
         vbDesc.pitch = skinned ? (colored ? 80 : 68) : (colored ? 60 : 48);
         vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
@@ -7539,7 +7539,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // uv(8). Stride 68 (VertexPositionNormalTangentTextureSkinned) appends blendWeight(16) +
         // blendIndices(4) after the same 48-byte prefix, matching EasyGLRenderer::
         // ApplyLayout's stride==48/68 cases exactly.
-        SDL_GPUVertexAttribute attrs[7]{};
+        SDL_GPUVertexAttribute attrs[8]{};
         attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
         attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
         attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4; attrs[2].offset = 24;
@@ -7555,6 +7555,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             attrs[slot].buffer_slot = 0;
             attrs[slot].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
             attrs[slot].offset = skinned ? 76 : 56;
+            // GLTF-182/GLTF-463: and TEXCOORD_1 ahead of it, at location 7 in both variants.
+            SDL_GPUVertexAttribute& uv1 = attrs[skinned ? 7 : 5];
+            uv1.location = 7;
+            uv1.buffer_slot = 0;
+            uv1.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+            uv1.offset = skinned ? 68 : 48;
         }
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
@@ -7573,7 +7579,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                        : StockVertexShaderEXT(instanced, pbrVertexShader_, Instanced::Pbr));
         pipelineInfo.fragment_shader = pbrFragmentShader_;  // shared unchanged by both variants
         const FixedVertexInputEXT input = MakeFixedVertexInputEXT(
-            vbDesc, attrs, skinned ? (colored ? 7u : 6u) : (colored ? 5u : 4u),
+            vbDesc, attrs, skinned ? (colored ? 8u : 6u) : (colored ? 6u : 4u),
             instance.stride, instance.columnOffsets);
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = input.buffers.data();
         pipelineInfo.vertex_input_state.num_vertex_buffers = input.bufferCount;
@@ -8048,8 +8054,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool skinned = params.skinned;
         // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
         // TEXCOORD_1 and a packed COLOR_0 appended, and glTF 3.9.2 makes that colour a multiplier on
-        // base colour. They select the colour-carrying shader variants; the second UV set stays
-        // unbound, which is this renderer's own separate capability gap.
+        // base colour. They select the colour-carrying shader variants, which also read TEXCOORD_1.
         const bool colored = skinned ? (stride == 80u) : (stride == 60u);
         const bool acceptable = skinned ? (stride == 68u || stride == 80u)
                                         : (stride == 48u || stride == 60u);
@@ -8138,6 +8143,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             haveIbl ? 1.0f : 0.0f,
             static_cast<float>(params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1),
             params.iblIntensity, 0.0f};
+        command.textureCoordinateSetMask = params.pbrTextureCoordinateSetMask;
         // glTF doubleSided, EasyGL's encoding: a mirroring World reverses the on-screen winding,
         // so gl_FrontFacing then names the back face and the shader reads it the other way round.
         if (params.pbrDoubleSided)
@@ -9049,7 +9055,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
         // SMG-0032: the stock sampler LOD biases ride at the end of PbrParams (lodBias0To3,
         // lodBias4To7), which frees fragment uniform slot 3 for the shadow parameter block.
-        std::array<float, 92> pbrBlock{};
+        std::array<float, 100> pbrBlock{};
         std::copy(command.pbrParams.begin(), command.pbrParams.end(), pbrBlock.begin());
         const std::array<float, 8> lodBiases{
             command.lodBias,
@@ -9065,6 +9071,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (std::size_t i = 0; i < command.iblSamplers.size(); ++i)
             pbrBlock[84 + i] = command.iblSamplers[i].lodBias;
         pbrBlock[88] = command.doubleSided;  // materialFlags.x
+        // texCoordSets0/1: bit i of the mask selects TEXCOORD_1 for PBR map i.
+        for (int map = 0; map < 7; ++map)
+            pbrBlock[92 + (map < 4 ? map : 4 + (map - 4))] =
+                (command.textureCoordinateSetMask & (std::uint32_t{1} << map)) != 0 ? 1.0f : 0.0f;
         SDL_PushGPUFragmentUniformData(cmd, 2, pbrBlock.data(), sizeof(pbrBlock));
 
         SDL_GPUBufferBinding vbBinding{};

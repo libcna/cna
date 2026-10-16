@@ -14,6 +14,8 @@ layout(location = 5) in uvec4 inBoneIndices;
 // pass opaque white, the multiplier's identity, so the shared fragment stage has one interface.
 #ifdef CNA_PBR_VERTEX_COLOR
 layout(location = 6) in vec4 inColor;
+// GLTF-463: the stride-80 record carries TEXCOORD_1 ahead of its colour.
+layout(location = 7) in vec2 inUV1;
 #endif
 
 // Interface matches pbr3d.frag.glsl's inputs exactly (same locations/types) -- this shader's
@@ -26,6 +28,7 @@ layout(location = 3) out float fragBitangentSign;
 layout(location = 4) out vec3  fragWorldPos;
 layout(location = 5) out vec4 fragFog;    // xyz=FogColor, w=keep-factor
 layout(location = 6) out vec4  fragColor0;
+layout(location = 7) out vec2  fragUV1;
 
 // Same 288x1 RGBA32F palette as skinned3d.vert.glsl: four column texels per matrix. It preserves
 // the full 4608-byte palette without exceeding SDL_gpu's pushed-uniform limit and remains portable
@@ -119,6 +122,11 @@ void main() {
     gl_Position = pc.mvp * skinnedPos;
     gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
+    #ifdef CNA_PBR_VERTEX_COLOR
+    fragUV1 = inUV1;
+    #else
+    fragUV1 = inUV;
+    #endif
     #ifdef CNA_PBR_VERTEX_COLOR
     fragColor0 = inColor;
     #else

@@ -2649,6 +2649,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 4> iblParams{};
             /// glTF doubleSided: 0 single-sided, +1 double-sided, -1 under a mirroring World.
             float doubleSided = 0.0f;
+            /// GpuDrawParams::pbrTextureCoordinateSetMask: bit i selects TEXCOORD_1 for map i.
+            std::uint32_t textureCoordinateSetMask = 0;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */

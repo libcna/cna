@@ -11,6 +11,8 @@ layout(location = 3) in vec2 inUV;
 // pass opaque white, the multiplier's identity, so the shared fragment stage has one interface.
 #ifdef CNA_PBR_VERTEX_COLOR
 layout(location = 4) in vec4 inColor;
+// GLTF-182: the stride-60 record carries TEXCOORD_1 ahead of its colour.
+layout(location = 7) in vec2 inUV1;
 #endif
 
 layout(location = 0) out vec2  fragUV;
@@ -20,6 +22,7 @@ layout(location = 3) out float fragBitangentSign;
 layout(location = 4) out vec3  fragWorldPos;
 layout(location = 5) out vec4 fragFog;    // xyz=FogColor, w=keep-factor
 layout(location = 6) out vec4  fragColor0;
+layout(location = 7) out vec2  fragUV1;
 
 // Reuses lit_textured3d.vert.glsl's exact PC layout (FillExtUniforms) -- PbrEffect's
 // DiffuseColor/AmbientColor/DirectionalLight0 all land in the same slots that already exist for
@@ -85,6 +88,11 @@ void main() {
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
     fragUV = inUV;
+    #ifdef CNA_PBR_VERTEX_COLOR
+    fragUV1 = inUV1;
+    #else
+    fragUV1 = inUV;
+    #endif
     #ifdef CNA_PBR_VERTEX_COLOR
     fragColor0 = inColor;
     #else

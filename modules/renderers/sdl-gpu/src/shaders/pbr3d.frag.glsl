@@ -1,6 +1,8 @@
 #version 450
 
 layout(location = 0) in vec2  fragUV;
+// TEXCOORD_1 where the record carries one (strides 60 and 80), else TEXCOORD_0 again.
+layout(location = 7) in vec2  fragUV1;
 layout(location = 1) in vec3  fragNormal;
 layout(location = 2) in vec3  fragTangent;
 layout(location = 3) in float fragBitangentSign;
@@ -79,6 +81,10 @@ layout(set = 3, binding = 2) uniform PbrParams {
     vec4 iblLodBias;
     // x = glTF doubleSided: 0 single-sided, +1 double-sided, -1 double-sided under a mirroring World.
     vec4 materialFlags;
+    // GLTF-182/GLTF-183: 1 where a map samples TEXCOORD_1 -- base colour, normal,
+    // metallic-roughness and emissive here; occlusion, specular strength and specular colour below.
+    vec4 texCoordSets0;
+    vec4 texCoordSets1;
 } pbrp;
 
 // SMG-0032: shadow reception, from the one shared snippet. The three maps follow the seven
@@ -154,14 +160,16 @@ vec3 cnaIblAmbient(vec3 N, vec3 V, vec3 albedo, vec3 F0, float roughness,
     return (diffuse + specular) * pbrp.iblParams.z * occlusion;
 }
 
+// @p uv is TEXCOORD_0; the slot's own coordinate set may select TEXCOORD_1 instead.
 vec2 cnaPbrTransformUV(vec2 uv, int slot) {
-    vec3 value = vec3(uv, 1.0);
+    float set = slot < 4 ? pbrp.texCoordSets0[slot] : pbrp.texCoordSets1.x;
+    vec3 value = vec3(set > 0.5 ? fragUV1 : uv, 1.0);
     return vec2(dot(value, pbrp.textureTransformRows[slot * 2].xyz),
                 dot(value, pbrp.textureTransformRows[slot * 2 + 1].xyz));
 }
 
 vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot) {
-    vec3 value = vec3(uv, 1.0);
+    vec3 value = vec3(pbrp.texCoordSets1[1 + slot] > 0.5 ? fragUV1 : uv, 1.0);
     return vec2(dot(value, pbrp.specularTextureTransformRows[slot * 2].xyz),
                 dot(value, pbrp.specularTextureTransformRows[slot * 2 + 1].xyz));
 }
