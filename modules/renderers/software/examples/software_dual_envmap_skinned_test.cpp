@@ -38,6 +38,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 
@@ -62,6 +66,27 @@ namespace
 
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
     constexpr int kSize = 64;
+
+    struct DualTextureVertex
+    {
+        float px, py, pz;
+        float nx, ny, nz;
+        float u0, v0;
+        float u1, v1;
+    };
+    static_assert(sizeof(DualTextureVertex) == 40);
+
+    [[nodiscard]] VertexDeclaration DualTextureDeclaration()
+    {
+        return VertexDeclaration(40, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(24, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(32, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 1),
+        });
+    }
 }
 
 class SoftwareDualEnvmapSkinnedTest : public Game
@@ -109,16 +134,16 @@ protected:
             const std::vector<std::uint8_t> tex1Pixels = {200, 200, 200, 255};
             Texture2D tex1 = Texture2D::CreateFromPixels(dev, 1, 1, tex1Pixels);
 
-            const VertexPositionNormalTexture verts[6] = {
-                {Vector3(-1.0f, 1.0f, 0.5f), Vector3(0, 0, 1), Vector2(0.0f, 0.0f)},
-                {Vector3(-1.0f, -1.0f, 0.5f), Vector3(0, 0, 1), Vector2(0.0f, 1.0f)},
-                {Vector3(1.0f, 1.0f, 0.5f), Vector3(0, 0, 1), Vector2(1.0f, 0.0f)},
-                {Vector3(1.0f, 1.0f, 0.5f), Vector3(0, 0, 1), Vector2(1.0f, 0.0f)},
-                {Vector3(-1.0f, -1.0f, 0.5f), Vector3(0, 0, 1), Vector2(0.0f, 1.0f)},
-                {Vector3(1.0f, -1.0f, 0.5f), Vector3(0, 0, 1), Vector2(1.0f, 1.0f)},
+            const DualTextureVertex verts[6] = {
+                {-1,  1, .5f, 0,0,1, 0,0, 0,0},
+                {-1, -1, .5f, 0,0,1, 0,1, 0,1},
+                { 1,  1, .5f, 0,0,1, 1,0, 1,0},
+                { 1,  1, .5f, 0,0,1, 1,0, 1,0},
+                {-1, -1, .5f, 0,0,1, 0,1, 0,1},
+                { 1, -1, .5f, 0,0,1, 1,1, 1,1},
             };
-            VertexBuffer vb(dev, VertexPositionNormalTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
-            vb.SetData(verts, 6);
+            VertexBuffer vb(dev, DualTextureDeclaration(), 6, BufferUsage::None);
+            vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(DualTextureVertex)));
 
             DualTextureEffect fx(dev);
             fx.setTextureProperty(&tex0);

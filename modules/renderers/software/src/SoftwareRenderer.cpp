@@ -94,6 +94,9 @@ namespace CNA::Internal::Renderers::Software
             /// same premultiply-then-divide perspective-correct interpolation treatment as color/uv.
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
+            /// PBR tangent frame * invW. `tangentSign` is tangent.w after folding in every
+            /// mirrored object/skin/instance transform, matching the GPU stock shaders.
+            float tx = 1.0f, ty = 0.0f, tz = 0.0f, tangentSign = 1.0f;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
             std::array<SoftwareShaderSemanticValueEXT, 16> compiledVaryings{};
             std::size_t compiledVaryingCount = 0;
@@ -438,6 +441,7 @@ namespace CNA::Internal::Renderers::Software
             /// World-space position/normal (SOFTWARE-82/113).
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
+            float tx = 1.0f, ty = 0.0f, tz = 0.0f, tangentSign = 1.0f;
             /// SpriteBatch viewport-local homogeneous position before its orthographic projection.
             float spriteX = 0.0f, spriteY = 0.0f;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
@@ -506,6 +510,10 @@ namespace CNA::Internal::Renderers::Software
             out.nx = a.nx + t * (b.nx - a.nx);
             out.ny = a.ny + t * (b.ny - a.ny);
             out.nz = a.nz + t * (b.nz - a.nz);
+            out.tx = a.tx + t * (b.tx - a.tx);
+            out.ty = a.ty + t * (b.ty - a.ty);
+            out.tz = a.tz + t * (b.tz - a.tz);
+            out.tangentSign = a.tangentSign + t * (b.tangentSign - a.tangentSign);
             out.spriteX = a.spriteX + t * (b.spriteX - a.spriteX);
             out.spriteY = a.spriteY + t * (b.spriteY - a.spriteY);
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
@@ -720,6 +728,10 @@ namespace CNA::Internal::Renderers::Software
             out.nx = cv.nx * invW;
             out.ny = cv.ny * invW;
             out.nz = cv.nz * invW;
+            out.tx = cv.tx * invW;
+            out.ty = cv.ty * invW;
+            out.tz = cv.tz * invW;
+            out.tangentSign = cv.tangentSign * invW;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
             out.compiledVaryingCount = cv.compiledVaryingCount;
             for (std::size_t varying = 0; varying < out.compiledVaryingCount; ++varying)
@@ -1552,10 +1564,10 @@ namespace CNA::Internal::Renderers::Software
 
         /// The point or spot light a BasicEffect can carry (BasicEffect.PunctualLightEXT, GpuDrawParams::punctualKind).
         /// The same equation as the EasyGL stock shaders' cnaPunctualLight -- inverse-square falloff windowed to zero at
-        /// the range, a squared smoothstep-free cone for a spot -- so the two renderers light a scene alike. Its shadow
-        /// map is not evaluated here: this renderer lights without shadowing the punctual light.
+        /// the range, a squared smoothstep-free cone for a spot -- so the two renderers light a scene alike.
         void AddPunctualDiffuse(const Vector3& worldPosition, const Vector3& worldNormal,
-                                const GpuDrawParams& params, float (&diffuseSum)[3])
+                                const GpuDrawParams& params, float (&diffuseSum)[3],
+                                float visibility = 1.0f)
         {
             if (params.punctualKind <= 0) return;
             const Vector3 offset(params.punctualPosition[0] - worldPosition.X,
@@ -1579,14 +1591,15 @@ namespace CNA::Internal::Renderers::Software
             }
             const float nDotL = std::max(worldNormal.X * toLight.X + worldNormal.Y * toLight.Y + worldNormal.Z * toLight.Z, 0.0f);
             for (int channel = 0; channel < 3; ++channel)
-                diffuseSum[channel] += params.punctualDiffuse[channel] * nDotL * attenuation;
+                diffuseSum[channel] += params.punctualDiffuse[channel] * nDotL * attenuation * visibility;
         }
 
         /// SOFTWARE-113/114/115: FNA StockEffects/HLSL/Lighting.fxh ComputeLights. Effect-specific
         /// FillGpuDrawParams prepares ambient/emissive consistently before this shared equation.
         [[nodiscard]] ClassicLightingResult ComputeClassicLighting(
             const Vector3& worldPosition, const Vector3& worldNormal,
-            const GpuDrawParams& params)
+            const GpuDrawParams& params, float directionalVisibility = 1.0f,
+            float punctualVisibility = 1.0f)
         {
             const Vector3 eye = NormalizeOrZero(Vector3(
                 params.eyePositionWorld[0] - worldPosition.X,
@@ -1621,13 +1634,13 @@ namespace CNA::Internal::Renderers::Software
                 for (int channel = 0; channel < 3; ++channel)
                 {
                     diffuseSum[channel] +=
-                        diffuseWeight * diffuseColors[light][channel];
+                        diffuseWeight * diffuseColors[light][channel] * directionalVisibility;
                     specularSum[channel] +=
-                        specularWeight * specularColors[light][channel];
+                        specularWeight * specularColors[light][channel] * directionalVisibility;
                 }
             }
 
-            AddPunctualDiffuse(worldPosition, worldNormal, params, diffuseSum);
+            AddPunctualDiffuse(worldPosition, worldNormal, params, diffuseSum, punctualVisibility);
 
             ClassicLightingResult result;
             for (int channel = 0; channel < 3; ++channel)
@@ -1653,6 +1666,22 @@ namespace CNA::Internal::Renderers::Software
                 m[0] * v.X + m[4] * v.Y + m[8]  * v.Z + m[12] * w,
                 m[1] * v.X + m[5] * v.Y + m[9]  * v.Z + m[13] * w,
                 m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
+        }
+
+        [[nodiscard]] bool UsesFragmentShadows(const GpuDrawParams& params)
+        {
+            return (params.shadowsEnabled && params.shadowMap != nullptr) ||
+                   (params.punctualKind == 1 && params.punctualShadowCube != nullptr) ||
+                   (params.punctualKind == 2 && params.punctualShadowMap != nullptr);
+        }
+
+        [[nodiscard]] float AffineHandedness(const float* m)
+        {
+            const float determinant =
+                m[0] * (m[5] * m[10] - m[9] * m[6]) -
+                m[4] * (m[1] * m[10] - m[9] * m[2]) +
+                m[8] * (m[1] * m[6] - m[5] * m[2]);
+            return determinant < 0.0f ? -1.0f : 1.0f;
         }
 
         /// SOFTWARE-113: transforms a normal with transpose(inverse(World3x3)). The cofactor
@@ -1716,7 +1745,10 @@ namespace CNA::Internal::Renderers::Software
             vertex.ny = worldNormal.Y;
             vertex.nz = worldNormal.Z;
 
-            if (params.preferPerPixelLighting)
+            // A vertex-lit result has already combined ambient, directional and punctual terms.
+            // Shadow maps attenuate only their own light, so active reception must keep those terms
+            // separate until the fragment position is known.
+            if (params.preferPerPixelLighting || UsesFragmentShadows(params))
                 return;
 
             const ClassicLightingResult lighting =
@@ -1729,6 +1761,35 @@ namespace CNA::Internal::Renderers::Software
             vertex.sr = std::clamp(lighting.specular[0], 0.0f, 1.0f);
             vertex.sg = std::clamp(lighting.specular[1], 0.0f, 1.0f);
             vertex.sb = std::clamp(lighting.specular[2], 0.0f, 1.0f);
+        }
+
+        void PreparePbrVertex(ClipVertex& vertex, const Vector3& position,
+                              const Vector3& normal, bool haveNormal,
+                              const Vector3& tangent, bool haveTangent, float tangentSign,
+                              const GpuDrawParams& params)
+        {
+            if (!params.pbr)
+                return;
+
+            const Vector3 worldPosition =
+                ApplyAffineColumnMajor(params.worldColMajor, position, 1.0f);
+            const Vector3 worldNormal = haveNormal
+                ? TransformWorldNormal(params.worldColMajor, normal)
+                : Vector3(0.0f, 0.0f, 1.0f);
+            const Vector3 worldTangent = haveTangent
+                ? NormalizeOrZero(ApplyAffineColumnMajor(params.worldColMajor, tangent, 0.0f))
+                : Vector3(1.0f, 0.0f, 0.0f);
+
+            vertex.wpx = worldPosition.X;
+            vertex.wpy = worldPosition.Y;
+            vertex.wpz = worldPosition.Z;
+            vertex.nx = worldNormal.X;
+            vertex.ny = worldNormal.Y;
+            vertex.nz = worldNormal.Z;
+            vertex.tx = worldTangent.X;
+            vertex.ty = worldTangent.Y;
+            vertex.tz = worldTangent.Z;
+            vertex.tangentSign = tangentSign * AffineHandedness(params.worldColMajor);
         }
 
         /// SOFTWARE-114: EnvironmentMapEffect performs all lighting, reflection and Fresnel work
@@ -1906,7 +1967,8 @@ namespace CNA::Internal::Renderers::Software
         void SampleCubeMap(const SoftwareCubeSurface& cube, const SoftwareSamplerState& sampler,
                           bool magnify, float lambda, const Vector3& dir,
                           float& r, float& g, float& b, float& a,
-                          const TextureFootprint* footprint = nullptr)
+                          const TextureFootprint* footprint = nullptr,
+                          bool traceSample = true)
         {
             int face = 0;
             float s = 0.5f, t = 0.5f;
@@ -1918,7 +1980,7 @@ namespace CNA::Internal::Renderers::Software
             const long long fetchesBefore = g_samplerTrace.texelFetches;
             SampleTexture(surface, cubeSampler, magnify, lambda, s, t, r, g, b, a, footprint);
 
-            if (g_cubeTrace.enabled)
+            if (traceSample && g_cubeTrace.enabled)
             {
                 // Re-derive the level selection for the trace from the SAME helpers the sample just
                 // used, so the reported stages cannot describe a different decision than the one
@@ -1976,6 +2038,214 @@ namespace CNA::Internal::Renderers::Software
                 g_cubeTrace.sampleR = r; g_cubeTrace.sampleG = g;
                 g_cubeTrace.sampleB = b; g_cubeTrace.sampleA = a;
             }
+        }
+
+        /// Samples the red channel exactly as the stock shadow shaders' point-clamped samplers do.
+        [[nodiscard]] float SampleShadowRed(const SoftwareColorSurface& surface, float u, float v)
+        {
+            const int width = std::max(1, surface.ColorWidth());
+            const int height = std::max(1, surface.ColorHeight());
+            const int x = std::clamp(static_cast<int>(u * static_cast<float>(width)), 0, width - 1);
+            const int y = std::clamp(static_cast<int>(v * static_cast<float>(height)), 0, height - 1);
+            float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+            surface.FetchColorTexel(0, x, y, r, g, b, a);
+            return r;
+        }
+
+        void TransformProjectiveColumnMajor(const float* matrix, const Vector3& position,
+                                            float& x, float& y, float& z, float& w)
+        {
+            x = matrix[0] * position.X + matrix[4] * position.Y +
+                matrix[8] * position.Z + matrix[12];
+            y = matrix[1] * position.X + matrix[5] * position.Y +
+                matrix[9] * position.Z + matrix[13];
+            z = matrix[2] * position.X + matrix[6] * position.Y +
+                matrix[10] * position.Z + matrix[14];
+            w = matrix[3] * position.X + matrix[7] * position.Y +
+                matrix[11] * position.Z + matrix[15];
+        }
+
+        [[nodiscard]] float SampleDirectionalShadowPcf(
+            const SoftwareColorSurface& map, float u, float v, float depth, float bias,
+            int radius, float minU, float minV, float maxU, float maxV)
+        {
+            if (depth > 1.0f) return 1.0f;
+            const float texelU = 1.0f / static_cast<float>(std::max(1, map.ColorWidth()));
+            const float texelV = 1.0f / static_cast<float>(std::max(1, map.ColorHeight()));
+            radius = std::clamp(radius, 0, 2);
+            float lit = 0.0f;
+            int taps = 0;
+            for (int y = -radius; y <= radius; ++y)
+            {
+                for (int x = -radius; x <= radius; ++x)
+                {
+                    const float sampleU = std::clamp(u + static_cast<float>(x) * texelU,
+                                                     minU, maxU);
+                    const float sampleV = std::clamp(v + static_cast<float>(y) * texelV,
+                                                     minV, maxV);
+                    lit += depth - bias <= SampleShadowRed(map, sampleU, sampleV) ? 1.0f : 0.0f;
+                    ++taps;
+                }
+            }
+            return lit / static_cast<float>(std::max(1, taps));
+        }
+
+        [[nodiscard]] int SelectShadowCascade(const Vector3& worldPosition,
+                                               const GpuDrawParams& params)
+        {
+            const int count = std::clamp(params.cascadeCount, 1, 4);
+            const float viewDepth = -(worldPosition.X * params.cascadeViewZRow[0] +
+                                      worldPosition.Y * params.cascadeViewZRow[1] +
+                                      worldPosition.Z * params.cascadeViewZRow[2] +
+                                      params.cascadeViewZRow[3]);
+            int selected = count - 1;
+            for (int cascade = 0; cascade < count; ++cascade)
+            {
+                if (viewDepth <= params.cascadeSplits[cascade])
+                {
+                    selected = cascade;
+                    break;
+                }
+            }
+            return selected;
+        }
+
+        [[nodiscard]] float SampleCascadeShadow(const SoftwareColorSurface& map,
+                                                 const Vector3& worldPosition,
+                                                 const GpuDrawParams& params, int cascade)
+        {
+            const int count = std::clamp(params.cascadeCount, 1, 4);
+            float x, y, z, w;
+            TransformProjectiveColumnMajor(params.cascadeMatricesColMajor + cascade * 16,
+                                           worldPosition, x, y, z, w);
+            if (!(std::abs(w) > 1e-12f)) return 1.0f;
+            const float u = x / w;
+            const float v = y / w;
+            const float depth = z / w;
+            const float slice = 1.0f / static_cast<float>(count);
+            const float sliceMin = static_cast<float>(cascade) * slice;
+            const float sliceMax = sliceMin + slice;
+            if (u < sliceMin || u > sliceMax || v < 0.0f || v > 1.0f) return 1.0f;
+
+            const float texelU = 1.0f / static_cast<float>(std::max(1, map.ColorWidth()));
+            const float texelV = 1.0f / static_cast<float>(std::max(1, map.ColorHeight()));
+            float minU = sliceMin + texelU;
+            float maxU = sliceMax - texelU;
+            float minV = texelV;
+            float maxV = 1.0f - texelV;
+            // Tiny synthetic atlases may not contain a full one-texel inset. Collapse such a
+            // dimension to its slice centre instead of passing inverted bounds to std::clamp.
+            if (minU > maxU) minU = maxU = (sliceMin + sliceMax) * 0.5f;
+            if (minV > maxV) minV = maxV = 0.5f;
+            return SampleDirectionalShadowPcf(map, u, v, depth, params.shadowDepthBias,
+                                              params.shadowPcfRadius,
+                                              minU, minV, maxU, maxV);
+        }
+
+        [[nodiscard]] float DirectionalShadowVisibility(const SoftwareColorSurface* map,
+                                                        const Vector3& worldPosition,
+                                                        const GpuDrawParams& params)
+        {
+            if (!params.shadowsEnabled || map == nullptr) return 1.0f;
+            if (params.cascadeCount > 0)
+            {
+                const int cascade = SelectShadowCascade(worldPosition, params);
+                float visibility = SampleCascadeShadow(*map, worldPosition, params, cascade);
+                const int count = std::clamp(params.cascadeCount, 1, 4);
+                const float viewDepth = -(worldPosition.X * params.cascadeViewZRow[0] +
+                                          worldPosition.Y * params.cascadeViewZRow[1] +
+                                          worldPosition.Z * params.cascadeViewZRow[2] +
+                                          params.cascadeViewZRow[3]);
+                const float split = params.cascadeSplits[cascade];
+                if (params.cascadeBlendBand > 0.0f && cascade + 1 < count &&
+                    viewDepth > split - params.cascadeBlendBand)
+                {
+                    const float blend = std::clamp(
+                        (viewDepth - (split - params.cascadeBlendBand)) /
+                            params.cascadeBlendBand,
+                        0.0f, 1.0f);
+                    const float next = SampleCascadeShadow(
+                        *map, worldPosition, params, cascade + 1);
+                    visibility += (next - visibility) * blend;
+                }
+                return visibility;
+            }
+
+            float x, y, z, w;
+            TransformProjectiveColumnMajor(params.lightViewProjColMajor,
+                                           worldPosition, x, y, z, w);
+            if (!(std::abs(w) > 1e-12f)) return 1.0f;
+            const float u = x / w * 0.5f + 0.5f;
+            const float v = y / w * 0.5f + 0.5f;
+            const float depth = z / w * 0.5f + 0.5f;
+            if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return 1.0f;
+            return SampleDirectionalShadowPcf(*map, u, v, depth, params.shadowDepthBias,
+                                              params.shadowPcfRadius,
+                                              0.0f, 0.0f, 1.0f, 1.0f);
+        }
+
+        [[nodiscard]] float PunctualShadowVisibility(
+            const SoftwareCubeSurface* cube, const SoftwareColorSurface* map,
+            const Vector3& worldPosition, const GpuDrawParams& params)
+        {
+            if (params.punctualKind <= 0 || !(params.punctualRange > 0.0f)) return 1.0f;
+            const Vector3 offset(params.punctualPosition[0] - worldPosition.X,
+                                 params.punctualPosition[1] - worldPosition.Y,
+                                 params.punctualPosition[2] - worldPosition.Z);
+            const float distance = std::sqrt(offset.X * offset.X + offset.Y * offset.Y +
+                                             offset.Z * offset.Z);
+            if (!(distance > 1e-5f)) return 1.0f;
+            const Vector3 toLight(offset.X / distance, offset.Y / distance, offset.Z / distance);
+            const float here = std::clamp(distance / params.punctualRange, 0.0f, 1.0f);
+            if (params.punctualKind == 1)
+            {
+                if (cube == nullptr) return 1.0f;
+                float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+                const SoftwareSamplerState pointClamp{1, 1, 1, 1, 1, 0, 0.0f};
+                SampleCubeMap(*cube, pointClamp, true, 0.0f,
+                              Vector3(-toLight.X, -toLight.Y, -toLight.Z), r, g, b, a);
+                return here - params.punctualShadowBias <= r ? 1.0f : 0.0f;
+            }
+            if (map == nullptr) return 1.0f;
+
+            float x, y, z, w;
+            TransformProjectiveColumnMajor(params.punctualViewProjColMajor,
+                                           worldPosition, x, y, z, w);
+            if (!(w > 0.0f)) return 1.0f;
+            const float u = x / w * 0.5f + 0.5f;
+            const float v = y / w * 0.5f + 0.5f;
+            if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return 1.0f;
+            const float texelU = 1.0f / static_cast<float>(std::max(1, map->ColorWidth()));
+            const float texelV = 1.0f / static_cast<float>(std::max(1, map->ColorHeight()));
+            float lit = 0.0f;
+            for (int sampleY = -1; sampleY <= 1; ++sampleY)
+            {
+                for (int sampleX = -1; sampleX <= 1; ++sampleX)
+                {
+                    const float sampleU = std::clamp(
+                        u + static_cast<float>(sampleX) * texelU, 0.0f, 1.0f);
+                    const float sampleV = std::clamp(
+                        v + static_cast<float>(sampleY) * texelV, 0.0f, 1.0f);
+                    lit += here - params.punctualShadowBias <=
+                        SampleShadowRed(*map, sampleU, sampleV) ? 1.0f : 0.0f;
+                }
+            }
+            return lit / 9.0f;
+        }
+
+        void ApplyCascadeDebugTint(float& r, float& g, float& b,
+                                   const Vector3& worldPosition,
+                                   const GpuDrawParams& params)
+        {
+            if (!params.cascadeDebugTint || !params.shadowsEnabled || params.cascadeCount <= 0)
+                return;
+            static constexpr float tint[4][3] = {
+                {1.0f, 0.6f, 0.6f}, {0.6f, 1.0f, 0.6f},
+                {0.6f, 0.6f, 1.0f}, {1.0f, 1.0f, 0.6f}};
+            const int cascade = SelectShadowCascade(worldPosition, params);
+            r *= tint[cascade][0];
+            g *= tint[cascade][1];
+            b *= tint[cascade][2];
         }
 
         /// This triangle's cube texel rate -- the footprint the MIPMAP component of
@@ -4340,6 +4610,15 @@ namespace CNA::Internal::Renderers::Software
             std::memcpy(&position, raw.At(0), sizeof(Vector3));
             Vector3 normal(0.0f, 0.0f, 1.0f);
             bool haveNormal = false;
+            Vector3 tangent(1.0f, 0.0f, 0.0f);
+            float tangentSign = 1.0f;
+            const bool tangentLayout =
+                stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80;
+            if (tangentLayout)
+            {
+                std::memcpy(&tangent, raw.At(24), sizeof(Vector3));
+                std::memcpy(&tangentSign, raw.At(36), sizeof(float));
+            }
 
             const bool skinnedLayout =
                 stride == 52 || stride == 56 || stride == 68 || stride == 76 || stride == 80;
@@ -4372,7 +4651,14 @@ namespace CNA::Internal::Renderers::Software
 
                 position = ApplyAffineColumnMajor(blended, position, 1.0f);
                 std::memcpy(&normal, raw.At(12), sizeof(Vector3));
-                normal = ApplyAffineColumnMajor(blended, normal, 0.0f);
+                normal = params.pbr
+                    ? TransformWorldNormal(blended, normal)
+                    : ApplyAffineColumnMajor(blended, normal, 0.0f);
+                if (tangentSkinned)
+                {
+                    tangent = ApplyAffineColumnMajor(blended, tangent, 0.0f);
+                    tangentSign *= AffineHandedness(blended);
+                }
                 haveNormal = true;
             }
 
@@ -4381,7 +4667,14 @@ namespace CNA::Internal::Renderers::Software
             {
                 position = ApplyAffineColumnMajor(instanceMatrix, position, 1.0f);
                 if (haveNormal)
-                    normal = ApplyAffineColumnMajor(instanceMatrix, normal, 0.0f);
+                    normal = params.pbr
+                        ? TransformWorldNormal(instanceMatrix, normal)
+                        : ApplyAffineColumnMajor(instanceMatrix, normal, 0.0f);
+                if (tangentLayout)
+                {
+                    tangent = ApplyAffineColumnMajor(instanceMatrix, tangent, 0.0f);
+                    tangentSign *= AffineHandedness(instanceMatrix);
+                }
             }
 
             const Vector4 clip = Vector4::Transform(position, combined);
@@ -4416,18 +4709,14 @@ namespace CNA::Internal::Renderers::Software
             else if (stride == 48 || stride == 60)
             {
                 // VertexPositionNormalTangentTexture, optionally followed by TextureCoordinate1.
-                // The Software PBR fallback samples the base-colour texture, so consume that map's
-                // selector (mask bit 0) without pretending to evaluate the other PBR maps here.
                 std::memcpy(&normal, raw.At(12), sizeof(Vector3));
                 haveNormal = true;
                 std::memcpy(&out.u, raw.At(40), sizeof(float));
                 std::memcpy(&out.v, raw.At(44), sizeof(float));
-                if (stride == 60 && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+                if (stride == 60)
                 {
                     std::memcpy(&out.u1, raw.At(48), sizeof(float));
                     std::memcpy(&out.v1, raw.At(52), sizeof(float));
-                    out.u = out.u1;
-                    out.v = out.v1;
                 }
                 // plans/plan_gltf.md GLTF-462: stride 60's last four bytes were reserved padding and are
                 // the packed COLOR_0 now. §3.7.2.1 makes it "an additional linear multiplier to base
@@ -4449,13 +4738,10 @@ namespace CNA::Internal::Renderers::Software
             {
                 std::memcpy(&out.u, raw.At(40), sizeof(float));
                 std::memcpy(&out.v, raw.At(44), sizeof(float));
-                if ((stride == 76 || stride == 80) &&
-                    (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+                if (stride == 76 || stride == 80)
                 {
                     std::memcpy(&out.u1, raw.At(68), sizeof(float));
                     std::memcpy(&out.v1, raw.At(72), sizeof(float));
-                    out.u = out.u1;
-                    out.v = out.v1;
                 }
                 // plans/plan_gltf.md GLTF-463: stride 80 is the stride-76 skinned PBR record with a packed
                 // COLOR_0 appended. This raster path already multiplies out.r/g/b/a into the sampled
@@ -4466,20 +4752,6 @@ namespace CNA::Internal::Renderers::Software
                     UnpackColorBytes(raw.At(76), out.r, out.g, out.b, out.a);
             }
 
-            if (stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80)
-            {
-                // PbrEffect's base-colour transform is slot zero. Identity rows make this an exact
-                // no-op for old callers and materials without KHR_texture_transform.
-                const float u = out.u;
-                const float v = out.v;
-                out.u = u * params.pbrTextureTransformRows[0][0] +
-                        v * params.pbrTextureTransformRows[0][1] +
-                        params.pbrTextureTransformRows[0][2];
-                out.v = u * params.pbrTextureTransformRows[1][0] +
-                        v * params.pbrTextureTransformRows[1][1] +
-                        params.pbrTextureTransformRows[1][2];
-            }
-
             if (!params.vertexColorEnabled)
             {
                 out.r = out.g = out.b = out.a = 1.0f;
@@ -4487,6 +4759,8 @@ namespace CNA::Internal::Renderers::Software
             PrepareUnlitCommonDiffuseVertex(out, params);
             PrepareEnvironmentMapVertex(out, position, normal, haveNormal, params);
             PrepareClassicLightingVertex(out, position, normal, haveNormal, params);
+            PreparePbrVertex(out, position, normal, haveNormal, tangent, tangentLayout,
+                             tangentSign, params);
             return out;
         }
 
@@ -4512,6 +4786,10 @@ namespace CNA::Internal::Renderers::Software
             Vector3 normal(normalAttribute.value[0], normalAttribute.value[1],
                            normalAttribute.value[2]);
             bool haveNormal = normalAttribute.found;
+            const auto tangentAttribute = raw.Read(VertexElementUsage::Tangent, 0);
+            Vector3 tangent(tangentAttribute.value[0], tangentAttribute.value[1],
+                            tangentAttribute.value[2]);
+            float tangentSign = tangentAttribute.found ? tangentAttribute.value[3] : 1.0f;
 
             if (params.skinned)
             {
@@ -4531,7 +4809,14 @@ namespace CNA::Internal::Renderers::Software
                         blended[e] += bone[e] * weight;
                 }
                 position = ApplyAffineColumnMajor(blended, position, 1.0f);
-                normal = ApplyAffineColumnMajor(blended, normal, 0.0f);
+                normal = params.pbr
+                    ? TransformWorldNormal(blended, normal)
+                    : ApplyAffineColumnMajor(blended, normal, 0.0f);
+                if (tangentAttribute.found)
+                {
+                    tangent = ApplyAffineColumnMajor(blended, tangent, 0.0f);
+                    tangentSign *= AffineHandedness(blended);
+                }
             }
 
             float instanceMatrix[16];
@@ -4539,7 +4824,14 @@ namespace CNA::Internal::Renderers::Software
             {
                 position = ApplyAffineColumnMajor(instanceMatrix, position, 1.0f);
                 if (haveNormal)
-                    normal = ApplyAffineColumnMajor(instanceMatrix, normal, 0.0f);
+                    normal = params.pbr
+                        ? TransformWorldNormal(instanceMatrix, normal)
+                        : ApplyAffineColumnMajor(instanceMatrix, normal, 0.0f);
+                if (tangentAttribute.found)
+                {
+                    tangent = ApplyAffineColumnMajor(instanceMatrix, tangent, 0.0f);
+                    tangentSign *= AffineHandedness(instanceMatrix);
+                }
             }
 
             const Vector4 clip = Vector4::Transform(position, combined);
@@ -4563,27 +4855,10 @@ namespace CNA::Internal::Renderers::Software
                 out.u1 = uv1Attribute.value[0];
                 out.v1 = uv1Attribute.value[1];
             }
-            if (params.pbr && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
-            {
-                if (uv1Attribute.found)
-                    uvAttribute = uv1Attribute;
-            }
             if (uvAttribute.found)
             {
                 out.u = uvAttribute.value[0];
                 out.v = uvAttribute.value[1];
-            }
-
-            if (params.pbr)
-            {
-                const float u = out.u;
-                const float v = out.v;
-                out.u = u * params.pbrTextureTransformRows[0][0] +
-                        v * params.pbrTextureTransformRows[0][1] +
-                        params.pbrTextureTransformRows[0][2];
-                out.v = u * params.pbrTextureTransformRows[1][0] +
-                        v * params.pbrTextureTransformRows[1][1] +
-                        params.pbrTextureTransformRows[1][2];
             }
 
             if (!params.vertexColorEnabled)
@@ -4591,6 +4866,8 @@ namespace CNA::Internal::Renderers::Software
             PrepareUnlitCommonDiffuseVertex(out, params);
             PrepareEnvironmentMapVertex(out, position, normal, haveNormal, params);
             PrepareClassicLightingVertex(out, position, normal, haveNormal, params);
+            PreparePbrVertex(out, position, normal, haveNormal, tangent,
+                             tangentAttribute.found, tangentSign, params);
             return out;
         }
 
@@ -4649,6 +4926,15 @@ namespace CNA::Internal::Renderers::Software
             const SoftwareColorSurface* texture0;
             const SoftwareColorSurface* texture1;
             const SoftwareCubeSurface* envMap;
+            const SoftwareColorSurface* shadowMap;
+            const SoftwareCubeSurface* punctualShadowCube;
+            const SoftwareColorSurface* punctualShadowMap;
+            const SoftwareCubeSurface* iblIrradiance;
+            const SoftwareCubeSurface* iblPrefilteredSpecular;
+            const SoftwareColorSurface* iblBrdfLut;
+            /// Normal, metallic-roughness, emissive, occlusion, specular-strength and
+            /// specular-colour maps. PBR uses the ordinary slot-0 sampler state on this CPU path.
+            std::array<const SoftwareColorSurface*, 6> pbrTextures;
             bool useDualTexture;
             bool useEnvMap;
             bool needUV;
@@ -4665,6 +4951,9 @@ namespace CNA::Internal::Renderers::Software
             // classification for each (only XNA filters 5..8 read it).
             SoftwareSamplerState sampler0;
             SoftwareSamplerState sampler1;
+            SoftwareSamplerState iblIrradianceSampler;
+            SoftwareSamplerState iblSpecularSampler;
+            SoftwareSamplerState iblBrdfSampler;
             bool magnify0;
             bool magnify1;
             // This triangle's level-of-detail for each bound texture, log2 of the
@@ -4699,6 +4988,140 @@ namespace CNA::Internal::Renderers::Software
             return !(clipWeight < 0.0f);
         }
 
+        [[nodiscard]] float SrgbToLinear(float value)
+        {
+            return value <= 0.04045f
+                ? value / 12.92f
+                : std::pow((value + 0.055f) / 1.055f, 2.4f);
+        }
+
+        [[nodiscard]] float LinearToSrgb(float value)
+        {
+            value = std::max(value, 0.0f);
+            return value <= 0.0031308f
+                ? value * 12.92f
+                : 1.055f * std::pow(value, 1.0f / 2.4f) - 0.055f;
+        }
+
+        void TransformPbrUv(const GpuDrawParams& params, int textureSlot,
+                            float u0, float v0, float u1, float v1,
+                            float& transformedU, float& transformedV)
+        {
+            const bool useUv1 =
+                (params.pbrTextureCoordinateSetMask & (1u << textureSlot)) != 0u;
+            const float u = useUv1 ? u1 : u0;
+            const float v = useUv1 ? v1 : v0;
+            const float (*rows)[4] = textureSlot < 5
+                ? &params.pbrTextureTransformRows[textureSlot * 2]
+                : &params.pbrSpecularTextureTransformRows[(textureSlot - 5) * 2];
+            transformedU = u * rows[0][0] + v * rows[0][1] + rows[0][2];
+            transformedV = u * rows[1][0] + v * rows[1][1] + rows[1][2];
+        }
+
+        void AddPbrDirectionalLight(const Vector3& normal, const Vector3& view,
+                                    const float* direction, const float* lightColor,
+                                    const float (&albedo)[3], const float (&f0)[3],
+                                    const float (&f90)[3], float roughness, float metallic,
+                                    float (&sum)[3], float visibility = 1.0f)
+        {
+            const Vector3 light = NormalizeOrZero(Vector3(
+                -direction[0], -direction[1], -direction[2]));
+            const Vector3 halfVector = NormalizeOrZero(Vector3(
+                view.X + light.X, view.Y + light.Y, view.Z + light.Z));
+            const auto dot = [](const Vector3& left, const Vector3& right) {
+                return left.X * right.X + left.Y * right.Y + left.Z * right.Z;
+            };
+            const float nDotL = std::max(dot(normal, light), 0.0f);
+            const float nDotV = std::max(dot(normal, view), 1e-4f);
+            const float nDotH = std::max(dot(normal, halfVector), 0.0f);
+            const float vDotH = std::max(dot(view, halfVector), 0.0f);
+            const float a2 = std::pow(roughness, 4.0f);
+            const float dTerm = nDotH * nDotH * (a2 - 1.0f) + 1.0f;
+            constexpr float kPi = 3.14159265358979323846f;
+            const float distribution = a2 / (kPi * dTerm * dTerm + 1e-7f);
+            const float kBase = roughness + 1.0f;
+            const float k = kBase * kBase / 8.0f;
+            const float geometry =
+                (nDotV / (nDotV * (1.0f - k) + k)) *
+                (nDotL / (nDotL * (1.0f - k) + k));
+            const float fresnelWeight = std::pow(std::clamp(1.0f - vDotH, 0.0f, 1.0f), 5.0f);
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                const float fresnel = f0[channel] + (f90[channel] - f0[channel]) * fresnelWeight;
+                const float specular = distribution * geometry * fresnel /
+                    std::max(4.0f * nDotV * nDotL, 1e-4f);
+                const float diffuse =
+                    (1.0f - fresnel) * albedo[channel] * (1.0f - metallic) / kPi;
+                sum[channel] +=
+                    (diffuse + specular) * lightColor[channel] * nDotL * visibility;
+            }
+        }
+
+        void ComputePbrIblAmbient(const ShadedContext& ctx,
+                                  const Vector3& normal, const Vector3& view,
+                                  const float (&albedo)[3], const float (&f0)[3],
+                                  float roughness, float metallic, float occlusion,
+                                  float (&ambient)[3])
+        {
+            if (!ctx.params.iblEnabled || ctx.iblIrradiance == nullptr ||
+                ctx.iblPrefilteredSpecular == nullptr || ctx.iblBrdfLut == nullptr)
+            {
+                for (int channel = 0; channel < 3; ++channel)
+                    ambient[channel] =
+                        ctx.params.ambientColor[channel] * albedo[channel] * occlusion;
+                return;
+            }
+
+            const float rawNormalDotView =
+                normal.X * view.X + normal.Y * view.Y + normal.Z * view.Z;
+            const float nDotV = std::clamp(rawNormalDotView, 1e-4f, 1.0f);
+            const float fresnelWeight = std::pow(1.0f - nDotV, 5.0f);
+            float kS[3];
+            float kD[3];
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                const float grazing = std::max(1.0f - roughness, f0[channel]);
+                kS[channel] = f0[channel] + (grazing - f0[channel]) * fresnelWeight;
+                kD[channel] = (1.0f - kS[channel]) * (1.0f - metallic);
+            }
+
+            float irradianceR = 0.0f, irradianceG = 0.0f;
+            float irradianceB = 0.0f, irradianceA = 1.0f;
+            SampleCubeMap(*ctx.iblIrradiance, ctx.iblIrradianceSampler,
+                          true, 0.0f, normal,
+                          irradianceR, irradianceG, irradianceB, irradianceA,
+                          nullptr, false);
+
+            const Vector3 reflection(
+                2.0f * rawNormalDotView * normal.X - view.X,
+                2.0f * rawNormalDotView * normal.Y - view.Y,
+                2.0f * rawNormalDotView * normal.Z - view.Z);
+            const float lod = roughness * static_cast<float>(
+                std::max(ctx.params.iblPrefilteredMipCount - 1, 0));
+            float specularR = 0.0f, specularG = 0.0f;
+            float specularB = 0.0f, specularA = 1.0f;
+            SampleCubeMap(*ctx.iblPrefilteredSpecular, ctx.iblSpecularSampler,
+                          !(lod > 0.0f), lod, reflection,
+                          specularR, specularG, specularB, specularA,
+                          nullptr, false);
+
+            float brdfScale = 0.0f, brdfBias = 0.0f;
+            float brdfBlue = 0.0f, brdfAlpha = 1.0f;
+            SampleTexture(*ctx.iblBrdfLut, ctx.iblBrdfSampler,
+                          true, 0.0f, nDotV, roughness,
+                          brdfScale, brdfBias, brdfBlue, brdfAlpha);
+            const float irradiance[3] = {irradianceR, irradianceG, irradianceB};
+            const float prefiltered[3] = {specularR, specularG, specularB};
+            for (int channel = 0; channel < 3; ++channel)
+            {
+                const float diffuse = irradiance[channel] * albedo[channel] * kD[channel];
+                const float specular = prefiltered[channel] *
+                    (kS[channel] * brdfScale + brdfBias);
+                ambient[channel] = (diffuse + specular) *
+                    ctx.params.iblIntensity * occlusion;
+            }
+        }
+
         /// Writes one already-interpolated shaded fragment -- the whole texture/diffuse/
         /// dual-texture/env-map/blend pipeline that used to live inline in RasterizeTriangleShaded's
         /// fill loop. `p*` are the perspective-premultiplied attribute sums (attr * invW), divided by
@@ -4712,6 +5135,7 @@ namespace CNA::Internal::Renderers::Software
                                         float psr, float psg, float psb,
                                         float penvx, float penvy, float penvz, float penvBlend,
                                         float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz,
+                                        float ptx, float pty, float ptz, float ptangentSign,
                                         unsigned int coverageMask = 0xFFFFFFFFu,
                                         const std::array<float, 4>* sampleDepths = nullptr)
         {
@@ -4775,27 +5199,177 @@ namespace CNA::Internal::Renderers::Software
                 float texB = ctx.params.pbr ? 1.0f : 0.0f;
                 float texA = 1.0f;
                 if (ctx.texture0 != nullptr)
-                    SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
+                {
+                    float sampleU = u;
+                    float sampleV = v;
+                    if (ctx.params.pbr)
+                        TransformPbrUv(ctx.params, 0, u, v, u1, v1, sampleU, sampleV);
+                    SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0,
+                                  sampleU, sampleV,
                                   texR, texG, texB, texA, &ctx.footprint0);
+                }
+                if (ctx.params.pbr && ctx.params.pbrBaseColorTextureIsSrgb)
+                {
+                    texR = SrgbToLinear(texR);
+                    texG = SrgbToLinear(texG);
+                    texB = SrgbToLinear(texB);
+                }
                 r *= texR;
                 g *= texG;
                 b *= texB;
                 a *= texA;
             }
 
-            if (UsesClassicEffectLighting(ctx.params))
+            if (ctx.params.pbr)
+            {
+                const auto samplePbrMap = [&](int mapIndex, int textureSlot,
+                                              float& sampleR, float& sampleG,
+                                              float& sampleB, float& sampleA) {
+                    const SoftwareColorSurface* texture =
+                        ctx.pbrTextures[static_cast<std::size_t>(mapIndex)];
+                    if (texture == nullptr)
+                        return;
+                    float sampleU;
+                    float sampleV;
+                    TransformPbrUv(ctx.params, textureSlot, u, v, u1, v1, sampleU, sampleV);
+                    SampleTexture(*texture, ctx.sampler0, ctx.magnify0, ctx.lambda0,
+                                  sampleU, sampleV, sampleR, sampleG, sampleB, sampleA,
+                                  &ctx.footprint0);
+                };
+
+                const Vector3 worldPosition(pwpx / invW, pwpy / invW, pwpz / invW);
+                Vector3 normal = NormalizeOrZero(Vector3(
+                    pnx / invW, pny / invW, pnz / invW));
+                Vector3 tangent(ptx / invW, pty / invW, ptz / invW);
+                const float tangentProjection =
+                    normal.X * tangent.X + normal.Y * tangent.Y + normal.Z * tangent.Z;
+                tangent = NormalizeOrZero(Vector3(
+                    tangent.X - normal.X * tangentProjection,
+                    tangent.Y - normal.Y * tangentProjection,
+                    tangent.Z - normal.Z * tangentProjection));
+                const float sign = ptangentSign / invW < 0.0f ? -1.0f : 1.0f;
+                const Vector3 bitangent(
+                    (normal.Y * tangent.Z - normal.Z * tangent.Y) * sign,
+                    (normal.Z * tangent.X - normal.X * tangent.Z) * sign,
+                    (normal.X * tangent.Y - normal.Y * tangent.X) * sign);
+
+                float normalR = 0.5f, normalG = 0.5f, normalB = 1.0f, normalA = 1.0f;
+                samplePbrMap(0, 1, normalR, normalG, normalB, normalA);
+                const float tangentNormalX = (normalR * 2.0f - 1.0f) * ctx.params.pbrNormalScale;
+                const float tangentNormalY = (normalG * 2.0f - 1.0f) * ctx.params.pbrNormalScale;
+                const float tangentNormalZ = normalB * 2.0f - 1.0f;
+                normal = NormalizeOrZero(Vector3(
+                    tangent.X * tangentNormalX + bitangent.X * tangentNormalY + normal.X * tangentNormalZ,
+                    tangent.Y * tangentNormalX + bitangent.Y * tangentNormalY + normal.Y * tangentNormalZ,
+                    tangent.Z * tangentNormalX + bitangent.Z * tangentNormalY + normal.Z * tangentNormalZ));
+
+                float mrR = 1.0f, mrG = 1.0f, mrB = 1.0f, mrA = 1.0f;
+                samplePbrMap(1, 2, mrR, mrG, mrB, mrA);
+                const float roughness = std::clamp(
+                    mrG * ctx.params.pbrRoughnessFactor, 0.045f, 1.0f);
+                const float metallic = std::clamp(
+                    mrB * ctx.params.pbrMetallicFactor, 0.0f, 1.0f);
+
+                const float albedo[3] = {
+                    r * ctx.params.diffuseColor[0],
+                    g * ctx.params.diffuseColor[1],
+                    b * ctx.params.diffuseColor[2]};
+                a *= ctx.params.diffuseColor[3];
+                const Vector3 view = NormalizeOrZero(Vector3(
+                    ctx.params.eyePositionWorld[0] - worldPosition.X,
+                    ctx.params.eyePositionWorld[1] - worldPosition.Y,
+                    ctx.params.eyePositionWorld[2] - worldPosition.Z));
+
+                float specularMapR = 1.0f, specularMapG = 1.0f;
+                float specularMapB = 1.0f, specularMapA = 1.0f;
+                samplePbrMap(4, 5, specularMapR, specularMapG, specularMapB, specularMapA);
+                float specularColorR = 1.0f, specularColorG = 1.0f;
+                float specularColorB = 1.0f, specularColorA = 1.0f;
+                samplePbrMap(5, 6, specularColorR, specularColorG,
+                             specularColorB, specularColorA);
+                if (ctx.params.pbrSpecularColorTextureIsSrgb)
+                {
+                    specularColorR = SrgbToLinear(specularColorR);
+                    specularColorG = SrgbToLinear(specularColorG);
+                    specularColorB = SrgbToLinear(specularColorB);
+                }
+                const float specularWeight =
+                    ctx.params.pbrSpecularFactor * specularMapA;
+                const float dielectricF0[3] = {
+                    std::min(ctx.params.pbrDielectricF0Unclamped[0] * specularColorR, 1.0f) * specularWeight,
+                    std::min(ctx.params.pbrDielectricF0Unclamped[1] * specularColorG, 1.0f) * specularWeight,
+                    std::min(ctx.params.pbrDielectricF0Unclamped[2] * specularColorB, 1.0f) * specularWeight};
+                float f0[3];
+                float f90[3];
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    f0[channel] = dielectricF0[channel] * (1.0f - metallic) +
+                                  albedo[channel] * metallic;
+                    f90[channel] = specularWeight * (1.0f - metallic) + metallic;
+                }
+
+                const float directionalVisibility = DirectionalShadowVisibility(
+                    ctx.shadowMap, worldPosition, ctx.params);
+                const float punctualVisibility = PunctualShadowVisibility(
+                    ctx.punctualShadowCube, ctx.punctualShadowMap,
+                    worldPosition, ctx.params);
+                float direct[3] = {0.0f, 0.0f, 0.0f};
+                AddPbrDirectionalLight(normal, view, ctx.params.light0Dir,
+                                       ctx.params.light0Diffuse, albedo, f0, f90,
+                                       roughness, metallic, direct, directionalVisibility);
+                AddPbrDirectionalLight(normal, view, ctx.params.light1Dir,
+                                       ctx.params.light1Diffuse, albedo, f0, f90,
+                                       roughness, metallic, direct, directionalVisibility);
+                AddPbrDirectionalLight(normal, view, ctx.params.light2Dir,
+                                       ctx.params.light2Diffuse, albedo, f0, f90,
+                                       roughness, metallic, direct, directionalVisibility);
+                float punctual[3] = {0.0f, 0.0f, 0.0f};
+                AddPunctualDiffuse(
+                    worldPosition, normal, ctx.params, punctual, punctualVisibility);
+
+                float occlusionR = 1.0f, occlusionG = 1.0f;
+                float occlusionB = 1.0f, occlusionA = 1.0f;
+                samplePbrMap(3, 4, occlusionR, occlusionG, occlusionB, occlusionA);
+                const float occlusion = 1.0f + ctx.params.pbrOcclusionStrength *
+                    (occlusionR - 1.0f);
+                float emissiveR = 1.0f, emissiveG = 1.0f;
+                float emissiveB = 1.0f, emissiveA = 1.0f;
+                samplePbrMap(2, 3, emissiveR, emissiveG, emissiveB, emissiveA);
+                if (ctx.params.pbrEmissiveTextureIsSrgb)
+                {
+                    emissiveR = SrgbToLinear(emissiveR);
+                    emissiveG = SrgbToLinear(emissiveG);
+                    emissiveB = SrgbToLinear(emissiveB);
+                }
+                float ambient[3] = {0.0f, 0.0f, 0.0f};
+                ComputePbrIblAmbient(ctx, normal, view, albedo, f0,
+                                     roughness, metallic, occlusion, ambient);
+                r = ambient[0] + direct[0] +
+                    punctual[0] * albedo[0] + ctx.params.emissiveColor[0] * emissiveR;
+                g = ambient[1] + direct[1] +
+                    punctual[1] * albedo[1] + ctx.params.emissiveColor[1] * emissiveG;
+                b = ambient[2] + direct[2] +
+                    punctual[2] * albedo[2] + ctx.params.emissiveColor[2] * emissiveB;
+            }
+            else if (UsesClassicEffectLighting(ctx.params))
             {
                 float specularR;
                 float specularG;
                 float specularB;
-                if (ctx.params.preferPerPixelLighting)
+                if (ctx.params.preferPerPixelLighting || UsesFragmentShadows(ctx.params))
                 {
                     const Vector3 worldPosition(
                         pwpx / invW, pwpy / invW, pwpz / invW);
                     const Vector3 worldNormal = NormalizeOrZero(Vector3(
                         pnx / invW, pny / invW, pnz / invW));
+                    const float directionalVisibility = DirectionalShadowVisibility(
+                        ctx.shadowMap, worldPosition, ctx.params);
+                    const float punctualVisibility = PunctualShadowVisibility(
+                        ctx.punctualShadowCube, ctx.punctualShadowMap,
+                        worldPosition, ctx.params);
                     const ClassicLightingResult lighting =
-                        ComputeClassicLighting(worldPosition, worldNormal, ctx.params);
+                        ComputeClassicLighting(worldPosition, worldNormal, ctx.params,
+                                               directionalVisibility, punctualVisibility);
                     r *= lighting.diffuse[0];
                     g *= lighting.diffuse[1];
                     b *= lighting.diffuse[2];
@@ -4824,6 +5398,13 @@ namespace CNA::Internal::Renderers::Software
                 g *= ctx.params.diffuseColor[1];
                 b *= ctx.params.diffuseColor[2];
                 a *= ctx.params.diffuseColor[3];
+            }
+
+            if (ctx.params.pbr || UsesClassicEffectLighting(ctx.params))
+            {
+                const Vector3 worldPosition(
+                    pwpx / invW, pwpy / invW, pwpz / invW);
+                ApplyCascadeDebugTint(r, g, b, worldPosition, ctx.params);
             }
 
             // FNA's AlphaTestEffect pixel shader evaluates texture * vertex colour * diffuse/alpha,
@@ -4888,9 +5469,33 @@ namespace CNA::Internal::Renderers::Software
             // follows texture/material/env-map and alpha-test processing, immediately before the
             // ordinary BlendState equation. FNA premultiplies FogColor by the completed output
             // alpha before this mix, matching all five classic stock-effect shaders.
-            r = ctx.params.fogColor[0] * a * (1.0f - fogKeep) + r * fogKeep;
-            g = ctx.params.fogColor[1] * a * (1.0f - fogKeep) + g * fogKeep;
-            b = ctx.params.fogColor[2] * a * (1.0f - fogKeep) + b * fogKeep;
+            if (ctx.params.pbr)
+            {
+                float fogR = ctx.params.fogColor[0];
+                float fogG = ctx.params.fogColor[1];
+                float fogB = ctx.params.fogColor[2];
+                if (ctx.params.pbrEncodeOutputToSrgb)
+                {
+                    fogR = SrgbToLinear(fogR);
+                    fogG = SrgbToLinear(fogG);
+                    fogB = SrgbToLinear(fogB);
+                }
+                r = fogR * (1.0f - fogKeep) + r * fogKeep;
+                g = fogG * (1.0f - fogKeep) + g * fogKeep;
+                b = fogB * (1.0f - fogKeep) + b * fogKeep;
+                if (ctx.params.pbrEncodeOutputToSrgb)
+                {
+                    r = LinearToSrgb(r);
+                    g = LinearToSrgb(g);
+                    b = LinearToSrgb(b);
+                }
+            }
+            else
+            {
+                r = ctx.params.fogColor[0] * a * (1.0f - fogKeep) + r * fogKeep;
+                g = ctx.params.fogColor[1] * a * (1.0f - fogKeep) + g * fogKeep;
+                b = ctx.params.fogColor[2] * a * (1.0f - fogKeep) + b * fogKeep;
+            }
 
             // Final colour channels (opaque store or exact XNA blend result). Each channel is
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
@@ -4944,18 +5549,43 @@ namespace CNA::Internal::Renderers::Software
             const std::array<float, 4>& blendFactor, int colorWriteMask,
             unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
             const SoftwareSamplerState& sampler1,
+            const SoftwareSamplerState& iblIrradianceSampler,
+            const SoftwareSamplerState& iblSpecularSampler,
+            const SoftwareSamplerState& iblBrdfSampler,
             SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
             const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
+            const auto* shadowMap = dynamic_cast<const SoftwareColorSurface*>(params.shadowMap);
+            const auto* punctualShadowCube =
+                dynamic_cast<const SoftwareCubeSurface*>(params.punctualShadowCube);
+            const auto* punctualShadowMap =
+                dynamic_cast<const SoftwareColorSurface*>(params.punctualShadowMap);
+            const auto* iblIrradiance =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblIrradiance);
+            const auto* iblPrefilteredSpecular =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblPrefilteredSpecular);
+            const auto* iblBrdfLut =
+                dynamic_cast<const SoftwareColorSurface*>(params.iblBrdfLut);
+            const std::array<const SoftwareColorSurface*, 6> pbrTextures = {
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrNormalMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrMetallicRoughnessMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrEmissiveMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrOcclusionMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrSpecularMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrSpecularColorMap)};
             const bool useDualTexture = params.dualTexture;
             const bool useEnvMap = params.envMapping;
-            const bool needUV = useDualTexture || useEnvMap || params.textureEnabled;
-            return ShadedContext{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
+            const bool needUV = useDualTexture || useEnvMap || params.textureEnabled || params.pbr;
+            return ShadedContext{params, texture0, texture1, envMap,
+                                 shadowMap, punctualShadowCube, punctualShadowMap,
+                                 iblIrradiance, iblPrefilteredSpecular, iblBrdfLut, pbrTextures,
+                                 useDualTexture, useEnvMap,
                                  needUV, blendState, blendFactor, depthState, stencilState,
                                  colorWriteMask, multiSampleMask, occlusionQuery, sampler0, sampler1,
-                                 true, true, 0.0f, 0.0f, true, 0.0f};
+                                 iblIrradianceSampler, iblSpecularSampler, iblBrdfSampler,
+                                 true, true, 0.0f, 0.0f, {}, {}, true, 0.0f, {}};
         }
 
         /// Rasterizes one one-pixel-wide line through the same depth, texture, material and blend
@@ -4967,11 +5597,15 @@ namespace CNA::Internal::Renderers::Software
             const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
             int colorWriteMask, unsigned int multiSampleMask,
             const SoftwareSamplerState& sampler0, const SoftwareSamplerState& sampler1,
+            const SoftwareSamplerState& iblIrradianceSampler,
+            const SoftwareSamplerState& iblSpecularSampler,
+            const SoftwareSamplerState& iblBrdfSampler,
             SoftwareOcclusionQueryRenderer* occlusionQuery, bool multiSampleAntiAlias)
         {
             const ShadedContext ctx = MakeLinearShadedContext(
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
-                multiSampleMask, sampler0, sampler1, occlusionQuery);
+                multiSampleMask, sampler0, sampler1, iblIrradianceSampler,
+                iblSpecularSampler, iblBrdfSampler, occlusionQuery);
             WalkRasterLine(fb, multiSampleAntiAlias, clip, a, b,
                            [&](int x, int y, float t, unsigned int coverageMask,
                                const std::array<float, 4>* sampleTs) {
@@ -5001,6 +5635,9 @@ namespace CNA::Internal::Renderers::Software
                     a.wpx + t * (b.wpx - a.wpx), a.wpy + t * (b.wpy - a.wpy),
                     a.wpz + t * (b.wpz - a.wpz), a.nx + t * (b.nx - a.nx),
                     a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz),
+                    a.tx + t * (b.tx - a.tx), a.ty + t * (b.ty - a.ty),
+                    a.tz + t * (b.tz - a.tz),
+                    a.tangentSign + t * (b.tangentSign - a.tangentSign),
                     coverageMask, sampleTs != nullptr ? &sampleDepths : nullptr);
             });
         }
@@ -5014,13 +5651,17 @@ namespace CNA::Internal::Renderers::Software
             const RasterClipRect& clip, const RasterVertex& point, int colorWriteMask,
             unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
             const SoftwareSamplerState& sampler1,
+            const SoftwareSamplerState& iblIrradianceSampler,
+            const SoftwareSamplerState& iblSpecularSampler,
+            const SoftwareSamplerState& iblBrdfSampler,
             SoftwareOcclusionQueryRenderer* occlusionQuery)
         {
             if (!std::isfinite(point.x) || !std::isfinite(point.y))
                 return;
             const ShadedContext ctx = MakeLinearShadedContext(
                 params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
-                multiSampleMask, sampler0, sampler1, occlusionQuery);
+                multiSampleMask, sampler0, sampler1, iblIrradianceSampler,
+                iblSpecularSampler, iblBrdfSampler, occlusionQuery);
             WriteShadedFragment(fb, ctx, clip,
                                 static_cast<int>(std::floor(point.x)),
                                 static_cast<int>(std::floor(point.y)),
@@ -5031,7 +5672,8 @@ namespace CNA::Internal::Renderers::Software
                                 point.sr, point.sg, point.sb,
                                 point.envx, point.envy, point.envz, point.envBlend,
                                 point.wpx, point.wpy, point.wpz,
-                                point.nx, point.ny, point.nz);
+                                point.nx, point.ny, point.nz,
+                                point.tx, point.ty, point.tz, point.tangentSign);
         }
 
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
@@ -5053,6 +5695,9 @@ namespace CNA::Internal::Renderers::Software
                                      int colorWriteMask, unsigned int multiSampleMask,
                                      const SoftwareSamplerState& sampler0,
                                      const SoftwareSamplerState& sampler1,
+                                     const SoftwareSamplerState& iblIrradianceSampler,
+                                     const SoftwareSamplerState& iblSpecularSampler,
+                                     const SoftwareSamplerState& iblBrdfSampler,
                                      SoftwareOcclusionQueryRenderer* occlusionQuery,
                                      bool multiSampleAntiAlias,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
@@ -5071,9 +5716,27 @@ namespace CNA::Internal::Renderers::Software
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
             const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
+            const auto* shadowMap = dynamic_cast<const SoftwareColorSurface*>(params.shadowMap);
+            const auto* punctualShadowCube =
+                dynamic_cast<const SoftwareCubeSurface*>(params.punctualShadowCube);
+            const auto* punctualShadowMap =
+                dynamic_cast<const SoftwareColorSurface*>(params.punctualShadowMap);
+            const auto* iblIrradiance =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblIrradiance);
+            const auto* iblPrefilteredSpecular =
+                dynamic_cast<const SoftwareCubeSurface*>(params.iblPrefilteredSpecular);
+            const auto* iblBrdfLut =
+                dynamic_cast<const SoftwareColorSurface*>(params.iblBrdfLut);
+            const std::array<const SoftwareColorSurface*, 6> pbrTextures = {
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrNormalMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrMetallicRoughnessMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrEmissiveMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrOcclusionMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrSpecularMap),
+                dynamic_cast<const SoftwareColorSurface*>(params.pbrSpecularColorMap)};
             const bool useDualTexture = params.dualTexture;
             const bool useEnvMap = params.envMapping;
-            const bool needUV = useDualTexture || useEnvMap || params.textureEnabled;
+            const bool needUV = useDualTexture || useEnvMap || params.textureEnabled || params.pbr;
             // Classify magnification once per triangle per bound texture. Only XNA
             // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
             // Anisotropic; it is computed only when a texture is actually sampled.
@@ -5101,10 +5764,15 @@ namespace CNA::Internal::Renderers::Software
                                                std::max(1, envMap->CubeSize()))
                 : TextureFootprint{};
             const float rhoCube = footprintCube.isotropicRate;
-            const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
+            const ShadedContext ctx{params, texture0, texture1, envMap,
+                                    shadowMap, punctualShadowCube, punctualShadowMap,
+                                    iblIrradiance, iblPrefilteredSpecular, iblBrdfLut, pbrTextures,
+                                    useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
                                     depthState, faceStencil, colorWriteMask, multiSampleMask,
-                                    occlusionQuery, sampler0, sampler1, magnify0, magnify1,
+                                    occlusionQuery, sampler0, sampler1,
+                                    iblIrradianceSampler, iblSpecularSampler, iblBrdfSampler,
+                                    magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     footprint0, footprint1,
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube), footprintCube};
@@ -5168,6 +5836,9 @@ namespace CNA::Internal::Renderers::Software
                                             A.wpx + t * (B.wpx - A.wpx), A.wpy + t * (B.wpy - A.wpy),
                                             A.wpz + t * (B.wpz - A.wpz), A.nx + t * (B.nx - A.nx),
                                             A.ny + t * (B.ny - A.ny), A.nz + t * (B.nz - A.nz),
+                                            A.tx + t * (B.tx - A.tx), A.ty + t * (B.ty - A.ty),
+                                            A.tz + t * (B.tz - A.tz),
+                                            A.tangentSign + t * (B.tangentSign - A.tangentSign),
                                             coverageMask,
                                             sampleTs != nullptr ? &sampleDepths : nullptr);
                     });
@@ -5286,6 +5957,11 @@ namespace CNA::Internal::Renderers::Software
                                         BarycentricInterpolate(v0.nx, v1.nx, v2.nx, lambda0, lambda1),
                                         BarycentricInterpolate(v0.ny, v1.ny, v2.ny, lambda0, lambda1),
                                         BarycentricInterpolate(v0.nz, v1.nz, v2.nz, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.tx, v1.tx, v2.tx, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.ty, v1.ty, v2.ty, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.tz, v1.tz, v2.tz, lambda0, lambda1),
+                                        BarycentricInterpolate(v0.tangentSign, v1.tangentSign,
+                                                               v2.tangentSign, lambda0, lambda1),
                                         coverageMask,
                                         fb.HasMultiSampleColor() ? &sampleDepths : nullptr);
                 }
@@ -6040,7 +6716,9 @@ namespace CNA::Internal::Renderers::Software
                     vertices[static_cast<std::size_t>(fan)],
                     vertices[static_cast<std::size_t>(fan + 1)],
                     GetColorWriteMask(), GetMultiSampleMask(),
-                    spriteSampler, spriteSampler, activeOcclusionQuery_,
+                    spriteSampler, spriteSampler,
+                    GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                    activeOcclusionQuery_,
                     IsMultiSampleAntiAliasEnabled(), wire, edgeMask);
             }
         };
@@ -6499,7 +7177,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizePointShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params,
                             clip, vertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_);
                 }
                 continue;
             }
@@ -6539,7 +7219,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizeLineShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params, clip,
                             firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_,
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_,
                             multiSampleAntiAlias_);
                 }
                 continue;
@@ -6592,7 +7274,9 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), activeOcclusionQuery_,
+                                        GetSamplerState(1), GetSamplerState(10),
+                                        GetSamplerState(11), GetSamplerState(12),
+                                        activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
         }
@@ -6761,7 +7445,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizePointShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params,
                             clip, vertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_);
                 }
                 continue;
             }
@@ -6801,7 +7487,9 @@ namespace CNA::Internal::Renderers::Software
                         RasterizeLineShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params, clip,
                             firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
-                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_,
+                            GetSamplerState(0), GetSamplerState(1),
+                            GetSamplerState(10), GetSamplerState(11), GetSamplerState(12),
+                            activeOcclusionQuery_,
                             multiSampleAntiAlias_);
                 }
                 continue;
@@ -6854,7 +7542,9 @@ namespace CNA::Internal::Renderers::Software
                                         clip, rv[0], rv[static_cast<std::size_t>(fan)],
                                         rv[static_cast<std::size_t>(fan + 1)],
                                         colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0),
-                                        GetSamplerState(1), activeOcclusionQuery_,
+                                        GetSamplerState(1), GetSamplerState(10),
+                                        GetSamplerState(11), GetSamplerState(12),
+                                        activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
         }

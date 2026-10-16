@@ -1582,6 +1582,10 @@ namespace CNA::Internal::Renderers::Software
          * @return Always true because the CPU sampler filters decoded floating-point planes.
          */
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+        /** @brief Reports that stock classic and PBR fragment paths sample CNA shadow maps. */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+        /** @brief Reports split-sum PBR image-based lighting through CPU cube/2D sampling. */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
         /** @brief Classifies formats whose complete CPU texture path is implemented. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;

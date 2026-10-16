@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -33,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 
 #include "common/PixelTestGame.hpp"
 #include "common/ViewSpaceFogRef.hpp"
@@ -188,7 +190,8 @@ class ViewSpaceFogTest : public Game
             {  1, -1, z,  0,0,1,  1,1,  1,0,0,0,  0,0,0,0 },
             {  1,  1, z,  0,0,1,  1,0,  1,0,0,0,  0,0,0,0 },
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(),
+                        6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
 
         Color got(0, 0, 0, 0);

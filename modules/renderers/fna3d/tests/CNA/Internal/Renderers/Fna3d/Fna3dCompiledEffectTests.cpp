@@ -35,6 +35,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -78,6 +80,15 @@ namespace
     {
         const std::filesystem::path path =
             CNA::TestSupport::CompiledEffectDirectory() / name;
+        std::ifstream input(path, std::ios::binary);
+        if (!input) return {};
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    std::vector<SharpRuntime::bytecs> LoadFixtureEffect(const char* name)
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectFixtureDirectory() / name;
         std::ifstream input(path, std::ios::binary);
         if (!input) return {};
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
@@ -1662,6 +1673,90 @@ TEST(Fna3dCompiledEffectTest, CompiledSpriteEffectRendersThroughDrawUserPrimitiv
     EXPECT_NEAR(pixel.getRProperty(), 20, 2);
     EXPECT_NEAR(pixel.getGProperty(), 210, 2);
     EXPECT_NEAR(pixel.getBProperty(), 60, 2);
+}
+
+TEST(Fna3dCompiledEffectTest, VertexTextureAndSamplerDeviceCollectionsReachTheDraw)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    const auto bytes = LoadFixtureEffect("vertex-texture-device-slots-xna4.fxb");
+    ASSERT_FALSE(bytes.empty());
+    Effect effect(device, bytes);
+    auto* amount = effect.getParametersProperty()["Amount"];
+    ASSERT_NE(amount, nullptr);
+    amount->SetValue(0.42f);
+
+    Texture2D heights(device, 4, 1, false, SurfaceFormat::Vector4);
+    const Vector4 heightData[] = {
+        Vector4(0.08f, 0, 0, 1), Vector4(0.94f, 0, 0, 1),
+        Vector4(0.22f, 0, 0, 1), Vector4(0.78f, 0, 0, 1)};
+    heights.SetData(heightData, 4);
+
+    struct Vertex
+    {
+        Vector3 position;
+        Vector2 sample;
+    };
+    constexpr int bars = 24;
+    std::vector<Vertex> vertices;
+    vertices.reserve(bars * 6);
+    for (int i = 0; i < bars; ++i)
+    {
+        const float x0 = -0.9f + 1.8f * static_cast<float>(i) / bars;
+        const float x1 = -0.9f + 1.8f * static_cast<float>(i + 1) / bars;
+        const float u = -0.25f + 1.5f * (static_cast<float>(i) + 0.5f) / bars;
+        const Vertex a{Vector3(x0, 0, 0), Vector2(u, 0)};
+        const Vertex b{Vector3(x1, 0, 0), Vector2(u, 0)};
+        const Vertex c{Vector3(x1, 0, 0), Vector2(u, 1)};
+        const Vertex d{Vector3(x0, 0, 0), Vector2(u, 1)};
+        vertices.insert(vertices.end(), {a, b, c, a, c, d});
+    }
+    const VertexDeclaration declaration(sizeof(Vertex), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+
+    const auto draw = [&](const SamplerState& sampler)
+    {
+        device.Clear(Color::Black);
+        effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
+        // Application changes after Apply must win over the pass's native binding snapshot.
+        device.getVertexTexturesProperty()(2, &heights);
+        device.getVertexSamplerStatesProperty()[2] = sampler;
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0,
+                                  static_cast<int>(vertices.size() / 3), declaration);
+        const Viewport viewport = device.getViewportProperty();
+        std::vector<Color> pixels(static_cast<std::size_t>(viewport.getWidthProperty()) *
+                                  static_cast<std::size_t>(viewport.getHeightProperty()));
+        device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+        return pixels;
+    };
+
+    const std::vector<Color> clamp = draw(SamplerState::PointClamp);
+    const std::vector<Color> wrap = draw(SamplerState::PointWrap);
+    int clampLit = 0;
+    int wrapLit = 0;
+    int different = 0;
+    for (std::size_t i = 0; i < clamp.size(); ++i)
+    {
+        clampLit += clamp[i].getRProperty() > 8 || clamp[i].getGProperty() > 8 ||
+                    clamp[i].getBProperty() > 8;
+        wrapLit += wrap[i].getRProperty() > 8 || wrap[i].getGProperty() > 8 ||
+                   wrap[i].getBProperty() > 8;
+        different += clamp[i].getPackedValueProperty() != wrap[i].getPackedValueProperty();
+    }
+    EXPECT_GT(clampLit, 1000);
+    EXPECT_GT(wrapLit, 1000);
+    EXPECT_GT(different, 1000)
+        << "PointClamp and PointWrap produced the same vertex-texture geometry";
 }
 
 TEST(Fna3dCompiledEffectTest, SpriteBatchExecutesCompiledEffectAndOverridesTextureSlotZero)

@@ -1733,17 +1733,47 @@ namespace Microsoft::Xna::Framework::Graphics
             streams.push_back(currentVertexBuffer_);
         }
         bool anyDeclared = false;
+        bool provided[static_cast<std::size_t>(VertexElementUsage::TessellateFactor) + 1u]
+                     [16] = {};
+        // FillVertexStreamBindings applies FNA3D's declaration-collision rule before deciding
+        // which shader inputs a stream supplies: a repeated (usage, index) pair moves to the first
+        // free index of that usage. Validate the same effective declaration, rather than the raw
+        // per-buffer declarations, or a legitimate split TEXCOORD0/TEXCOORD0 layout is rejected
+        // before the renderer can consume it as TEXCOORD0/TEXCOORD1.
         for (const VertexBuffer* buffer : streams)
-            if (!buffer->getVertexDeclarationProperty().GetVertexElements().empty()) anyDeclared = true;
+        {
+            const auto& elements =
+                buffer->getVertexDeclarationProperty().GetVertexElements();
+            if (!elements.empty()) anyDeclared = true;
+            for (const VertexElement& element : elements)
+            {
+                const auto usage =
+                    static_cast<std::size_t>(element.getVertexElementUsageProperty());
+                int index = element.getUsageIndexProperty();
+                if (usage >= std::size(provided) || index < 0 || index >= 16)
+                    continue;
+                if (provided[usage][static_cast<std::size_t>(index)])
+                {
+                    index = -1;
+                    for (int candidate = 0; candidate < 16; ++candidate)
+                    {
+                        if (!provided[usage][static_cast<std::size_t>(candidate)])
+                        {
+                            index = candidate;
+                            break;
+                        }
+                    }
+                    if (index < 0)
+                        continue; // FillVertexStreamBindings reports the exhausted-index error.
+                }
+                provided[usage][static_cast<std::size_t>(index)] = true;
+            }
+        }
         const auto provides = [&](VertexElementUsage usage, int usageIndex)
         {
-            for (const VertexBuffer* buffer : streams)
-                for (const VertexElement& element :
-                     buffer->getVertexDeclarationProperty().GetVertexElements())
-                    if (element.getVertexElementUsageProperty() == usage &&
-                        element.getUsageIndexProperty() == usageIndex)
-                        return true;
-            return false;
+            const auto usageSlot = static_cast<std::size_t>(usage);
+            return usageSlot < std::size(provided) && usageIndex >= 0 && usageIndex < 16 &&
+                   provided[usageSlot][static_cast<std::size_t>(usageIndex)];
         };
         const auto require = [&](VertexElementUsage usage, int usageIndex, const char* name)
         {

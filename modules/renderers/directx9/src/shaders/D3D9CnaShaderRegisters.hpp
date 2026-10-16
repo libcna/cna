@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// D3D9 PBR + skinned-vertex-color porting task: the real, compiler-verified constant register
-// layout for CNA's own 3 new CNAEXT shaders (Pbr3D, PbrSkinned3D, SkinnedVertexColor3D -- see
+// D3D9 extension shaders: the real, compiler-verified constant register layout for CNA's own
+// BasicPunctual3D, Pbr3D, PbrSkinned3D and SkinnedVertexColor3D shaders (see
 // shaders/cna/*.hlsl's own header comments), extracted the same way D9-72's own
 // extract_shader_registers.py extracts the vendored XNA Stock Effects' tables: from a real
 // D3DDisassemble()'s own "// Registers:" comment block, NOT hand-derived from each .hlsl file's own
@@ -19,8 +19,8 @@
 // for every Stock Effect) avoids that class of bug entirely -- the very reason this table exists
 // instead of a hand-rolled `SetVertexShaderConstantF(4, ..., 4)` call.
 //
-// Regenerate after any change to shaders/cna/Pbr3D.hlsl, shaders/cna/PbrSkinned3D.hlsl, or
-// shaders/cna/SkinnedVertexColor3D.hlsl: compile each entry point (see d3d9_pbr_shaders.hpp /
+// Regenerate after any change to shaders/cna/BasicPunctual3D.hlsl, Pbr3D.hlsl,
+// PbrSkinned3D.hlsl, or SkinnedVertexColor3D.hlsl: compile each entry point (see d3d9_pbr_shaders.hpp /
 // d3d9_skinned_vertex_color_shader.hpp's own header comments for the exact fxc_tool.exe
 // invocations), run disasm_tool.exe over the resulting .bin, and transcribe each entry point's own
 // "// Registers:" table verbatim (see extract_shader_registers.py for the exact parsing this file's
@@ -34,6 +34,109 @@
 
 namespace CNA::Internal::Renderers::DirectX9::Shaders
 {
+
+static constexpr D3D9ShaderConstantSlot kBasicPunctual3DVS_Registers[] = {
+    {"WorldViewProj", 'v', 0, 4},
+    {"World", 'v', 4, 3},
+    {"WorldInverseTranspose", 'v', 8, 3},
+    {"FogVector", 'v', 11, 1}
+};
+static constexpr int kBasicPunctual3DVS_RegistersCount = 4;
+
+static constexpr D3D9ShaderConstantSlot kBasicPunctualSkinned3DVS_Registers[] = {
+    {"WorldViewProj", 'v', 0, 4},
+    {"World", 'v', 4, 3},
+    {"WorldInverseTranspose", 'v', 8, 3},
+    {"FogVector", 'v', 11, 1},
+    {"Bones", 'v', 12, 216},
+    {"SkinningParams", 'v', 228, 1}
+};
+static constexpr int kBasicPunctualSkinned3DVS_RegistersCount = 6;
+
+static constexpr D3D9ShaderConstantSlot kBasicPunctual3DPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1},
+    {"EmissiveColor", 'p', 1, 1},
+    {"SpecularColorPower", 'p', 2, 1},
+    {"EyePosition", 'p', 3, 1},
+    {"Light0Direction", 'p', 4, 1},
+    {"Light0Diffuse", 'p', 5, 1},
+    {"Light0Specular", 'p', 6, 1},
+    {"Light1Direction", 'p', 7, 1},
+    {"Light1Diffuse", 'p', 8, 1},
+    {"Light1Specular", 'p', 9, 1},
+    {"Light2Direction", 'p', 10, 1},
+    {"Light2Diffuse", 'p', 11, 1},
+    {"Light2Specular", 'p', 12, 1},
+    {"PunctualPositionRange", 'p', 13, 1},
+    {"PunctualDirectionKind", 'p', 14, 1},
+    {"PunctualDiffuse", 'p', 15, 1},
+    {"PunctualCone", 'p', 16, 1},
+    {"FogColor", 'p', 17, 1}
+};
+static constexpr int kBasicPunctual3DPS_RegistersCount = 18;
+
+static constexpr D3D9ShaderConstantSlot kBasicPunctual3DShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1},
+    {"EmissiveColor", 'p', 1, 1},
+    {"SpecularColorPower", 'p', 2, 1},
+    {"EyePosition", 'p', 3, 1},
+    {"Light0Direction", 'p', 4, 1},
+    {"Light0Diffuse", 'p', 5, 1},
+    {"Light0Specular", 'p', 6, 1},
+    {"Light1Direction", 'p', 7, 1},
+    {"Light1Diffuse", 'p', 8, 1},
+    {"Light1Specular", 'p', 9, 1},
+    {"Light2Direction", 'p', 10, 1},
+    {"Light2Diffuse", 'p', 11, 1},
+    {"Light2Specular", 'p', 12, 1},
+    {"PunctualPositionRange", 'p', 13, 1},
+    {"PunctualDirectionKind", 'p', 14, 1},
+    {"PunctualDiffuse", 'p', 15, 1},
+    {"PunctualCone", 'p', 16, 1},
+    {"FogColor", 'p', 17, 1},
+    {"CnaLightViewProj", 'p', 34, 4},
+    {"CnaCascadeMatrices", 'p', 38, 16},
+    {"CnaPunctualViewProj", 'p', 72, 4},
+    {"CnaShadowParams", 'p', 58, 1},
+    {"CnaShadowTexelBlendDebug", 'p', 59, 1},
+    {"CnaCascadeSplits", 'p', 60, 1},
+    {"CnaCascadeViewZ", 'p', 61, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}
+};
+static constexpr int kBasicPunctual3DShadowPS_RegistersCount = 26;
+
+// The point-shadow compiler variant eliminates CnaPunctualViewProj completely. Keep its table
+// exact rather than uploading c72-c75 merely because the directional-plus-spot variant uses them.
+static constexpr D3D9ShaderConstantSlot kBasicPunctual3DPointShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1}, {"EmissiveColor", 'p', 1, 1},
+    {"SpecularColorPower", 'p', 2, 1}, {"EyePosition", 'p', 3, 1},
+    {"Light0Direction", 'p', 4, 1}, {"Light0Diffuse", 'p', 5, 1},
+    {"Light0Specular", 'p', 6, 1}, {"Light1Direction", 'p', 7, 1},
+    {"Light1Diffuse", 'p', 8, 1}, {"Light1Specular", 'p', 9, 1},
+    {"Light2Direction", 'p', 10, 1}, {"Light2Diffuse", 'p', 11, 1},
+    {"Light2Specular", 'p', 12, 1}, {"PunctualPositionRange", 'p', 13, 1},
+    {"PunctualDirectionKind", 'p', 14, 1}, {"PunctualDiffuse", 'p', 15, 1},
+    {"PunctualCone", 'p', 16, 1}, {"FogColor", 'p', 17, 1},
+    {"CnaLightViewProj", 'p', 34, 4}, {"CnaCascadeMatrices", 'p', 38, 16},
+    {"CnaShadowParams", 'p', 58, 1}, {"CnaShadowTexelBlendDebug", 'p', 59, 1},
+    {"CnaCascadeSplits", 'p', 60, 1}, {"CnaCascadeViewZ", 'p', 61, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}
+};
+static constexpr int kBasicPunctual3DPointShadowPS_RegistersCount = 25;
+
+static constexpr D3D9ShaderConstantSlot kBasicPunctual3DSpotOnlyShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1}, {"EmissiveColor", 'p', 1, 1},
+    {"SpecularColorPower", 'p', 2, 1}, {"EyePosition", 'p', 3, 1},
+    {"Light0Direction", 'p', 4, 1}, {"Light0Diffuse", 'p', 5, 1},
+    {"Light0Specular", 'p', 6, 1}, {"Light1Direction", 'p', 7, 1},
+    {"Light1Diffuse", 'p', 8, 1}, {"Light1Specular", 'p', 9, 1},
+    {"Light2Direction", 'p', 10, 1}, {"Light2Diffuse", 'p', 11, 1},
+    {"Light2Specular", 'p', 12, 1}, {"PunctualPositionRange", 'p', 13, 1},
+    {"PunctualDirectionKind", 'p', 14, 1}, {"PunctualDiffuse", 'p', 15, 1},
+    {"PunctualCone", 'p', 16, 1}, {"FogColor", 'p', 17, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}, {"CnaPunctualViewProj", 'p', 72, 4}
+};
+static constexpr int kBasicPunctual3DSpotOnlyShadowPS_RegistersCount = 20;
 
 static constexpr D3D9ShaderConstantSlot kPbr3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},
@@ -62,9 +165,82 @@ static constexpr D3D9ShaderConstantSlot kPbr3DPS_Registers[] = {
     {"TextureTransformRows", 'p', 14, 10},
     {"SpecularFresnelInputs", 'p', 24, 1},
     {"SpecularMapFlags", 'p', 25, 1},
-    {"SpecularTextureTransformRows", 'p', 26, 4}
+    {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1},
+    {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1},
+    {"PunctualCone", 'p', 33, 1}
 };
-static constexpr int kPbr3DPS_RegistersCount = 18;
+static constexpr int kPbr3DPS_RegistersCount = 22;
+
+static constexpr D3D9ShaderConstantSlot kPbr3DShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1},
+    {"AmbientColor", 'p', 1, 1},
+    {"EmissiveColor", 'p', 2, 1},
+    {"MetallicRoughnessFactor", 'p', 3, 1},
+    {"Light0Dir", 'p', 4, 1},
+    {"Light0Diffuse", 'p', 5, 1},
+    {"Light1Dir", 'p', 6, 1},
+    {"Light1Diffuse", 'p', 7, 1},
+    {"Light2Dir", 'p', 8, 1},
+    {"Light2Diffuse", 'p', 9, 1},
+    {"EyePosition", 'p', 10, 1},
+    {"AlphaTest", 'p', 11, 1},
+    {"FogColor", 'p', 12, 1},
+    {"VertexColorFlags", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10},
+    {"SpecularFresnelInputs", 'p', 24, 1},
+    {"SpecularMapFlags", 'p', 25, 1},
+    {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1},
+    {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1},
+    {"PunctualCone", 'p', 33, 1},
+    {"CnaLightViewProj", 'p', 34, 4},
+    {"CnaCascadeMatrices", 'p', 38, 16},
+    {"CnaPunctualViewProj", 'p', 72, 4},
+    {"CnaShadowParams", 'p', 58, 1},
+    {"CnaShadowTexelBlendDebug", 'p', 59, 1},
+    {"CnaCascadeSplits", 'p', 60, 1},
+    {"CnaCascadeViewZ", 'p', 61, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}
+};
+static constexpr int kPbr3DShadowPS_RegistersCount = 30;
+
+static constexpr D3D9ShaderConstantSlot kPbr3DPointShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1}, {"AmbientColor", 'p', 1, 1},
+    {"EmissiveColor", 'p', 2, 1}, {"MetallicRoughnessFactor", 'p', 3, 1},
+    {"Light0Dir", 'p', 4, 1}, {"Light0Diffuse", 'p', 5, 1},
+    {"Light1Dir", 'p', 6, 1}, {"Light1Diffuse", 'p', 7, 1},
+    {"Light2Dir", 'p', 8, 1}, {"Light2Diffuse", 'p', 9, 1},
+    {"EyePosition", 'p', 10, 1}, {"AlphaTest", 'p', 11, 1},
+    {"FogColor", 'p', 12, 1}, {"VertexColorFlags", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10}, {"SpecularFresnelInputs", 'p', 24, 1},
+    {"SpecularMapFlags", 'p', 25, 1}, {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1}, {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1}, {"PunctualCone", 'p', 33, 1},
+    {"CnaLightViewProj", 'p', 34, 4}, {"CnaCascadeMatrices", 'p', 38, 16},
+    {"CnaShadowParams", 'p', 58, 1}, {"CnaShadowTexelBlendDebug", 'p', 59, 1},
+    {"CnaCascadeSplits", 'p', 60, 1}, {"CnaCascadeViewZ", 'p', 61, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}
+};
+static constexpr int kPbr3DPointShadowPS_RegistersCount = 29;
+
+static constexpr D3D9ShaderConstantSlot kPbr3DSpotOnlyShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1}, {"AmbientColor", 'p', 1, 1},
+    {"EmissiveColor", 'p', 2, 1}, {"MetallicRoughnessFactor", 'p', 3, 1},
+    {"Light0Dir", 'p', 4, 1}, {"Light0Diffuse", 'p', 5, 1},
+    {"Light1Dir", 'p', 6, 1}, {"Light1Diffuse", 'p', 7, 1},
+    {"Light2Dir", 'p', 8, 1}, {"Light2Diffuse", 'p', 9, 1},
+    {"EyePosition", 'p', 10, 1}, {"AlphaTest", 'p', 11, 1},
+    {"FogColor", 'p', 12, 1}, {"VertexColorFlags", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10}, {"SpecularFresnelInputs", 'p', 24, 1},
+    {"SpecularMapFlags", 'p', 25, 1}, {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1}, {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1}, {"PunctualCone", 'p', 33, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}, {"CnaPunctualViewProj", 'p', 72, 4}
+};
+static constexpr int kPbr3DSpotOnlyShadowPS_RegistersCount = 24;
 
 static constexpr D3D9ShaderConstantSlot kPbrSkinned3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},
@@ -97,9 +273,82 @@ static constexpr D3D9ShaderConstantSlot kPbrSkinned3DPS_Registers[] = {
     {"TextureTransformRows", 'p', 14, 10},
     {"SpecularFresnelInputs", 'p', 24, 1},
     {"SpecularMapFlags", 'p', 25, 1},
-    {"SpecularTextureTransformRows", 'p', 26, 4}
+    {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1},
+    {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1},
+    {"PunctualCone", 'p', 33, 1}
 };
-static constexpr int kPbrSkinned3DPS_RegistersCount = 18;
+static constexpr int kPbrSkinned3DPS_RegistersCount = 22;
+
+static constexpr D3D9ShaderConstantSlot kPbrSkinned3DShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1},
+    {"AmbientColor", 'p', 1, 1},
+    {"EmissiveColor", 'p', 2, 1},
+    {"MetallicRoughnessFactor", 'p', 3, 1},
+    {"Light0Dir", 'p', 4, 1},
+    {"Light0Diffuse", 'p', 5, 1},
+    {"Light1Dir", 'p', 6, 1},
+    {"Light1Diffuse", 'p', 7, 1},
+    {"Light2Dir", 'p', 8, 1},
+    {"Light2Diffuse", 'p', 9, 1},
+    {"EyePosition", 'p', 10, 1},
+    {"AlphaTest", 'p', 11, 1},
+    {"FogColor", 'p', 12, 1},
+    {"VertexColorFlags", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10},
+    {"SpecularFresnelInputs", 'p', 24, 1},
+    {"SpecularMapFlags", 'p', 25, 1},
+    {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1},
+    {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1},
+    {"PunctualCone", 'p', 33, 1},
+    {"CnaLightViewProj", 'p', 34, 4},
+    {"CnaCascadeMatrices", 'p', 38, 16},
+    {"CnaPunctualViewProj", 'p', 72, 4},
+    {"CnaShadowParams", 'p', 58, 1},
+    {"CnaShadowTexelBlendDebug", 'p', 59, 1},
+    {"CnaCascadeSplits", 'p', 60, 1},
+    {"CnaCascadeViewZ", 'p', 61, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}
+};
+static constexpr int kPbrSkinned3DShadowPS_RegistersCount = 30;
+
+static constexpr D3D9ShaderConstantSlot kPbrSkinned3DPointShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1}, {"AmbientColor", 'p', 1, 1},
+    {"EmissiveColor", 'p', 2, 1}, {"MetallicRoughnessFactor", 'p', 3, 1},
+    {"Light0Dir", 'p', 4, 1}, {"Light0Diffuse", 'p', 5, 1},
+    {"Light1Dir", 'p', 6, 1}, {"Light1Diffuse", 'p', 7, 1},
+    {"Light2Dir", 'p', 8, 1}, {"Light2Diffuse", 'p', 9, 1},
+    {"EyePosition", 'p', 10, 1}, {"AlphaTest", 'p', 11, 1},
+    {"FogColor", 'p', 12, 1}, {"VertexColorFlags", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10}, {"SpecularFresnelInputs", 'p', 24, 1},
+    {"SpecularMapFlags", 'p', 25, 1}, {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1}, {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1}, {"PunctualCone", 'p', 33, 1},
+    {"CnaLightViewProj", 'p', 34, 4}, {"CnaCascadeMatrices", 'p', 38, 16},
+    {"CnaShadowParams", 'p', 58, 1}, {"CnaShadowTexelBlendDebug", 'p', 59, 1},
+    {"CnaCascadeSplits", 'p', 60, 1}, {"CnaCascadeViewZ", 'p', 61, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}
+};
+static constexpr int kPbrSkinned3DPointShadowPS_RegistersCount = 29;
+
+static constexpr D3D9ShaderConstantSlot kPbrSkinned3DSpotOnlyShadowPS_Registers[] = {
+    {"DiffuseColor", 'p', 0, 1}, {"AmbientColor", 'p', 1, 1},
+    {"EmissiveColor", 'p', 2, 1}, {"MetallicRoughnessFactor", 'p', 3, 1},
+    {"Light0Dir", 'p', 4, 1}, {"Light0Diffuse", 'p', 5, 1},
+    {"Light1Dir", 'p', 6, 1}, {"Light1Diffuse", 'p', 7, 1},
+    {"Light2Dir", 'p', 8, 1}, {"Light2Diffuse", 'p', 9, 1},
+    {"EyePosition", 'p', 10, 1}, {"AlphaTest", 'p', 11, 1},
+    {"FogColor", 'p', 12, 1}, {"VertexColorFlags", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10}, {"SpecularFresnelInputs", 'p', 24, 1},
+    {"SpecularMapFlags", 'p', 25, 1}, {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1}, {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1}, {"PunctualCone", 'p', 33, 1},
+    {"CnaPunctualShadowParams", 'p', 62, 1}, {"CnaPunctualViewProj", 'p', 72, 4}
+};
+static constexpr int kPbrSkinned3DSpotOnlyShadowPS_RegistersCount = 24;
 
 static constexpr D3D9ShaderConstantSlot kSkinnedVertexColor3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},

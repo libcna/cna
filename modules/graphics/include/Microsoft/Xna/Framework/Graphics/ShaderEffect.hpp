@@ -192,6 +192,16 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Task 1081: binds a cube texture to an additional sampler unit, for a custom
          * shader that declares a `samplerCube` uniform (e.g. a reflection/environment map).
          *
+         * EasyGL source shaders that may receive a `RenderTargetCube` can declare
+         * `uniform vec4 uRtCubeFlipV`; component N is 1 when unit N needs its lookup direction
+         * mirrored to compensate for GL's rendered-face row order, and 0 for an uploaded cube.
+         * Mirror Y for the four side faces and Z for the positive/negative Y faces. This is the
+         * cube-direction counterpart of the existing `uRtFlipV` 2D texture contract. Because that
+         * face-local transform is discontinuous at a face edge while GLES cube filtering is always
+         * seamless, a linear-filtered shader must also clamp the two minor direction components to
+         * `major * (1 - 1 / faceSize)` and prefer a side face on an exact major-axis tie. The EasyGL
+         * render-target-cube sampling example contains the complete helper.
+         *
          * @param unit    0-based sampler unit.
          * @param texture Cube texture to bind.
          */

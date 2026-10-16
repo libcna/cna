@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -31,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -121,7 +123,8 @@ class SkinnedEffectFogTest : public Game
             {  1, -1, z,  0,0,1,  1,1,  1,0,0,0,  0,0,0,0 },
             {  1,  1, z,  0,0,1,  1,0,  1,0,0,0,  0,0,0,0 },
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(),
+                        6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
 
         dev.setRasterizerStateProperty(RasterizerState::CullNone);

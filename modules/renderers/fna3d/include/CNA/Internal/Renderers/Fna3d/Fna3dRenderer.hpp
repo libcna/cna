@@ -536,6 +536,12 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
                                    const void* data, int dataLength) override;
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override
+        {
+            return SetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
 
         /**
          * @brief Reads tightly packed voxels in the texture's declared surface format.
@@ -552,6 +558,12 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override
+        {
+            return GetData(level, x, y, z, w, h, depth, data, dataLength);
+        }
 
         /**
          * @brief Reports this volume's dimensions.
@@ -1444,6 +1456,18 @@ namespace CNA::Internal::Renderers::Fna3d
             int surfaceFormat) const override;
 
         /**
+         * @brief Classifies the uncompressed formats backed by FNA3D volume storage.
+         *
+         * Texture3D has its own gate because block-compressed and signed-normalized formats are
+         * not valid XNA volume formats even when Texture2D supports them.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return Supported for the fifteen XNA volume formats, Unsupported otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
          * @brief Whether `SamplerState.MipMapLevelOfDetailBias` reaches the GPU. CNAEXT.
          *
          * plans/plan_apple_m4.md AM4-191: FNA3D hands the bias to its driver's native sampler. On
@@ -1640,6 +1664,7 @@ namespace CNA::Internal::Renderers::Fna3d
         void ApplyCurrentDepthStencilState();
         void BindCompiledPixelTexturesEXT(const GpuDrawParams& params,
                                           FNA3D_Texture* spriteTexture0 = nullptr);
+        void BindCompiledVertexTexturesEXT(const GpuDrawParams& params);
         void ClearInternal(FNA3D_ClearOptions options, const FNA3D_Vec4* color, float depth,
                            int stencil);
         void ProbeTexture3DReadbackSupport();

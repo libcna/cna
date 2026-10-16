@@ -95,22 +95,32 @@ namespace
         void Script()
         {
             using C = Ui::Command;
+            // The rail: Body 0, Skin, Face, Eyes, Eyebrows, Ears, Nose, Mouth, Hair 8, Facial hair, Makeup,
+            // Outfits 11, Tops, Bottoms, Shoes, Headwear 15, Glasses, Earrings, Wristwear, Gloves, Rings 20.
             steps_ = {
                 {"01-editor", {}, {}},
                 {"02-body-types", {C::Accept}, {}},
-                {"03-height", {C::Down, C::Right, C::Right, C::Right, C::Right}, {}},
-                {"04-face-shapes", {C::Back, C::Down, C::Down, C::Accept, C::Right}, {}},
-                {"05-face-chosen", {C::Accept, C::Down, C::Down, C::Down, C::Right, C::Right, C::Right}, {}},
-                {"06-eyes", {C::Back, C::Down, C::Accept, C::Right}, {}},
-                {"07-hair-styles", {C::Back, C::Down, C::Down, C::Accept, C::Right, C::Right}, {}},
-                {"08-hair-color", {C::Accept, C::Down, C::Right, C::Right, C::Right}, {}},
-                {"09-tops", {C::Accept, C::Back, C::Next, C::Next, C::Accept, C::Right}, {}},
-                {"10-bottoms", {C::Accept, C::Back, C::Next, C::Accept, C::Right}, {}},
-                {"11-shoes", {C::Accept, C::Back, C::Next, C::Accept, C::Right}, {}},
-                {"12-headwear", {C::Accept, C::Back, C::Next, C::Next, C::Accept, C::Right, C::Right}, {}},
-                {"13-randomized", {C::Back, C::Y}, {}},
-                {"14-leave", {C::Back}, {}},
-                {"15-saved", {}, [] { Ui::clickForTesting(0); }},
+                {"03-body-shapes", {C::Down, C::Right, C::Right}, {}},
+                {"04-height", {C::Accept, C::Down, C::Right, C::Right, C::Right, C::Right}, {}},
+                {"05-face-shapes", {C::Back, C::Down, C::Down, C::Accept, C::Right}, {}},
+                {"06-face-chosen", {C::Accept, C::Down, C::Down, C::Down, C::Right, C::Right, C::Right}, {}},
+                {"07-eyes", {C::Back, C::Down, C::Accept, C::Right}, {}},
+                {"08-eyebrows", {C::Accept, C::Back, C::Down, C::Accept, C::Right, C::Right}, {}},
+                {"09-ears", {C::Accept, C::Back, C::Down, C::Accept, C::Right}, {}},
+                {"10-hair-styles", {C::Accept, C::Back, C::Down, C::Down, C::Down, C::Accept, C::Right, C::Right}, {}},
+                {"11-hair-color", {C::Accept, C::Down, C::Right, C::Right, C::Right}, {}},
+                {"12-facial-hair", {C::Accept, C::Back, C::Down, C::Accept, C::Right}, {}},
+                {"13-makeup", {C::Accept, C::Back, C::Down, C::Accept, C::Right}, {}},
+                {"14-outfits", {C::Accept, C::Back, C::Down, C::Accept, C::Right, C::Right}, {}},
+                {"15-tops", {C::Accept, C::Back, C::Next, C::Accept, C::Right}, {}},
+                {"16-shoes", {C::Accept, C::Back, C::Next, C::Next, C::Accept, C::Right}, {}},
+                {"17-headwear", {C::Accept, C::Back, C::Next, C::Accept, C::Right, C::Right}, {}},
+                {"18-earrings", {C::Accept, C::Back, C::Next, C::Next, C::Accept, C::Right}, {}},
+                {"19-wristwear", {C::Accept, C::Back, C::Next, C::Accept, C::Right}, {}},
+                {"20-gloves", {C::Accept, C::Back, C::Next, C::Accept, C::Right}, {}},
+                {"21-randomized", {C::Accept, C::Back, C::Y}, {}},
+                {"22-leave", {C::Back}, {}},
+                {"23-saved", {}, [] { Ui::clickForTesting(0); }},
             };
         }
 

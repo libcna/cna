@@ -91,7 +91,8 @@ void DualCompareDemo::Draw(const GameTime& gameTime)
     const Matrix projection = Matrix::CreatePerspectiveFieldOfView(0.75f, aspect, 0.1f, 50.0f);
     for (int side = 0; side < 2; ++side)
     {
-        renderers_[side]->setWorldProperty(Matrix::CreateRotationY(side == 0 ? 0.25f : -0.25f) *
+        // XNA avatars face -Z: a half turn faces them to the camera, then a little towards each other.
+        renderers_[side]->setWorldProperty(Matrix::CreateRotationY(3.14159265f + (side == 0 ? 0.25f : -0.25f)) *
                                            Matrix::CreateTranslation(side == 0 ? -0.55f : 0.55f, 0.0f, 0.0f));
         renderers_[side]->setViewProperty(view);
         renderers_[side]->setProjectionProperty(projection);
@@ -111,7 +112,9 @@ void DualCompareDemo::Draw(const GameTime& gameTime)
         }
         spriteBatch_->End();
     }
-    if (smokeFramesLeft_ == 1 && !screenshotPath_.empty())
+    // The first frame drawn near the end of a smoke run: a fixed-step catch-up may update twice
+    // before drawing, so waiting for exactly the last one can miss it.
+    if (smokeFramesLeft_ > 0 && smokeFramesLeft_ <= 5 && !screenshotPath_.empty())
     {
         SaveBackBufferScreenshotEXT(device, screenshotPath_);
         screenshotPath_.clear();

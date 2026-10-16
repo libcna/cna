@@ -284,6 +284,9 @@ namespace CNA::Internal::Renderers::Fna3d
                   "EnvironmentMapEffect");
         effects_[static_cast<std::size_t>(StockEffectKind::Skinned)]
             .Load(device_, kSkinnedEffectFxb, sizeof(kSkinnedEffectFxb), "SkinnedEffect");
+        effects_[static_cast<std::size_t>(StockEffectKind::Punctual)]
+            .Load(device_, kCnaPunctualEffectFxb, sizeof(kCnaPunctualEffectFxb),
+                  "CnaPunctualEffect");
 
         ProbeTexture3DReadbackSupport();
         QueryDriverLimits();
@@ -394,6 +397,7 @@ namespace CNA::Internal::Renderers::Fna3d
             case Xna::Color:
             case Xna::NormalizedByte2:
             case Xna::NormalizedByte4:
+            case Xna::Vector4:
                 return RendererFormatVerdict::Supported;
 
             case Xna::Dxt1:
@@ -411,6 +415,34 @@ namespace CNA::Internal::Renderers::Fna3d
                 // formats, but their whole public XNA transfer + sampling contract has not yet
                 // been promoted. Preserve the existing shared gate rather than over-advertise.
                 return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict Fna3dRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<Xna>(surfaceFormat))
+        {
+            // Fna3dTexture3DRenderer already preserves the declared unit width, uploads that
+            // exact byte count, and either reads it natively or from its checked upload mirror.
+            case Xna::Color:
+            case Xna::Bgr565:
+            case Xna::Bgra5551:
+            case Xna::Bgra4444:
+            case Xna::Rgba1010102:
+            case Xna::Rg32:
+            case Xna::Rgba64:
+            case Xna::Alpha8:
+            case Xna::Single:
+            case Xna::Vector2:
+            case Xna::Vector4:
+            case Xna::HalfSingle:
+            case Xna::HalfVector2:
+            case Xna::HalfVector4:
+            case Xna::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Unsupported;
         }
     }
 

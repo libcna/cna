@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile CNA's DirectX 9 PBR shaders and regenerate their embedded bytecode header.
+"""Compile CNA's DirectX 9 PBR/basic-punctual shaders and regenerate embedded bytecode.
 
 The compiler is the repository's small D3DCompile-based ``fxc_tool.cpp`` executable, cross-built
 with MinGW and run under Wine. Run this script under Xvfb on headless hosts. The Wine prefix must
@@ -25,6 +25,48 @@ DEFAULT_WINEPREFIX = Path.home() / ".wine-cna-d3d9-spike"
 NATIVE_D3DCOMPILER_SHA256 = "4432bbd1a390874f3f0a503d45cc48d346abc3a8c0213c289f4b615bf0ee84f3"
 
 SHADERS = (
+    ("cna/BasicPunctual3D.hlsl", "VSBasicPunctual", "vs_3_0",
+     "kBasicPunctual3DVSBytecode", "BasicPunctual3D vertex shader"),
+    ("cna/BasicPunctual3D.hlsl", "VSBasicPunctualVc", "vs_3_0",
+     "kBasicPunctual3DColorVSBytecode", "BasicPunctual3D vertex shader (COLOR0)"),
+    ("cna/BasicPunctual3D.hlsl", "VSBasicPunctualTx", "vs_3_0",
+     "kBasicPunctual3DTextureVSBytecode", "BasicPunctual3D vertex shader (TEXCOORD0)"),
+    ("cna/BasicPunctual3D.hlsl", "VSBasicPunctualTxVc", "vs_3_0",
+     "kBasicPunctual3DTextureColorVSBytecode",
+     "BasicPunctual3D vertex shader (TEXCOORD0 + COLOR0)"),
+    ("cna/BasicPunctual3D.hlsl", "VSBasicPunctualSkinned", "vs_3_0",
+     "kBasicPunctualSkinned3DVSBytecode", "BasicPunctual3D skinned vertex shader"),
+    ("cna/BasicPunctual3D.hlsl", "VSBasicPunctualSkinnedVc", "vs_3_0",
+     "kBasicPunctualSkinned3DColorVSBytecode",
+     "BasicPunctual3D skinned vertex shader (COLOR0)"),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctual", "ps_3_0",
+     "kBasicPunctual3DPSBytecode", "BasicPunctual3D pixel shader"),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
+     "kBasicPunctual3DTexturePSBytecode", "BasicPunctual3D textured pixel shader"),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctual", "ps_3_0",
+     "kBasicPunctual3DPointShadowPSBytecode", "BasicPunctual3D point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctual", "ps_3_0",
+     "kBasicPunctual3DSpotOnlyShadowPSBytecode", "BasicPunctual3D spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctual", "ps_3_0",
+     "kBasicPunctual3DSpotDirectionalShadowPSBytecode",
+     "BasicPunctual3D directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
+     "kBasicPunctual3DTexturePointShadowPSBytecode",
+     "BasicPunctual3D textured point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
+     "kBasicPunctual3DTextureSpotOnlyShadowPSBytecode",
+     "BasicPunctual3D textured spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
+     "kBasicPunctual3DTextureSpotDirectionalShadowPSBytecode",
+     "BasicPunctual3D textured directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
     ("cna/Pbr3D.hlsl", "VSPbr3D", "vs_3_0", "kPbr3DVSBytecode", "Pbr3D vertex shader"),
     # plans/plan_gltf.md GLTF-465: the stride-60 and stride-80 twins. A separate entry point rather than a
     # preprocessor define, because a vs_3_0 input with no stream behind it reads undefined -- so each
@@ -33,12 +75,33 @@ SHADERS = (
     ("cna/Pbr3D.hlsl", "VSPbr3DColor", "vs_3_0", "kPbr3DColorVSBytecode",
      "Pbr3D vertex shader (stride 60, COLOR_0)"),
     ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DPSBytecode", "Pbr3D pixel shader"),
+    ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DPointShadowPSBytecode",
+     "Pbr3D point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DSpotOnlyShadowPSBytecode",
+     "Pbr3D spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DSpotDirectionalShadowPSBytecode",
+     "Pbr3D directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
     ("cna/PbrSkinned3D.hlsl", "VSPbrSkinned3D", "vs_3_0",
      "kPbrSkinned3DVSBytecode", "PbrSkinned3D vertex shader"),
     ("cna/PbrSkinned3D.hlsl", "VSPbrSkinned3DColor", "vs_3_0",
      "kPbrSkinned3DColorVSBytecode", "PbrSkinned3D vertex shader (stride 80, COLOR_0)"),
     ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
      "kPbrSkinned3DPSBytecode", "PbrSkinned3D pixel shader"),
+    ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
+     "kPbrSkinned3DPointShadowPSBytecode", "PbrSkinned3D point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
+     "kPbrSkinned3DSpotOnlyShadowPSBytecode", "PbrSkinned3D spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
+     "kPbrSkinned3DSpotDirectionalShadowPSBytecode",
+     "PbrSkinned3D directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
 )
 
 
@@ -69,12 +132,15 @@ def build_compiler_tool(output: Path) -> None:
 
 
 def compile_shader(tool: Path, wineprefix: Path, source: Path, entry: str,
-                   profile: str, output: Path) -> bytes:
+                   profile: str, output: Path, defines=()) -> bytes:
     environment = dict(os.environ)
     environment["WINEPREFIX"] = str(wineprefix)
     environment.setdefault("WINEDEBUG", "-all")
+    command = ["wine", str(tool), str(source), entry, profile, str(output)]
+    for definition in defines:
+        command.extend(("--define", definition))
     result = subprocess.run(
-        ["wine", str(tool), str(source), entry, profile, str(output)],
+        command,
         capture_output=True,
         text=True,
         env=environment,
@@ -121,9 +187,9 @@ def main() -> None:
             "// SPDX-License-Identifier: MS-PL\n"
             "// AUTO-GENERATED by compile_pbr_shaders.py -- do not edit by hand.\n"
             "//\n"
-            "// Real vs_3_0/ps_3_0 bytecode for CNA's DirectX 9 PBR shaders, compiled through\n"
+            "// Real vs_3_0/ps_3_0 bytecode for CNA's DirectX 9 extension shaders, compiled through\n"
             "// fxc_tool.cpp and d3dcompiler_47.dll under Wine. Re-run this generator after any\n"
-            "// Pbr3D.hlsl or PbrSkinned3D.hlsl change, then verify the constant-register table\n"
+            "// BasicPunctual3D/Pbr3D/PbrSkinned3D HLSL change, then verify the constant table\n"
             "// in D3D9CnaShaderRegisters.hpp against D3DDisassemble.\n"
             "#pragma once\n"
             "#include <cstddef>\n"
@@ -132,12 +198,14 @@ def main() -> None:
             "{\n\n"
         ]
 
-        for relative_source, entry, profile, name, description in SHADERS:
+        for shader in SHADERS:
+            relative_source, entry, profile, name, description = shader[:5]
+            defines = shader[5] if len(shader) > 5 else ()
             source = SCRIPT_DIR / relative_source
             output = temporary_path / f"{name}.bin"
             print(f"Compiling {source.name} [{entry}/{profile}] ...", end=" ", flush=True)
             bytecode = compile_shader(
-                compiler_tool, args.wineprefix, source, entry, profile, output)
+                compiler_tool, args.wineprefix, source, entry, profile, output, defines)
             print(f"OK ({len(bytecode)} bytes)")
             parts.append(byte_array(name, description, bytecode) + "\n")
 

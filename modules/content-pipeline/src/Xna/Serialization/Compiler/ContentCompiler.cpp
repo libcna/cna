@@ -4,6 +4,8 @@
 #include <algorithm>
 
 #include "CNA/Content/Pipeline/XnaModelBridge.hpp"
+#include "CNA/Content/Cnb/CnbTextureFormat.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInWriters.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
@@ -15,6 +17,9 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/CompiledEffectContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/SpriteFontContent.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/VideoContent.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
@@ -186,6 +191,149 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         private:
             const Xnb::XnbTypeWriterBase* canonical_;
         };
+
+        /// Resolves the runtime surface format carried by a processed bitmap.
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat TextureFormat(
+            const Graphics::BitmapContent& bitmap)
+        {
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat format{};
+            if (!bitmap.TryGetFormat(format))
+            {
+                throw PipelineException(
+                    "ContentCompiler: a texture's bitmap type has no surface format to write.");
+            }
+            return format;
+        }
+
+        /// Flattens six pipeline face chains into the XNB writer's face-major level order.
+        [[nodiscard]] Xnb::XnbTextureCubeContent ConvertTextureCube(
+            const Graphics::TextureCubeContent& source)
+        {
+            const Graphics::MipmapChainCollection& faces = source.getFacesProperty();
+            if (faces.getCountProperty() != 6)
+            {
+                throw PipelineException("ContentCompiler: a cube texture must have six faces.");
+            }
+            const Graphics::MipmapChain& first = *faces[0];
+            if (first.getCountProperty() == 0)
+            {
+                throw PipelineException("ContentCompiler: a cube texture face has no mipmap levels.");
+            }
+            Xnb::XnbTextureCubeContent wrapper;
+            Xnb::XnbTextureData& texture = wrapper.texture;
+            texture.kind = Xnb::XnbTextureKind::TextureCube;
+            texture.surfaceFormat = TextureFormat(*first[0]);
+            texture.width = static_cast<std::uint32_t>(first[0]->getWidthProperty());
+            texture.height = static_cast<std::uint32_t>(first[0]->getHeightProperty());
+            texture.depth = 1u;
+            texture.faceCount = 6u;
+            texture.mipCount = static_cast<std::uint32_t>(first.getCountProperty());
+            texture.platform = 'w';
+            for (SharpRuntime::intcs face = 0; face < faces.getCountProperty(); ++face)
+            {
+                const Graphics::MipmapChain& chain = *faces[face];
+                if (chain.getCountProperty() != first.getCountProperty())
+                {
+                    throw PipelineException(
+                        "ContentCompiler: every cube face must have the same mipmap count.");
+                }
+                for (SharpRuntime::intcs level = 0; level < chain.getCountProperty(); ++level)
+                {
+                    const SharpRuntime::intcs expectedWidth =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getWidthProperty() >> level);
+                    const SharpRuntime::intcs expectedHeight =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getHeightProperty() >> level);
+                    if (chain[level]->getWidthProperty() != expectedWidth ||
+                        chain[level]->getHeightProperty() != expectedHeight)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every cube face must have the same mipmap dimensions.");
+                    }
+                    if (TextureFormat(*chain[level]) != texture.surfaceFormat)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every level of a cube texture must have the same surface format.");
+                    }
+                    const auto bytes = chain[level]->GetPixelData();
+                    texture.levels.emplace_back(bytes.begin(), bytes.end());
+                }
+            }
+            return wrapper;
+        }
+
+        /// Packs each volume mip into one payload, with its surviving slices placed consecutively.
+        [[nodiscard]] Xnb::XnbTexture3DContent ConvertTexture3D(
+            const Graphics::Texture3DContent& source)
+        {
+            const Graphics::MipmapChainCollection& slices = source.getFacesProperty();
+            if (slices.getCountProperty() == 0 || slices[0]->getCountProperty() == 0)
+            {
+                throw PipelineException(
+                    "ContentCompiler: a volume texture must have a depth and a mipmap level.");
+            }
+            const Graphics::MipmapChain& first = *slices[0];
+            Xnb::XnbTexture3DContent wrapper;
+            Xnb::XnbTextureData& texture = wrapper.texture;
+            texture.kind = Xnb::XnbTextureKind::Texture3D;
+            texture.surfaceFormat = TextureFormat(*first[0]);
+            texture.width = static_cast<std::uint32_t>(first[0]->getWidthProperty());
+            texture.height = static_cast<std::uint32_t>(first[0]->getHeightProperty());
+            texture.depth = static_cast<std::uint32_t>(slices.getCountProperty());
+            texture.faceCount = 1u;
+            texture.mipCount = static_cast<std::uint32_t>(first.getCountProperty());
+            texture.platform = 'w';
+            for (SharpRuntime::intcs slice = 0; slice < slices.getCountProperty(); ++slice)
+            {
+                SharpRuntime::intcs expectedLevels = 0;
+                for (SharpRuntime::intcs level = 0; level < first.getCountProperty(); ++level)
+                {
+                    if (slice < std::max<SharpRuntime::intcs>(
+                                    1, slices.getCountProperty() >> level))
+                    {
+                        ++expectedLevels;
+                    }
+                }
+                if (slices[slice]->getCountProperty() != expectedLevels)
+                {
+                    throw PipelineException(
+                        "ContentCompiler: a volume texture slice has the wrong mipmap count for its depth.");
+                }
+            }
+            for (SharpRuntime::intcs level = 0; level < first.getCountProperty(); ++level)
+            {
+                const SharpRuntime::intcs levelDepth =
+                    std::max<SharpRuntime::intcs>(1, slices.getCountProperty() >> level);
+                std::vector<std::uint8_t> combined;
+                for (SharpRuntime::intcs slice = 0; slice < levelDepth; ++slice)
+                {
+                    const Graphics::MipmapChain& chain = *slices[slice];
+                    if (chain.getCountProperty() <= level)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: a volume texture slice is missing a mipmap level.");
+                    }
+                    const SharpRuntime::intcs expectedWidth =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getWidthProperty() >> level);
+                    const SharpRuntime::intcs expectedHeight =
+                        std::max<SharpRuntime::intcs>(1, first[0]->getHeightProperty() >> level);
+                    if (chain[level]->getWidthProperty() != expectedWidth ||
+                        chain[level]->getHeightProperty() != expectedHeight)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every volume slice must have the same mipmap dimensions.");
+                    }
+                    if (TextureFormat(*chain[level]) != texture.surfaceFormat)
+                    {
+                        throw PipelineException(
+                            "ContentCompiler: every level of a volume texture must have the same surface format.");
+                    }
+                    const auto bytes = chain[level]->GetPixelData();
+                    combined.insert(combined.end(), bytes.begin(), bytes.end());
+                }
+                texture.levels.push_back(std::move(combined));
+            }
+            return wrapper;
+        }
 
         /// A processed sound or song reaches the canonical writer for it the same way: the pipeline's content object becomes the
         /// canonical data (what the .xnb holds), and the canonical writer writes it. `Convert` does the one conversion that differs.
@@ -379,6 +527,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                    [facade, this](TargetPlatform platform) -> std::shared_ptr<Xnb::XnbTypeWriterBase>
                                    { return std::make_shared<Adapter<TContent>>(facade, platform, this); }});
         };
+        addCanonical.template operator()<Graphics::TextureCubeContent, Xnb::XnbTextureCubeContent>(
+            ConvertTextureCube);
+        addCanonical.template operator()<Graphics::Texture3DContent, Xnb::XnbTexture3DContent>(
+            ConvertTexture3D);
         addCanonical.template operator()<Processors::SoundEffectContent, Xnb::XnbSoundEffectData>(
             [](const Processors::SoundEffectContent& sound) {
                 Xnb::XnbSoundEffectData data;
@@ -404,6 +556,57 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                 Xnb::XnbSongData data;
                 data.mediaPath = song.FileName();
                 data.durationMs = static_cast<std::int32_t>(song.Duration().getTotalMillisecondsProperty());
+                return data;
+            });
+        addCanonical.template operator()<VideoContent, Xnb::XnbVideoData>(
+            [](const VideoContent& video) {
+                Xnb::XnbVideoData data;
+                data.mediaPath = CNA::Internal::PathToUtf8(
+                    CNA::Internal::PathFromUtf8(video.getFilenameProperty()).filename());
+                data.durationMs = static_cast<std::int32_t>(
+                    video.getDurationProperty().getTotalMillisecondsProperty());
+                data.width = video.getWidthProperty();
+                data.height = video.getHeightProperty();
+                data.framesPerSecond = video.getFramesPerSecondProperty();
+                data.soundtrackType = static_cast<std::int32_t>(
+                    video.getVideoSoundtrackTypeProperty());
+                return data;
+            });
+        addCanonical.template operator()<Processors::SpriteFontContent, Xnb::XnbSpriteFontData>(
+            [](const Processors::SpriteFontContent& font) {
+                const CNA::Content::Cnb::CnbSpriteFontData& source = font.Data();
+                if (source.atlas.representations.empty())
+                {
+                    throw PipelineException(
+                        "ContentCompiler: a sprite font atlas carries no pixel representation.");
+                }
+                const CNA::Content::Cnb::CnbTextureRepresentation& representation =
+                    source.atlas.representations.front();
+                Xnb::XnbSpriteFontData data;
+                data.atlas.kind = Xnb::XnbTextureKind::Texture2D;
+                data.atlas.surfaceFormat =
+                    CNA::Content::Cnb::CnbTextureFormatToSurfaceFormat(representation.format);
+                data.atlas.width = source.atlas.width;
+                data.atlas.height = source.atlas.height;
+                data.atlas.depth = source.atlas.depth;
+                data.atlas.faceCount = source.atlas.faceCount;
+                data.atlas.mipCount = source.atlas.mipCount;
+                data.atlas.platform = 'w';
+                data.atlas.levels = representation.levels;
+                data.glyphs = source.glyphBounds;
+                data.cropping = source.cropping;
+                data.characters = source.characters;
+                data.lineSpacing = source.lineSpacing;
+                data.spacing = source.spacing;
+                data.kerning = source.kerning;
+                data.defaultCharacter = source.defaultCharacter;
+                return data;
+            });
+        addCanonical.template operator()<Processors::CompiledEffectContent,
+                                         Xnb::XnbCompiledEffectContent>(
+            [](const Processors::CompiledEffectContent& effect) {
+                Xnb::XnbCompiledEffectContent data;
+                data.bytecode.assign(effect.GetEffectCode().begin(), effect.GetEffectCode().end());
                 return data;
             });
     }

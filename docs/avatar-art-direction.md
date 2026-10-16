@@ -43,6 +43,75 @@ All three must be addressed for Task 7.11's "no mesh explosions, no distorted li
 be genuinely met — proportion/topology fixes alone (mesh-craft geometry) will not fix the ring
 artifacts, and vice versa.
 
+## Catalog v3 revision 2 (2026-10-15)
+
+Measured by `tools/avatar_builder/avatar_audit.py` from the generated bodies (the first release
+was about 3.9 and 4.0 head-heights tall):
+
+| | Female | Male |
+|---|---|---|
+| Height | 1.68 m, 4.64 heads | 1.80 m, 4.79 heads |
+| Head, chin to crown / width | 0.362 m / 0.88 heads | 0.375 m / 0.88 heads |
+| Shoulder width | 1.38 heads | 1.52 heads |
+| Arm, shoulder to wrist | 1.30 heads | 1.35 heads |
+| Leg, hip to ankle | 1.99 heads (0.43 of height) | 2.04 heads (0.43 of height) |
+| Hand / foot | 0.48 / 0.48 heads | 0.50 / 0.50 heads |
+| Arm span / height | 0.86 | 0.88 |
+
+Still clearly more head-heavy than realistic proportion (about 7.5 heads, legs about half the
+height, arm span equal to it) and in the console era's friendly, stylized category, but reading as
+adults: a sculpted head with a tapered jaw, cheekbones and chin, a neck that carries it, shoulders
+and a torso broad enough for the head; the big head shortens arms, legs, hands and feet against
+the height together, so no part reads as out of scale with the others. The table below predates
+the generator and is kept as the record of that pass; the bodies no longer follow its 6.0
+head-heights.
+
+## Catalog v3 revision 3 (2026-10-15): the visual language
+
+Revision 3 reworks the art of revision 2's entries (no entries added) so the avatar reads as an
+authored stylized character rather than as procedural parts. The rules the generator now follows:
+
+| Area | Rule |
+|---|---|
+| Head | One sculpted surface from three silhouettes -- a face profile (flat forehead plane, brow, a face plane, a defined chin, a jaw line under the ear), a back and a front outline -- joined by superellipse sections that are squarer at the cheeks. Features are relief *in* the surface (nose, sockets, brow, cheekbones, muzzle, lips, chin), never separate primitives. Facets crowd onto the face. |
+| Face proportions | Mouth 7.1 cm and nose tip 3.2 cm under the head centre (male scale); eyes 5.4 cm apart from the midline; a modest nose (2.2 cm male, 1.8 cm female at the tip); the profile must read at 90 degrees. Female heads: narrower jaw, smaller chin and nose. |
+| Eyes, brows | An almond opening whose upper lid rests on the top of the iris; a slim lid line thickening toward the outer corner; a warm sclera shaded under the lid; a small highlight; a pink inner corner. Brows are hair: soft at the head, a tapered tail, strokes along the hair direction, tinted by the hair colour. |
+| Ears | One closed form: rolled helix open toward the face, bowl, antihelix, tragus, lobe. |
+| Hair | Masses, not strips: strands marched over the head under a style's flow form a slab of clumped locks with grooves, thickness and pointed tips; hair lies on the scalp and hangs from where the head curves away, behind the shoulders, to a set hem. Short styles end together at the hairline. Strands turned aside by the face slide along the head and come down beside it in the order they started, never crossing (a crossing folds the hair). Clump scale: 22-40 locks round a head; groove depth about 60 % of a lock's crest. |
+| Garments | Built like garments: tops hang from the chest by their fit in soft folds, close over the shoulders to a neck opening, and have bands, collars (stand, fall, points), cuffs and hems with the cloth's thickness; sleeves and trouser legs cover the limbs' envelope (no elbow or knee hollow) and fold at the cuff, elbow and knee; buttons, plackets and pockets lie on the cloth. Layers: an inner layer always hangs inside the outer one at every height. |
+| Shoes | Lasted: an upper that holds the foot and heel, a sole with a lip and toe spring, the details of the style (welt, toe cap, tongue and laces, collar, heel tab, apron) as geometry. Low shoes always have a sock. |
+| Hands | The back of the hand widens to an arc of knuckles; fingers curl in a cascade. |
+| Surfaces | Low-frequency forms only (folds 3-8 mm deep, grooves, seams 1-2 mm): nothing that needs more than the shared textures and SkinnedEffect's one light to read. Hair specular 1.6, cloth 0.3-1.0, leather 2.0. |
+| Makeup | Soft washes and flushes with radial falloff; liner on the eye's own lid line; nothing with a hard outline but liner. |
+
+Measured by `avatar_audit.py` on revision 3: the female body 1.68 m and 4.78 heads tall (head 0.351 m,
+shoulders 1.42 heads), the male 1.80 m and 4.94 heads (head 0.364 m, shoulders 1.56 heads); limbs,
+hands and feet as revision 2. `avatar_audit.py` passes: no garment, shoe, hat or hairstyle lets more
+than 2 % and 30 vertices of the skin under it show through in the bind pose (open sandals show the
+foot by design); `AvatarCatalogContentTest` checks layers and details in every pose.
+
+Review it with the `portraits`, `presets` and `bodies` sheets of `avatar_review.py` (five angles
+with a portrait lens, every face preset, every build) and with `random` sheets of
+`cna_avatar_review --random` avatars.
+
+## Catalog v3 revision 4 (2026-10-16): refinement
+
+Revision 4 keeps every entry and refines what still read as procedural:
+
+| Area | Rule |
+|---|---|
+| Eyes | The socket, an eyeball dome, an upper lid that rolls over it into a soft crease and a slimmer lower lid are sculpted round exactly the opening the atlas paints; the paint lies on the head's own facets, so the eye sits in the face in profile. Iris 0.44 of the eye tile; no painted crease. |
+| Mouth | Sculpted upper and fuller lower lips on the painted parting line, a parting groove into tucked corners, a faint philtrum. Lip colour is deeper than any skin and feathered, never a cut-out. |
+| Brows | Hair strokes rising at the head and lying along the tail, a darker core, a hair-broken edge centred on the stroke's edge (the style keeps its width). |
+| Shading | The head texture carries the face's hollows measured from the relief (lid crease, inner corners, beside the nose, nostrils, mouth corners, under the lip, round the ears), never under the eyes. Each material family sets its highlight's sharpness (`cnaShininess`): skin 14, cloth 6-14, hair 20, leather 32, glasses 48, metal 60. |
+| Face shapes | Each moves the skull, cheeks, jaw and chin together, so no two read alike from the front or in profile; values stay under 0.7. |
+| Hair | Hair hanging past the ears is tucked behind them (the ear and an earring show whole); under short hair the scalp shell stays under the locks; long curls hang as one ordered sheet. |
+| Facial hair | Grown hair is cut where it meets the skin (a clean edge, flush); mustaches rounded in section; sideburns and mutton chops grow from under the hairline in front of the ear. |
+| Hands | The palm keeps its thickness to the knuckles so the fingers grow out of it; the thumb pad stops short of the wrist. |
+
+Review it with the focus sheets of `avatar_review.py`: `eyes`, `mouth`, `temples`, `profiles`,
+`hands` and `presetgroups`.
+
 ## Proportion targets
 
 Expressed in **head-heights** (the classic, non-proprietary figure-drawing/character-design unit —

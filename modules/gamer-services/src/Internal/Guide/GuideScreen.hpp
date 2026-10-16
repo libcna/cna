@@ -105,6 +105,10 @@ public:
     [[nodiscard]] virtual int focus() const { return -1; }
     /** @brief Activates an item as a click would. @param index Item. */
     virtual void activate(int index) { (void)index; }
+    /** @brief What a mouse can click as last drawn, named ("option 0 3"), for tests. @return Targets. */
+    [[nodiscard]] virtual std::vector<std::pair<std::string,Box>> targets() const { return {}; }
+    /** @brief State tests cannot read from the labels ("yaw=3.14 zoom=1.00"), for tests. @return Text. */
+    [[nodiscard]] virtual std::string stateForTesting() const { return {}; }
     /** @brief Preferred dialog width (reference pixels). @return Width. */
     [[nodiscard]] virtual float dialogWidth() const { return 600; }
     /** @brief Dialog height (reference pixels), title and hints included. @return Height. */

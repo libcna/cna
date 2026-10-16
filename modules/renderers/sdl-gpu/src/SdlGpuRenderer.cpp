@@ -4450,16 +4450,23 @@ namespace CNA::Internal::Renderers::SdlGpu
     RendererFormatVerdict SdlGpuRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::Color || format == SurfaceFormat::Single ||
+            format == SurfaceFormat::Vector4)
         {
-            // The ordinary CNA Texture3D surface currently exposes Color-shaped transfers only,
-            // and both EasyGL's real storage path and this one allocate RGBA8 volumes.
-            case SurfaceFormat::Color:
-                return RendererFormatVerdict::Supported;
+            RenderTargetFormatInfo info{};
+            return TryGetRenderTargetFormatInfo(format, info) &&
+                    SDL_GPUTextureSupportsFormat(
+                        device_, info.nativeFormat, SDL_GPU_TEXTURETYPE_3D,
+                        SDL_GPU_TEXTUREUSAGE_SAMPLER)
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
 
-            // Do not inherit Texture2D's packed/BC/SNORM verdict: a format with no corresponding
-            // public volume transfer and no verified 3D storage path must be refused at creation,
-            // never accepted and silently represented as RGBA8.
+        switch (format)
+        {
+            // Do not inherit Texture2D's packed/BC/SNORM verdict: a format with no verified 3D
+            // storage and transfer path must be refused at creation, never silently substituted.
             case SurfaceFormat::Bgr565:
             case SurfaceFormat::Bgra5551:
             case SurfaceFormat::Bgra4444:
@@ -4472,9 +4479,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             case SurfaceFormat::Rg32:
             case SurfaceFormat::Rgba64:
             case SurfaceFormat::Alpha8:
-            case SurfaceFormat::Single:
             case SurfaceFormat::Vector2:
-            case SurfaceFormat::Vector4:
             case SurfaceFormat::HalfSingle:
             case SurfaceFormat::HalfVector2:
             case SurfaceFormat::HalfVector4:
@@ -11445,16 +11450,24 @@ namespace CNA::Internal::Renderers::SdlGpu
         , surfaceFormat_(surfaceFormat)
     {
         state_->owner = &owner;
-        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        RenderTargetFormatInfo formatInfo{};
+        if (!TryGetRenderTargetFormatInfo(format, formatInfo) ||
+            (format != SurfaceFormat::Color && format != SurfaceFormat::Single &&
+             format != SurfaceFormat::Vector4) ||
+            !SDL_GPUTextureSupportsFormat(
+                owner_->Device(), formatInfo.nativeFormat, SDL_GPU_TEXTURETYPE_3D,
+                SDL_GPU_TEXTUREUSAGE_SAMPLER))
         {
             throw std::invalid_argument(
                 "CNA SDL_GPU: Texture3D received unsupported SurfaceFormat ordinal " +
                 std::to_string(surfaceFormat_));
         }
+        bytesPerTexel_ = formatInfo.bytesPerPixel;
 
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_3D;
-        createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        createInfo.format = formatInfo.nativeFormat;
         // Plain XNA/FNA Texture3D mip levels are explicitly authored with SetData; construction
         // never makes the resource a render target and a level-0 upload never regenerates the
         // chain. Keeping COLOR_TARGET out also avoids asking SDL 3.5.0's Vulkan renderer to build
@@ -11489,7 +11502,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         const int levelD = std::max(1, depth_ >> level);
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
-        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * static_cast<Uint32>(depth) * 4;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) *
+                                 static_cast<Uint32>(depth) * bytesPerTexel_;
         if (dataLength < 0 || static_cast<Uint32>(dataLength) < sizeBytes) return false;
 
         SDL_GPUDevice* device = owner_->Device();
@@ -11555,7 +11569,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // transparent-black volume rather than a refusal.
         if (w <= 0 || h <= 0 || depth <= 0 || data == nullptr || level < 0)
             return false;
-        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * static_cast<Uint32>(depth) * 4;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) *
+                                 static_cast<Uint32>(depth) * bytesPerTexel_;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: Texture3D::GetData: dataLength too small for the requested region");
 

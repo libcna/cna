@@ -209,9 +209,8 @@ namespace
             // The service's newest avatar catalog is this build's, so the avatar editor opens on it.
             std::string catalog;
             const auto newest = "v" + std::to_string(Avatars::embeddedCatalogs().back()->version) + "/catalog.json";
-            for (const auto& file : Avatars::embeddedCatalogFiles())
-                if (std::string_view(file.name) == newest)
-                    catalog.assign(reinterpret_cast<const char*>(file.data), file.size);
+            const auto bytes = Avatars::embeddedCatalogFile(newest);
+            catalog.assign(bytes.begin(), bytes.end());
             Service::setFakeAvatarCatalog(*service_, catalog, {{PictureHash(), picture}});
             Service::setBackendForTesting(service_);
         }

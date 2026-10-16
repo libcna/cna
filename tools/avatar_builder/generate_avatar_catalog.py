@@ -6,11 +6,10 @@
     python3 tools/avatar_builder/generate_avatar_catalog.py --check    # verify it byte for byte
 
 Everything is procedural and original; nothing is downloaded or derived from third-party or
-Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/, CNA's baseline avatar
-catalog (docs/avatars.md). Catalog v3 is released and frozen; a new catalog is a new version (change
-CATALOG_VERSION and the output directory). The development catalogs v1 and v2 that preceded it are
-not shipped or supported; Git history keeps them (v1 from this tool's predecessor at commit
-6ca06d069, v2 from this tool at commit d1730d4f3).
+Xbox avatar content. Output: modules/gamer-services/assets/avatars/v3/, CNA's avatar catalog
+(docs/avatars.md), revision CATALOG_REVISION: a revision keeps every id of the previous one in its
+kind. The development catalogs v1 and v2 that preceded v3 are not shipped or supported; Git history
+keeps them (v1 from this tool's predecessor at commit 6ca06d069, v2 from this tool at commit d1730d4f3).
 """
 import argparse
 import hashlib
@@ -27,39 +26,111 @@ from cna_avatar import catalog, face, facecontrols, rig, animations  # noqa: E40
 
 DEFAULT_OUT = HERE.parent.parent / "modules" / "gamer-services" / "assets" / "avatars" / "v3"
 CATALOG_VERSION = 3
+# Revision 2 (2026-10): the first v3 release's ids keep their kinds, and everything added since is
+# named only by format 3 descriptions (docs/avatars.md).
+# Revision 3 (2026-10): the same entries, art reworked for visual quality.
+# Revision 4 (2026-10): the same entries; sculpted lids, lips and brows, decals on the head's own facets.
+CATALOG_REVISION = 4
+# The catalog contract level a reader needs: 2 adds shared texture files, face styles, accessories,
+# ear shapes, hair covers, anchors and the head surface.
+READER = 2
 
 
-def build():
+def _round(values, digits=5):
+    return [round(v, digits) for v in values]
+
+
+def head_surface(body_type):
+    """The head surface as radii around its centre on a grid (HeadSurface in AvatarAssets.hpp)."""
+    from cna_avatar import head
+    rings, segments = 32, 48
+    radii = []
+    for r in range(rings + 1):
+        theta = math.pi * r / rings
+        for k in range(segments):
+            phi = -math.pi + 2.0 * math.pi * k / segments
+            p = head.local_point(body_type, theta, phi)
+            radii.append(round(math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]), 5))
+    return {"centre": _round(head.centre(body_type)), "rings": rings, "segments": segments, "radii": radii}
+
+
+def face_anchors(body_type):
+    from cna_avatar import head
+    a = head.anchors(body_type)
+    return {name: _round(a[name]) for name in ("eyeLeft", "eyeRight", "earLeft", "earRight")}
+
+
+def _glb_task(task):
+    """One GLB of the catalog: ("body", body type) or ("item", body type, id, slot, name)."""
+    if task[0] == "body":
+        return catalog.body_glb(task[1])
+    return catalog.item_glb(*task[1:])
+
+
+def build(jobs=1):
+    from cna_avatar import accessories, head
     files = {}
+    textures_used = set()
     items, features = [], []
+    tasks = [("body", b) for b in rig.BODY_TYPES]
+    for entry_def in catalog.ITEMS + catalog.FEATURE_ITEMS:
+        item_id, slot, name = entry_def[:3]
+        tasks += [("item", b, item_id, slot, name) for b in rig.BODY_TYPES]
+    # Every GLB and atlas tile depends only on its own task, so the output is the same however the
+    # work is split.
+    pool = None
+    if jobs > 1:
+        import multiprocessing
+        pool = multiprocessing.Pool(jobs)
+    try:
+        built = pool.map(_glb_task, tasks, chunksize=1) if pool else [_glb_task(task) for task in tasks]
+        atlas, layout, styles = face.atlas(pool)
+    finally:
+        if pool:
+            pool.close()
+    glbs = {}
+    for task, (data, used) in zip(tasks, built):
+        name = "body.%s.glb" % task[1] if task[0] == "body" else "%s.%s.glb" % (task[4], task[1])
+        glbs[name] = data
+        textures_used.update(used)
     for body_type in rig.BODY_TYPES:
-        files["body.%s.glb" % body_type] = catalog.body_glb(body_type)
-    for item_id, slot, name, female, male in catalog.ITEMS + catalog.FEATURE_ITEMS:
+        files["body.%s.glb" % body_type] = glbs["body.%s.glb" % body_type]
+    for entry_def in catalog.ITEMS + catalog.FEATURE_ITEMS:
+        item_id, slot, name, female, male = entry_def[:5]
+        extras = entry_def[5] if len(entry_def) > 5 else {}
         entry = {"id": item_id, "slot": slot, "name": name, "random": {"female": female, "male": male},
                  "assets": {b: "%s.%s.glb" % (name, b) for b in rig.BODY_TYPES}}
         for body_type in rig.BODY_TYPES:
-            files["%s.%s.glb" % (name, body_type)] = catalog.item_glb(body_type, item_id, slot, name)
-            if slot == "hair":
-                files["%s.hat.%s.glb" % (name, body_type)] = catalog.item_glb(body_type, item_id, slot, name, under_hat=True)
-        if slot == "hair":
-            entry["hatAssets"] = {b: "%s.hat.%s.glb" % (name, b) for b in rig.BODY_TYPES}
-        if name in catalog.COVERING_HATS:
-            entry["coversHair"] = True
-        (features if slot == "facialHair" else items).append(entry)
-    atlas, layout = face.atlas()
+            files["%s.%s.glb" % (name, body_type)] = glbs["%s.%s.glb" % (name, body_type)]
+        if name in accessories.HAT_COVER:
+            entry["hairCover"] = {"line": list(accessories.HAT_COVER[name]),
+                                  "lift": round(accessories.UNDER_HAT_LIFT * max(head.SCALE.values()), 5)}
+        entry.update(extras)
+        if name in catalog.LABELS:
+            entry["label"] = catalog.LABELS[name]
+        (features if slot in ("facialHair", "ears") else items).append(entry)
+    for kind in sorted(textures_used):
+        files[catalog.texture_file(kind)] = catalog.texture_bytes(kind)
     files["face_features.png"] = atlas
     files["animations.glb"] = catalog.animations_glb()
     assets = [{"name": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
               for name, data in sorted(files.items())]
     manifest = {
-        "format": 1, "catalogVersion": CATALOG_VERSION, "rig": "cna-avatar-71",
+        "format": 1, "catalogVersion": CATALOG_VERSION, "revision": CATALOG_REVISION, "reader": READER,
+        "rig": "cna-avatar-71",
         "note": "Original CNA avatar assets generated by tools/avatar_builder/generate_avatar_catalog.py.",
         "bodies": {b: {"asset": "body.%s.glb" % b,
                        "authoredHeightMillimeters": int(round(rig.PROPORTIONS[b]["height"] * 1000))}
                    for b in rig.BODY_TYPES},
         "items": items,
         "featureItems": features,
+        "faceStyles": [dict(style, label=catalog.LABELS[style["name"]]) if style["name"] in catalog.LABELS else style
+                       for style in catalog.face_styles(styles)],
+        "outfits": catalog.outfits(),
+        "facePresets": catalog.face_presets(),
         "faceControls": {b: facecontrols.controls(b) for b in rig.BODY_TYPES},
+        "faceAnchors": {b: face_anchors(b) for b in rig.BODY_TYPES},
+        "headSurface": {b: head_surface(b) for b in rig.BODY_TYPES},
         "face": {"asset": "face_features.png", "layout": layout},
         "animations": {"asset": "animations.glb", "presets": animations.PRESETS},
         "assets": assets,
@@ -72,12 +143,11 @@ def build():
 # reproduce. FemaleShocked places both hands at face(+-0.13, -0.13), a point the head's Newton
 # solve (cna_avatar.head._solve) has no solution for: its residual wanders between 0.06 and 0.26 for
 # all twelve iterations, and a one-ulp change in the starting guess moves the answer by 11 radians.
-# What v3 froze for those six arm rotations is therefore whatever glibc's libm last bits produced
-# (catalog v3 is released and frozen, docs/avatars.md, so it is not regenerated); every other byte
-# of every file is reproducible anywhere. On another C library the check still requires all of
-# that byte for byte, and of these channels exactly what can be required of them: the same
-# accessors, holding finite values and unit quaternions. The solver itself belongs to a future
-# catalog.
+# What revisions 1-3 froze for those six arm rotations was therefore whatever glibc's libm last bits
+# produced. Revision 4 moves a face target the solve cannot reach toward the face's middle until it
+# can (posing._face_point), so the clip converges; the tolerance below stays as a safety net: on
+# another C library the check still requires every other byte, and of these channels exactly what
+# can be required of them: the same accessors, holding finite values and unit quaternions.
 LIBM_SENSITIVE_CLIP = "FemaleShocked"
 LIBM_SENSITIVE_JOINTS = frozenset(("ShoulderLeft", "ShoulderRight", "ElbowLeft", "ElbowRight",
                                    "WristLeft", "WristRight"))
@@ -153,8 +223,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--jobs", type=int, default=1, help="build the GLBs in this many processes")
     args = parser.parse_args()
-    files = build()
+    files = build(args.jobs)
     if args.check:
         stale = [name for name, data in files.items()
                  if not (args.out / name).is_file() or (args.out / name).read_bytes() != data]
@@ -179,6 +250,11 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
         (args.out / name).write_bytes(data)
+    # Files of an earlier generation that this one no longer has (a catalog directory holds only
+    # the generator's output).
+    for stale in sorted(p for p in args.out.iterdir() if p.is_file() and p.name not in files and
+                        p.suffix in (".glb", ".png", ".json")):
+        stale.unlink()
     print("wrote %d files (%d bytes) to %s" % (len(files), sum(len(d) for d in files.values()), args.out))
     return 0
 

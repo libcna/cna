@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_dx9.md Phase D9-8 (D9-82b/c/d/e): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
 // dispatch -- BasicEffect (D9-82b), AlphaTestEffect (D9-82c), DualTextureEffect (D9-82d),
-// EnvironmentMapEffect (D9-82e). SkinnedEffect is D9-82f, not yet implemented; Check F confirms it
-// throws a named not-yet-implemented rather than silently drawing the wrong thing (plus two
-// "unsupported combination" throw checks for BasicEffect/DualTextureEffect/EnvironmentMapEffect's
-// own honest vertex-layout/GpuDrawParams gaps).
+// EnvironmentMapEffect (D9-82e), and SkinnedEffect (D9-82f), plus negative checks confirming that
+// incomplete vertex declarations throw rather than silently drawing the wrong thing.
 //
 // Every expected pixel value below is HAND-COMPUTED directly from BasicEffect.fx's/
 // AlphaTestEffect.fx's/DualTextureEffect.fx's/EnvironmentMapEffect.fx's/Lighting.fxh's own real
@@ -31,9 +29,8 @@
 // Check E -- fog: same unlit+textured setup as Check A, but with fog forced to its fully-fogged
 //   (fogFactor=1) case via the authoritative CPU-prepared fog vector -- exact FogColor
 //   readback (ApplyFog's lerp(color,FogColor*alpha,1) == FogColor*alpha).
-// Check F -- unsupported BasicEffect/DualTextureEffect/EnvironmentMapEffect flag/stride
-//   combinations (no matching CNA vertex layout) each throw a named error rather than silently
-//   drawing wrong; SkinnedEffect throws its own row-specific not-yet-implemented (D9-82f).
+// Check F -- incomplete BasicEffect/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect vertex
+//   declarations each throw a named error rather than silently drawing wrong.
 // Check G -- AlphaTestEffect, Less compare, PASSES (LtGt bucket, stride 20): exact
 //   texture*DiffuseColor readback, proving DiffuseColor + the clip()-passes path both work.
 // Check H -- AlphaTestEffect, Less compare, FAILS (discarded): the background is left genuinely
@@ -85,6 +82,9 @@
 //   light state. Fixed by uploading each of these to BOTH stages via the soft, never-throws
 //   TryUpload*ShaderConstantEXT helpers (a genuine no-op for every other bucket's PS table, which
 //   declares none of these names).
+// Check S -- DualTextureEffect, EnvironmentMapEffect and SkinnedEffect accept explicit vertex
+//   declarations that provide every shader input plus additional attributes. This guards against
+//   regressing to the old exact-stride gates (28/32, 32 and 52 respectively).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -97,6 +97,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
@@ -162,6 +163,43 @@ namespace
         {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
         { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
         {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
+    };
+
+    // Explicit declarations with extra attributes. These are deliberately not any of the old
+    // stock-effect gate's exact natural strides.
+    struct DualExtra
+    {
+        float x, y, z, nx, ny, nz, u0, v0, u1, v1;
+        std::uint32_t color;
+    };
+    static_assert(sizeof(DualExtra) == 44);
+    const DualExtra kTriDualExtra[3] = {
+        {-1.0f, -1.0f, 0.0f, 0, 0, 1, 0, 0, 0, 0, 0xFFFFFFFFu},
+        { 3.0f, -1.0f, 0.0f, 0, 0, 1, 0, 0, 0, 0, 0xFFFFFFFFu},
+        {-1.0f,  3.0f, 0.0f, 0, 0, 1, 0, 0, 0, 0, 0xFFFFFFFFu},
+    };
+
+    struct EnvExtra
+    {
+        float x, y, z, nx, ny, nz, tx, ty, tz, tw, u, v;
+    };
+    static_assert(sizeof(EnvExtra) == 48);
+    const EnvExtra kTriEnvExtra[3] = {
+        {-1.0f, -1.0f, 0.0f, 0, 0, 1, 1, 0, 0, 1, 0, 0},
+        { 3.0f, -1.0f, 0.0f, 0, 0, 1, 1, 0, 0, 1, 0, 0},
+        {-1.0f,  3.0f, 0.0f, 0, 0, 1, 1, 0, 0, 1, 0, 0},
+    };
+
+    struct SkinnedExtra
+    {
+        float x, y, z, nx, ny, nz, tx, ty, tz, tw, u, v, w0, w1, w2, w3;
+        std::uint8_t idx[4];
+    };
+    static_assert(sizeof(SkinnedExtra) == 68);
+    const SkinnedExtra kTriSkinnedExtra[3] = {
+        {-1.0f, -1.0f, 0.0f, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, {0, 0, 0, 0}},
+        { 3.0f, -1.0f, 0.0f, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, {0, 0, 0, 0}},
+        {-1.0f,  3.0f, 0.0f, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, {0, 0, 0, 0}},
     };
 
     std::unique_ptr<CNA::Internal::Renderers::ITextureRenderer> Make1x1Texture(
@@ -643,6 +681,116 @@ protected:
                   "exact readback (80,48,16) via the pixel shader's own lighting constants");
         }
 
+        // Check S: stock-effect declarations may contain attributes the chosen shader ignores.
+        // The required semantic set, not one exact stride, determines compatibility.
+        {
+            auto texWhite = Make1x1Texture(renderer, 255, 255, 255, 255);
+            auto texOverlay = Make1x1Texture(renderer, 100, 60, 20, 255);
+            auto vb = renderer.CreateVertexBuffer(3);
+            const VertexDeclaration declaration(44, {
+                VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(32, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+                VertexElement(40, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            });
+            vb->SetVertexDeclaration(declaration);
+            vb->SetData(kTriDualExtra, 3, sizeof(DualExtra));
+
+            GpuDrawParams params;
+            params.dualTexture = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = true;
+            params.texture0 = texWhite.get();
+            params.texture1 = texOverlay.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = 0.5f;
+            params.diffuseColor[3] = 1.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() == 100 && px.getGProperty() == 60 &&
+                      px.getBProperty() == 20 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (DualTextureEffect): explicit stride-44 declaration with an "
+                  "extra Normal renders exactly");
+        }
+        {
+            auto tex = Make1x1Texture(renderer, 200, 120, 40, 255);
+            auto cube = Make1x1CubeTexture(renderer, 100, 200, 50, 255);
+            auto vb = renderer.CreateVertexBuffer(3);
+            const VertexDeclaration declaration(48, {
+                VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0),
+                VertexElement(40, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            });
+            vb->SetVertexDeclaration(declaration);
+            vb->SetData(kTriEnvExtra, 3, sizeof(EnvExtra));
+
+            GpuDrawParams params;
+            params.envMapping = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = tex.get();
+            params.envMap = cube.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] =
+                params.diffuseColor[3] = 1.0f;
+            params.envMapAmount = 0.5f;
+            params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 0.4f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() == 90 && px.getGProperty() == 124 &&
+                      px.getBProperty() == 33 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (EnvironmentMapEffect): explicit stride-48 declaration with "
+                  "an extra Tangent renders exactly");
+        }
+        {
+            auto tex = Make1x1Texture(renderer, 200, 120, 40, 255);
+            auto vb = renderer.CreateVertexBuffer(3);
+            const VertexDeclaration declaration(68, {
+                VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(24, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0),
+                VertexElement(40, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(48, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+                VertexElement(64, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0),
+            });
+            vb->SetVertexDeclaration(declaration);
+            vb->SetData(kTriSkinnedExtra, 3, sizeof(SkinnedExtra));
+
+            GpuDrawParams params;
+            params.skinned = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = tex.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] =
+                params.diffuseColor[3] = 1.0f;
+            params.specularColor[0] = params.specularColor[1] = params.specularColor[2] = 0.0f;
+            params.weightsPerVertex = 1;
+            params.boneCount = 1;
+            const float identity16[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+            std::copy(identity16, identity16 + 16, params.boneTransforms);
+            params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 0.4f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() == 80 && px.getGProperty() == 48 &&
+                      px.getBProperty() == 16 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (SkinnedEffect): explicit stride-68 declaration with an "
+                  "extra Tangent renders exactly");
+        }
+
         // Check F: honest-gap / not-yet-implemented reporting.
         {
             auto vb = renderer.CreateVertexBuffer(3);
@@ -675,8 +823,8 @@ protected:
             check(threw, "DrawPrimitivesEx: a DualTextureEffect declaration missing TEXCOORD1 and "
                          "COLOR0 throws rather than drawing wrong");
 
-            // No matching CNA vertex layout: EnvironmentMapEffect requires stride 32
-            // (VSInputNmTx), and this vb is stride 20.
+            // No matching CNA vertex layout: EnvironmentMapEffect requires VSInputNmTx's Normal,
+            // and this Position+TexCoord declaration does not provide one.
             GpuDrawParams envMapParams;
             envMapParams.envMapping = true;
             threw = false;
@@ -685,8 +833,8 @@ protected:
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx: an unsupported EnvironmentMapEffect vertex layout throws");
 
-            // No matching CNA vertex layout: SkinnedEffect requires stride 52
-            // (VSInputNmTxWeights), and this vb is stride 20.
+            // No matching CNA vertex layout: SkinnedEffect requires VSInputNmTxWeights' Normal,
+            // BlendWeight and BlendIndices, and this declaration provides none of them.
             GpuDrawParams skinnedParams;
             skinnedParams.skinned = true;
             threw = false;

@@ -28,7 +28,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
+#include <array>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -126,6 +128,39 @@ protected:
             bool match = (readback[0] == level1Color) && (readback[1] == level1Color);
             check(match, "Check C: GetData(level=1) reads back level 1's own uploaded content, "
                         "not level 0's -- proves the mip level parameter is honoured");
+        }
+
+        // Check D: the two HiDef float volume formats use their exact native texel widths rather
+        // than being substituted with RGBA8 storage.
+        {
+            const std::array<float, 8> singles{
+                -2.0f, -1.0f, -0.5f, 0.0f, 0.25f, 0.5f, 1.0f, 4.0f};
+            std::array<float, 8> singleReadback{};
+            Texture3D single(dev, 2, 2, 2, false, SurfaceFormat::Single);
+            single.SetData(singles.data(), static_cast<int>(singles.size()));
+            single.GetData(singleReadback.data(), static_cast<int>(singleReadback.size()));
+            check(singleReadback == singles,
+                  "Check D1: Single preserves all binary32 voxels exactly");
+
+            const std::array<Vector4, 8> vectors{
+                Vector4(-1.0f, 0.0f, 1.0f, 2.0f), Vector4(3.0f, 4.0f, 5.0f, 6.0f),
+                Vector4(7.0f, 8.0f, 9.0f, 10.0f), Vector4(11.0f, 12.0f, 13.0f, 14.0f),
+                Vector4(15.0f, 16.0f, 17.0f, 18.0f), Vector4(19.0f, 20.0f, 21.0f, 22.0f),
+                Vector4(23.0f, 24.0f, 25.0f, 26.0f), Vector4(27.0f, 28.0f, 29.0f, 30.0f)};
+            std::array<Vector4, 8> vectorReadback{};
+            Texture3D vector(dev, 2, 2, 2, false, SurfaceFormat::Vector4);
+            vector.SetData(vectors.data(), static_cast<int>(vectors.size()));
+            vector.GetData(vectorReadback.data(), static_cast<int>(vectorReadback.size()));
+            bool vectorsMatch = true;
+            for (std::size_t i = 0; i < vectors.size(); ++i)
+            {
+                vectorsMatch &= vectorReadback[i].X == vectors[i].X &&
+                                vectorReadback[i].Y == vectors[i].Y &&
+                                vectorReadback[i].Z == vectors[i].Z &&
+                                vectorReadback[i].W == vectors[i].W;
+            }
+            check(vectorsMatch,
+                  "Check D2: Vector4 preserves all four binary32 channels exactly");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

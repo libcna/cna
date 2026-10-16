@@ -18,16 +18,24 @@ import numpy as np
 from PIL import Image
 
 from . import glbread, rig
-from .description import decode, SLOTS
+from .description import decode, SLOTS, ACCESSORIES, MAKEUP, EXTENDED_COLORS
 
 BUILD_AXES = {1: 5, 5: 14, 2: 6, 3: 8, 6: 11, 8: 15, 12: 20, 16: 22, 20: 25, 22: 28, 25: 33, 28: 36}
 FEATURES = ("eyeLeft", "eyeRight", "eyebrowLeft", "eyebrowRight", "mouth")
+# Makeup decals of the body: (makeup kind, side index).
+MAKEUP_FEATURES = {"lips": ("lips", 0), "shadowLeft": ("eyeShadow", 0), "shadowRight": ("eyeShadow", 1),
+                   "linerLeft": ("eyeliner", 0), "linerRight": ("eyeliner", 1), "blushLeft": ("blush", 0),
+                   "blushRight": ("blush", 1)}
+CLOSED_EYES = (4, 7, 8, 13)
 EYES = ["Neutral", "Sad", "Angry", "Confused", "Laughing", "Shocked", "Happy", "Yawning", "Sleeping", "LookUp",
         "LookDown", "LookLeft", "LookRight", "Blink"]
 EYEBROWS = ["Neutral", "Sad", "Angry", "Confused", "Raised"]
 MOUTHS = ["Neutral", "Sad", "Angry", "Confused", "Laughing", "Shocked", "Happy", "PhoneticO", "PhoneticAi",
           "PhoneticEe", "PhoneticFv", "PhoneticW", "PhoneticL", "PhoneticDth"]
-TINTS = ("skin", "hair", "eyes", "top", "bottom", "shoes", "accessory")
+TINTS = ("skin", "hair", "eyes", "top", "bottom", "shoes", "accessory", "lips", "eyeShadow", "blush", "jewelry", "gloves")
+# The first colour of each format 3 palette (AvatarDescriptionCodec.cpp), drawn for an unset (black) slot.
+DEFAULT_COLORS = {"lips": (176, 86, 96), "eyeShadow": (138, 108, 98), "blush": (226, 128, 124), "jewelry": (212, 176, 98),
+                  "gloves": (220, 60, 56)}
 
 
 # ----- catalogs ---------------------------------------------------------------------------------
@@ -59,7 +67,8 @@ class Catalogs:
     def glb(self, version, name):
         key = (version, name)
         if key not in self._glbs:
-            self._glbs[key] = read_avatar_glb(self.file(version, name))
+            self._glbs[key] = read_avatar_glb(self.file(version, name),
+                                              lambda texture: premultiplied(Image.open(io.BytesIO(self.file(version, texture)))))
         return self._glbs[key]
 
     def face_tiles(self, version):
@@ -80,8 +89,9 @@ def premultiplied(image):
     return rgba
 
 
-def read_avatar_glb(data):
-    """{'bind': (71,3), 'primitives': [...]} of a CNA avatar GLB."""
+def read_avatar_glb(data, shared_texture=None):
+    """{'bind': (71,3), 'primitives': [...]} of a CNA avatar GLB; shared_texture(name) loads a
+    catalog texture file a material names (cnaTexture)."""
     gltf, blob = glbread.read(data)
     skin = gltf["skins"][0]
     slot_of_joint = [rig.INDEX[gltf["nodes"][n]["name"]] for n in skin["joints"]]
@@ -99,6 +109,8 @@ def read_avatar_glb(data):
             if "baseColorTexture" in pbr:
                 image = gltf["textures"][pbr["baseColorTexture"]["index"]]["source"]
                 texture = premultiplied(Image.open(io.BytesIO(glbread.image_bytes(gltf, blob, image))))
+            elif "cnaTexture" in extras and shared_texture:
+                texture = shared_texture(extras["cnaTexture"])
             count = gltf["accessors"][a["POSITION"]]["count"]
             joints = np.array(glbread.accessor(gltf, blob, a["JOINTS_0"]), dtype=np.int64)
             weights = np.array(glbread.accessor(gltf, blob, a["WEIGHTS_0"]), dtype=np.float64)
@@ -115,7 +127,9 @@ def read_avatar_glb(data):
                 "tint": extras.get("cnaTint", "none"),
                 "feature": extras.get("cnaFeature"),
                 "layer": extras.get("cnaLayer", 0),
-                "specular": extras.get("cnaSpecular", 1.0),
+                "specular": extras.get("cnaSpecular", 1.0), "shininess": extras.get("cnaShininess", 24.0),
+                "side": {"left": 1, "right": 2}.get(extras.get("cnaSide"), 0),
+                "blend": extras.get("cnaBlend") == "alpha",
                 "texture": texture,
             })
     return {"bind": bind, "primitives": primitives, "gltf": gltf, "blob": blob}
@@ -184,6 +198,119 @@ def face_deform(positions, joints, weights, controls, face, face_scope):
     return out
 
 
+def _hairline(line, phi):
+    a = abs((phi + math.pi) % (2.0 * math.pi) - math.pi)
+    sm = lambda e0, e1, x: float(_smoothstep(e0, e1, x))
+    if a < 0.30 * math.pi:
+        return math.pi * (line[0] + (line[1] - line[0]) * sm(0.0, 0.30 * math.pi, a))
+    if a < 0.55 * math.pi:
+        return math.pi * (line[1] + (line[2] - line[1]) * sm(0.30 * math.pi, 0.55 * math.pi, a))
+    return math.pi * (line[2] + (line[3] - line[2]) * sm(0.55 * math.pi, math.pi, a))
+
+
+def _surface_radius(surface, theta, phi):
+    rings, segments = surface["rings"], surface["segments"]
+    radii = np.array(surface["radii"]).reshape(rings + 1, segments)
+    row = np.clip(theta / math.pi, 0.0, 1.0) * rings
+    column = ((phi + math.pi) / (2.0 * math.pi) * segments) % segments
+    r0 = np.minimum(row.astype(np.int64), rings - 1)
+    c0 = np.minimum(column.astype(np.int64), segments - 1)
+    c1 = (c0 + 1) % segments
+    fr, fc = row - r0, column - c0
+    top = radii[r0, c0] + (radii[r0, c1] - radii[r0, c0]) * fc
+    bottom = radii[r0 + 1, c0] + (radii[r0 + 1, c1] - radii[r0 + 1, c0]) * fc
+    return top + (bottom - top) * fr
+
+
+def flatten_under_hat(prim, surface, cover):
+    """AvatarModel.cpp's flattenUnderHat: hair a covering hat hides lies flat under it."""
+    centre = np.array(surface["centre"])
+    local = prim["positions"] - centre
+    r = np.linalg.norm(local, axis=1)
+    d = local / np.maximum(r, 1e-9)[:, None]
+    theta = np.arccos(np.clip(d[:, 1], -1.0, 1.0))
+    phi = np.arctan2(d[:, 0], d[:, 2])
+    line = np.array([_hairline(cover["line"], p) for p in phi])
+    covered = theta < line - 0.05 * math.pi
+    amount = 1.0 - _smoothstep(line - 0.03 * math.pi, line + 0.02 * math.pi, theta)
+    limit = _surface_radius(surface, theta, phi) + cover["lift"]
+    positions = centre + d * (r + (np.minimum(r, limit) - r) * amount)[:, None]
+    keep = ~covered[prim["indices"]].all(axis=1)
+    return dict(prim, positions=positions, indices=prim["indices"][keep])
+
+
+def face_displacement(points, controls, face):
+    """Every face control's displacement of authored points (full weight)."""
+    fake_joints = np.full((len(points), 4), rig.INDEX["Head"])
+    weights = np.tile([1.0, 0.0, 0.0, 0.0], (len(points), 1))
+    return face_deform(points, fake_joints, weights, controls, face, True) - points
+
+
+PROPORTION_BONES = None
+
+
+def proportions(authored, local, value):
+    """AvatarModel.cpp's proportionsFor: (morphed joint positions, stretch per bone, axis per bone, head scale)."""
+    t = max(-1.0, min(1.0, (value - 128.0) / 127.0))
+    stretch = np.ones(rig.BONE_COUNT)
+    axes = np.zeros((rig.BONE_COUNT, 3))
+    if t == 0.0:
+        return authored.copy(), stretch, axes, 1.0
+    at = lambda compact, tall: 1.0 + (-t * (compact - 1.0) if t < 0 else t * (tall - 1.0))
+    legs, arms, torso, neck, shoulders = at(0.84, 1.07), at(0.88, 1.05), at(0.90, 1.05), at(0.80, 1.06), at(0.88, 1.03)
+    head_scale = at(1.10, 0.96)
+    factor = np.ones((rig.BONE_COUNT, 3))
+    for side in ("Left", "Right"):
+        factor[rig.INDEX["Hip" + side]] = (1, legs, 1)
+        factor[rig.INDEX["Knee" + side]] = (legs, legs, legs)
+        factor[rig.INDEX["Ankle" + side]] = (legs, legs, legs)
+        factor[rig.INDEX["Collar" + side]] = (shoulders, torso, 1)
+        factor[rig.INDEX["Shoulder" + side]] = (shoulders, 1, 1)
+        factor[rig.INDEX["Elbow" + side]] = (arms, arms, arms)
+        factor[rig.INDEX["Wrist" + side]] = (arms, arms, arms)
+    factor[rig.INDEX["BackUpper"]] = (1, torso, 1)
+    factor[rig.INDEX["Neck"]] = (1, torso, 1)
+    factor[rig.INDEX["Head"]] = (1, neck, 1)
+    for bone in range(rig.BONE_COUNT):
+        parent = rig.PARENTS[bone]
+        if rig.NAMES[bone].startswith("Slot") and parent > 0:
+            name = rig.NAMES[parent]
+            if name.startswith(("Hip", "Knee")):
+                factor[bone] = (legs, legs, legs)
+            elif name.startswith(("Shoulder", "Elbow")):
+                factor[bone] = (arms, arms, arms)
+    out = authored.copy()
+    hip_height = authored[rig.INDEX["HipLeft"]][1]
+    for bone in range(1, rig.BONE_COUNT):
+        parent = rig.PARENTS[bone]
+        offset = local[bone].copy()
+        if bone == rig.INDEX["BackLower"] or (parent == 0 and rig.NAMES[bone].startswith("Slot")):
+            offset[1] = min(offset[1], hip_height) * legs + max(offset[1] - hip_height, 0.0) * torso
+        else:
+            offset = offset * factor[bone]
+        out[bone] = out[parent] + offset
+    for bone, toward in BUILD_AXES.items():
+        direction = authored[toward] - authored[bone]
+        before = np.linalg.norm(direction)
+        axes[bone] = direction / before
+        stretch[bone] = np.linalg.norm(out[toward] - out[bone]) / before if before > 1e-4 else 1.0
+    return out, stretch, axes, head_scale
+
+
+def apply_proportions(positions, joints, weights, authored, morph):
+    moved_joints, stretch, axes, head_scale = morph
+    out = np.zeros_like(positions)
+    head = rig.INDEX["Head"]
+    for k in range(4):
+        bone = joints[:, k]
+        offset = positions - authored[bone]
+        scale_head = (bone == head)[:, None]
+        along = (offset * axes[bone]).sum(axis=1, keepdims=True) * axes[bone] * (stretch[bone][:, None] - 1.0)
+        offset = np.where(scale_head, offset * head_scale, offset + along)
+        out += weights[:, k:k + 1] * (moved_joints[bone] + offset)
+    return out
+
+
 def assemble(catalogs, description_bytes):
     """The avatar a description renders as, or None when it is not a readable CNA avatar."""
     d = decode(description_bytes)
@@ -195,48 +322,111 @@ def assemble(catalogs, description_bytes):
     manifest = catalogs.manifest(version)
     body = "male" if d.body_type == 1 else "female"
     body_glb = catalogs.glb(version, manifest["bodies"][body]["asset"])
-    items = {item["id"]: item for item in manifest["items"]}
-    features = {item["id"]: item for item in manifest.get("featureItems", [])}
-    assets = [(body_glb, True)]
+    entries = {e["id"]: e for key in ("items", "featureItems", "faceStyles") for e in manifest.get(key, [])}
+
+    def worn(item_id, slot):
+        e = entries.get(item_id)
+        return e if item_id and e and e["slot"] == slot else None
+    pieces = [(body_glb, "face", None, 0, None)]
     substituted = []
-    hat = items.get(d.items["hat"])
-    under_hat = bool(hat and hat.get("coversHair"))
+    hidden = set()
+    for slot in SLOTS:
+        e = worn(d.items[slot], slot)
+        if e:
+            hidden.update(e.get("hides", []))
+    for name in ACCESSORIES:
+        e = worn(d.accessories.get(name, 0), name)
+        if e:
+            hidden.update(e.get("hides", []))
+    hat = worn(d.items["hat"], "hat")
+    cover = hat.get("hairCover") if hat else None
+    ears = worn(d.ears, "ears") or next((e for e in manifest.get("featureItems", []) if e["slot"] == "ears"), None)
+    if ears:
+        pieces.append((catalogs.glb(version, ears["assets"][body]), "face", None, 0, None))
     for slot in SLOTS:
         item_id = d.items[slot]
-        item = items.get(item_id)
-        if item_id and item and item["slot"] == slot:
-            files = item.get("hatAssets") if slot == "hair" and under_hat and "hatAssets" in item else item["assets"]
-            assets.append((catalogs.glb(version, files[body]), False))
+        item = worn(item_id, slot)
+        if item:
+            scope = "head" if slot in ("hair", "hat") else None
+            follow = item.get("follow")
+            if slot == "glasses" and not follow:
+                scope = "head"
+            pieces.append((catalogs.glb(version, item["assets"][body]), scope, follow, 0, cover if slot == "hair" else None))
         elif item_id:
             substituted.append(item_id)
             fallback = next((i for i in manifest["items"] if i["slot"] == slot), None)
             if slot not in ("glasses", "hat") and fallback:
-                assets.append((catalogs.glb(version, fallback["assets"][body]), False))
-    feature = features.get(d.facial_hair)
+                pieces.append((catalogs.glb(version, fallback["assets"][body]), None, None, 0, None))
+    feature = worn(d.facial_hair, "facialHair")
     if d.facial_hair and feature:
-        assets.append((catalogs.glb(version, feature["assets"][body]), True))
+        pieces.append((catalogs.glb(version, feature["assets"][body]), "face", None, 0, None))
     elif d.facial_hair:
         substituted.append(d.facial_hair)
+    for name in ACCESSORIES:
+        item = worn(d.accessories.get(name, 0), name)
+        if item and name not in hidden:
+            pieces.append((catalogs.glb(version, item["assets"][body]), None, item.get("follow"), d.sides.get(name, 0), None))
     authored_height = manifest["bodies"][body]["authoredHeightMillimeters"] / 1000.0
-    scale = (d.height_mm / 1000.0) / authored_height
     bind = body_glb["bind"]
     authored = world_positions(bind)
+    morph = proportions(authored, bind, d.proportion)
+    head = rig.INDEX["Head"]
+    morphed_height = morph[0][head][1] + (authored_height - authored[head][1]) * morph[3]
+    scale = (d.height_mm / 1000.0) / morphed_height
     factor = 1.0 + (d.build - 128.0) / 127.0 * 0.18
-    colors = {name: np.array(d.colors[name]) / 255.0 for name in TINTS}
+    colors = {name: np.array(d.colors[name] if d.colors.get(name, (0, 0, 0)) != (0, 0, 0) or name not in DEFAULT_COLORS
+                             else DEFAULT_COLORS[name]) / 255.0 for name in TINTS}
+    controls = manifest.get("faceControls", {}).get(body, [])
+    shaped = bool(controls) and any(v != 128 for v in d.face)
+    anchors = manifest.get("faceAnchors", {}).get(body)
+    eye_move, eye_stretch, eye_centre, ear_move = np.zeros(3), 1.0, np.zeros(3), np.zeros((2, 3))
+    if shaped and anchors:
+        pts = np.array([anchors["eyeLeft"], anchors["eyeRight"], anchors["earLeft"], anchors["earRight"]])
+        moved = pts + face_displacement(pts, controls, d.face)
+        eye_centre = (pts[0] + pts[1]) / 2.0
+        eye_move = (moved[0] + moved[1]) / 2.0 - eye_centre
+        eye_stretch = abs(moved[0][0] - moved[1][0]) / max(abs(pts[0][0] - pts[1][0]), 1e-4)
+        ear_move = moved[2:] - pts[2:]
+    brows = worn(d.eyebrows, "eyebrows")
+    makeup = {kind: worn(d.makeup.get(kind, 0), kind) for kind in MAKEUP}
     opaque, decals = [], []
-    controls = manifest.get("faceControls", {}).get(body, []) if d.format == 2 else []
-    for glb, face_scope in assets:
+    for glb, scope, follow, sides, hair_cover in pieces:
         for prim in glb["primitives"]:
-            positions = face_deform(prim["positions"], prim["joints"], prim["weights"], controls, d.face, face_scope)
-            positions = apply_build(positions, prim["joints"], prim["weights"], authored, factor) * scale
+            if prim["side"] and sides and prim["side"] != sides:
+                continue
+            extra = {}
+            if prim["feature"] in MAKEUP_FEATURES:
+                kind, side = MAKEUP_FEATURES[prim["feature"]]
+                style = makeup[kind]
+                if not style:
+                    continue
+                extra = {"style_tiles": style["tiles"], "alpha": style.get("opacity", 1.0), "makeup_side": side}
+            if hair_cover:
+                prim = flatten_under_hat(prim, manifest["headSurface"][body], hair_cover)
+            positions = prim["positions"]
+            if shaped and scope:
+                positions = face_deform(positions, prim["joints"], prim["weights"], controls, d.face, scope == "face")
+            if shaped and follow == "eyes":
+                positions = positions.copy()
+                positions[:, 0] = eye_centre[0] + (positions[:, 0] - eye_centre[0]) * eye_stretch
+                positions = positions + eye_move
+            elif shaped and follow == "ears":
+                positions = positions + np.where((positions[:, 0] >= 0.0)[:, None], ear_move[0], ear_move[1])
+            positions = apply_proportions(positions, prim["joints"], prim["weights"], authored, morph)
+            positions = apply_build(positions, prim["joints"], prim["weights"], morph[0], factor) * scale
             tint = colors.get(prim["tint"], np.ones(3))
-            part = dict(prim, positions=positions, color=prim["color"] * tint)
-            (decals if prim["feature"] else opaque).append(part)
-    decals.sort(key=lambda p: p["layer"])
+            part = dict(prim, positions=positions, color=prim["color"] * tint, **extra)
+            (decals if prim["feature"] or prim["blend"] else opaque).append(part)
+    decals.sort(key=lambda p: (bool(p["feature"]), p["layer"]))
     tiles, layout = catalogs.face_tiles(version)
-    return {"height": d.height_mm / 1000.0, "bind_translations": bind * scale,
-            "bind_positions": world_positions(bind * scale), "parts": opaque + decals, "tiles": tiles,
-            "layout": layout, "substituted": substituted}
+    eyebrow_tiles = brows["tiles"] if brows else None
+    bind_positions = morph[0] * scale
+    translations = bind_positions.copy()
+    for bone in range(1, rig.BONE_COUNT):
+        translations[bone] = bind_positions[bone] - bind_positions[rig.PARENTS[bone]]
+    return {"height": d.height_mm / 1000.0, "bind_translations": translations,
+            "bind_positions": bind_positions, "parts": opaque + decals, "tiles": tiles,
+            "layout": layout, "substituted": substituted, "eyebrow_tiles": eyebrow_tiles}
 
 
 # ----- animation (AvatarAnimation.cpp / AvatarClips.cpp) ----------------------------------------
@@ -427,7 +617,7 @@ class Lighting:
         self.color = np.array(color, dtype=np.float64)
         self.ambient = np.array(ambient, dtype=np.float64)
 
-    def shade(self, rgba, diffuse, normal, position, eye, specular=1.0):
+    def shade(self, rgba, diffuse, normal, position, eye, specular=1.0, shininess=24.0):
         """SkinnedEffect with one directional light: texture * diffuse * (ambient + N.L) + specular."""
         n = normal / np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-9)
         dot_l = n @ -self.direction
@@ -436,7 +626,7 @@ class Lighting:
         e /= np.maximum(np.linalg.norm(e, axis=1, keepdims=True), 1e-9)
         h = e - self.direction
         h /= np.maximum(np.linalg.norm(h, axis=1, keepdims=True), 1e-9)
-        spec = np.power(np.maximum(np.einsum("ij,ij->i", n, h), 0.0)[:, None] * lit, 24.0) * self.color * 0.12 * specular
+        spec = np.power(np.maximum(np.einsum("ij,ij->i", n, h), 0.0)[:, None] * lit, shininess) * self.color * 0.12 * specular
         light = self.ambient + self.color * np.maximum(dot_l, 0.0)[:, None]
         rgb = rgba[:, :3] * diffuse * light + spec * rgba[:, 3:4]
         return np.concatenate([rgb, rgba[:, 3:4]], axis=1)
@@ -451,8 +641,8 @@ def render(model, camera, bones, expression, lighting=None, world=None, backgrou
     color = np.tile(np.append(np.array(background, dtype=np.float64) / 255.0, 1.0), (width * height, 1))
     depth = np.full(width * height, np.inf)
     posed = [skin_part(part, bones, world) for part in model["parts"]]
-    opaque = [i for i, part in enumerate(model["parts"]) if not part["feature"]]
-    decals = [i for i, part in enumerate(model["parts"]) if part["feature"]]
+    opaque = [i for i, part in enumerate(model["parts"]) if not part["feature"] and not part.get("blend")]
+    decals = [i for i, part in enumerate(model["parts"]) if part["feature"] or part.get("blend")]
     # Opaque parts: nearest fragment per pixel over all parts, then shade once.
     frags = []
     for i in opaque:
@@ -475,7 +665,7 @@ def render(model, camera, bones, expression, lighting=None, world=None, backgrou
     layout = model["layout"]
     for i in decals:
         part = model["parts"][i]
-        tile = _tile(layout, part, expression)
+        tile = _tile(model, part, expression) if part["feature"] else None
         p, _ = posed[i]
         sx, sy, w = camera.project(p)
         pix, z, tri, bary = fragments(sx, sy, w, part["indices"], width, height)
@@ -484,24 +674,35 @@ def render(model, camera, bones, expression, lighting=None, world=None, backgrou
         if not len(pix):
             continue
         win = nearest(pix, z)
-        src = _shade(model, i, posed[i], tri[win], bary[win], lighting, camera, model["tiles"][tile])
+        src = _shade(model, i, posed[i], tri[win], bary[win], lighting, camera, model["tiles"][tile] if tile is not None else None)
+        src = src * part.get("alpha", 1.0)
         dst = color[pix[win]]
         color[pix[win]] = src + dst * (1.0 - src[:, 3:4])
     color[:, 3] = 1.0
     return np.clip(color.reshape(height, width, 4), 0.0, 1.0)
 
 
-def _tile(layout, part, expression):
+def _tile(model, part, expression):
+    layout = model["layout"]
     mouth, left_eye, right_eye, left_brow, right_brow = expression
     feature = part["feature"]
+    if "style_tiles" in part:
+        tiles = part["style_tiles"]
+        if feature == "lips":
+            return tiles[mouth]
+        side = part["makeup_side"]
+        if len(tiles) == 4 and (left_eye if side == 0 else right_eye) in CLOSED_EYES:
+            return tiles[2 + side]
+        return tiles[side]
     if feature == "eyeLeft":
         return layout["eyes"][EYES[left_eye]]["left"][part["layer"]]
     if feature == "eyeRight":
         return layout["eyes"][EYES[right_eye]]["right"][part["layer"]]
-    if feature == "eyebrowLeft":
-        return layout["eyebrows"][EYEBROWS[left_brow]]["left"]
-    if feature == "eyebrowRight":
-        return layout["eyebrows"][EYEBROWS[right_brow]]["right"]
+    if feature in ("eyebrowLeft", "eyebrowRight"):
+        side, state = (0, left_brow) if feature == "eyebrowLeft" else (1, right_brow)
+        if model.get("eyebrow_tiles"):
+            return model["eyebrow_tiles"][state * 2 + side]
+        return layout["eyebrows"][EYEBROWS[state]]["left" if side == 0 else "right"]
     return layout["mouths"][MOUTHS[mouth]]
 
 
@@ -517,7 +718,7 @@ def _shade(model, index, posed, tri, bary, lighting, camera, texture):
         rgba = sample(image, uv)
     else:
         rgba = np.ones((len(tri), 4))
-    return lighting.shade(rgba, part["color"], normal, position, camera.eye, part.get("specular", 1.0))
+    return lighting.shade(rgba, part["color"], normal, position, camera.eye, part.get("specular", 1.0), part.get("shininess", 24.0))
 
 
 def yaw_matrix(degrees):

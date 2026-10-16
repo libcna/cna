@@ -36,6 +36,25 @@ texture via `TextureCube::GetRenderer()` (shared with `RenderTargetCube`) and ca
 through virtual dispatch — both the plain cube-texture and render-target-cube renderers override it
 correctly.
 
+The later REMED-GFX-137 orientation audit found that binding alone was insufficient on EasyGL:
+GL rasterizes a rendered face bottom-up while an uploaded cube's first row is sampled as its top.
+The lookup direction is now mirrored only for a `RenderTargetCube` in every stock consumer:
+`EnvironmentMapEffect` and both independent PBR IBL cubes (irradiance and prefiltered specular).
+Source `ShaderEffect` exposes the same correction as an opt-in `uRtCubeFlipV` vector, parallel to
+the existing 2D `uRtFlipV` contract. The shared nine-check GPU witness covers both IBL terms, a
+rendered cube (including an exact face-edge sample) in a source shader, and switching that shader
+back to an uploaded cube; it passes on
+OPENGLES3 and OPENGL33, and a specular-only mutation fails exactly its two checks. Public readback
+remains top-down and unchanged. The inherited `RenderTargetCube::SetData` path had already been
+normalized in `23c5557f7`; the complete readback contract's W1 check confirms a 64/64 same-order
+upload/readback round trip on both GL profiles. The final GLES-only edge artifact came from the
+necessarily discontinuous face-local row flip: mandatory seamless filtering crossed into an
+unrelated transformed neighbour. Stock EnvironmentMap/PBR sampling and the documented source-shader
+helper now keep the bilinear footprint one texel inside the chosen face and give exact ties to a
+side face. The focused edge oracle changes from red to `(128,0,128)` when that inset is removed;
+restored, it passes on OPENGLES3 and OPENGL33, and the museum's reflection sphere has no face outline.
+No public row-orientation or rendered-cube edge gap remains.
+
 ## 3. Depth buffer functionality (Task 335)
 
 Task 331's property test only proved `getDepthStencilFormatProperty()` round-trips the constructor
@@ -135,7 +154,7 @@ FNA's own delegate-to-native-driver behavior (§7), not a divergence.
 |---|---|
 | `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ |
 | `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ |
-| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ |
+| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`, PBR IBL, opt-in source `ShaderEffect`) | ✅ |
 | Depth buffer functionality (does depth testing work inside an RT) | ✅ |
 | Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) |
 | Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) |

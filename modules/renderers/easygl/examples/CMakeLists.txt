@@ -2620,6 +2620,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_EnvironmentMap_RenderTargetCubeOrientation COMMAND cna_test_easygl_envmap_rendertargetcube_orientation
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-137 follow-up: the two other cube consumers keep a rendered face upright too.
+        # PBR owns two independent IBL cube samplers; source ShaderEffect opts into the renderer's
+        # per-unit correction through uRtCubeFlipV, mirroring the established 2D uRtFlipV contract.
+        # The source helper also pins GLES's mandatory seamless footprint inside the chosen face.
+        cna_easygl_test(cna_test_easygl_rendertargetcube_sampling_orientation
+                        easygl_rendertargetcube_sampling_orientation_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTargetCube_SamplingOrientation COMMAND cna_test_easygl_rendertargetcube_sampling_orientation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # IGraphicsRenderer::CreateRenderTargetCube had no `preserveContents` parameter,
         # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
         # renderer and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses

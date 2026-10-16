@@ -32,7 +32,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
 
     macro(cna_directx9_ctest_command out_var target_name)
         if(CMAKE_CROSSCOMPILING)
-            set(${out_var} ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh $<TARGET_FILE:${target_name}>)
+            set(${out_var} ${CNA_SOURCE_DIR}/scripts/run-wine-dxvk9.sh $<TARGET_FILE:${target_name}>)
         else()
             set(${out_var} $<TARGET_FILE:${target_name}>)
         endif()
@@ -158,6 +158,25 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_SkinnedEffect_Fog COMMAND ${_directx9_skinnedeffect_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
+    # CNAEXT BasicEffect point/spot light: the same public, renderer-agnostic pixel witness used by
+    # EasyGL and Software. DIRECTX9 selects its CNA-owned SM3 variant only while the extension is
+    # active; ordinary BasicEffect draws keep Microsoft's original bytecode.
+    cna_directx9_test(cna_test_directx9_basiceffect_punctual_light
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/basiceffect_punctuallight_test.cpp)
+    cna_directx9_ctest_command(_directx9_basiceffect_punctual_light_cmd
+                               cna_test_directx9_basiceffect_punctual_light)
+    cna_register_renderer_test(NAME DirectX9_BasicEffect_PunctualLight
+        COMMAND ${_directx9_basiceffect_punctual_light_cmd}
+        TIMEOUT 60 LABELS "DIRECTX9")
+
+    cna_directx9_test(cna_test_directx9_skinnedeffect_punctual_light
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_punctuallight_test.cpp)
+    cna_directx9_ctest_command(_directx9_skinnedeffect_punctual_light_cmd
+                               cna_test_directx9_skinnedeffect_punctual_light)
+    cna_register_renderer_test(NAME DirectX9_SkinnedEffect_PunctualLight
+        COMMAND ${_directx9_skinnedeffect_punctual_light_cmd}
+        TIMEOUT 60 LABELS "DIRECTX9")
+
     # D9-83: real hardware instancing via SetStreamSourceFreq (CNA's own CNAEXT Instanced3D shader).
     cna_directx9_test(cna_test_directx9_instanced directx9_instanced_test.cpp)
     cna_directx9_ctest_command(_directx9_instanced_cmd cna_test_directx9_instanced)
@@ -182,14 +201,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
 
     # GLTF-213: exact mid-grey transfer witnesses on both SM3 PBR pixel shaders.
     cna_directx9_test(cna_test_directx9_pbr_srgb_transfer
-                      ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+                      ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
     cna_directx9_ctest_command(_directx9_pbr_srgb_cmd cna_test_directx9_pbr_srgb_transfer)
     cna_register_renderer_test(NAME DirectX9_Pbr_SrgbTransfer COMMAND ${_directx9_pbr_srgb_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
     # GLTF-343/344: SM3 witnesses for dielectric F0/F90 on rigid and skinned PBR paths.
     cna_directx9_test(cna_test_directx9_pbr_fresnel_factors
-                      ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+                      ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
     cna_directx9_ctest_command(_directx9_pbr_fresnel_cmd cna_test_directx9_pbr_fresnel_factors)
     cna_register_renderer_test(NAME DirectX9_Pbr_FresnelFactors COMMAND ${_directx9_pbr_fresnel_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
@@ -228,7 +247,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # include/ root), so this target gets the implementation root itself, scoped to it
     # alone -- the same includer-relative "shaders/..." spelling the renderer TUs use.
     target_include_directories(cna_test_directx9_shadercache PRIVATE
-        ${CMAKE_SOURCE_DIR}/modules/renderers/directx9/src)
+        ${CNA_SOURCE_DIR}/modules/renderers/directx9/src)
     cna_directx9_ctest_command(_directx9_shadercache_cmd cna_test_directx9_shadercache)
     cna_register_renderer_test(NAME DirectX9_ShaderCache COMMAND ${_directx9_shadercache_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
@@ -239,22 +258,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # D3D9 state object was created/bound". Same 4-test subset the retired DirectX11 suite
     # established (DirectX11_BlendState_Opaque/DirectX11_BlendState_AlphaBlend/
     # DirectX11_DepthStencilState_StencilEnable/DirectX11_RasterizerState_CullMode).
-    cna_directx9_test(cna_test_directx9_blendstate_opaque ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_opaque_test.cpp)
+    cna_directx9_test(cna_test_directx9_blendstate_opaque ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_opaque_test.cpp)
     cna_directx9_ctest_command(_directx9_blend_opaque_cmd cna_test_directx9_blendstate_opaque)
     cna_register_renderer_test(NAME DirectX9_BlendState_Opaque COMMAND ${_directx9_blend_opaque_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    cna_directx9_test(cna_test_directx9_blendstate_alphablend ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_alphablend_test.cpp)
+    cna_directx9_test(cna_test_directx9_blendstate_alphablend ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_alphablend_test.cpp)
     cna_directx9_ctest_command(_directx9_blend_alpha_cmd cna_test_directx9_blendstate_alphablend)
     cna_register_renderer_test(NAME DirectX9_BlendState_AlphaBlend COMMAND ${_directx9_blend_alpha_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    cna_directx9_test(cna_test_directx9_depthstencilstate_stencil_enable ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+    cna_directx9_test(cna_test_directx9_depthstencilstate_stencil_enable ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_stencil_enable_test.cpp)
     cna_directx9_ctest_command(_directx9_ds_stencil_cmd cna_test_directx9_depthstencilstate_stencil_enable)
     cna_register_renderer_test(NAME DirectX9_DepthStencilState_StencilEnable COMMAND ${_directx9_ds_stencil_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
-    cna_directx9_test(cna_test_directx9_rasterizerstate_cullmode ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp)
+    cna_directx9_test(cna_test_directx9_rasterizerstate_cullmode ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_test.cpp)
     cna_directx9_ctest_command(_directx9_rast_cullmode_cmd cna_test_directx9_rasterizerstate_cullmode)
     cna_register_renderer_test(NAME DirectX9_RasterizerState_CullMode COMMAND ${_directx9_rast_cullmode_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
@@ -264,14 +283,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # judges its output against tools/xna-oracle/Oracle.cs's own, or -- D9-120, below -- against
     # the checked-in reference images). Reuses the cna_directx9_test() macro purely for its build/link
     # setup, deliberately without registering IT DIRECTLY via add_test().
-    cna_directx9_test(cna_oracle_render ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
+    cna_directx9_test(cna_oracle_render ${CNA_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
 
     # D9-120: promotes the D9-A oracle corpus into a REAL CTest, running every checked-in scene
     # through cna_oracle_render.exe (above) and diffing against the checked-in real XNA 4.0
     # reference PNG (tools/xna-oracle/reference/*.png, D9-A4's own tolerance=0) -- deliberately
     # does NOT need the XNA Wine prefix at all, only the D3D9 one every other test here already
     # needs. See scripts/run-oracle-corpus-diff.sh's own header comment for the full contract.
-    cna_register_renderer_test(NAME D3D9_XNA_Diff COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff.sh $<TARGET_FILE:cna_oracle_render>
+    cna_register_renderer_test(NAME D3D9_XNA_Diff COMMAND ${CNA_SOURCE_DIR}/scripts/run-oracle-corpus-diff.sh $<TARGET_FILE:cna_oracle_render>
         TIMEOUT 300 LABELS "DIRECTX9")
 
     # D9-110 (Phase D9-11, ask-first, authorized 2026-07-15): validates the CTAB constant-table

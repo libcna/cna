@@ -7,17 +7,18 @@
 # stock effects (effects/, provenance in effects/README.md) are embedded into a generated header
 # rather than loaded from disk at run time -- a test binary stays self-contained, exactly like the
 # generated shader headers the SDL_GPU family carries.
-set(CNA_FNA3D_STOCK_EFFECTS
+set(CNA_FNA3D_EMBEDDED_EFFECTS
     SpriteEffect
     BasicEffect
     AlphaTestEffect
     DualTextureEffect
     EnvironmentMapEffect
-    SkinnedEffect)
+    SkinnedEffect
+    CnaPunctualEffect)
 
 set(_cna_fna3d_effect_args)
 set(_cna_fna3d_effect_inputs)
-foreach(_effect IN LISTS CNA_FNA3D_STOCK_EFFECTS)
+foreach(_effect IN LISTS CNA_FNA3D_EMBEDDED_EFFECTS)
     set(_effect_path "${CMAKE_CURRENT_SOURCE_DIR}/effects/${_effect}.fxb")
     if(NOT EXISTS "${_effect_path}")
         message(FATAL_ERROR

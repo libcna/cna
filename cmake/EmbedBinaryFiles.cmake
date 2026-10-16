@@ -1,12 +1,14 @@
 # Embeds data files into a target as `{name, bytes, size}` records, generated at build time with
 # CMake alone (no Python), so every platform and toolchain gets the same bytes.
 #
-#   cna_embed_binary_files(<target> <namespace> <function> <output.cpp> [BASE <dir>] FILES <file>...)
+#   cna_embed_binary_files(<target> <namespace> <function> <output.cpp> [BASE <dir>] [COMPRESS] FILES <file>...)
 #
 # generates <output.cpp> defining, in <namespace>,
 #   std::span<const CNA::Internal::EmbeddedFile> <function>();
 # whose records are sorted by name: the file name, or with BASE the path relative to <dir>
-# ("v3/catalog.json"). Invoked with -P this file is the generator itself.
+# ("v3/catalog.json"). With COMPRESS each file is stored as a raw deflate stream (made by CMake's
+# own gzip, header and trailer stripped so the bytes do not depend on the build time) and its
+# record's inflatedSize is the original length. Invoked with -P this file is the generator itself.
 
 if(CMAKE_SCRIPT_MODE_FILE)
     # Script mode: OUTPUT, NAMESPACE, FUNCTION, FILES_LIST (a file that sets FILES), optional BASE.
@@ -21,14 +23,30 @@ if(CMAKE_SCRIPT_MODE_FILE)
         else()
             get_filename_component(_name "${_file}" NAME)
         endif()
-        file(READ "${_file}" _hex HEX)
+        set(_inflated 0)
+        if(COMPRESS)
+            file(SIZE "${_file}" _inflated)
+            file(ARCHIVE_CREATE OUTPUT "${OUTPUT}.gz" PATHS "${_file}" FORMAT raw COMPRESSION GZip COMPRESSION_LEVEL 9)
+            file(READ "${OUTPUT}.gz" _gzip HEX)
+            file(REMOVE "${OUTPUT}.gz")
+            # A gzip member: 10-byte header (no optional fields), the deflate stream, CRC-32 and size.
+            string(SUBSTRING "${_gzip}" 0 8 _magic)
+            if(NOT _magic STREQUAL "1f8b0800")
+                message(FATAL_ERROR "cna_embed_binary_files: unexpected gzip header ${_magic} for ${_file}")
+            endif()
+            string(LENGTH "${_gzip}" _gzip_length)
+            math(EXPR _deflate_length "${_gzip_length} - 36")
+            string(SUBSTRING "${_gzip}" 20 ${_deflate_length} _hex)
+        else()
+            file(READ "${_file}" _hex HEX)
+        endif()
         string(LENGTH "${_hex}" _hex_length)
         math(EXPR _size "${_hex_length} / 2")
         # 32 bytes per line keeps the generated source friendly to every compiler.
         string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," _bytes "${_hex}")
         string(REGEX REPLACE "((0x[0-9a-f][0-9a-f],){32})" "\\1\n" _bytes "${_bytes}")
         string(APPEND _body "alignas(16) const unsigned char file${_index}[${_size}] = {\n${_bytes}\n};\n")
-        string(APPEND _table "    {\"${_name}\", file${_index}, ${_size}},\n")
+        string(APPEND _table "    {\"${_name}\", file${_index}, ${_size}, ${_inflated}},\n")
         math(EXPR _index "${_index} + 1")
     endforeach()
     file(WRITE "${OUTPUT}.tmp"
@@ -45,7 +63,7 @@ endif()
 set(_cna_embed_binary_files_script "${CMAKE_CURRENT_LIST_FILE}")
 
 function(cna_embed_binary_files target namespace function output)
-    cmake_parse_arguments(PARSE_ARGV 4 _embed "" "BASE" "FILES")
+    cmake_parse_arguments(PARSE_ARGV 4 _embed "COMPRESS" "BASE" "FILES")
     # plans/plan_apple_m4.md AM4-299: the list travels in a file, not on the command line. An
     # escaped `;`-list in one argument survives Ninja and Makefiles, but the Visual Studio
     # generator's cmd.exe quoting left a literal `"` on its last element ("failed to open for
@@ -55,7 +73,7 @@ function(cna_embed_binary_files target namespace function output)
     add_custom_command(
         OUTPUT "${output}"
         COMMAND "${CMAKE_COMMAND}" "-DOUTPUT=${output}" "-DNAMESPACE=${namespace}" "-DFUNCTION=${function}"
-                "-DBASE=${_embed_BASE}" "-DFILES_LIST=${_list_file}" -P "${_cna_embed_binary_files_script}"
+                "-DBASE=${_embed_BASE}" "-DFILES_LIST=${_list_file}" "-DCOMPRESS=${_embed_COMPRESS}" -P "${_cna_embed_binary_files_script}"
         DEPENDS ${_embed_FILES} "${_list_file}" "${_cna_embed_binary_files_script}"
         COMMENT "Embedding ${function} data files"
         VERBATIM)

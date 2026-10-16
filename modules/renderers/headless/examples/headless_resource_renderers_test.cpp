@@ -69,60 +69,63 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<HeadlessRenderer&>(dev.GetRenderer());
         const HeadlessStatistics baseline = renderer.GetStatistics();
+        int additionalCubeResources = 0;
 
         // Check A: TextureCube, two different faces independently readable.
         {
             TextureCube cube(dev, 4, false, SurfaceFormat::Color);
             std::vector<Color> posX(16, Color::Red);
             std::vector<Color> negX(16, Color::Blue);
-            // These two uploads used to be issued bare, as if they had stored
-            // something. They never did -- this renderer's cube SetData validates its arguments,
-            // records a trace entry and keeps no pixels -- and the shared layer had no way to say
-            // so. Both are now deterministic rejections, asserted here rather than assumed.
-            bool threwSetPosX = false, threwSetNegX = false;
-            try { cube.SetData(CubeMapFace::PositiveX, posX.data(), 16); }
-            catch (const System::NotSupportedException&) { threwSetPosX = true; }
-            catch (...) {}
-            try { cube.SetData(CubeMapFace::NegativeX, negX.data(), 16); }
-            catch (const System::NotSupportedException&) { threwSetNegX = true; }
-            catch (...) {}
-            check(threwSetPosX && threwSetNegX,
-                  "TextureCube: SetData() on two independent faces throws a deterministic "
-                  "System::NotSupportedException -- this renderer stores no pixel data, so it "
-                  "refuses the upload rather than accepting and discarding it ");
-            // False-positive audit: these two checks used to be `check(true, ...)`
-            // -- they asserted nothing at all about what GetData produced, so any behaviour
-            // whatsoever passed them. They were then strengthened to PIN what the Headless cube
-            // renderer actually did: SetData recorded but not stored, and GetData overwriting the
-            // caller's whole destination with zeros -- the same fabrication the honest Texture2D::GetData contract removed
-            // from the Texture2D path, surviving on the separate ITextureCubeRenderer interface.
-            //
-            // Has now closed that: this renderer stores no pixel data by design, so
-            // its cube readback refuses instead of inventing one. The sentinel pre-fill stays --
-            // it is what proves the rejection leaves the caller's destination byte-for-byte
-            // untouched, which "an exception was thrown" alone would not.
-            const Color sentinelCD(0xCD, 0xCD, 0xCD, 0xCD);
-            const Color sentinelA5(0xA5, 0xA5, 0xA5, 0xA5);
-            std::vector<Color> readPosX(16, sentinelCD);
-            std::vector<Color> readNegX(16, sentinelA5);
-            bool threwPosX = false, threwNegX = false;
-            try { cube.GetData(CubeMapFace::PositiveX, readPosX.data(), 16); }
-            catch (const System::NotSupportedException&) { threwPosX = true; }
-            catch (...) {}
-            try { cube.GetData(CubeMapFace::NegativeX, readNegX.data(), 16); }
-            catch (const System::NotSupportedException&) { threwNegX = true; }
-            catch (...) {}
+            cube.SetData(CubeMapFace::PositiveX, posX.data(), 16);
+            cube.SetData(CubeMapFace::NegativeX, negX.data(), 16);
+            check(true,
+                  "TextureCube: SetData() stores two independent caller-authored faces");
+            std::vector<Color> readPosX(16);
+            std::vector<Color> readNegX(16);
+            cube.GetData(CubeMapFace::PositiveX, readPosX.data(), 16);
+            cube.GetData(CubeMapFace::NegativeX, readNegX.data(), 16);
             const auto allEqual = [](const std::vector<Color>& v, const Color& c) {
                 for (const Color& got : v)
                     if (got.getPackedValueProperty() != c.getPackedValueProperty()) return false;
                 return true;
             };
-            check(threwPosX && threwNegX &&
-                      allEqual(readPosX, sentinelCD) && allEqual(readNegX, sentinelA5),
-                  "TextureCube: GetData() on two independent faces throws a deterministic "
-                  "System::NotSupportedException and leaves BOTH destinations byte-for-byte at "
-                  "their non-zero sentinels -- this renderer stores no pixel data, so it refuses "
-                  "rather than fabricating a transparent-black face ");
+            check(allEqual(readPosX, Color::Red) && allEqual(readNegX, Color::Blue),
+                  "TextureCube: GetData() preserves two independent faces exactly");
+
+            bool allFormatsExact = true;
+            for (int ordinal = static_cast<int>(SurfaceFormat::Color);
+                 ordinal <= static_cast<int>(SurfaceFormat::HdrBlendable); ++ordinal)
+            {
+                if (renderer.ClassifyTextureCubeFormatEXT(ordinal) !=
+                    RendererFormatVerdict::Supported)
+                    continue;
+                ++additionalCubeResources;
+                const auto format = static_cast<SurfaceFormat>(ordinal);
+                const bool compressed = format == SurfaceFormat::Dxt1 ||
+                                        format == SurfaceFormat::Dxt3 ||
+                                        format == SurfaceFormat::Dxt5;
+                const int byteCount = compressed
+                    ? Texture::GetFormatSizeEXT(format)
+                    : 16 * Texture::GetFormatSizeEXT(format);
+                std::vector<std::uint8_t> source(static_cast<std::size_t>(byteCount));
+                for (int i = 0; i < byteCount; ++i)
+                    source[static_cast<std::size_t>(i)] =
+                        static_cast<std::uint8_t>((i * 31 + ordinal * 17) & 0xff);
+                std::vector<std::uint8_t> result(static_cast<std::size_t>(byteCount));
+                try
+                {
+                    TextureCube formatted(dev, 4, false, format);
+                    formatted.SetData(CubeMapFace::PositiveZ, source.data(), byteCount);
+                    formatted.GetData(CubeMapFace::PositiveZ, result.data(), byteCount);
+                    allFormatsExact &= result == source;
+                }
+                catch (...)
+                {
+                    allFormatsExact = false;
+                }
+            }
+            check(allFormatsExact,
+                  "TextureCube: every advertised classic format round-trips exact native bytes");
         }
 
         // Check B: Texture3D construction is REJECTED on this renderer.
@@ -214,19 +217,20 @@ protected:
         {
             const HeadlessStatistics& stats = renderer.GetStatistics();
             const bool countsOk =
-                stats.textureCubesCreated == baseline.textureCubesCreated + 1 &&
+                stats.textureCubesCreated ==
+                    baseline.textureCubesCreated + 1 + additionalCubeResources &&
                 // Check B's Texture3D is now rejected before any renderer resource is created
                 //, so this counter must NOT move.
                 stats.textures3DCreated == baseline.textures3DCreated &&
                 stats.renderTargetsCreated == baseline.renderTargetsCreated + 1 &&
                 stats.renderTargetCubesCreated == baseline.renderTargetCubesCreated + 1 &&
                 stats.effectsCreated == baseline.effectsCreated + 1;
-            check(countsOk, "resource-creation counters increment by exactly one for each type created above");
+            check(countsOk,
+                  "resource-creation counters track every cube plus each other type created above");
         }
 
-        // Added the cube SetData rejection check to Check A.
-        std::printf("=== %d/%d PASS ===\n", passCount_, 10);
-        result_ = (passCount_ == 10) ? 0 : 1;
+        std::printf("=== %d/%d PASS ===\n", passCount_, 11);
+        result_ = (passCount_ == 11) ? 0 : 1;
         Exit();
     }
 

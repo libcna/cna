@@ -186,6 +186,14 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // ---- IGraphicsRenderer: real (Phase D9-5, D9-50/D9-51) ----
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const override;
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override;
         /// D9-51: CubeMap creation is gated on the real D3DCAPS9 (D3DPTEXTURECAPS_CUBEMAP) queried
         /// at device-creation time -- returns nullptr (IGraphicsRenderer's own "unsupported"
         /// convention) rather than assuming support, unlike CreateTexture() above.
@@ -266,9 +274,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-82: real -- BasicEffect with VertexColorEnabled=true/DiffuseColor=white/fog disabled/
         /// no texture/no lighting (matches every other renderer's own DrawColoredPrimitives scope),
         /// via the real "BasicEffect_VSBasicVcNoFog"/"BasicEffect_PSBasicNoFog" shader pair
-        /// (D9-80's dispatch tables) and D9-72's real register layout. Only stride 16
-        /// (VertexPositionColor) so far -- other strides/effect variants are DrawPrimitivesEx's own
-        /// job (D9-82b/c, not yet implemented).
+        /// (D9-80's dispatch tables) and D9-72's real register layout. This convenience path is
+        /// stride 16 (VertexPositionColor); general stock-effect dispatch uses DrawPrimitivesEx.
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -428,6 +435,15 @@ namespace CNA::Internal::Renderers::DirectX9
          * @return True when the device has not been lost.
          */
         [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /// CNA's SM3 stock-extension and PBR shaders sample the full shared shadow contract:
+        /// single/cascaded directional maps plus point-cube and spot-map shadows.
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override
+        {
+            return device_ != nullptr &&
+                   caps_.VertexShaderVersion >= static_cast<DWORD>(D3DVS_VERSION(3, 0)) &&
+                   caps_.PixelShaderVersion >= static_cast<DWORD>(D3DPS_VERSION(3, 0)) &&
+                   (caps_.TextureCaps & D3DPTEXTURECAPS_CUBEMAP) != 0;
+        }
         /**
          * @brief Polls device recovery and applies pending resizes before the next Draw.
          * @return True when the native device is ready to draw.
@@ -591,6 +607,14 @@ namespace CNA::Internal::Renderers::DirectX9
                                 std::size_t stride, const Matrix& world, const Matrix& view,
                                 const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                 const GpuDrawParams& params);
+        /// CNAEXT point/spot-light variant for lit BasicEffect and SkinnedEffect draws. The
+        /// original XNA bytecode remains selected whenever no punctual source is active. Defined in
+        /// `D3D9BasicPunctualDraw.cpp`.
+        void DrawBasicPunctualEffectEXT(const IVertexBufferRenderer& vb,
+                                        const IIndexBufferRenderer* ib, std::size_t stride,
+                                        const Matrix& world, const Matrix& view,
+                                        const Matrix& projection, PrimitiveType primitive,
+                                        int primitiveCount, const GpuDrawParams& params);
         /// D9-82c: real `AlphaTestEffect` dispatch -- same shape as `DrawBasicEffectEXT`, simpler
         /// (no lighting, always textured). `isEqNe` sourced losslessly from
         /// `params.alphaTest[1] (tolerance) > 0` per `D9-81`'s own finding. Defined in
@@ -756,6 +780,24 @@ namespace CNA::Internal::Renderers::DirectX9
         ComPtr<IDirect3DPixelShader9> instancedPS_;
         ComPtr<IDirect3DVertexDeclaration9> instancedVertexDecl_;
 
+        /// CNAEXT BasicEffect/SkinnedEffect point/spot-light variants. The VS input shapes preserve
+        /// the optional texture-coordinate/vertex-colour and skinning contracts; textured and
+        /// untextured PS twins avoid sampling an unbound texture. Lazily created and reset-independent.
+        ComPtr<IDirect3DVertexShader9> basicPunctualVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualColorVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualTextureVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualTextureColorVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualSkinnedVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualSkinnedColorVS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTexturePS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualPointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualSpotDirectionalShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTexturePointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTextureSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTextureSpotDirectionalShadowPS_;
+
         /// D3D9 PBR porting task: CNA's own CNAEXT Pbr3D/PbrSkinned3D shader pairs, lazily created
         /// on first `DrawPbrEffectEXT()` call. Not `D3DPOOL_DEFAULT` resources -- survive `Reset()`
         /// unaffected, same as `shaderCache_`/`instancedVS_` above.
@@ -763,10 +805,16 @@ namespace CNA::Internal::Renderers::DirectX9
         /// plans/plan_gltf.md GLTF-465: the stride-60 twin, whose input struct declares COLOR0.
         ComPtr<IDirect3DVertexShader9> pbrColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrPS_;
+        ComPtr<IDirect3DPixelShader9> pbrPointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSpotDirectionalShadowPS_;
         ComPtr<IDirect3DVertexShader9> pbrSkinnedVS_;
         /// plans/plan_gltf.md GLTF-465: the stride-80 twin.
         ComPtr<IDirect3DVertexShader9> pbrSkinnedColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrSkinnedPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSkinnedPointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSkinnedSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSkinnedSpotDirectionalShadowPS_;
         /// D3D9 skinned-vertex-color porting task: CNA's own CNAEXT SkinnedVertexColor3D shader
         /// pair, lazily created on first `DrawSkinnedVertexColorEXT()` call.
         ComPtr<IDirect3DVertexShader9> skinnedVertexColorVS_;

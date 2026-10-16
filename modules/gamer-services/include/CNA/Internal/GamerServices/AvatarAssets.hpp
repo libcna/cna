@@ -37,8 +37,14 @@ std::string_view boneName(int slot);
 int boneIndex(std::string_view name);
 
 /** @brief Every file of every catalog version compiled into the library, named "v<N>/<file>"
- * (generated source). @return Files by name. */
+ * (generated source), stored deflated: read them through inflateEmbedded. @return Files by name. */
 std::span<const EmbeddedFile> embeddedCatalogFiles();
+/** @brief The contents of a compiled-in file. @param file Record. @return Bytes.
+ * @throws std::runtime_error when the stored data is damaged. */
+std::vector<std::uint8_t> inflateEmbedded(const EmbeddedFile& file);
+/** @brief The contents of one compiled-in catalog file by name ("v3/catalog.json").
+ * @param name Name. @return Bytes, or empty when no such file is compiled in. */
+std::vector<std::uint8_t> embeddedCatalogFile(std::string_view name);
 
 /** @brief One file listed by a catalog manifest. */
 struct CatalogAsset {
@@ -50,22 +56,93 @@ struct CatalogAsset {
     std::size_t size=0;
 };
 
-/** @brief A wardrobe item and its per-body-type asset. */
+/** @brief Where a hat flattens the hair it covers (the catalog's hairCover). */
+struct HairCover {
+    /** @brief The covered region's lowest head angle, as a fraction of pi from the crown, at the
+     * face, the temples, the sides and the nape. */
+    std::array<float,4> line{};
+    /** @brief How far above the head surface covered hair is flattened to, authored metres. */
+    float lift=0.0f;
+};
+
+/** @brief How an item meets face shaping: shaped by the controls of its scope, or carried rigidly
+ * by the face features it rests on. */
+enum class ItemFollow : std::uint8_t { Shape, Eyes, Ears };
+
+/** @brief A catalog entry a description can name: a wardrobe item, accessory or feature item (a
+ * model per body type), or a face style (expression atlas tiles). */
 struct CatalogItem {
     /** @brief Stable id a description stores. */
     std::uint16_t id=0;
-    /** @brief Wardrobe slot. */
+    /** @brief What it is. */
     AvatarItemSlot slot=AvatarItemSlot::Hair;
     /** @brief Item name. */
     std::string name;
-    /** @brief Asset per body type (female, male). */
+    /** @brief What the editor calls it ("Bob with bangs"); empty to derive it from the name. */
+    std::string label;
+    /** @brief Model per body type (female, male); empty for a face style. */
     std::array<std::string,2> assets;
-    /** @brief Relative chance CreateRandom picks it, per body type (0 = never). */
+    /** @brief Relative chance random avatars get it, per body type (0 = never). */
     std::array<float,2> randomWeight{1.0f,1.0f};
-    /** @brief Hair: the style's assets for wearing under a hat that covers hair (empty = none). */
-    std::array<std::string,2> hatAssets;
-    /** @brief Hat: it covers the hair, which then uses its hatAssets. */
-    bool coversHair=false;
+    /** @brief The lowest description format that may name it: 1 for the items of the first catalog
+     * v3 release, 3 for everything added since (a format 1 or 2 reader never meets an id it lacks). */
+    std::uint8_t format=1;
+    /** @brief A hat: the hair it covers and flattens; empty when it covers none. */
+    std::optional<HairCover> hairCover;
+    /** @brief Shaped by face controls, or carried by the eyes (glasses) or ears (earrings). */
+    ItemFollow follow=ItemFollow::Shape;
+    /** @brief Kinds of item it hides while worn (gloves hide rings). */
+    std::vector<AvatarItemSlot> hides;
+    /** @brief A face style's atlas tiles: eyebrows [state * 2 + side] for the five eyebrow states;
+     * eye shadow and blush [side]; eyeliner [closed * 2 + side] for an open and a closed eye; lips
+     * [mouth state] for the fourteen mouth states. */
+    std::vector<int> tiles;
+    /** @brief A face style's opacity. */
+    float opacity=1.0f;
+};
+
+/** @brief Named points of a body's face, authored model space (the catalog's faceAnchors). */
+struct FaceAnchors {
+    /** @brief Eye centres (the avatar's left and right). */
+    Microsoft::Xna::Framework::Vector3 eyeLeft, eyeRight;
+    /** @brief Ear centres. */
+    Microsoft::Xna::Framework::Vector3 earLeft, earRight;
+};
+
+/** @brief The head surface as radii around its centre, for flattening hair under a hat. */
+struct HeadSurface {
+    /** @brief Centre, authored model space. */
+    Microsoft::Xna::Framework::Vector3 centre;
+    /** @brief Rows from the crown (angle 0) to under the jaw (pi), inclusive. */
+    int rings=0;
+    /** @brief Columns around, evenly from the back (angle -pi) through the face (0) to the back. */
+    int segments=0;
+    /** @brief Distance from the centre per row and column. */
+    std::vector<float> radii;
+    /** @brief The surface's distance from the centre in a direction (bilinear). @param theta Angle
+     * from the crown. @param phi Angle around from the face toward the avatar's left. @return Metres. */
+    [[nodiscard]] float radius(float theta,float phi) const;
+};
+
+/** @brief A ready-made outfit: a quick way to set several wardrobe items and colours at once. */
+struct CatalogOutfit {
+    /** @brief Name. */
+    std::string name;
+    /** @brief Items it sets, by kind (0 removes an optional one). */
+    std::vector<std::pair<AvatarItemSlot,std::uint16_t>> items;
+    /** @brief Colours it sets. */
+    std::vector<std::pair<AvatarColorSlot,AvatarColor>> colors;
+};
+
+/** @brief A named shape: several face controls (or the body's height, build and proportions) set
+ * together, each in [-1, 1] of its range. */
+struct FacePreset {
+    /** @brief The editor page it belongs to ("face", "eyes", "brows", "ears", "nose", "mouth", "body"). */
+    std::string group;
+    /** @brief Name. */
+    std::string name;
+    /** @brief Values by control name ("jawWidth"; "height", "build", "proportion" for the body). */
+    std::vector<std::pair<std::string,float>> values;
 };
 
 /** @brief One deformer of a face-shape control (the catalog's faceControls). */
@@ -104,6 +181,8 @@ struct FaceLayout {
     int tileSize=0;
     /** @brief Tiles per atlas row. */
     int columns=0;
+    /** @brief Tiles in the atlas. */
+    int tiles=0;
     /** @brief Eye tiles [AvatarEye][left/right][white layer, iris layer]. */
     std::array<std::array<std::array<int,2>,2>,14> eyes{};
     /** @brief Eyebrow tiles [AvatarEyebrow][left/right]. */
@@ -116,14 +195,27 @@ struct FaceLayout {
 struct CatalogManifest {
     /** @brief Catalog version descriptions refer to. */
     std::uint16_t version=0;
+    /** @brief Revision of that version: a revised catalog keeps every id of the previous revision in
+     * its kind and adds others, which only format 3 descriptions name. */
+    std::uint16_t revision=1;
     /** @brief Body asset per body type. */
     std::array<std::string,2> bodies;
     /** @brief Authored feet-to-head height per body type. */
     std::array<std::uint16_t,2> authoredHeightMillimeters{};
-    /** @brief Wardrobe items. */
+    /** @brief Wardrobe items and accessories. */
     std::vector<CatalogItem> items;
-    /** @brief Feature items (facial hair) a format 2 description can name. */
+    /** @brief Feature items (facial hair, ears). */
     std::vector<CatalogItem> featureItems;
+    /** @brief Face styles (eyebrows, eye shadow, eyeliner, blush, lips). */
+    std::vector<CatalogItem> faceStyles;
+    /** @brief Face anchors per body type. */
+    std::array<FaceAnchors,2> faceAnchors{};
+    /** @brief Head surface per body type (empty radii: no hair is flattened under hats). */
+    std::array<HeadSurface,2> headSurface;
+    /** @brief Ready-made outfits. */
+    std::vector<CatalogOutfit> outfits;
+    /** @brief Named shapes for the editor. */
+    std::vector<FacePreset> facePresets;
     /** @brief Face-shape controls per body type (female, male); empty when the catalog has none. */
     std::array<std::vector<FaceControl>,2> faceControls;
     /** @brief Face feature atlas asset. */
@@ -134,10 +226,20 @@ struct CatalogManifest {
     std::string animationsAsset;
     /** @brief Every listed file by name. */
     std::map<std::string,CatalogAsset,std::less<>> assets;
-    /** @brief Finds an item. @param id Item id. @return Item or null. */
+    /** @brief Finds a wardrobe item or accessory. @param id Item id. @return Item or null. */
     const CatalogItem* item(std::uint16_t id) const;
     /** @brief Finds a feature item. @param id Item id. @return Item or null. */
     const CatalogItem* featureItem(std::uint16_t id) const;
+    /** @brief Finds a face style. @param id Style id. @return Style or null. */
+    const CatalogItem* faceStyle(std::uint16_t id) const;
+    /** @brief Finds an entry of any kind (ids are unique across kinds). @param id Id. @return Entry or null. */
+    const CatalogItem* entry(std::uint16_t id) const;
+    /** @brief Finds an entry of one kind. @param id Id. @param slot Kind. @return Entry or null. */
+    const CatalogItem* item(std::uint16_t id,AvatarItemSlot slot) const;
+    /** @brief Every entry of one kind, in catalog order. @param slot Kind. @return Entries. */
+    std::vector<const CatalogItem*> itemsOf(AvatarItemSlot slot) const;
+    /** @brief A face control's parameter by name. @param body Body type. @param name Control name. @return Parameter or -1. */
+    int faceParameter(int body,std::string_view name) const;
 };
 
 /** @brief Parses and validates a manifest; every name, size and hash is checked, and the catalog
@@ -190,8 +292,8 @@ struct AssetBytes {
 std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::string_view name);
 
 /** @brief A compiled-in file with exactly this size and SHA-256, whatever catalog holds it.
- * @param asset Listed file. @return Its bytes, or empty. */
-std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset);
+ * @param asset Listed file. @return Its bytes (inflated), or empty. */
+std::optional<AssetBytes> embeddedFileByContent(const CatalogAsset& asset);
 /** @brief The highest atlas tile index a layout names. @param layout Layout. @return Index. */
 int maximumFaceTile(const FaceLayout& layout);
 /** @brief One file of the installed pack of a catalog version, verified against its size and
@@ -199,8 +301,10 @@ int maximumFaceTile(const FaceLayout& layout);
 std::optional<std::vector<std::uint8_t>> installedCatalogFile(std::uint16_t version,const CatalogAsset& asset);
 
 /** @brief The catalog contract level this build reads (GLB attributes, manifest keys). A catalog
- * pack states the level it needs; a client never installs one it cannot read. */
-inline constexpr int CatalogReaderLevel=1;
+ * pack states the level it needs; a client never installs one it cannot read. Level 2 (catalog v3
+ * revision 2) adds shared texture files, face styles, accessories, ear shapes, hair covers, face
+ * anchors and the head surface. */
+inline constexpr int CatalogReaderLevel=2;
 /** @brief The catalog pack format this build installs. */
 inline constexpr int CatalogPackFormat=1;
 
@@ -306,14 +410,22 @@ struct AvatarPrimitive {
     std::string tint;
     /** @brief Base color factor. */
     Microsoft::Xna::Framework::Vector3 color{1.0f,1.0f,1.0f};
-    /** @brief Face feature decal ("eyeLeft", ...), empty for ordinary parts. */
+    /** @brief Face feature decal ("eyeLeft", "lips", "blushLeft", ...), empty for ordinary parts. */
     std::string feature;
-    /** @brief Decal layer (0 white/lines, 1 iris). */
+    /** @brief Decal layer (eyes: 0 white/lines, 1 iris and eyeliner). */
     int layer=0;
     /** @brief Scale of the renderer's specular highlight (material extra cnaSpecular, default 1). */
     float specular=1.0f;
-    /** @brief PNG of the base color texture, if any. */
+    /** @brief How tight the highlight is, the effect's specular power (material extra cnaShininess, default 24). */
+    float shininess=24.0f;
+    /** @brief Which of a pair it is (material extra cnaSide): 0 neither, 1 the avatar's left, 2 its right. */
+    int side=0;
+    /** @brief Drawn translucent over what is beneath (material extra cnaBlend "alpha"): stubble. */
+    bool blend=false;
+    /** @brief PNG of the base color texture embedded in the asset, if any. */
     std::vector<std::uint8_t> texturePng;
+    /** @brief A catalog texture file the base color texture is instead (material extra cnaTexture). */
+    std::string texture;
 };
 
 /** @brief One animation curve on a joint (glTF cubic spline). */
@@ -384,8 +496,9 @@ struct AvatarImage {
     std::vector<std::uint8_t> rgba;
 };
 
-/** @brief Face feature decals, indexed by AvatarModelPart::feature. */
-enum class AvatarFeature : int { None=-1, EyeLeft, EyeRight, EyebrowLeft, EyebrowRight, Mouth };
+/** @brief Face feature decals: the expression chooses the tile of the first six; a Static decal
+ * (makeup) always draws its own tile. */
+enum class AvatarFeature : int { None=-1, EyeLeft, EyeRight, EyebrowLeft, EyebrowRight, Mouth, Lips, Static };
 
 /** @brief A drawable part of an assembled avatar. */
 struct AvatarModelPart {
@@ -399,10 +512,22 @@ struct AvatarModelPart {
     int image=-1;
     /** @brief Decal this part is, drawn with the expression's atlas tile. */
     AvatarFeature feature=AvatarFeature::None;
+    /** @brief A Static decal's atlas tile. */
+    int tile=-1;
+    /** @brief A Static decal's tile while the eye it belongs to is closed (-1: the same tile). */
+    int closedTile=-1;
+    /** @brief The eye (0 left, 1 right) whose state chooses closedTile. */
+    int eye=0;
     /** @brief Decal layer (eyes: 0 white/lines, 1 iris). */
     int layer=0;
     /** @brief Scale of the specular highlight. */
     float specular=1.0f;
+    /** @brief The highlight's specular power. */
+    float shininess=24.0f;
+    /** @brief Opacity (decals and translucent parts). */
+    float alpha=1.0f;
+    /** @brief Drawn with the decals, translucent over what is beneath, although not a face feature. */
+    bool blend=false;
 };
 
 /** @brief An avatar assembled from a description, ready for upload. */
@@ -415,12 +540,16 @@ struct AvatarModel {
     std::array<Microsoft::Xna::Framework::Vector3,BoneCount> bindPositions{};
     /** @brief Opaque parts first, then decals. */
     std::vector<AvatarModelPart> parts;
-    /** @brief Part textures. */
-    std::vector<AvatarImage> images;
+    /** @brief Part textures (shared between models that use the same texture). */
+    std::vector<std::shared_ptr<const AvatarImage>> images;
     /** @brief Every expression tile of the face atlas. */
     std::shared_ptr<const std::vector<AvatarImage>> faceTiles;
     /** @brief Atlas tile indices. */
     FaceLayout face;
+    /** @brief The eyebrow tiles of the avatar's eyebrow style [AvatarEyebrow][left/right]. */
+    std::array<std::array<int,2>,5> eyebrowTiles{};
+    /** @brief The lip tiles of the avatar's lip style [AvatarMouth] (unused without one). */
+    std::array<int,14> lipTiles{};
     /** @brief Items the catalog could not resolve and that were replaced by a default. */
     std::vector<std::uint16_t> substitutedItems;
     /** @brief The description's catalog version was unavailable, so the newest compiled-in catalog

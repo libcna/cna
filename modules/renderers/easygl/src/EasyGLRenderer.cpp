@@ -2150,8 +2150,29 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLEffectRenderer::BindTextureCube(int unit, ITextureCubeRenderer* texture)
     {
         if (!texture) return;
+        MakeProgramCurrent();
         texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+
+        // A source shader owns its direction math, so expose an opt-in contract instead of
+        // rewriting arbitrary GLSL. A rendered GL cube has bottom-up face rows; uploaded cubes
+        // and the other renderer families use the ordinary lookup direction.
+        if (unit >= 0 && unit < 4)
+        {
+            const float flip =
+                dynamic_cast<const IRenderTargetCubeRenderer*>(texture) != nullptr ? 1.0f : 0.0f;
+            if (rtCubeFlipV_[unit] != flip || !rtCubeFlipVUploaded_)
+            {
+                rtCubeFlipV_[unit] = flip;
+                const int loc = program_.uniform_location("uRtCubeFlipV");
+                if (loc >= 0)
+                {
+                    program_.set_uniform(loc, rtCubeFlipV_[0], rtCubeFlipV_[1],
+                                         rtCubeFlipV_[2], rtCubeFlipV_[3]);
+                    rtCubeFlipVUploaded_ = true;
+                }
+            }
+        }
     }
 
     // plans/plan_graphics.md Task 863: same shape as BindTextureCube(), but for a sampler3D --
@@ -9803,6 +9824,7 @@ namespace CNA::Internal::Renderers::EasyGL
         p.loc_ibl_brdf       = p.prog.uniform_location("uIblBrdfLut");
         p.loc_ibl_mipcount   = p.prog.uniform_location("uIblMipCount");
         p.loc_ibl_intensity  = p.prog.uniform_location("uIblIntensity");
+        p.loc_ibl_cube_flip  = p.prog.uniform_location("uIblCubeFlip");
     }
 
     // The 63/128 correction exists for FILL edges: just under half a pixel keeps a triangle's pixel
@@ -10428,6 +10450,13 @@ namespace CNA::Internal::Renderers::EasyGL
                                                           ? params.iblPrefilteredMipCount : 1));
             if (p.loc_ibl_intensity >= 0)
                 p.prog.set_uniform(p.loc_ibl_intensity, params.iblIntensity);
+            if (p.loc_ibl_cube_flip >= 0)
+                p.prog.set_uniform(
+                    p.loc_ibl_cube_flip,
+                    dynamic_cast<const IRenderTargetCubeRenderer*>(params.iblIrradiance) != nullptr
+                        ? 1.0f : 0.0f,
+                    dynamic_cast<const IRenderTargetCubeRenderer*>(params.iblPrefilteredSpecular) != nullptr
+                        ? 1.0f : 0.0f);
             if (p.loc_ibl_irradiance >= 0)
             {
                 p.prog.set_uniform(p.loc_ibl_irradiance, 10);

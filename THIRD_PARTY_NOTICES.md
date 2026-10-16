@@ -251,6 +251,23 @@ product that uses it. This notice is that credit:
 > Portions of this software are copyright © 1996-2023 The FreeType Project (www.freetype.org).
 > All rights reserved.
 
+## stb_image (image and zlib decoding)
+
+[stb_image](https://github.com/nothings/stb) v2.30 by Sean Barrett, vendored unmodified as
+`third_party/stb/stb_image.h` (with `stb_image_write.h`), decodes images for textures and the
+content pipeline (`modules/graphics/src/Internal/ImageLoader.cpp`), and its zlib decoder inflates
+the deflated avatar catalog compiled into the gamer-services library
+(`modules/gamer-services/src/Internal/Avatars/AvatarInflate.cpp`). It is dual-licensed, at the
+user's choice, under the MIT License or into the public domain (the Unlicense); both texts are at
+the end of the header.
+
+## cgltf (glTF parsing)
+
+[cgltf](https://github.com/jkuhlmann/cgltf) v1.15 by Johannes Kuhlmann, vendored as
+`third_party/cgltf/cgltf.h`, parses glTF for the content pipeline's glTF import and the avatar
+asset reader (`modules/gamer-services/src/Internal/Avatars/AvatarGlb.cpp`). It is licensed under the
+MIT License; the text is in `third_party/cgltf/LICENSE`.
+
 ## stb_vorbis (Ogg Vorbis decoding for CNA's own mixer)
 
 `CNA_AUDIO_PLATFORM=ALSA` decodes Ogg Vorbis with [stb_vorbis](https://github.com/nothings/stb)

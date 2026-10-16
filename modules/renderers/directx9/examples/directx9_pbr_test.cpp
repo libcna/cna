@@ -25,6 +25,8 @@
 // Check D -- unsupported stride (params.pbr=true, params.skinned=false, stride 20 -- no matching
 //   CNA vertex layout for PbrEffect, which needs stride 48) throws a named error rather than
 //   silently drawing wrong.
+// Checks E-I -- the unshadowed PunctualLightEXT term: disabled, point, out-of-range point, spot
+//   aimed at/away from the surface, and the same point light through the skinned shader.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 //
@@ -129,6 +131,16 @@ namespace
         params.light2Diffuse[0] = params.light2Diffuse[1] = params.light2Diffuse[2] = 0.0f;
         params.pbrMetallicFactor = 0.0f;
         params.pbrRoughnessFactor = 1.0f;
+    }
+
+    void SetDirectPbrParams(GpuDrawParams& params, CNA::Internal::Renderers::ITextureRenderer* tex)
+    {
+        SetAmbientOnlyPbrParams(params, tex);
+        params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = 0.0f;
+        params.eyePositionWorld[2] = 3.0f;
+        params.light0Dir[0] = params.light0Dir[1] = 0.0f;
+        params.light0Dir[2] = -1.0f;
+        params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 6.0f;
     }
 }
 
@@ -242,6 +254,345 @@ protected:
             check(threw, "DrawPrimitivesEx (PbrEffect): unsupported stride 20 throws a named error");
         }
 
+        // Checks E-H: the rigid shader consumes the complete unshadowed point/spot contract.
+        // Ambient, emissive and all directional lights are zero, so only the punctual term can
+        // make the centre pixel non-black.
+        {
+            auto vb = renderer.CreateVertexBuffer(3);
+            vb->SetData(kTriPbr, 3, sizeof(VPNTanT));
+            const auto shadePunctual = [&](int kind, float range, float directionZ) {
+                GpuDrawParams params;
+                SetAmbientOnlyPbrParams(params, tex.get());
+                params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = 0.0f;
+                params.eyePositionWorld[2] = 3.0f;
+                params.punctualKind = kind;
+                params.punctualPosition[2] = 1.0f;
+                params.punctualDirection[0] = 0.0f;
+                params.punctualDirection[1] = 0.0f;
+                params.punctualDirection[2] = directionZ;
+                params.punctualDiffuse[0] = params.punctualDiffuse[1] =
+                    params.punctualDiffuse[2] = 6.0f;
+                params.punctualRange = range;
+                params.punctualCosInner = 0.9396926f; // cos(20 degrees)
+                params.punctualCosOuter = 0.7660444f; // cos(40 degrees)
+
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+
+            const int none = shadePunctual(0, 10.0f, 0.0f);
+            const int point = shadePunctual(1, 10.0f, 0.0f);
+            const int outOfRange = shadePunctual(1, 0.5f, 0.0f);
+            const int spotAt = shadePunctual(2, 10.0f, -1.0f);
+            const int spotAway = shadePunctual(2, 10.0f, 1.0f);
+            check(none < 10, "Pbr3D: disabled punctual light contributes nothing");
+            check(point > 120, "Pbr3D: in-range point light illuminates the surface");
+            check(outOfRange < 10, "Pbr3D: point light outside its range contributes nothing");
+            std::printf("[INFO] Pbr3D spot centre red: aimed-at=%d aimed-away=%d\n",
+                        spotAt, spotAway);
+            check(spotAt > 120, "Pbr3D: spot aimed at the surface illuminates it");
+            check(spotAway < 10, "Pbr3D: spot aimed away contributes nothing");
+        }
+
+        // Check I: the identical punctual constants and world-position/normal term reach the
+        // skinned pixel shader after an identity bone transform.
+        {
+            auto vb = renderer.CreateVertexBuffer(3);
+            vb->SetData(kTriPbrSkinned, 3, sizeof(VPNTanTW));
+            auto ib = renderer.CreateIndexBuffer16(3);
+            static const uint16_t kIdx[3] = {0, 1, 2};
+            ib->SetData16(kIdx, 3);
+
+            GpuDrawParams params;
+            SetAmbientOnlyPbrParams(params, tex.get());
+            params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = 0.0f;
+            params.eyePositionWorld[2] = 3.0f;
+            params.skinned = true;
+            params.weightsPerVertex = 1;
+            params.boneCount = 1;
+            const float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+            for (int i = 0; i < 16; ++i) params.boneTransforms[i] = identity[i];
+            params.punctualKind = 1;
+            params.punctualPosition[2] = 1.0f;
+            params.punctualDiffuse[0] = params.punctualDiffuse[1] =
+                params.punctualDiffuse[2] = 6.0f;
+            params.punctualRange = 10.0f;
+
+            dev.Clear(Color::Black);
+            renderer.DrawIndexedPrimitivesEx(
+                *vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() > 120,
+                  "PbrSkinned3D: point light survives identity-bone skinning");
+        }
+
+        // Checks J-N: the shadow bytecode samples the complete shared contract. Constant-colour
+        // maps turn every comparison into an unambiguous oracle: white means lit, black shadowed.
+        {
+            auto vb = renderer.CreateVertexBuffer(3);
+            vb->SetData(kTriPbr, 3, sizeof(VPNTanT));
+            auto white = Make1x1Texture(renderer, 255, 255, 255);
+            auto black = Make1x1Texture(renderer, 0, 0, 0);
+
+            const auto shadeDirectional = [&](CNA::Internal::Renderers::ITextureRenderer* map) {
+                GpuDrawParams params;
+                SetDirectPbrParams(params, white.get());
+                params.shadowsEnabled = true;
+                params.shadowMap = map;
+                params.shadowDepthBias = 0.0f;
+                params.shadowPcfRadius = 0;
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+
+            const int directionalLit = shadeDirectional(white.get());
+            const int directionalShadow = shadeDirectional(black.get());
+            std::printf("[INFO] Pbr3D directional shadow red: lit=%d shadow=%d\n",
+                        directionalLit, directionalShadow);
+            check(directionalLit > 80 && directionalShadow < 10,
+                  "Pbr3D: single directional shadow map attenuates direct light only");
+
+            ImageData atlasData;
+            atlasData.width = 2;
+            atlasData.height = 1;
+            atlasData.pixels = {0, 0, 0, 255, 255, 255, 255, 255};
+            auto atlas = renderer.CreateTexture(atlasData);
+            const auto shadeCascade = [&](bool secondCascade) {
+                GpuDrawParams params;
+                SetDirectPbrParams(params, white.get());
+                params.shadowsEnabled = true;
+                params.shadowMap = atlas.get();
+                params.shadowDepthBias = 0.0f;
+                params.shadowPcfRadius = 0;
+                params.cascadeCount = 2;
+                params.cascadeSplits[0] = secondCascade ? -1.0f : 1.0f;
+                params.cascadeSplits[1] = 2.0f;
+                for (int cascade = 0; cascade < 2; ++cascade)
+                {
+                    float* matrix = params.cascadeMatricesColMajor + cascade * 16;
+                    matrix[12] = cascade == 0 ? 0.25f : 0.75f;
+                    matrix[13] = 0.5f;
+                    matrix[14] = 0.5f;
+                    matrix[15] = 1.0f;
+                }
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+            const int cascade0 = shadeCascade(false);
+            const int cascade1 = shadeCascade(true);
+            std::printf("[INFO] Pbr3D cascade shadow red: cascade0=%d cascade1=%d\n",
+                        cascade0, cascade1);
+            check(cascade0 < 10 && cascade1 > 80,
+                  "Pbr3D: cascade selection samples the selected atlas slice");
+
+            auto whiteCube = renderer.CreateTextureCube(1, false, 0);
+            auto blackCube = renderer.CreateTextureCube(1, false, 0);
+            const uint8_t whitePixel[4] = {255, 255, 255, 255};
+            const uint8_t blackPixel[4] = {0, 0, 0, 255};
+            for (int face = 0; face < 6; ++face)
+            {
+                whiteCube->SetData(face, 0, 0, 0, 1, 1, whitePixel, sizeof(whitePixel));
+                blackCube->SetData(face, 0, 0, 0, 1, 1, blackPixel, sizeof(blackPixel));
+            }
+            const auto shadePoint = [&](CNA::Internal::Renderers::ITextureCubeRenderer* cube) {
+                GpuDrawParams params;
+                SetAmbientOnlyPbrParams(params, white.get());
+                params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = 0.0f;
+                params.eyePositionWorld[2] = 3.0f;
+                params.punctualKind = 1;
+                params.punctualPosition[2] = 1.0f;
+                params.punctualDiffuse[0] = params.punctualDiffuse[1] =
+                    params.punctualDiffuse[2] = 6.0f;
+                params.punctualRange = 10.0f;
+                params.punctualShadowBias = 0.0f;
+                params.punctualShadowCube = cube;
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+            const int pointLit = shadePoint(whiteCube.get());
+            const int pointShadow = shadePoint(blackCube.get());
+            check(pointLit > 80 && pointShadow < 10,
+                  "Pbr3D: point-light cube shadow attenuates only the punctual light");
+
+            const auto shadeSpot = [&](CNA::Internal::Renderers::ITextureRenderer* map) {
+                GpuDrawParams params;
+                SetAmbientOnlyPbrParams(params, white.get());
+                params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = 0.0f;
+                params.eyePositionWorld[2] = 3.0f;
+                params.punctualKind = 2;
+                params.punctualPosition[2] = 1.0f;
+                params.punctualDirection[0] = 0.0f;
+                params.punctualDirection[1] = 0.0f;
+                params.punctualDirection[2] = -1.0f;
+                params.punctualDiffuse[0] = params.punctualDiffuse[1] =
+                    params.punctualDiffuse[2] = 6.0f;
+                params.punctualRange = 10.0f;
+                params.punctualCosInner = 0.94f;
+                params.punctualCosOuter = 0.76f;
+                params.punctualShadowBias = 0.0f;
+                params.punctualShadowMap = map;
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+            const int spotLit = shadeSpot(white.get());
+            const int spotShadow = shadeSpot(black.get());
+            std::printf("[INFO] Pbr3D spot shadow red: lit=%d shadow=%d\n",
+                        spotLit, spotShadow);
+            check(spotLit > 80 && spotShadow < 10,
+                  "Pbr3D: spot-light shadow lookup attenuates only the punctual light");
+
+            const auto shadeDirectionalAndSpot = [&](CNA::Internal::Renderers::ITextureRenderer* directionalMap,
+                                                      CNA::Internal::Renderers::ITextureRenderer* spotMap,
+                                                      float directionalStrength,
+                                                      float spotStrength,
+                                                      bool cascaded) {
+                GpuDrawParams params;
+                SetDirectPbrParams(params, white.get());
+                params.light0Diffuse[0] = params.light0Diffuse[1] =
+                    params.light0Diffuse[2] = directionalStrength;
+                params.shadowsEnabled = true;
+                params.shadowMap = directionalMap;
+                params.shadowDepthBias = 0.0f;
+                params.shadowPcfRadius = 0;
+                if (cascaded)
+                {
+                    params.cascadeCount = 2;
+                    params.cascadeSplits[0] = -1.0f;
+                    params.cascadeSplits[1] = 2.0f;
+                    for (int cascade = 0; cascade < 2; ++cascade)
+                    {
+                        float* matrix = params.cascadeMatricesColMajor + cascade * 16;
+                        matrix[12] = cascade == 0 ? 0.25f : 0.75f;
+                        matrix[13] = 0.5f;
+                        matrix[14] = 0.5f;
+                        matrix[15] = 1.0f;
+                    }
+                }
+                params.punctualKind = 2;
+                params.punctualPosition[2] = 1.0f;
+                params.punctualDirection[0] = params.punctualDirection[1] = 0.0f;
+                params.punctualDirection[2] = -1.0f;
+                params.punctualDiffuse[0] = params.punctualDiffuse[1] =
+                    params.punctualDiffuse[2] = spotStrength;
+                params.punctualRange = 10.0f;
+                params.punctualCosInner = 0.94f;
+                params.punctualCosOuter = 0.76f;
+                params.punctualShadowBias = 0.0f;
+                params.punctualShadowMap = spotMap;
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+            check(shadeDirectionalAndSpot(white.get(), white.get(), 0.0f, 6.0f, false) > 80 &&
+                      shadeDirectionalAndSpot(white.get(), black.get(), 0.0f, 6.0f, false) < 10,
+                  "Pbr3D: combined directional-plus-spot variant samples the spot map");
+            check(shadeDirectionalAndSpot(white.get(), white.get(), 6.0f, 0.0f, false) > 80 &&
+                      shadeDirectionalAndSpot(black.get(), white.get(), 6.0f, 0.0f, false) < 10,
+                  "Pbr3D: combined directional-plus-spot variant samples the directional map");
+            check(shadeDirectionalAndSpot(atlas.get(), white.get(), 6.0f, 0.0f, true) > 80,
+                  "Pbr3D: combined cascade-plus-spot variant selects the lit atlas slice");
+
+            auto skinnedVb = renderer.CreateVertexBuffer(3);
+            skinnedVb->SetData(kTriPbrSkinned, 3, sizeof(VPNTanTW));
+            const auto shadeSkinned = [&](CNA::Internal::Renderers::ITextureRenderer* map) {
+                GpuDrawParams params;
+                SetDirectPbrParams(params, white.get());
+                params.skinned = true;
+                params.weightsPerVertex = 1;
+                params.boneCount = 1;
+                const float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+                for (int i = 0; i < 16; ++i) params.boneTransforms[i] = identity[i];
+                params.shadowsEnabled = true;
+                params.shadowMap = map;
+                params.shadowDepthBias = 0.0f;
+                params.shadowPcfRadius = 0;
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *skinnedVb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+            check(shadeSkinned(white.get()) > 80 && shadeSkinned(black.get()) < 10,
+                  "PbrSkinned3D: directional shadow survives identity-bone skinning");
+
+            const auto shadeBasic = [&](CNA::Internal::Renderers::ITextureRenderer* map,
+                                        bool skinned) {
+                GpuDrawParams params;
+                params.lightingEnabled = true;
+                params.vertexColorEnabled = false;
+                params.textureEnabled = false;
+                params.diffuseColor[0] = params.diffuseColor[1] =
+                    params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+                params.light0Dir[2] = -1.0f;
+                params.light0Diffuse[0] = params.light0Diffuse[1] =
+                    params.light0Diffuse[2] = 1.0f;
+                params.eyePositionWorld[2] = 3.0f;
+                params.shadowsEnabled = true;
+                params.shadowMap = map;
+                params.shadowDepthBias = 0.0f;
+                params.shadowPcfRadius = 0;
+                params.skinned = skinned;
+                params.texture0 = white.get();
+                params.weightsPerVertex = 1;
+                params.boneCount = 1;
+                const float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+                for (int i = 0; i < 16; ++i) params.boneTransforms[i] = identity[i];
+                dev.Clear(Color::Black);
+                if (skinned)
+                {
+                    renderer.DrawPrimitivesEx(
+                        *skinnedVb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                        Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                }
+                else
+                {
+                    renderer.DrawPrimitivesEx(
+                        *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                        Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                }
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+            check(shadeBasic(white.get(), false) > 80 && shadeBasic(black.get(), false) < 10,
+                  "BasicEffect extension shader samples the directional shadow map");
+            check(shadeBasic(white.get(), true) > 80 && shadeBasic(black.get(), true) < 10,
+                  "SkinnedEffect extension shader samples the directional shadow map");
+        }
+
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
         std::fflush(stdout);
         Exit();
@@ -262,16 +613,54 @@ public:
         // resize fails before Draw() is reached.
         auto& renderer = static_cast<DirectX9Renderer&>(getGraphicsDeviceProperty().GetRenderer());
         auto* device = renderer.GetDeviceEXT();
+        std::printf("[INFO] DirectX9 ps_3_0 instruction slots: %lu\n",
+                    static_cast<unsigned long>(renderer.GetCapsEXT().MaxPixelShader30InstructionSlots));
+        check(renderer.SupportsShadowSamplingEXT(),
+              "DirectX9 advertises shadow sampling with SM3 and cube textures");
         IDirect3DPixelShader9* rigid = nullptr;
         IDirect3DPixelShader9* skinned = nullptr;
+        IDirect3DPixelShader9* rigidPointShadow = nullptr;
+        IDirect3DPixelShader9* rigidSpotShadow = nullptr;
+        IDirect3DPixelShader9* rigidSpotDirectionalShadow = nullptr;
+        IDirect3DPixelShader9* skinnedPointShadow = nullptr;
+        IDirect3DPixelShader9* skinnedSpotShadow = nullptr;
+        IDirect3DPixelShader9* skinnedSpotDirectionalShadow = nullptr;
         const HRESULT rigidHr = device->CreatePixelShader(
             reinterpret_cast<const DWORD*>(Shaders::kPbr3DPSBytecode), &rigid);
         const HRESULT skinnedHr = device->CreatePixelShader(
             reinterpret_cast<const DWORD*>(Shaders::kPbrSkinned3DPSBytecode), &skinned);
+        const HRESULT rigidPointShadowHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbr3DPointShadowPSBytecode), &rigidPointShadow);
+        const HRESULT rigidSpotShadowHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbr3DSpotOnlyShadowPSBytecode), &rigidSpotShadow);
+        const HRESULT rigidSpotDirectionalShadowHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbr3DSpotDirectionalShadowPSBytecode),
+            &rigidSpotDirectionalShadow);
+        const HRESULT skinnedPointShadowHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbrSkinned3DPointShadowPSBytecode), &skinnedPointShadow);
+        const HRESULT skinnedSpotShadowHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbrSkinned3DSpotOnlyShadowPSBytecode), &skinnedSpotShadow);
+        const HRESULT skinnedSpotDirectionalShadowHr = device->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kPbrSkinned3DSpotDirectionalShadowPSBytecode),
+            &skinnedSpotDirectionalShadow);
         check(SUCCEEDED(rigidHr), "CreatePixelShader accepts the generated rigid PBR blob");
         check(SUCCEEDED(skinnedHr), "CreatePixelShader accepts the generated skinned PBR blob");
+        check(SUCCEEDED(rigidPointShadowHr), "CreatePixelShader accepts the rigid PBR point-shadow blob");
+        check(SUCCEEDED(rigidSpotShadowHr), "CreatePixelShader accepts the rigid PBR spot-shadow blob");
+        check(SUCCEEDED(rigidSpotDirectionalShadowHr),
+              "CreatePixelShader accepts the rigid PBR directional-plus-spot blob");
+        check(SUCCEEDED(skinnedPointShadowHr), "CreatePixelShader accepts the skinned PBR point-shadow blob");
+        check(SUCCEEDED(skinnedSpotShadowHr), "CreatePixelShader accepts the skinned PBR spot-shadow blob");
+        check(SUCCEEDED(skinnedSpotDirectionalShadowHr),
+              "CreatePixelShader accepts the skinned PBR directional-plus-spot blob");
         if (rigid != nullptr) rigid->Release();
         if (skinned != nullptr) skinned->Release();
+        if (rigidPointShadow != nullptr) rigidPointShadow->Release();
+        if (rigidSpotShadow != nullptr) rigidSpotShadow->Release();
+        if (rigidSpotDirectionalShadow != nullptr) rigidSpotDirectionalShadow->Release();
+        if (skinnedPointShadow != nullptr) skinnedPointShadow->Release();
+        if (skinnedSpotShadow != nullptr) skinnedSpotShadow->Release();
+        if (skinnedSpotDirectionalShadow != nullptr) skinnedSpotDirectionalShadow->Release();
     }
 };
 

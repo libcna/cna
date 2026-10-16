@@ -362,8 +362,13 @@ namespace
             "System.Collections.Generic.Dictionary`2[[System.String],[System.String]]",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.ModelContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture3DContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureCubeContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.SoundEffectContent",
             "Microsoft.Xna.Framework.Content.Pipeline.Processors.SongContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.VideoContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.Processors.SpriteFontContent",
+            "Microsoft.Xna.Framework.Content.Pipeline.Processors.CompiledEffectContent",
         };
         std::sort(names.begin(), names.end());
         std::sort(expected.begin(), expected.end());

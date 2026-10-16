@@ -730,6 +730,10 @@ namespace CNA::Internal::Renderers::EasyGL
         /// into this effect's own `uRtFlipV` when its GLSL opts in by declaring that uniform.
         float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         bool  rtFlipVUploaded_ = false;
+        /// Per-unit rendered-cube row-order flags exposed to opt-in source shaders as
+        /// `uRtCubeFlipV`, the samplerCube counterpart of `uRtFlipV`.
+        float rtCubeFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        bool  rtCubeFlipVUploaded_ = false;
     };
 
     class EasyGLOcclusionQueryRenderer : public IOcclusionQueryRenderer, public ::easygl::RecoverableResource
@@ -1340,6 +1344,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_ibl_brdf       = -1;  ///< sampler2D, unit 12 (N.V across, roughness down)
             int loc_ibl_mipcount   = -1;  ///< float, mips the prefiltered cube was generated with
             int loc_ibl_intensity  = -1;  ///< float, multiplies the whole environment term
+            int loc_ibl_cube_flip  = -1;  ///< vec2: irradiance/specular are rendered cubes
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_env_cube_flip = -1;  ///< float: 1 when the environment cube is a RenderTargetCube (rows stored bottom-up)
             int loc_envmap_amount = -1;  ///< float blend [0,1]

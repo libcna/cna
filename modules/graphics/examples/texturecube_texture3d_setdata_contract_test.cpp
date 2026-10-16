@@ -23,13 +23,15 @@
 //   * NO RESOURCE -- a renderer that keeps IGraphicsRenderer::CreateTextureCube's nullptr default
 //     (the retired SDL_RENDERER did) leaves `renderer_` null, and the upload is dropped by the `if`
 //     itself;
-//   * NO STORAGE -- Headless's cube renderer validates its arguments, records a trace entry and
-//     stores nothing, and RenderTargetCube renderers without an explicit upload override inherit
-//     IRenderTargetCubeRenderer::SetData's deterministic refusal;
+//   * NO STORAGE -- Headless's cube renderer used to validate its arguments, record a trace entry
+//     and store nothing, while RenderTargetCube renderers without an explicit upload override
+//     inherit IRenderTargetCubeRenderer::SetData's deterministic refusal;
 //   * NO LEVEL -- Software's cube renderer returns early for any `level != 0`, because it allocated
 //     storage for level 0 only while TextureCube still reports the full LevelCount.
 //
-// After the honest TextureCube/Texture3D readback contract the reachable end state is worse than merely losing the data: a caller can
+// Headless now retains plain TextureCube uploads in CPU validation storage; this contract test is
+// the regression guard that required that change. After the honest TextureCube/Texture3D readback
+// contract, an unfixed renderer's reachable end state is worse than merely losing the data: a caller can
 // upload a face, read it back, be told "this renderer cannot read a cube face back to the CPU", and
 // still never learn that the write went nowhere either. Check Z2 below states that exact
 // inconsistency as a runtime-derived invariant -- readback support and write support must agree --
@@ -134,12 +136,10 @@ namespace
     };
 
 #if defined(CNA_RENDERER_HEADLESS)
-    // Headless deliberately executes no rasterization and stores no pixel data: it records API
-    // usage and resource state for validation/tracing. Its cube SetData is a trace entry, not a
-    // write -- the honest TextureCube/Texture3D readback contract already deleted the zero-filled buffers that used to make its GetData
-    // look like a readback -- so accepting an upload here would be accept-and-discard by
-    // definition. Texture3D is refused at construction.
-    constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
+    // Headless does not rasterize, but plain TextureCube uploads are caller-authored resource data
+    // and are retained exactly in CPU validation storage. Render-target faces still have no
+    // rasterized content, and Texture3D remains refused at construction.
+    constexpr Contract kContract{"HEADLESS", true, Support::Exact, Support::Exact,
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
 #elif defined(CNA_RENDERER_SOFTWARE)

@@ -19,7 +19,9 @@
 // A renderer that overrides neither therefore does not "leave the caller's buffer untouched": it
 // returns a complete, confidently-wrong, uniformly transparent-black face/volume. Headless goes one
 // step further and actively `std::fill_n`s the caller's destination with zeros while its SetData
-// stores nothing at all -- the same fabrication reached through a different renderer behaviour.
+// stored nothing at all -- the same fabrication reached through a different renderer behaviour.
+// Headless now retains plain TextureCube uploads in CPU validation storage; the history remains
+// here because this contract test is the regression guard that required that change.
 //
 // That result is strictly worse than an empty one, because
 //   * the obvious oracle "did GetData overwrite my sentinel destination?" PASSES on it, and
@@ -114,11 +116,10 @@ namespace
     };
 
 #if defined(CNA_RENDERER_HEADLESS)
-    // Headless deliberately executes no rasterization and stores no pixel data: it records API
-    // usage and resource state for validation/tracing. Its cube SetData is a trace entry, not a
-    // write, so there is no content it could honestly return. Texture3D is refused at construction
-    // (it reports no GraphicsCapability::Texture3D).
-    constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
+    // Headless does not rasterize, but plain TextureCube is caller-authored resource data just like
+    // its stored Texture2D bytes. It preserves every face and mip in CPU validation storage.
+    // Texture3D is still refused at construction (it reports no GraphicsCapability::Texture3D).
+    constexpr Contract kContract{"HEADLESS", true, Support::Exact, Support::Exact,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     // SOFTWARE-82/118 provide exact CPU storage for every declared cube and volume mip level.

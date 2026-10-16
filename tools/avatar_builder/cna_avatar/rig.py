@@ -43,21 +43,23 @@ SIDES = (("Left", 1.0), ("Right", -1.0))
 
 BODY_TYPES = ("female", "male")
 
-# Authored proportions (catalog v3: a head about a fifth larger on a shorter neck, the shoulders
-# and chest lowered to meet it, shorter legs, sturdier limbs and larger hands -- a friendlier
-# toy-like figure); the renderer scales uniformly to a description's height.
+# Authored proportions (catalog v3 revision 2): an adult figure about 4.7 heads tall -- still a
+# large, friendly head, on a longer torso and legs, with broader shoulders, sturdier limbs and big
+# simplified hands. A description's proportions byte morphs this toward a compact, younger-looking
+# figure or a longer-limbed one; the renderer scales uniformly to a description's height.
 PROPORTIONS = {
-    "male": dict(height=1.80, head_center=1.566, head_joint=1.369, neck=1.321, collar=(0.037, 1.290),
-                 shoulder=(0.190, 1.266), back_upper=1.078, back_lower=0.890, hip=(0.100, 0.806),
-                 knee=(0.101, 0.444), ankle=(0.100, 0.082), toe=(0.100, 0.024, 0.132), arm_angle=73.0,
-                 upper_arm=0.246, forearm=0.222, hand=1.40),
-    "female": dict(height=1.68, head_center=1.457, head_joint=1.270, neck=1.227, collar=(0.034, 1.198),
-                   shoulder=(0.170, 1.178), back_upper=1.003, back_lower=0.834, hip=(0.102, 0.760),
-                   knee=(0.096, 0.420), ankle=(0.092, 0.078), toe=(0.092, 0.021, 0.120), arm_angle=73.0,
-                   upper_arm=0.226, forearm=0.206, hand=1.28),
+    "male": dict(height=1.80, head_center=1.607, head_joint=1.440, neck=1.383, collar=(0.042, 1.350),
+                 shoulder=(0.212, 1.322), back_upper=1.128, back_lower=0.928, hip=(0.104, 0.846),
+                 knee=(0.104, 0.468), ankle=(0.100, 0.082), toe=(0.100, 0.024, 0.132), arm_angle=74.0,
+                 upper_arm=0.268, forearm=0.240, hand=1.30),
+    "female": dict(height=1.68, head_center=1.495, head_joint=1.336, neck=1.284, collar=(0.038, 1.252),
+                   shoulder=(0.188, 1.228), back_upper=1.050, back_lower=0.872, hip=(0.106, 0.800),
+                   knee=(0.098, 0.444), ankle=(0.092, 0.078), toe=(0.092, 0.021, 0.120), arm_angle=73.0,
+                   upper_arm=0.248, forearm=0.224, hand=1.20),
 }
-FINGER_SEGMENTS = {"Index": (0.027, 0.019, 0.014), "Middle": (0.029, 0.021, 0.015),
-                   "Ring": (0.027, 0.019, 0.014), "Small": (0.022, 0.016, 0.012), "Thumb": (0.026, 0.021, 0.015)}
+# Short, chunky fingers (revision 2): simplified hands that read at a distance.
+FINGER_SEGMENTS = {"Index": (0.024, 0.016, 0.012), "Middle": (0.026, 0.018, 0.013),
+                   "Ring": (0.024, 0.016, 0.012), "Small": (0.020, 0.014, 0.010), "Thumb": (0.024, 0.018, 0.013)}
 FINGER_SPREAD = {"Index": 0.026, "Middle": 0.009, "Ring": -0.009, "Small": -0.025}
 
 

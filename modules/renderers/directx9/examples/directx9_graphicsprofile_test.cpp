@@ -46,6 +46,11 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -269,6 +274,165 @@ protected:
         check(threwOverCeiling,
               "Texture2D(dev, 4097, 4097) under GraphicsProfile.HiDef: throws "
               "System::NotSupportedException -- one pixel past HiDef's own 4096 ceiling");
+
+        // Native Texture2D format storage: each format is classified honestly and survives a real
+        // D3D9 CreateTexture/LockRect upload through the public transfer API.
+        // The museum's tex-formats room renders the same five witnesses side by side.
+        {
+            using CNA::Internal::Renderers::RendererFormatVerdict;
+            using namespace Microsoft::Xna::Framework::Graphics::PackedVector;
+            const auto classified = [&](SurfaceFormat format) {
+                return dev.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                       RendererFormatVerdict::Supported;
+            };
+            check(classified(SurfaceFormat::Bgr565) &&
+                  classified(SurfaceFormat::Bgra4444) &&
+                  classified(SurfaceFormat::Alpha8) &&
+                  classified(SurfaceFormat::HalfVector4),
+                  "DirectX9 ClassifySurfaceFormatEXT: the four non-Color tex-formats witnesses "
+                  "are supported by this device");
+
+            bool uploaded = true;
+            try
+            {
+                Texture2D bgr(dev, 2, 2, false, SurfaceFormat::Bgr565);
+                const Bgr565 bgrPixels[4] = {
+                    Bgr565(1.0f, 0.0f, 0.0f), Bgr565(0.0f, 1.0f, 0.0f),
+                    Bgr565(0.0f, 0.0f, 1.0f), Bgr565(1.0f, 1.0f, 1.0f)};
+                bgr.SetData(bgrPixels, 4);
+
+                Texture2D bgra(dev, 2, 2, false, SurfaceFormat::Bgra4444);
+                const Bgra4444 bgraPixels[4] = {
+                    Bgra4444(1.0f, 0.0f, 0.0f, 1.0f),
+                    Bgra4444(0.0f, 1.0f, 0.0f, 1.0f),
+                    Bgra4444(0.0f, 0.0f, 1.0f, 1.0f),
+                    Bgra4444(1.0f, 1.0f, 1.0f, 1.0f)};
+                bgra.SetData(bgraPixels, 4);
+
+                Texture2D alpha(dev, 2, 2, false, SurfaceFormat::Alpha8);
+                const Alpha8 alphaPixels[4] = {
+                    Alpha8(0.0f), Alpha8(0.33f), Alpha8(0.67f), Alpha8(1.0f)};
+                alpha.SetData(alphaPixels, 4);
+
+                Texture2D half(dev, 2, 2, false, SurfaceFormat::HalfVector4);
+                const HalfVector4 halfPixels[4] = {
+                    HalfVector4(1.0f, 0.0f, 0.0f, 1.0f),
+                    HalfVector4(0.0f, 1.0f, 0.0f, 1.0f),
+                    HalfVector4(0.0f, 0.0f, 1.0f, 1.0f),
+                    HalfVector4(1.0f, 1.0f, 1.0f, 1.0f)};
+                half.SetData(halfPixels, 4);
+            }
+            catch (const std::exception&)
+            {
+                uploaded = false;
+            }
+            check(uploaded,
+                  "Texture2D native formats: Bgr565, Bgra4444, Alpha8 and HalfVector4 create "
+                  "and upload without RGBA8 substitution");
+
+            bool everyAdvertisedClassicFormatCreates = true;
+            for (int ordinal = static_cast<int>(SurfaceFormat::Color);
+                 ordinal <= static_cast<int>(SurfaceFormat::HdrBlendable); ++ordinal)
+            {
+                if (dev.GetRenderer().ClassifySurfaceFormatEXT(ordinal) !=
+                    RendererFormatVerdict::Supported)
+                {
+                    continue;
+                }
+                try
+                {
+                    // Four-by-four is valid for both ordinary texels and DXT's complete block.
+                    Texture2D texture(dev, 4, 4, false, static_cast<SurfaceFormat>(ordinal));
+                }
+                catch (const std::exception&)
+                {
+                    everyAdvertisedClassicFormatCreates = false;
+                    break;
+                }
+            }
+            check(everyAdvertisedClassicFormatCreates,
+                  "DirectX9 classic Texture2D capability agreement: every format classified "
+                  "Supported creates and accepts its zero-filled level without substitution");
+
+            check(dev.GetRenderer().ClassifyTextureCubeFormatEXT(
+                      static_cast<int>(SurfaceFormat::Single)) ==
+                          RendererFormatVerdict::Supported &&
+                  dev.GetRenderer().ClassifyTextureCubeFormatEXT(
+                      static_cast<int>(SurfaceFormat::Vector4)) ==
+                          RendererFormatVerdict::Supported,
+                  "DirectX9 cube classifier live-probes Single and Vector4 native storage");
+            check(dev.GetRenderer().ClassifyTexture3DFormatEXT(
+                      static_cast<int>(SurfaceFormat::Single)) ==
+                          RendererFormatVerdict::Supported &&
+                  dev.GetRenderer().ClassifyTexture3DFormatEXT(
+                      static_cast<int>(SurfaceFormat::Vector4)) ==
+                          RendererFormatVerdict::Supported,
+                  "DirectX9 volume classifier live-probes Single and Vector4 native storage");
+
+            bool everyAdvertisedCubeFormatRoundTrips = true;
+            bool everyAdvertisedVolumeFormatRoundTrips = true;
+            for (int ordinal = static_cast<int>(SurfaceFormat::Color);
+                 ordinal <= static_cast<int>(SurfaceFormat::HdrBlendable); ++ordinal)
+            {
+                const auto format = static_cast<SurfaceFormat>(ordinal);
+                if (dev.GetRenderer().ClassifyTextureCubeFormatEXT(ordinal) ==
+                    RendererFormatVerdict::Supported)
+                {
+                    try
+                    {
+                        TextureCube cube(dev, 4, false, format);
+                        const bool compressed = format == SurfaceFormat::Dxt1 ||
+                                                format == SurfaceFormat::Dxt3 ||
+                                                format == SurfaceFormat::Dxt5;
+                        const int byteCount = compressed
+                            ? Texture::GetFormatSizeEXT(format)
+                            : 16 * Texture::GetFormatSizeEXT(format);
+                        std::vector<std::uint8_t> source(static_cast<std::size_t>(byteCount));
+                        for (int i = 0; i < byteCount; ++i)
+                            source[static_cast<std::size_t>(i)] =
+                                static_cast<std::uint8_t>((i * 37 + ordinal * 11) & 0xff);
+                        std::vector<std::uint8_t> result(static_cast<std::size_t>(byteCount));
+                        cube.SetData(CubeMapFace::PositiveX, source.data(), byteCount);
+                        cube.GetData(CubeMapFace::PositiveX, result.data(), byteCount);
+                        if (result != source)
+                            everyAdvertisedCubeFormatRoundTrips = false;
+                    }
+                    catch (const std::exception&)
+                    {
+                        everyAdvertisedCubeFormatRoundTrips = false;
+                    }
+                }
+
+                if (dev.GetRenderer().ClassifyTexture3DFormatEXT(ordinal) ==
+                    RendererFormatVerdict::Supported)
+                {
+                    try
+                    {
+                        Texture3D volume(dev, 2, 2, 2, false, format);
+                        const int byteCount = 8 * Texture::GetFormatSizeEXT(format);
+                        std::vector<std::uint8_t> source(static_cast<std::size_t>(byteCount));
+                        for (int i = 0; i < byteCount; ++i)
+                            source[static_cast<std::size_t>(i)] =
+                                static_cast<std::uint8_t>((i * 29 + ordinal * 13) & 0xff);
+                        std::vector<std::uint8_t> result(static_cast<std::size_t>(byteCount));
+                        volume.SetData(source.data(), byteCount);
+                        volume.GetData(result.data(), byteCount);
+                        if (result != source)
+                            everyAdvertisedVolumeFormatRoundTrips = false;
+                    }
+                    catch (const std::exception&)
+                    {
+                        everyAdvertisedVolumeFormatRoundTrips = false;
+                    }
+                }
+            }
+            check(everyAdvertisedCubeFormatRoundTrips,
+                  "DirectX9 cube capability agreement: every advertised classic format creates "
+                  "and round-trips exact native bytes");
+            check(everyAdvertisedVolumeFormatRoundTrips,
+                  "DirectX9 volume capability agreement: every advertised HiDef format creates "
+                  "and round-trips exact native bytes");
+        }
 
         // Check K: MaxRenderTargets under HiDef -- the SAME 2-target request Check J refused
         // under Reach now succeeds (HiDef's own ceiling is 4).

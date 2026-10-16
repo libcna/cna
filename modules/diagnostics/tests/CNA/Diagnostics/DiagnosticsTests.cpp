@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <barrier>
+#include <cstdlib>
 #include <limits>
 #include <random>
 #include <sstream>
@@ -792,6 +793,47 @@ namespace
         const Snapshot after = GetProvider().CaptureSnapshot();
         EXPECT_EQ(after.profilerOwnedBytes, baseline.profilerOwnedBytes);
     }
+
+#if GTEST_HAS_DEATH_TEST
+    // exit() destroys the exiting thread's thread_local objects BEFORE it runs static destructors, so an
+    // object with static storage duration (a GraphicsResource static, say) that emits an event from its
+    // destructor reaches a thread context that has already been released. That used to read freed memory
+    // (AddressSanitizer: heap-use-after-free in EmitRawEvent). The late event must now be refused and counted
+    // as a producer drop instead.
+    struct LateEmitterAtExit
+    {
+        NameHandle marker{"Tests/Events/AfterThreadContextRelease"};
+
+        ~LateEmitterAtExit()
+        {
+            const EventBatch before = GetProvider().ReadEvents(0, EventHistoryCapacity);
+            MarkEvent(marker);
+            const EventBatch after = GetProvider().ReadEvents(
+                before.newestAvailableSequence, EventHistoryCapacity);
+            // Exit code 0 only if the late event was dropped, not silently pushed into a released context.
+            std::_Exit(after.producerEventsDropped > before.producerEventsDropped ? 0 : 3);
+        }
+    };
+
+    [[noreturn]] void ExitWithALateEventFromAStaticDestructor()
+    {
+        (void)SetRuntimeMode(Mode::Full);
+        // Gives this thread a context, so there is one to be released. Then a function-local static, because
+        // exit() runs static destructors and skips locals.
+        MarkEvent(NameHandle("Tests/Events/BeforeExit"));
+        static LateEmitterAtExit late;
+        (void)late;
+        std::exit(0);
+    }
+
+    TEST(DiagnosticsEventsTest, EventEmittedByAStaticDestructorAfterThreadContextReleaseIsDropped)
+    {
+        GTEST_FLAG_SET(death_test_style, "threadsafe");
+        EXPECT_EXIT(ExitWithALateEventFromAStaticDestructor(), ::testing::ExitedWithCode(0), "")
+            << "a static destructor's event after the thread context was released was pushed into freed "
+               "memory (or crashed) instead of being counted as a producer drop";
+    }
+#endif
 
     TEST(DiagnosticsEventsTest, ThreadBufferOverflowDropsNewEventsAndReportsIt)
     {

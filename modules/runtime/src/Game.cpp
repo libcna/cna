@@ -1299,41 +1299,67 @@ namespace Microsoft::Xna::Framework
 
             state.game->PollEvents();
 
-            // The platform's epoch is its own creation rather than library init, which changes
-            // nothing here: only deltas are used, and the first callback seeds lastTickMs either way.
-            const std::uint64_t nowMs = state.game->GetPlatformEXT().GetTicksMilliseconds();
-            if (state.lastTickMs == 0)
-            {
-                state.lastTickMs = nowMs;
-            }
-
-            double deltaMs = static_cast<double>(nowMs - state.lastTickMs);
-            state.lastTickMs = nowMs;
-
-            if (deltaMs > 250.0)
-            {
-                deltaMs = 250.0;
-            }
-
-            state.accumulatorMs += deltaMs;
-            const double targetMs = state.game->getTargetMsFrameTimeProperty();
-            const auto stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
-
             bool updated = false;
-            while (state.game->RunApplication && state.accumulatorMs >= targetMs)
+            if (!state.game->IsFixedTimeStep_)
             {
-                state.accumulatorMs -= targetMs;
-
-                state.gameTime.setElapsedGameTimeProperty(stepSpan);
-                state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + stepSpan);
+                // IsFixedTimeStep = false is XNA's variable step: one Update with the real elapsed
+                // time, then one Draw, per displayed frame. The accumulator below would instead run
+                // zero, one or several 1/60 s Updates per requestAnimationFrame (browser frame times
+                // jitter around the display's period), pacing picture and input unevenly, and after
+                // every slow frame it would catch up with a burst of Updates that makes the next
+                // frame slower still.
+                const System::TimeSpan maxStep = System::TimeSpan::FromMilliseconds(250.0);
+                const System::TimeSpan advanced = state.game->AdvanceElapsedTime();
+                state.game->accumulatedElapsedTime_ = System::TimeSpan::Zero;
+                const System::TimeSpan step = TimeSpanGreater(advanced, maxStep) ? maxStep : advanced;
+                state.gameTime.setElapsedGameTimeProperty(step);
+                state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + step);
                 state.gameTime.setIsRunningSlowlyProperty(false);
-
+                if (state.game->RunApplication)
                 {
                     CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
                     state.game->Update(state.gameTime);
+                    CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
+                    updated = true;
                 }
-                CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
-                updated = true;
+            }
+            else
+            {
+                // The platform's epoch is its own creation rather than library init, which changes
+                // nothing here: only deltas are used, and the first callback seeds lastTickMs either way.
+                const std::uint64_t nowMs = state.game->GetPlatformEXT().GetTicksMilliseconds();
+                if (state.lastTickMs == 0)
+                {
+                    state.lastTickMs = nowMs;
+                }
+
+                double deltaMs = static_cast<double>(nowMs - state.lastTickMs);
+                state.lastTickMs = nowMs;
+
+                if (deltaMs > 250.0)
+                {
+                    deltaMs = 250.0;
+                }
+
+                state.accumulatorMs += deltaMs;
+                const double targetMs = state.game->getTargetMsFrameTimeProperty();
+                const auto stepSpan = System::TimeSpan::FromMilliseconds(targetMs);
+
+                while (state.game->RunApplication && state.accumulatorMs >= targetMs)
+                {
+                    state.accumulatorMs -= targetMs;
+
+                    state.gameTime.setElapsedGameTimeProperty(stepSpan);
+                    state.gameTime.setTotalGameTimeProperty(state.gameTime.getTotalGameTimeProperty() + stepSpan);
+                    state.gameTime.setIsRunningSlowlyProperty(false);
+
+                    {
+                        CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
+                        state.game->Update(state.gameTime);
+                    }
+                    CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
+                    updated = true;
+                }
             }
 
             if (updated && state.game->BeginDraw())

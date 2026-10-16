@@ -39,6 +39,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -162,7 +163,9 @@ class SkinnedEffectLightingConformanceTest : public Game
             {  1, -1, 0,  kNx,kNy,kNz,  1,1,  1,0,0,0,  0,0,0,0 },
             {  1,  1, 0,  kNx,kNy,kNz,  1,0,  1,0,0,0,  0,0,0,0 },
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev,
+                        VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(),
+                        6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
 
         Color got(0, 0, 0, 0);

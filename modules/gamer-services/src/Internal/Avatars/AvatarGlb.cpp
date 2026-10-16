@@ -19,8 +19,10 @@ using Microsoft::Xna::Framework::Vector4;
 constexpr std::size_t MaximumPrimitives=64, MaximumVertices=65535, MaximumTotalVertices=200000;
 constexpr std::size_t MaximumIndices=3*120000, MaximumImageBytes=1u<<20, MaximumClips=64, MaximumKeys=4096;
 constexpr float MaximumCoordinate=5.0f;
-constexpr std::array<std::string_view,8> Tints{"none","skin","hair","eyes","top","bottom","shoes","accessory"};
-constexpr std::array<std::string_view,5> Features{"eyeLeft","eyeRight","eyebrowLeft","eyebrowRight","mouth"};
+constexpr std::array<std::string_view,13> Tints{"none","skin","hair","eyes","top","bottom","shoes","accessory","lips","eyeShadow",
+    "blush","jewelry","gloves"};
+constexpr std::array<std::string_view,12> Features{"eyeLeft","eyeRight","eyebrowLeft","eyebrowRight","mouth","lips","shadowLeft",
+    "shadowRight","linerLeft","linerRight","blushLeft","blushRight"};
 
 [[noreturn]] void malformed(const std::string& what){throw std::runtime_error("avatar asset: "+what);}
 
@@ -147,10 +149,29 @@ void readPrimitive(const cgltf_primitive& primitive,const std::vector<int>& skin
     if(out.layer<0||out.layer>1)malformed("layer");
     out.specular=description.value("cnaSpecular",1.0f);
     if(!(out.specular>=0.0f&&out.specular<=4.0f))malformed("specular");
+    out.shininess=description.value("cnaShininess",24.0f);
+    if(!(out.shininess>=1.0f&&out.shininess<=128.0f))malformed("shininess");
+    if(description.contains("cnaSide")) {
+        const auto side=description["cnaSide"].get<std::string>();
+        if(side!="left"&&side!="right")malformed("side");
+        out.side=side=="left"?1:2;
+    }
+    if(description.contains("cnaBlend")) {
+        if(description["cnaBlend"].get<std::string>()!="alpha"||!out.feature.empty())malformed("blend");
+        out.blend=true;
+    }
+    if(description.contains("cnaTexture")) {
+        // A texture shared by many assets: a file of the catalog, named here and resolved by the manifest.
+        out.texture=description["cnaTexture"].get<std::string>();
+        if(out.texture.empty()||out.texture.size()>64||!out.texture.ends_with(".png")||out.texture.front()=='.'||
+           !std::ranges::all_of(out.texture,[](char c){return (c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='_'||c=='.'||c=='-';}))
+            malformed("texture name");
+    }
     const auto& pbr=material->pbr_metallic_roughness;
     out.color=Vector3(std::clamp(pbr.base_color_factor[0],0.0f,1.0f),std::clamp(pbr.base_color_factor[1],0.0f,1.0f),
                       std::clamp(pbr.base_color_factor[2],0.0f,1.0f));
     if(const auto* texture=pbr.base_color_texture.texture) {
+        if(!out.texture.empty())malformed("two textures");
         const auto* image=texture->image;
         if(!image||image->uri||!image->buffer_view||!image->mime_type||std::strcmp(image->mime_type,"image/png")!=0)
             malformed("texture image");

@@ -164,8 +164,12 @@ void validateCatalog(const CatalogManifest& manifest,const std::function<std::sp
         const auto bytes=file(asset);
         if(name.ends_with(".glb")) {
             auto glb=parseAvatarGlb(bytes);
-            for(const auto& primitive:glb.primitives)
+            for(const auto& primitive:glb.primitives) {
                 if(!primitive.texturePng.empty())(void)decodeAvatarImage(primitive.texturePng);
+                // A shared texture must be a picture of this catalog.
+                if(!primitive.texture.empty()&&(!manifest.assets.contains(primitive.texture)||!primitive.texture.ends_with(".png")))
+                    invalid(name+" names a texture the catalog does not have");
+            }
             models.emplace(name,std::move(glb));
         } else if(name.ends_with(".png")) {
             const auto image=decodeAvatarImage(bytes);
@@ -191,12 +195,9 @@ void validateCatalog(const CatalogManifest& manifest,const std::function<std::sp
         }
     };
     for(const auto* list:{&manifest.items,&manifest.featureItems})
-        for(const auto& item:*list) {
-            fitted(item.assets);
-            if(!item.hatAssets[0].empty())fitted(item.hatAssets);
-        }
+        for(const auto& item:*list)fitted(item.assets);
     const auto& face=manifest.face;
-    if(atlasWidth!=face.columns*face.tileSize||atlasHeight%face.tileSize||maximumFaceTile(face)>=face.columns*(atlasHeight/face.tileSize))
+    if(atlasWidth!=face.columns*face.tileSize||atlasHeight%face.tileSize||face.columns*(atlasHeight/face.tileSize)!=face.tiles)
         invalid("face atlas does not match its layout");
     if(model(manifest.animationsAsset).clips.size()!=31)invalid("animations must have every preset");
 }
@@ -337,7 +338,7 @@ CatalogInstall installCatalogPack(const CatalogPack& pack,std::uint64_t maximumB
         for(const auto& [name,asset]:manifest.assets) {
             const auto target=staging/asset.sha256;
             std::optional<std::vector<std::uint8_t>> bytes;
-            if(auto embedded=embeddedFileByContent(asset))bytes.emplace(embedded->begin(),embedded->end());
+            if(auto embedded=embeddedFileByContent(asset))bytes.emplace(embedded->view.begin(),embedded->view.end());
             for(const auto& candidate:others) {
                 if(bytes)break;
                 if(!embeddedManifest(candidate))bytes=installedCatalogFile(candidate,asset);

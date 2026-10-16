@@ -199,6 +199,9 @@ TEST_F(ServiceRequestRetryTest, ADevelopmentCatalogIsNeverAskedForOrAccepted) {
     EXPECT_TRUE(service.arguments("avatars.catalogPack").empty());
     EXPECT_THROW((void)backend->avatarCatalog(0),Unavailable);
     ASSERT_EQ(1u,service.arguments("avatars.catalog").size());
+    EXPECT_THROW((void)backend->newestAvatarCatalog(),Unavailable);
+    ASSERT_EQ(2u,service.arguments("avatars.catalog").size());
+    EXPECT_EQ(false,service.arguments("avatars.catalog")[1]["manifest"]);
     EXPECT_NO_THROW((void)backend->avatarCatalogPack(3));
     EXPECT_NO_THROW((void)backend->avatarCatalog(3));
 }
@@ -214,7 +217,10 @@ TEST_F(ServiceRequestRetryTest, AnAvatarReadThatNamesNoCatalogsSendsNoCatalogLis
     const auto reads=service.arguments("avatars.get");
     ASSERT_EQ(2u,reads.size());
     EXPECT_FALSE(reads[0].contains("catalogs"));
-    EXPECT_EQ(Json::array({1,2}),reads[0]["formats"]);
+    EXPECT_EQ(Json::array({1,2,3}),reads[0]["formats"]);
+    // Every read states the catalog contract level this client reads, with or without catalogs.
+    EXPECT_EQ(Service::Avatars::CatalogReaderLevel,reads[0]["reader"]);
+    EXPECT_EQ(Service::Avatars::CatalogReaderLevel,reads[1]["reader"]);
     EXPECT_EQ(Json::array({3}),reads[1]["catalogs"]);
     EXPECT_TRUE(reads[1]["catalogUpdates"].is_boolean());
 }

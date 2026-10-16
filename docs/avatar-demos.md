@@ -11,7 +11,7 @@ Each demo's in-app **F1** overlay is the authoritative control reference; **Esc*
 
 | Demo | What it demonstrates | CLI flags |
 |---|---|---|
-| `demo_avatar` | One random avatar playing any preset, with a free camera. Space: next preset, R: new avatar, G: other body type, E: cycle expression overrides, Left/Right: orbit. | `--gender male\|female`, `--clip <preset>`, `--yaw <degrees>`, `--smoke N`, `--screenshot <path>`, `--show-help` |
+| `demo_avatar` | A random avatar, a lineup of five, or one given description, playing any preset, for looking at avatars closely: camera views of the whole body, the head, the hands and the feet, lighting a game might use (studio, daylight, sunset, dim room). Space/Backspace: next/previous preset, R: new avatars, G: other body type, L: lineup, Tab: next of the lineup, V: view, K: lighting, E: expression overrides, P: pause, Left/Right: orbit, Up/Down: tilt, PgUp/PgDn: zoom. | `--gender male\|female`, `--clip <preset>`, `--lineup N`, `--view body\|head\|hands\|feet`, `--description <hex\|file>`, `--yaw <degrees>`, `--smoke N`, `--screenshot <path>`, `--show-help` |
 | `demo_avatar_animation_gallery` | Eight avatars playing the 31 presets a page at a time. Space: next page, R: new avatars. | `--smoke N`, `--screenshot <path>`, `--show-help` |
 | `demo_avatar_dual_compare` | A female and a male avatar playing the same preset side by side, showing how one standard animation fits different heights and builds. Space: next preset, R: new pair. | `--smoke N`, `--screenshot <path>`, `--show-help` |
 | `demo_avatar_bone_state_boundary` | The renderer lifecycle (`Unavailable`, `Loading`, `Ready`, `BindPose`, `ParentBones`) printed to the console, then a draw from game-supplied bone transforms instead of an `AvatarAnimation`. | `--screenshot <path>`, `--show-help` (runs a fixed window of frames) |
@@ -23,8 +23,8 @@ service signs in a local offline profile. For unattended runs set
 `CNA_GAMER_SERVICES_AUTO_SIGN_IN=<profile name>` (a different name per process), and
 `CNA_GAMER_SERVICES_PROFILES_DIR` to keep the profiles out of your own store.
 
-`--smoke N` exits after N drawn frames without input; `--screenshot <path>` saves the last frame's
-back buffer as a PNG (the demos use the HiDef profile so it can be read back). Run them through
+`--smoke N` exits after N drawn frames without input; `--screenshot <path>` saves one of the last
+frames' back buffer as a PNG (the demos use the HiDef profile so it can be read back). Run them through
 `tools/platform/run_gpu_tests_private.sh`'s private display, never on a live desktop.
 
 ## Troubleshooting: network demo startup (ENet port binding, discovery)

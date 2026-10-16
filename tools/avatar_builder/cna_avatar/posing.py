@@ -9,7 +9,7 @@ import math
 
 from . import rig
 from .mathutil import (add, sub, mul, dot, cross, normalize, length, quat_mul, quat_normalize, quat_rotate,
-                       quat_axis_angle, quat_euler)
+                       quat_axis_angle, quat_euler, smoothstep)
 
 I = rig.INDEX
 IDENTITY = (0.0, 0.0, 0.0, 1.0)
@@ -116,21 +116,28 @@ class Pose:
         self.fingers("Right", 0.26)
         return self
 
+    # A hand's fingers never curl alike: from the index to the little finger each curls a little
+    # more (a relaxed hand cascades), and a relaxed hand's fingers part slightly.
+    CASCADE = {"Index": 0.78, "Middle": 0.94, "Ring": 1.08, "Small": 1.22}
+
     def fingers(self, side, curl, thumb=None, spread=0.0):
         """Curl 0 = straight, 1 = fist."""
         sign = 1.0 if side == "Left" else -1.0
         along, normal, _ = rig.hand_frame(sign, rig.PROPORTIONS[self.body])
         axis = cross(along, normal)
+        relaxed = 1.0 - min(1.0, abs(curl - 0.3) / 0.5) if 0.0 < curl < 0.8 else 0.0
         for finger in rig.FINGERS:
             amounts = (55.0, 80.0, 60.0)
             names = ("Finger%s%s", "Finger%s2%s", "Finger%s3%s")
+            cascade = 1.0 + (self.CASCADE[finger] - 1.0) * min(1.0, curl / 0.25) * (1.0 - smoothstep(0.75, 1.0, curl))
             for amount, name in zip(amounts, names):
                 bone = I[name % (finger, side)]
-                self.local[bone] = quat_axis_angle(axis, curl * amount)
-            if spread:
+                self.local[bone] = quat_axis_angle(axis, min(curl * cascade, 1.0) * amount)
+            fan_amount = spread + 0.35 * relaxed
+            if fan_amount:
                 fan = {"Index": 1.0, "Middle": 0.3, "Ring": -0.3, "Small": -1.0}[finger]
                 bone = I["Finger%s%s" % (finger, side)]
-                self.local[bone] = quat_normalize(quat_mul(quat_axis_angle(normal, spread * fan * 8.0), self.local[bone]))
+                self.local[bone] = quat_normalize(quat_mul(quat_axis_angle(normal, fan_amount * fan * 8.0), self.local[bone]))
         t = curl if thumb is None else thumb
         thumb_axis = cross(rig.thumb_direction(sign, rig.PROPORTIONS[self.body]), normal)
         for amount, name in zip((25.0, 35.0, 30.0), ("FingerThumb%s", "FingerThumb2%s", "FingerThumb3%s")):
@@ -204,7 +211,7 @@ class Pose:
         scaled to this body's head), following the head."""
         from . import head
         s = head.SCALE[self.body]
-        on_face = add(head.front_point(self.body, x * s, y * s)[0], (0.0, 0.0, out))
+        on_face = add(_face_point(self.body, x * s, y * s), (0.0, 0.0, out))
         return self._on_head(on_face)
 
     def beside_head(self, side, y=0.0, z=0.0, out=0.05):
@@ -219,3 +226,21 @@ class Pose:
     def _on_head(self, bind_point):
         rot, pos = self.world()
         return add(pos[I["Head"]], quat_rotate(rot[I["Head"]], sub(bind_point, self.bind[I["Head"]])))
+
+
+def _face_point(body, x, y):
+    """The face's surface seen from the front at head-local (x, y). A point past the face's outline
+    (below the chin, beside the jaw) has no such surface point, and the head's Newton solve then
+    wanders to an arbitrary one (revision 3's FemaleYawn and FemaleShocked aimed their hands there):
+    such a point is moved toward the face's middle until the face is under it."""
+    from . import head
+    c = head.centre(body)
+    toward = (0.0, head.MOUTH_Y * head.SCALE[body])
+    for k in range(41):
+        f = k / 40.0
+        px, py = x + (toward[0] - x) * f, y + (toward[1] - y) * f
+        q = head.front_point(body, px, py)[0]
+        if abs(q[0] - c[0] - px) + abs(q[1] - c[1] - py) < 1e-6:
+            return q
+    return head.front_point(body, toward[0], toward[1])[0]
+

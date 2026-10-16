@@ -115,7 +115,8 @@ void GalleryDemo::Draw(const GameTime& gameTime)
     for (std::size_t index = 0; index < slots_.size(); ++index)
     {
         auto& slot = slots_[index];
-        slot.renderer->setWorldProperty(Matrix::CreateTranslation(SlotPosition(index)));
+        // XNA avatars face -Z: a half turn faces them to the camera.
+        slot.renderer->setWorldProperty(Matrix::CreateRotationY(3.14159265f) * Matrix::CreateTranslation(SlotPosition(index)));
         slot.renderer->setViewProperty(view);
         slot.renderer->setProjectionProperty(projection);
         slot.renderer->Draw(slot.animation.get());
@@ -145,7 +146,9 @@ void GalleryDemo::Draw(const GameTime& gameTime)
         }
     }
     spriteBatch_->End();
-    if (smokeFramesLeft_ == 1 && !screenshotPath_.empty())
+    // The first frame drawn near the end of a smoke run: a fixed-step catch-up may update twice
+    // before drawing, so waiting for exactly the last one can miss it.
+    if (smokeFramesLeft_ > 0 && smokeFramesLeft_ <= 5 && !screenshotPath_.empty())
     {
         SaveBackBufferScreenshotEXT(device, screenshotPath_);
         screenshotPath_.clear();

@@ -65,6 +65,12 @@ cmake --build cmake-build-d3d9 -j
 - **Buffers, textures, render targets, MRT, MSAA, occlusion queries, NPOT, hardware instancing,
   all render/blend/depth-stencil/rasterizer state** — real `SetRenderState`/`SetSamplerState`
   sequences (D3D9 has no state objects to cache — design decision 11).
+- **CNA punctual lighting**: `BasicEffect`, `SkinnedEffect`, `PbrEffect` and `SkinnedPbrEffect`
+  consume the single `PunctualLightEXT` point/spot source, including range and spot-cone
+  attenuation. The classic effects select CNA-owned SM3 variants only while the extension is
+  active, leaving Microsoft's stock bytecode untouched for ordinary XNA draws. Focused public
+  BasicEffect and SkinnedEffect regressions cover disabled, point, out-of-range and aimed/away
+  spot cases; PBR also covers a skinned draw.
 
 ## What's not (yet)
 
@@ -82,6 +88,8 @@ cmake --build cmake-build-d3d9 -j
   `GpuDrawParams` gap present on **every** CNA renderer (Divergence 1/4 in `plans/plan_dx9.md`'s own
   "CNA's divergences from XNA 4.0" section) — out of this renderer's authority to fix; measured
   and reported, not silently worked around.
+- **Direct shadow-map sampling** is not implemented in the D3D9 Basic/Skinned/PBR paths; their
+  point and spot lights are currently unshadowed.
 - **`SpriteSortMode.Immediate`/`.Texture`**: `Immediate`'s only real behavioral difference from
   `Deferred` isn't pixel-observable by a raster-diff methodology at all; `Texture` sorts by
   `Texture.GetHashCode()` in real FNA, an implementation-defined identity hash with no
@@ -171,7 +179,7 @@ only the checks that should be affected) goes red, then revert and reconfirm gre
 discipline catching genuine false-positive traps (a check that stays green even with its own
 target feature disabled is worse than no check at all).
 
-## Known limitations (2026-07-15)
+## Known limitations (2026-10-16)
 
 - **Not verified on real Windows hardware** (`D9-140`, `needs_human`) — see the DXVK-authenticity
   caveat above.

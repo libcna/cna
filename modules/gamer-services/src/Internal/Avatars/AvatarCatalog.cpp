@@ -32,13 +32,34 @@ constexpr std::array<std::string_view,BoneCount> Names{
     "FingerThumb3Left", "FingerIndex3Right", "FingerMiddle3Right", "FingerRing3Right", "FingerSmall3Right",
     "FingerThumb3Right"};
 
-constexpr std::array<std::string_view,6> SlotNames{"hair","top","bottom","shoes","glasses","hat"};
+// Kind names by AvatarItemSlot, and which manifest list holds each kind.
+constexpr std::array<std::string_view,AvatarItemKindCount> SlotNames{"hair","top","bottom","shoes","glasses","hat","facialHair","ears",
+    "earrings","wristwear","gloves","rings","eyebrows","eyeShadow","eyeliner","blush","lips"};
+enum class ListKind : std::uint8_t { Items, Features, Styles };
+ListKind listOf(AvatarItemSlot slot)
+{
+    if(slot==AvatarItemSlot::FacialHair||slot==AvatarItemSlot::Ears)return ListKind::Features;
+    return slot>=AvatarItemSlot::Eyebrows?ListKind::Styles:ListKind::Items;
+}
+// Tiles a face style names: eyebrows a tile per state and side, lips one per mouth state,
+// eyeliner one per side for an open and a closed eye, the other makeup one per side.
+std::size_t styleTiles(AvatarItemSlot slot)
+{
+    switch(slot) {
+    case AvatarItemSlot::Eyebrows: return 10;
+    case AvatarItemSlot::Lips: return 14;
+    case AvatarItemSlot::Eyeliner: return 4;
+    default: return 2;
+    }
+}
+constexpr std::array<std::string_view,AvatarColorSlotCount> ColorNames{"skin","hair","eyes","top","bottom","shoes","accessory","lips",
+    "eyeShadow","blush","jewelry","gloves"};
 constexpr std::array<std::string_view,14> EyeNames{"Neutral","Sad","Angry","Confused","Laughing","Shocked","Happy",
     "Yawning","Sleeping","LookUp","LookDown","LookLeft","LookRight","Blink"};
 constexpr std::array<std::string_view,5> EyebrowNames{"Neutral","Sad","Angry","Confused","Raised"};
 constexpr std::array<std::string_view,14> MouthNames{"Neutral","Sad","Angry","Confused","Laughing","Shocked","Happy",
     "PhoneticO","PhoneticAi","PhoneticEe","PhoneticFv","PhoneticW","PhoneticL","PhoneticDth"};
-constexpr std::size_t MaximumAssetBytes=8u<<20;
+constexpr std::size_t MaximumAssetBytes=8u<<20, MaximumAssets=1024, MaximumEntries=1024;
 
 [[noreturn]] void malformed(const std::string& what){throw std::runtime_error("avatar catalog manifest: "+what);}
 
@@ -107,6 +128,55 @@ const CatalogItem* CatalogManifest::featureItem(std::uint16_t id) const
     return found==featureItems.end()?nullptr:&*found;
 }
 
+const CatalogItem* CatalogManifest::faceStyle(std::uint16_t id) const
+{
+    auto found=std::ranges::find(faceStyles,id,&CatalogItem::id);
+    return found==faceStyles.end()?nullptr:&*found;
+}
+
+const CatalogItem* CatalogManifest::entry(std::uint16_t id) const
+{
+    if(const auto* found=item(id))return found;
+    if(const auto* found=featureItem(id))return found;
+    return faceStyle(id);
+}
+
+const CatalogItem* CatalogManifest::item(std::uint16_t id,AvatarItemSlot slot) const
+{
+    const auto* found=entry(id);
+    return found&&found->slot==slot?found:nullptr;
+}
+
+std::vector<const CatalogItem*> CatalogManifest::itemsOf(AvatarItemSlot slot) const
+{
+    std::vector<const CatalogItem*> out;
+    for(const auto* list:{&items,&featureItems,&faceStyles})
+        for(const auto& entry:*list)
+            if(entry.slot==slot)out.push_back(&entry);
+    return out;
+}
+
+int CatalogManifest::faceParameter(int body,std::string_view name) const
+{
+    for(const auto& control:faceControls[body==1?1:0])
+        if(control.name==name)return control.parameter;
+    return -1;
+}
+
+float HeadSurface::radius(float theta,float phi) const
+{
+    if(rings<1||segments<3||radii.size()!=static_cast<std::size_t>((rings+1)*segments))return 0.0f;
+    constexpr float Pi=3.14159265358979f;
+    const float row=std::clamp(theta/Pi,0.0f,1.0f)*static_cast<float>(rings);
+    float column=(phi+Pi)/(2.0f*Pi)*static_cast<float>(segments);
+    column-=std::floor(column/static_cast<float>(segments))*static_cast<float>(segments);
+    const int r0=std::min(static_cast<int>(row),rings-1), c0=std::min(static_cast<int>(column),segments-1), c1=(c0+1)%segments;
+    const float fr=row-static_cast<float>(r0), fc=column-static_cast<float>(c0);
+    auto at=[&](int r,int c){return radii[static_cast<std::size_t>(r*segments+c)];};
+    const float top=at(r0,c0)+(at(r0,c1)-at(r0,c0))*fc, bottom=at(r0+1,c0)+(at(r0+1,c1)-at(r0+1,c0))*fc;
+    return top+(bottom-top)*fr;
+}
+
 namespace {
 CatalogManifest parseManifestJson(std::string_view text);
 }
@@ -135,7 +205,7 @@ Microsoft::Xna::Framework::Vector3 vector3(const nlohmann::json& value,float bou
 void readFaceControls(const nlohmann::json& json,CatalogManifest& manifest)
 {
     // Bounded so that a hostile catalog can neither tear a head apart nor cost real time.
-    constexpr std::size_t MaximumControls=32, MaximumDeformers=8;
+    constexpr std::size_t MaximumControls=2*FaceParameterCount, MaximumDeformers=8;
     if(!json.is_object())malformed("face controls");
     for(int body=0;body<2;++body) {
         const auto& list=json.at(body==0?"female":"male");
@@ -184,6 +254,80 @@ void readFaceControls(const nlohmann::json& json,CatalogManifest& manifest)
     }
 }
 
+// Anchors, the head surface, outfits and presets: what the assembly and the editor read beyond items.
+void readFaceData(const nlohmann::json& json,CatalogManifest& manifest)
+{
+    const char* bodies[]{"female","male"};
+    if(json.contains("faceAnchors"))
+        for(int body=0;body<2;++body) {
+            const auto& anchors=json["faceAnchors"].at(bodies[body]);
+            auto& out=manifest.faceAnchors[body];
+            out.eyeLeft=vector3(anchors.at("eyeLeft"),5.0f);
+            out.eyeRight=vector3(anchors.at("eyeRight"),5.0f);
+            out.earLeft=vector3(anchors.at("earLeft"),5.0f);
+            out.earRight=vector3(anchors.at("earRight"),5.0f);
+        }
+    if(json.contains("headSurface"))
+        for(int body=0;body<2;++body) {
+            const auto& entry=json["headSurface"].at(bodies[body]);
+            auto& surface=manifest.headSurface[body];
+            surface.centre=vector3(entry.at("centre"),5.0f);
+            surface.rings=entry.at("rings").get<int>();
+            surface.segments=entry.at("segments").get<int>();
+            if(surface.rings<2||surface.rings>128||surface.segments<4||surface.segments>256)malformed("head surface size");
+            const auto& radii=entry.at("radii");
+            if(!radii.is_array()||radii.size()!=static_cast<std::size_t>((surface.rings+1)*surface.segments))malformed("head surface radii");
+            for(const auto& radius:radii) {
+                const float value=radius.get<float>();
+                if(!(value>0.01f&&value<1.0f))malformed("head surface radius");
+                surface.radii.push_back(value);
+            }
+        }
+    if(json.contains("outfits")) {
+        if(!json["outfits"].is_array()||json["outfits"].size()>256)malformed("outfits");
+        for(const auto& entry:json["outfits"]) {
+            CatalogOutfit outfit;
+            outfit.name=entry.at("name").get<std::string>();
+            if(outfit.name.empty()||outfit.name.size()>64)malformed("outfit name");
+            for(const auto& [kind,id]:entry.at("items").items()) {
+                auto slot=std::ranges::find(SlotNames,kind);
+                if(slot==SlotNames.end())malformed("outfit item kind");
+                const auto value=id.get<int>();
+                const auto itemSlot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
+                if(value<0||value>0xffff||(value!=0&&!manifest.item(static_cast<std::uint16_t>(value),itemSlot)))malformed("outfit item");
+                outfit.items.emplace_back(itemSlot,static_cast<std::uint16_t>(value));
+            }
+            if(entry.contains("colors"))
+                for(const auto& [name,rgb]:entry["colors"].items()) {
+                    auto slot=std::ranges::find(ColorNames,name);
+                    if(slot==ColorNames.end()||!rgb.is_array()||rgb.size()!=3)malformed("outfit color");
+                    AvatarColor color;
+                    std::array<std::uint8_t*,3> channels{&color.r,&color.g,&color.b};
+                    for(std::size_t k=0;k<3;++k) {
+                        const int value=rgb[k].get<int>();
+                        if(value<0||value>255)malformed("outfit color");
+                        *channels[k]=static_cast<std::uint8_t>(value);
+                    }
+                    outfit.colors.emplace_back(static_cast<AvatarColorSlot>(slot-ColorNames.begin()),color);
+                }
+            manifest.outfits.push_back(std::move(outfit));
+        }
+    }
+    if(json.contains("facePresets")) {
+        if(!json["facePresets"].is_array()||json["facePresets"].size()>256)malformed("face presets");
+        for(const auto& entry:json["facePresets"]) {
+            FacePreset preset{entry.at("group").get<std::string>(),entry.at("name").get<std::string>(),{}};
+            if(preset.group.empty()||preset.group.size()>16||preset.name.empty()||preset.name.size()>32)malformed("face preset name");
+            for(const auto& [name,value]:entry.at("values").items()) {
+                const float amount=value.get<float>();
+                if(!(amount>=-1.0f&&amount<=1.0f)||name.size()>32)malformed("face preset value");
+                preset.values.emplace_back(name,amount);
+            }
+            manifest.facePresets.push_back(std::move(preset));
+        }
+    }
+}
+
 CatalogManifest parseManifestJson(std::string_view text)
 {
     const auto json=nlohmann::json::parse(text,nullptr,false);
@@ -194,7 +338,11 @@ CatalogManifest parseManifestJson(std::string_view text)
     if(version<1||version>0xffff)malformed("catalog version");
     if(!isSupportedCatalogVersion(version))malformed("catalog version "+std::to_string(version)+" is a development catalog below the baseline");
     manifest.version=static_cast<std::uint16_t>(version);
-    if(!json.contains("assets")||!json["assets"].is_array()||json["assets"].size()>256)malformed("asset list");
+    const auto revision=json.value("revision",1);
+    if(revision<1||revision>0xffff)malformed("catalog revision");
+    manifest.revision=static_cast<std::uint16_t>(revision);
+    if(json.value("reader",1)>CatalogReaderLevel)malformed("the catalog needs a newer reader");
+    if(!json.contains("assets")||!json["assets"].is_array()||json["assets"].size()>MaximumAssets)malformed("asset list");
     for(const auto& asset:json["assets"]) {
         CatalogAsset entry{asset.value("name",std::string()),asset.value("sha256",std::string()),asset.value("size",std::size_t{0})};
         if(!safeName(entry.name)||entry.sha256.size()!=64||entry.size==0||entry.size>MaximumAssetBytes||
@@ -214,46 +362,7 @@ CatalogManifest parseManifestJson(std::string_view text)
         if(height<MinimumHeightMillimeters||height>MaximumHeightMillimeters)malformed("authored height");
         manifest.authoredHeightMillimeters[body]=static_cast<std::uint16_t>(height);
     }
-    std::set<std::uint16_t> ids;
-    auto readItem=[&](const nlohmann::json& item,bool feature) {
-        CatalogItem entry;
-        const int id=item.at("id").get<int>();
-        if(id<1||id>0xffff||!ids.insert(static_cast<std::uint16_t>(id)).second)malformed("item id");
-        entry.id=static_cast<std::uint16_t>(id);
-        const auto slotName=item.at("slot").get<std::string>();
-        if(feature) {
-            if(slotName!="facialHair")malformed("feature item slot");
-            entry.slot=AvatarItemSlot::FacialHair;
-        } else {
-            auto slot=std::ranges::find(SlotNames,slotName);
-            if(slot==SlotNames.end())malformed("item slot");
-            entry.slot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
-        }
-        entry.name=item.at("name").get<std::string>();
-        entry.assets={listed(item.at("assets").at("female")),listed(item.at("assets").at("male"))};
-        if(item.contains("random")) {
-            for(int body=0;body<2;++body) {
-                const float weight=item["random"].at(body==0?"female":"male").get<float>();
-                if(!(weight>=0.0f&&weight<=1000.0f))malformed("item random weight");
-                entry.randomWeight[body]=weight;
-            }
-        }
-        if(item.contains("hatAssets")) {
-            if(entry.slot!=AvatarItemSlot::Hair)malformed("hat assets on a non-hair item");
-            entry.hatAssets={listed(item["hatAssets"].at("female")),listed(item["hatAssets"].at("male"))};
-        }
-        if(item.contains("coversHair")) {
-            if(entry.slot!=AvatarItemSlot::Hat)malformed("coversHair on a non-hat item");
-            entry.coversHair=item["coversHair"].get<bool>();
-        }
-        return entry;
-    };
-    for(const auto& item:json.at("items"))manifest.items.push_back(readItem(item,false));
-    if(json.contains("featureItems")) {
-        if(!json["featureItems"].is_array()||json["featureItems"].size()>256)malformed("feature items");
-        for(const auto& item:json["featureItems"])manifest.featureItems.push_back(readItem(item,true));
-    }
-    if(json.contains("faceControls"))readFaceControls(json["faceControls"],manifest);
+    // The face atlas first: face styles name its tiles.
     const auto& face=json.at("face");
     manifest.faceAsset=listed(face.at("asset"));
     const auto& layout=face.at("layout");
@@ -262,19 +371,96 @@ CatalogManifest parseManifestJson(std::string_view text)
     const int width=layout.at("width").get<int>(), height=layout.at("height").get<int>();
     if(manifest.face.tileSize<8||manifest.face.tileSize>256||manifest.face.columns<1||width!=manifest.face.columns*manifest.face.tileSize||
        height<manifest.face.tileSize||height>4096||height%manifest.face.tileSize)malformed("face layout");
-    const int tiles=manifest.face.columns*(height/manifest.face.tileSize);
+    const int tileCount=manifest.face.columns*(height/manifest.face.tileSize);
+    manifest.face.tiles=tileCount;
+    std::set<std::uint16_t> ids;
+    auto readItem=[&](const nlohmann::json& item,ListKind list) {
+        CatalogItem entry;
+        const int id=item.at("id").get<int>();
+        if(id<1||id>0xffff||!ids.insert(static_cast<std::uint16_t>(id)).second)malformed("item id");
+        entry.id=static_cast<std::uint16_t>(id);
+        auto slot=std::ranges::find(SlotNames,item.at("slot").get<std::string>());
+        if(slot==SlotNames.end())malformed("item slot");
+        entry.slot=static_cast<AvatarItemSlot>(slot-SlotNames.begin());
+        if(listOf(entry.slot)!=list)malformed("item slot in the wrong list");
+        entry.name=item.at("name").get<std::string>();
+        if(entry.name.empty()||entry.name.size()>64)malformed("item name");
+        entry.label=item.value("label",std::string());
+        if(entry.label.size()>40)malformed("item label");
+        if(list==ListKind::Styles) {
+            const auto& tiles=item.at("tiles");
+            if(!tiles.is_array()||tiles.size()!=styleTiles(entry.slot))malformed("face style tiles");
+            for(const auto& value:tiles)entry.tiles.push_back(tile(value,tileCount));
+            entry.opacity=item.value("opacity",1.0f);
+            if(!(entry.opacity>0.0f&&entry.opacity<=1.0f))malformed("face style opacity");
+        } else {
+            entry.assets={listed(item.at("assets").at("female")),listed(item.at("assets").at("male"))};
+        }
+        if(item.contains("random")) {
+            for(int body=0;body<2;++body) {
+                const float weight=item["random"].at(body==0?"female":"male").get<float>();
+                if(!(weight>=0.0f&&weight<=1000.0f))malformed("item random weight");
+                entry.randomWeight[body]=weight;
+            }
+        }
+        const int format=item.value("format",1);
+        if(format<FormatVersion||format>ExtendedFormatVersion)malformed("item format");
+        // A kind format 3 introduced cannot be named by an older format.
+        const bool extendedKind=entry.slot==AvatarItemSlot::Ears||entry.slot>=AvatarItemSlot::Earrings;
+        entry.format=static_cast<std::uint8_t>(std::max<int>(format,extendedKind?ExtendedFormatVersion:FormatVersion));
+        if(item.contains("hairCover")) {
+            if(entry.slot!=AvatarItemSlot::Hat)malformed("hairCover on a non-hat item");
+            const auto& cover=item["hairCover"];
+            const auto& line=cover.at("line");
+            if(!line.is_array()||line.size()!=4)malformed("hairCover line");
+            HairCover parsed;
+            for(std::size_t k=0;k<4;++k) {
+                parsed.line[k]=line[k].get<float>();
+                if(!(parsed.line[k]>0.0f&&parsed.line[k]<1.0f))malformed("hairCover line");
+            }
+            parsed.lift=cover.at("lift").get<float>();
+            if(!(parsed.lift>=0.0f&&parsed.lift<=0.1f))malformed("hairCover lift");
+            entry.hairCover=parsed;
+        }
+        if(item.contains("follow")) {
+            const auto follow=item["follow"].get<std::string>();
+            if(follow=="eyes"&&entry.slot==AvatarItemSlot::Glasses)entry.follow=ItemFollow::Eyes;
+            else if(follow=="ears"&&entry.slot==AvatarItemSlot::Earrings)entry.follow=ItemFollow::Ears;
+            else malformed("item follow");
+        }
+        if(item.contains("hides")) {
+            if(!item["hides"].is_array()||item["hides"].size()>AvatarItemKindCount)malformed("item hides");
+            for(const auto& hidden:item["hides"]) {
+                auto kind=std::ranges::find(SlotNames,hidden.get<std::string>());
+                if(kind==SlotNames.end()||listOf(static_cast<AvatarItemSlot>(kind-SlotNames.begin()))!=ListKind::Items)malformed("item hides");
+                entry.hides.push_back(static_cast<AvatarItemSlot>(kind-SlotNames.begin()));
+            }
+        }
+        return entry;
+    };
+    auto readList=[&](const char* key,ListKind list,std::vector<CatalogItem>& out) {
+        if(!json.contains(key))return;
+        if(!json[key].is_array()||json[key].size()>MaximumEntries)malformed(std::string(key)+" list");
+        for(const auto& item:json[key])out.push_back(readItem(item,list));
+    };
+    readList("items",ListKind::Items,manifest.items);
+    if(!json.contains("items"))malformed("items");
+    readList("featureItems",ListKind::Features,manifest.featureItems);
+    readList("faceStyles",ListKind::Styles,manifest.faceStyles);
+    if(json.contains("faceControls"))readFaceControls(json["faceControls"],manifest);
     for(std::size_t state=0;state<EyeNames.size();++state)
         for(int side=0;side<2;++side) {
             const auto& pair=layout.at("eyes").at(std::string(EyeNames[state])).at(side==0?"left":"right");
             if(!pair.is_array()||pair.size()!=2)malformed("eye tiles");
-            manifest.face.eyes[state][side]={tile(pair[0],tiles),tile(pair[1],tiles)};
+            manifest.face.eyes[state][side]={tile(pair[0],tileCount),tile(pair[1],tileCount)};
         }
     for(std::size_t state=0;state<EyebrowNames.size();++state)
         for(int side=0;side<2;++side)
-            manifest.face.eyebrows[state][side]=tile(layout.at("eyebrows").at(std::string(EyebrowNames[state])).at(side==0?"left":"right"),tiles);
+            manifest.face.eyebrows[state][side]=tile(layout.at("eyebrows").at(std::string(EyebrowNames[state])).at(side==0?"left":"right"),tileCount);
     for(std::size_t state=0;state<MouthNames.size();++state)
-        manifest.face.mouths[state]=tile(layout.at("mouths").at(std::string(MouthNames[state])),tiles);
+        manifest.face.mouths[state]=tile(layout.at("mouths").at(std::string(MouthNames[state])),tileCount);
     manifest.animationsAsset=listed(json.at("animations").at("asset"));
+    readFaceData(json,manifest);
     // Required slots need an item to fall back to and to draw at random.
     for(auto required:{AvatarItemSlot::Hair,AvatarItemSlot::Top,AvatarItemSlot::Bottom,AvatarItemSlot::Shoes})
         for(int body=0;body<2;++body)
@@ -291,8 +477,9 @@ const std::vector<std::shared_ptr<const CatalogManifest>>& embeddedCatalogs()
         for(const auto& file:embeddedCatalogFiles()) {
             const std::string_view name(file.name);
             if(!name.starts_with("v")||!name.ends_with("/catalog.json"))continue;
+            const auto text=inflateEmbedded(file);
             auto manifest=std::make_shared<const CatalogManifest>(
-                parseManifest(std::string_view(reinterpret_cast<const char*>(file.data),file.size)));
+                parseManifest(std::string_view(reinterpret_cast<const char*>(text.data()),text.size())));
             if(name!="v"+std::to_string(manifest->version)+"/catalog.json")
                 throw std::runtime_error("avatar catalog: "+std::string(name)+" describes another version");
             out.push_back(std::move(manifest));
@@ -316,17 +503,30 @@ std::shared_ptr<const CatalogManifest> embeddedManifest(std::uint16_t version)
 
 const CatalogManifest& newestEmbeddedManifest(){return *embeddedCatalogs().back();}
 
-std::optional<std::span<const std::uint8_t>> embeddedFileByContent(const CatalogAsset& asset)
+std::optional<AssetBytes> embeddedFileByContent(const CatalogAsset& asset)
 {
-    // Each compiled-in file is hashed at most once per process.
+    // Each compiled-in file is inflated and hashed at most once per process to learn its identity.
     for(const auto& file:embeddedCatalogFiles()) {
-        if(file.size!=asset.size)continue;
+        if((file.inflatedSize?file.inflatedSize:file.size)!=asset.size)continue;
+        std::shared_ptr<const std::vector<std::uint8_t>> contents;
+        {
+            std::lock_guard guard(verifiedLock);
+            if(auto hash=embeddedHashes.find(file.data);hash!=embeddedHashes.end()&&hash->second!=asset.sha256)continue;
+        }
+        contents=std::make_shared<const std::vector<std::uint8_t>>(inflateEmbedded(file));
         std::lock_guard guard(verifiedLock);
         auto hash=embeddedHashes.find(file.data);
-        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(file.bytes())).first;
-        if(hash->second==asset.sha256)return file.bytes();
+        if(hash==embeddedHashes.end())hash=embeddedHashes.emplace(file.data,sha256Hex(*contents)).first;
+        if(hash->second==asset.sha256)return AssetBytes{contents,std::span<const std::uint8_t>(*contents)};
     }
     return std::nullopt;
+}
+
+std::vector<std::uint8_t> embeddedCatalogFile(std::string_view name)
+{
+    for(const auto& file:embeddedCatalogFiles())
+        if(name==file.name)return inflateEmbedded(file);
+    return {};
 }
 
 int maximumFaceTile(const FaceLayout& layout)
@@ -344,7 +544,7 @@ std::optional<AssetBytes> resolveAsset(const CatalogManifest& manifest,std::stri
     if(listed==manifest.assets.end())return std::nullopt;
     // Compiled-in contents are found by size and hash, never by name: two catalog versions may
     // hold different files under one name.
-    if(auto embedded=embeddedFileByContent(listed->second))return AssetBytes{nullptr,*embedded};
+    if(auto embedded=embeddedFileByContent(listed->second))return embedded;
     // Otherwise the installed pack of exactly this version, verified again on every read. Assets
     // are never downloaded here: a missing catalog is installed as a whole (catalogManifest).
     auto bytes=installedCatalogFile(manifest.version,listed->second);

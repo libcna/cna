@@ -55,6 +55,14 @@ else
     export WINEPREFIX="$HOME/.wine-cna-d3d9-spike"
     # entry, profile, header, committed-array-name
     set -- \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctual vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DVSBytecode" \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctualVc vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DColorVSBytecode" \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctualTx vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DTextureVSBytecode" \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctualTxVc vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DTextureColorVSBytecode" \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctualSkinned vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctualSkinned3DVSBytecode" \
+      "cna/BasicPunctual3D.hlsl VSBasicPunctualSkinnedVc vs_3_0 d3d9_pbr_shaders.hpp kBasicPunctualSkinned3DColorVSBytecode" \
+      "cna/BasicPunctual3D.hlsl PSBasicPunctual ps_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DPSBytecode" \
+      "cna/BasicPunctual3D.hlsl PSBasicPunctualTx ps_3_0 d3d9_pbr_shaders.hpp kBasicPunctual3DTexturePSBytecode" \
       "cna/Pbr3D.hlsl VSPbr3D vs_3_0 d3d9_pbr_shaders.hpp kPbr3DVSBytecode" \
       "cna/Pbr3D.hlsl PSPbr3D ps_3_0 d3d9_pbr_shaders.hpp kPbr3DPSBytecode" \
       "cna/PbrSkinned3D.hlsl VSPbrSkinned3D vs_3_0 d3d9_pbr_shaders.hpp kPbrSkinned3DVSBytecode" \

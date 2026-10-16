@@ -407,7 +407,7 @@ public:
         // What this client can draw: the description formats it reads, the catalogs it has, and
         // whether (and how large) it installs the one a description names. The service answers
         // with the stored avatar when that is drawable here, else with a marked projection.
-        Json args{{"userIds",ids},{"formats",Json::array({1,2})}};
+        Json args{{"userIds",ids},{"formats",Json::array({1,2,3})},{"reader",Avatars::CatalogReaderLevel}};
         // A caller that names no catalogs only reads descriptions; the service refuses an empty list.
         if(capabilities_.contains("avatar-catalog-packs")&&!client.versions.empty()) {
             Json catalogs=Json::array();
@@ -416,7 +416,6 @@ public:
             args["catalogs"]=std::move(catalogs);
             args["catalogUpdates"]=policy.updates&&client.canInstall;
             args["maxCatalogBytes"]=policy.maximumBytes;
-            args["reader"]=Avatars::CatalogReaderLevel;
         }
         const auto result=request("avatars.get",args,tokenFor({}));
         const auto& entries=result.at("avatars");
@@ -460,9 +459,21 @@ public:
         Json args=Json::object();if(version)args["version"]=version;
         const auto result=request("avatars.catalog",args,tokenFor({}));
         if(!result.contains("version")||!result["version"].is_number_integer()||(version&&result["version"]!=version)||
-           !Avatars::isSupportedCatalogVersion(result["version"].get<long long>())||
-           !result.contains("manifest")||!result["manifest"].is_object())throw Unavailable("Invalid avatar catalog response.");
-        return result["manifest"].dump();
+           !Avatars::isSupportedCatalogVersion(result["version"].get<long long>()))throw Unavailable("Invalid avatar catalog response.");
+        if(result.contains("manifest")&&result["manifest"].is_object())return result["manifest"].dump();
+        // A manifest larger than a message is named rather than sent, and read by hash like a pack's.
+        if(!result.contains("manifestSha256")||!result["manifestSha256"].is_string()||!result.contains("manifestSize")||
+           !result["manifestSize"].is_number_unsigned())throw Unavailable("Invalid avatar catalog response.");
+        const auto bytes=catalogFile(result["manifestSha256"].get<std::string>(),result["manifestSize"].get<std::size_t>());
+        return std::string(bytes.begin(),bytes.end());
+    }
+    int newestAvatarCatalog() override {
+        if(!capabilities_.contains("avatars"))throw Unavailable("CNA service avatars capability missing.");
+        // The version alone: a service from before catalog revisions sends the manifest anyway.
+        const auto result=request("avatars.catalog",{{"manifest",false}},tokenFor({}));
+        if(!result.contains("version")||!result["version"].is_number_integer()||
+           !Avatars::isSupportedCatalogVersion(result["version"].get<long long>()))throw Unavailable("Invalid avatar catalog response.");
+        return result["version"].get<int>();
     }
     std::vector<unsigned char> asset(const std::string& hash) override {
         if(hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw Unavailable("Invalid service asset identifier.");

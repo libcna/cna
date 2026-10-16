@@ -188,6 +188,18 @@ float4 TextureTransformRows[10] : register(c14); // two affine UV rows per PBR m
 float4 SpecularFresnelInputs    : register(c24); // xyz=unclamped F0, w=specular factor
 float4 SpecularMapFlags        : register(c25); // x=decode specular-colour sample from sRGB
 float4 SpecularTextureTransformRows[4] : register(c26); // two affine rows per specular map
+float4 PunctualPositionRange   : register(c30); // xyz=world position, w=range
+float4 PunctualDirectionKind   : register(c31); // xyz=spot direction, w=0 none / 1 point / 2 spot
+float4 PunctualDiffuse         : register(c32); // xyz=linear colour/intensity
+float4 PunctualCone            : register(c33); // x=cos(inner), y=cos(outer)
+
+#if CNA_D3D9_SHADOWS
+#include "ShadowSampling3D.fxh"
+#else
+float CnaShadowFactor(float3 worldPos) { return 1.0; }
+float3 CnaCascadeDebugTint(float3 worldPos) { return float3(1.0, 1.0, 1.0); }
+float CnaPunctualShadow(float3 worldPos, float3 toLight, float distanceToLight) { return 1.0; }
+#endif
 
 struct PSInput
 {
@@ -250,6 +262,32 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
 }
 
+// MOD-1005: same unshadowed point/spot term as the other PBR backends. Shadow textures remain
+// deliberately unsupported by DIRECTX9 and therefore do not affect this direct-light result.
+float3 CnaPunctualLight(float3 worldPos, float3 normal)
+{
+    if (PunctualDirectionKind.w < 0.5)
+        return float3(0.0, 0.0, 0.0);
+    float3 offset = PunctualPositionRange.xyz - worldPos;
+    float distanceToLight = length(offset);
+    if (distanceToLight > PunctualPositionRange.w || distanceToLight < 1e-5)
+        return float3(0.0, 0.0, 0.0);
+    float3 toLight = offset / distanceToLight;
+    float t = distanceToLight / PunctualPositionRange.w;
+    float window = saturate(1.0 - t * t * t * t);
+    float attenuation = window * window / (1.0 + distanceToLight * distanceToLight);
+    if (PunctualDirectionKind.w > 1.5)
+    {
+        float cosAngle = dot(normalize(PunctualDirectionKind.xyz), -toLight);
+        float cone = saturate((cosAngle - PunctualCone.y) /
+                              max(PunctualCone.x - PunctualCone.y, 1e-4));
+        attenuation *= cone * cone;
+    }
+    float ndotl = max(dot(normal, toLight), 0.0);
+    return PunctualDiffuse.xyz * ndotl * attenuation *
+           CnaPunctualShadow(worldPos, toLight, distanceToLight);
+}
+
 float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
 {
     float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(pin.UV, 0));
@@ -294,6 +332,8 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     Lo += PbrLight(finalNormal, V, normalize(-Light0Dir), Light0Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo *= CnaShadowFactor(pin.WorldPos);
+    Lo += CnaPunctualLight(pin.WorldPos, finalNormal) * albedo;
 
     float occlusion = tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r;
     occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
@@ -303,6 +343,7 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     float3 emissive = EmissiveColor.xyz * emissiveSample;
 
     float4 outColor = float4(ambient + Lo + emissive, alpha);
+    outColor.rgb *= CnaCascadeDebugTint(pin.WorldPos);
 
     float alphaTestResult = (AlphaTest.y > 0.0)
         ? ((abs(outColor.a - AlphaTest.x) < AlphaTest.y) ? AlphaTest.z : AlphaTest.w)

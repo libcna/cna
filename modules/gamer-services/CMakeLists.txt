@@ -51,7 +51,8 @@ endif()
 # catalogs and are not supported. A future catalog is added by generating its directory and
 # appending its version here; every catalog in the list stays compiled in once released.
 #
-# Link boundary (docs/link-size-architecture.md): the catalog is ~13 MB of GLB and PNG data, so it
+# Link boundary (docs/link-size-architecture.md): the catalog is ~30 MB of GLB and PNG data,
+# compiled in deflated (about a third of that; inflated file by file as an avatar needs it), so it
 # is a library of its own whose one symbol, embeddedCatalogFiles(), only the avatar catalog code
 # (src/Internal/Avatars/AvatarCatalog.cpp) references. A program reaches it by drawing or editing
 # avatars -- AvatarDescription, AvatarRenderer, or the system Guide GamerServicesDispatcher installs
@@ -80,7 +81,12 @@ add_library(cna_gamerservices_avatar_catalog STATIC)
 add_library(CNA::GamerServicesAvatarCatalog ALIAS cna_gamerservices_avatar_catalog)
 cna_embed_binary_files(cna_gamerservices_avatar_catalog CNA::Internal::GamerServices::Avatars embeddedCatalogFiles
     "${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedAvatarCatalog.cpp" BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets/avatars"
-    FILES ${CNA_AVATAR_CATALOG_FILES})
+    COMPRESS FILES ${CNA_AVATAR_CATALOG_FILES})
+# Debug information would repeat every byte of the arrays (GCC describes a constant array with its
+# value), doubling what every debug program that draws avatars links.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/generated/EmbeddedAvatarCatalog.cpp" PROPERTIES COMPILE_OPTIONS "-g0")
+endif()
 target_link_libraries(cna_gamerservices_avatar_catalog PRIVATE cna_build_config cna_core_headers)
 target_link_libraries(CNA_GamerServices PRIVATE cna_gamerservices_avatar_catalog)
 # The checked-in catalog must be exactly what the generator produces (tools/avatar_builder).
@@ -93,6 +99,8 @@ if(CNA_BUILD_TESTS)
 endif()
 # The avatar asset reader parses GLB with the cgltf implementation compiled into cna_content.
 target_include_directories(CNA_GamerServices PRIVATE ${CNA_SOURCE_DIR}/third_party/cgltf)
+# The compiled-in catalog is deflated; stb_image's zlib decoder inflates it (AvatarInflate.cpp).
+target_include_directories(CNA_GamerServices PRIVATE ${CNA_SOURCE_DIR}/third_party/stb)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HeaderOnlyJson.cmake")
 cna_link_json_headers(CNA_GamerServices)
 target_include_directories(CNA_GamerServices PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Internal/Protocol)

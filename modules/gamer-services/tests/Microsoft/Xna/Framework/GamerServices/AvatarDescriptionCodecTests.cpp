@@ -18,7 +18,7 @@ Avatars::AvatarDescriptor sample()
     descriptor.bodyType = 1;
     descriptor.heightMillimeters = 1834;
     descriptor.build = 201;
-    for (std::size_t index = 0; index < Avatars::AvatarColorSlotCount; ++index) {
+    for (std::size_t index = 0; index < Avatars::FormatTwoColorSlotCount; ++index) {
         descriptor.colors[index] = {static_cast<std::uint8_t>(10 + index), static_cast<std::uint8_t>(100 + index),
             static_cast<std::uint8_t>(200 + index)};
     }
@@ -207,7 +207,7 @@ Avatars::AvatarDescriptor shaped()
     auto descriptor = sample();
     descriptor.catalogVersion = Avatars::BaseCatalogVersion;
     descriptor.facialHair = 122;
-    for (std::size_t index = 0; index < Avatars::FaceParameterCount; ++index) {
+    for (std::size_t index = 0; index < Avatars::FormatTwoFaceParameterCount; ++index) {
         descriptor.face[index] = static_cast<std::uint8_t>(index * 16 + 3);
     }
     return descriptor;
@@ -266,8 +266,132 @@ TEST(AvatarDescriptionCodecTest, Format2RefusesWhatItCannotMean) {
     EXPECT_TRUE(Avatars::decode(Avatars::encode(newer)).has_value());
     // A format this build does not know is not decoded.
     auto future = good;
-    future[0] = 3;
+    future[0] = 4;
     EXPECT_FALSE(Avatars::decode(withChecksum(future)).has_value());
+}
+
+namespace {
+// A format 3 avatar using every field format 3 adds (eyebrows, ears, makeup, its colours,
+// proportions and the second face block), on catalog v3's own entries.
+Avatars::AvatarDescriptor extended()
+{
+    using Slot = Avatars::AvatarItemSlot;
+    const auto& catalog = *Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
+    auto descriptor = shaped();
+    descriptor.eyebrows = catalog.itemsOf(Slot::Eyebrows).back()->id;
+    descriptor.ears = catalog.itemsOf(Slot::Ears)[2]->id;
+    for (auto slot : {Slot::EyeShadow, Slot::Eyeliner, Slot::Blush, Slot::Lips}) {
+        descriptor.makeup[Avatars::makeupIndex(slot)] = catalog.itemsOf(slot).front()->id;
+    }
+    for (std::size_t index = Avatars::FormatTwoColorSlotCount; index < Avatars::AvatarColorSlotCount; ++index) {
+        descriptor.colors[index] = {static_cast<std::uint8_t>(index), static_cast<std::uint8_t>(index * 9), 77};
+    }
+    descriptor.proportion = 40;
+    for (std::size_t index = Avatars::FormatTwoFaceParameterCount; index < Avatars::FaceParameterCount; ++index) {
+        descriptor.face[index] = static_cast<std::uint8_t>(255 - index * 5);
+    }
+    return descriptor;
+}
+}
+
+TEST(AvatarDescriptionCodecTest, Format3RoundTripsEveryFieldInItsDocumentedPlace) {
+    const auto descriptor = extended();
+    ASSERT_TRUE(descriptor.usesExtendedFields());
+    const auto bytes = Avatars::encode(descriptor);
+    EXPECT_EQ(bytes[0], Avatars::ExtendedFormatVersion);
+    // Format 3 keeps format 2's bytes 1-60 exactly.
+    auto two = descriptor;
+    two.eyebrows = two.ears = 0;
+    two.makeup = {};
+    std::fill(two.colors.begin() + Avatars::FormatTwoColorSlotCount, two.colors.end(), Avatars::AvatarColor{});
+    two.proportion = Avatars::NeutralFaceParameter;
+    std::fill(two.face.begin() + Avatars::FormatTwoFaceParameterCount, two.face.end(), Avatars::NeutralFaceParameter);
+    const auto formatTwo = Avatars::encode(two);
+    EXPECT_EQ(formatTwo[0], Avatars::FaceFormatVersion);
+    EXPECT_TRUE(std::equal(bytes.begin() + 1, bytes.begin() + 61, formatTwo.begin() + 1));
+    // docs/avatars.md: eyebrows 61, ears 63, accessories 65 (id, side) x 4, makeup 77, colours 85,
+    // proportion 100, face 101-116, reserved from 117.
+    EXPECT_EQ(bytes[61] | bytes[62] << 8, descriptor.eyebrows);
+    EXPECT_EQ(bytes[63] | bytes[64] << 8, descriptor.ears);
+    EXPECT_EQ(bytes[77] | bytes[78] << 8, descriptor.makeup[0]);
+    EXPECT_EQ(bytes[83] | bytes[84] << 8, descriptor.makeup[3]);
+    EXPECT_EQ(bytes[85], descriptor.colors[7].r);
+    EXPECT_EQ(bytes[99], descriptor.colors[11].b);
+    EXPECT_EQ(bytes[100], 40);
+    EXPECT_EQ(bytes[101], descriptor.face[16]);
+    EXPECT_EQ(bytes[116], descriptor.face[31]);
+    EXPECT_TRUE(std::all_of(bytes.begin() + 117, bytes.end() - 4, [](auto b) { return b == 0; }));
+    const auto decoded = Avatars::decode(bytes);
+    ASSERT_TRUE(decoded.has_value());
+    EXPECT_EQ(*decoded, descriptor);
+    EXPECT_EQ(Avatars::encode(*decoded), bytes);
+}
+
+TEST(AvatarDescriptionCodecTest, EachFormat3FieldAloneNeedsFormat3) {
+    using Slot = Avatars::AvatarItemSlot;
+    const auto& catalog = *Avatars::embeddedManifest(Avatars::BaseCatalogVersion);
+    const auto plain = sample();
+    ASSERT_EQ(Avatars::requiredFormat(plain), Avatars::FormatVersion);
+    std::vector<Avatars::AvatarDescriptor> cases;
+    auto add = [&](auto change) { auto d = plain; change(d); cases.push_back(d); };
+    add([&](auto& d) { d.eyebrows = catalog.itemsOf(Slot::Eyebrows).front()->id; });
+    add([&](auto& d) { d.ears = catalog.itemsOf(Slot::Ears).front()->id; });
+    add([&](auto& d) { d.makeup[1] = catalog.itemsOf(Slot::Eyeliner).front()->id; });
+    add([&](auto& d) { d.colors[static_cast<std::size_t>(Avatars::AvatarColorSlot::Jewelry)] = {1, 2, 3}; });
+    add([&](auto& d) { d.proportion = 129; });
+    add([&](auto& d) { d.face[31] = 0; });
+    for (const auto& d : cases) {
+        const auto bytes = Avatars::encode(d);
+        EXPECT_EQ(bytes[0], Avatars::ExtendedFormatVersion);
+        EXPECT_EQ(Avatars::decode(bytes), d);
+    }
+    // A catalog entry added since the first v3 release needs format 3 as well.
+    for (const auto& item : catalog.items) {
+        if (item.format != 3 || item.slot > Slot::Hat) {
+            continue;
+        }
+        auto d = plain;
+        d.items[static_cast<std::size_t>(item.slot)] = item.id;
+        EXPECT_EQ(Avatars::requiredFormat(d), Avatars::ExtendedFormatVersion) << item.name;
+    }
+}
+
+TEST(AvatarDescriptionCodecTest, Format3RefusesWhatItCannotMean) {
+    const auto good = Avatars::encode(extended());
+    auto reserved = good;
+    reserved[117] = 1;
+    EXPECT_FALSE(Avatars::decode(withChecksum(reserved)).has_value());
+    reserved = good;
+    reserved[600] = 9;
+    EXPECT_FALSE(Avatars::decode(withChecksum(reserved)).has_value());
+    // A format 3 buffer that says nothing format 2 cannot is not canonical.
+    auto formatTwo = Avatars::encode(shaped());
+    auto lifted = formatTwo;
+    lifted[0] = Avatars::ExtendedFormatVersion;
+    lifted[100] = Avatars::NeutralFaceParameter;
+    std::fill(lifted.begin() + 101, lifted.begin() + 117, Avatars::NeutralFaceParameter);
+    EXPECT_FALSE(Avatars::decode(withChecksum(lifted)).has_value());
+    // A side byte outside both/left/right, a side without an accessory, and a single glove.
+    auto side = good;
+    side[67] = 3;
+    EXPECT_FALSE(Avatars::decode(withChecksum(side)).has_value());
+    auto lonely = extended();
+    lonely.sides[0] = Avatars::AvatarSides::Left;
+    EXPECT_FALSE(Avatars::isEncodable(lonely));
+    // Entries must be of the kind their field names.
+    auto wrongKind = extended();
+    wrongKind.eyebrows = wrongKind.ears;
+    EXPECT_FALSE(Avatars::isEncodable(wrongKind));
+    auto unknownStyle = extended();
+    unknownStyle.makeup[2] = 4000;
+    EXPECT_FALSE(Avatars::isEncodable(unknownStyle));
+}
+
+TEST(AvatarDescriptionCodecTest, Format3BytesAreStable) {
+    // The same avatar is always the same 1021 bytes (a CRC of this one pins the layout).
+    const auto bytes = Avatars::encode(extended());
+    EXPECT_EQ(Avatars::encode(extended()), bytes);
+    EXPECT_EQ(Avatars::crc32(bytes), Avatars::crc32(Avatars::encode(*Avatars::decode(bytes))));
 }
 
 TEST(AvatarDescriptionCodecTest, RandomAvatarsHaveIndividualFaces) {

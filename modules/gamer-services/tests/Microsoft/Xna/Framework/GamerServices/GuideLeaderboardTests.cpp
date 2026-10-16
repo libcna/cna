@@ -25,9 +25,8 @@ struct Provider final : System::IServiceProvider {
 // Any real PNG will do: the baseline avatar catalog's face atlas.
 std::vector<unsigned char> Picture() {
     const auto name = "v" + std::to_string(Avatars::BaseCatalogVersion) + "/face_features.png";
-    for (const auto& file : Avatars::embeddedCatalogFiles())
-        if (std::string_view(file.name) == name) return {file.data, file.data + file.size};
-    return {};
+    const auto bytes = Avatars::embeddedCatalogFile(name);
+    return {bytes.begin(), bytes.end()};
 }
 
 class GuideLeaderboardTest : public ::testing::Test {

@@ -1098,11 +1098,12 @@ native draw path still accepted only triangles. The renderer now rasterises `Poi
 `LineList` and `LineStrip`, for indexed and non-indexed submissions, through the same clipped,
 depth-tested, blended fragment path as triangles; `TriangleStrip` remains an explicit unsupported
 boundary. The next run stopped on `uv1-material`: its canonical 60-byte dual-UV record reached the
-renderer intact, but the CPU fallback only knew stride 48/68. SOFTWARE now accepts stride 60/76,
-selects the base-colour UV with mask bit 0 and applies that map's affine transform. The corrected
-capture covers the complete 45,643-pixel numbered quad. This is deliberately bounded evidence:
-SOFTWARE's reduced PBR fallback samples base colour only, so its corpus does not claim full
-normal/MR/emissive/occlusion shading fidelity already established by EasyGL.
+renderer intact, but the CPU path only knew stride 48/68. SOFTWARE now accepts stride 60/76 and
+retains both UV channels. Its later PBR completion applies the independent selector and affine
+transform for every material map; the analytic direct-lighting and mirrored-skin TBN oracle is
+paired with the corpus rather than inferred from its images. The recorded capture itself predates
+that lighting completion and remains evidence for the importer/raster/coverage boundary, not a
+current PBR golden claim.
 
 Reproduce the exact campaign after building the SOFTWARE viewer:
 

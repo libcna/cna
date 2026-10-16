@@ -111,6 +111,8 @@ void BoundaryDemo::Draw(const GameTime& gameTime)
     const float aspect = viewport.getHeightProperty() > 0
         ? static_cast<float>(viewport.getWidthProperty()) / static_cast<float>(viewport.getHeightProperty())
         : 1.0f;
+    // XNA avatars face -Z: a half turn faces it to the camera.
+    renderer_->setWorldProperty(Matrix::CreateRotationY(3.14159265f));
     renderer_->setViewProperty(Matrix::CreateLookAt(Vector3(0.0f, 1.3f, 2.6f), Vector3(0.0f, 1.0f, 0.0f), Vector3::Up));
     renderer_->setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(0.75f, aspect, 0.1f, 50.0f));
 

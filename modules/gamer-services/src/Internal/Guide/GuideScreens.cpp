@@ -976,4 +976,14 @@ void clickForTesting(int index)
     if(!s.stack.empty())s.stack.back()->activate(index);
     noteTop();
 }
+
+std::vector<std::pair<std::string,Xna::Vector2>> targetsForTesting()
+{
+    std::vector<std::pair<std::string,Xna::Vector2>> out;
+    if(state().stack.empty())return out;
+    for(const auto& [name,box]:state().stack.back()->targets())out.emplace_back(name,Xna::Vector2(box.x+box.w/2,box.y+box.h/2));
+    return out;
+}
+
+std::string stateForTesting(){return state().stack.empty()?std::string():state().stack.back()->stateForTesting();}
 }

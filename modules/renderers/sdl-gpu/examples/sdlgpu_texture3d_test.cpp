@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "System/NotSupportedException.hpp"
@@ -149,6 +150,11 @@ protected:
         Check(renderer.ClassifyTexture3DFormatEXT(static_cast<int>(SurfaceFormat::Color)) ==
                   RendererFormatVerdict::Supported,
               "Texture3D classifier explicitly supports Color");
+        Check(renderer.ClassifyTexture3DFormatEXT(static_cast<int>(SurfaceFormat::Single)) ==
+                  RendererFormatVerdict::Supported &&
+              renderer.ClassifyTexture3DFormatEXT(static_cast<int>(SurfaceFormat::Vector4)) ==
+                  RendererFormatVerdict::Supported,
+              "Texture3D classifier explicitly supports Single and Vector4");
         const std::array unsupported{
             SurfaceFormat::Bgr565,
             SurfaceFormat::Bgra5551,
@@ -162,9 +168,7 @@ protected:
             SurfaceFormat::Rg32,
             SurfaceFormat::Rgba64,
             SurfaceFormat::Alpha8,
-            SurfaceFormat::Single,
             SurfaceFormat::Vector2,
-            SurfaceFormat::Vector4,
             SurfaceFormat::HalfSingle,
             SurfaceFormat::HalfVector2,
             SurfaceFormat::HalfVector4,
@@ -186,7 +190,7 @@ protected:
             }
         }
         Check(unsupportedExact,
-              "Texture3D classifier explicitly refuses all 19 non-Color classic formats");
+              "Texture3D classifier explicitly refuses the other 17 classic formats");
         Check(publicRefusalExact,
               "public Texture3D construction gives a named refusal for every unsupported format");
 
@@ -221,6 +225,37 @@ protected:
         single.SetData(oneMipReplacement.data(), static_cast<int>(oneMipReplacement.size()));
         CheckExact(single, 0, 4, 4, 4, oneMipReplacement,
                    "one-mip repeated full-volume upload replaces prior data");
+
+        {
+            const std::array<float, 8> sourceSingle{
+                -2.0f, -1.0f, -0.5f, 0.0f, 0.25f, 0.5f, 1.0f, 4.0f};
+            std::array<float, 8> resultSingle{};
+            Texture3D singleFloat(device, 2, 2, 2, false, SurfaceFormat::Single);
+            singleFloat.SetData(sourceSingle.data(), static_cast<int>(sourceSingle.size()));
+            singleFloat.GetData(resultSingle.data(), static_cast<int>(resultSingle.size()));
+            Check(resultSingle == sourceSingle,
+                  "Single Texture3D preserves all binary32 voxels exactly");
+
+            const std::array<Vector4, 8> sourceVector4{
+                Vector4(-1.0f, 0.0f, 1.0f, 2.0f), Vector4(3.0f, 4.0f, 5.0f, 6.0f),
+                Vector4(7.0f, 8.0f, 9.0f, 10.0f), Vector4(11.0f, 12.0f, 13.0f, 14.0f),
+                Vector4(15.0f, 16.0f, 17.0f, 18.0f), Vector4(19.0f, 20.0f, 21.0f, 22.0f),
+                Vector4(23.0f, 24.0f, 25.0f, 26.0f), Vector4(27.0f, 28.0f, 29.0f, 30.0f)};
+            std::array<Vector4, 8> resultVector4{};
+            Texture3D vector4(device, 2, 2, 2, false, SurfaceFormat::Vector4);
+            vector4.SetData(sourceVector4.data(), static_cast<int>(sourceVector4.size()));
+            vector4.GetData(resultVector4.data(), static_cast<int>(resultVector4.size()));
+            bool vectorsMatch = true;
+            for (std::size_t i = 0; i < sourceVector4.size(); ++i)
+            {
+                vectorsMatch &= resultVector4[i].X == sourceVector4[i].X &&
+                                resultVector4[i].Y == sourceVector4[i].Y &&
+                                resultVector4[i].Z == sourceVector4[i].Z &&
+                                resultVector4[i].W == sourceVector4[i].W;
+            }
+            Check(vectorsMatch,
+                  "Vector4 Texture3D preserves all four binary32 channels exactly");
+        }
 
         // Nontrivial partial box: x/y/z are all nonzero and every extent is smaller than the mip.
         const auto base = Solid(4, 4, 4, dark);

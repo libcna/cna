@@ -44,6 +44,8 @@ namespace CNA::Internal::Renderers::Fna3d
 
         StockEffectKind SelectStockEffect(const GpuDrawParams& params)
         {
+            if (params.lightingEnabled && params.punctualKind != 0)
+                return StockEffectKind::Punctual;
             if (params.skinned)      return StockEffectKind::Skinned;
             if (params.envMapping)   return StockEffectKind::EnvironmentMap;
             if (params.dualTexture)  return StockEffectKind::DualTexture;
@@ -62,7 +64,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                               int bindingCount)
         {
             struct Input { FNA3D_VertexElementUsage usage; int index; const char* name; };
-            std::array<Input, 5> needed{};
+            std::array<Input, 6> needed{};
             std::size_t count = 0;
             const auto need = [&](FNA3D_VertexElementUsage usage, int index, const char* name) {
                 needed[count++] = Input{usage, index, name};
@@ -104,6 +106,20 @@ namespace CNA::Internal::Renderers::Fna3d
                     need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0, "TextureCoordinate0");
                     need(FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES, 0, "BlendIndices0");
                     need(FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT, 0, "BlendWeight0");
+                    break;
+                case StockEffectKind::Punctual:
+                    effectName = "CnaPunctualEffect";
+                    need(FNA3D_VERTEXELEMENTUSAGE_NORMAL, 0, "Normal0");
+                    if (params.textureEnabled || params.skinned)
+                        need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0,
+                             "TextureCoordinate0");
+                    if (params.skinned)
+                    {
+                        need(FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES, 0, "BlendIndices0");
+                        need(FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT, 0, "BlendWeight0");
+                    }
+                    if (params.vertexColorEnabled)
+                        need(FNA3D_VERTEXELEMENTUSAGE_COLOR, 0, "Color0");
                     break;
                 default:
                     return;
@@ -250,6 +266,7 @@ namespace CNA::Internal::Renderers::Fna3d
             // afterward. Resolve the final XNA-visible slot at draw time, matching FNA's device
             // state application instead of retaining the native binding from pass application.
             BindCompiledPixelTexturesEXT(params);
+            BindCompiledVertexTexturesEXT(params);
         }
         ApplyVertexBindingsEXT(vb, params, baseVertex);
     }
@@ -420,6 +437,55 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    void Fna3dRenderer::BindCompiledVertexTexturesEXT(const GpuDrawParams& params)
+    {
+        const auto* textures = params.compiledDeviceVertexTextures;
+        const auto* samplers = params.compiledDeviceVertexSamplerStates;
+        if (textures == nullptr || samplers == nullptr) return;
+
+        // The public collection reports four vertex-stage slots in HiDef and none in Reach.
+        // Using that count avoids indexing a deliberately empty Reach collection.
+        const int publicSlots = samplers->ActiveSamplerCount();
+        for (int slot = 0; slot < publicSlots; ++slot)
+        {
+            Texture* texture = (*textures)[slot];
+            if (maxVertexTextureSlots_ <= 0 || slot >= maxVertexTextureSlots_)
+            {
+                if (texture != nullptr)
+                    throw std::runtime_error(
+                        "FNA3D renderer: a vertex texture was bound to sampler slot " +
+                        std::to_string(slot) + ", but the running driver exposes only " +
+                        std::to_string(std::max(maxVertexTextureSlots_, 0)) +
+                        " vertex texture slots.");
+                continue;
+            }
+
+            const Fna3dSampledTexture* sampled = GetSampledTexture(texture);
+            if (texture != nullptr &&
+                (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_))
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: a compiled effect vertex texture was not created by this "
+                    "graphics device.");
+            }
+
+            const auto& state = (*samplers)[slot];
+            FNA3D_SamplerState native = vertexSamplerStates_[static_cast<std::size_t>(slot)];
+            native.filter = static_cast<FNA3D_TextureFilter>(state.getFilterProperty());
+            native.addressU = static_cast<FNA3D_TextureAddressMode>(state.getAddressUProperty());
+            native.addressV = static_cast<FNA3D_TextureAddressMode>(state.getAddressVProperty());
+            native.addressW = static_cast<FNA3D_TextureAddressMode>(state.getAddressWProperty());
+            native.mipMapLevelOfDetailBias = state.getMipMapLevelOfDetailBiasProperty();
+            native.maxMipLevel = state.getMaxMipLevelProperty();
+            native.maxAnisotropy = state.getMaxAnisotropyProperty();
+            FNA3D_Texture* nativeTexture = sampled != nullptr ? sampled->GetFna3dTextureEXT()
+                                                              : nullptr;
+            FNA3D_VerifyVertexSampler(device_, slot, nativeTexture, &native);
+            vertexSamplerStates_[static_cast<std::size_t>(slot)] = native;
+            boundVertexTextures_[static_cast<std::size_t>(slot)] = nativeTexture;
+        }
+    }
+
     void Fna3dRenderer::ApplyStockEffectEXT(const Matrix& world, const Matrix& view,
                                             const Matrix& projection, const GpuDrawParams& params)
     {
@@ -522,6 +588,48 @@ namespace CNA::Internal::Renderers::Fna3d
                                                         params.preferPerPixelLighting, oneLight));
                 effect.Apply(device_);
                 BindEffectTextureEXT(0, params.texture0);
+                break;
+            }
+
+            case StockEffectKind::Punctual:
+            {
+                effect.SetFloats("DiffuseColor", params.diffuseColor, 4);
+                ApplyLightingParamsEXT(effect, world, view, params, /*withSpecular=*/true);
+                if (params.skinned)
+                {
+                    effect.SetMatrix4x3Array("Bones", params.boneTransforms, params.boneCount);
+                    const float skinning[4] = {
+                        static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f
+                    };
+                    effect.SetFloats("SkinningParams", skinning, 4);
+                }
+                const float positionRange[4] = {
+                    params.punctualPosition[0], params.punctualPosition[1],
+                    params.punctualPosition[2], params.punctualRange
+                };
+                const float directionKind[4] = {
+                    params.punctualDirection[0], params.punctualDirection[1],
+                    params.punctualDirection[2], static_cast<float>(params.punctualKind)
+                };
+                const float punctualDiffuse[4] = {
+                    params.punctualDiffuse[0], params.punctualDiffuse[1],
+                    params.punctualDiffuse[2], 1.0f
+                };
+                const float cone[4] = {
+                    params.punctualCosInner, params.punctualCosOuter, 0.0f, 0.0f
+                };
+                effect.SetFloats("PunctualPositionRange", positionRange, 4);
+                effect.SetFloats("PunctualDirectionKind", directionKind, 4);
+                effect.SetFloats("PunctualDiffuse", punctualDiffuse, 4);
+                effect.SetFloats("PunctualCone", cone, 4);
+
+                const int passIndex = params.skinned
+                    ? 4 + (params.vertexColorEnabled ? 1 : 0)
+                    : (params.textureEnabled ? 2 : 0) +
+                          (params.vertexColorEnabled ? 1 : 0);
+                effect.Apply(device_, passIndex);
+                if (params.textureEnabled || params.skinned)
+                    BindEffectTextureEXT(0, params.texture0);
                 break;
             }
 
