@@ -10220,7 +10220,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         if (needsAlphaTest || needsDualTexture || needsEnvMap || params.skinned || params.pbr)
             return StockVertexShapeEXT::StrideDerived;
-        if (hasNormal)
+        // A Normal means nothing to an unlit draw, so it takes the program the same record without
+        // one would: the lit program's unlit branch does not saturate the vertex colour at the
+        // vertex (Direct3D 9's oD0) as colored_textured3d does, and two unlit coloured records would
+        // disagree by stride. A Position+Normal record with neither colour nor UV keeps it.
+        if (hasNormal && (params.lightingEnabled || (!hasUv && !hasColor)))
             return StockVertexShapeEXT::Lit;
         if (hasUv)
             return hasColor ? StockVertexShapeEXT::ColoredTextured
