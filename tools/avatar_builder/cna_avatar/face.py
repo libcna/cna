@@ -29,7 +29,9 @@ PUPIL = (14, 10, 12)
 INSIDE = (70, 20, 30)
 TEETH = (248, 247, 240)
 TONGUE = (214, 102, 112)
-LIP = (150, 58, 62)
+# Lips: a deeper rose than any skin, translucent over it, so they darken and warm every skin tone
+# rather than lighten a deep one toward pink.
+LIP = (118, 44, 50)
 
 
 # ----- signed distance shapes ---------------------------------------------------------------------
@@ -158,7 +160,7 @@ def mix(c0, c1, t):
 # tapered lid line, a warm sclera in the lid's shade, and a small highlight.
 RX, RY, CY, FLOOR = 0.70, 0.52, 0.02, -0.44
 LID = (48, 32, 28)
-SCLERA = (240, 236, 229)
+SCLERA = (232, 228, 221)
 
 
 def _opening(rx=RX, ry=RY):
@@ -168,7 +170,7 @@ def _opening(rx=RX, ry=RY):
 def eye_layers(state, side):
     """(white layer, iris layer) shape lists for 'Left'/'Right'."""
     inner = -1.0 if side == "Left" else 1.0
-    iris_c, iris_r = (0.0, 0.03), 0.41
+    iris_c, iris_r = (0.0, 0.03), 0.44
     rx, ry = RX, RY
     lid = None         # upper lid height at the inner and outer corners (a straight cut)
     raise_low = None   # lower lid pushed up (a smile squint)
@@ -247,7 +249,7 @@ def eye_layers(state, side):
         sy = CY + ry * 0.92 * math.cos(a) * (0.35 if lid else 1.0) + (0.0 if not lid else 0.15)
         ex, ey = sx - inner * length_ * 0.8, sy + length_ * 0.6
         lashes.append(stroke([(sx, sy), (ex, ey)], [0.05, 0.015]))
-    white = [(visible, sclera, 1.0), (lower, (96, 62, 56), 0.35), (upper, LID, 0.96), (wing, LID, 0.92), (crease, LID, 0.06)]
+    white = [(visible, sclera, 1.0), (lower, (96, 62, 56), 0.35), (upper, LID, 0.96), (wing, LID, 0.92)]
     white += [(lash, LID, 0.85) for lash in lashes]
 
     ix, iy = iris_c

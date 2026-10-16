@@ -43,13 +43,13 @@
   },
   {
    "name": "body.female.glb",
-   "sha256": "120bc6f9482baee87e1d1cb767e9b9f5be41c0e3a0c433b054ca79568a14ba53",
-   "size": 1190436
+   "sha256": "de12b0b0f338609689e170645de31fee95b8ff808340702d2cf448c45a3a4448",
+   "size": 1185744
   },
   {
    "name": "body.male.glb",
-   "sha256": "fb248f040b3394a7be3212bc0faa06713e4228fd9b65ca2802ec25802717edf9",
-   "size": 1191264
+   "sha256": "fec5a25aa982d9b5103d90a337adad809864aafec57fbb4b46e707769f89fc16",
+   "size": 1186164
   },
   {
    "name": "bottom_bermuda.female.glb",
@@ -343,8 +343,8 @@
   },
   {
    "name": "face_features.png",
-   "sha256": "14bebd83f914c3ae9eada54cf9a026fc13082b02cd20e3d83509950b3f7a94a1",
-   "size": 935436
+   "sha256": "2ee24af2c764e9d173ee2ee216d7388f8c850ca4cdb4b96049bdadb709ea211a",
+   "size": 934611
   },
   {
    "name": "facial_beard.female.glb",
