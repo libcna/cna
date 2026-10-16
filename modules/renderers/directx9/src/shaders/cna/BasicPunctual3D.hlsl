@@ -33,6 +33,14 @@ float4 PunctualDiffuse          : register(c15);
 float4 PunctualCone             : register(c16); // x=cos(inner), y=cos(outer)
 float4 FogColor                 : register(c17);
 
+#if CNA_D3D9_SHADOWS
+#include "ShadowSampling3D.fxh"
+#else
+float CnaShadowFactor(float3 worldPos) { return 1.0; }
+float3 CnaCascadeDebugTint(float3 worldPos) { return float3(1.0, 1.0, 1.0); }
+float CnaPunctualShadow(float3 worldPos, float3 toLight, float distanceToLight) { return 1.0; }
+#endif
+
 struct VSInputNm
 {
     float4 Position : POSITION0;
@@ -187,17 +195,21 @@ float3 CnaPunctualLight(float3 worldPos, float3 normal)
                               max(PunctualCone.x - PunctualCone.y, 1e-4));
         attenuation *= cone * cone;
     }
-    return PunctualDiffuse.xyz * max(dot(normal, toLight), 0.0) * attenuation;
+    return PunctualDiffuse.xyz * max(dot(normal, toLight), 0.0) * attenuation *
+           CnaPunctualShadow(worldPos, toLight, distanceToLight);
 }
 
 float4 ShadeBasicPunctual(VSOutput pin, float4 texel)
 {
     float3 normal = normalize(pin.NormalWS);
     float3 eye = normalize(EyePosition.xyz - pin.PositionWS);
-    float3 diffuseLight = DirectionalDiffuse(normal) + CnaPunctualLight(pin.PositionWS, normal);
+    float shadow = CnaShadowFactor(pin.PositionWS);
+    float3 diffuseLight = DirectionalDiffuse(normal) * shadow +
+                          CnaPunctualLight(pin.PositionWS, normal);
     float3 lit = diffuseLight * DiffuseColor.rgb + EmissiveColor.rgb;
     float4 color = texel * float4(lit, DiffuseColor.a) * pin.Color;
-    color.rgb += DirectionalSpecular(normal, eye) * color.a;
+    color.rgb *= CnaCascadeDebugTint(pin.PositionWS);
+    color.rgb += DirectionalSpecular(normal, eye) * shadow * color.a;
     color.rgb = lerp(color.rgb, FogColor.rgb * color.a, pin.FogFactor);
     return color;
 }

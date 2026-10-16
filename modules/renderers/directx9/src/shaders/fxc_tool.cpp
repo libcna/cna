@@ -8,7 +8,7 @@
 // which the retired D3DCommon's shaders/hlsl_compiler_tool.cpp did not need (no XNA-style
 // #include tree there).
 //
-// usage: fxc_tool.exe <file.fx> <entry> <target> <out.bin> [--strip]
+// usage: fxc_tool.exe <file.fx> <entry> <target> <out.bin> [--strip] [--define NAME=VALUE]...
 // --strip is a dead option -- Phase D9-0 found the real fxc silently ignores the Effect-framework
 // tail (VertexShader/PixelShader arrays, Technique) at /T vs_2_0/ps_2_0, so it is never used by
 // compile_shaders_sm2.py; kept only so this file stays otherwise identical to the proven spike.
@@ -40,9 +40,30 @@ struct Inc : public ID3DInclude {
 
 int main(int argc, char** argv)
 {
-    if (argc < 5) { std::fprintf(stderr, "usage: %s <file.fx> <entry> <target> <out> [--strip]\n", argv[0]); return 2; }
+    if (argc < 5) { std::fprintf(stderr, "usage: %s <file.fx> <entry> <target> <out> [--strip] [--define NAME=VALUE]...\n", argv[0]); return 2; }
     const std::string path = argv[1], entry = argv[2], target = argv[3], out = argv[4];
-    const bool strip = (argc > 5 && std::string(argv[5]) == "--strip");
+    bool strip = false;
+    std::vector<std::string> macroNames;
+    std::vector<std::string> macroValues;
+    for (int i = 5; i < argc; ++i)
+    {
+        const std::string argument = argv[i];
+        if (argument == "--strip")
+        {
+            strip = true;
+            continue;
+        }
+        if (argument == "--define" && i + 1 < argc)
+        {
+            const std::string definition = argv[++i];
+            const std::size_t equals = definition.find('=');
+            macroNames.push_back(definition.substr(0, equals));
+            macroValues.push_back(equals == std::string::npos ? "1" : definition.substr(equals + 1));
+            continue;
+        }
+        std::fprintf(stderr, "error: unknown option %s\n", argument.c_str());
+        return 2;
+    }
 
     auto slash = path.find_last_of("/\\");
     gDir = (slash == std::string::npos) ? "." : path.substr(0, slash);
@@ -66,8 +87,14 @@ int main(int argc, char** argv)
     }
 
     Inc inc;
+    std::vector<D3D_SHADER_MACRO> macros;
+    macros.reserve(macroNames.size() + 1);
+    for (std::size_t i = 0; i < macroNames.size(); ++i)
+        macros.push_back({macroNames[i].c_str(), macroValues[i].c_str()});
+    macros.push_back({nullptr, nullptr});
     ComPtr<ID3DBlob> code, errs;
-    const HRESULT hr = D3DCompile(src.data(), src.size(), path.c_str(), nullptr, &inc,
+    const HRESULT hr = D3DCompile(src.data(), src.size(), path.c_str(),
+                                  macroNames.empty() ? nullptr : macros.data(), &inc,
                                   entry.c_str(), target.c_str(),
                                   D3DCOMPILE_OPTIMIZATION_LEVEL3, 0,
                                   code.GetAddressOf(), errs.GetAddressOf());

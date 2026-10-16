@@ -43,6 +43,30 @@ SHADERS = (
      "kBasicPunctual3DPSBytecode", "BasicPunctual3D pixel shader"),
     ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
      "kBasicPunctual3DTexturePSBytecode", "BasicPunctual3D textured pixel shader"),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctual", "ps_3_0",
+     "kBasicPunctual3DPointShadowPSBytecode", "BasicPunctual3D point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctual", "ps_3_0",
+     "kBasicPunctual3DSpotOnlyShadowPSBytecode", "BasicPunctual3D spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctual", "ps_3_0",
+     "kBasicPunctual3DSpotDirectionalShadowPSBytecode",
+     "BasicPunctual3D directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
+     "kBasicPunctual3DTexturePointShadowPSBytecode",
+     "BasicPunctual3D textured point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
+     "kBasicPunctual3DTextureSpotOnlyShadowPSBytecode",
+     "BasicPunctual3D textured spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/BasicPunctual3D.hlsl", "PSBasicPunctualTx", "ps_3_0",
+     "kBasicPunctual3DTextureSpotDirectionalShadowPSBytecode",
+     "BasicPunctual3D textured directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
     ("cna/Pbr3D.hlsl", "VSPbr3D", "vs_3_0", "kPbr3DVSBytecode", "Pbr3D vertex shader"),
     # plans/plan_gltf.md GLTF-465: the stride-60 and stride-80 twins. A separate entry point rather than a
     # preprocessor define, because a vs_3_0 input with no stream behind it reads undefined -- so each
@@ -51,12 +75,33 @@ SHADERS = (
     ("cna/Pbr3D.hlsl", "VSPbr3DColor", "vs_3_0", "kPbr3DColorVSBytecode",
      "Pbr3D vertex shader (stride 60, COLOR_0)"),
     ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DPSBytecode", "Pbr3D pixel shader"),
+    ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DPointShadowPSBytecode",
+     "Pbr3D point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DSpotOnlyShadowPSBytecode",
+     "Pbr3D spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/Pbr3D.hlsl", "PSPbr3D", "ps_3_0", "kPbr3DSpotDirectionalShadowPSBytecode",
+     "Pbr3D directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
     ("cna/PbrSkinned3D.hlsl", "VSPbrSkinned3D", "vs_3_0",
      "kPbrSkinned3DVSBytecode", "PbrSkinned3D vertex shader"),
     ("cna/PbrSkinned3D.hlsl", "VSPbrSkinned3DColor", "vs_3_0",
      "kPbrSkinned3DColorVSBytecode", "PbrSkinned3D vertex shader (stride 80, COLOR_0)"),
     ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
      "kPbrSkinned3DPSBytecode", "PbrSkinned3D pixel shader"),
+    ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
+     "kPbrSkinned3DPointShadowPSBytecode", "PbrSkinned3D point-shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=1")),
+    ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
+     "kPbrSkinned3DSpotOnlyShadowPSBytecode", "PbrSkinned3D spot-only shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2",
+      "CNA_D3D9_DIRECTIONAL_SHADOW_MODE=0")),
+    ("cna/PbrSkinned3D.hlsl", "PSPbrSkinned3D", "ps_3_0",
+     "kPbrSkinned3DSpotDirectionalShadowPSBytecode",
+     "PbrSkinned3D directional plus spot shadow pixel shader",
+     ("CNA_D3D9_SHADOWS=1", "CNA_D3D9_PUNCTUAL_SHADOW_KIND=2")),
 )
 
 
@@ -87,12 +132,15 @@ def build_compiler_tool(output: Path) -> None:
 
 
 def compile_shader(tool: Path, wineprefix: Path, source: Path, entry: str,
-                   profile: str, output: Path) -> bytes:
+                   profile: str, output: Path, defines=()) -> bytes:
     environment = dict(os.environ)
     environment["WINEPREFIX"] = str(wineprefix)
     environment.setdefault("WINEDEBUG", "-all")
+    command = ["wine", str(tool), str(source), entry, profile, str(output)]
+    for definition in defines:
+        command.extend(("--define", definition))
     result = subprocess.run(
-        ["wine", str(tool), str(source), entry, profile, str(output)],
+        command,
         capture_output=True,
         text=True,
         env=environment,
@@ -150,12 +198,14 @@ def main() -> None:
             "{\n\n"
         ]
 
-        for relative_source, entry, profile, name, description in SHADERS:
+        for shader in SHADERS:
+            relative_source, entry, profile, name, description = shader[:5]
+            defines = shader[5] if len(shader) > 5 else ()
             source = SCRIPT_DIR / relative_source
             output = temporary_path / f"{name}.bin"
             print(f"Compiling {source.name} [{entry}/{profile}] ...", end=" ", flush=True)
             bytecode = compile_shader(
-                compiler_tool, args.wineprefix, source, entry, profile, output)
+                compiler_tool, args.wineprefix, source, entry, profile, output, defines)
             print(f"OK ({len(bytecode)} bytes)")
             parts.append(byte_array(name, description, bytecode) + "\n")
 

@@ -8,6 +8,7 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
+#include "D3D9ShadowUpload.hpp"
 #include "shaders/D3D9CnaShaderRegisters.hpp"
 #include "shaders/d3d9_pbr_shaders.hpp"
 
@@ -140,10 +141,49 @@ namespace CNA::Internal::Renderers::DirectX9
                     "DrawBasicPunctualEffectEXT: CreateVertexShader failed, hr=" + FormatHr(hr));
         }
 
-        ComPtr<IDirect3DPixelShader9>* pixelShader = params.textureEnabled
-            ? &basicPunctualTexturePS_ : &basicPunctualPS_;
-        const uint8_t* pixelBytecode = params.textureEnabled
-            ? kBasicPunctual3DTexturePSBytecode : kBasicPunctual3DPSBytecode;
+        const bool wantsDirectionalShadow = params.shadowsEnabled && params.shadowMap != nullptr;
+        const bool wantsPunctualShadow =
+            (params.punctualKind == 1 && params.punctualShadowCube != nullptr) ||
+            (params.punctualKind == 2 && params.punctualShadowMap != nullptr);
+        const bool useShadowShader = SupportsShadowSamplingEXT() &&
+                                     (wantsDirectionalShadow || wantsPunctualShadow);
+        const bool useSpotShadowShader = useShadowShader && params.punctualKind == 2 &&
+                                         params.punctualShadowMap != nullptr;
+        const bool useSpotOnlyShadowShader = useSpotShadowShader && !wantsDirectionalShadow;
+        ComPtr<IDirect3DPixelShader9>* pixelShader = nullptr;
+        const uint8_t* pixelBytecode = nullptr;
+        if (useShadowShader && params.textureEnabled)
+        {
+            pixelShader = useSpotShadowShader
+                ? (useSpotOnlyShadowShader ? &basicPunctualTextureSpotOnlyShadowPS_
+                                           : &basicPunctualTextureSpotDirectionalShadowPS_)
+                : &basicPunctualTexturePointShadowPS_;
+            pixelBytecode = useSpotShadowShader
+                ? (useSpotOnlyShadowShader ? kBasicPunctual3DTextureSpotOnlyShadowPSBytecode
+                                            : kBasicPunctual3DTextureSpotDirectionalShadowPSBytecode)
+                : kBasicPunctual3DTexturePointShadowPSBytecode;
+        }
+        else if (useShadowShader)
+        {
+            pixelShader = useSpotShadowShader
+                ? (useSpotOnlyShadowShader ? &basicPunctualSpotOnlyShadowPS_
+                                           : &basicPunctualSpotDirectionalShadowPS_)
+                : &basicPunctualPointShadowPS_;
+            pixelBytecode = useSpotShadowShader
+                ? (useSpotOnlyShadowShader ? kBasicPunctual3DSpotOnlyShadowPSBytecode
+                                            : kBasicPunctual3DSpotDirectionalShadowPSBytecode)
+                : kBasicPunctual3DPointShadowPSBytecode;
+        }
+        else if (params.textureEnabled)
+        {
+            pixelShader = &basicPunctualTexturePS_;
+            pixelBytecode = kBasicPunctual3DTexturePSBytecode;
+        }
+        else
+        {
+            pixelShader = &basicPunctualPS_;
+            pixelBytecode = kBasicPunctual3DPSBytecode;
+        }
         if (!*pixelShader)
         {
             const HRESULT hr = device_->CreatePixelShader(
@@ -160,8 +200,18 @@ namespace CNA::Internal::Renderers::DirectX9
             ? kBasicPunctualSkinned3DVS_Registers : kBasicPunctual3DVS_Registers;
         const int vsCount = params.skinned
             ? kBasicPunctualSkinned3DVS_RegistersCount : kBasicPunctual3DVS_RegistersCount;
-        const auto* psRegs = kBasicPunctual3DPS_Registers;
-        const int psCount = kBasicPunctual3DPS_RegistersCount;
+        const auto* psRegs = useSpotOnlyShadowShader
+            ? kBasicPunctual3DSpotOnlyShadowPS_Registers
+            : (useSpotShadowShader
+                   ? kBasicPunctual3DShadowPS_Registers
+                   : (useShadowShader ? kBasicPunctual3DPointShadowPS_Registers
+                                      : kBasicPunctual3DPS_Registers));
+        const int psCount = useSpotOnlyShadowShader
+            ? kBasicPunctual3DSpotOnlyShadowPS_RegistersCount
+            : (useSpotShadowShader
+                   ? kBasicPunctual3DShadowPS_RegistersCount
+                   : (useShadowShader ? kBasicPunctual3DPointShadowPS_RegistersCount
+                                      : kBasicPunctual3DPS_RegistersCount));
 
         UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "WorldViewProj",
                                world * view * projection);
@@ -236,6 +286,8 @@ namespace CNA::Internal::Renderers::DirectX9
 
         if (params.textureEnabled)
             device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+        if (useShadowShader)
+            ShadowUploadDetail::UploadAndBind(device_.Get(), psRegs, psCount, params);
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);

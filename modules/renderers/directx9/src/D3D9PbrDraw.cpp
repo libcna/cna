@@ -26,6 +26,7 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"
+#include "D3D9ShadowUpload.hpp"
 #include "shaders/d3d9_pbr_shaders.hpp"
 #include "shaders/D3D9CnaShaderRegisters.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
@@ -169,6 +170,15 @@ namespace CNA::Internal::Renderers::DirectX9
         // with no stream behind it reads undefined rather than zero.
         const bool skinned = params.skinned;
         const bool colored = skinned ? (stride == 80) : (stride == 60);
+        const bool wantsDirectionalShadow = params.shadowsEnabled && params.shadowMap != nullptr;
+        const bool wantsPunctualShadow =
+            (params.punctualKind == 1 && params.punctualShadowCube != nullptr) ||
+            (params.punctualKind == 2 && params.punctualShadowMap != nullptr);
+        const bool useShadowShader = SupportsShadowSamplingEXT() &&
+                                     (wantsDirectionalShadow || wantsPunctualShadow);
+        const bool useSpotShadowShader = useShadowShader && params.punctualKind == 2 &&
+                                         params.punctualShadowMap != nullptr;
+        const bool useSpotOnlyShadowShader = useSpotShadowShader && !wantsDirectionalShadow;
         if (skinned && stride != 68 && stride != 80)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (PbrEffect, skinned): stride " +
@@ -199,17 +209,42 @@ namespace CNA::Internal::Renderers::DirectX9
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreateVertexShader (skinned) failed, hr=" + FormatHr(hr));
             }
-            if (!pbrSkinnedPS_)
+            ComPtr<IDirect3DPixelShader9>& selectedPs =
+                useShadowShader
+                    ? (useSpotShadowShader
+                           ? (useSpotOnlyShadowShader ? pbrSkinnedSpotOnlyShadowPS_
+                                                      : pbrSkinnedSpotDirectionalShadowPS_)
+                           : pbrSkinnedPointShadowPS_)
+                    : pbrSkinnedPS_;
+            if (!selectedPs)
             {
                 const HRESULT hr = device_->CreatePixelShader(
-                    reinterpret_cast<const DWORD*>(kPbrSkinned3DPSBytecode), pbrSkinnedPS_.GetAddressOf());
+                    reinterpret_cast<const DWORD*>(useShadowShader
+                        ? (useSpotShadowShader
+                               ? (useSpotOnlyShadowShader
+                                      ? kPbrSkinned3DSpotOnlyShadowPSBytecode
+                                      : kPbrSkinned3DSpotDirectionalShadowPSBytecode)
+                               : kPbrSkinned3DPointShadowPSBytecode)
+                        : kPbrSkinned3DPSBytecode),
+                    selectedPs.GetAddressOf());
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreatePixelShader (skinned) failed, hr=" + FormatHr(hr));
             }
             vs = skinnedVs.Get();
-            ps = pbrSkinnedPS_.Get();
+            ps = selectedPs.Get();
             vsRegs = kPbrSkinned3DVS_Registers; vsCount = kPbrSkinned3DVS_RegistersCount;
-            psRegs = kPbrSkinned3DPS_Registers; psCount = kPbrSkinned3DPS_RegistersCount;
+            psRegs = useSpotOnlyShadowShader
+                ? kPbrSkinned3DSpotOnlyShadowPS_Registers
+                : (useSpotShadowShader
+                       ? kPbrSkinned3DShadowPS_Registers
+                       : (useShadowShader ? kPbrSkinned3DPointShadowPS_Registers
+                                          : kPbrSkinned3DPS_Registers));
+            psCount = useSpotOnlyShadowShader
+                ? kPbrSkinned3DSpotOnlyShadowPS_RegistersCount
+                : (useSpotShadowShader
+                       ? kPbrSkinned3DShadowPS_RegistersCount
+                       : (useShadowShader ? kPbrSkinned3DPointShadowPS_RegistersCount
+                                          : kPbrSkinned3DPS_RegistersCount));
         }
         else
         {
@@ -222,17 +257,40 @@ namespace CNA::Internal::Renderers::DirectX9
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreateVertexShader failed, hr=" + FormatHr(hr));
             }
-            if (!pbrPS_)
+            ComPtr<IDirect3DPixelShader9>& selectedPs = useShadowShader
+                ? (useSpotShadowShader
+                       ? (useSpotOnlyShadowShader ? pbrSpotOnlyShadowPS_
+                                                  : pbrSpotDirectionalShadowPS_)
+                       : pbrPointShadowPS_)
+                : pbrPS_;
+            if (!selectedPs)
             {
                 const HRESULT hr = device_->CreatePixelShader(
-                    reinterpret_cast<const DWORD*>(kPbr3DPSBytecode), pbrPS_.GetAddressOf());
+                    reinterpret_cast<const DWORD*>(useShadowShader
+                        ? (useSpotShadowShader
+                               ? (useSpotOnlyShadowShader ? kPbr3DSpotOnlyShadowPSBytecode
+                                                          : kPbr3DSpotDirectionalShadowPSBytecode)
+                               : kPbr3DPointShadowPSBytecode)
+                        : kPbr3DPSBytecode),
+                    selectedPs.GetAddressOf());
                 if (FAILED(hr))
                     throw std::runtime_error("DrawPbrEffectEXT: CreatePixelShader failed, hr=" + FormatHr(hr));
             }
             vs = rigidVs.Get();
-            ps = pbrPS_.Get();
+            ps = selectedPs.Get();
             vsRegs = kPbr3DVS_Registers; vsCount = kPbr3DVS_RegistersCount;
-            psRegs = kPbr3DPS_Registers; psCount = kPbr3DPS_RegistersCount;
+            psRegs = useSpotOnlyShadowShader
+                ? kPbr3DSpotOnlyShadowPS_Registers
+                : (useSpotShadowShader
+                       ? kPbr3DShadowPS_Registers
+                       : (useShadowShader ? kPbr3DPointShadowPS_Registers
+                                          : kPbr3DPS_Registers));
+            psCount = useSpotOnlyShadowShader
+                ? kPbr3DSpotOnlyShadowPS_RegistersCount
+                : (useSpotShadowShader
+                       ? kPbr3DShadowPS_RegistersCount
+                       : (useShadowShader ? kPbr3DPointShadowPS_RegistersCount
+                                          : kPbr3DPS_RegistersCount));
         }
 
         device_->SetVertexShader(vs);
@@ -343,6 +401,8 @@ namespace CNA::Internal::Renderers::DirectX9
         BindPbrSampler(device_.Get(), 4, params.pbrOcclusionMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 5, params.pbrSpecularMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 6, params.pbrSpecularColorMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
+        if (useShadowShader)
+            ShadowUploadDetail::UploadAndBind(device_.Get(), psRegs, psCount, params);
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);

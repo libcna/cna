@@ -650,8 +650,10 @@ namespace CNA::Internal::Renderers::DirectX9
             // SkinnedVertexColor3D custom shader instead of DrawSkinnedEffectEXT. Microsoft's
             // stock shader has no Color input, so merely accepting the extra declaration element
             // would draw without applying the vertex colour.
-            const bool punctual = params.punctualKind >= 1 && params.punctualKind <= 2;
-            if (stride == 56 && !punctual)
+            const bool extendedLighting =
+                (params.punctualKind >= 1 && params.punctualKind <= 2) ||
+                (SupportsShadowSamplingEXT() && params.shadowsEnabled && params.shadowMap != nullptr);
+            if (stride == 56 && !extendedLighting)
             {
                 DrawSkinnedVertexColorEXT(vb, ib, world, view, projection, primitive, primitiveCount, params);
                 return;
@@ -701,10 +703,12 @@ namespace CNA::Internal::Renderers::DirectX9
                 " has no matching CNA vertex layout: the vertex declaration has no" + missing + " (plans/plan_dx9.md D9-82b)");
         }
 
-        // Microsoft's original BasicEffect bytecode has no point/spot-light constants. Keep that
-        // bytecode untouched for the ordinary XNA path, and select CNA's extension shader only
-        // for an active PunctualLightEXT.
-        if (params.lightingEnabled && params.punctualKind >= 1 && params.punctualKind <= 2)
+        // Microsoft's original BasicEffect bytecode has neither punctual-light nor shadow-map
+        // inputs. Keep it untouched for ordinary XNA draws and select CNA's extension shader when
+        // either extension actually participates in lighting.
+        if (params.lightingEnabled &&
+            ((params.punctualKind >= 1 && params.punctualKind <= 2) ||
+             (SupportsShadowSamplingEXT() && params.shadowsEnabled && params.shadowMap != nullptr)))
         {
             DrawBasicPunctualEffectEXT(
                 vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
@@ -1145,15 +1149,17 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord";
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_BLENDWEIGHT, 0)) missing += " BlendWeight";
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_BLENDINDICES, 0)) missing += " BlendIndices";
-        const bool punctual = params.punctualKind >= 1 && params.punctualKind <= 2;
-        if (punctual && params.vertexColorEnabled &&
+        const bool extendedLighting =
+            (params.punctualKind >= 1 && params.punctualKind <= 2) ||
+            (SupportsShadowSamplingEXT() && params.shadowsEnabled && params.shadowMap != nullptr);
+        if (extendedLighting && params.vertexColorEnabled &&
             !DeclarationProvidesEXT(layout, D3DDECLUSAGE_COLOR, 0)) missing += " Color";
         if (!missing.empty())
             throw System::InvalidOperationException(
                 "DirectX9Renderer::DrawPrimitivesEx (SkinnedEffect): stride " + std::to_string(stride) +
                 " has no matching CNA vertex layout: the vertex declaration has no" + missing);
 
-        if (punctual)
+        if (extendedLighting)
         {
             DrawBasicPunctualEffectEXT(
                 vb, ib, stride, world, view, projection, primitive, primitiveCount, params);

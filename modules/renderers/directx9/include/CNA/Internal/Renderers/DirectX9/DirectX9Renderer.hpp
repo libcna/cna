@@ -435,6 +435,15 @@ namespace CNA::Internal::Renderers::DirectX9
          * @return True when the device has not been lost.
          */
         [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+        /// CNA's SM3 stock-extension and PBR shaders sample the full shared shadow contract:
+        /// single/cascaded directional maps plus point-cube and spot-map shadows.
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override
+        {
+            return device_ != nullptr &&
+                   caps_.VertexShaderVersion >= static_cast<DWORD>(D3DVS_VERSION(3, 0)) &&
+                   caps_.PixelShaderVersion >= static_cast<DWORD>(D3DPS_VERSION(3, 0)) &&
+                   (caps_.TextureCaps & D3DPTEXTURECAPS_CUBEMAP) != 0;
+        }
         /**
          * @brief Polls device recovery and applies pending resizes before the next Draw.
          * @return True when the native device is ready to draw.
@@ -782,6 +791,12 @@ namespace CNA::Internal::Renderers::DirectX9
         ComPtr<IDirect3DVertexShader9> basicPunctualSkinnedColorVS_;
         ComPtr<IDirect3DPixelShader9> basicPunctualPS_;
         ComPtr<IDirect3DPixelShader9> basicPunctualTexturePS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualPointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualSpotDirectionalShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTexturePointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTextureSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTextureSpotDirectionalShadowPS_;
 
         /// D3D9 PBR porting task: CNA's own CNAEXT Pbr3D/PbrSkinned3D shader pairs, lazily created
         /// on first `DrawPbrEffectEXT()` call. Not `D3DPOOL_DEFAULT` resources -- survive `Reset()`
@@ -790,10 +805,16 @@ namespace CNA::Internal::Renderers::DirectX9
         /// plans/plan_gltf.md GLTF-465: the stride-60 twin, whose input struct declares COLOR0.
         ComPtr<IDirect3DVertexShader9> pbrColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrPS_;
+        ComPtr<IDirect3DPixelShader9> pbrPointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSpotDirectionalShadowPS_;
         ComPtr<IDirect3DVertexShader9> pbrSkinnedVS_;
         /// plans/plan_gltf.md GLTF-465: the stride-80 twin.
         ComPtr<IDirect3DVertexShader9> pbrSkinnedColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrSkinnedPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSkinnedPointShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSkinnedSpotOnlyShadowPS_;
+        ComPtr<IDirect3DPixelShader9> pbrSkinnedSpotDirectionalShadowPS_;
         /// D3D9 skinned-vertex-color porting task: CNA's own CNAEXT SkinnedVertexColor3D shader
         /// pair, lazily created on first `DrawSkinnedVertexColorEXT()` call.
         ComPtr<IDirect3DVertexShader9> skinnedVertexColorVS_;

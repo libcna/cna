@@ -145,6 +145,14 @@ float4 PunctualDirectionKind   : register(c31); // xyz=spot direction, w=0 none 
 float4 PunctualDiffuse         : register(c32); // xyz=linear colour/intensity
 float4 PunctualCone            : register(c33); // x=cos(inner), y=cos(outer)
 
+#if CNA_D3D9_SHADOWS
+#include "ShadowSampling3D.fxh"
+#else
+float CnaShadowFactor(float3 worldPos) { return 1.0; }
+float3 CnaCascadeDebugTint(float3 worldPos) { return float3(1.0, 1.0, 1.0); }
+float CnaPunctualShadow(float3 worldPos, float3 toLight, float distanceToLight) { return 1.0; }
+#endif
+
 struct PSInput
 {
     float3 Normal    : TEXCOORD0;
@@ -231,7 +239,8 @@ float3 CnaPunctualLight(float3 worldPos, float3 normal)
         attenuation *= cone * cone;
     }
     float ndotl = max(dot(normal, toLight), 0.0);
-    return PunctualDiffuse.xyz * ndotl * attenuation;
+    return PunctualDiffuse.xyz * ndotl * attenuation *
+           CnaPunctualShadow(worldPos, toLight, distanceToLight);
 }
 
 float4 PSPbr3D(PSInput pin) : SV_Target0
@@ -279,6 +288,7 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
     Lo += PbrLight(finalNormal, V, normalize(-Light0Dir), Light0Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo *= CnaShadowFactor(pin.WorldPos);
     Lo += CnaPunctualLight(pin.WorldPos, finalNormal) * albedo;
 
     float occlusion = tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r;
@@ -289,6 +299,7 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
     float3 emissive = EmissiveColor.xyz * emissiveSample;
 
     float4 outColor = float4(ambient + Lo + emissive, alpha);
+    outColor.rgb *= CnaCascadeDebugTint(pin.WorldPos);
 
     float alphaTestResult = (AlphaTest.y > 0.0)
         ? ((abs(outColor.a - AlphaTest.x) < AlphaTest.y) ? AlphaTest.z : AlphaTest.w)
