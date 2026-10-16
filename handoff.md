@@ -128,9 +128,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
 
 ### 5.1 Defects
 
-1. **`DIRECTX9` `BasicEffect` draws 12 of its 32 shader variants.** The other 20 (Position-only,
-   untextured lighting, lit with vertex colour) throw a named `std::runtime_error` from
-   `D3D9EffectDraw.cpp`. Every register table exists; only the dispatch is missing.
 7. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
     The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
     of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites, measured on Linux through
