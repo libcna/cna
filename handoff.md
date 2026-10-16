@@ -312,6 +312,16 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     the avatar-baseline commits, so they come before them; the stock-effect vertex-declaration check
     of `e7bd98e46`/`757924d35` is the likely cause and is unconfirmed. The other 107 `CApi_*` cases
     pass.
+18. **22 more EasyGL programs and three C API record checks fail on `next`** (`cmake-build-multi`,
+    OPENGLES3 default, private display, 2026-10-16; identical at `ba52769a0` and after the Avatar v3
+    merge). 21 EasyGL programs draw without the vertex elements `GraphicsDevice` now requires
+    (`e7bd98e46`): the 13 `EasyGL_SkinnedEffect_*`, `EasyGL_SkinnedBones`,
+    `EasyGL_SkinnedModel_AttachPart`, `EasyGL_EmissiveAmbientComposition` and `EasyGL_ViewSpace_Fog`
+    abort with "BlendIndices0 is missing"; `EasyGL_Parity_unlit_position_color`,
+    `_dual_texture_uv1`, `_basic_effect_vertex_color` and `EasyGL_InstancedTexturedDraw` stop on
+    Normal0/TextureCoordinate1. `EasyGL_SurfaceFormat_Throws` expects a different exception type for
+    the `*EXT` formats. `CApiCoverageMatrix`, `CApiLimitations` and `CApiReleaseGate` report
+    `tools/c-api` coverage inventory and `docs/c-api/LIMITATIONS.md` out of date.
 ### 5.2 Limitations
 
 - `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves
