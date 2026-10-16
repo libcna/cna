@@ -8,6 +8,8 @@
 //
 //   A  a surface whose normal tilts up reflects the upper half of a side face    -> red
 //   B  a surface whose normal tilts down reflects the lower half of a side face  -> blue
+//   C  a surface reflecting exactly across a side/top boundary stays red, with no
+//      opposite-edge texel pulled in by mandatory GLES seamless cube filtering
 //
 // GL's rasterizer fills a render target bottom-up, so an unmodified GL sampler reads a rendered face upside
 // down (that is what made EasyGL show the museum's reflection sphere with the floor in both hemispheres).
@@ -93,6 +95,19 @@ class EnvironmentMapRenderTargetCubeOrientationTest final : public Game
         for (int i = 0; i < 6; ++i) quad[i] = v[i];
     }
 
+    /// With the eye on +Z, this normal reflects the centre pixel exactly along +Y/+Z.
+    static void EdgeQuad(VertexPositionNormalTexture (&quad)[6])
+    {
+        Vector3 edge(0.0f, 0.41421356f, 1.0f);
+        edge.Normalize();
+        const VertexPositionNormalTexture tl(Vector3(-1.5f, 1.5f, 0.0f), edge, Vector2(0, 0));
+        const VertexPositionNormalTexture tr(Vector3(1.5f, 1.5f, 0.0f), edge, Vector2(1, 0));
+        const VertexPositionNormalTexture bl(Vector3(-1.5f, -1.5f, 0.0f), edge, Vector2(0, 1));
+        const VertexPositionNormalTexture br(Vector3(1.5f, -1.5f, 0.0f), edge, Vector2(1, 1));
+        const VertexPositionNormalTexture v[6] = {tl, bl, br, tl, br, tr};
+        for (int i = 0; i < 6; ++i) quad[i] = v[i];
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -154,6 +169,14 @@ protected:
               "A normals tilted up reflect the upper half of a rendered side face (red): got " + Text(above));
         check(near(below, 0, 0, 255),
               "B normals tilted down reflect the lower half of a rendered side face (blue): got " + Text(below));
+
+        dev.Clear(Color(0, 0, 0, 255));
+        EdgeQuad(quad);
+        fx.Apply();
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+        const Color edge = ReadPixel(dev, kSize / 2, kSize / 2);
+        check(near(edge, 255, 0, 0),
+              "C a rendered cube's +Y/+Z edge does not sample a flipped opposite edge: got " + Text(edge));
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         std::fflush(stdout);

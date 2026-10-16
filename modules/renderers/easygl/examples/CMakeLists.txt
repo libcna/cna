@@ -2623,6 +2623,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # REMED-GFX-137 follow-up: the two other cube consumers keep a rendered face upright too.
         # PBR owns two independent IBL cube samplers; source ShaderEffect opts into the renderer's
         # per-unit correction through uRtCubeFlipV, mirroring the established 2D uRtFlipV contract.
+        # The source helper also pins GLES's mandatory seamless footprint inside the chosen face.
         cna_easygl_test(cna_test_easygl_rendertargetcube_sampling_orientation
                         easygl_rendertargetcube_sampling_orientation_test.cpp)
         cna_register_renderer_test(NAME EasyGL_RenderTargetCube_SamplingOrientation COMMAND cna_test_easygl_rendertargetcube_sampling_orientation

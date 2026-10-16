@@ -41,13 +41,19 @@ GL rasterizes a rendered face bottom-up while an uploaded cube's first row is sa
 The lookup direction is now mirrored only for a `RenderTargetCube` in every stock consumer:
 `EnvironmentMapEffect` and both independent PBR IBL cubes (irradiance and prefiltered specular).
 Source `ShaderEffect` exposes the same correction as an opt-in `uRtCubeFlipV` vector, parallel to
-the existing 2D `uRtFlipV` contract. The shared eight-check GPU witness covers both IBL terms, a
-rendered cube in a source shader, and switching that shader back to an uploaded cube; it passes on
+the existing 2D `uRtFlipV` contract. The shared nine-check GPU witness covers both IBL terms, a
+rendered cube (including an exact face-edge sample) in a source shader, and switching that shader
+back to an uploaded cube; it passes on
 OPENGLES3 and OPENGL33, and a specular-only mutation fails exactly its two checks. Public readback
 remains top-down and unchanged. The inherited `RenderTargetCube::SetData` path had already been
 normalized in `23c5557f7`; the complete readback contract's W1 check confirms a 64/64 same-order
-upload/readback round trip on both GL profiles. Therefore no public row-orientation gap remains;
-the separate one-texel GLES seamless-filtering face-edge artifact is still tracked.
+upload/readback round trip on both GL profiles. The final GLES-only edge artifact came from the
+necessarily discontinuous face-local row flip: mandatory seamless filtering crossed into an
+unrelated transformed neighbour. Stock EnvironmentMap/PBR sampling and the documented source-shader
+helper now keep the bilinear footprint one texel inside the chosen face and give exact ties to a
+side face. The focused edge oracle changes from red to `(128,0,128)` when that inset is removed;
+restored, it passes on OPENGLES3 and OPENGL33, and the museum's reflection sphere has no face outline.
+No public row-orientation or rendered-cube edge gap remains.
 
 ## 3. Depth buffer functionality (Task 335)
 

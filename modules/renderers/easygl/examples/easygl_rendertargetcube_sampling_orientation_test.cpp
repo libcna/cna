@@ -56,7 +56,14 @@ uniform vec4 uRtCubeFlipV;
 vec3 cnaCubeDir(vec3 d,float flip){
     if(flip<0.5)return d;
     vec3 a=abs(d);
-    return (a.y>=a.x&&a.y>=a.z)?vec3(d.x,d.y,-d.z):vec3(d.x,-d.y,d.z);
+    bool yf=a.y>a.x&&a.y>a.z;
+    vec3 r=yf?vec3(d.x,d.y,-d.z):vec3(d.x,-d.y,d.z);
+    float m=max(a.x,max(a.y,a.z));
+    float lim=m*max(0.0,1.0-1.0/float(textureSize(CubeSampler,0).x));
+    if(yf)r.xz=clamp(r.xz,vec2(-lim),vec2(lim));
+    else if(a.x>=a.z)r.yz=clamp(r.yz,vec2(-lim),vec2(lim));
+    else r.xy=clamp(r.xy,vec2(-lim),vec2(lim));
+    return r;
 }
 void main(){ FragColor=texture(CubeSampler,cnaCubeDir(direction,uRtCubeFlipV.x)); }
 )";
@@ -133,8 +140,13 @@ protected:
             device.Clear(Color::Black);
             batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
                         nullptr, nullptr);
-            batch.Draw(white, Rectangle(0, 0, kFace, kFace / 2), Color::Red);
-            batch.Draw(white, Rectangle(0, kFace / 2, kFace, kFace / 2), Color::Blue);
+            if (i == 2) batch.Draw(white, Rectangle(0, 0, kFace, kFace), Color::Red);
+            else if (i == 3) batch.Draw(white, Rectangle(0, 0, kFace, kFace), Color::Blue);
+            else
+            {
+                batch.Draw(white, Rectangle(0, 0, kFace, kFace / 2), Color::Red);
+                batch.Draw(white, Rectangle(0, kFace / 2, kFace, kFace / 2), Color::Blue);
+            }
             batch.End();
         }
         device.SetRenderTarget(nullptr);
@@ -205,6 +217,8 @@ protected:
               "ShaderEffect cube flip contract keeps a rendered upper texel above");
         Check(Near(DrawCustom(Vector3(0, -0.25f, 1)), 0, 0, 255),
               "ShaderEffect cube flip contract keeps a rendered lower texel below");
+        Check(Near(DrawCustom(Vector3(0, 1, 1)), 255, 0, 0),
+              "ShaderEffect cube flip contract keeps GLES seamless filtering inside the chosen face");
 
         // Binding an ordinary uploaded cube after the rendered one must clear the unit's flag.
         TextureCube uploaded(device, kFace, false, SurfaceFormat::Color);

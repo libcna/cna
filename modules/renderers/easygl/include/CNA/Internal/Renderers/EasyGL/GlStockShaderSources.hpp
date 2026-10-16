@@ -41,12 +41,23 @@
 /// first stored row at its top (+Y side), like an uploaded one: sampled by direction, a rendered face comes out upside
 /// down. `flip` is 1 for such a cube; the direction is then mirrored across the plane that turns each face's rows over
 /// (y for the four side faces, z for +Y/-Y), which selects the texel the Direct3D orientation would have read.
+/// That piecewise transform is necessarily discontinuous where the major face changes. GLES cube filtering is always
+/// seamless and would therefore blend from the transformed direction's unrelated neighbour. `edge` lets the helper
+/// keep the bilinear footprint inside the chosen face, matching the non-seamless Direct3D 9 / desktop-GL result.
+/// Exact ties prefer a side face so the single boundary fragment cannot jump to a flipped top/bottom edge.
 /// Same idea as cnaSampleUV for 2D render targets.
 #define CNA_GL_CUBE_DIR_DECL \
-"vec3 cnaCubeDir(vec3 d,float flip){\n" \
+"vec3 cnaCubeDir(vec3 d,float flip,float edge){\n" \
 "    if(flip<0.5)return d;\n" \
 "    vec3 a=abs(d);\n" \
-"    return (a.y>=a.x&&a.y>=a.z)?vec3(d.x,d.y,-d.z):vec3(d.x,-d.y,d.z);\n" \
+"    bool yf=a.y>a.x&&a.y>a.z;\n" \
+"    vec3 r=yf?vec3(d.x,d.y,-d.z):vec3(d.x,-d.y,d.z);\n" \
+"    float m=max(a.x,max(a.y,a.z));\n" \
+"    float lim=m*max(0.0,1.0-1.0/max(edge,1.0));\n" \
+"    if(yf)r.xz=clamp(r.xz,vec2(-lim),vec2(lim));\n" \
+"    else if(a.x>=a.z)r.yz=clamp(r.yz,vec2(-lim),vec2(lim));\n" \
+"    else r.xy=clamp(r.xy,vec2(-lim),vec2(lim));\n" \
+"    return r;\n" \
 "}\n"
 
 #define CNA_GL_CUBE_SAMPLE_DECL \
@@ -315,7 +326,7 @@ namespace CNA::Internal::Renderers::GlStockShaders
     [[nodiscard]] inline std::string CnaGlIblDecl()
     {
         const char* const prefilteredSample =
-            "textureLod(uIblSpecular,cnaCubeDir(R,uIblCubeFlip.y),lod)";
+            "textureLod(uIblSpecular,cnaCubeDir(R,uIblCubeFlip.y,float(textureSize(uIblSpecular,int(min(ceil(lod),max(uIblMipCount-1.0,0.0)))).x)),lod)";
         return std::string(
     CNA_GL_CUBE_DIR_DECL
     "uniform samplerCube uIblIrradiance;\n"
@@ -330,7 +341,7 @@ namespace CNA::Internal::Renderers::GlStockShaders
     "    float NdotV=clamp(dot(N,V),1e-4,1.0);\n"
     "    vec3 kS=F0+(max(vec3(1.0-roughness),F0)-F0)*pow(1.0-NdotV,5.0);\n"
     "    vec3 kD=(1.0-kS)*(1.0-metallic);\n"
-    "    vec3 diffuse=texture(uIblIrradiance,cnaCubeDir(N,uIblCubeFlip.x)).rgb*albedo*kD;\n"
+    "    vec3 diffuse=texture(uIblIrradiance,cnaCubeDir(N,uIblCubeFlip.x,float(textureSize(uIblIrradiance,0).x))).rgb*albedo*kD;\n"
     "    vec3 R=reflect(-V,N);\n"
     "    float lod=roughness*max(uIblMipCount-1.0,0.0);\n"
     "    vec3 prefiltered=") + prefilteredSample + std::string(".rgb;\n"
@@ -1010,7 +1021,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec3 reflDir=reflect(-E,N);\n"
-"    vec4 envSample=texture(uEnvMap,cnaCubeDir(reflDir,uEnvCubeFlip));\n"
+"    vec4 envSample=texture(uEnvMap,cnaCubeDir(reflDir,uEnvCubeFlip,float(textureSize(uEnvMap,0).x)));\n"
 "    vec3 baseColor=litRGB*texColor.rgb;\n"
 "    float combinedAlpha=uDiffuseColor.a*texColor.a;\n"
 "    float blendFactor=vFresnel;\n"
