@@ -49,6 +49,7 @@
 
 #include <cstdio>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -172,14 +173,14 @@ class SdlGpuEffectsFogTest : public Game
             const VertexPositionColorTexture q[6] = {
                 QuadPCT(-1, 1, z), QuadPCT(-1, -1, z), QuadPCT(1, -1, z),
                 QuadPCT(-1, 1, z), QuadPCT(1, -1, z), QuadPCT(1, 1, z) };
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, q, 0, 2);
         }
         else
         {
             const VertexPositionTexture q[6] = {
                 QuadPT(-1, 1, z), QuadPT(-1, -1, z), QuadPT(1, -1, z),
                 QuadPT(-1, 1, z), QuadPT(1, -1, z), QuadPT(1, 1, z) };
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, q, 0, 2);
         }
         return EndRT(dev);
     }

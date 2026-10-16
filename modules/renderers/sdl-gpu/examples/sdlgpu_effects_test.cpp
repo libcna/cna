@@ -38,6 +38,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -133,8 +134,10 @@ protected:
         };
         quadVb1_ = std::make_unique<VertexBuffer>(dev, VertexPositionTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
         quadVb1_->SetData(quadVerts, 0, 6);
-        quadVb2_ = std::make_unique<VertexBuffer>(dev, VertexPositionTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
-        quadVb2_->SetData(quadVerts, 0, 6);
+        // DualTextureEffect reads TEXCOORD1 too, and XNA refuses a declaration without it.
+        const auto dualVerts = CNA::Examples::ToDualTextureUserVertices(quadVerts, 0, 6);
+        quadVb2_ = std::make_unique<VertexBuffer>(dev, CNA::Examples::DualTextureUserDeclaration(), 6, BufferUsage::None);
+        quadVb2_->SetDataRaw(dualVerts.data(), 6, static_cast<int>(sizeof(CNA::Examples::DualTextureUserVertex)));
     }
 
     void DrawScene()

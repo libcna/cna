@@ -347,7 +347,8 @@ protected:
                 catch (const std::exception& e)
                 {
                     rejectedMissingPosition = true;
-                    preciseMissingPosition = std::string(e.what()).find("POSITION0") != std::string::npos;
+                    // XNA's spelling: "... Position0 is missing."
+                    preciseMissingPosition = std::string(e.what()).find("Position0") != std::string::npos;
                 }
                 dev.SetVertexBuffer(nullptr);
                 check(rejectedMissingPosition && preciseMissingPosition,

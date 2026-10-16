@@ -39,6 +39,8 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -161,7 +163,7 @@ class SdlGpuViewSpaceFogTest : public Game
             {  1, -1, z,  0,0,1,  1,1,  1,0,0,0,  0,0,0,0 },
             {  1,  1, z,  0,0,1,  1,0,  1,0,0,0,  0,0,0,0 },
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), 6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);

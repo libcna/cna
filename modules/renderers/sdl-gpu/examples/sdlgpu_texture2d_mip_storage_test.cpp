@@ -134,6 +134,8 @@
 #include <set>
 #include <string>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -950,6 +952,18 @@ class SdlGpuTexture2DMipStorageTest : public Game
         fx.DirectionalLight0.setEnabledProperty(false);
         fx.DirectionalLight1.setEnabledProperty(false);
         fx.DirectionalLight2.setEnabledProperty(false);
+    }
+
+    /// The skinned record is declared: SkinnedEffect reads BlendIndices/BlendWeight, and XNA has
+    /// no undeclared vertex buffers.
+    static void DrawQuadRaw(GraphicsDevice& dev, const std::vector<VtxPNTS>& verts)
+    {
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(),
+                        static_cast<int>(verts.size()), BufferUsage::None);
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(VtxPNTS)));
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
     }
 
     template <typename V>

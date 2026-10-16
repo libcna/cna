@@ -39,6 +39,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -123,7 +125,9 @@ protected:
         // guaranteed to fail at least one of the two checks below.
         std::vector<SkinnedColorGpuVertex> verts;
         BuildQuad(verts, 0, 0, 0, 255);
-        vbNoColor_ = std::make_unique<VertexBuffer>(dev, static_cast<int>(verts.size()));
+        vbNoColor_ = std::make_unique<VertexBuffer>(
+            dev, CNA::Examples::SkinnedColorVertexDeclaration(), static_cast<int>(verts.size()),
+            BufferUsage::None);
         vbNoColor_->SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedColorGpuVertex)));
     }
 

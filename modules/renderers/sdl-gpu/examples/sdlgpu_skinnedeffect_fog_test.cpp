@@ -49,6 +49,8 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -194,7 +196,10 @@ class SdlGpuSkinnedFogTest : public Game
         fx.VertexColorEnabled = vertexColor;
         fx.Apply();
 
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev,
+                        vertexColor ? CNA::Examples::SkinnedColorVertexDeclaration()
+                                    : CNA::Examples::SkinnedVertexDeclaration(),
+                        6, BufferUsage::None);
         if (vertexColor)
         {
             auto mk = [&](float x, float y) {
