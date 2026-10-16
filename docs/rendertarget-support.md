@@ -44,7 +44,10 @@ Source `ShaderEffect` exposes the same correction as an opt-in `uRtCubeFlipV` ve
 the existing 2D `uRtFlipV` contract. The shared eight-check GPU witness covers both IBL terms, a
 rendered cube in a source shader, and switching that shader back to an uploaded cube; it passes on
 OPENGLES3 and OPENGL33, and a specular-only mutation fails exactly its two checks. Public readback
-remains top-down and unchanged.
+remains top-down and unchanged. The inherited `RenderTargetCube::SetData` path had already been
+normalized in `23c5557f7`; the complete readback contract's W1 check confirms a 64/64 same-order
+upload/readback round trip on both GL profiles. Therefore no public row-orientation gap remains;
+the separate one-texel GLES seamless-filtering face-edge artifact is still tracked.
 
 ## 3. Depth buffer functionality (Task 335)
 
