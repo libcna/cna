@@ -1132,11 +1132,12 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX9SamplesBothKhrMaterialsSpecularTextu
              // The pixel bytecode's exact LENGTH, which is what says the committed blob was
              // regenerated from the HLSL beside it rather than left behind by an edit. It moved from
              // 5588 to 5688 when GLTF-465 added the COLOR_0 product and its VertexColorFlags
-             // register, and the byte count is the only part of an opaque blob a source audit can
+             // register, and to 6472 when the PBR pixel shaders gained punctual lights and shadow
+             // sampling; the byte count is the only part of an opaque blob a source audit can
              // read -- so it is updated deliberately here, alongside the register table below,
              // rather than loosened into "some bytecode exists".
-             "kPbr3DPSBytecode[5688]",
-             "kPbrSkinned3DPSBytecode[5688]"})
+             "kPbr3DPSBytecode[6472]",
+             "kPbrSkinned3DPSBytecode[6472]"})
     {
         EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
             << "missing DirectX 9 specular binding evidence: " << evidence;
@@ -2001,13 +2002,14 @@ TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFa
 TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSubmission)
 {
     // GLTF-394 closes the last known silent POINTS reinterpretations. D3D9 duplicates its native
-    // mapper in six independently compiled draw implementations, so checking only the ordinary
-    // path would leave PBR (the glTF path), stock, skinned-colour, instanced or compiled-effect
-    // draws behind. The sixth is D3D9CompiledEffect.cpp, added by plans/plan_fx.md FX-070.
+    // mapper in seven independently compiled draw implementations, so checking only the ordinary
+    // path would leave PBR (the glTF path), stock, skinned-colour, instanced, compiled-effect or
+    // punctual-light draws behind. The sixth is D3D9CompiledEffect.cpp, added by plans/plan_fx.md
+    // FX-070; the seventh is D3D9BasicPunctualDraw.cpp.
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
     const std::string d3d9 = RendererText(renderers / "directx9");
-    EXPECT_EQ(6u, CountOccurrences(
+    EXPECT_EQ(7u, CountOccurrences(
                       d3d9,
                       "casePrimitiveType::PointListEXT:returnD3DPT_POINTLIST;"));
 
