@@ -29,6 +29,7 @@
 #include <chrono>
 #include <exception>
 #include <memory>
+#include <algorithm>
 #include <string>
 #include <thread>
 #include <utility>
@@ -715,6 +716,35 @@ TEST(GameTest, AGameWhoseDeviceCannotBeCreatedThrowsNoSuitableGraphicsDeviceExce
                 std::string("Unable to create the graphics device. ") + failure.what());
         }
     }
+}
+
+TEST(GameTest, AWindowlessPlatformHostsTheRendererOrRefusesAsThePlatform)
+{
+    // HEADLESS and TERMINAL start no SDL video, and SDL's GPU drivers will not prepare a device
+    // without it; a GL context or an FNA3D device needs a native window. Such a pairing is the
+    // platform declining what the renderer needs: XNA's NoSuitableGraphicsDeviceException around
+    // a PlatformException, which games and the platform suites tell apart from a renderer
+    // failure. SDL_GPU used to let a std::runtime_error about SPIR-V out instead.
+    const std::vector<std::string> available = CNA::Platform::PlatformFactory::GetAvailable();
+    int probed = 0;
+    for (const std::string name : {"Headless", "Terminal"})
+    {
+        if (std::find(available.begin(), available.end(), name) == available.end())
+            continue;
+        ++probed;
+        try
+        {
+            LifecycleTestGame game(CNA::Platform::PlatformFactory::Create(name));
+        }
+        catch (const Graphics::NoSuitableGraphicsDeviceException& refusal)
+        {
+            EXPECT_TRUE(CNA::Runtime::Testing::IsPlatformRefusal(refusal))
+                << name << " refused the renderer with something other than the platform's "
+                << "refusal: " << refusal.what();
+        }
+    }
+    if (probed == 0)
+        GTEST_SKIP() << "neither the Headless nor the Terminal platform is compiled in";
 }
 
 TEST(GameTest, ANoSuitableGraphicsDeviceExceptionFromTheDeviceIsNotWrapped)

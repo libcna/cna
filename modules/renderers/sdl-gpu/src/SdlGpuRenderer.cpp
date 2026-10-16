@@ -154,6 +154,28 @@ namespace CNA::Internal::Renderers::SdlGpu
                 (std::strcmp(driver, "dummy") == 0 || std::strcmp(driver, "offscreen") == 0);
         }
 
+        // plans/plan_apple_m4.md AM4-176: SDL's GPU drivers will not prepare a device without SDL's
+        // video subsystem -- Vulkan loads its library through it, Metal needs its layer -- and a
+        // platform without SDL video (HEADLESS, TERMINAL) never starts it; the dummy video driver
+        // offers Vulkan nothing, and neither isolated driver has a Metal layer. Those pairings are
+        // the platform declining what this renderer needs, which GraphicsDevice reports as XNA
+        // does (NoSuitableGraphicsDeviceException around the platform's refusal), not an SDL_GPU
+        // failure. Applies both when no driver accepts the shader formats and when the device
+        // itself cannot be created.
+        [[noreturn]] void ThrowDeviceUnavailable(bool headless, const std::string& failure)
+        {
+            const bool videoAbsent = headless && SDL_WasInit(SDL_INIT_VIDEO) == 0;
+            if (videoAbsent || IsIsolatedVideoDriver(SDL_GetCurrentVideoDriver()))
+                throw CNA::Platform::PlatformException(
+                    "SDL_GPU device",
+                    std::string(videoAbsent
+                        ? "this SDL GPU driver needs SDL's video subsystem, which the selected "
+                          "platform does not start: "
+                        : "the SDL video driver in use offers this SDL GPU driver no device: ") +
+                    SDL_GetError());
+            throw std::runtime_error(failure);
+        }
+
 #if defined(CNA_SDL_GPU_SHADERCROSS)
         std::mutex shaderCrossSessionMutex;
         std::size_t shaderCrossSessionReferences = 0;
@@ -2542,7 +2564,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             requestedShaderFormats | resources.shaderCrossFormats);
 #else
         if (!SDL_GPUSupportsShaderFormats(requestedShaderFormats, /*name=*/nullptr))
-            throw std::runtime_error(
+            ThrowDeviceUnavailable(resources.headless,
                 "CNA SDL_GPU: no installed SDL_gpu driver accepts SPIR-V; rebuild with "
                 "CNA_SDL_GPU_SHADERCROSS=ON for native D3D12/Metal stock shaders");
 #endif
@@ -2550,26 +2572,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         resources.device = SDL_CreateGPUDevice(
             requestedShaderFormats, resources.debugModeEnabled, /*name=*/nullptr);
         if (resources.device == nullptr)
-        {
-            // plans/plan_apple_m4.md AM4-176: SDL's Metal GPU driver will not create a device
-            // until SDL's video subsystem is up -- a platform without SDL video (HEADLESS,
-            // TERMINAL) never starts it -- nor under the dummy and offscreen video drivers, which
-            // have no Metal layer to give it. Vulkan's headless device needs neither. Those
-            // pairings are the platform declining what this renderer needs, which GraphicsDevice
-            // reports as XNA does (NoSuitableGraphicsDeviceException around the platform's
-            // refusal), not an SDL_GPU failure.
-            const bool videoAbsent = resources.headless && SDL_WasInit(SDL_INIT_VIDEO) == 0;
-            if (videoAbsent || IsIsolatedVideoDriver(SDL_GetCurrentVideoDriver()))
-                throw CNA::Platform::PlatformException(
-                    "SDL_GPU device",
-                    std::string(videoAbsent
-                        ? "this SDL GPU driver needs SDL's video subsystem, which the selected "
-                          "platform does not start: "
-                        : "the SDL video driver in use offers this SDL GPU driver no device: ") +
-                    SDL_GetError());
-            throw std::runtime_error(
+            ThrowDeviceUnavailable(resources.headless,
                 std::string("CNA SDL_GPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
-        }
         NotifyResource(testHooks, SdlGpuResourceKindEXT::Device,
                        SdlGpuResourceEventEXT::Acquired);
 

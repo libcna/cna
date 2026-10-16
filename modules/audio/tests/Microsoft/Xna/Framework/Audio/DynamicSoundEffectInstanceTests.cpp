@@ -550,12 +550,12 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresWhenStarved)
 // immediately after (before any real consumption could have happened), PendingBufferCount == 1
 // and MINIMUM_BUFFER_CHECK(3) - 1 == 2 raises are expected.
 //
-// The submitted buffer is one second long, not the helper's 256-frame (~6 ms) default: a chunk
-// stops being pending once the device thread has consumed it whole, and under parallel load
-// (a full `ctest -j4` run) that thread routinely drained a 6 ms chunk between Play() and the
-// Update() below, so PendingBufferCount was 0 and three raises -- correct for a dry stream --
-// failed the assertion for a reason unrelated to the starvation arithmetic. A one-second chunk
-// cannot be consumed in that gap, so the count this test asserts is the one the test set up.
+// A chunk stops being pending once the device thread has played it whole, which it does in its
+// own time: even a one-second chunk is gone when the test thread is descheduled for a second
+// between Play() and Update() -- a full parallel run did that, and three raises were then correct
+// for a dry stream. So the expectation is taken from the count the raise loop itself used, which
+// the handler reads (only Update() and SubmitBuffer() change it, both on this thread); the
+// one-second chunk keeps that count at 1 on any ordinary run.
 TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresExactlyTheStarvedCount)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -566,9 +566,14 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededFiresExactlyTheStarvedCount)
     ASSERT_EQ(d.getPendingBufferCountProperty(), 1);
 
     int fired = 0;
-    d.BufferNeeded += [&fired](System::Object*, const System::EventArgs&) { ++fired; };
+    int pendingWhenRaised = -1;
+    d.BufferNeeded += [&](System::Object*, const System::EventArgs&) {
+        if (fired++ == 0) pendingWhenRaised = d.getPendingBufferCountProperty();
+    };
     d.Update();
-    EXPECT_EQ(fired, 2); // MINIMUM_BUFFER_CHECK(3) - PendingBufferCount(1)
+    ASSERT_GE(pendingWhenRaised, 0) << "a starved stream must raise BufferNeeded";
+    EXPECT_LE(pendingWhenRaised, 1);
+    EXPECT_EQ(fired, 3 - pendingWhenRaised); // MINIMUM_BUFFER_CHECK(3) - PendingBufferCount
 }
 
 // CP-4: a buffer must remain "pending" until the stream reports it was actually consumed, not

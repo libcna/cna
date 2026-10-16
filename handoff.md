@@ -139,16 +139,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
    run, because a query slot may be written once per resolve and the Clear splits the run across
    render passes; a later run now records into a fresh slot and the readback sums the query's
    slots (`OcclusionQueryLifecycleTest.ACountSpansAClearBetweenItsDraws`).
-6. **Shared-test failures with `SDL_GPU` as the default renderer** (full `cmake-build-sdlgpu` runs,
-   2026-10-13 and 2026-10-14; each also fails or passes identically on `9edbf314e`; the other
-   failures of those runs are items 7 and 16):
-   - A game on a non-video platform asks `SDL_GPU` for its device and gets "no installed SDL_gpu
-     driver accepts SPIR-V": `GameEventSemanticsGoldenTest` `/Headless` and `/Terminal`, and
-     `GameWindowPlatformTest.DelegatesStateAndGeometryToTheSelectedPlatformWindow` inside
-     `CnaPlatformWindowTests`.
-   - `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails only under the
-     full parallel run (3 buffers requested instead of 2); alone it passed 40 of 40 on both commits.
-
 7. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
     The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
     of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites, measured on Linux through
