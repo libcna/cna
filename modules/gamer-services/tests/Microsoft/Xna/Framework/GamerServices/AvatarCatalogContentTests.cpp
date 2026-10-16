@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// The content of CNA's avatar catalog v3 (revision 3): every model is sound geometry, every
+// The content of CNA's avatar catalog v3 (revision 4): every model is sound geometry, every
 // reference of the manifest resolves to what the editor and the random generator expect, and what
 // an avatar wears is assembled where and as its description says.
 #include <gtest/gtest.h>

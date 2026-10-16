@@ -158,7 +158,7 @@ def mix(c0, c1, t):
 # tapered lid line, a warm sclera in the lid's shade, and a small highlight.
 RX, RY, CY, FLOOR = 0.70, 0.52, 0.02, -0.44
 LID = (48, 32, 28)
-SCLERA = (244, 239, 232)
+SCLERA = (240, 236, 229)
 
 
 def _opening(rx=RX, ry=RY):
@@ -220,11 +220,12 @@ def eye_layers(state, side):
     def sclera(x, y):
         # The upper lid's shade falls across the top of the eye; the corners are in shadow too.
         under_lid = smoothstep(0.30, 0.0, top_of(x) - y)
-        shade = 0.42 * under_lid + 0.16 * smoothstep(0.30, 0.66, abs(x)) + 0.06 * smoothstep(-0.1, -0.4, y)
-        c = mix(SCLERA, (178, 168, 170), shade)
+        # The eyeball rounds away toward the corners and under the lids.
+        shade = 0.44 * under_lid + 0.30 * smoothstep(0.22, 0.70, abs(x)) ** 1.3 + 0.12 * smoothstep(-0.05, -0.42, y)
+        c = mix(SCLERA, (172, 160, 160), shade)
         # The pink inner corner.
         corner = smoothstep(0.20, 0.0, math.hypot(x - inner * (rx - 0.08), y - (CY - 0.06)))
-        return mix(c, (214, 152, 150), 0.65 * corner)
+        return mix(c, (214, 152, 150), 0.40 * corner)
 
     # The lid line: slim at the inner corner, fuller toward the outer one, ending in a short flick.
     def outer_of(x):
@@ -232,7 +233,7 @@ def eye_layers(state, side):
 
     def lid_width(x):
         o = outer_of(x)
-        return 0.040 + 0.085 * smoothstep(0.0, 0.72, o) - 0.035 * smoothstep(0.80, 1.0, o)
+        return 0.034 + 0.072 * smoothstep(0.0, 0.72, o) - 0.030 * smoothstep(0.80, 1.0, o)
     # The line follows the lid down round the outer corner a little, into the flick.
     upper = both(Sdf(lambda x, y: abs(visible(x, y)) - 0.5 * lid_width(x), FULL),
                  Sdf(lambda x, y: (CY - 0.06 - 0.08 * smoothstep(0.6, 1.0, outer_of(x))) - y, FULL))
@@ -246,7 +247,7 @@ def eye_layers(state, side):
         sy = CY + ry * 0.92 * math.cos(a) * (0.35 if lid else 1.0) + (0.0 if not lid else 0.15)
         ex, ey = sx - inner * length_ * 0.8, sy + length_ * 0.6
         lashes.append(stroke([(sx, sy), (ex, ey)], [0.05, 0.015]))
-    white = [(visible, sclera, 1.0), (lower, (96, 62, 56), 0.35), (upper, LID, 0.96), (wing, LID, 0.92), (crease, LID, 0.13)]
+    white = [(visible, sclera, 1.0), (lower, (96, 62, 56), 0.35), (upper, LID, 0.96), (wing, LID, 0.92), (crease, LID, 0.06)]
     white += [(lash, LID, 0.85) for lash in lashes]
 
     ix, iy = iris_c
@@ -349,38 +350,65 @@ def eyebrow(state, side, style="classic"):
         pts.append((inner * x, y))
         w0, w1, w2 = p["widths"]
         widths.append(w0 + (w1 - w0) * (u / p["peak"]) if u <= p["peak"] else w1 + (w2 - w1) * ((u - p["peak"]) / (1.0 - p["peak"])))
-    # Keep the stroke inside its tile, round caps and all.
+    # Keep the stroke inside its tile, round caps, feathered edge and all.
     reach = max(abs(x) + w * 0.5 for (x, _), w in zip(pts, widths))
-    if reach > 0.96:
-        k = 0.96 / reach
+    limit = 0.94 - 0.05 - 0.04 * p["feather"]
+    if reach > limit:
+        k = limit / reach
         pts = [(x * k, y) for x, y in pts]
         widths = [w * k for w in widths]
     shape = stroke(pts, widths)
     feather = p["feather"]
     x_in, x_out = pts[0][0], pts[-1][0]
+    toward = 1.0 if x_out < x_in else -1.0
 
     def along(x):
         return clamp((x - x_in) / (x_out - x_in), 0.0, 1.0)
 
-    def colour(x, y):
-        # Hairs: fine strokes that rise and fan out at the brow's head and lie flat along its tail,
-        # over a darker core; feathered styles break the edge into strokes.
-        d = shape(x, y)
+    def hairs(x, y):
+        """Single hairs: fine strokes that rise and fan at the brow's head and lie flat along its
+        tail, each broken along its length, so the brow is hair rather than a painted band."""
         u = along(x)
-        angle = (1.25 - 1.0 * smoothstep(0.0, 0.55, u)) * (1.0 if x_out < x_in else -1.0)
-        hairs = 0.5 + 0.5 * math.sin(58.0 * (x * math.sin(angle) - y * math.cos(angle)))
-        edge = smoothstep(-0.02, 0.10, d + 0.12)
-        if feather:
-            edge = clamp(edge + feather * 0.25 * (0.5 + 0.5 * math.sin(x * 46.0 + y * 9.0)) * smoothstep(-0.10, 0.0, d), 0.0, 1.0)
-        return mix((255, 255, 255), (196, 196, 196), clamp(0.75 * edge + 0.22 * hairs, 0.0, 1.0))
+        angle = (1.20 - 1.0 * smoothstep(0.0, 0.55, u)) * toward
+        a = x * math.sin(angle) - y * math.cos(angle)
+        b = x * math.cos(angle) + y * math.sin(angle)
+        cell = a * 17.0
+        k = math.floor(cell)
+        line = smoothstep(0.42, 0.12, abs(cell - k - 0.5 - 0.25 * (_hash(k, 7) - 0.5)))
+        dash = smoothstep(0.30, 0.62, 0.5 + 0.5 * math.sin(b * (15.0 + 14.0 * _hash(k, 13)) + 6.283 * _hash(k, 11)))
+        return line * (0.35 + 0.65 * dash)
+
+    def stray(x, y):
+        # Only some hairs reach past the brow's edge.
+        u = along(x)
+        angle = (1.20 - 1.0 * smoothstep(0.0, 0.55, u)) * toward
+        k = math.floor((x * math.sin(angle) - y * math.cos(angle)) * 17.0)
+        return hairs(x, y) * smoothstep(0.40, 0.75, _hash(k, 17))
+
+    def colour(x, y):
+        # A denser, darker core; lighter single hairs at the edge.
+        d = shape(x, y)
+        core = smoothstep(0.02, -0.10, d)
+        h = hairs(x, y)
+        return mix((255, 255, 255), (178, 178, 178), clamp(0.45 * core + 0.30 * h * core, 0.0, 1.0))
 
     def opacity(x, y):
-        # The head of the brow is softer than its body, and its edge is broken by hairs.
+        # The head starts soft and the tail thins to a point; the edge feathers into single hairs
+        # (feathered styles break it further), so the brow grows from the skin.
         u = along(x)
         d = shape(x, y)
-        hairs = 0.5 + 0.5 * math.sin(41.0 * x + 23.0 * y)
-        return (0.55 + 0.45 * smoothstep(0.0, 0.32, u)) * (1.0 - 0.35 * hairs * smoothstep(-0.05, 0.0, d))
-    return [(shape, colour, opacity)]
+        body = (0.32 + 0.68 * smoothstep(0.0, 0.32, u)) * (1.0 - 0.30 * smoothstep(0.78, 1.0, u))
+        h = hairs(x, y)
+        inside = smoothstep(0.0, 0.07 + 0.05 * feather, -d) * (0.80 + 0.20 * h)
+        fringe = stray(x, y) * smoothstep(0.045 + 0.04 * feather, -0.02, d) * (0.55 + 0.35 * feather)
+        return body * max(inside, fringe)
+    return [(grow(shape, 0.05 + 0.04 * feather), colour, opacity)]
+
+
+def _hash(k, seed):
+    h = (k * 374761393 + seed * 668265263) & 0xffffffff
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff
+    return ((h ^ (h >> 16)) & 0xffff) / 65535.0
 
 
 # ----- makeup (drawn white: tinted by the description's makeup colours) --------------------------
@@ -460,16 +488,22 @@ def blush(style, side):
 
 
 def lips_mask(state):
-    """Where lip colour goes for a mouth state: the lips of mouth(state), opaque (the style's opacity
-    and colour come from the description)."""
-    return [(shape, (255, 255, 255), 1.0) for shape, colour, opacity in mouth(state) if colour == LIP]
+    """Where lip colour goes for a mouth state: the lips of mouth(state), opaque inside with a soft
+    edge (the style's opacity and colour come from the description)."""
+    return [(shape, (255, 255, 255), _feathered(shape, 1.0, 0.05)) for shape, colour, opacity in mouth(state) if colour == LIP]
 
 
 # ----- mouths -----------------------------------------------------------------------------------
 
+def _feathered(shape, strength, falloff):
+    """An opacity rising from nothing at the shape's edge to `strength` `falloff` inside it: colour
+    that lies on a form (the lips are sculpted) rather than a cut-out."""
+    return lambda x, y: strength * smoothstep(0.0, falloff, -shape(x, y))
+
+
 def mouth(state):
     s = []
-    lips = lambda shape, o=0.34: (shape, LIP, o)
+    lips = lambda shape, o=0.34: (shape, LIP, _feathered(shape, o, 0.07))
     if state in ("Neutral", "Happy", "Sad", "Confused"):
         if state == "Neutral":
             fn = lambda x: -0.03 + 0.11 * (x / 0.5) ** 2
@@ -486,8 +520,12 @@ def mouth(state):
         lower_lip = curve(lambda x: fn(x) - 0.125, x0 * 0.82, x1 * 0.82, lambda t: 0.25 * math.sin(math.pi * t) ** 0.8 + 0.03)
         upper_lip = curve(lambda x: fn(x) + 0.075 - 0.035 * math.cos(math.pi * x / 0.42), x0 * 0.78, x1 * 0.78,
                           lambda t: 0.15 * math.sin(math.pi * t) ** 0.7 + 0.02)
-        line = curve(fn, x0, x1, lambda t: 0.032 + 0.040 * math.sin(math.pi * t) ** 0.8)
-        s += [lips(lower_lip, 0.36), lips(upper_lip, 0.30), (line, LINE, 0.92)]
+        # The parting line: the lips meet in a sculpted groove, so the line is slim and fades into
+        # the corners, which are sculpted too.
+        line = curve(fn, x0, x1, lambda t: 0.026 + 0.032 * math.sin(math.pi * t) ** 0.8)
+        reach = max(abs(x0), abs(x1))
+        s += [lips(lower_lip, 0.36), lips(upper_lip, 0.30),
+              (line, LINE, lambda x, y: 0.86 * (1.0 - 0.65 * smoothstep(0.55 * reach, reach, abs(x))))]
         if state == "Happy":
             for side in (-1.0, 1.0):
                 s.append((curve(lambda x, side=side: fn(side * 0.62) + 0.02 + 0.5 * (x - side * 0.62) * side,
@@ -632,28 +670,93 @@ MAKEUP = {
     "lips": ("mouth", "same"),
     "blushLeft": ((0.074, -0.044, 0.070, 0.056), None), "blushRight": ((-0.074, -0.044, 0.070, 0.056), None),
 }
-LIFT = 0.0012
+# How far decals lie above the skin; they lie on the head's own facets (head.conforming_patch), so
+# they follow the sculpted lids and lips exactly.
+LIFT = 0.0008
+
+
+def _painted_specs(name):
+    """Every atlas tile drawn on a patch: a feature's states and styles, and the makeup sharing it."""
+    if name in ("eyeLeft", "eyeRight"):
+        side = name[3:]
+        return [("eye", st, side, layer) for st in EYES for layer in (0, 1)] + \
+            [("eyeliner", style, side, closed) for style in LINER_STYLES for closed in (False, True)]
+    if name in ("eyebrowLeft", "eyebrowRight"):
+        side = name[7:]
+        return [("eyebrow", st, side) for st in EYEBROWS] + \
+            [("eyebrow", st, side, style) for style in BROW_STYLES for st in EYEBROWS]
+    if name == "mouth":
+        return [("mouth", st) for st in MOUTHS] + [("lips", st) for st in MOUTHS]
+    if name in ("shadowLeft", "shadowRight"):
+        return [("eyeShadow", style, name[6:]) for style in SHADOW_STYLES]
+    return None
+
+
+_COVERAGE = {}
+COVERAGE_SIZE = 48
+
+
+def _coverage(name):
+    """Where any tile drawn on patch `name` paints (a coarse grid, grown by a cell)."""
+    if name not in _COVERAGE:
+        n = COVERAGE_SIZE
+        painted = [[False] * n for _ in range(n)]
+        for spec in _painted_specs(name):
+            pixels = render(_tile_layers(spec), n)
+            for y in range(n):
+                for x in range(n):
+                    if pixels[(y * n + x) * 4 + 3] > 0:
+                        painted[y][x] = True
+        grown = [[any(painted[yy][xx] for yy in range(max(0, y - 1), min(n, y + 2)) for xx in range(max(0, x - 1), min(n, x + 2)))
+                  for x in range(n)] for y in range(n)]
+        _COVERAGE[name] = grown
+    return _COVERAGE[name]
+
+
+def _trimmed(mesh, name):
+    """The patch without the facets no tile of it ever paints (they would only draw nothing)."""
+    if _painted_specs(name) is None:
+        return mesh
+    cover, n = _coverage(name), COVERAGE_SIZE
+    cell = lambda uv: (min(n - 1, int(uv[1] * n)), min(n - 1, int(uv[0] * n)))
+    kept = []
+    for t in range(0, len(mesh.indices), 3):
+        tri = mesh.indices[t:t + 3]
+        us = [mesh.uvs[i][0] for i in tri]
+        vs = [mesh.uvs[i][1] for i in tri]
+        r0, c0 = cell((min(us), min(vs)))
+        r1, c1 = cell((max(us), max(vs)))
+        if any(cover[r][c] for r in range(r0, r1 + 1) for c in range(c0, c1 + 1)):
+            kept += tri
+    mesh.indices = kept
+    return mesh.compact()
 
 
 def build_decals(body_type):
     from . import head
     s = head.SCALE[body_type]
-    return {name: head.decal_patch(body_type, x * s, y * s, w * s, h * s, LIFT * s)
+    return {name: _trimmed(head.conforming_patch(body_type, x * s, y * s, w * s, h * s, LIFT * s), name)
             for name, (x, y, w, h) in FEATURES.items()}
 
 
-def build_makeup(body_type):
-    """Makeup patches (drawn only when a description wears that makeup)."""
+def build_makeup(body_type, decals=None):
+    """Makeup patches (drawn only when a description wears that makeup). Eyeliner and lips lie on
+    exactly the patch of the feature they follow (`decals`, from build_decals), so they share it."""
     from . import head
     s = head.SCALE[body_type]
+    decals = decals or build_decals(body_type)
     out = {}
     for name, (base, how) in MAKEUP.items():
+        if how == "same":
+            out[name] = decals[base]
+            continue
         if how is None:
+            # Blush lies on the smooth cheek and fades out before its edge: a light patch will do.
             x, y, w, h = base
-        else:
-            x, y, w, h = FEATURES[base]
-            if how == "shadow":
-                dx, dy, fw, fh = SHADOW_PATCH
-                x, y, w, h = x + dx, y + dy, w * fw, h * fh
-        out[name] = head.decal_patch(body_type, x * s, y * s, w * s, h * s, LIFT * s * 0.8)
+            out[name] = head.decal_patch(body_type, x * s, y * s, w * s, h * s, LIFT * s * 1.5, 10, 8)
+            continue
+        x, y, w, h = FEATURES[base]
+        dx, dy, fw, fh = SHADOW_PATCH
+        x, y, w, h = x + dx, y + dy, w * fw, h * fh
+        out[name] = _trimmed(head.conforming_patch(body_type, x * s, y * s, w * s, h * s, LIFT * s * 0.8), name)
     return out

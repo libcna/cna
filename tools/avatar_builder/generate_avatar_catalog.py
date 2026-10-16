@@ -29,7 +29,8 @@ CATALOG_VERSION = 3
 # Revision 2 (2026-10): the first v3 release's ids keep their kinds, and everything added since is
 # named only by format 3 descriptions (docs/avatars.md).
 # Revision 3 (2026-10): the same entries, art reworked for visual quality.
-CATALOG_REVISION = 3
+# Revision 4 (2026-10): the same entries; sculpted lids, lips and brows, decals on the head's own facets.
+CATALOG_REVISION = 4
 # The catalog contract level a reader needs: 2 adds shared texture files, face styles, accessories,
 # ear shapes, hair covers, anchors and the head surface.
 READER = 2

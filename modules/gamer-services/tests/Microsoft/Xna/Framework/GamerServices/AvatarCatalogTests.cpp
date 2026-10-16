@@ -117,7 +117,7 @@ TEST(AvatarCatalogTest, CatalogV3RevisionsKeepTheFirstReleaseAndAddOnlyFormat3En
     // reader of only formats 1 and 2 never receives (the service projects it).
     const auto v3 = Avatars::embeddedManifest(3);
     ASSERT_NE(v3, nullptr);
-    EXPECT_EQ(v3->revision, 3);
+    EXPECT_EQ(v3->revision, 4);
     std::set<std::uint16_t> first;
     for (const auto& [slot, ids] : firstRelease()) {
         for (auto id : ids) {
@@ -285,7 +285,7 @@ std::string ModelDigest(const Avatars::AvatarModel& model) {
 
 TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
     // A v3 description, format 1 or format 2, draws the same model on every machine: these digests
-    // pin catalog v3 revision 3 (a later revision changes them on purpose).
+    // pin catalog v3 revision 4 (a later revision changes them on purpose).
     struct Case {
         std::uint8_t body;
         std::uint16_t height;
@@ -296,10 +296,10 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
         const char* digest;
     };
     const Case cases[] = {
-        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "686f0f5f8d0d1a59f87c7b8cf33450ce4d508bf9e3e37f372f234c38b51717fd"},
-        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "3b375a5d12aa6857bf3f8c3f891dfca0ff18a75a319d62e611e3d17f9dbf98a3"},
-        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "df45f7d6021f35a9aaf7a10e3e31093cb89a40129814178028c9cb40fba535cb"},
-        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "62be8cfff9b65fcbdc132407c840a09cbae9204ab8b72e296bbe3a906f02616e"},
+        {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "896ad0bc600781adb8faf8ca2f90cd851a5a4646cd414992a756ee9246737c55"},
+        {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "b4662d18719b6d359e8943f2024f9caefbeac3df8f54e63922da8898216a5c06"},
+        {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "f035940da5b957b2b4a556e873bf76e552fe479c0304728c789ff1aa8a508682"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "bcc68ee69af7a9a9810e502b16f3d654a7f70db6531f2418836b9c8f9e7a70fe"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;

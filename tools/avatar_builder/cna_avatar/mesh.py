@@ -31,6 +31,13 @@ class Mesh:
         for joints, weights in self.skin:
             assert sum(weights) == 255 and all(0 <= j < 71 for j in joints)
 
+    def copy(self):
+        m = Mesh()
+        m.positions, m.normals, m.uvs, m.skin = list(self.positions), list(self.normals), list(self.uvs), list(self.skin)
+        m.indices = list(self.indices)
+        m.patch_origin = self.patch_origin
+        return m
+
     def compact(self):
         """Drop the vertices no triangle uses (after triangles were left out)."""
         used = sorted(set(self.indices))

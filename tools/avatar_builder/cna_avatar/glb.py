@@ -16,6 +16,7 @@ class GlbBuilder:
                      "buffers": [], "bufferViews": [], "accessors": []}
         self.blob = bytearray()
         self.textured_materials = set()
+        self.shared = {}
 
     def _view(self, data, target=None, stride=None):
         while len(self.blob) % 4:
@@ -35,6 +36,10 @@ class GlbBuilder:
         rows = [v if isinstance(v, (tuple, list)) else (v,) for v in values]
         data = b"".join(b"".join(struct.pack(fmt, c) for c in r) + b"\0" * pad for r in rows)
         stride = len(data) // len(rows) if pad else None
+        # Parts drawn over the same mesh (a feature's layers, makeup lying on a feature) share its data.
+        key = (data, kind, component, normalized, target, stride, bounds)
+        if key in self.shared:
+            return self.shared[key]
         accessor = {"bufferView": self._view(data, target, stride), "componentType": component, "count": len(values),
                     "type": kind}
         if normalized:
@@ -46,7 +51,8 @@ class GlbBuilder:
             accessor["min"] = [min(r[i] for r in rows) for i in range(count_per)]
             accessor["max"] = [max(r[i] for r in rows) for i in range(count_per)]
         self.gltf["accessors"].append(accessor)
-        return len(self.gltf["accessors"]) - 1
+        self.shared[key] = len(self.gltf["accessors"]) - 1
+        return self.shared[key]
 
     def add_rig(self, body):
         """Adds the 71 joint nodes (bind translations, identity rotations) and returns the skin index."""

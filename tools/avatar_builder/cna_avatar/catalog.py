@@ -12,7 +12,7 @@ from .glb import GlbBuilder
 FEATURE_TINTS = {"eyeLeft": ("none", "eyes"), "eyeRight": ("none", "eyes"), "eyebrowLeft": ("hair",),
                  "eyebrowRight": ("hair",), "mouth": ("none",)}
 # Highlight scale per material family: wet eyes and lips, hair and leather sheen, matte cloth.
-SPECULAR = {"eyeLeft": (2.5, 3.0), "eyeRight": (2.5, 3.0), "eyebrowLeft": (0.4,), "eyebrowRight": (0.4,), "mouth": (1.6,)}
+SPECULAR = {"eyeLeft": (1.2, 3.0), "eyeRight": (1.2, 3.0), "eyebrowLeft": (0.4,), "eyebrowRight": (0.4,), "mouth": (0.9,)}
 CLOTH_SPECULAR = {"knit": 0.35, "rib": 0.35, "cable": 0.3, "fleece": 0.25, "denim": 0.45, "canvas": 0.5, "pleat": 0.4,
                   "leather": 2.0, "plain": 1.0, "strands": 2.0}
 HAIR_SPECULAR = 1.6
@@ -60,7 +60,7 @@ def body_glb(body_type):
     if details.positions:
         parts.append((details, skin_material))
     decals = face.build_decals(body_type)
-    makeup = face.build_makeup(body_type)
+    makeup = face.build_makeup(body_type, decals)
 
     def decal(name, mesh, tint, specular, layer):
         parts.append((mesh, builder.add_material("%s%d" % (name, layer), tint, specular=specular,

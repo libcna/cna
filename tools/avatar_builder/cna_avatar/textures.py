@@ -119,9 +119,30 @@ def hair_cap():
     return image(256, 64, fn)
 
 
-def skin_head():
-    """Head multiplier (u = 0.5 is the face, v = theta / pi): a faint warmth over the cheeks, nose
-    and chin, broad enough that face controls never move a feature out of it."""
+def skin_head(width=512, height=256):
+    """Head multiplier (u = 0.5 is the face, v = theta / pi): a faint warmth over the cheeks, nose and
+    chin, and the face's hollows in a soft shade -- the sockets under the brow, the inner corners of
+    the eyes and the lids' crease, the nostrils, the mouth's corners and the groove under the lower
+    lip, and round the root of each ear. The hollows are measured from the sculpted relief itself
+    (how far it lies below its surroundings), so the shade is where the forms are; it lies on the
+    head's facets and follows the face controls with them. Low-frequency, so it reads under the
+    one light without mipmaps."""
+    from . import head
+    body = "male"
+    s = head.SCALE[body]
+    relief = lambda x, y: head._features(body, x, y)
+    rings = [(r, [(math.cos(2.0 * math.pi * k / 8), math.sin(2.0 * math.pi * k / 8)) for k in range(8)])
+             for r in (0.0045, 0.0095)]
+    ear_y, ear_z = head.EAR
+
+    def hollow(x, y):
+        """How far the relief at (x, y) lies below the relief round it (metres, >= 0)."""
+        h = relief(x, y)
+        around = 0.0
+        for r, dirs in rings:
+            around += sum(relief(x + r * cx, y + r * cy) for cx, cy in dirs) / len(dirs)
+        return max(0.0, around / len(rings) - h)
+
     def fn(u, v):
         warm = 0.0
         for cu in (0.5 - 0.085, 0.5 + 0.085):
@@ -130,8 +151,32 @@ def skin_head():
         nose = max(0.0, 1.0 - ((u - 0.5) / 0.03) ** 2 - ((v - 0.555) / 0.05) ** 2) ** 2
         chin = max(0.0, 1.0 - ((u - 0.5) / 0.05) ** 2 - ((v - 0.76) / 0.05) ** 2) ** 2
         tint = 0.055 * warm + 0.035 * nose + 0.025 * chin
-        return (1.0, 1.0 - tint, 1.0 - 1.15 * tint)
-    return image(128, 64, fn)
+        shade = 0.0
+        theta, phi = v * math.pi, math.pi + 2.0 * math.pi * u
+        q = head.local_point(body, theta, phi)
+        x, y, z = q[0] / s, q[1] / s, q[2] / s
+        r = math.sqrt(x * x + y * y + z * z)
+        gate = smoothstep(0.32, 0.62, z / r)
+        if gate > 0.0 and -0.13 < y < 0.09:
+            # Hollows, but not under the eyes (a shade there reads as tiredness) or along the
+            # philtrum (as a stripe).
+            calm = 1.0 - 0.75 * smoothstep(0.004, 0.016, head.EYE[1] - 0.016 - y) * smoothstep(0.050, 0.020, abs(abs(x) - head.EYE[0]))
+            calm *= 1.0 - 0.7 * smoothstep(0.008, 0.003, abs(x)) * smoothstep(-0.074, -0.066, y) * smoothstep(-0.040, -0.048, y)
+            shade += 0.14 * gate * calm * smoothstep(0.0002, 0.0020, hollow(x, y))
+            # The nostrils: soft shade on the underside of the nose either side of its tip.
+            if abs(x) < 0.016 and -0.050 < y < -0.030:
+                n = head.surface_normal(body, theta, phi)
+                under = smoothstep(0.15, 0.75, -n[1])
+                for side in (1.0, -1.0):
+                    k = ((x - side * 0.0078) / 0.0042) ** 2 + ((y - (head.NOSE_TIP_Y - 0.0085)) / 0.0032) ** 2
+                    shade += 0.30 * under * max(0.0, 1.0 - k) ** 1.5
+        if abs(x) > 0.09:
+            # Round the root of each ear (the ear stands over most of it).
+            k = ((y - ear_y) / 0.034) ** 2 + ((z - ear_z) / 0.026) ** 2
+            shade += 0.10 * max(0.0, 1.0 - k) ** 2
+        c = 1.0 - min(shade, 0.45)
+        return (c, c * (1.0 - tint), c * (1.0 - 1.15 * tint))
+    return image(width, height, fn)
 
 
 def cloth(kind, width=128, height=128, seed=0):

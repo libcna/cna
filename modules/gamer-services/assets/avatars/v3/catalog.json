@@ -38,18 +38,18 @@
  "assets": [
   {
    "name": "animations.glb",
-   "sha256": "32781108dff2a0a1288e2f963665d2046f4080eb3b35760c5cb13859dcf30b58",
-   "size": 714916
+   "sha256": "d77c417a620fa125b6a20e278eda82b283f955d7b62f544c16d1396ace0931b8",
+   "size": 625136
   },
   {
    "name": "body.female.glb",
-   "sha256": "f9d7fb0181b13bd9cc500e9e466eb9b20ec2e50e7d74be61dededd17026093eb",
-   "size": 800532
+   "sha256": "e0db5416182690839a0b7b70e535892dd89213f92758d1c71148ccd4747c28b7",
+   "size": 1190216
   },
   {
    "name": "body.male.glb",
-   "sha256": "cbd1a8459a861674a54ddf402eb6b26478a856d69b743a5deb26eb77a92205eb",
-   "size": 800652
+   "sha256": "4169991ce86e8ed105c66d8280910a28c901abb408f2b878bca1f1a040bb6095",
+   "size": 1191092
   },
   {
    "name": "bottom_bermuda.female.glb",
@@ -223,63 +223,63 @@
   },
   {
    "name": "earrings_bighoop.female.glb",
-   "sha256": "263887d22e7e4990148b0f15dc65a6de7299af09537bfe78140922bba28cfd28",
-   "size": 26036
+   "sha256": "324cec61d0d7bb48092279a68e30e2a87812137f12ebe98b093173334ff04b17",
+   "size": 21952
   },
   {
    "name": "earrings_bighoop.male.glb",
-   "sha256": "9eac7b6ca9c489ae54a949b71f09a8e6b5699b68c9adce715de03242280d7fbe",
-   "size": 26020
+   "sha256": "15dad975e34d2337ab3f237d74ade890df8abbae01363ae7c570c305c3e41f55",
+   "size": 21936
   },
   {
    "name": "earrings_bigstud.female.glb",
-   "sha256": "70176b14c282844106b7baff030d08a0aadbea2a27699197e5d85b302227ac11",
-   "size": 20404
+   "sha256": "a4174a67110c8d88606a576f017aacdd00c2237868161e2a8b01c73ffb6432a5",
+   "size": 18900
   },
   {
    "name": "earrings_bigstud.male.glb",
-   "sha256": "ecde9e8a3091f5203df30b9b764451b0095fda264e3ebf17552d29e404e945dd",
-   "size": 20396
+   "sha256": "7a6b1c4f1601e4684f4cbb3d4694bc1da24164e757695bda4d920048fed5d235",
+   "size": 18892
   },
   {
    "name": "earrings_drop.female.glb",
-   "sha256": "3573365df30b24315137113f1b0f0ab9d4da9f8a089d1027d80842de455f28cf",
-   "size": 24968
+   "sha256": "468182eaf4938c1d02e1ce3b8125ab15524db0c5ce7c1f5c9ec155a027ab9cd0",
+   "size": 22072
   },
   {
    "name": "earrings_drop.male.glb",
-   "sha256": "3dae56f006930293452e3c73c074acb6512a3406f5e815bcec7dfff207528cb3",
-   "size": 24952
+   "sha256": "44cdaed5f083a61a64331c2c6f34450ac14b96a14e90ecf2a035ab4586dd4037",
+   "size": 22056
   },
   {
    "name": "earrings_hoop.female.glb",
-   "sha256": "9659678fccd9bf667311a5a8e6ad2063d2766c35c7313057d5ac46941f6592c2",
-   "size": 26020
+   "sha256": "53f4bde2f9035eb15a7a165e3c2deee1a7b48214abd6f463e376bdec1595a723",
+   "size": 21936
   },
   {
    "name": "earrings_hoop.male.glb",
-   "sha256": "2872333eaf9a8e80f108b6b7c6e81aaf26eff5d72a9c3a109a84fe01fabe914c",
-   "size": 26012
+   "sha256": "2dd72caa4f33e18451c5d09124c918f02214b808d0cf1534128a2896d200d898",
+   "size": 21928
   },
   {
    "name": "earrings_huggie.female.glb",
-   "sha256": "17fccbee139bf2435ce37a027288de888261078b6b0b044658bb12ba76eacac7",
-   "size": 26036
+   "sha256": "999530afb39cbef26463673e1a42d9433b99d127e1172e3f6a598e3058f6ffb7",
+   "size": 21952
   },
   {
    "name": "earrings_huggie.male.glb",
-   "sha256": "c06f9679c7bef284e7ebe85373fa98f6bc735c658f53efe458a3c7c147817a36",
-   "size": 26020
+   "sha256": "0add8f42fae3cf5bba560b5bccf2f459cc0e4cb09d92f44fde8518a6cc119eee",
+   "size": 21936
   },
   {
    "name": "earrings_stud.female.glb",
-   "sha256": "302289c7762f1350dfaf42c23efed2c2d14616dacd0a10005fb852a5661049f8",
-   "size": 20388
+   "sha256": "e59ba5bf109585bc1fa092e388ea4cf0f31b72779935768fd562c48389a13418",
+   "size": 18884
   },
   {
    "name": "earrings_stud.male.glb",
-   "sha256": "dc41be54b0ed08fca70a360a64af46c365e0e4e9b8b08e1534979170e0d77a6c",
-   "size": 20376
+   "sha256": "308a8e12a615355e42fd0cb80b97eaafdfe97da8001f9725ae4d11644e359bf1",
+   "size": 18876
   },
   {
    "name": "ears_attached.female.glb",
@@ -343,128 +343,128 @@
   },
   {
    "name": "face_features.png",
-   "sha256": "a08f11f54493eb91dcb25e0607c614523b494275eeb8714406bd8519b07c72c6",
-   "size": 825061
+   "sha256": "14bebd83f914c3ae9eada54cf9a026fc13082b02cd20e3d83509950b3f7a94a1",
+   "size": 935436
   },
   {
    "name": "facial_beard.female.glb",
-   "sha256": "2349041eee5c1077dba4bd74c17079124b763f2ad50fe9720c98f4a9e20983b5",
-   "size": 233944
+   "sha256": "f0281aea44123286fb31edb800ee8f4160032b90312ec91000a3bcbd90080ff6",
+   "size": 233996
   },
   {
    "name": "facial_beard.male.glb",
-   "sha256": "34231c1c4a053db27b62349c9fbd48135186df69ac6b2665cf7a161c42171091",
-   "size": 234232
+   "sha256": "cbb5399e52cbfdc76ff5146c30e9c478dd11a4b41b676166e9099667768adb9f",
+   "size": 234396
   },
   {
    "name": "facial_chinbeard.female.glb",
-   "sha256": "8d08a7f4848e0e2efaf85445c5661ede15d52a1960e0e8ced7023fe6b890fb2d",
-   "size": 73740
+   "sha256": "2c5d8b6cb82d78da43403f1595fbfdaf2b3e32042f15e962d066a162f0612134",
+   "size": 73744
   },
   {
    "name": "facial_chinbeard.male.glb",
-   "sha256": "37b8f203168466eb9f21860b573920e326a823e2f59ba115c790aa2629f841b3",
-   "size": 73200
+   "sha256": "4261d22a696ded0c5d9b97161cf9f98b5d32bd59f1e95e65ac4bca9200a7d215",
+   "size": 73204
   },
   {
    "name": "facial_chinstrap.female.glb",
-   "sha256": "f3e403a39db5d48082dca87bb81b2c63343814132e5b4342f4bfb796459aefd3",
+   "sha256": "453610bc4296f019d356a985b7d0494e1a7508fc9b470036f7ee76554a46689a",
    "size": 207716
   },
   {
    "name": "facial_chinstrap.male.glb",
-   "sha256": "0c5e3518bec32b689f023875bd06b69ad6ddf7e6e6a6e8382e011061cc25cca7",
-   "size": 208720
+   "sha256": "9f4d37c3f0f3e8fc29afd2e3a7f64077c24cc90159b0b37c8f7334942126caa3",
+   "size": 208844
   },
   {
    "name": "facial_goatee.female.glb",
-   "sha256": "b7102d6614b3506172e92c0f6b143d128b1006b51002fdb2ed8e01f7e3444534",
+   "sha256": "5820cf291f062ad4ed20dc7b1b0355c43809f315f46bdb7d62e36bc072c90863",
    "size": 80256
   },
   {
    "name": "facial_goatee.male.glb",
-   "sha256": "5ffffbb72c58d6937e6010a3804613d255b1d5356025c305ca79f9f9e8a29245",
-   "size": 79892
+   "sha256": "7fa1265f24aa2b843314e211145f4bfa86630914f0a2eef560ec3b96ae31b490",
+   "size": 79808
   },
   {
    "name": "facial_handlebar.female.glb",
-   "sha256": "9df3ab98a36c87ea473ce53f9b976e25f1d7773f3f799576ce245b488cd82909",
-   "size": 26280
+   "sha256": "bf27ee5911ab60f3c176d6b8501c1919b790a660592cb7030ec5ad999b5a29db",
+   "size": 26284
   },
   {
    "name": "facial_handlebar.male.glb",
-   "sha256": "a77839900bfbb5de60f05d8f7b4fbc99a4c304ea741013c223bcd1f8bd55ee61",
-   "size": 26656
+   "sha256": "6cd4fadfa7528a73a3855abf05240c9c2613823f740e9f76f75d9a5b19ca268a",
+   "size": 26480
   },
   {
    "name": "facial_heavystubble.female.glb",
-   "sha256": "3d4d1200b0a80b09457e36023614281596b3a47b3d411108edcbd6d60e578837",
+   "sha256": "91f1c5f98e563d8f7565596e7e5e53b4be7be4d3118a867a074c3370781279ea",
    "size": 117764
   },
   {
    "name": "facial_heavystubble.male.glb",
-   "sha256": "c884136b217e7beeaf2d1f8203abb7fc39ec81dc355f9f6d7c30ef501209bd4b",
-   "size": 117788
+   "sha256": "d6b0a81ded43d4e90d42958cec15969bcbd16af48590de26652cedc6b9a0a8bd",
+   "size": 117912
   },
   {
    "name": "facial_horseshoe.female.glb",
-   "sha256": "b9d9a2de4f5df7cbc5918914a779665d5d70e78a6eb42ef445ae444f433e6052",
-   "size": 25736
+   "sha256": "96c896a3ea5e1ac4d79372055fdf58c2335ca0153ffffef094a9143eb937ceca",
+   "size": 25944
   },
   {
    "name": "facial_horseshoe.male.glb",
-   "sha256": "efb0abf5e871f1e277263596f22d71b8510f3ac218d5f35460d170f3f7286726",
-   "size": 25900
+   "sha256": "3167ffe1b7ac660c9897bd575c931801d44c83c20135a991bcf94c2e087de634",
+   "size": 26020
   },
   {
    "name": "facial_longbeard.female.glb",
-   "sha256": "f18a9629b22c7874ee1fd7c6f6833b2a06a0ca285ca63e58a8356b8399a1259e",
-   "size": 271236
+   "sha256": "2758a7397151fbf65d4c3631c01806b9bd3035539797a6aa40183267d55406d7",
+   "size": 271284
   },
   {
    "name": "facial_longbeard.male.glb",
-   "sha256": "66fde85e27d1cf6e3a6b3d017ce47f65b3cffe09e02c6dfd95b7881fc5cdb56c",
-   "size": 271524
+   "sha256": "92979209a5d8fc88b532e76fd8934e554f41407d1d169d68252ea5f490c1a731",
+   "size": 271688
   },
   {
    "name": "facial_mustache.female.glb",
-   "sha256": "bb7df6bd66be20388062c303a49c254a2332bf6fafeb3efa6455e2d14420feca",
+   "sha256": "717d238ca4e85d048247d83cbcde573f52fe98f25848f1847aeaab07b76480a7",
    "size": 19872
   },
   {
    "name": "facial_mustache.male.glb",
-   "sha256": "c708bb2f9b64c85e94968002e80c835358ef39c201ccd2747867731432591020",
-   "size": 20252
+   "sha256": "a01150fb871be6e6177ea7d500d658997052061039e5966c56a202e4b17f9dce",
+   "size": 20164
   },
   {
    "name": "facial_muttonchops.female.glb",
-   "sha256": "246cebd9d605d2b97249d0ecd8279e6842688aeeb86067ed2fba837aee0d4d29",
+   "sha256": "74a8edf4bea63a10a846d4dd086b33c63900328f91d7c5d8bcd76992116d9254",
    "size": 171300
   },
   {
    "name": "facial_muttonchops.male.glb",
-   "sha256": "7eba6206435f863ec038f9ad07d82036b82a84c58388800f40514f4bded55802",
-   "size": 167072
+   "sha256": "2f89b8272f9d24d418f9b2bacc8f8ab9345af804f2ac862c44f8a0990d1fd8df",
+   "size": 167108
   },
   {
    "name": "facial_pencil.female.glb",
-   "sha256": "3ac3e4dc56fdb5ee531a250098a0805aba2e8d213d5679b8ce0c3ffc8f9eec87",
-   "size": 15720
+   "sha256": "b54d73a238772a6632a68a0812853fa8df4cc0408b32bac15e96cf7302afb755",
+   "size": 15724
   },
   {
    "name": "facial_pencil.male.glb",
-   "sha256": "c1ae46b34775cedea582bb0004fab949387f4c0e3e05b9d7245456dd325c5313",
-   "size": 16160
+   "sha256": "f2c8c3e239cf436a0309738395e036a1a70781bbbb85fa76123d8b148f10c46c",
+   "size": 16076
   },
   {
    "name": "facial_shortbeard.female.glb",
-   "sha256": "db8323554eb1ced14c63cbb7f4611ab584de7cec6bca196508a91362e2242ff5",
+   "sha256": "0755f133e9ab6afedaeaf048024d0a672d50771f9d2ec643e550972b716140ac",
    "size": 232924
   },
   {
    "name": "facial_shortbeard.male.glb",
-   "sha256": "b1fe1e4c408e0e98221a68a1b445e38ce6928ffd713a105f46d212305943088d",
-   "size": 233252
+   "sha256": "8dfdf90208deff23fe19ddb0318c9e72096c7ce96a67df214c573725573f898d",
+   "size": 233412
   },
   {
    "name": "facial_sideburns.female.glb",
@@ -478,132 +478,132 @@
   },
   {
    "name": "facial_soulpatch.female.glb",
-   "sha256": "2b14a54015f15d50164dcf3d27ac15ea73da132a0cec10a74a73a1755d2997f5",
+   "sha256": "bd9ba314f367bbcafffe660f03829e9b2944bb1daf5ae2998bb5326d807e8c5b",
    "size": 12508
   },
   {
    "name": "facial_soulpatch.male.glb",
-   "sha256": "0a2fbf8e55b0563e3430ee13bfba1a5921075932d0050db2ddb7e552de07027f",
-   "size": 12496
+   "sha256": "dc6fe4a274bd806a3d4d908b13cd359c5e77179fa5871a94a53598dbca42aa27",
+   "size": 12492
   },
   {
    "name": "facial_stubble.female.glb",
-   "sha256": "cf5ba6c848de07a038fe4dd9768d91d37cdb2119bdc5f3f5c74809a366518cd5",
+   "sha256": "c4f1d7f73afef49b85299743f01fb4025886f347c0a2f1d28ffdfe9654805899",
    "size": 117736
   },
   {
    "name": "facial_stubble.male.glb",
-   "sha256": "647eed224c29a611fa86d51af5dec5a376ce876b451cc8302017f16395da8b34",
-   "size": 117760
+   "sha256": "5e133a8d32afaf32e2deadf4fb03f2570a072231828f503c35b4e218bfa5d655",
+   "size": 117884
   },
   {
    "name": "facial_vandyke.female.glb",
-   "sha256": "6eaaacaae3de063cb179967f467e3e4edd6de83624d665e7a4938e95f4aa8d3f",
-   "size": 80000
+   "sha256": "f0a1bf7e1c2d18a309bcc844bc63ed3e1bec9d1e225b9bfa9f893d1b6c67205e",
+   "size": 79916
   },
   {
    "name": "facial_vandyke.male.glb",
-   "sha256": "3ce1dea0cf13cc27c61f89638c25c16586684fcc04f2d2e8927a10db43eede87",
-   "size": 79748
+   "sha256": "93c31e36d9bde1b3fbeaed9a19a55c6a1a9df4fa33ddd4382c8ff8e3bda75f7c",
+   "size": 79660
   },
   {
    "name": "glasses_aviator.female.glb",
-   "sha256": "19fd56d7239c279016b32a62e1c5825e4f296601916e8af2531ca66205a419aa",
+   "sha256": "d12228a009a3afa330e56491365fb4dd3e9281aa7db5cf64aba76d2875228e3a",
    "size": 40780
   },
   {
    "name": "glasses_aviator.male.glb",
-   "sha256": "72833fad6d7f1a5bdac99d03dc541da65b97d32a0dc06e8ca464d4ffa6c97ee1",
+   "sha256": "6ec5742d37601f415afdf4c68db23bbf173a647f178b3e428871512b11fc4258",
    "size": 40772
   },
   {
    "name": "glasses_bigsquare.female.glb",
-   "sha256": "f6a3faa195890989707c97346c529b81050119f677602733a67fbdbc77b0a952",
+   "sha256": "0bfb4f10a3e06cff950d84a037dcfe68203bb402c4b26ecfe15f1c03257763f1",
    "size": 31920
   },
   {
    "name": "glasses_bigsquare.male.glb",
-   "sha256": "9bb01199e88e827c7d831e1d17c1bf332ead046a2f2e4d5ff45f2cbc4ffdf12a",
+   "sha256": "5da6d819e716fa5e541c3db529279ce1448de3ff3fbf018663bf553b7f203b6f",
    "size": 31912
   },
   {
    "name": "glasses_browline.female.glb",
-   "sha256": "43db3908e118394a20a77054bc1afe8153e0c4959d7aaeeaa677a600db7a9455",
+   "sha256": "21ea7928b5982143adf07a0f4785422a2a801e8d08eeae2ef98184ad5171ae6c",
    "size": 31920
   },
   {
    "name": "glasses_browline.male.glb",
-   "sha256": "81e4bb53be693800932bd18e3b71f2ebb9ecc00530c55c07e18158c36132dd25",
+   "sha256": "b8fde7cf6f94d78cae8b06dfbb88bdd67a2da08d6e87b38b417690de59299d5d",
    "size": 31908
   },
   {
    "name": "glasses_cateye.female.glb",
-   "sha256": "d0d2bca07a52afc6a08fd3b3cecf0535c22298a38014102cbb3f7507f7dc4250",
+   "sha256": "3074ca180b456acfb3098ef1cc048512fdeef49f2d619758692fae1f50c5d4e6",
    "size": 31912
   },
   {
    "name": "glasses_cateye.male.glb",
-   "sha256": "e251989d4fd21d427a19cc963650d89d15e928c7eba7247d7361cd194c4b4ce5",
+   "sha256": "65a1a74259bc32abf010231d7d7e457759986f1316ad94282bc9b3ba4d80e9bc",
    "size": 31900
   },
   {
    "name": "glasses_narrow.female.glb",
-   "sha256": "8e5e5d9715ab6a36474bc0d05a81284a2204a0efb23bded51f6d98384e85f078",
+   "sha256": "9bf014a581608558446a24e6a6d2395ab55e070ca6d51572bb8878da523fd1e3",
    "size": 31912
   },
   {
    "name": "glasses_narrow.male.glb",
-   "sha256": "14ad6c8f63a421805eb5b4f17ccdee4822c67f40fb888f02ed249ccd2ec012a1",
+   "sha256": "e035b59fc11492a5c5fa293e60725eaa707bc1a4e72d0d277e84f37d02927a51",
    "size": 31900
   },
   {
    "name": "glasses_oversized.female.glb",
-   "sha256": "32af6040a36558f4a2d3562382817a3527fc736171d63a55f56fcdc1b584a4e5",
+   "sha256": "1204f7dbe9eae34b1fe284b536649b63cf9907619218bd1c9cd28e33739d896c",
    "size": 31924
   },
   {
    "name": "glasses_oversized.male.glb",
-   "sha256": "6e81627b722e345fc88e3eef5f1e4acc79b08c013fd64d234e64442ab62ee57c",
+   "sha256": "87ed15e71474ad6e0c226adbcbb66f820d23f254239941a75c331db5fb3d38fb",
    "size": 31912
   },
   {
    "name": "glasses_round.female.glb",
-   "sha256": "096a02df2d6d18c94ad30b9828ce1ae34fb1542c62e1e21646fdd06266489586",
+   "sha256": "459365efdfe5ae421adc5bb6c4737d9d47af91ce7d4694638d8456be94b25b7b",
    "size": 31908
   },
   {
    "name": "glasses_round.male.glb",
-   "sha256": "524ddd7bfd55b6a2de7d90e7f565e2018feed4c643e635b3872e81957801e82a",
+   "sha256": "c88566656f5d6d108e9f526192494054aa4ed4a8895cf141bada49513bdbf263",
    "size": 31896
   },
   {
    "name": "glasses_square.female.glb",
-   "sha256": "3097118007867914a8f09e8958fc201fb8ecdb189aeff947eb6ba1065f0b67dc",
-   "size": 31908
+   "sha256": "23d633f56640adbea42d1fe1ca7bdbf7594bfd93787fc309333b9ad27f2ce06a",
+   "size": 31912
   },
   {
    "name": "glasses_square.male.glb",
-   "sha256": "3eb11a7b1f06cc55017ac9a56ccac6fbe10e4f86d11b8155bc5b20704a4579b2",
+   "sha256": "4c00beef2b9ce57a1b9084e6f3340ba1adbd84f33b5eeae23988f2239f24a061",
    "size": 31900
   },
   {
    "name": "glasses_thick.female.glb",
-   "sha256": "92ed1d600827412cafd97279b9a37005eee40823bc2fa455294eb0f5d2dd4f94",
+   "sha256": "447b68e4d0385d0bdc60db87dea16df1903c9a374372fae87bbd048eff2cdc84",
    "size": 31908
   },
   {
    "name": "glasses_thick.male.glb",
-   "sha256": "619d50bdfb8d6a78232405d50cc38c8cd81a40a1eec9f3ea7eb6464e851d13e2",
+   "sha256": "c9be3d40df8bbc0aaf33d7c88687dceaeb12ec8b0a82c71ead4ee791b4b253e7",
    "size": 31896
   },
   {
    "name": "glasses_wire.female.glb",
-   "sha256": "927cf5d9b6b0776a4ce47d81c6c327de30e1bc88dd0b970a11328b4998d94fce",
-   "size": 31900
+   "sha256": "7251065541b1af3b6a6ba406609f2b44b0b3d5cf50d0a1fd60cf47d257695d4d",
+   "size": 31904
   },
   {
    "name": "glasses_wire.male.glb",
-   "sha256": "162ad3e0c824eb076099138755ff353a4e22f8762db4e286f070b5210da4525a",
+   "sha256": "c595cc4213d64a0969d24920ce0dc4c85ef305e30baebc52e154320efe5c7093",
    "size": 31892
   },
   {
@@ -668,42 +668,42 @@
   },
   {
    "name": "hair_bob.female.glb",
-   "sha256": "437d53e66980841a1831708eb6fe2d4f3d4e14bc5f60d256938a8d865bb89ff8",
+   "sha256": "c69485b29d58fc68c2bb393628ec798082a84afb33a7f9969a4e8fe2b5416b59",
    "size": 152948
   },
   {
    "name": "hair_bob.male.glb",
-   "sha256": "1824b317c8f7c3fdda3f6bb6fab318bc5ba01c9bb009118e5e000f9aa9449e7d",
+   "sha256": "e6055445320a74d632b0a2a9e798a367a4826bf6a2d9a3ed73468fc5d4a62cfd",
    "size": 152936
   },
   {
    "name": "hair_bobbangs.female.glb",
-   "sha256": "2f668deda21b61bd9bc668eeb1ee5007c49adb02141b2a566c8582396d8fbd14",
+   "sha256": "bca06bd6d7c4880f4ea88d39481d6733e41cf3805d93b73ed656ca67bd911c3d",
    "size": 191980
   },
   {
    "name": "hair_bobbangs.male.glb",
-   "sha256": "cc1d8ca040ce70680c99a5f98134a7f55de8664d916c761545b54d9fcfa54e07",
+   "sha256": "4cdd10ff4e4c05556fe81f7bef3e4099b9e6926019e1969e1502a748a1239ad2",
    "size": 191968
   },
   {
    "name": "hair_braid.female.glb",
-   "sha256": "7f2bb7a60d33ebc3e9cd43ed7accc3b26115787823862325d4d62fcab4bb182e",
+   "sha256": "70777052ff64aa25032ebb969ea743c2456279c7218acb6e086e0201591cb279",
    "size": 243416
   },
   {
    "name": "hair_braid.male.glb",
-   "sha256": "f340ba714d706be821cf64abc2aa25c7ef87902d38f6194c1f303ed762ab6b23",
+   "sha256": "1be394dbe2417a623ed613faf857421a789ffd59731504b55009199476b3c540",
    "size": 243396
   },
   {
    "name": "hair_bun.female.glb",
-   "sha256": "4f4d5777498ceda0e69b57c1cb473013b2cee84ace376d359a10cad09547efeb",
+   "sha256": "6f10f5bdd1f1f99984d9948c3264d3305b011ccbedff14713d6781e034575b87",
    "size": 197172
   },
   {
    "name": "hair_bun.male.glb",
-   "sha256": "1815a23dca4de5ae1c8949a22a08e9ee2efa49ff9261af4245b9f809a54f2e98",
+   "sha256": "5ced5a35aa30fad65430afb71224fa84f2de710e066fd24b9053866bf3dcdd8d",
    "size": 197156
   },
   {
@@ -718,152 +718,152 @@
   },
   {
    "name": "hair_crew.female.glb",
-   "sha256": "4e2f553022d27e7545ad371e6bd9d8d6f930e2068483c5aa62d69f443cc43af6",
+   "sha256": "d0133902dcf1500ca63d0c2fe84e7eb3af9ba1989b61ef8b0d9ae69970f7d10d",
    "size": 137356
   },
   {
    "name": "hair_crew.male.glb",
-   "sha256": "8d88ad2448bd042b6864f90ce9a36d075222745baf072f363c95fbee5f9795b6",
+   "sha256": "547d72b05de46f50183aaa0f8b998f6982f28090a460fdd6996fede54dabed01",
    "size": 137344
   },
   {
    "name": "hair_crop.female.glb",
-   "sha256": "0dc9f5bf2acc539b67c4bf70c86f14e3aeb34912e287c635f1714c80a2319436",
+   "sha256": "2d63715f5962b7fd3a42b7f508cdfa03f2b7b8aaa6390e8741527af4268ec65d",
    "size": 145156
   },
   {
    "name": "hair_crop.male.glb",
-   "sha256": "b9368e78c77d14fc77fca86045059e736498fe1abf14cc470914924c9f40a31e",
+   "sha256": "f513fd296d0ba9c3948d45cd7de99f7f5bce1d395bc06fbf3916bb62a05547c0",
    "size": 145140
   },
   {
    "name": "hair_curly.female.glb",
-   "sha256": "aedfb10d36d113267beeda17728fc08a06af67835d31c92352e6cd8b54d8b7a8",
+   "sha256": "4c7a5d4534f8ae89764e1e53f4eb82c125dfc36d565dee73e3159b74a099c0af",
    "size": 152956
   },
   {
    "name": "hair_curly.male.glb",
-   "sha256": "a6294a06159ee3ad2631e85ddf0b89cef82a6e760f17f14a07dea3e257015ab8",
+   "sha256": "eeed80ac54856524e51a4905dc7123b83627dfc67310782fd1587a51ea8fdc78",
    "size": 152948
   },
   {
    "name": "hair_curlyshort.female.glb",
-   "sha256": "3ce11796d2c59cc76f67c219173a5e8e6b42a1a9954e1d443b1454c57e55a0bd",
+   "sha256": "7f76d345bc9bfb770fbe476e7859976a6dcecf4487fd323b3c7f47e781ecc148",
    "size": 145188
   },
   {
    "name": "hair_curlyshort.male.glb",
-   "sha256": "0471e562fb12e76393c24daeb48cfbb8239f7f77d755ecaf592896254da14e32",
+   "sha256": "2b234c5e559d5518e524ab2bba7ee455c5db289f775793c0f0dde53204f64ede",
    "size": 145176
   },
   {
    "name": "hair_curtain.female.glb",
-   "sha256": "28fdb0235d7dfaf371d03c9ccdec89adee8931be84f9ba766dcc7f7ae0530555",
+   "sha256": "3b3a9d6fb028b0e056013544ee5d8d24727ecd709dcba04018501e3e072c7cb2",
    "size": 195876
   },
   {
    "name": "hair_curtain.male.glb",
-   "sha256": "573c9d73d6fec82fdab346250e99d7f4de7c97037535fc762d94b26e6b7b0566",
+   "sha256": "d7246979ee8897a5c2c3b89fd0b84b5204ab4eaa4e09d0b8e1aa793a3130f9d7",
    "size": 195864
   },
   {
    "name": "hair_fade.female.glb",
-   "sha256": "ea3f517e3799fea7342530afae1aa0012a08751baa4ff3a2a4bc6548d545c789",
+   "sha256": "97f39c33263307c09f2073ef58bbae1b7024692a0d0684335546f0071e93a889",
    "size": 129552
   },
   {
    "name": "hair_fade.male.glb",
-   "sha256": "828bfc255140674a7b64e6e2f86170b88db1cde806a0538f4fbaae3a264d3d22",
+   "sha256": "4ae8e53706957473f2a3411483e959aa35d02839fd9d4358dca68803846ee282",
    "size": 129540
   },
   {
    "name": "hair_halfup.female.glb",
-   "sha256": "c81cebd39e030eb1446d0df779c3a5684b19d14839e9294357f3206282ff4f2c",
+   "sha256": "2e8ae697510000a86972bdd2a35019568f92f68afb10425caf1ff8b18db8bbbc",
    "size": 204988
   },
   {
    "name": "hair_halfup.male.glb",
-   "sha256": "36d5b9fff7bab2400ed1f34a9421a69991670e9d77f3aa973b697cbea9b51069",
-   "size": 204972
+   "sha256": "e9433fe6791b5eca1df5d99ede60b32c6b1a469879364f5ddacc2d78e4f50333",
+   "size": 204976
   },
   {
    "name": "hair_highponytail.female.glb",
-   "sha256": "ef77f127e4479e0e264fde3b1aeaec34309f6835a0b994be4865ce311ca3202a",
+   "sha256": "1db9b3ee40729e479a3de5aec51ab573bfbbcef2f02c57ebc0649d03a1e6812f",
    "size": 232208
   },
   {
    "name": "hair_highponytail.male.glb",
-   "sha256": "463410a93d6c765af3104720df93455869726507d96d34919ce0f79badaf8040",
+   "sha256": "a1b62afe908cf7d3bb7b91fe03556b284b4f86313ea437470d2a35b7bf5aca57",
    "size": 232200
   },
   {
    "name": "hair_layered.female.glb",
-   "sha256": "5c0f89f594ab34c359eb6f14954aa695cf2bafcdcd035300c806eff3dc4619bd",
+   "sha256": "2fab082ff5b669d29ec97c75d708e584e21e0da7671bd1c2ac748b0c27173a37",
    "size": 219276
   },
   {
    "name": "hair_layered.male.glb",
-   "sha256": "25dceb2f505b76df1af6cdbecf675b82a72dd718ed7a2c6f1e6ad7e4922a27cb",
+   "sha256": "83a6f0e92406dbbbc26dd5b3a03550eadaae4f63fc48207e25f7c3ec701c865c",
    "size": 219264
   },
   {
    "name": "hair_lob.female.glb",
-   "sha256": "62084b56288cbd27746e8f7ba37c3b98ab58a461723abbd631d6096b24c19335",
-   "size": 152948
+   "sha256": "4ffbf5116f5a23e02df53f49a8a06aeaefc165e7d22bc3dd3b238d212c24761c",
+   "size": 152952
   },
   {
    "name": "hair_lob.male.glb",
-   "sha256": "40e1b09ba6c1fb2eb694448e6e0c9cea1ddf810760f49dadb11ab148e56ae56a",
+   "sha256": "6ffe64156741ed89f20f4c6cea2213725f6084b1485d5d99a177a1e67dabcb07",
    "size": 152936
   },
   {
    "name": "hair_long.female.glb",
-   "sha256": "58a52a7949269e331bcb3240a8c0b5d725c847b310ea2edaa3dc0746286f9838",
-   "size": 152956
+   "sha256": "fb8baaf000ba9b15311e4486634b7cb04d514da61e82f83198241b4dd30ed98c",
+   "size": 152952
   },
   {
    "name": "hair_long.male.glb",
-   "sha256": "31c0eec1a5269731295063f8b48b10a02688caf8c3aa7c9da9acc1a6751c4f9b",
+   "sha256": "755c762afe2888226446c1d3629886e02b8bd9f1de65f35c5e09f113a8003e01",
    "size": 152940
   },
   {
    "name": "hair_longbangs.female.glb",
-   "sha256": "0499009dc0d2fe8a0d94bfe3e9d5b32c776f4eb1b179327dc336264d51eb8c0f",
-   "size": 191988
+   "sha256": "00dae744287f6fbcd4b030c3a620ca9c82f017d975963f89e19d99af73abe610",
+   "size": 191984
   },
   {
    "name": "hair_longbangs.male.glb",
-   "sha256": "9421a5bd5379c09e6c22333d842563b99c86caf7c9c980f834b8cc098b23c4a3",
+   "sha256": "09aab7de4a6f7f7cf860e16c4ab4717f646903ef0308a20952ccb8fb1c4c251a",
    "size": 191976
   },
   {
    "name": "hair_longcurly.female.glb",
-   "sha256": "0b671bff777c679d6dfa48a0798fcbf66dbf406e240aac916815b9e8a8f364c7",
-   "size": 638176
+   "sha256": "649631f4af81c65e8601b420615d8618784dddffb61756bf889872354c1191d0",
+   "size": 637736
   },
   {
    "name": "hair_longcurly.male.glb",
-   "sha256": "e8bedece37a5a645f44c8f4c1ddd5d73d92d8b3b0f8fbea3332b4b492a56a8c2",
-   "size": 635084
+   "sha256": "1fb4c108814dfdc07734d4c5364678965ba54603760f17af597e74c2693689bd",
+   "size": 635524
   },
   {
    "name": "hair_longwavy.female.glb",
-   "sha256": "96831e5b5cd38c48f3a061022838d92b1b70658be858cb2d6505e586e9c3a5b7",
+   "sha256": "14a953cb34cfdf0784552be83811f8da632157681f5e3dd9b181c020adf0cd7a",
    "size": 152976
   },
   {
    "name": "hair_longwavy.male.glb",
-   "sha256": "ec4f427a0e649a59d05d4c677d2cebf02059a6fc85c4cdbd31ce8c4681d89f8f",
-   "size": 152964
+   "sha256": "8f8b7928a7cc0d3fcc43f0d0a5f157fbf647b2e36df09b59edbe19a15b4ea616",
+   "size": 152960
   },
   {
    "name": "hair_lowponytail.female.glb",
-   "sha256": "0baae47c70fac47b2d873890af9975b47578296c5b8b9e9a1e8448a096b94013",
+   "sha256": "9d85aab15424127cdbe0255d88ab99347c7cf37e03da3c4621593f9c31d1b576",
    "size": 232204
   },
   {
    "name": "hair_lowponytail.male.glb",
-   "sha256": "1c47716e2aa3c0688f8038f2823f1c14b8f03a85e2dac7896ec550bdfab54df0",
+   "sha256": "b22bcea264c93b566d86eec879e7b294fe1a870764ef5f72664d6ea8496e0adc",
    "size": 232192
   },
   {
@@ -878,42 +878,42 @@
   },
   {
    "name": "hair_pigtails.female.glb",
-   "sha256": "1f6996b587e818f59ef63f3a973a47d27ba38a7e86fcc672e34dabda495165ca",
+   "sha256": "166b8a1aef22ba451d1762d0a2e307852be1b8aab3fe453b7e86ca99d5ad18b4",
    "size": 298368
   },
   {
    "name": "hair_pigtails.male.glb",
-   "sha256": "91e9dc7cbeec1008b10642ecfa4f3642f3b10d82b6c0f4d499c4768e0c680928",
+   "sha256": "2612de62828d543eabb758f4dd910d565ae54f2fc0ce35f7c58552320ec92b66",
    "size": 298356
   },
   {
    "name": "hair_ponytail.female.glb",
-   "sha256": "ab5d3429357f64e8880cf1a38cc78c249496a711182c5254472c15d0510e88e2",
+   "sha256": "2be52b22689d9af0d7620a2583ffd9a167636dd2eefdb458d11279f11cd0aa28",
    "size": 232184
   },
   {
    "name": "hair_ponytail.male.glb",
-   "sha256": "81c069b05479e8b6732294250e37fdb2e88df3c8c97a72489ff1a8d59161629a",
+   "sha256": "c874022327b422dc3f080c66954653de2965666d5ed46281402c8f9373843fa3",
    "size": 232172
   },
   {
    "name": "hair_quiff.female.glb",
-   "sha256": "0607c6da17bbd3b89c86ccc1875849dd1a5f628e2476b1fc2095755fded390fe",
+   "sha256": "28b8e70ac8d7979030f6437248e235c92b0f5269f97699b77233cc97bae4e38d",
    "size": 176368
   },
   {
    "name": "hair_quiff.male.glb",
-   "sha256": "3a66c50861ad7a41fb730e67b0c6dd0d3995cbb3d961ff46108ee15509ab4bb6",
+   "sha256": "e6682fda29a40f70e1a741fcd20780bc38355ac524cc8dcc8e2d754c06da3a16",
    "size": 176352
   },
   {
    "name": "hair_shag.female.glb",
-   "sha256": "9e3b9eebc2715322bd3dbceb0a28b5e1d454cf4713632d64549228ada9aba78d",
+   "sha256": "96edceffc78cb6f60878676eccb92c5ba7dad0bacc0108331ebe23d8d9e49773",
    "size": 184160
   },
   {
    "name": "hair_shag.male.glb",
-   "sha256": "e0e9bc567723677e8cc9dd4434b99e8d903f4f37e2feac699871f7a33e2c585e",
+   "sha256": "a25d364632f72684f299dbe937cddc58844d5e078548be245fa215082f9e37e6",
    "size": 184148
   },
   {
@@ -928,72 +928,72 @@
   },
   {
    "name": "hair_short.female.glb",
-   "sha256": "014abc262cfa1877ab0ce100a6d72128e7517e399b11e9aa9d1501779b107735",
+   "sha256": "f8d7d6caaa1b335e8adb2a31f3b044d19c28b41a9c7701fe15874900e0287f37",
    "size": 145156
   },
   {
    "name": "hair_short.male.glb",
-   "sha256": "10c7316b97b83b1ae5721df2aaccd97c480fba00acc03036e02ebcffe25ea495",
+   "sha256": "32697af5e10271e92178e900f6c5f1c8c48213cbf4a11fa405b4195d0bbaae4e",
    "size": 145148
   },
   {
    "name": "hair_sidepart.female.glb",
-   "sha256": "e486966119f195419784c07fad2d7b2e6e17ac767b7e0695c47dda218b7b5fbe",
+   "sha256": "e7799986af99a745cd0945e18621c76e0434b1ac0aa34216f4fec7b518bf5e3a",
    "size": 156876
   },
   {
    "name": "hair_sidepart.male.glb",
-   "sha256": "2ad8059cc8e0e855450b854062b2264b7d0a08d4cbaa03b9c9e83a66676a27e8",
+   "sha256": "5dd795ad1443506037dca31c26cebf10cf6cd009f0994d3b71a5889e4426d7bb",
    "size": 156864
   },
   {
    "name": "hair_sideponytail.female.glb",
-   "sha256": "3ddf1ee4a35bff7ba15105afb7b046961fce82feb46ae5fddc28c7ec0ebff52b",
+   "sha256": "cb11482ae8a1c06c7902cd855b147a938c1e3d243d8d486234f6d0e129ddd624",
    "size": 232208
   },
   {
    "name": "hair_sideponytail.male.glb",
-   "sha256": "07fc36d2c43617a65a3a9a534094c76f0bc9a175d00e93a2199230fd55e7f785",
+   "sha256": "bb1f21f87c0386c36aa682650b6bab071cb28da72eb2207bcd89ff219a729e2c",
    "size": 232196
   },
   {
    "name": "hair_slick.female.glb",
-   "sha256": "a784270a66baa12cd34ac5664378c7197e5d4485cf1590ebf8e6dc5ca8215830",
+   "sha256": "b7eb6f96c6d7e4c2dbe758633adfa446552861fed44756313432522fe13a9bea",
    "size": 184164
   },
   {
    "name": "hair_slick.male.glb",
-   "sha256": "517c3761a8ab7cca00f5ef6d45b41bec1c9e8e8f89f17c22786784d1647fc313",
+   "sha256": "af4d1e47b736ee5e6137d2cfe8fc8c9bf2400d747dc042a89452ebc82aba6514",
    "size": 184152
   },
   {
    "name": "hair_spacebuns.female.glb",
-   "sha256": "c4c38ccc96bccb291a62dd5af8100f5985d5c473153a6cfbcdd1131e2bf5f448",
+   "sha256": "ec4d0ee43c3e221a20958a5e94b689c3711ce9ccde6c5de0219c5ab8417924c7",
    "size": 233616
   },
   {
    "name": "hair_spacebuns.male.glb",
-   "sha256": "67a54df61b93ad98aa5d233e639d2c65c6875015ab1332083b1648f1ec69fc8e",
+   "sha256": "bc499343a52a886f8e5a9b832f695ef4ceab744002d259042a9c1cfbcd3743fc",
    "size": 233604
   },
   {
    "name": "hair_spiky.female.glb",
-   "sha256": "c59ec73337c9bd9e9ffc2224cb55738ddad2907784a3692c987710f8266b4296",
+   "sha256": "d1da421f5a6706486ddee1dbbae8ecfeb552974480c1325d266fc2e2953f1545",
    "size": 302196
   },
   {
    "name": "hair_spiky.male.glb",
-   "sha256": "b324aad71486cfb31e9619e381415905b51dbae6a91486dea36a9402a75f2470",
+   "sha256": "de404e0ef01270b237c9676f14a22df78563d43979c462baae9a25781ee571b3",
    "size": 302184
   },
   {
    "name": "hair_topknot.female.glb",
-   "sha256": "e3754326b06f36793714840eefdc00f06b9882a9f1d1256ab564c2e25f8fcbcb",
+   "sha256": "1dd1de4925cb3431b518b272ca158adc198b82532f571dabac29928276202e5a",
    "size": 197196
   },
   {
    "name": "hair_topknot.male.glb",
-   "sha256": "7bd643145792ba71f4f40878884ca6c07f8cd5d3e14589212f9897a0abf821df",
+   "sha256": "979ffe419e279fbb86e202cfde3bc044011c16a11e3fad196fc229cb76265e46",
    "size": 197180
   },
   {
@@ -1003,37 +1003,37 @@
   },
   {
    "name": "hair_twists.male.glb",
-   "sha256": "60af4e8dc4705115ad5d4acee2baf639bcee0f19c78f6f3e1b7507bc8d134d8a",
+   "sha256": "3ba8899e0c6e9d7df8c1ad6dc1fd2775610e4fb6f94141249c0286926f55bd19",
    "size": 257120
   },
   {
    "name": "hair_wavy.female.glb",
-   "sha256": "46d6354272eb077b856ff82c53210f963d3f15684b5298545730ebf4acf3556c",
+   "sha256": "d1b6b48745955edc3330e039257035dd42f03aa80998fa73b2705bf240146fed",
    "size": 152956
   },
   {
    "name": "hair_wavy.male.glb",
-   "sha256": "401797419e085aefdd5b93ad7a9c9562c82ed855e18ed14048373d6b3c18640d",
+   "sha256": "8ff25d536cc5d0174bf2c007612b0e5c6ac4d4b059e27af103cfaf9e46f3c78f",
    "size": 152944
   },
   {
    "name": "hat_backwardcap.female.glb",
-   "sha256": "0358ac0c435e81415a117ec4f225cb67078cd38cd49b88e2a33255ad4a8b852a",
+   "sha256": "d1b0c23fabd2b27b2d444d8ee3e72ed49a9a02f01c5bb72559e06838a3deb869",
    "size": 52312
   },
   {
    "name": "hat_backwardcap.male.glb",
-   "sha256": "6d3dfcbe078f614aba34ac0cb8e2f6eae3c075e2836f3a499b85b68d2333e7c6",
+   "sha256": "31ed2c1dc5f1dbff15e54bf0f2e9c302c92214e1511fb8d0cd35946e7fba9d7c",
    "size": 52300
   },
   {
    "name": "hat_beanie.female.glb",
-   "sha256": "f450e331dee3e79b66fdb200688924c824b3f7b404fb4fe5ca6c42566db6f604",
+   "sha256": "fabcd9df4842774530aae32a4583900f8c1c7fda693e8d7d19574c3746b2db12",
    "size": 58532
   },
   {
    "name": "hat_beanie.male.glb",
-   "sha256": "878fa85bbfbff90c367c85c152d91b63a40386a351ea14f3c9351b44e6c1744f",
+   "sha256": "3cf531c5f64baac5ab8511af59360157dfd3253c04711001d931f98077f68423",
    "size": 58516
   },
   {
@@ -1048,42 +1048,42 @@
   },
   {
    "name": "hat_bucket.female.glb",
-   "sha256": "6cffe8f064336596018d486b9104a343eef8a1528e5121a3fc6dfb188ff46d11",
+   "sha256": "894765d2fde5909a30c1b22a96139bd84e8c332c9e16a4aec82214eeb9fc8831",
    "size": 53628
   },
   {
    "name": "hat_bucket.male.glb",
-   "sha256": "e9f31bf9b8668072f657cda7f23e701c956f4dd73a07ab1a5bb377f766562397",
+   "sha256": "dcae1552dfee6ae8b550ecff1e37c177f3623ed5090539a6641fcdf9e0fd6ec3",
    "size": 53612
   },
   {
    "name": "hat_cap.female.glb",
-   "sha256": "839395800a99ad545d48ed09358c36a2a133512cc3ec5bd7e84a4c9916240393",
+   "sha256": "31c823690a61f6ee462978e280078c6c4a9214e61ad4f3e4c0bd83553df8e026",
    "size": 52272
   },
   {
    "name": "hat_cap.male.glb",
-   "sha256": "a2ea2595badbd0492b6294751e4c58fdfbe1e5d2aceb4db99c34c93fc0835a9f",
+   "sha256": "1b08d51308a8204fea359119a3a3d25fa806ef6c9cad1aa428613a05ba682b61",
    "size": 52260
   },
   {
    "name": "hat_fedora.female.glb",
-   "sha256": "087f8a8b3b18bb573674488a3e03f30b0ab61342cd3164755754c46626664fd2",
+   "sha256": "765c3038f54d265daca4cfabec557554dba98b4ac80270a9f1050a45e3170ed2",
    "size": 52264
   },
   {
    "name": "hat_fedora.male.glb",
-   "sha256": "29ab511445668ba5b794a9b291dc48ffb858a04ca345f2a89a58b5293f8917a2",
+   "sha256": "c9e92dda835b3557a13f7ab66a5ce3b8d64eb412b8c080e0f5deb0838e94bfe3",
    "size": 52256
   },
   {
    "name": "hat_flatcap.female.glb",
-   "sha256": "2f1a697fa2894cc17b130f0c42aa996addcb5f24321d463d8e00628cd7387b4e",
+   "sha256": "b961c1f32fbbfbf807591495ce9d025fe672e946bc8560733858d06a44aba181",
    "size": 47832
   },
   {
    "name": "hat_flatcap.male.glb",
-   "sha256": "a9733c13f9b7ff4d9c18b94314c9c30809dad825ad1dbe31592bf4bcb139bbb1",
+   "sha256": "08ed3213df0c035f4eeb2f17658ec17105587250f89b1651486b5ae85e4afbb7",
    "size": 47820
   },
   {
@@ -1098,52 +1098,52 @@
   },
   {
    "name": "hat_helmet.female.glb",
-   "sha256": "ad3b1ee2f3373b58de286026a887198e5b426e2d8ba4b86750a5c0b28bec65eb",
-   "size": 59392
+   "sha256": "4b924da9bf69ad3d63ad746b1a99390cf7f93c62d87a8dff048b3c7d3b04e884",
+   "size": 59396
   },
   {
    "name": "hat_helmet.male.glb",
-   "sha256": "f0f68b2073bc1bde08bf392234db7f7688721b9ab0a979fa7f364c5b1ebd45da",
-   "size": 59380
+   "sha256": "5f9c80fc845f565afcd74f48423f3e288e929916937de6ab93c3c4497dcf24ce",
+   "size": 59384
   },
   {
    "name": "hat_slouchbeanie.female.glb",
-   "sha256": "740510ee13263af0a2f380836d0b5ae2a1aa7a2aedbc25027bd10f782b1e5f0c",
+   "sha256": "e2a075bcf96d91c3f4abd10ce098ca6584692d91dedc59bd66964db65d04d019",
    "size": 55800
   },
   {
    "name": "hat_slouchbeanie.male.glb",
-   "sha256": "bfd8671406b0634a161190d3078be079d01ad1a425905d162b3577f0f1486839",
+   "sha256": "1b367b4cc8e8cff2bc5c41334119e1a04f0d33b075ed1c5ee180c57f5c008d84",
    "size": 55788
   },
   {
    "name": "hat_sunhat.female.glb",
-   "sha256": "480c8a0c80aea19703be15f8451d50b9b8e635305866feb578aafe46f2415ea3",
-   "size": 67784
+   "sha256": "1adb27983e7270e04d9950cb742899eb918d4e06b7a88dc6b97ea3b081db793e",
+   "size": 67780
   },
   {
    "name": "hat_sunhat.male.glb",
-   "sha256": "2d315e626548aaed02f875c29212b4003a2acd91c78ebf43963f46d9313c3f35",
+   "sha256": "269dfa9d378a796239f9ca8730c0d7e0775c21c0821cc30eb8bbbd8aa2a3facb",
    "size": 67764
   },
   {
    "name": "hat_tophat.female.glb",
-   "sha256": "97ea01e20da05133b01a8aa921bc423b40cd076ffc6551df9c5296c3bc897dc5",
-   "size": 44212
+   "sha256": "8c1d7aef11380ed84bcbfacf6b2b5a50399e0a6da93527fc594f61d7b6785643",
+   "size": 44216
   },
   {
    "name": "hat_tophat.male.glb",
-   "sha256": "fafb42ca3fb673bf757b717eef956634e9ef50e0b760fe142583a3e362aec0ac",
+   "sha256": "a4f52ede6822b07e5c027cf9a4534b5f413f1c04c2dc7ed825ec66091d128af6",
    "size": 44200
   },
   {
    "name": "hat_trucker.female.glb",
-   "sha256": "794a57400415d1e4e0a61eae68719d80a9b98dfd497dc7c87c820d82aba4e04c",
+   "sha256": "636a6c77339edc8cf1906593765807faf9521d0813fdbd3d9b676aaec5046a24",
    "size": 52276
   },
   {
    "name": "hat_trucker.male.glb",
-   "sha256": "82b60c5f2d302941c0e9c9cb7a39c741643a23e3ead9bc05a9c6fc2a6c258c74",
+   "sha256": "03ff345a8855af12e50a78b11f195fcda88e60f893c00c555c2dbea520bdfdfc",
    "size": 52260
   },
   {
@@ -1158,43 +1158,43 @@
   },
   {
    "name": "hat_western.female.glb",
-   "sha256": "c3b2f8aeea4686981fdba5872edcb5b821f5798b0a7470e74e2c7021c073756c",
+   "sha256": "e2985739c27e5843db39f5b6f375ffc882f98cf1791394cc4140bf6f5970d6ca",
    "size": 52272
   },
   {
    "name": "hat_western.male.glb",
-   "sha256": "ce42356fd16338da70d286c84a627384516c8cd24b6ec82673fd40b4411a9717",
+   "sha256": "93dbebeef63accef97bf55d3afd6a06d7a056a43c037cbcb24cfc424d82e33a9",
    "size": 52264
   },
   {
    "name": "ring_band.female.glb",
-   "sha256": "433d616e5384c94b71cc3d13971ab7497b55b6feede6d314ce8544294d9c6182",
-   "size": 23884
+   "sha256": "81817facea2ec23885266110771a8e7a1df47206d0282009a7fb35f04f29f3ea",
+   "size": 21008
   },
   {
    "name": "ring_band.male.glb",
-   "sha256": "fd964e943f994fc6b637486ed08265e0b8f962ee950d43734e6f174ea8ca2279",
-   "size": 23876
+   "sha256": "1b4623c8b3b8ee2238bfdb9963b4c032c72d6c1acaceb5771e3fcdf3a474c71c",
+   "size": 21000
   },
   {
    "name": "ring_gem.female.glb",
-   "sha256": "cd53f7d86a334aef0759cfd498fc86fb3089b384ba37eb66104681112c3f1b0d",
-   "size": 32168
+   "sha256": "f61b2a1de4931c486b7c79c369bb0f657121a473031347d8fb0b49b01b7c9534",
+   "size": 28440
   },
   {
    "name": "ring_gem.male.glb",
-   "sha256": "7654f02b26026899de596d353a8e94bcad7ddde475b7de34bed311b2aad6f7ca",
-   "size": 32168
+   "sha256": "c24c77b97abfa26a1186a6cf3ed9f252085835e5f0898aeccf2e1e235c560ee2",
+   "size": 28436
   },
   {
    "name": "ring_signet.female.glb",
-   "sha256": "461f50edf590634b49e21c3b742d754a0143d7257ff28f8870aae97a50681764",
-   "size": 29576
+   "sha256": "9bb8bab4962a2d9cd84d612bfcaa00b09340550c2601f1b1b6536c132218ddb3",
+   "size": 27712
   },
   {
    "name": "ring_signet.male.glb",
-   "sha256": "126225f614bda7bcd75df82edc5ba66c4426c7a5e2786bd219defcfd4e181427",
-   "size": 29568
+   "sha256": "d7cc24f7a1a755c0bde629c55b451e52db515278eeae6c9144d691847759d587",
+   "size": 27704
   },
   {
    "name": "shoes_boots.female.glb",
@@ -1338,32 +1338,32 @@
   },
   {
    "name": "sunglasses_round.female.glb",
-   "sha256": "dd91cb4287566c7a7f184eefe1871df2d10f2d64fff80ed7099b82c91496b137",
+   "sha256": "c6fa6bf6d9a71ce54aeb7dd677d4a3edab60001f7f6444c058808e5e11f2a1eb",
    "size": 39612
   },
   {
    "name": "sunglasses_round.male.glb",
-   "sha256": "cd358c7e540bb5fbf9e29d9d3e155519ac9f2ebf90b12bab7f3bb0c5656ae7f6",
+   "sha256": "f304f7c02041ad009e36a2aa3e57b49bd8c800ae9e45afa00024c8e3280adbc4",
    "size": 39600
   },
   {
    "name": "sunglasses_sport.female.glb",
-   "sha256": "4a30e90fcb45b5557d6236db44c2fa5467d5494fc751e97d28036fbdd1481d58",
+   "sha256": "592987fbc7cfcc792b2f904669de9d28fd126a936383ad565348c000d0c428f3",
    "size": 39612
   },
   {
    "name": "sunglasses_sport.male.glb",
-   "sha256": "9b82ed6e8f0dffc488e7d33b837e6069f474d9ff8bdc121d6ee8f502a9f6f24b",
+   "sha256": "81a6d5d6e2916f9ed1c1b8421d950e8ba668dab34a6f8619f8c62115c06c6e3f",
    "size": 39600
   },
   {
    "name": "sunglasses_square.female.glb",
-   "sha256": "e4a217ba78b9e0338f67069915ee9652428c301db2cc57899df4a86c1742fcd5",
+   "sha256": "778a92f7b491033337bc828369e144cc9f732ff28552bb372dcb7c80519e1ff4",
    "size": 39620
   },
   {
    "name": "sunglasses_square.male.glb",
-   "sha256": "7305863501094ac8d1292c46cffd409a87bb6bafdf404024d23d87a7c7387b65",
+   "sha256": "b9e4d3cef6654d09b67418a54dbe38affa5ee6682a6c36a4a782f714f5a29e2f",
    "size": 39608
   },
   {
@@ -1448,8 +1448,8 @@
   },
   {
    "name": "tex_skin_head.png",
-   "sha256": "597d66c1bbda4af9747b6f928904dcb5f72f2ad16d6cfdfbfddcc23037449144",
-   "size": 592
+   "sha256": "d666cbbb00fc97579b5e614e157457b798dafb6cc1c1f2fa1642b98067d71124",
+   "size": 6146
   },
   {
    "name": "tex_stripes.png",
@@ -1458,33 +1458,33 @@
   },
   {
    "name": "tex_stubble_female.png",
-   "sha256": "c6c7d58e3d5b6562e6a51878bdd472b69130bef53b5f6a4c44d7464a88959e06",
-   "size": 40758
+   "sha256": "cca25a6b5fbd35508bcb754823d7122f6f647bfb88b375b03eeebf55e6245c14",
+   "size": 40813
   },
   {
    "name": "tex_stubble_halo_female.png",
-   "sha256": "69ac7c4a1b1967ded8565fc557233f11f1978190e62e157c19891d17541a1585",
-   "size": 47425
+   "sha256": "fdb92c062b8d84061e1d4e7dea31b5cd033df6cf0230a75054d9c0d13eebb101",
+   "size": 47402
   },
   {
    "name": "tex_stubble_halo_male.png",
-   "sha256": "f27084a2adf165b52d0653bd3e35ae314560df7ee2fdf56a3e8960ea87ef3a2c",
-   "size": 47406
+   "sha256": "4e50fcc0604136a9d41e86d76e7e9b0eb61b92f9b78c26deedf74d26ba03cf42",
+   "size": 47385
   },
   {
    "name": "tex_stubble_heavy_female.png",
-   "sha256": "5ccdf2c387d4dfd05d885021a08b291f91730b7b1e8226af10b4d4e3add9d742",
-   "size": 44149
+   "sha256": "7e34a02df6449abad8c2989a3d2667017987035edfc0da972afce814a55d26db",
+   "size": 44162
   },
   {
    "name": "tex_stubble_heavy_male.png",
-   "sha256": "df84bb13ed76eab675d8ab7f5b06f1c8fece6a00962d1f08bea9ff7e5f013728",
-   "size": 44135
+   "sha256": "f2510ce240d8988698b4fadfdc43ec71a8889a41ffce407f7114cdde71e65e1e",
+   "size": 44129
   },
   {
    "name": "tex_stubble_male.png",
-   "sha256": "14c62b0e8ce50d7e8b24f9fc3426d27a36435fba941a730548f5dd28f5850951",
-   "size": 40778
+   "sha256": "96141572e5b44a0628f51c298ce2df97ae05d83302e1f84367ce8d4f9f4acd23",
+   "size": 40781
   },
   {
    "name": "top_blazer.female.glb",
@@ -1768,63 +1768,63 @@
   },
   {
    "name": "wrist_band.female.glb",
-   "sha256": "f3284c990c9748c70ec869c1074e893e1c878b50b33fe0a887403261b0945165",
-   "size": 50340
+   "sha256": "6f99ddcbb62ff6864add2984d36da6456671d7453a12018e4e077caafb714cdd",
+   "size": 41636
   },
   {
    "name": "wrist_band.male.glb",
-   "sha256": "0e4f3e0194beb2761c64caff2288ba2b7e2577f8e38f90820f4a8a96112235b6",
-   "size": 50324
+   "sha256": "f25b8a141942b622292e195142ecf0db0fd2061dadf66d8f46b1c3cbb62bcc00",
+   "size": 41620
   },
   {
    "name": "wrist_bangle.female.glb",
-   "sha256": "f0619d91b68ffe3b67d228a7fb61b226ec825d6e6dbc04084160cb592f08ff5c",
-   "size": 53424
+   "sha256": "56649fa45fb7a54bcedb48b81df64aabaf25a0acb1d9d27d343be103e6571493",
+   "size": 43904
   },
   {
    "name": "wrist_bangle.male.glb",
-   "sha256": "985669d87eca1f4b577065ab42a559174987dc71e03a54200522ea1ab02cc9f7",
-   "size": 53404
+   "sha256": "92e10a80fd236f31c4320c6cc78c1905e47190e5e6bb1c12215f08d2ddd0955a",
+   "size": 43884
   },
   {
    "name": "wrist_beads.female.glb",
-   "sha256": "7f216ae718b8ebf78b08bbb5312e62dbc1199ad2e74a4909234eff37f18cc316",
-   "size": 85640
+   "sha256": "fde5269f2ce1672a0423087f25023d8fa6dab4957518f46452dd9ac2255efd40",
+   "size": 63032
   },
   {
    "name": "wrist_beads.male.glb",
-   "sha256": "5ad2989dd7d872ad84eacc84596bdfd786a54df5764e40a8636cc7aeb265209a",
-   "size": 85628
+   "sha256": "1f11fcaf80baf69e9e90284cce8772f8171869381f421d62654dd583b856e163",
+   "size": 63020
   },
   {
    "name": "wrist_cuff.female.glb",
-   "sha256": "3174188dcdeeb18876f1a401ea8e5b40613c40925a625b424aa5a6b82c2b62a4",
-   "size": 50336
+   "sha256": "b3737241c58e245059a170fb42d31dfa867a247684d0d7a387552d615231996c",
+   "size": 41632
   },
   {
    "name": "wrist_cuff.male.glb",
-   "sha256": "ee4fb9285f5ca426dc990dc86a3f0c17f8721757bcb47d728bfe42db0f54ae04",
-   "size": 50328
+   "sha256": "005d79822fae5c91101e6525df17da0133c39d37d9850d0d1040d9da51db9835",
+   "size": 41624
   },
   {
    "name": "wrist_sportwatch.female.glb",
-   "sha256": "39d2d3999cebf8c1c70dbbdede03bcbecee73b2db829e661755a520aca7caef4",
-   "size": 59516
+   "sha256": "a09726adfd3879d0afc9b60f354a7c82b58fec0db53ec7c0095254816f58d0b3",
+   "size": 49340
   },
   {
    "name": "wrist_sportwatch.male.glb",
-   "sha256": "f83e41d4f7ed8b8ab73ad50a6d74ef4bf7f7b9acff0fc9b7fcb8ea97078a200d",
-   "size": 59496
+   "sha256": "09780f5e8cd5dc5d4c307d054aaf73314018c5ea8b453d897a04b39fe30fb0e1",
+   "size": 49316
   },
   {
    "name": "wrist_watch.female.glb",
-   "sha256": "d88054173203baf2a8e4f205078b8193581d2e5f709b91da6030c8a779e5cc3c",
-   "size": 59468
+   "sha256": "6e1e3b615e377693b4250e2a3bce81a2356cc8085831ebf352890aed10f980d9",
+   "size": 49292
   },
   {
    "name": "wrist_watch.male.glb",
-   "sha256": "dfb3678160e215ae6adde9be4924718540872ecbcc3aec350f77aa3134686350",
-   "size": 59452
+   "sha256": "020ac53c00347ac3cf05178e498967d899346a1afda7b8771f9d3bb2f8db9586",
+   "size": 49276
   }
  ],
  "bodies": {
@@ -2042,12 +2042,12 @@
    "eyeLeft": [
     0.05832,
     1.49068,
-    0.15321
+    0.15322
    ],
    "eyeRight": [
     -0.05832,
     1.49068,
-    0.15321
+    0.15322
    ]
   },
   "male": {
@@ -2064,12 +2064,12 @@
    "eyeLeft": [
     0.06048,
     1.60252,
-    0.15872
+    0.15873
    ],
    "eyeRight": [
     -0.06048,
     1.60252,
-    0.15872
+    0.15873
    ]
   }
  },
@@ -2157,7 +2157,7 @@
       "centre": [
        0.0,
        1.3546,
-       0.14749
+       0.14717
       ],
       "inner": 0.3,
       "radii": [
@@ -2225,7 +2225,7 @@
       "centre": [
        0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "radii": [
@@ -2243,7 +2243,7 @@
       "centre": [
        -0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "radii": [
@@ -2268,7 +2268,7 @@
       "centre": [
        0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "move": [
@@ -2286,7 +2286,7 @@
       "centre": [
        -0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "move": [
@@ -2311,7 +2311,7 @@
       "centre": [
        0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "move": [
@@ -2329,7 +2329,7 @@
       "centre": [
        -0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "move": [
@@ -2347,7 +2347,7 @@
       "centre": [
        0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.72,
       "move": [
@@ -2365,7 +2365,7 @@
       "centre": [
        -0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.72,
       "move": [
@@ -2390,7 +2390,7 @@
       "centre": [
        0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "degrees": 14.0,
       "inner": 0.72,
@@ -2409,7 +2409,7 @@
       "centre": [
        -0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "degrees": -14.0,
       "inner": 0.72,
@@ -2435,7 +2435,7 @@
       "centre": [
        0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.7,
       "move": [
@@ -2453,7 +2453,7 @@
       "centre": [
        -0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.7,
       "move": [
@@ -2478,7 +2478,7 @@
       "centre": [
        0.0,
        1.47475,
-       0.17124
+       0.16922
       ],
       "inner": 0.55,
       "radii": [
@@ -2503,7 +2503,7 @@
       "centre": [
        0.0,
        1.47475,
-       0.17124
+       0.16922
       ],
       "inner": 0.55,
       "radii": [
@@ -2528,7 +2528,7 @@
       "centre": [
        0.0,
        1.47475,
-       0.17124
+       0.16922
       ],
       "inner": 0.55,
       "move": [
@@ -2553,7 +2553,7 @@
       "centre": [
        0.0,
        1.41832,
-       0.16796
+       0.16897
       ],
       "inner": 0.7,
       "radii": [
@@ -2578,7 +2578,7 @@
       "centre": [
        0.0,
        1.41832,
-       0.16796
+       0.16897
       ],
       "inner": 0.7,
       "move": [
@@ -2721,7 +2721,7 @@
       "centre": [
        0.0,
        1.3546,
-       0.14749
+       0.14717
       ],
       "inner": 0.35,
       "move": [
@@ -2746,7 +2746,7 @@
       "centre": [
        0.0,
        1.3546,
-       0.14749
+       0.14717
       ],
       "inner": 0.35,
       "move": [
@@ -2771,7 +2771,7 @@
       "centre": [
        0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.7,
       "move": [
@@ -2789,7 +2789,7 @@
       "centre": [
        -0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.7,
       "move": [
@@ -2814,7 +2814,7 @@
       "centre": [
        0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "degrees": 13.0,
       "inner": 0.72,
@@ -2833,7 +2833,7 @@
       "centre": [
        -0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "degrees": -13.0,
       "inner": 0.72,
@@ -2859,7 +2859,7 @@
       "centre": [
        0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.65,
       "radii": [
@@ -2877,7 +2877,7 @@
       "centre": [
        -0.06048,
        1.55548,
-       0.14979
+       0.15003
       ],
       "inner": 0.65,
       "radii": [
@@ -2902,7 +2902,7 @@
       "centre": [
        0.0,
        1.49284,
-       0.16421
+       0.16392
       ],
       "inner": 0.45,
       "radii": [
@@ -2927,7 +2927,7 @@
       "centre": [
        0.0,
        1.45666,
-       0.17827
+       0.17453
       ],
       "inner": 0.45,
       "move": [
@@ -2952,7 +2952,7 @@
       "centre": [
        0.0,
        1.42912,
-       0.16796
+       0.16897
       ],
       "inner": 0.55,
       "radii": [
@@ -2977,7 +2977,7 @@
       "centre": [
        0.0,
        1.40536,
-       0.16796
+       0.16897
       ],
       "inner": 0.55,
       "radii": [
@@ -3133,7 +3133,7 @@
       "centre": [
        0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "radii": [
@@ -3151,7 +3151,7 @@
       "centre": [
        -0.05832,
        1.49068,
-       0.15321
+       0.15322
       ],
       "inner": 0.72,
       "radii": [
@@ -3253,7 +3253,7 @@
       "centre": [
        0.0,
        1.4614,
-       0.16029
+       0.15961
       ],
       "inner": 0.3,
       "radii": [
@@ -3321,7 +3321,7 @@
       "centre": [
        0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "radii": [
@@ -3339,7 +3339,7 @@
       "centre": [
        -0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "radii": [
@@ -3364,7 +3364,7 @@
       "centre": [
        0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "move": [
@@ -3382,7 +3382,7 @@
       "centre": [
        -0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "move": [
@@ -3407,7 +3407,7 @@
       "centre": [
        0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "move": [
@@ -3425,7 +3425,7 @@
       "centre": [
        -0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "move": [
@@ -3443,7 +3443,7 @@
       "centre": [
        0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.72,
       "move": [
@@ -3461,7 +3461,7 @@
       "centre": [
        -0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.72,
       "move": [
@@ -3486,7 +3486,7 @@
       "centre": [
        0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "degrees": 14.0,
       "inner": 0.72,
@@ -3505,7 +3505,7 @@
       "centre": [
        -0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "degrees": -14.0,
       "inner": 0.72,
@@ -3531,7 +3531,7 @@
       "centre": [
        0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.7,
       "move": [
@@ -3549,7 +3549,7 @@
       "centre": [
        -0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.7,
       "move": [
@@ -3574,7 +3574,7 @@
       "centre": [
        0.0,
        1.586,
-       0.18095
+       0.17957
       ],
       "inner": 0.55,
       "radii": [
@@ -3599,7 +3599,7 @@
       "centre": [
        0.0,
        1.586,
-       0.18095
+       0.17957
       ],
       "inner": 0.55,
       "radii": [
@@ -3624,7 +3624,7 @@
       "centre": [
        0.0,
        1.586,
-       0.18095
+       0.17957
       ],
       "inner": 0.55,
       "move": [
@@ -3649,7 +3649,7 @@
       "centre": [
        0.0,
        1.52748,
-       0.17384
+       0.17486
       ],
       "inner": 0.7,
       "radii": [
@@ -3674,7 +3674,7 @@
       "centre": [
        0.0,
        1.52748,
-       0.17384
+       0.17486
       ],
       "inner": 0.7,
       "move": [
@@ -3817,7 +3817,7 @@
       "centre": [
        0.0,
        1.4614,
-       0.16029
+       0.15961
       ],
       "inner": 0.35,
       "move": [
@@ -3842,7 +3842,7 @@
       "centre": [
        0.0,
        1.4614,
-       0.16029
+       0.15961
       ],
       "inner": 0.35,
       "move": [
@@ -3867,7 +3867,7 @@
       "centre": [
        0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.7,
       "move": [
@@ -3885,7 +3885,7 @@
       "centre": [
        -0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.7,
       "move": [
@@ -3910,7 +3910,7 @@
       "centre": [
        0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "degrees": 13.0,
       "inner": 0.72,
@@ -3929,7 +3929,7 @@
       "centre": [
        -0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "degrees": -13.0,
       "inner": 0.72,
@@ -3955,7 +3955,7 @@
       "centre": [
        0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.65,
       "radii": [
@@ -3973,7 +3973,7 @@
       "centre": [
        -0.06272,
        1.66972,
-       0.15651
+       0.15676
       ],
       "inner": 0.65,
       "radii": [
@@ -3998,7 +3998,7 @@
       "centre": [
        0.0,
        1.60476,
-       0.17086
+       0.17056
       ],
       "inner": 0.45,
       "radii": [
@@ -4023,7 +4023,7 @@
       "centre": [
        0.0,
        1.56724,
-       0.19104
+       0.18858
       ],
       "inner": 0.45,
       "move": [
@@ -4048,7 +4048,7 @@
       "centre": [
        0.0,
        1.53868,
-       0.17384
+       0.17486
       ],
       "inner": 0.55,
       "radii": [
@@ -4073,7 +4073,7 @@
       "centre": [
        0.0,
        1.51404,
-       0.17384
+       0.17486
       ],
       "inner": 0.55,
       "radii": [
@@ -4229,7 +4229,7 @@
       "centre": [
        0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "radii": [
@@ -4247,7 +4247,7 @@
       "centre": [
        -0.06048,
        1.60252,
-       0.15872
+       0.15873
       ],
       "inner": 0.72,
       "radii": [
@@ -6213,13 +6213,13 @@
     0.17663,
     0.17616,
     0.17492,
-    0.17318,
+    0.17319,
     0.17128,
     0.16967,
     0.16893,
     0.16967,
     0.17128,
-    0.17318,
+    0.17319,
     0.17492,
     0.17616,
     0.17663,
@@ -6259,17 +6259,17 @@
     0.17231,
     0.17385,
     0.17446,
-    0.17419,
-    0.17385,
-    0.17275,
-    0.16998,
-    0.1669,
+    0.17432,
+    0.17426,
+    0.17341,
+    0.17059,
+    0.16709,
     0.1658,
-    0.1669,
-    0.16998,
-    0.17275,
-    0.17385,
-    0.17419,
+    0.16709,
+    0.17059,
+    0.17341,
+    0.17426,
+    0.17432,
     0.17446,
     0.17385,
     0.17231,
@@ -6307,17 +6307,17 @@
     0.16955,
     0.17132,
     0.17211,
-    0.17175,
-    0.17067,
-    0.16882,
-    0.16626,
-    0.16401,
+    0.17178,
+    0.17074,
+    0.16847,
+    0.16565,
+    0.16386,
     0.16314,
-    0.16401,
-    0.16626,
-    0.16882,
-    0.17067,
-    0.17175,
+    0.16386,
+    0.16565,
+    0.16847,
+    0.17074,
+    0.17178,
     0.17211,
     0.17132,
     0.16955,
@@ -6355,17 +6355,17 @@
     0.16703,
     0.16891,
     0.16983,
-    0.16962,
-    0.16762,
-    0.16377,
-    0.16238,
-    0.16223,
-    0.16142,
-    0.16223,
-    0.16238,
-    0.16377,
-    0.16762,
-    0.16962,
+    0.16948,
+    0.16706,
+    0.16586,
+    0.16318,
+    0.16066,
+    0.16134,
+    0.16066,
+    0.16318,
+    0.16586,
+    0.16706,
+    0.16948,
     0.16983,
     0.16891,
     0.16703,
@@ -6403,17 +6403,17 @@
     0.1651,
     0.16697,
     0.16799,
-    0.16798,
-    0.16536,
-    0.16357,
-    0.16129,
-    0.16143,
-    0.16314,
-    0.16143,
-    0.16129,
-    0.16357,
-    0.16536,
-    0.16798,
+    0.1674,
+    0.16623,
+    0.16444,
+    0.16145,
+    0.1597,
+    0.16282,
+    0.1597,
+    0.16145,
+    0.16444,
+    0.16623,
+    0.1674,
     0.16799,
     0.16697,
     0.1651,
@@ -6451,17 +6451,17 @@
     0.16396,
     0.16573,
     0.16685,
-    0.16715,
-    0.16586,
-    0.16499,
-    0.16304,
-    0.16253,
-    0.17328,
-    0.16253,
-    0.16304,
-    0.16499,
-    0.16586,
-    0.16715,
+    0.16691,
+    0.16645,
+    0.16421,
+    0.16184,
+    0.16091,
+    0.17409,
+    0.16091,
+    0.16184,
+    0.16421,
+    0.16645,
+    0.16691,
     0.16685,
     0.16573,
     0.16396,
@@ -6500,15 +6500,15 @@
     0.16492,
     0.16627,
     0.16709,
-    0.16724,
-    0.1667,
-    0.166,
-    0.16517,
-    0.18364,
-    0.16517,
-    0.166,
-    0.1667,
-    0.16724,
+    0.16691,
+    0.1657,
+    0.16498,
+    0.16495,
+    0.18125,
+    0.16495,
+    0.16498,
+    0.1657,
+    0.16691,
     0.16709,
     0.16627,
     0.16492,
@@ -6545,21 +6545,21 @@
     0.15881,
     0.16044,
     0.16233,
-    0.16459,
-    0.16726,
-    0.16968,
-    0.17063,
-    0.17011,
+    0.16458,
+    0.16725,
+    0.16974,
+    0.17076,
+    0.17013,
     0.16992,
-    0.17065,
+    0.17067,
     0.17127,
-    0.17065,
+    0.17067,
     0.16992,
-    0.17011,
-    0.17063,
-    0.16968,
-    0.16726,
-    0.16459,
+    0.17013,
+    0.17076,
+    0.16974,
+    0.16725,
+    0.16458,
     0.16233,
     0.16044,
     0.15881,
@@ -6592,23 +6592,23 @@
     0.15643,
     0.15749,
     0.15913,
-    0.16154,
-    0.16511,
-    0.16922,
-    0.17277,
-    0.17459,
-    0.17467,
-    0.17551,
-    0.17904,
-    0.18268,
-    0.17904,
-    0.17551,
-    0.17467,
-    0.17459,
-    0.17277,
-    0.16922,
-    0.16511,
-    0.16154,
+    0.16153,
+    0.16501,
+    0.16904,
+    0.1727,
+    0.17469,
+    0.17471,
+    0.1755,
+    0.17876,
+    0.18041,
+    0.17876,
+    0.1755,
+    0.17471,
+    0.17469,
+    0.1727,
+    0.16904,
+    0.16501,
+    0.16153,
     0.15913,
     0.15749,
     0.15643,
@@ -6640,23 +6640,23 @@
     0.15475,
     0.15583,
     0.15765,
-    0.16046,
-    0.1644,
-    0.1687,
-    0.17248,
-    0.1754,
+    0.16045,
+    0.16429,
+    0.1685,
+    0.17232,
+    0.17535,
     0.17781,
     0.18071,
-    0.18463,
-    0.18941,
-    0.18463,
+    0.18425,
+    0.18799,
+    0.18425,
     0.18071,
     0.17781,
-    0.1754,
-    0.17248,
-    0.1687,
-    0.1644,
-    0.16046,
+    0.17535,
+    0.17232,
+    0.1685,
+    0.16429,
+    0.16045,
     0.15765,
     0.15583,
     0.15475,
@@ -6689,21 +6689,21 @@
     0.15424,
     0.15627,
     0.15922,
-    0.16299,
-    0.16729,
+    0.16298,
+    0.16728,
     0.17188,
     0.17671,
     0.18142,
     0.18544,
-    0.18828,
-    0.18871,
-    0.18828,
+    0.18838,
+    0.18974,
+    0.18838,
     0.18544,
     0.18142,
     0.17671,
     0.17188,
-    0.16729,
-    0.16299,
+    0.16728,
+    0.16298,
     0.15922,
     0.15627,
     0.15424,
@@ -6743,9 +6743,9 @@
     0.17999,
     0.18598,
     0.19122,
-    0.19588,
-    0.19929,
-    0.19588,
+    0.19591,
+    0.19949,
+    0.19591,
     0.19122,
     0.18598,
     0.17999,
@@ -6791,9 +6791,9 @@
     0.18257,
     0.18955,
     0.19574,
-    0.20098,
-    0.20391,
-    0.20098,
+    0.20093,
+    0.20369,
+    0.20093,
     0.19574,
     0.18955,
     0.18257,
@@ -7808,13 +7808,13 @@
     0.18355,
     0.18318,
     0.182,
-    0.18026,
+    0.18027,
     0.17834,
     0.1767,
     0.17592,
     0.1767,
     0.17834,
-    0.18026,
+    0.18027,
     0.182,
     0.18318,
     0.18355,
@@ -7854,17 +7854,17 @@
     0.17918,
     0.18103,
     0.18196,
-    0.18194,
-    0.18177,
-    0.18084,
-    0.17813,
-    0.17499,
+    0.18206,
+    0.18218,
+    0.1815,
+    0.17874,
+    0.17518,
     0.17386,
-    0.17499,
-    0.17813,
-    0.18084,
-    0.18177,
-    0.18194,
+    0.17518,
+    0.17874,
+    0.1815,
+    0.18218,
+    0.18206,
     0.18196,
     0.18103,
     0.17918,
@@ -7902,17 +7902,17 @@
     0.17643,
     0.17856,
     0.17971,
-    0.17967,
-    0.17884,
-    0.1772,
-    0.17464,
-    0.1723,
+    0.17969,
+    0.17895,
+    0.17692,
+    0.17408,
+    0.17216,
     0.17139,
-    0.1723,
-    0.17464,
-    0.1772,
-    0.17884,
-    0.17967,
+    0.17216,
+    0.17408,
+    0.17692,
+    0.17895,
+    0.17969,
     0.17971,
     0.17856,
     0.17643,
@@ -7950,17 +7950,17 @@
     0.17359,
     0.17569,
     0.17681,
-    0.17676,
-    0.17488,
-    0.17097,
-    0.16953,
-    0.16941,
-    0.16857,
-    0.16941,
-    0.16953,
-    0.17097,
-    0.17488,
-    0.17676,
+    0.17664,
+    0.17419,
+    0.17315,
+    0.17038,
+    0.16778,
+    0.1685,
+    0.16778,
+    0.17038,
+    0.17315,
+    0.17419,
+    0.17664,
     0.17681,
     0.17569,
     0.17359,
@@ -7998,17 +7998,17 @@
     0.17122,
     0.17315,
     0.17421,
-    0.1742,
-    0.17149,
-    0.16963,
-    0.16726,
-    0.16741,
-    0.16976,
-    0.16741,
-    0.16726,
-    0.16963,
-    0.17149,
-    0.1742,
+    0.1736,
+    0.17238,
+    0.17053,
+    0.16743,
+    0.16561,
+    0.16942,
+    0.16561,
+    0.16743,
+    0.17053,
+    0.17238,
+    0.1736,
     0.17421,
     0.17315,
     0.17122,
@@ -8046,17 +8046,17 @@
     0.16972,
     0.17156,
     0.17273,
-    0.17305,
-    0.17172,
-    0.17084,
-    0.16882,
-    0.1683,
-    0.18047,
-    0.1683,
-    0.16882,
-    0.17084,
-    0.17172,
-    0.17305,
+    0.1728,
+    0.17235,
+    0.17003,
+    0.16758,
+    0.16663,
+    0.18146,
+    0.16663,
+    0.16758,
+    0.17003,
+    0.17235,
+    0.1728,
     0.17273,
     0.17156,
     0.16972,
@@ -8095,15 +8095,15 @@
     0.17073,
     0.17219,
     0.1731,
-    0.17331,
-    0.1728,
-    0.17211,
-    0.17127,
-    0.19444,
-    0.17127,
-    0.17211,
-    0.1728,
-    0.17331,
+    0.17297,
+    0.17176,
+    0.17105,
+    0.17104,
+    0.19374,
+    0.17104,
+    0.17105,
+    0.17176,
+    0.17297,
     0.1731,
     0.17219,
     0.17073,
@@ -8140,21 +8140,21 @@
     0.16484,
     0.16651,
     0.16845,
-    0.17076,
-    0.1735,
-    0.17596,
-    0.17691,
-    0.17634,
+    0.17075,
+    0.17349,
+    0.17603,
+    0.17705,
+    0.17636,
     0.17612,
-    0.17686,
-    0.18137,
-    0.17686,
+    0.17688,
+    0.17996,
+    0.17688,
     0.17612,
-    0.17634,
-    0.17691,
-    0.17596,
-    0.1735,
-    0.17076,
+    0.17636,
+    0.17705,
+    0.17603,
+    0.17349,
+    0.17075,
     0.16845,
     0.16651,
     0.16484,
@@ -8188,21 +8188,21 @@
     0.16486,
     0.16644,
     0.16873,
-    0.17218,
-    0.17621,
-    0.17965,
-    0.18126,
-    0.18108,
+    0.17209,
+    0.17602,
+    0.17957,
+    0.18137,
+    0.18111,
     0.18173,
-    0.18523,
-    0.18888,
-    0.18523,
+    0.18497,
+    0.18662,
+    0.18497,
     0.18173,
-    0.18108,
-    0.18126,
-    0.17965,
-    0.17621,
-    0.17218,
+    0.18111,
+    0.18137,
+    0.17957,
+    0.17602,
+    0.17209,
     0.16873,
     0.16644,
     0.16486,
@@ -8235,23 +8235,23 @@
     0.16411,
     0.16514,
     0.16684,
-    0.1694,
-    0.17302,
-    0.17711,
-    0.18069,
-    0.18336,
+    0.16939,
+    0.17294,
+    0.17692,
+    0.18054,
+    0.18331,
     0.18547,
     0.1881,
-    0.19188,
-    0.19671,
-    0.19188,
+    0.19149,
+    0.19523,
+    0.19149,
     0.1881,
     0.18547,
-    0.18336,
-    0.18069,
-    0.17711,
-    0.17302,
-    0.1694,
+    0.18331,
+    0.18054,
+    0.17692,
+    0.17294,
+    0.16939,
     0.16684,
     0.16514,
     0.16411,
@@ -8284,21 +8284,21 @@
     0.1657,
     0.16766,
     0.17045,
-    0.174,
+    0.17399,
     0.17812,
     0.18259,
     0.18723,
     0.19168,
     0.19546,
-    0.19812,
-    0.19884,
-    0.19812,
+    0.19816,
+    0.1996,
+    0.19816,
     0.19546,
     0.19168,
     0.18723,
     0.18259,
     0.17812,
-    0.174,
+    0.17399,
     0.17045,
     0.16766,
     0.1657,
@@ -8338,9 +8338,9 @@
     0.19274,
     0.19851,
     0.20352,
-    0.20867,
-    0.21336,
-    0.20867,
+    0.20869,
+    0.21352,
+    0.20869,
     0.20352,
     0.19851,
     0.19274,
@@ -8386,9 +8386,9 @@
     0.19605,
     0.20268,
     0.20851,
-    0.21337,
-    0.2164,
-    0.21337,
+    0.21331,
+    0.21609,
+    0.21331,
     0.20851,
     0.20268,
     0.19605,
@@ -11378,6 +11378,6 @@
   }
  ],
  "reader": 2,
- "revision": 3,
+ "revision": 4,
  "rig": "cna-avatar-71"
 }

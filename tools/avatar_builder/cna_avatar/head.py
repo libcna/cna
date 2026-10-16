@@ -84,28 +84,96 @@ def _nose(body, x, y):
     return height * (1.0 - q) ** roundness
 
 
+# The eye opening as the expression atlas paints it (face.py: RX, RY, CY, FLOOR in the eye tile,
+# whose half-size is EYE_TILE metres): the lids are sculpted round exactly that opening.
+EYE_TILE = (0.038, 0.035)
+APERTURE = (0.70, 0.52, 0.02, -0.44)
+
+
+def _eye(x, y, side):
+    """Relief of one eye at front coordinates (x, y) (male metres): the socket under the brow, the
+    eyeball rounding forward in the opening, the upper lid standing over it with its crease above,
+    a slimmer lower lid, and the inner corner tucked in toward the nose."""
+    rx, ry, cy, floor = APERTURE
+    tx = (x - side * EYE[0]) / EYE_TILE[0]
+    ty = (y - EYE[1]) / EYE_TILE[1]
+    o = side * tx                      # toward the outer corner
+    ny = (ty - cy) / ry if ty >= cy else (ty - cy) / (cy - floor)
+    e = math.hypot(tx / rx, ny)        # 1 on the painted opening's edge
+    up = smoothstep(-0.45, 0.35, ny)   # the upper lid's share
+    h = 0.0
+    # The socket: deepest toward the nose under the brow, shallow out at the temple.
+    h -= 0.0058 * _blob(o, ty, -0.12, 0.10, 1.55, 1.30)
+    # The eyeball: a dome a little larger than the opening (the lids lie on it).
+    if e < 1.30:
+        h += 0.0048 * (1.0 - (e / 1.30) ** 2) ** 1.4
+    # The upper lid: a rounded band along the opening's top edge standing over the eyeball, fading
+    # into the crease; it thins toward the corners where it meets the lower lid.
+    corners = 1.0 - 0.55 * smoothstep(0.55, 1.0, abs(tx) / rx)
+    t = (e - 0.93) / 0.50
+    lid = math.sin(math.pi * t ** 0.65) ** 0.8 if 0.0 < t < 1.0 else 0.0
+    h += (0.0022 * up * corners + 0.0010 * (1.0 - up)) * lid
+    # The crease over the upper lid, softer toward the corners.
+    h -= 0.0004 * up * corners * math.exp(-((e - 1.46) / 0.16) ** 2)
+    # The inner corner tucks in toward the nose.
+    h -= 0.0008 * _blob(o, ty, -rx * 1.02, cy - 0.06, 0.28, 0.22)
+    return h
+
+
 def _features(body, x, y):
     """Relief of the face at front coordinates (x, y) (male metres), outward: broad, soft forms."""
     ex, ey = EYE
     h = 0.0
     for side in (1.0, -1.0):
-        # The eye sits in a shallow socket under the brow; the eyeball rounds the lids forward.
-        h -= 0.0045 * _blob(x, y, side * ex, ey + 0.004, 0.044, 0.036)
-        h += 0.0036 * _blob(x, y, side * ex, ey - 0.002, 0.030, 0.023)
-        # A soft brow over each eye, and the cheekbone below and outside it.
-        h += 0.0022 * _blob(x, y, side * (ex + 0.002), ey + 0.046, 0.052, 0.020)
+        if side * x > -0.012:
+            h += _eye(x, y, side)
+        # A brow over each eye, and the cheekbone below and outside it.
+        h += 0.0030 * _blob(x, y, side * (ex + 0.002), ey + 0.046, 0.054, 0.021)
         h += 0.0035 * _blob(x, y, side * 0.086, ey - 0.056, 0.050, 0.034)
-        # The corners of the mouth tuck in a little.
-        h -= 0.0012 * _blob(x, y, side * 0.035, MOUTH_Y, 0.010, 0.009)
-    # The mouth region rounds forward as one form; the lips sit on it, the upper a little fuller.
+    # The mouth region rounds forward as one form; the lips sit on it.
     h += 0.0042 * _blob(x, y, 0.0, MOUTH_Y + 0.004, 0.052, 0.040)
-    h += 0.0026 * _blob(x, y, 0.0, MOUTH_Y + 0.0060, 0.030, 0.0080)
-    h += 0.0030 * _blob(x, y, 0.0, MOUTH_Y - 0.0078, 0.026, 0.0090)
-    h -= 0.0008 * _blob(x, y, 0.0, MOUTH_Y + 0.0002, 0.030, 0.0022)
-    # Under the lower lip a soft groove, then the chin.
-    h -= 0.0012 * _blob(x, y, 0.0, MOUTH_Y - 0.024, 0.026, 0.009)
+    h += _mouth(x, y)
     h += CHIN[body] * _blob(x, y, 0.0, MOUTH_Y - 0.050, 0.034, 0.028)
     return h + _nose(body, x, y)
+
+
+# The mouth's parting line as the expression atlas paints the neutral mouth (face.py, the mouth
+# tile at FEATURES["mouth"]): its height at the middle, how far it rises to the corners and where
+# the corners are (male metres).
+MOUTH_LINE = (-0.0742, 0.0044, 0.034)
+
+
+def _mouth(x, y):
+    """The lips at front coordinates (x, y) (male metres): an upper lip rising from the parting line
+    to its border under the philtrum, a fuller lower lip, both thinning into the corners, which tuck
+    in; the parting line itself a soft groove, and a groove under the lower lip."""
+    y0, rise, half = MOUTH_LINE
+    u = x / half
+    line = y0 + rise * min(u * u, 1.6)
+    d = y - line
+    across = max(0.0, 1.0 - (x / 0.031) ** 2)
+    h = 0.0
+    if across > 0.0:
+        if d >= 0.0:
+            top = 0.0015 + 0.0040 * across ** 0.7
+            t = min(d / top, 1.0)
+            h += 0.0024 * across ** 0.5 * math.sin(math.pi * t) ** 0.6
+        else:
+            bottom = 0.0020 + 0.0072 * across ** 0.7
+            t = min(-d / bottom, 1.0)
+            h += 0.0029 * across ** 0.5 * math.sin(math.pi * t ** 0.8) ** 0.6
+    # The lips part along the line, the parting deepening into the corners.
+    h -= 0.0009 * math.exp(-(d / 0.0010) ** 2) * smoothstep(1.25, 0.85, abs(u))
+    for side in (1.0, -1.0):
+        h -= 0.0013 * _blob(x, y, side * 0.0355, y0 + rise * 1.09, 0.0085, 0.0065)
+    # The philtrum: a shallow channel between two soft ridges from under the nose to the lip.
+    nose_bottom = NOSE_TIP_Y - 0.011
+    span = smoothstep(line + 0.0040, line + 0.0075, y) * (1.0 - smoothstep(nose_bottom - 0.007, nose_bottom - 0.001, y))
+    if span > 0.0:
+        h += span * (0.00022 * math.exp(-((abs(x) - 0.0055) / 0.0022) ** 2) - 0.00030 * math.exp(-(x / 0.0034) ** 2))
+    # Under the lower lip a soft groove, then the chin.
+    h -= 0.0012 * _blob(x, y, 0.0, y0 - 0.0135, 0.026, 0.0070)
+    return h
 
 
 def _clamped_spline(knots):
@@ -207,7 +275,11 @@ def _base_point(body, theta, phi):
     # Features: relief over the front of the face, pushed outward along the direction.
     gate = smoothstep(0.30, 0.62, d[2])
     if gate > 0.0:
+        # The relief is sculpted in front coordinates: find the push whose pushed point lies at the
+        # coordinates it was measured at (the decals are placed by front coordinates too).
         push = _features(body, x, y) * gate
+        for _ in range(2):
+            push = _features(body, x + d[0] * push, y + d[1] * push) * gate
         x, y, z = x + d[0] * push, y + d[1] * push, z + d[2] * push
     return (x * s, y * s, z * s)
 
@@ -266,18 +338,21 @@ def side_point(body, side, y, z, lift=0.0):
     return add(centre(body), local_point(body, theta, phi, lift)), theta, phi
 
 
-def _crowded(count, centre, width, gain, period):
-    """count + 1 parameters over [0, period] (wrapping when period is 2 pi), crowded around
-    `centre`: the density is 1 + gain * exp(-((a - centre) / width)^2), so features there get fine
-    facets and the rest of the head stays light."""
-    samples = 2048
+def _crowded(count, crowds, period):
+    """count + 1 parameters over [0, period] (wrapping when period is 2 pi), crowded where the face's
+    features are: the density is 1 + the sum of gain * exp(-((a - centre) / width)^2) over the
+    (centre, width, gain) crowds, so features get fine facets and the rest of the head stays light."""
+    samples = 4096
     mass, total = [0.0], 0.0
     for k in range(samples):
         a = period * (k + 0.5) / samples
-        delta = a - centre
-        if period > 4.0:
-            delta = (delta + math.pi) % (2.0 * math.pi) - math.pi
-        total += (1.0 + gain * math.exp(-(delta / width) ** 2)) * period / samples
+        density = 1.0
+        for centre, width, gain in crowds:
+            delta = a - centre
+            if period > 4.0:
+                delta = (delta + math.pi) % (2.0 * math.pi) - math.pi
+            density += gain * math.exp(-(delta / width) ** 2)
+        total += density * period / samples
         mass.append(total)
     out, j = [], 0
     for i in range(count + 1):
@@ -289,18 +364,31 @@ def _crowded(count, centre, width, gain, period):
     return out
 
 
-def head_mesh(body, segments=112, rings=96):
+# Where the head's rings and columns crowd: (centre, width, gain) -- the face, the eyes and brows,
+# the mouth; the face's columns, the eyes'.
+RING_CROWDS = ((0.60 * math.pi, 0.36, 4.0), (0.475 * math.pi, 0.20, 6.0), (0.645 * math.pi, 0.10, 4.0))
+COLUMN_CROWDS = ((math.pi, 0.55, 5.0), (math.pi + 0.36, 0.20, 3.0), (math.pi - 0.36, 0.20, 3.0))
+
+
+_HEAD_MESHES = {}
+
+
+def head_mesh(body, segments=132, rings=116):
     """The head surface, UV-mapped around (u, 0.5 at the face) and top to bottom (v = theta / pi),
-    seam at the back; facets crowd onto the face, where the features are."""
-    thetas = _crowded(rings, 0.60 * math.pi, 0.36, 4.0, math.pi)
-    phis = _crowded(segments, math.pi, 0.50, 5.0, 2.0 * math.pi)[:-1]
+    seam at the back; facets crowd onto the face, finest where the lids and lips are."""
+    key = (body, segments, rings)
+    if key in _HEAD_MESHES:
+        return _HEAD_MESHES[key].copy()
+    thetas = _crowded(rings, RING_CROWDS, math.pi)
+    phis = _crowded(segments, COLUMN_CROWDS, 2.0 * math.pi)[:-1]
     rows = [[point(body, theta, math.pi + phi) for phi in phis] for theta in thetas]
     m = Mesh().grid(rows, HEAD, uv_seam=True)
     emitted = segments + 1
     for r, theta in enumerate(thetas):
         for c in range(emitted):
             m.uvs[r * emitted + c] = (phis[c] / (2.0 * math.pi) if c < segments else 1.0, theta / math.pi)
-    return m
+    _HEAD_MESHES[key] = m
+    return m.copy()
 
 
 def nose_mesh(body):
@@ -450,6 +538,39 @@ def anchors(body):
     out["chin"] = front_point(body, 0.0, -0.13 * s)[0]
     out["crown"] = point(body, 0.0, 0.0)
     return out
+
+
+def conforming_patch(body, x, y, width, height, lift):
+    """A decal patch on the head mesh's own facets, centred at head-local front (x, y): the head's
+    vertices there lifted `lift` along its normals, so the patch lies evenly over every lid, lip and
+    fold however finely they are sculpted. UV (0,0) is the top-left as the viewer sees it (u grows
+    toward the viewer's right, the avatar's left); the patch reaches a facet past the rectangle and
+    the sampler holds the tile's transparent edge there."""
+    m = head_mesh(body)
+    c = centre(body)
+    margin = 0.0035 * SCALE[body]
+    x0, x1, y0, y1 = x - 0.5 * width, x + 0.5 * width, y - 0.5 * height, y + 0.5 * height
+    near = set()
+    for i, q in enumerate(m.positions):
+        lx, ly, lz = q[0] - c[0], q[1] - c[1], q[2] - c[2]
+        if lz > 0.0 and x0 - margin <= lx <= x1 + margin and y0 - margin <= ly <= y1 + margin:
+            near.add(i)
+    patch = Mesh()
+    index = {}
+    for t in range(0, len(m.indices), 3):
+        tri = m.indices[t:t + 3]
+        if not all(v in near for v in tri):
+            continue
+        for v in tri:
+            if v not in index:
+                index[v] = len(patch.positions)
+                q, n = m.positions[v], m.normals[v]
+                patch.positions.append(add(q, mul(n, lift)))
+                patch.normals.append(n)
+                patch.uvs.append((clamp((q[0] - c[0] - x0) / width, 0.0, 1.0), clamp((y1 - (q[1] - c[1])) / height, 0.0, 1.0)))
+                patch.skin.append(((I["Head"], 0, 0, 0), (255, 0, 0, 0)))
+        patch.indices += [index[v] for v in tri]
+    return patch
 
 
 def decal_patch(body, x, y, width, height, lift, columns=10, rows=10):
