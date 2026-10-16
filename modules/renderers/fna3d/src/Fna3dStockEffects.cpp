@@ -154,14 +154,20 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
-    void Fna3dStockEffect::Apply(FNA3D_Device* device)
+    void Fna3dStockEffect::Apply(FNA3D_Device* device, int passIndex)
     {
         if (effect_ == nullptr || effectData_ == nullptr)
         {
             throw std::runtime_error(
                 "FNA3D renderer: Apply() called on a stock effect that was never loaded.");
         }
+        if (passIndex < 0 ||
+            passIndex >= static_cast<int>(effectData_->techniques[0].pass_count))
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: stock effect pass index is outside technique 0.");
+        }
         FNA3D_SetEffectTechnique(device, effect_, &effectData_->techniques[0]);
-        FNA3D_ApplyEffect(device, effect_, 0, &stateChanges_);
+        FNA3D_ApplyEffect(device, effect_, passIndex, &stateChanges_);
     }
 }

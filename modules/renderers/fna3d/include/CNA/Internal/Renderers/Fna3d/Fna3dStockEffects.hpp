@@ -15,8 +15,9 @@ namespace CNA::Internal::Renderers::Fna3d
      *
      * FNA3D can only execute Direct3D 9 Effect Framework binaries, so every draw this renderer
      * issues goes through one of the six XNA stock effects vendored under the module's `effects/`
-     * directory. Selection is made from `GpuDrawParams`, not from the public `Effect` object,
-     * because the shared graphics layer hands renderers the flattened parameter block.
+     * directory, or CNA's compiled punctual-light extension. Selection is made from
+     * `GpuDrawParams`, not from the public `Effect` object, because the shared graphics layer
+     * hands renderers the flattened parameter block.
      */
     enum class StockEffectKind
     {
@@ -32,6 +33,8 @@ namespace CNA::Internal::Renderers::Fna3d
         EnvironmentMap,
         /** @brief SkinnedEffect -- 18 variants over fog/weights-per-vertex/lighting. */
         Skinned,
+        /** @brief CNA's Basic/Skinned extension for one point or spot light. */
+        Punctual,
         /** @brief Number of stock effects; not an effect itself. */
         Count
     };
@@ -278,15 +281,15 @@ namespace CNA::Internal::Renderers::Fna3d
         void SetMatrix4x3Array(const char* name, const float* source, int count) const;
 
         /**
-         * @brief Selects technique 0 and applies pass 0, committing every parameter write.
+         * @brief Selects technique 0 and applies one pass, committing every parameter write.
          *
-         * Every vendored stock effect carries exactly one technique with one pass (measured, see
-         * the module's `effects/README.md`), so there is no technique to choose at runtime -- the
-         * variant is the `ShaderIndex` parameter.
+         * The six vendored stock effects carry one pass; CNA's punctual extension carries six
+         * explicit input-layout passes. All effects still carry exactly one technique.
          *
-         * @param device Device to apply the effect on.
+         * @param device    Device to apply the effect on.
+         * @param passIndex Pass within technique 0 (zero for every XNA stock effect).
          */
-        void Apply(FNA3D_Device* device);
+        void Apply(FNA3D_Device* device, int passIndex = 0);
 
         /** @brief The parsed MojoShader effect, or nullptr when not loaded. */
         [[nodiscard]] MOJOSHADER_effect* GetEffectData() const { return effectData_; }

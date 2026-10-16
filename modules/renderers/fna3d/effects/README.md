@@ -61,6 +61,27 @@ artefact and is not committed; only these inputs are.
 
 ---
 
+## `CnaPunctualEffect.fx` / `.fxb` — CNA's point/spot-light extension
+
+XNA's stock BasicEffect and SkinnedEffect binaries have no point/spot-light input. CNA therefore
+selects this effect only when `PunctualLightEXT` is active; ordinary draws keep the untouched stock
+binary and its exact XNA shader-index behavior. Six passes cover untextured/textured and optional
+vertex-colour BasicEffect input plus textured SkinnedEffect input with or without vertex colour.
+
+The source is CNA-owned and MS-PL. The committed 35,300-byte binary was produced by the same DirectX
+SDK June 2010 `fxc.exe` identified below, with SHA-256
+`f3ef1bdacf48d4f85452a0abb7a24034bc64acdd5582ecc9f5489950ad1f3678`:
+
+```bash
+fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPunctualEffect.fxb CnaPunctualEffect.fx
+```
+
+`/Op` is required: without it D3DX emits a CPU preshader operand which the pinned MojoShader rejects
+as unknown before device creation. The registered BasicEffect and identity-bone SkinnedEffect pixel
+witnesses exercise disabled, in-range/out-of-range point, and aimed/away spot cases through FNA3D.
+
+---
+
 ## `CnaConformanceEffect.fx` / `.fxb` — CNA's own conformance fixture (plans/plan_fx.md FX-004)
 
 Everything above is a stock binary Microsoft compiled years ago; `Fna3dCompiledEffectTests.cpp`

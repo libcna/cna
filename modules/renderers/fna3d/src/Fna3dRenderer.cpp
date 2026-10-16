@@ -284,6 +284,9 @@ namespace CNA::Internal::Renderers::Fna3d
                   "EnvironmentMapEffect");
         effects_[static_cast<std::size_t>(StockEffectKind::Skinned)]
             .Load(device_, kSkinnedEffectFxb, sizeof(kSkinnedEffectFxb), "SkinnedEffect");
+        effects_[static_cast<std::size_t>(StockEffectKind::Punctual)]
+            .Load(device_, kCnaPunctualEffectFxb, sizeof(kCnaPunctualEffectFxb),
+                  "CnaPunctualEffect");
 
         ProbeTexture3DReadbackSupport();
         QueryDriverLimits();
