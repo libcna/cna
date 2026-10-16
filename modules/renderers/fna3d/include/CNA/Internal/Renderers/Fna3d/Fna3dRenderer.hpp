@@ -1444,6 +1444,11 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+        /** @brief CNA's compiled stock/PBR effects sample directional and punctual shadow maps. */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override
+        {
+            return device_ != nullptr && maxTextureSlots_ >= 10;
+        }
         /** @brief FNA3D's CNA PBR effects sample the shared split-sum IBL resource set. */
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override
         {
@@ -1609,7 +1614,7 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         void ApplyStockEffectEXT(const Matrix& world, const Matrix& view, const Matrix& projection,
                                  const GpuDrawParams& params,
-                                 bool pbrVertexColorDeclared = false);
+                                 bool vertexColorDeclared = false);
         ITextureRenderer* GetOrCreatePbrWhiteTextureEXT();
         ITextureRenderer* GetOrCreatePbrFlatNormalTextureEXT();
 
@@ -1653,6 +1658,8 @@ namespace CNA::Internal::Renderers::Fna3d
         void ApplyLightingParamsEXT(Fna3dStockEffect& effect, const Matrix& world,
                                     const Matrix& view, const GpuDrawParams& params,
                                     bool withSpecular);
+        void SetShadowParamsEXT(Fna3dStockEffect& effect, const GpuDrawParams& params);
+        void BindShadowMapsEXT(Fna3dStockEffect& effect, const GpuDrawParams& params);
 
         /**
          * @brief CNAEXT. Reads back the native sampler state this renderer holds for one slot.

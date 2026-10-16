@@ -15,9 +15,10 @@ and BRDF-LUT equation used by EasyGL, Software and WebGPU, including explicit ro
 
 Double-sided materials reverse the complete tangent basis on a back face, including under a
 mirroring World transform. Material maps independently select UV0 or UV1 before their own affine
-texture transform. The boundary remains explicit: this variant does not sample shadow maps; those
-fields follow the renderer contract's accepted-and-ignored convention. Custom shader *source* is
-still unsupported, which is a separate capability from these committed compiled effects.
+texture transform. The CNA-owned compiled effects sample the shared directional/cascaded,
+point-cube and spot-map shadow contract across Basic, Skinned, PBR and SkinnedPBR. Custom shader
+*source* is still unsupported, which is a separate capability from these committed compiled
+effects.
 
 Until 2026-08-18, FNA3D silently shaded PBR draws with Basic/Skinned. GLTF-477 changed that to an
 honest refusal. The native path above now supersedes the refusal and is pixel-verified on both the
@@ -110,7 +111,9 @@ computes (`Fna3dStockEffects.hpp`, unit-tested exhaustively).
 
 Consequently **`GraphicsCapability::CompiledEffects` is true**, while
 **`GraphicsCapability::CustomEffects` is false** and
-`CreateEffectRenderer` returns null: a caller's `ShaderEffect` GLSL/HLSL source cannot be compiled
+`CreateEffectRenderer` returns null. The renderer also advertises the shared `ShadowSampling`
+feature when its runtime driver exposes the ten sampler slots required by the compiled shadow
+receivers. A caller's `ShaderEffect` GLSL/HLSL source cannot be compiled
 by anything FNA3D offers, and claiming otherwise would be a promise broken at the first custom
 effect. The two capabilities describe different formats.
 
@@ -253,7 +256,7 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 
 | Kind | Status |
 |---|---|
-| Native runtime (Linux, isolated Xvfb + Mesa llvmpipe, FNA3D OpenGL driver) | **Performed** — all seventeen native `Fna3d_*` CTest binaries pass, including the sequential-device/post-device lifetime regression, punctual-light paths, split-sum IBL, double-sided PBR and independent UV0/UV1 material maps. The complete `Fna3d` label is 49/49 without failures (47 pass plus two intentional shader-backend skips). |
+| Native runtime (Linux, isolated display, FNA3D OpenGL driver) | **Performed** — all nineteen native `Fna3d_*` CTest binaries pass, including the sequential-device/post-device lifetime regression, punctual-light paths, split-sum IBL, double-sided PBR, independent UV0/UV1 material maps and the shared nine-check shadow oracle. The complete `Fna3d` label is 50/50 without failures (48 pass plus two intentional shader-backend skips). |
 | XNA 4.0 oracle corpus (39 scenes vs real XNA reference images) | **Performed** — `Fna3d_XNA_Oracle`; every scene renders, 10/39 exact at the EasyGL baseline. This is the only coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have. See [`fna3d-parity-report.md`](fna3d-parity-report.md) |
 | Unit tests (`CnaTests`, `Fna3d*` plus the generic disposed-`Texture2D` regression) | **Performed** — format-region and shared transfer-contract coverage pass |
 | Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 34 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, SpriteBatch pixels, and a legally reproducible synthetic multi-technique/pass/default/annotation/render-state conformance binary |
@@ -277,6 +280,7 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | `Fna3d_Capabilities` | Every capability answer matched against a real factory or a real refusal, and both rejection paths |
 | `Fna3d_Pbr_DoubleSided` | Five front/back/mirrored-World cases each through public rigid and identity-bone skinned PBR effects; the same shared oracle runs on EasyGL |
 | `Fna3d_Pbr_MaterialMaps` | Twenty-one rigid/skinned material-map checks, including channel semantics, normal/occlusion controls and independent UV0/UV1 selection; the same shared oracle runs on EasyGL |
+| `Fna3d_ShadowSampling` | Nine public-contract checks for capability reporting, rigid/skinned PBR directional reception, PCF, cascades, point-cube and spot maps, ambient preservation, and classic skinned vertex colour; the same shared oracle runs on Software |
 | `Fna3d_RenderTarget_Advanced` | All six cube faces hold distinct colours and geometry renders into a bound face; two MRT slots are both written and keep their own storage; a mipmapped target's level count, base level and level-1 storage |
 | `Fna3d_Buffers` | POSITION and COLOR split across two real vertex streams (both binding orders), all three `SetDataOptions`, source-window selection, consecutive uploads, both index widths |
 | `Fna3d_Sampler` | Point vs Linear magnification, Clamp/Wrap/Mirror past u=1, independent U/V addressing, Anisotropic, and the LOD controls |

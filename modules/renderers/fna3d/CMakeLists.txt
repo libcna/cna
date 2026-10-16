@@ -15,6 +15,8 @@ set(CNA_FNA3D_EMBEDDED_EFFECTS
     EnvironmentMapEffect
     SkinnedEffect
     CnaPunctualEffect
+    CnaShadowEffect
+    CnaShadowVertexColorEffect
     CnaPbrEffect
     CnaSkinnedPbrEffect)
 

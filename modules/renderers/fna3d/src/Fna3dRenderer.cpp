@@ -294,6 +294,12 @@ namespace CNA::Internal::Renderers::Fna3d
         effects_[static_cast<std::size_t>(StockEffectKind::Punctual)]
             .Load(device_, kCnaPunctualEffectFxb, sizeof(kCnaPunctualEffectFxb),
                   "CnaPunctualEffect");
+        effects_[static_cast<std::size_t>(StockEffectKind::Shadow)]
+            .Load(device_, kCnaShadowEffectFxb, sizeof(kCnaShadowEffectFxb),
+                  "CnaShadowEffect");
+        effects_[static_cast<std::size_t>(StockEffectKind::ShadowVertexColor)]
+            .Load(device_, kCnaShadowVertexColorEffectFxb,
+                  sizeof(kCnaShadowVertexColorEffectFxb), "CnaShadowVertexColorEffect");
         effects_[static_cast<std::size_t>(StockEffectKind::Pbr)]
             .Load(device_, kCnaPbrEffectFxb, sizeof(kCnaPbrEffectFxb), "CnaPbrEffect");
         effects_[static_cast<std::size_t>(StockEffectKind::SkinnedPbr)]

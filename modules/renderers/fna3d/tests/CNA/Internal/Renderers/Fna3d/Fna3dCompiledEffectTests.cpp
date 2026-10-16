@@ -823,9 +823,11 @@ TEST(Fna3dCompiledEffectTest, StockFixtureHashesMatchDocumentedFnaRevision)
 TEST(Fna3dCompiledEffectTest, CnaExtensionFixtureHashesMatchDocumentedBuilds)
 {
     constexpr std::pair<const char*, const char*> fixtures[] = {
-        {"CnaPunctualEffect.fxb", "f3ef1bdacf48d4f85452a0abb7a24034bc64acdd5582ecc9f5489950ad1f3678"},
-        {"CnaPbrEffect.fxb", "667ee38f5decef73a88fb91fa952c1abe6322a9057e2a9679051c2ae0f135e24"},
-        {"CnaSkinnedPbrEffect.fxb", "06528175553a68bb41da27baa29b5a1f9e2e23bed024da4e9303e85b7b7e8480"},
+        {"CnaPunctualEffect.fxb", "f48d8880f1d2984f6ade586778ac0e707903bb1b5828bf5055250ea49c061c70"},
+        {"CnaShadowEffect.fxb", "94aca82454f874cd81d40be80dae9b4cb022bd654951536245b723a1238eee6f"},
+        {"CnaShadowVertexColorEffect.fxb", "7721323489b7bba0f7f989f45d35de785827acbb941bb74244d94a9710be3610"},
+        {"CnaPbrEffect.fxb", "89affaab64d924a7f545a6fbb30888a5fbc734e8694b914a22350967455908fa"},
+        {"CnaSkinnedPbrEffect.fxb", "7796d051a2624176fa9d1dffaa4ebf03474685cf7bda43c522e66b71d8bcf0f8"},
     };
     for (const auto& [name, expected] : fixtures)
     {

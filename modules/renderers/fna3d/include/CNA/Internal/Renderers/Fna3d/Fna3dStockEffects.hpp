@@ -35,6 +35,10 @@ namespace CNA::Internal::Renderers::Fna3d
         Skinned,
         /** @brief CNA's Basic/Skinned extension for one point or spot light. */
         Punctual,
+        /** @brief CNA's compact Basic/Skinned directional-shadow extension. */
+        Shadow,
+        /** @brief Directional-shadow extension whose sole pixel shape consumes COLOR0. */
+        ShadowVertexColor,
         /** @brief CNA's rigid metallic-roughness effect. */
         Pbr,
         /** @brief CNA's skinned metallic-roughness effect. */
@@ -266,6 +270,14 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param matrix Source matrix in CNA/XNA row-major storage.
          */
         void SetMatrix(const char* name, const Matrix& matrix) const;
+
+        /**
+         * @brief Writes flattened row-major 4x4 matrices into an Effect matrix array.
+         * @param name   Parameter name.
+         * @param source Source matrices in CNA/XNA `M11..M44` member order.
+         * @param count  Number of matrices to write, bounded by the reflected parameter.
+         */
+        void SetMatrixArray(const char* name, const float* source, int count) const;
 
         /**
          * @brief Writes an array of flattened 4x4 matrices as a `float4x3` parameter.

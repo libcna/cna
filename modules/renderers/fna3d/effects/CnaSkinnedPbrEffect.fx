@@ -7,6 +7,8 @@
 #define CNA_D3D9_IBL 1
 #define CNA_D3D9_DOUBLE_SIDED 1
 #define CNA_D3D9_DUAL_UV 1
+#define CNA_D3D9_SHADOWS 1
+#define CNA_D3D9_FNA_SHADOWS 1
 #include "../../directx9/src/shaders/cna/PbrSkinned3D.hlsl"
 
 technique CnaSkinnedPbr

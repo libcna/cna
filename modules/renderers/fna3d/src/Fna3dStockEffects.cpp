@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dStockEffects.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
@@ -133,6 +134,31 @@ namespace CNA::Internal::Renderers::Fna3d
             dst[0]  = matrix.M11; dst[1]  = matrix.M21; dst[2]  = matrix.M31; dst[3]  = matrix.M41;
             dst[4]  = matrix.M12; dst[5]  = matrix.M22; dst[6]  = matrix.M32; dst[7]  = matrix.M42;
             dst[8]  = matrix.M13; dst[9]  = matrix.M23; dst[10] = matrix.M33; dst[11] = matrix.M43;
+        }
+    }
+
+    void Fna3dStockEffect::SetMatrixArray(const char* name, const float* source, int count) const
+    {
+        MOJOSHADER_effectParam* param = Find(name);
+        if (param == nullptr || param->value.values == nullptr || source == nullptr)
+        {
+            return;
+        }
+        const int capacityMatrices = static_cast<int>(param->value.value_count) / 16;
+        const int writable = std::min(count, capacityMatrices);
+        float* dst = param->value.valuesF;
+        for (int i = 0; i < writable; ++i)
+        {
+            const float* matrix = source + static_cast<std::size_t>(i) * 16;
+            float* packed = dst + static_cast<std::size_t>(i) * 16;
+            packed[0]  = matrix[0];  packed[1]  = matrix[4];
+            packed[2]  = matrix[8];  packed[3]  = matrix[12];
+            packed[4]  = matrix[1];  packed[5]  = matrix[5];
+            packed[6]  = matrix[9];  packed[7]  = matrix[13];
+            packed[8]  = matrix[2];  packed[9]  = matrix[6];
+            packed[10] = matrix[10]; packed[11] = matrix[14];
+            packed[12] = matrix[3];  packed[13] = matrix[7];
+            packed[14] = matrix[11]; packed[15] = matrix[15];
         }
     }
 

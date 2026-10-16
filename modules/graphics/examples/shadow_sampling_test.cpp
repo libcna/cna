@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Deterministic CPU oracle for CNAEXT stock-effect shadow reception.
+// Renderer-neutral deterministic oracle for CNAEXT stock-effect shadow reception.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -66,6 +66,23 @@ namespace
          1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
     };
 
+    struct VPNTWColor
+    {
+        float x, y, z, nx, ny, nz, u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t indices[4];
+        std::uint32_t color;
+    };
+
+    constexpr VPNTWColor kSkinnedColorTriangle[3] = {
+        {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}, 0x80808080u},
+        { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}, 0x80808080u},
+        {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}, 0x80808080u},
+    };
+
     std::unique_ptr<ITextureRenderer> MakeTexture(
         IGraphicsRenderer& renderer, int width, int height,
         const std::vector<std::uint8_t>& pixels)
@@ -116,7 +133,7 @@ namespace
     }
 }
 
-class SoftwareShadowSamplingTest final : public Game
+class ShadowSamplingTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> manager_;
     int result_ = 1;
@@ -154,11 +171,14 @@ protected:
         vertices->SetData(kTriangle, 3, sizeof(VPNTanT));
         auto skinnedVertices = renderer.CreateVertexBuffer(3);
         skinnedVertices->SetData(kSkinnedTriangle, 3, sizeof(VPNTanTW));
+        auto skinnedColorVertices = renderer.CreateVertexBuffer(3);
+        skinnedColorVertices->SetData(
+            kSkinnedColorTriangle, 3, sizeof(VPNTWColor));
         auto white = MakeSolidTexture(renderer, 1, 1, 255);
         auto black = MakeSolidTexture(renderer, 1, 1, 0);
 
         Check(renderer.SupportsShadowSamplingEXT(),
-              "Software advertises the shadow sampling it executes");
+              "renderer advertises the shadow sampling it executes");
 
         const auto shadeDirectional = [&](ITextureRenderer* map, int radius = 0) {
             GpuDrawParams params;
@@ -295,8 +315,44 @@ protected:
         };
         const int classicLit = shadeClassic(white.get(), 0.25f);
         const int classicShadow = shadeClassic(black.get(), 0.25f);
+        std::printf("[INFO] classic shadow pixels: lit=%d shadowed=%d\n",
+                    classicLit, classicShadow);
         Check(classicLit > 200 && classicShadow > 45 && classicShadow < 85,
               "classic shadow preserves ambient while attenuating directional diffuse");
+
+        const auto shadeClassicSkinnedColor = [&](ITextureRenderer* map) {
+            GpuDrawParams params;
+            params.lightingEnabled = true;
+            params.skinned = true;
+            params.vertexColorEnabled = true;
+            params.texture0 = white.get();
+            params.diffuseColor[0] = params.diffuseColor[1] =
+                params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            params.ambientColor[0] = params.ambientColor[1] =
+                params.ambientColor[2] = 0.25f;
+            params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] =
+                params.light0Diffuse[2] = 1.0f;
+            params.eyePositionWorld[2] = 3.0f;
+            params.weightsPerVertex = 1;
+            params.boneCount = 1;
+            const float identity[16] = {
+                1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+            for (int element = 0; element < 16; ++element)
+                params.boneTransforms[element] = identity[element];
+            params.shadowsEnabled = true;
+            params.shadowMap = map;
+            params.shadowDepthBias = 0.0f;
+            params.shadowPcfRadius = 0;
+            return Shade(renderer, device, *skinnedColorVertices, params);
+        };
+        const int classicColorLit = shadeClassicSkinnedColor(white.get());
+        const int classicColorShadow = shadeClassicSkinnedColor(black.get());
+        std::printf("[INFO] skinned vertex-colour shadow pixels: lit=%d shadowed=%d\n",
+                    classicColorLit, classicColorShadow);
+        Check(classicColorLit > 150 && classicColorLit < 175 &&
+                  classicColorShadow > 20 && classicColorShadow < 45,
+              "skinned classic shadow consumes the declared vertex colour");
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
         std::fflush(stdout);
@@ -305,7 +361,7 @@ protected:
     }
 
 public:
-    SoftwareShadowSamplingTest()
+    ShadowSamplingTest()
     {
         manager_ = std::make_unique<GraphicsDeviceManager>(this);
         manager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
@@ -318,7 +374,7 @@ public:
 
 int main()
 {
-    SoftwareShadowSamplingTest game;
+    ShadowSamplingTest game;
     game.Run();
     return game.Result();
 }

@@ -83,7 +83,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
 
     # CNAEXT shadow receivers must sample single/cascade directional maps and punctual cube/2D
     # maps in both PBR and classic lighting without darkening ambient light.
-    cna_software_test(cna_test_software_shadow_sampling software_shadow_sampling_test.cpp)
+    cna_software_test(cna_test_software_shadow_sampling
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/shadow_sampling_test.cpp)
     cna_register_renderer_test(NAME Software_ShadowSampling
         COMMAND cna_test_software_shadow_sampling TIMEOUT 30 LABELS "Software")
 

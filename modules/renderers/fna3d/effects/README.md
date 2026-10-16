@@ -61,24 +61,38 @@ artefact and is not committed; only these inputs are.
 
 ---
 
-## `CnaPunctualEffect.fx` / `.fxb` — CNA's point/spot-light extension
+## `CnaPunctualEffect.fx` and compiled lighting/shadow variants
 
-XNA's stock BasicEffect and SkinnedEffect binaries have no point/spot-light input. CNA therefore
-selects this effect only when `PunctualLightEXT` is active; ordinary draws keep the untouched stock
-binary and its exact XNA shader-index behavior. Six passes cover untextured/textured and optional
-vertex-colour BasicEffect input plus textured SkinnedEffect input with or without vertex colour.
+XNA's stock BasicEffect and SkinnedEffect binaries have no point/spot-light or shadow-map input.
+CNA therefore compiles this source three ways. `CnaPunctualEffect.fxb` handles point/spot lights
+and their cube/2D shadows. The two smaller directional-only binaries handle Basic/Skinned shadow
+reception without and with a real `COLOR0` declaration. Keeping those pixel shapes in separate
+Effect containers avoids a MojoShader GLSL 1.20 failure where an absent synthetic colour
+interpolator zeroed the otherwise valid shadow result. Six passes in each binary cover
+untextured/textured BasicEffect and textured SkinnedEffect, with declaration-aware colour variants.
 
-The source is CNA-owned and MS-PL. The committed 35,300-byte binary was produced by the same DirectX
-SDK June 2010 `fxc.exe` identified below, with SHA-256
-`f3ef1bdacf48d4f85452a0abb7a24034bc64acdd5582ecc9f5489950ad1f3678`:
+The source is CNA-owned and MS-PL. The committed binaries were produced by the same DirectX SDK
+June 2010 `fxc.exe` identified below:
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| `CnaPunctualEffect.fxb` | 70,116 | `f48d8880f1d2984f6ade586778ac0e707903bb1b5828bf5055250ea49c061c70` |
+| `CnaShadowEffect.fxb` | 60,916 | `94aca82454f874cd81d40be80dae9b4cb022bd654951536245b723a1238eee6f` |
+| `CnaShadowVertexColorEffect.fxb` | 61,116 | `7721323489b7bba0f7f989f45d35de785827acbb941bb74244d94a9710be3610` |
 
 ```bash
 fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPunctualEffect.fxb CnaPunctualEffect.fx
+fxc.exe /nologo /Op /D CNA_FNA_DIRECTIONAL_ONLY=1 /T fx_2_0 \
+    /Fo CnaShadowEffect.fxb CnaPunctualEffect.fx
+fxc.exe /nologo /Op /D CNA_FNA_DIRECTIONAL_ONLY=1 \
+    /D CNA_FNA_DIRECTIONAL_VERTEX_COLOR_ONLY=1 /T fx_2_0 \
+    /Fo CnaShadowVertexColorEffect.fxb CnaPunctualEffect.fx
 ```
 
 `/Op` is required: without it D3DX emits a CPU preshader operand which the pinned MojoShader rejects
-as unknown before device creation. The registered BasicEffect and identity-bone SkinnedEffect pixel
-witnesses exercise disabled, in-range/out-of-range point, and aimed/away spot cases through FNA3D.
+as unknown before device creation. The registered witnesses exercise disabled, in-range/out-of-range
+point, aimed/away spot, directional/cascade PCF, point-cube and spot-map shadows, ambient
+preservation, identity-bone skinning and declared vertex colour through FNA3D.
 
 ---
 
@@ -100,8 +114,8 @@ MojoShader receives no unsupported preshader operands:
 
 | File | Bytes | SHA-256 |
 |---|---:|---|
-| `CnaPbrEffect.fxb` | 41,064 | `667ee38f5decef73a88fb91fa952c1abe6322a9057e2a9679051c2ae0f135e24` |
-| `CnaSkinnedPbrEffect.fxb` | 66,776 | `06528175553a68bb41da27baa29b5a1f9e2e23bed024da4e9303e85b7b7e8480` |
+| `CnaPbrEffect.fxb` | 64,336 | `89affaab64d924a7f545a6fbb30888a5fbc734e8694b914a22350967455908fa` |
+| `CnaSkinnedPbrEffect.fxb` | 90,048 | `7796d051a2624176fa9d1dffaa4ebf03474685cf7bda43c522e66b71d8bcf0f8` |
 
 ```bash
 fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPbrEffect.fxb CnaPbrEffect.fx
