@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
+#include "System/InvalidOperationException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -33,15 +34,18 @@ class SurfaceFormatThrowsTest : public Game
     int pass_   = 0;
     int fail_   = 0;
 
+    /// A format the renderer itself cannot store is refused with System::InvalidOperationException,
+    /// the renderer's own refusal, which stays distinguishable from the profile's NotSupportedException
+    /// (CHECKLIST.md's exception convention).
     void expectThrows(const char* label, auto fn)
     {
         try
         {
             fn();
-            std::printf("[FAIL] %s — expected std::runtime_error, no exception thrown\n", label);
+            std::printf("[FAIL] %s — expected System::InvalidOperationException, no exception thrown\n", label);
             ++fail_;
         }
-        catch (const std::runtime_error&)
+        catch (const System::InvalidOperationException&)
         {
             std::printf("[PASS] %s\n", label);
             ++pass_;

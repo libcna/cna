@@ -60,7 +60,9 @@ namespace
     constexpr int kCell = 64;
     constexpr int kWidth = kColumns * kCell;
     constexpr int kHeight = 64;
-    constexpr int kStride = 24;   ///< VertexPositionColorTexture.
+    /// Position, Normal, Colour, TextureCoordinate. The gate columns are unlit and ignore the
+    /// normal; the clamp leg is lit, and XNA refuses a lit draw whose declaration has no Normal.
+    constexpr int kStride = 36;
 
     const Color kClearColor(9, 13, 17, 255);
     /// Three different channels on purpose -- see this file's header.
@@ -151,21 +153,25 @@ protected:
             if (clampLeg) effect.setEmissiveColorProperty(Vector3(0.9f, 0.9f, 0.0f));
 
             const auto corners = grid.QuadCorners(column, 0);
-            struct Vertex { float x, y, z; std::uint32_t color; float u, v; };
+            struct Vertex { float x, y, z, nx, ny, nz; std::uint32_t color; float u, v; };
+            static_assert(sizeof(Vertex) == kStride);
             const std::uint32_t packed = kVertexColor.getPackedValueProperty();
-            // Triangle STRIP order TL, BL, TR, BR.
+            // Triangle STRIP order TL, BL, TR, BR. The normal faces the camera, against the clamp
+            // leg's light, so that leg is fully lit.
             const std::array<Vertex, 4> verts{
-                Vertex{corners[0].X, corners[0].Y, 0.0f, packed, 0.0f, 0.0f},
-                Vertex{corners[1].X, corners[1].Y, 0.0f, packed, 0.0f, 1.0f},
-                Vertex{corners[3].X, corners[3].Y, 0.0f, packed, 1.0f, 0.0f},
-                Vertex{corners[2].X, corners[2].Y, 0.0f, packed, 1.0f, 1.0f}};
+                Vertex{corners[0].X, corners[0].Y, 0.0f, 0.0f, 0.0f, 1.0f, packed, 0.0f, 0.0f},
+                Vertex{corners[1].X, corners[1].Y, 0.0f, 0.0f, 0.0f, 1.0f, packed, 0.0f, 1.0f},
+                Vertex{corners[3].X, corners[3].Y, 0.0f, 0.0f, 0.0f, 1.0f, packed, 1.0f, 0.0f},
+                Vertex{corners[2].X, corners[2].Y, 0.0f, 0.0f, 0.0f, 1.0f, packed, 1.0f, 1.0f}};
             VertexBuffer vb(device,
                             VertexDeclaration(kStride,
                                 {VertexElement(0, VertexElementFormat::Vector3,
                                                VertexElementUsage::Position, 0),
-                                 VertexElement(12, VertexElementFormat::Color,
+                                 VertexElement(12, VertexElementFormat::Vector3,
+                                               VertexElementUsage::Normal, 0),
+                                 VertexElement(24, VertexElementFormat::Color,
                                                VertexElementUsage::Color, 0),
-                                 VertexElement(16, VertexElementFormat::Vector2,
+                                 VertexElement(28, VertexElementFormat::Vector2,
                                                VertexElementUsage::TextureCoordinate, 0)}),
                             static_cast<int>(verts.size()), BufferUsage::None);
             vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), kStride);

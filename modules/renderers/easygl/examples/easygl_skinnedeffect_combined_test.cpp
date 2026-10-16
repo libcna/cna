@@ -44,6 +44,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -132,7 +134,7 @@ protected:
         appendQuad(verts, 1.0f, 0.0f, 0.0f, 0.0f, 1, 0, 0, 0); // quad B: bone 1 -> -0.25..0.25
         appendQuad(verts, 0.5f, 0.5f, 0.0f, 0.0f, 2, 3, 0, 0); // quad C: bones 2+3 blend -> 0.5..1.0
 
-        VertexBuffer vb(device, static_cast<int>(verts.size()));
+        VertexBuffer vb(device, CNA::Examples::SkinnedVertexDeclaration(), static_cast<int>(verts.size()), BufferUsage::None);
         vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedGpuVertex)));
         device.SetVertexBuffer(&vb);
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, static_cast<int>(verts.size() / 3));

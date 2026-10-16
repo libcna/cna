@@ -63,6 +63,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -170,7 +172,7 @@ class EasyGLSkinnedEffectWorldNormalTest : public Game
             mk( kQuad, -kQuad, 1.0f, 1.0f), mk(-kQuad,  kQuad, 0.0f, 0.0f),
             mk( kQuad, -kQuad, 1.0f, 1.0f), mk( kQuad,  kQuad, 1.0f, 0.0f),
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), 6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);

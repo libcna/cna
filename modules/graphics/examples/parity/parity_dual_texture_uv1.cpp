@@ -14,13 +14,12 @@
 //
 //   0  uv0 -> base.white, uv1 -> overlay.blue   -> blue
 //   1  uv0 -> base.white, uv1 -> overlay.green  -> green
-//   2  a declaration with NO TEXCOORD1          -> the measured unbound-attribute value
+//   2  a declaration with NO TEXCOORD1          -> refused by name, nothing drawn
 //
-// Column 2 is the case the plan asked to MEASURE rather than assume. Both candidate reference
-// behaviours agree: D3D9 fills a vertex register's missing components with (0,0,0,1) and OpenGL's
-// disabled generic vertex attribute has the same default, so uv1 is (0,0) and the overlay is
-// sampled at its first texel -- the same result as column 1. This fixture asserts that equality
-// under BOTH renderers, so if either disagrees the run says so instead of the assumption standing.
+// Column 2 used to MEASURE what the shader read from the absent attribute ((0,0,0,1), in both D3D9
+// and OpenGL). XNA never gets that far: DualTextureEffect's vertex shader reads TEXCOORD1, and
+// GraphicsDevice refuses a draw whose declaration lacks it with InvalidOperationException
+// ("TextureCoordinate1 is missing"). That refusal is what every renderer is held to now.
 
 #include "parity/ParityFixture.hpp"
 
@@ -43,10 +42,13 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -157,17 +159,34 @@ protected:
             vertices.SetDataRaw(bytes.data(), 4, stride);
             device.SetVertexBuffer(&vertices);
             effect.Apply();
-            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+            std::string refusal;
+            try
+            {
+                device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+            }
+            catch (const System::InvalidOperationException& error)
+            {
+                refusal = error.what();
+            }
             device.SetVertexBuffer(nullptr);
+            return refusal;
         };
 
         const VertexDeclaration dual = DualUvDeclaration();
         const VertexDeclaration single = SingleUvDeclaration();
         // Both columns 0 and 1 use the SAME TEXCOORD0; only TEXCOORD1 differs, so any difference
         // between them is attributable to the second UV set and to nothing else.
-        drawColumn(0, dual, kDualStride, Vector2(0.25f, 0.5f), true, Vector2(0.75f, 0.5f));
-        drawColumn(1, dual, kDualStride, Vector2(0.25f, 0.5f), true, Vector2(0.25f, 0.5f));
-        drawColumn(2, single, kSingleStride, Vector2(0.75f, 0.5f), false, Vector2::Zero);
+        Require(drawColumn(0, dual, kDualStride, Vector2(0.25f, 0.5f), true,
+                           Vector2(0.75f, 0.5f)).empty(),
+                "the canonical dual-texture declaration is drawn");
+        Require(drawColumn(1, dual, kDualStride, Vector2(0.25f, 0.5f), true,
+                           Vector2(0.25f, 0.5f)).empty(),
+                "the canonical dual-texture declaration is drawn again");
+        const std::string refusal =
+            drawColumn(2, single, kSingleStride, Vector2(0.75f, 0.5f), false, Vector2::Zero);
+        std::printf("[INFO] refusal = \"%s\"\n", refusal.c_str());
+        Require(refusal.find("TextureCoordinate1 is missing") != std::string::npos,
+                "a declaration without TEXCOORD1 is refused naming TextureCoordinate1");
 
         const Color kOverlayGreen(0, 255, 0, 255);
         const Color kOverlayBlue(0, 0, 255, 255);
@@ -179,11 +198,7 @@ protected:
                       grid.Interior(1, 0), kOverlayGreen, 2);
         ExpectDistinct("TEXCOORD1 alone materially changes the result",
                        grid.Interior(0, 0), grid.Interior(1, 0), /*minDelta=*/200);
-        // The measured unbound-TEXCOORD1 value: (0,0), so the overlay is sampled at its first
-        // texel. TEXCOORD0 is 0.75 here, so a renderer that reused TEXCOORD0 for the second
-        // sampler would produce the OTHER texel and fail this check rather than pass it by luck.
-        ExpectAverage("an absent TEXCOORD1 samples the overlay at (0,0)",
-                      grid.Interior(2, 0), kOverlayGreen, 2);
+        ExpectAverage("the refused draw rasterized nothing", grid.Interior(2, 0), kClearColor, 2);
         ExpectFlat("the dual-textured interior is flat", grid.Interior(0, 0), /*maxSpread=*/2);
     }
 };

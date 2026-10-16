@@ -75,6 +75,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -882,12 +883,13 @@ protected:
         }
 
         // ---- V/W: the COLOURED dual-texture shape -------------------------------------------
-        // VULKAN-230. L/M drive the two-coordinate shape; DualTextureEffect
-        // has a second one, Position+Colour+TextureCoordinate at stride 24 (Task 889), where the
-        // record carries ONE coordinate set and the shader's second UV input reads the same
-        // element (VULKAN-150). tex0 WHITE, tex2 quarter-grey, vertex colour RED: the correct
-        // answer is 255 * 0.25 * 2 = 128 times red -> (128,0,0), (128,128,128) is the specific
-        // signature of a dropped vertex colour, and (255,0,0) of a dropped second texture.
+        // VULKAN-230. L/M drive the uncoloured two-coordinate shape; this is the COLOURED one,
+        // Position+Colour+TextureCoordinate0+TextureCoordinate1 at stride 32. (It used to carry
+        // one coordinate set and let the second UV input read it again; XNA's DualTextureEffect
+        // reads TEXCOORD1, and GraphicsDevice refuses a declaration without it.) tex0 WHITE, tex2
+        // quarter-grey, vertex colour RED: the correct answer is 255 * 0.25 * 2 = 128 times red
+        // -> (128,0,0), (128,128,128) is the specific signature of a dropped vertex colour, and
+        // (255,0,0) of a dropped second texture.
         {
             Texture2D whiteD(dev, 1, 1, false, SurfaceFormat::Color);
             const std::uint8_t wpxD[4] = { 255, 255, 255, 255 };
@@ -895,18 +897,19 @@ protected:
             Texture2D quarterD(dev, 1, 1, false, SurfaceFormat::Color);
             const std::uint8_t qpxD[4] = { 64, 64, 64, 255 };
             quarterD.SetDataRGBA(qpxD, 1);
-            struct PCT2 { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-            static_assert(sizeof(PCT2) == 24);
+            struct PCT2 { float x, y, z; std::uint8_t r, g, b, a; float u, v, u1, v1; };
+            static_assert(sizeof(PCT2) == 32);
             const PCT2 cdq[4] = {
-                { -0.12f,  0.12f, 0.0f, 255, 0, 0, 255, 0.0f, 0.0f },
-                { -0.12f, -0.12f, 0.0f, 255, 0, 0, 255, 0.0f, 1.0f },
-                {  0.12f, -0.12f, 0.0f, 255, 0, 0, 255, 1.0f, 1.0f },
-                {  0.12f,  0.12f, 0.0f, 255, 0, 0, 255, 1.0f, 0.0f },
+                { -0.12f,  0.12f, 0.0f, 255, 0, 0, 255, 0.0f, 0.0f, 0.0f, 0.0f },
+                { -0.12f, -0.12f, 0.0f, 255, 0, 0, 255, 0.0f, 1.0f, 0.0f, 1.0f },
+                {  0.12f, -0.12f, 0.0f, 255, 0, 0, 255, 1.0f, 1.0f, 1.0f, 1.0f },
+                {  0.12f,  0.12f, 0.0f, 255, 0, 0, 255, 1.0f, 0.0f, 1.0f, 0.0f },
             };
-            const VertexDeclaration cdqDecl(24, {
+            const VertexDeclaration cdqDecl(32, {
                 VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
                 VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color, 0),
                 VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
             });
             VertexBuffer cdvb(dev, cdqDecl, 4, BufferUsage::None);
             cdvb.SetDataRaw(cdq, 4, static_cast<int>(sizeof(PCT2)));
@@ -977,9 +980,9 @@ protected:
         // centre is covered, so both legs fail. Drop the instancing and all three land at +0.25:
         // +0.75 is empty. Neither half can be missing and still pass.
         {
-            // The stride-52 GPU-compact skinned record, and the empty-declaration VertexBuffer
-            // constructor its siblings use: pos(12) + normal(12) + uv(8) + weights(16) +
-            // indices(4).
+            // The stride-52 GPU-compact skinned record -- pos(12) + normal(12) + uv(8) +
+            // weights(16) + indices(4) -- declared, since SkinnedEffect reads BlendIndices and
+            // BlendWeight and XNA has no undeclared vertex buffers.
             struct SkinnedGpuVertex {
                 float px, py, pz;
                 float nx, ny, nz;
@@ -994,7 +997,7 @@ protected:
                 {  0.12f, -0.12f, 0.0f, 0,0,1, 1.0f, 1.0f, 1,0,0,0, 0,0,0,0 },
                 {  0.12f,  0.12f, 0.0f, 0,0,1, 1.0f, 0.0f, 1,0,0,0, 0,0,0,0 },
             };
-            VertexBuffer svb(dev, 4);
+            VertexBuffer svb(dev, CNA::Examples::SkinnedVertexDeclaration(), 4, BufferUsage::None);
             svb.SetDataRaw(sq, 4, static_cast<int>(sizeof(SkinnedGpuVertex)));
 
             auto skinned = [&](bool instanced) {

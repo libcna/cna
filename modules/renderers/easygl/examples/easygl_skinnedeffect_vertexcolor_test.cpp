@@ -26,6 +26,8 @@
 
 #include <cstdint>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -94,7 +96,7 @@ protected:
         // result to pure black, regardless of the lighting math.
         AppendQuad(verts, 0.5f, 1.0f, 0, 0, 0, 255);
 
-        VertexBuffer vb(device, static_cast<int>(verts.size()));
+        VertexBuffer vb(device, CNA::Examples::SkinnedColorVertexDeclaration(), static_cast<int>(verts.size()), BufferUsage::None);
         vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedColorGpuVertex)));
         device.SetVertexBuffer(&vb);
 

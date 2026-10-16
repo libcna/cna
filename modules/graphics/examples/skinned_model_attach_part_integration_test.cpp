@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "System/TimeSpan.hpp"
 
 #include <cstdio>
@@ -71,7 +72,10 @@ namespace
         };
         const std::uint16_t indices[6] = {0, 1, 2, 3, 4, 5};
 
-        auto vb = std::make_unique<VertexBuffer>(device, 6);
+        // Declared: SkinnedEffect reads BlendIndices/BlendWeight, and XNA has no undeclared buffers.
+        auto vb = std::make_unique<VertexBuffer>(
+            device, VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(), 6,
+            BufferUsage::None);
         vb->SetData(verts, 6);
         auto ib = std::make_unique<IndexBuffer>(device, 6);
         ib->SetData(indices, 6);

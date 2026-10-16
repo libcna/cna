@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-158 (harness: WEBGPU-207): a vertex that declares NO Normal renders
-// unlit and keeps its declared colour -- whatever its stride happens to be.
+// plans/plan_webgpu.md WEBGPU-158 (harness: WEBGPU-207): the DECLARATION, not the stride, decides
+// whether a vertex can be lit.
 //
-// This is the shape. Stride 32 is `VertexPositionNormalTexture`'s, so a renderer that
-// reads the layout out of the stride binds a lit program to a Position+Colour record padded to 32
-// bytes: the declared colour has no input to bind to and is silently dropped, and twelve bytes of
-// padding are lit as if they were a normal. The reference renderer asks the declaration instead
-// (`DeclarationNamesUsage(..., Normal)`), and so must this one.
+// Stride 32 is `VertexPositionNormalTexture`'s, so a renderer that reads the layout out of the
+// stride binds a lit program to a Position+Colour record padded to 32 bytes: twelve bytes of padding
+// are lit as if they were a normal. XNA asks the declaration: a lit BasicEffect reads NORMAL0, and
+// GraphicsDevice refuses a draw whose declaration lacks it with InvalidOperationException ("Normal0
+// is missing"). The fixture used to expect an unlit draw in the declared colour instead, which is
+// no renderer's XNA behaviour; it now holds every renderer to the refusal.
 //
-// Both halves of the statement are in one fixture on purpose -- "no normal means unlit" is only
-// half a rule, and a renderer that answered it by never lighting anything would pass alone:
-//   0  Position+Colour padded to stride 32, lighting ENABLED -> unlit, the declared colour
-//   1  a genuine VertexPositionNormalTexture, same stride    -> still lit
+// Both halves of the statement are in one fixture on purpose -- "no normal is refused" is only half
+// a rule, and a renderer that never lit anything would pass alone:
+//   0  Position+Colour padded to stride 32, lighting ENABLED -> refused by name, nothing drawn
+//   1  a genuine VertexPositionNormalTexture, same stride    -> lit (black, the light faces away)
 
 #include "parity/ParityFixture.hpp"
 
@@ -31,10 +32,13 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -48,7 +52,7 @@ namespace
     constexpr int kStride = 32;
 
     const Color kClearColor(9, 13, 17, 255);
-    /// Distinct in all three channels, and nowhere near either a lit or an unlit grey.
+    /// Distinct in all three channels, so a draw that is not refused cannot pass for the clear.
     const Color kDeclaredColor(40, 200, 120, 255);
 
     /// Position at 0, Colour at 12, twelve bytes of padding -- 32 bytes, and no Normal anywhere.
@@ -72,7 +76,7 @@ namespace
     }
 }
 
-/// WEBGPU-158: stride 32 does not mean "lit"; the declaration does.
+/// WEBGPU-158: stride 32 does not mean "lit"; the declaration does, and XNA refuses the mismatch.
 class UnlitPositionColorParityFixture : public CNA::Parity::ParityFixture
 {
 public:
@@ -89,11 +93,11 @@ protected:
         effect.setViewProperty(Matrix::getIdentityProperty());
         effect.setProjectionProperty(Matrix::getIdentityProperty());
         // Lighting stays ON for BOTH columns: the point is that the DECLARATION, not the effect
-        // state and not the stride, decides whether a vertex can be lit at all.
+        // state and not the stride, decides whether a vertex can be lit at all. Vertex colour is on
+        // only for column 0, whose declaration carries one.
         effect.setLightingEnabledProperty(true);
         effect.setPreferPerPixelLightingProperty(false);
         effect.setTextureEnabledProperty(false);
-        effect.setVertexColorEnabledProperty(true);
         effect.setAmbientLightColorProperty(Vector3::Zero);
         effect.setDiffuseColorProperty(Vector3::One);
         effect.setEmissiveColorProperty(Vector3::Zero);
@@ -136,9 +140,22 @@ protected:
             VertexBuffer vertices(device, declaration, 4, BufferUsage::None);
             vertices.SetDataRaw(bytes.data(), 4, kStride);
             device.SetVertexBuffer(&vertices);
+            effect.setVertexColorEnabledProperty(true);
             effect.Apply();
-            device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+            std::string refusal;
+            try
+            {
+                device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2);
+            }
+            catch (const System::InvalidOperationException& error)
+            {
+                refusal = error.what();
+            }
+            std::printf("[INFO] refusal = \"%s\"\n", refusal.c_str());
+            Require(refusal.find("Normal0 is missing") != std::string::npos,
+                    "a lit draw over a declaration without Normal is refused naming Normal0");
             device.SetVertexBuffer(nullptr);
+            effect.setVertexColorEnabledProperty(false);
         }
 
         // Column 1: the real lit vertex, at the same stride. Its normal faces the camera, and the
@@ -167,13 +184,10 @@ protected:
             device.SetVertexBuffer(nullptr);
         }
 
-        ExpectAverage("a stride-32 declaration with no Normal keeps its declared colour",
-                      grid.Interior(0, 0), kDeclaredColor, 2);
+        ExpectAverage("the refused draw rasterized nothing", grid.Interior(0, 0), kClearColor, 2);
         ExpectAverage("a genuine VertexPositionNormalTexture at the same stride still lights",
                       grid.Interior(1, 0), Color(0, 0, 0, 255), 2);
-        ExpectDistinct("the two stride-32 declarations render differently",
-                       grid.Interior(0, 0), grid.Interior(1, 0), /*minDelta=*/100);
-        ExpectFlat("the unlit coloured interior is flat", grid.Interior(0, 0), /*maxSpread=*/2);
+        ExpectFlat("the untouched interior is flat", grid.Interior(0, 0), /*maxSpread=*/2);
     }
 };
 

@@ -31,6 +31,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -110,7 +112,7 @@ protected:
             {  0,  1, 0,  0,0,1,  1,0,  1,0,0,0,  0,0,0,0 },
         };
 
-        VertexBuffer vb(device, 6);
+        VertexBuffer vb(device, CNA::Examples::SkinnedVertexDeclaration(), 6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
         device.SetVertexBuffer(&vb);
         // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default

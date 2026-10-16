@@ -277,15 +277,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     `SDL_GPU` selected at run time the same case segfaults in the Debug multi-renderer tree and all
     seven teardown cases pass in the Release one (`build-probe`, 2026-10-14). Every other C API case
     passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with the extension layer.
-18. **22 more EasyGL programs fail on `next`** (`cmake-build-multi`,
-    OPENGLES3 default, private display, 2026-10-16; identical at `ba52769a0` and after the Avatar v3
-    merge). 21 EasyGL programs draw without the vertex elements `GraphicsDevice` now requires
-    (`e7bd98e46`): the 13 `EasyGL_SkinnedEffect_*`, `EasyGL_SkinnedBones`,
-    `EasyGL_SkinnedModel_AttachPart`, `EasyGL_EmissiveAmbientComposition` and `EasyGL_ViewSpace_Fog`
-    abort with "BlendIndices0 is missing"; `EasyGL_Parity_unlit_position_color`,
-    `_dual_texture_uv1`, `_basic_effect_vertex_color` and `EasyGL_InstancedTexturedDraw` stop on
-    Normal0/TextureCoordinate1. `EasyGL_SurfaceFormat_Throws` expects a different exception type for
-    the `*EXT` formats.
 19. **`NetworkSession.SimulatedPacketLoss`/`SimulatedLatency` act on the receiving machine** (found
     2026-10-16 while making `SendDataOptions` a flags enumeration). XNA applies both on the sending
     machine, to every recipient including local gamers, and gives unordered packets a normally

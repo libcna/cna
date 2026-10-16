@@ -47,6 +47,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -160,7 +162,7 @@ class SkinnedEffectSpecularTest : public Game
             {  1, -1, 0,  kNx,kNy,kNz,  1,0,  1,0,0,0,  0,0,0,0 },
             {  1,  1, 0,  kNx,kNy,kNz,  1,1,  1,0,0,0,  0,0,0,0 },
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), 6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
 
         Color got(0, 0, 0, 0);

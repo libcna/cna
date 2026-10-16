@@ -62,6 +62,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/SkinnedVertexDeclarations.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -194,7 +196,7 @@ class EmissiveAmbientCompositionTest : public Game
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
         fx.Apply();
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), 6, BufferUsage::None);
         vb.SetDataRaw(quad, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
