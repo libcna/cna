@@ -62,9 +62,13 @@ static constexpr D3D9ShaderConstantSlot kPbr3DPS_Registers[] = {
     {"TextureTransformRows", 'p', 14, 10},
     {"SpecularFresnelInputs", 'p', 24, 1},
     {"SpecularMapFlags", 'p', 25, 1},
-    {"SpecularTextureTransformRows", 'p', 26, 4}
+    {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1},
+    {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1},
+    {"PunctualCone", 'p', 33, 1}
 };
-static constexpr int kPbr3DPS_RegistersCount = 18;
+static constexpr int kPbr3DPS_RegistersCount = 22;
 
 static constexpr D3D9ShaderConstantSlot kPbrSkinned3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},
@@ -97,9 +101,13 @@ static constexpr D3D9ShaderConstantSlot kPbrSkinned3DPS_Registers[] = {
     {"TextureTransformRows", 'p', 14, 10},
     {"SpecularFresnelInputs", 'p', 24, 1},
     {"SpecularMapFlags", 'p', 25, 1},
-    {"SpecularTextureTransformRows", 'p', 26, 4}
+    {"SpecularTextureTransformRows", 'p', 26, 4},
+    {"PunctualPositionRange", 'p', 30, 1},
+    {"PunctualDirectionKind", 'p', 31, 1},
+    {"PunctualDiffuse", 'p', 32, 1},
+    {"PunctualCone", 'p', 33, 1}
 };
-static constexpr int kPbrSkinned3DPS_RegistersCount = 18;
+static constexpr int kPbrSkinned3DPS_RegistersCount = 22;
 
 static constexpr D3D9ShaderConstantSlot kSkinnedVertexColor3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},

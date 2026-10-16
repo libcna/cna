@@ -25,6 +25,8 @@
 // Check D -- unsupported stride (params.pbr=true, params.skinned=false, stride 20 -- no matching
 //   CNA vertex layout for PbrEffect, which needs stride 48) throws a named error rather than
 //   silently drawing wrong.
+// Checks E-I -- the unshadowed PunctualLightEXT term: disabled, point, out-of-range point, spot
+//   aimed at/away from the surface, and the same point light through the skinned shader.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 //
@@ -240,6 +242,85 @@ protected:
             }
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx (PbrEffect): unsupported stride 20 throws a named error");
+        }
+
+        // Checks E-H: the rigid shader consumes the complete unshadowed point/spot contract.
+        // Ambient, emissive and all directional lights are zero, so only the punctual term can
+        // make the centre pixel non-black.
+        {
+            auto vb = renderer.CreateVertexBuffer(3);
+            vb->SetData(kTriPbr, 3, sizeof(VPNTanT));
+            const auto shadePunctual = [&](int kind, float range, float directionZ) {
+                GpuDrawParams params;
+                SetAmbientOnlyPbrParams(params, tex.get());
+                params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = 0.0f;
+                params.eyePositionWorld[2] = 3.0f;
+                params.punctualKind = kind;
+                params.punctualPosition[2] = 1.0f;
+                params.punctualDirection[0] = 0.0f;
+                params.punctualDirection[1] = 0.0f;
+                params.punctualDirection[2] = directionZ;
+                params.punctualDiffuse[0] = params.punctualDiffuse[1] =
+                    params.punctualDiffuse[2] = 6.0f;
+                params.punctualRange = range;
+                params.punctualCosInner = 0.9396926f; // cos(20 degrees)
+                params.punctualCosOuter = 0.7660444f; // cos(40 degrees)
+
+                dev.Clear(Color::Black);
+                renderer.DrawPrimitivesEx(
+                    *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                    Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+                Color px(0, 0, 0, 0);
+                ReadCenterPixel(dev, px);
+                return px.getRProperty();
+            };
+
+            const int none = shadePunctual(0, 10.0f, 0.0f);
+            const int point = shadePunctual(1, 10.0f, 0.0f);
+            const int outOfRange = shadePunctual(1, 0.5f, 0.0f);
+            const int spotAt = shadePunctual(2, 10.0f, -1.0f);
+            const int spotAway = shadePunctual(2, 10.0f, 1.0f);
+            check(none < 10, "Pbr3D: disabled punctual light contributes nothing");
+            check(point > 120, "Pbr3D: in-range point light illuminates the surface");
+            check(outOfRange < 10, "Pbr3D: point light outside its range contributes nothing");
+            std::printf("[INFO] Pbr3D spot centre red: aimed-at=%d aimed-away=%d\n",
+                        spotAt, spotAway);
+            check(spotAt > 120, "Pbr3D: spot aimed at the surface illuminates it");
+            check(spotAway < 10, "Pbr3D: spot aimed away contributes nothing");
+        }
+
+        // Check I: the identical punctual constants and world-position/normal term reach the
+        // skinned pixel shader after an identity bone transform.
+        {
+            auto vb = renderer.CreateVertexBuffer(3);
+            vb->SetData(kTriPbrSkinned, 3, sizeof(VPNTanTW));
+            auto ib = renderer.CreateIndexBuffer16(3);
+            static const uint16_t kIdx[3] = {0, 1, 2};
+            ib->SetData16(kIdx, 3);
+
+            GpuDrawParams params;
+            SetAmbientOnlyPbrParams(params, tex.get());
+            params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = 0.0f;
+            params.eyePositionWorld[2] = 3.0f;
+            params.skinned = true;
+            params.weightsPerVertex = 1;
+            params.boneCount = 1;
+            const float identity[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+            for (int i = 0; i < 16; ++i) params.boneTransforms[i] = identity[i];
+            params.punctualKind = 1;
+            params.punctualPosition[2] = 1.0f;
+            params.punctualDiffuse[0] = params.punctualDiffuse[1] =
+                params.punctualDiffuse[2] = 6.0f;
+            params.punctualRange = 10.0f;
+
+            dev.Clear(Color::Black);
+            renderer.DrawIndexedPrimitivesEx(
+                *vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() > 120,
+                  "PbrSkinned3D: point light survives identity-bone skinning");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

@@ -311,6 +311,25 @@ namespace CNA::Internal::Renderers::DirectX9
         TryUploadPixelShaderConstantEXT(
             device_.Get(), psRegs, psCount, "SpecularTextureTransformRows",
             &params.pbrSpecularTextureTransformRows[0][0]);
+        const float punctualPositionRange[4] = {
+            params.punctualPosition[0], params.punctualPosition[1],
+            params.punctualPosition[2], params.punctualRange};
+        const float punctualDirectionKind[4] = {
+            params.punctualDirection[0], params.punctualDirection[1],
+            params.punctualDirection[2], static_cast<float>(params.punctualKind)};
+        const float punctualDiffuse[4] = {
+            params.punctualDiffuse[0], params.punctualDiffuse[1],
+            params.punctualDiffuse[2], 0.0f};
+        const float punctualCone[4] = {
+            params.punctualCosInner, params.punctualCosOuter, 0.0f, 0.0f};
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "PunctualPositionRange", punctualPositionRange);
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "PunctualDirectionKind", punctualDirectionKind);
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "PunctualDiffuse", punctualDiffuse);
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "PunctualCone", punctualCone);
 
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
         // s4=OcclusionMap, s5=specular strength, s6=specular colour. Base color falls back to
