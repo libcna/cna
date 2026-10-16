@@ -3551,8 +3551,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Renders any pending clear into the acquired swapchain texture and submits the command
         // buffer. Returns false if no swapchain texture could be acquired this frame (minimized
         // window, lost surface, etc) -- mirrors WebGPURenderer::EnsureFrameRendered's
-        // on-demand-submit semantics.
-        bool EnsureFrameRendered();
+        // on-demand-submit semantics. @p presenting is true only for Present(); any other flush
+        // happens mid-frame, see the body.
+        bool EnsureFrameRendered(bool presenting = false);
         // (Re)creates depthStencilTexture_ if it does not already match the requested size.
         // depthStencilFormat_ is selected at construction/Reset, not here, since pipeline creation
         // needs a stable answer before any frame has rendered.

@@ -3033,10 +3033,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         return true;
     }
 
-    bool SdlGpuRenderer::EnsureFrameRendered()
+    bool SdlGpuRenderer::EnsureFrameRendered(bool presenting)
     {
         if (!framePending_)
             return true;
+        // A flush before Present() -- a render target read or written, a resize -- submits this
+        // command buffer, and the next one acquires another swapchain texture, so a backbuffer
+        // pass after it would LOAD contents this frame never drew. From the first such flush
+        // the backbuffer is the persistent proxy, blitted to the swapchain, as after a readback.
+        if (!presenting)
+            backbufferReadbackEnabled_ = true;
 
         MaybeFailForTest(SdlGpuFailurePointEXT::FrameCommandBufferAcquisition);
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
@@ -4008,7 +4014,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         // SDL_gpu automatically presents the acquired swapchain texture once the command buffer
         // that acquired it is submitted -- there is no separate explicit present call.
-        EnsureFrameRendered();
+        EnsureFrameRendered(/*presenting=*/true);
     }
 
     void SdlGpuRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
