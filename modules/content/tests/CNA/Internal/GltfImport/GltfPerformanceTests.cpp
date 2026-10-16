@@ -16,10 +16,16 @@
 //
 // `docs/gltf-performance.md` carries the numbers and the decision each row reached.
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <vector>
+
+#if !defined(_WIN32)
+#include <time.h>
+#endif
 
 #include <gtest/gtest.h>
 
@@ -64,14 +70,39 @@ namespace
     /// 50 ms budgets (plans/plan_apple_m4.md AM4-316), so a sanitized build scales them.
     constexpr double kBudgetScale = kAddressSanitized ? 10.0 : 1.0;
 
-    /// Wall-clock milliseconds for one call of @p work, averaged over @p iterations.
+    /// The calling thread's own CPU time where the platform keeps one with useful resolution
+    /// (POSIX), else the steady clock.
+    double NowMilliseconds()
+    {
+#if defined(_WIN32)
+        return std::chrono::duration<double, std::milli>(
+                   std::chrono::steady_clock::now().time_since_epoch()).count();
+#else
+        timespec now{};
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now);
+        return static_cast<double>(now.tv_sec) * 1000.0 + static_cast<double>(now.tv_nsec) / 1.0e6;
+#endif
+    }
+
+    /// The cost of one call of @p work: the FASTEST of @p iterations, on the thread's CPU clock.
+    ///
+    /// These budgets catch a change in the shape of the work, so what they compare is what the
+    /// work costs, not what the machine was doing. A mean of wall-clock time is mostly the latter
+    /// under a concurrent build -- the runs that missed 50 ms were waiting for a core, not
+    /// computing. Thread CPU time leaves out the waiting, and the minimum leaves out the calls a
+    /// page fault or a cold cache made slower; neither can hide an algorithm that got slower,
+    /// which is slower on every call.
     template <typename Work>
     double MillisecondsPerCall(int iterations, Work&& work)
     {
-        const auto start = std::chrono::steady_clock::now();
-        for (int i = 0; i < iterations; ++i) { work(); }
-        const auto elapsed = std::chrono::steady_clock::now() - start;
-        return std::chrono::duration<double, std::milli>(elapsed).count() / iterations;
+        double fastest = std::numeric_limits<double>::infinity();
+        for (int i = 0; i < iterations; ++i)
+        {
+            const double start = NowMilliseconds();
+            work();
+            fastest = std::min(fastest, NowMilliseconds() - start);
+        }
+        return fastest;
     }
 
     /// A fixture with a material, a texture-free PBR path and real geometry -- the ordinary case.
