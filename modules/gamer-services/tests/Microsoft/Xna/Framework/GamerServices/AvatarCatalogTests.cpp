@@ -299,7 +299,7 @@ TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
         {0, 1680, 128, {3, 20, 42, 60, 0, 0}, 0, 128, "c8e542f3715ea1492b53356e21f9c88e5992f70edfe2a857f3c605872c84e7d6"},
         {1, 1950, 40, {2, 22, 40, 61, 81, 100}, 0, 128, "3a9fa863818f74ee102f9e9e4cfdbcc5ef92392fb1c05a1eca5938ecacc448e0"},
         {0, 1500, 220, {4, 23, 41, 61, 80, 104}, 0, 128, "e55d7608f26822e3298a6ec6194522928bb332f1a0d088bd5515c3237325a402"},
-        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "d8f8aa97626cfe89ca1b87f50856380055175f098ec11c83cb4ee3a261c5ac65"},
+        {1, 1800, 128, {6, 26, 43, 63, 82, 0}, 122, 200, "68c971c2b98b87a964f07e5d0a83267fd655675deb4f440e1d1d51e7a17bb051"},
     };
     for (const auto& c : cases) {
         Avatars::AvatarDescriptor descriptor;

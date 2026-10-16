@@ -31,6 +31,55 @@ class Mesh:
         for joints, weights in self.skin:
             assert sum(weights) == 255 and all(0 <= j < 71 for j in joints)
 
+    def clipped(self, values, level):
+        """The part of this mesh where the per-vertex `values` are at least `level`, triangles cut
+        along the iso-line (positions, normals and uvs interpolated), so its edge is smooth rather
+        than stepped along the facets."""
+        out = Mesh()
+        out.patch_origin = self.patch_origin
+        index, cuts = {}, {}
+
+        def keep(i):
+            if i not in index:
+                index[i] = len(out.positions)
+                out.positions.append(self.positions[i])
+                out.normals.append(self.normals[i])
+                out.uvs.append(self.uvs[i])
+                out.skin.append(self.skin[i])
+            return index[i]
+
+        def cut(a, b):
+            key = (min(a, b), max(a, b))
+            if key not in cuts:
+                t = (level - values[a]) / (values[b] - values[a])
+                lerp_ = lambda p, q: tuple(p[k] + (q[k] - p[k]) * t for k in range(len(p)))
+                n = lerp_(self.normals[a], self.normals[b])
+                length_ = math.sqrt(sum(c * c for c in n)) or 1.0
+                cuts[key] = len(out.positions)
+                out.positions.append(lerp_(self.positions[a], self.positions[b]))
+                out.normals.append(tuple(c / length_ for c in n))
+                out.uvs.append(lerp_(self.uvs[a], self.uvs[b]))
+                out.skin.append(self.skin[a] if values[a] >= level else self.skin[b])
+            return cuts[key]
+        for t in range(0, len(self.indices), 3):
+            tri = self.indices[t:t + 3]
+            inside = [values[i] >= level for i in tri]
+            count = sum(inside)
+            if count == 0:
+                continue
+            if count == 3:
+                out.indices += [keep(i) for i in tri]
+                continue
+            # Rotate (keeping the winding) so the lone vertex is first.
+            lone = inside.index(True) if count == 1 else inside.index(False)
+            a, b, c = tri[lone], tri[(lone + 1) % 3], tri[(lone + 2) % 3]
+            if count == 1:
+                out.indices += [keep(a), cut(a, b), cut(a, c)]
+            else:
+                ab, ca = cut(a, b), cut(c, a)
+                out.indices += [ab, keep(b), keep(c), ab, keep(c), ca]
+        return out
+
     def copy(self):
         m = Mesh()
         m.positions, m.normals, m.uvs, m.skin = list(self.positions), list(self.normals), list(self.uvs), list(self.skin)

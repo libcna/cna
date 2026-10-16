@@ -395,10 +395,16 @@ def _beard_region(my, full, chin_only=False, sideburns=False, mutton=False, chin
         cheek_y = -0.016 - 0.052 * smoothstep(0.000, 0.075, z)
         under = smoothstep(cheek_y + 0.010, cheek_y - 0.020, y) * smoothstep(-0.050, -0.018, z)
         if sideburns or mutton:
-            # Only in front of the ears, down to the jaw (mutton chops spread onto the cheeks).
-            reach = 0.040 if mutton else 0.012
-            burn = smoothstep(reach + 0.012, reach - 0.004, z) * smoothstep(-0.040, -0.020, z)
-            return under * burn * smoothstep(-0.10 if mutton else -0.07, -0.05 if mutton else -0.045, -abs(y + 0.03))
+            # In front of the ear from under the hairline at the temple down past the lobe (the ear's
+            # front edge is at z 0.002); mutton chops widen onto the cheeks and follow the jaw down.
+            # Revision 3 cut them off at the full beard's cheek line, leaving a patch under the ear.
+            # They thin toward the top, where they run on under the hairline.
+            side = smoothstep(0.050, 0.080, ax) * smoothstep(0.085, 0.045, y)
+            back = smoothstep(-0.008, 0.008, z)
+            if mutton:
+                front = 0.026 + 0.040 * smoothstep(-0.010, -0.075, y)
+                return side * back * smoothstep(front + 0.016, front, z) * smoothstep(-0.116, -0.096, y)
+            return side * back * smoothstep(0.038, 0.022, z) * smoothstep(-0.064, -0.046, y)
         if chin_only:
             return smoothstep(0.040, 0.026, ax) * smoothstep(my - 0.020, my - 0.034, y) * smoothstep(-0.02, 0.02, z)
         if full:
@@ -415,15 +421,16 @@ def _beard_region(my, full, chin_only=False, sideburns=False, mutton=False, chin
 
 
 def _face_shell(body_type, region, thick, under=0.004, grooves=0.0, spacing=0.011, rows=40, columns=84, lift=0.0,
-                theta=(0.46, 0.92), phi=0.66, drop=True):
+                theta=(0.46, 0.92), phi=0.66, drop=True, thin=None):
     """A shell over the lower face where region(x, y, z) (head-local male metres) is 1, `thick`
     above the skin, diving under it outside the region so its edge grows out of the skin.
     grooves: how deep the soft vertical channels between beard clumps are (0 smooth), `spacing`
     apart, bending outward toward the jaw; drop: leave out what lies wholly outside the region.
-    u runs across the face and v down it over the shell's (theta, phi) range."""
+    u runs across the face and v down it over the shell's (theta, phi) range; thin(x, y, z) scales the
+    thickness where the hair is thinner than its region (sideburns running on under the hairline)."""
     s = head.SCALE[body_type]
     c = head.centre(body_type)
-    grid, inside_of, uvs = [], [], []
+    grid, inside_of, uvs, heights = [], [], [], []
     for r in range(rows):
         th = PI * (theta[0] + (theta[1] - theta[0]) * r / (rows - 1))
         row, ins, uv_row = [], [], []
@@ -432,13 +439,14 @@ def _face_shell(body_type, region, thick, under=0.004, grooves=0.0, spacing=0.01
             local = head.local_point(body_type, th, ph)
             x, y, z = local[0] / s, local[1] / s, local[2] / s
             inside = region(x, y, z)
-            h = thick * inside
+            h = thick * inside * (thin(x, y, z) if thin else 1.0)
             if grooves:
                 # Clumps of hair growing down and a little outward along the jaw.
                 lean = x + 0.35 * x * smoothstep(-0.02, -0.12, y)
                 band = 0.5 + 0.5 * math.cos(2.0 * PI * lean / spacing + 0.8 * hair.jitter(int(lean / spacing * 4.0), 7))
                 h *= 1.0 - grooves * band ** 2 * smoothstep(0.0, 0.6, inside)
-            row.append(head.point(body_type, th, ph, lift * s + h - under * s * (1.0 - inside)))
+            heights.append(lift * s + h - under * s * (1.0 - inside))
+            row.append(head.point(body_type, th, ph, heights[-1]))
             ins.append(inside)
             uv_row.append((k / (columns - 1), r / (rows - 1)))
         grid.append(row)
@@ -448,6 +456,10 @@ def _face_shell(body_type, region, thick, under=0.004, grooves=0.0, spacing=0.01
     shell.patch_origin = c
     shell.grid(grid, HEADW, wrap=False)
     shell.uvs = [uv for row in uvs for uv in row]
+    if drop and thick > 0.0:
+        # A grown beard ends where it meets the skin, cut along that line: dropping whole facets
+        # and diving under the skin left its edge stepped along the facets.
+        return shell.clipped(heights, 0.00025 * s)
     if drop:
         flat = [v for row in inside_of for v in row]
         kept = []
@@ -469,10 +481,12 @@ def _mustache_region(my, width=0.044, height=0.014, centre_gap=0.0, droop=0.0, t
         ax = abs(x)
         u = min(ax / width, 1.0)
         # Full in the middle, thinning toward the ends (the shell shows where this is above ~0.3).
-        end = (1.0 - 0.72 * u * u) * smoothstep(1.0, 1.0 - 0.12 * taper, u)
+        # Rounded in section and toward its ends (a steep edge read as a slab in profile).
+        end = (1.0 - 0.72 * u * u) * smoothstep(1.0, 1.0 - 0.30 * taper, u)
         top = nose_bottom - 0.002 - 0.010 * u * u - droop * smoothstep(0.55, 1.0, u)
         bottom = top - height * (1.0 - 0.45 * u * u) - droop * 1.4 * smoothstep(0.45, 1.0, u)
-        band = smoothstep(bottom - 0.0015, bottom + 0.0025, y) * smoothstep(top + 0.0015, top - 0.0025, y)
+        soft = min(0.0052, 0.32 * height)
+        band = smoothstep(bottom - 0.0015, bottom + soft, y) * smoothstep(top + 0.0015, top - soft, y)
         gap = smoothstep(centre_gap * 0.5, centre_gap * 0.5 + 0.003, ax) if centre_gap else 1.0
         return band * end * gap * smoothstep(0.02, 0.06, z)
     return region
@@ -620,7 +634,12 @@ def facial_hair(body_type, style):
                 smoothstep(my - 0.058, my - 0.050, y) * smoothstep(0.02, 0.06, z)
         thick = 0.008
     if region is not None:
-        add_part(_face_shell(body_type, region, thick * s, grooves=0.45, spacing=0.012))
+        if style in ("facial_sideburns", "facial_muttonchops"):
+            # From the temple, on finer facets (they are narrow and cross the side of the head).
+            add_part(_face_shell(body_type, region, thick * s, under=0.0015, grooves=0.45, spacing=0.012, theta=(0.30, 0.92),
+                                 rows=64, columns=128, thin=lambda x, y, z: 1.0 - 0.78 * smoothstep(-0.005, 0.040, y)))
+        else:
+            add_part(_face_shell(body_type, region, thick * s, grooves=0.45, spacing=0.012))
     if style in mustaches:
         m = mustaches[style]
         add_part(_face_shell(body_type, _mustache_region(my, **m), (0.0075 if style != "facial_pencil" else 0.0040) * s,
