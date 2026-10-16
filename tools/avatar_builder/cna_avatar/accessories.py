@@ -402,7 +402,10 @@ def _beard_region(my, full, chin_only=False, sideburns=False, mutton=False, chin
         if chin_only:
             return smoothstep(0.040, 0.026, ax) * smoothstep(my - 0.020, my - 0.034, y) * smoothstep(-0.02, 0.02, z)
         if full:
-            chin = smoothstep(my - 0.024, my - 0.046, y) if ax < 0.040 else 1.0
+            # Clear of the mouth, the beard grows from just under the lower lip round to the jaw
+            # (revision 3 left a bare patch under the lip, cut off square at 4 cm either side).
+            clear = 1.0 - smoothstep(0.032, 0.048, ax)
+            chin = 1.0 - clear * (1.0 - smoothstep(my - 0.016, my - 0.026, y))
             return under * chin
         if chin_strap:
             edge = smoothstep(-0.100, -0.122, y) + smoothstep(0.040, 0.010, z)
@@ -491,7 +494,15 @@ def stubble_region(body_type, dilate=0.0):
     if not dilate:
         return base
     offsets = [(0.0, 0.0)] + [(dilate * math.cos(a), dilate * math.sin(a)) for a in (k * PI / 4 for k in range(8))]
-    return lambda x, y, z: max(base(x + dx, y + dy, z) for dx, dy in offsets)
+    line = head.MOUTH_LINE[0]
+    nose_bottom = head.NOSE_TIP_Y - 0.011
+
+    def grown(x, y, z):
+        # Grown, but never onto the nose or the lips.
+        nose = smoothstep(nose_bottom - 0.004, nose_bottom + 0.002, y) * smoothstep(0.024, 0.014, abs(x))
+        lips = smoothstep(line - 0.013, line - 0.009, y) * smoothstep(line + 0.008, line + 0.004, y) * smoothstep(0.036, 0.028, abs(x))
+        return max(base(x + dx, y + dy, z) for dx, dy in offsets) * (1.0 - max(nose, lips))
+    return grown
 
 
 def stubble_texture(body_type, density, width=384, height=192, dilate=0.0):
@@ -634,8 +645,10 @@ def facial_hair(body_type, style):
     if not parts:
         raise ValueError(style)
     if style in ("facial_beard", "facial_shortbeard", "facial_longbeard", "facial_muttonchops", "facial_chinstrap"):
-        # Under a grown beard the face is stubbled, so the beard's edge fades into the skin.
-        halo = _face_shell(body_type, stubble_region(body_type), 0.0, under=0.0, lift=0.0007, theta=STUBBLE_THETA,
+        # Under a grown beard the face is stubbled, so the beard's edge fades into the skin; the
+        # halo reaches as far as its texture does (grown by the same 12 mm; cut at the ungrown region,
+        # its facets ended in steps where the texture was still dark).
+        halo = _face_shell(body_type, stubble_region(body_type, 0.012), 0.0, under=0.0, lift=0.0007, theta=STUBBLE_THETA,
                            phi=STUBBLE_PHI)
         parts.insert(0, (halo, "hair", "stubble_halo_" + body_type, (1.0, 1.0, 1.0), {"cnaBlend": "alpha"}))
     return parts
