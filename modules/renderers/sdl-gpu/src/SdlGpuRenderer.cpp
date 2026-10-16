@@ -1054,17 +1054,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         // SDL_gpu exposes the native D3D/Vulkan/Metal constant-factor convention, whereas XNA's
-        // RasterizerState.DepthBias is a normalized depth offset. This is the same per-format
-        // conversion used by FNA3D's SDL_gpu driver. D32 float has 23 mantissa bits; fixed-point
-        // formats use all of their depth bits. A depthless pass follows FNA3D's D16 fallback --
-        // the value is inert there, but keeping it deterministic preserves cache identity.
+        // RasterizerState.DepthBias is a normalized depth offset (Direct3D 9's D3DRS_DEPTHBIAS,
+        // which XNA sets unchanged). Fixed-point formats use all of their depth bits. A float
+        // attachment's unit is 2^(e-23) for the primitive's largest depth exponent e, which is
+        // -1 over [0.5, 1) -- where a perspective scene's depth lies -- so D32 takes D24's 2^24
+        // and its offset is exact there; FNA3D's SDL_gpu driver uses 2^23 and halves every such
+        // bias (SdlGpu_CrossFamily_DepthBiasMagnitudeContract on a device without D24, as AMD's
+        // Vulkan drivers are). Below 0.5 the unit halves per octave, as the native API defines.
+        // A depthless pass follows FNA3D's D16 fallback -- the value is inert there, but keeping
+        // it deterministic preserves cache identity.
         [[nodiscard]] float XnaToSdlDepthBiasScale(SDL_GPUTextureFormat depthStencilFormat)
         {
             switch (depthStencilFormat)
             {
                 case SDL_GPU_TEXTUREFORMAT_D32_FLOAT:
                 case SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT:
-                    return static_cast<float>((1u << 23) - 1u);
                 case SDL_GPU_TEXTUREFORMAT_D24_UNORM:
                 case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT:
                     return static_cast<float>((1u << 24) - 1u);
