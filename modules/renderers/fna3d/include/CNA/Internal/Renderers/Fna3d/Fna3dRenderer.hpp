@@ -370,6 +370,17 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h, void* data,
                                    int dataLength) const override;
+        // SetData/GetData already move texels in the declared surface format, as Texture3D's do.
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override
+        {
+            return SetData(face, level, x, y, w, h, data, dataLength);
+        }
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override
+        {
+            return GetData(face, level, x, y, w, h, data, dataLength);
+        }
 
         /** @brief Edge length of one face in texels. */
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
