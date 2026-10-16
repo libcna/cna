@@ -329,7 +329,7 @@ protected:
         // GLTF-264's exact corpus geometry normal and joint scale. Inverse-transpose(S[1,2,1])
         // sends (0,.6,.8) to normalize(0,.3,.8). With L=+Y, V=+Z and this test's rough dielectric
         // material the analytic PBR result encodes to byte 93; the old direct joint 3x3 multiply
-        // produced 139. This pins the third EasyGL skinned vertex program in addition to
+        // produced 139. This pins the renderer's third skinned vertex program in addition to
         // EasyGL_SkinnedEffect_WorldNormal's per-pixel/per-vertex stock-effect programs.
         const std::vector<SkinnedPbrVertex> tilted = SkinnedTiltedNormalQuad();
         VertexBuffer tiltedBuffer(device, static_cast<int>(tilted.size()));

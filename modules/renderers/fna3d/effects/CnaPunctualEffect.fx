@@ -2,8 +2,8 @@
 //
 // CNA-owned FNA3D extension for BasicEffect/SkinnedEffect punctual lighting.
 // FNA3D accepts only compiled Direct3D 9 Effect Framework binaries, so the corresponding
-// CnaPunctualEffect.fxb is committed beside this source and embedded with the stock effects.
-// Rebuild with: fxc /nologo /Op /T fx_2_0 /Fo CnaPunctualEffect.fxb CnaPunctualEffect.fx
+// Three compiled variants are committed beside this source and embedded with the stock effects;
+// their exact commands and hashes are recorded in README.md.
 
 texture Texture;
 sampler2D TextureSampler = sampler_state
@@ -37,6 +37,9 @@ float4 PunctualDirectionKind; // xyz = spot direction, w = 1 point / 2 spot
 float3 PunctualDiffuse;
 float2 PunctualCone; // x = cos(inner), y = cos(outer)
 float3 FogColor;
+
+#define CNA_D3D9_FNA_SHADOWS 1
+#include "../../directx9/src/shaders/cna/ShadowSampling3D.fxh"
 
 struct VSInputNm
 {
@@ -176,6 +179,11 @@ float3 DirectionalSpecular(float3 normal, float3 eye)
 
 float3 PunctualLight(float3 worldPos, float3 normal)
 {
+#if defined(CNA_FNA_DIRECTIONAL_ONLY) && CNA_FNA_DIRECTIONAL_ONLY
+    return float3(0, 0, 0);
+#else
+    if (PunctualDirectionKind.w < 0.5)
+        return float3(0, 0, 0);
     float3 offset = PunctualPositionRange.xyz - worldPos;
     float distanceToLight = length(offset);
     if (distanceToLight > PunctualPositionRange.w || distanceToLight < 0.00001)
@@ -191,17 +199,26 @@ float3 PunctualLight(float3 worldPos, float3 normal)
                               max(PunctualCone.x - PunctualCone.y, 0.0001));
         attenuation *= cone * cone;
     }
-    return PunctualDiffuse * max(dot(normal, toLight), 0) * attenuation;
+    return PunctualDiffuse * max(dot(normal, toLight), 0) * attenuation *
+           CnaPunctualShadow(worldPos, toLight, distanceToLight);
+#endif
 }
 
 float4 Shade(VSOutput input, float4 texel)
 {
     float3 normal = normalize(input.NormalWS);
     float3 eye = normalize(EyePosition - input.PositionWS);
-    float3 lit = (DirectionalDiffuse(normal) + PunctualLight(input.PositionWS, normal)) *
-                 DiffuseColor.rgb + EmissiveColor;
+    float shadow = CnaShadowFactor(input.PositionWS);
+    float3 lit = (DirectionalDiffuse(normal) * shadow +
+                  PunctualLight(input.PositionWS, normal)) * DiffuseColor.rgb + EmissiveColor;
+#if defined(CNA_FNA_DIRECTIONAL_ONLY) && CNA_FNA_DIRECTIONAL_ONLY && \
+    !(defined(CNA_FNA_DIRECTIONAL_VERTEX_COLOR_ONLY) && CNA_FNA_DIRECTIONAL_VERTEX_COLOR_ONLY)
+    float4 color = texel * float4(lit, DiffuseColor.a);
+#else
     float4 color = texel * float4(lit, DiffuseColor.a) * input.Color;
-    color.rgb += DirectionalSpecular(normal, eye) * color.a;
+#endif
+    color.rgb *= CnaCascadeDebugTint(input.PositionWS);
+    color.rgb += DirectionalSpecular(normal, eye) * shadow * color.a;
     color.rgb = lerp(color.rgb, FogColor * color.a, input.FogFactor);
     return color;
 }

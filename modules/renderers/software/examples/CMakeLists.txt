@@ -83,13 +83,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
 
     # CNAEXT shadow receivers must sample single/cascade directional maps and punctual cube/2D
     # maps in both PBR and classic lighting without darkening ambient light.
-    cna_software_test(cna_test_software_shadow_sampling software_shadow_sampling_test.cpp)
+    cna_software_test(cna_test_software_shadow_sampling
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/shadow_sampling_test.cpp)
     cna_register_renderer_test(NAME Software_ShadowSampling
         COMMAND cna_test_software_shadow_sampling TIMEOUT 30 LABELS "Software")
 
     # The split-sum PBR environment term consumes cube mips and the BRDF LUT through public
     # sampler slots 10/11/12, replacing (not adding to) the flat ambient term.
-    cna_software_test(cna_test_software_ibl_sampling software_ibl_sampling_test.cpp)
+    cna_software_test(cna_test_software_ibl_sampling
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/ibl_sampling_test.cpp)
     cna_register_renderer_test(NAME Software_ImageBasedLighting
         COMMAND cna_test_software_ibl_sampling TIMEOUT 30 LABELS "Software")
 

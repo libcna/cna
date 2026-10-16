@@ -278,9 +278,9 @@ shared source with them: `DIRECT2D` used only the common `PlatformRendererSurfac
 included by `GDI`, `DIRECTX9`/`11`/`12`, `METAL` and `WEBGPU`), `FREEDIRECT` the common
 `NoOp3DResources.hpp` and `Sdl3RendererInterop.hpp` (still used by `SDL_RENDERER`, `CANVAS`,
 `SDL_GPU` and `FNA3D`), and `PORTABLEGL` `VertexDeclarationFidelity.hpp` (used throughout).
-`RequirePbrShadingSupportEXT` stays because `FNA3D` still calls it. The Win32 platform, the
-`IPlatformSurfacePresenter` CPU-frame path and the `TERMINAL` platform are unchanged; `TERMINAL`
-keeps `SOFTWARE`, `HEADLESS` and `STUB`.
+The shared PBR-refusal guard was later removed when FNA3D gained its native PBR path. The Win32
+platform, the `IPlatformSurfacePresenter` CPU-frame path and the `TERMINAL` platform are unchanged;
+`TERMINAL` keeps `SOFTWARE`, `HEADLESS` and `STUB`.
 
 **Validation performed** (2026-09-27, Linux x86-64). `cmake-build-multi` was configured from an
 empty directory with `SDL_RENDERER;OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` in one binary and

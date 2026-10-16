@@ -289,7 +289,7 @@ int main()
     catch (const std::exception& e)
     {
         // Every draw here is a PbrEffect or SkinnedPbrEffect one, so a renderer with no
-        // metallic-roughness model (FNA3D) refuses the whole program by name.
+        // metallic-roughness model may refuse the whole program by name.
         if (!CNA::Examples::Conformance::IsNamedPbrRefusal(e))
             throw;
         std::printf("[SKIP] stock_effect_uniform_ring: %s\n", e.what());

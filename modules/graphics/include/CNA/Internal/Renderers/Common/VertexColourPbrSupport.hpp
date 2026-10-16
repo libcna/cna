@@ -82,40 +82,4 @@ namespace CNA::Internal::Renderers
             "the identity deliberately.");
     }
 
-    /**
-     * @brief Refuses a metallic-roughness draw on a renderer that has no PBR shading at all.
-     *
-     * plans/plan_gltf.md GLTF-477. The guard above is for a renderer that shades glTF materials but
-     * cannot evaluate one *term* of them. This one is for the other shape: a renderer with no
-     * metallic-roughness path whatsoever, whose stock-effect selector would otherwise fall through
-     * and shade an authored glTF material as something else entirely.
-     *
-     * The partition is the same and so is the reasoning: this is that decision made once, so a
-     * renderer cannot join the refusing set by accident or drift out of it silently. (Five retired
-     * renderers refused it in their own words -- `SOKOL`, `TINYGL`, `GLIDE` and `OPENGLES1` until
-     * 2026-09-17, `PORTABLEGL` until 2026-09-27 -- which is why the shared guard was worth
-     * extracting even though one caller, `FNA3D`, remains.)
-     *
-     * Call it at the entry of the params-carrying draw paths, before any GPU state is touched: a
-     * refusal that happens after the data has been submitted through the wrong shading model is not
-     * a refusal.
-     *
-     * @param params Draw state as the effect filled it.
-     * @param rendererName Short renderer identifier, e.g. "FNA3D".
-     * @throws std::runtime_error When the draw came from PbrEffect or SkinnedPbrEffect.
-     */
-    inline void RequirePbrShadingSupportEXT(const GpuDrawParams& params, const char* rendererName)
-    {
-        if (!params.pbr) { return; }
-        throw std::runtime_error(
-            std::string(rendererName) +
-            " renderer: this primitive came from PbrEffect/SkinnedPbrEffect, and this renderer has "
-            "no metallic-roughness shading path -- no BRDF, and none of glTF 2.0 3.9.2's normal, "
-            "metallic-roughness, emissive or occlusion maps. Shading it with the nearest stock "
-            "effect would present a visibly different material as a successful draw, so the draw is "
-            "refused instead (plans/plan_gltf.md GLTF-477). Use a renderer that implements the model "
-            "(EasyGL: OPENGLES3/OPENGL33/WEBGL2, SDL_GPU, WEBGPU, "
-            "DIRECTX9), or a reduced one whose "
-            "boundary is documented (SOFTWARE).");
-    }
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
+#include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dVertexLayouts.hpp"
-#include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
@@ -42,15 +42,71 @@ namespace CNA::Internal::Renderers::Fna3d
                    isBlack(params.light2Diffuse) && isBlack(params.light2Specular);
         }
 
-        StockEffectKind SelectStockEffect(const GpuDrawParams& params)
+        bool WantsDirectionalShadow(const GpuDrawParams& params)
         {
+            return params.shadowsEnabled && params.shadowMap != nullptr;
+        }
+
+        StockEffectKind SelectStockEffect(const GpuDrawParams& params, bool vertexColorDeclared)
+        {
+            if (params.pbr)
+                return params.skinned ? StockEffectKind::SkinnedPbr : StockEffectKind::Pbr;
+            // XNA's stock SkinnedEffect binary has no COLOR0 variant. CNA's compiled punctual
+            // effect does, and with punctualKind == 0 its extra lamp contributes exactly zero, so
+            // it is also the native route for CNA's SkinnedEffect.VertexColorEnabled extension.
             if (params.lightingEnabled && params.punctualKind != 0)
+                return StockEffectKind::Punctual;
+            if (params.lightingEnabled && WantsDirectionalShadow(params))
+                return params.vertexColorEnabled && vertexColorDeclared
+                    ? StockEffectKind::ShadowVertexColor : StockEffectKind::Shadow;
+            if (params.lightingEnabled && params.skinned && params.vertexColorEnabled &&
+                vertexColorDeclared)
                 return StockEffectKind::Punctual;
             if (params.skinned)      return StockEffectKind::Skinned;
             if (params.envMapping)   return StockEffectKind::EnvironmentMap;
             if (params.dualTexture)  return StockEffectKind::DualTexture;
             if (AlphaTestActive(params)) return StockEffectKind::AlphaTest;
             return StockEffectKind::Basic;
+        }
+
+        /** Whether any active stream supplies COLOR0 to the selected stock-extension program. */
+        bool VertexColorDeclared(const IVertexBufferRenderer& vb,
+                                 const GpuDrawParams& params)
+        {
+            const auto hasColor = [](const Fna3dVertexBufferRenderer& buffer,
+                                     int declaredStride) {
+                std::span<const FNA3D_VertexElement> elements;
+                if (buffer.HasDeclarationEXT())
+                {
+                    const auto& declared = buffer.GetDeclarationElementsEXT();
+                    elements = {declared.data(), declared.size()};
+                }
+                else
+                {
+                    const int stride = declaredStride > 0
+                        ? declaredStride : buffer.GetStrideEXT();
+                    elements = ElementsForStride(stride);
+                }
+                return std::any_of(elements.begin(), elements.end(), [](const auto& element) {
+                    return element.vertexElementUsage == FNA3D_VERTEXELEMENTUSAGE_COLOR &&
+                           element.usageIndex == 0;
+                });
+            };
+
+            if (params.vertexStreamCount > 0)
+            {
+                for (int i = 0; i < params.vertexStreamCount; ++i)
+                {
+                    const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+                    const auto* buffer =
+                        dynamic_cast<const Fna3dVertexBufferRenderer*>(stream.buffer);
+                    if (buffer != nullptr && hasColor(*buffer, stream.strideInBytes))
+                        return true;
+                }
+                return false;
+            }
+            const auto* buffer = dynamic_cast<const Fna3dVertexBufferRenderer*>(&vb);
+            return buffer != nullptr && hasColor(*buffer, 0);
         }
 
         /**
@@ -61,16 +117,16 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         void RequireStockVertexInputsDeclared(const GpuDrawParams& params,
                                               const FNA3D_VertexBufferBinding* bindings,
-                                              int bindingCount)
+                                              int bindingCount, bool vertexColorDeclared)
         {
             struct Input { FNA3D_VertexElementUsage usage; int index; const char* name; };
-            std::array<Input, 6> needed{};
+            std::array<Input, 8> needed{};
             std::size_t count = 0;
             const auto need = [&](FNA3D_VertexElementUsage usage, int index, const char* name) {
                 needed[count++] = Input{usage, index, name};
             };
             need(FNA3D_VERTEXELEMENTUSAGE_POSITION, 0, "Position0");
-            const StockEffectKind kind = SelectStockEffect(params);
+            const StockEffectKind kind = SelectStockEffect(params, vertexColorDeclared);
             const char* effectName = "BasicEffect";
             switch (kind)
             {
@@ -108,7 +164,12 @@ namespace CNA::Internal::Renderers::Fna3d
                     need(FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT, 0, "BlendWeight0");
                     break;
                 case StockEffectKind::Punctual:
-                    effectName = "CnaPunctualEffect";
+                case StockEffectKind::Shadow:
+                case StockEffectKind::ShadowVertexColor:
+                    effectName = kind == StockEffectKind::Punctual
+                        ? "CnaPunctualEffect"
+                        : (kind == StockEffectKind::ShadowVertexColor
+                               ? "CnaShadowVertexColorEffect" : "CnaShadowEffect");
                     need(FNA3D_VERTEXELEMENTUSAGE_NORMAL, 0, "Normal0");
                     if (params.textureEnabled || params.skinned)
                         need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0,
@@ -120,6 +181,23 @@ namespace CNA::Internal::Renderers::Fna3d
                     }
                     if (params.vertexColorEnabled)
                         need(FNA3D_VERTEXELEMENTUSAGE_COLOR, 0, "Color0");
+                    break;
+                case StockEffectKind::Pbr:
+                case StockEffectKind::SkinnedPbr:
+                    effectName = kind == StockEffectKind::Pbr
+                        ? "CnaPbrEffect" : "CnaSkinnedPbrEffect";
+                    need(FNA3D_VERTEXELEMENTUSAGE_NORMAL, 0, "Normal0");
+                    need(FNA3D_VERTEXELEMENTUSAGE_TANGENT, 0, "Tangent0");
+                    need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 0,
+                         "TextureCoordinate0");
+                    if (params.pbrTextureCoordinateSetMask != 0)
+                        need(FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE, 1,
+                             "TextureCoordinate1");
+                    if (kind == StockEffectKind::SkinnedPbr)
+                    {
+                        need(FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES, 0, "BlendIndices0");
+                        need(FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT, 0, "BlendWeight0");
+                    }
                     break;
                 default:
                     return;
@@ -190,11 +268,6 @@ namespace CNA::Internal::Renderers::Fna3d
                                          PrimitiveType primitive, int primitiveCount,
                                          const GpuDrawParams& params)
     {
-        // plans/plan_gltf.md GLTF-477: before PrepareDrawEXT, which binds buffers and applies a stock
-        // effect. SelectStockEffect has no PBR case, so a PbrEffect draw used to fall through to
-        // FNA's own BasicEffect and a SkinnedPbrEffect draw to its SkinnedEffect -- an authored
-        // glTF metallic-roughness material rendered as a different material, silently.
-        RequirePbrShadingSupportEXT(params, "FNA3D");
         PrepareDrawEXT(vb, world, view, projection, params, /*baseVertex=*/0);
         FNA3D_DrawPrimitives(device_, ToFna3dPrimitiveType(primitive), params.vertexStart,
                              primitiveCount);
@@ -206,9 +279,6 @@ namespace CNA::Internal::Renderers::Fna3d
                                                 const Matrix& projection, PrimitiveType primitive,
                                                 int primitiveCount, const GpuDrawParams& params)
     {
-        // plans/plan_gltf.md GLTF-477: see DrawPrimitivesEx, and before the buffer checks for the same
-        // reason -- nothing about this draw is going to be submitted.
-        RequirePbrShadingSupportEXT(params, "FNA3D");
         const auto* indexBuffer = dynamic_cast<const Fna3dIndexBufferRenderer*>(&ib);
         if (indexBuffer == nullptr || indexBuffer->GetFna3dDeviceStateEXT() != deviceState_)
         {
@@ -229,9 +299,6 @@ namespace CNA::Internal::Renderers::Fna3d
                                                   PrimitiveType primitive, int primitiveCount,
                                                   int instanceCount, const GpuDrawParams& params)
     {
-        // plans/plan_gltf.md GLTF-477: an instanced PBR draw is refused for the shading model rather than
-        // for the instancing, so the diagnostic names the real reason.
-        RequirePbrShadingSupportEXT(params, "FNA3D");
         if (params.compiledEffectRuntime == nullptr)
         {
             throw std::runtime_error(
@@ -258,7 +325,8 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_SetXnaPixelCenterEXT(device_, 1);
         if (params.compiledEffectRuntime == nullptr)
         {
-            ApplyStockEffectEXT(world, view, projection, params);
+            ApplyStockEffectEXT(world, view, projection, params,
+                                VertexColorDeclared(vb, params));
         }
         else
         {
@@ -364,7 +432,8 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         if (params.compiledEffectRuntime == nullptr && !driverDefaultsMissingVertexInputs_)
-            RequireStockVertexInputsDeclared(params, bindings.data(), bindingCount);
+            RequireStockVertexInputsDeclared(
+                params, bindings.data(), bindingCount, VertexColorDeclared(vb, params));
         FNA3D_ApplyVertexBufferBindings(device_, bindings.data(), bindingCount, 1, baseVertex);
     }
 
@@ -405,6 +474,32 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_VerifySampler(device_, slot, native,
                             &samplerStates_[static_cast<std::size_t>(slot)]);
         boundPixelTextures_[static_cast<std::size_t>(slot)] = native;
+    }
+
+    ITextureRenderer* Fna3dRenderer::GetOrCreatePbrWhiteTextureEXT()
+    {
+        if (pbrDefaultWhiteTexture_ == nullptr)
+        {
+            CNA::Internal::Graphics::ImageData data{};
+            data.width = 1;
+            data.height = 1;
+            data.pixels = {255, 255, 255, 255};
+            pbrDefaultWhiteTexture_ = CreateTexture(data);
+        }
+        return pbrDefaultWhiteTexture_.get();
+    }
+
+    ITextureRenderer* Fna3dRenderer::GetOrCreatePbrFlatNormalTextureEXT()
+    {
+        if (pbrDefaultFlatNormalTexture_ == nullptr)
+        {
+            CNA::Internal::Graphics::ImageData data{};
+            data.width = 1;
+            data.height = 1;
+            data.pixels = {128, 128, 255, 255};
+            pbrDefaultFlatNormalTexture_ = CreateTexture(data);
+        }
+        return pbrDefaultFlatNormalTexture_.get();
     }
 
     void Fna3dRenderer::BindCompiledPixelTexturesEXT(const GpuDrawParams& params,
@@ -487,9 +582,10 @@ namespace CNA::Internal::Renderers::Fna3d
     }
 
     void Fna3dRenderer::ApplyStockEffectEXT(const Matrix& world, const Matrix& view,
-                                            const Matrix& projection, const GpuDrawParams& params)
+                                            const Matrix& projection, const GpuDrawParams& params,
+                                            bool vertexColorDeclared)
     {
-        const StockEffectKind kind = SelectStockEffect(params);
+        const StockEffectKind kind = SelectStockEffect(params, vertexColorDeclared);
         Fna3dStockEffect& effect = effects_[static_cast<std::size_t>(kind)];
 
         const Matrix worldView = Matrix::Multiply(world, view);
@@ -592,6 +688,8 @@ namespace CNA::Internal::Renderers::Fna3d
             }
 
             case StockEffectKind::Punctual:
+            case StockEffectKind::Shadow:
+            case StockEffectKind::ShadowVertexColor:
             {
                 effect.SetFloats("DiffuseColor", params.diffuseColor, 4);
                 ApplyLightingParamsEXT(effect, world, view, params, /*withSpecular=*/true);
@@ -622,14 +720,228 @@ namespace CNA::Internal::Renderers::Fna3d
                 effect.SetFloats("PunctualDirectionKind", directionKind, 4);
                 effect.SetFloats("PunctualDiffuse", punctualDiffuse, 4);
                 effect.SetFloats("PunctualCone", cone, 4);
+                SetShadowParamsEXT(effect, params);
 
+                const bool useVertexColor = params.vertexColorEnabled && vertexColorDeclared;
                 const int passIndex = params.skinned
-                    ? 4 + (params.vertexColorEnabled ? 1 : 0)
+                    ? 4 + (useVertexColor ? 1 : 0)
                     : (params.textureEnabled ? 2 : 0) +
-                          (params.vertexColorEnabled ? 1 : 0);
+                          (useVertexColor ? 1 : 0);
                 effect.Apply(device_, passIndex);
+                BindShadowMapsEXT(effect, params);
                 if (params.textureEnabled || params.skinned)
                     BindEffectTextureEXT(0, params.texture0);
+                break;
+            }
+
+            case StockEffectKind::Pbr:
+            case StockEffectKind::SkinnedPbr:
+            {
+                const bool skinned = kind == StockEffectKind::SkinnedPbr;
+                const bool useVertexColor =
+                    params.vertexColorEnabled && vertexColorDeclared;
+                effect.SetMatrix("World", world);
+                if (skinned)
+                {
+                    const float fogParams[4] = {
+                        0.0f, 0.0f, 0.0f, static_cast<float>(params.weightsPerVertex)
+                    };
+                    effect.SetFloats("FogParams", fogParams, 4);
+                    effect.SetFloats("FogVector", params.fogVector, 4);
+                    effect.SetMatrix4x3Array("Bones", params.boneTransforms, params.boneCount);
+                }
+                else
+                {
+                    effect.SetMatrix("NormalMatrix", Matrix::Transpose(Matrix::Invert(world)));
+                    effect.SetFloats("FogParams", params.fogVector, 4);
+                }
+
+                effect.SetFloats("DiffuseColor", params.diffuseColor, 4);
+                const bool useIbl = params.iblEnabled && params.iblIrradiance != nullptr &&
+                                    params.iblPrefilteredSpecular != nullptr &&
+                                    params.iblBrdfLut != nullptr;
+                const float ambient[4] = {
+                    useIbl ? 0.0f : params.ambientColor[0],
+                    useIbl ? 0.0f : params.ambientColor[1],
+                    useIbl ? 0.0f : params.ambientColor[2],
+                    params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f
+                };
+                const float emissive[4] = {
+                    params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2],
+                    params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f
+                };
+                const float metallicRoughness[4] = {
+                    params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                    params.pbrNormalScale, params.pbrOcclusionStrength
+                };
+                const float fogColor[4] = {
+                    params.fogColor[0], params.fogColor[1], params.fogColor[2],
+                    params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f
+                };
+                const float vertexColorFlags[4] = {
+                    useVertexColor ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f
+                };
+                const float specularFresnel[4] = {
+                    params.pbrDielectricF0Unclamped[0],
+                    params.pbrDielectricF0Unclamped[1],
+                    params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor
+                };
+                const float specularMapFlags[4] = {
+                    params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f,
+                    0.0f, 0.0f, 0.0f
+                };
+                const float punctualPositionRange[4] = {
+                    params.punctualPosition[0], params.punctualPosition[1],
+                    params.punctualPosition[2], params.punctualRange
+                };
+                const float punctualDirectionKind[4] = {
+                    params.punctualDirection[0], params.punctualDirection[1],
+                    params.punctualDirection[2], static_cast<float>(params.punctualKind)
+                };
+                const float punctualDiffuse[4] = {
+                    params.punctualDiffuse[0], params.punctualDiffuse[1],
+                    params.punctualDiffuse[2], 0.0f
+                };
+                const float punctualCone[4] = {
+                    params.punctualCosInner, params.punctualCosOuter, 0.0f, 0.0f
+                };
+                const float iblParams[4] = {
+                    useIbl ? 1.0f : 0.0f,
+                    static_cast<float>(params.iblPrefilteredMipCount > 0
+                                           ? params.iblPrefilteredMipCount : 1),
+                    params.iblIntensity, 0.0f
+                };
+                float doubleSidedOrientation = 0.0f;
+                if (params.pbrDoubleSided)
+                {
+                    const float determinant =
+                        world.M11 * (world.M22 * world.M33 - world.M23 * world.M32) -
+                        world.M12 * (world.M21 * world.M33 - world.M23 * world.M31) +
+                        world.M13 * (world.M21 * world.M32 - world.M22 * world.M31);
+                    doubleSidedOrientation = determinant < 0.0f ? -1.0f : 1.0f;
+                }
+                const float doubleSidedParams[4] = {
+                    doubleSidedOrientation, 0.0f, 0.0f, 0.0f
+                };
+                const auto textureCoordinateSet = [&](int slot) {
+                    return (params.pbrTextureCoordinateSetMask &
+                            (std::uint32_t{1} << slot)) != 0
+                        ? 1.0f : 0.0f;
+                };
+                const float textureCoordinateSets[4] = {
+                    textureCoordinateSet(0), textureCoordinateSet(1),
+                    textureCoordinateSet(2), textureCoordinateSet(3)
+                };
+                const float textureCoordinateSets2[4] = {
+                    textureCoordinateSet(4), textureCoordinateSet(5),
+                    textureCoordinateSet(6), 0.0f
+                };
+
+                effect.SetFloats("AmbientColor", ambient, 4);
+                effect.SetFloats("EmissiveColor", emissive, 4);
+                effect.SetFloats("MetallicRoughnessFactor", metallicRoughness, 4);
+                effect.SetFloats("Light0Dir", params.light0Dir, 3);
+                effect.SetFloats("Light0Diffuse", params.light0Diffuse, 3);
+                effect.SetFloats("Light1Dir", params.light1Dir, 3);
+                effect.SetFloats("Light1Diffuse", params.light1Diffuse, 3);
+                effect.SetFloats("Light2Dir", params.light2Dir, 3);
+                effect.SetFloats("Light2Diffuse", params.light2Diffuse, 3);
+                effect.SetFloats("EyePosition", params.eyePositionWorld, 3);
+                effect.SetFloats("AlphaTest", params.alphaTest, 4);
+                effect.SetFloats("FogColor", fogColor, 4);
+                effect.SetFloats("VertexColorFlags", vertexColorFlags, 4);
+                effect.SetFloats("TextureTransformRows",
+                                 &params.pbrTextureTransformRows[0][0], 40);
+                effect.SetFloats("SpecularFresnelInputs", specularFresnel, 4);
+                effect.SetFloats("SpecularMapFlags", specularMapFlags, 4);
+                effect.SetFloats("SpecularTextureTransformRows",
+                                 &params.pbrSpecularTextureTransformRows[0][0], 16);
+                effect.SetFloats("PunctualPositionRange", punctualPositionRange, 4);
+                effect.SetFloats("PunctualDirectionKind", punctualDirectionKind, 4);
+                effect.SetFloats("PunctualDiffuse", punctualDiffuse, 4);
+                effect.SetFloats("PunctualCone", punctualCone, 4);
+                effect.SetFloats("IblParams", iblParams, 4);
+                effect.SetFloats("PbrDoubleSidedParams", doubleSidedParams, 4);
+                effect.SetFloats("PbrTextureCoordinateSets", textureCoordinateSets, 4);
+                effect.SetFloats("PbrTextureCoordinateSets2", textureCoordinateSets2, 4);
+                SetShadowParamsEXT(effect, params);
+
+                const bool useDualUv = params.pbrTextureCoordinateSetMask != 0;
+                effect.Apply(device_, (useDualUv ? 2 : 0) + (useVertexColor ? 1 : 0));
+                BindShadowMapsEXT(effect, params);
+                const auto bindPbrTexture = [&](const char* samplerName,
+                                                const ITextureRenderer* texture) {
+                    const int slot = effect.FindPixelSamplerRegister(samplerName);
+                    if (slot < 0)
+                    {
+                        throw std::runtime_error(
+                            std::string("FNA3D PBR effect: applied pass has no pixel sampler '") +
+                            samplerName + "'.");
+                    }
+                    BindEffectTextureEXT(slot, texture);
+                };
+                ITextureRenderer* white = GetOrCreatePbrWhiteTextureEXT();
+                // Create both lazy resources before binding either one. FNA3D's OpenGL texture
+                // upload temporarily touches the active texture unit; creating the normal fallback
+                // between the s0 and s1 binds would replace the first draw's base-colour binding.
+                ITextureRenderer* flatNormal = GetOrCreatePbrFlatNormalTextureEXT();
+                bindPbrTexture("Texture", params.texture0 != nullptr ? params.texture0 : white);
+                bindPbrTexture(
+                    "NormalMap", params.pbrNormalMap != nullptr
+                        ? params.pbrNormalMap : flatNormal);
+                bindPbrTexture(
+                    "MetallicRoughnessMap", params.pbrMetallicRoughnessMap != nullptr
+                        ? params.pbrMetallicRoughnessMap : white);
+                bindPbrTexture(
+                    "EmissiveMap", params.pbrEmissiveMap != nullptr
+                        ? params.pbrEmissiveMap : white);
+                bindPbrTexture(
+                    "OcclusionMap", params.pbrOcclusionMap != nullptr
+                        ? params.pbrOcclusionMap : white);
+                bindPbrTexture(
+                    "SpecularMap", params.pbrSpecularMap != nullptr
+                        ? params.pbrSpecularMap : white);
+                bindPbrTexture(
+                    "SpecularColorMap", params.pbrSpecularColorMap != nullptr
+                        ? params.pbrSpecularColorMap : white);
+
+                // The two cube interfaces are siblings of ITextureRenderer, so bind their shared
+                // native sampled-texture mix-in directly. Resolve registers from the applied pass,
+                // exactly as for the seven material maps: MojoShader is free to remap them per
+                // profile even though the authored SM3 registers are public slots 10/11/12.
+                const auto bindPbrSampled = [&](const char* samplerName,
+                                                const Fna3dSampledTexture* sampled) {
+                    const int slot = effect.FindPixelSamplerRegister(samplerName);
+                    if (slot < 0)
+                    {
+                        throw std::runtime_error(
+                            std::string("FNA3D PBR effect: applied pass has no pixel sampler '") +
+                            samplerName + "'.");
+                    }
+                    if (sampled != nullptr && sampled->GetFna3dDeviceStateEXT() != deviceState_)
+                    {
+                        throw std::runtime_error(
+                            "FNA3D renderer: an IBL texture was not created by this graphics device.");
+                    }
+                    FNA3D_Texture* native = sampled != nullptr
+                        ? sampled->GetFna3dTextureEXT() : nullptr;
+                    FNA3D_VerifySampler(device_, slot, native,
+                                        &samplerStates_[static_cast<std::size_t>(slot)]);
+                    boundPixelTextures_[static_cast<std::size_t>(slot)] = native;
+                };
+                const auto* irradiance = useIbl
+                    ? dynamic_cast<const Fna3dSampledTexture*>(params.iblIrradiance) : nullptr;
+                const auto* specular = useIbl
+                    ? dynamic_cast<const Fna3dSampledTexture*>(params.iblPrefilteredSpecular)
+                    : nullptr;
+                if (useIbl && (irradiance == nullptr || specular == nullptr))
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: an IBL cube texture was not created by FNA3D.");
+                }
+                bindPbrSampled("IblIrradiance", irradiance);
+                bindPbrSampled("IblSpecular", specular);
+                bindPbrTexture("IblBrdfLut", useIbl ? params.iblBrdfLut : nullptr);
                 break;
             }
 
@@ -639,6 +951,109 @@ namespace CNA::Internal::Renderers::Fna3d
                 throw std::runtime_error(
                     "FNA3D renderer: the sprite effect is not a 3D draw path.");
         }
+    }
+
+    void Fna3dRenderer::SetShadowParamsEXT(Fna3dStockEffect& effect,
+                                            const GpuDrawParams& params)
+    {
+        const bool directionalEnabled =
+            SupportsShadowSamplingEXT() && params.shadowsEnabled && params.shadowMap != nullptr;
+        const int cascadeCount = directionalEnabled ? std::clamp(params.cascadeCount, 0, 4) : 0;
+        const float shadowParams[4] = {
+            directionalEnabled ? 1.0f : 0.0f,
+            params.shadowDepthBias,
+            static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2)),
+            static_cast<float>(cascadeCount)
+        };
+        const float shadowTexelBlendDebug[4] = {
+            directionalEnabled && params.shadowMap->GetWidth() > 0
+                ? 1.0f / static_cast<float>(params.shadowMap->GetWidth()) : 0.0f,
+            directionalEnabled && params.shadowMap->GetHeight() > 0
+                ? 1.0f / static_cast<float>(params.shadowMap->GetHeight()) : 0.0f,
+            params.cascadeBlendBand,
+            params.cascadeDebugTint ? 1.0f : 0.0f
+        };
+        const bool pointShadow = SupportsShadowSamplingEXT() && params.punctualKind == 1 &&
+                                 params.punctualShadowCube != nullptr;
+        const bool spotShadow = SupportsShadowSamplingEXT() && params.punctualKind == 2 &&
+                                params.punctualShadowMap != nullptr;
+        const float punctualShadowParams[4] = {
+            (pointShadow || spotShadow) ? 1.0f : 0.0f,
+            params.punctualShadowBias,
+            spotShadow && params.punctualShadowMap->GetWidth() > 0
+                ? 1.0f / static_cast<float>(params.punctualShadowMap->GetWidth()) : 0.0f,
+            spotShadow && params.punctualShadowMap->GetHeight() > 0
+                ? 1.0f / static_cast<float>(params.punctualShadowMap->GetHeight()) : 0.0f
+        };
+        const auto matrixFromParams = [](const float* values) {
+            return Matrix(values[0], values[1], values[2], values[3],
+                          values[4], values[5], values[6], values[7],
+                          values[8], values[9], values[10], values[11],
+                          values[12], values[13], values[14], values[15]);
+        };
+
+        effect.SetMatrix("CnaLightViewProj", matrixFromParams(params.lightViewProjColMajor));
+        effect.SetMatrixArray("CnaCascadeMatrices", params.cascadeMatricesColMajor, 4);
+        effect.SetMatrix("CnaPunctualViewProj",
+                         matrixFromParams(params.punctualViewProjColMajor));
+        effect.SetFloats("CnaShadowParams", shadowParams, 4);
+        effect.SetFloats("CnaShadowTexelBlendDebug", shadowTexelBlendDebug, 4);
+        effect.SetFloats("CnaCascadeSplits", params.cascadeSplits, 4);
+        effect.SetFloats("CnaCascadeViewZ", params.cascadeViewZRow, 4);
+        effect.SetFloats("CnaPunctualShadowParams", punctualShadowParams, 4);
+    }
+
+    void Fna3dRenderer::BindShadowMapsEXT(Fna3dStockEffect& effect,
+                                           const GpuDrawParams& params)
+    {
+        const auto resolve = [&](const auto* texture, bool selected, const char* label) {
+            if (!selected)
+                return static_cast<const Fna3dSampledTexture*>(nullptr);
+            const auto* sampled = dynamic_cast<const Fna3dSampledTexture*>(texture);
+            if (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_)
+            {
+                throw std::runtime_error(
+                    std::string("FNA3D renderer: the ") + label +
+                    " shadow map was not created by this graphics device.");
+            }
+            return sampled;
+        };
+        const auto* directional = resolve(
+            params.shadowMap, params.shadowsEnabled && params.shadowMap != nullptr,
+            "directional");
+        const auto* point = resolve(
+            params.punctualShadowCube,
+            params.punctualKind == 1 && params.punctualShadowCube != nullptr, "point");
+        const auto* spot = resolve(
+            params.punctualShadowMap,
+            params.punctualKind == 2 && params.punctualShadowMap != nullptr, "spot");
+
+        const auto bind = [&](const char* samplerName, const Fna3dSampledTexture* sampled) {
+            const int slot = effect.FindPixelSamplerRegister(samplerName);
+            if (slot < 0 && sampled == nullptr)
+                return;
+            if (slot < 0 || slot >= static_cast<int>(samplerStates_.size()))
+            {
+                throw std::runtime_error(
+                    std::string("FNA3D shadow effect: applied pass has no usable sampler '") +
+                    samplerName + "'.");
+            }
+            FNA3D_SamplerState native = samplerStates_[static_cast<std::size_t>(slot)];
+            native.filter = FNA3D_TEXTUREFILTER_POINT;
+            native.addressU = FNA3D_TEXTUREADDRESSMODE_CLAMP;
+            native.addressV = FNA3D_TEXTUREADDRESSMODE_CLAMP;
+            native.addressW = FNA3D_TEXTUREADDRESSMODE_CLAMP;
+            native.mipMapLevelOfDetailBias = 0.0f;
+            native.maxMipLevel = 0;
+            native.maxAnisotropy = 1;
+            FNA3D_Texture* texture = sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr;
+            FNA3D_VerifySampler(device_, slot, texture, &native);
+            samplerStates_[static_cast<std::size_t>(slot)] = native;
+            boundPixelTextures_[static_cast<std::size_t>(slot)] = texture;
+        };
+        bind("CnaShadowMap", directional);
+        bind("CnaPunctualCube", point);
+        bind("CnaPunctualMap", spot);
     }
 
     void Fna3dRenderer::ApplyLightingParamsEXT(Fna3dStockEffect& effect, const Matrix& world,

@@ -53,6 +53,27 @@ struct VSInputColor
     float4 Color    : COLOR0;
 };
 
+#if CNA_D3D9_DUAL_UV
+struct VSInputDualUv
+{
+    float3 Position : POSITION0;
+    float3 Normal   : NORMAL0;
+    float4 Tangent  : TANGENT0;
+    float2 UV       : TEXCOORD0;
+    float2 UV1      : TEXCOORD1;
+};
+
+struct VSInputDualUvColor
+{
+    float3 Position : POSITION0;
+    float3 Normal   : NORMAL0;
+    float4 Tangent  : TANGENT0;
+    float2 UV       : TEXCOORD0;
+    float2 UV1      : TEXCOORD1;
+    float4 Color    : COLOR0;
+};
+#endif
+
 struct VSOutput
 {
     float4 Position  : SV_Position;
@@ -61,6 +82,9 @@ struct VSOutput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+#if CNA_D3D9_DUAL_UV
+    float2 UV1       : TEXCOORD5;
+#endif
     // Written by BOTH entry points: the authored colour where the layout supplies one, opaque white
     // -- the multiplier's identity -- where it does not, so one pixel shader serves both.
     float4 Color     : COLOR0;
@@ -71,7 +95,8 @@ float CnaDirectionHandedness(float3x3 m)
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
 
-VSOutput VSPbr3DBody(float3 position, float3 normal, float4 tangent, float2 uv, float4 color)
+VSOutput VSPbr3DBody(float3 position, float3 normal, float4 tangent, float2 uv,
+                     float2 uv1, float4 color)
 {
     VSOutput vout;
     VSInput vin;
@@ -90,6 +115,9 @@ VSOutput VSPbr3DBody(float3 position, float3 normal, float4 tangent, float2 uv, 
     vout.TangentWS = float4(mul(vin.Tangent.xyz, worldDirectionMat),
                             vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
     vout.UV = vin.UV;
+#if CNA_D3D9_DUAL_UV
+    vout.UV1 = uv1;
+#endif
     vout.WorldPos = mul(float4(vin.Position, 1.0), World).xyz;
     // FNA view-space fog. FogParams now carries EffectHelpers.SetFogVector
     // (World*View 3rd column); keep = 1 - saturate(dot(objectPos, fogVector)) is true eye-space-Z
@@ -103,13 +131,27 @@ VSOutput VSPbr3D(VSInput vin)
 {
     // No colour element in the stride-48 declaration: opaque white is the multiplier's identity, so
     // the shared pixel stage multiplies by one instead of reading a stream that is not there.
-    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, float4(1.0, 1.0, 1.0, 1.0));
+    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, vin.UV,
+                       float4(1.0, 1.0, 1.0, 1.0));
 }
 
 VSOutput VSPbr3DColor(VSInputColor vin)
 {
-    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, vin.Color);
+    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, vin.UV, vin.Color);
 }
+
+#if CNA_D3D9_DUAL_UV
+VSOutput VSPbr3DDualUv(VSInputDualUv vin)
+{
+    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, vin.UV1,
+                       float4(1.0, 1.0, 1.0, 1.0));
+}
+
+VSOutput VSPbr3DDualUvColor(VSInputDualUvColor vin)
+{
+    return VSPbr3DBody(vin.Position, vin.Normal, vin.Tangent, vin.UV, vin.UV1, vin.Color);
+}
+#endif
 
 sampler2D Texture              : register(s0);
 sampler2D NormalMap            : register(s1);
@@ -118,6 +160,15 @@ sampler2D EmissiveMap          : register(s3);
 sampler2D OcclusionMap         : register(s4);
 sampler2D SpecularMap          : register(s5);
 sampler2D SpecularColorMap     : register(s6);
+#if CNA_D3D9_IBL
+// FNA3D is CNA's Effect-Framework consumer of this otherwise Direct3D-9 shader. Keep the
+// environment on the public slots shared by EasyGL/Software/WebGPU: irradiance=10,
+// prefiltered-specular=11, split-sum LUT=12. DirectX9 leaves CNA_D3D9_IBL undefined, so its
+// compiled shaders and sampler budget are unchanged.
+samplerCUBE IblIrradiance       : register(s10);
+samplerCUBE IblSpecular         : register(s11);
+sampler2D   IblBrdfLut          : register(s12);
+#endif
 
 float4 DiffuseColor           : register(c0);
 float4 AmbientColor            : register(c1); // xyz=color, w=decode base-color texture from sRGB
@@ -144,6 +195,17 @@ float4 PunctualPositionRange   : register(c30); // xyz=world position, w=range
 float4 PunctualDirectionKind   : register(c31); // xyz=spot direction, w=0 none / 1 point / 2 spot
 float4 PunctualDiffuse         : register(c32); // xyz=linear colour/intensity
 float4 PunctualCone            : register(c33); // x=cos(inner), y=cos(outer)
+#if CNA_D3D9_IBL
+// Kept above the shadow block's c34-c75 range so FNA3D can compose both extensions later.
+float4 IblParams               : register(c76); // x=enabled, y=mip count, z=intensity
+#endif
+#if CNA_D3D9_DOUBLE_SIDED
+float4 PbrDoubleSidedParams    : register(c77); // x=0 single-sided, +/-1 world orientation
+#endif
+#if CNA_D3D9_DUAL_UV
+float4 PbrTextureCoordinateSets  : register(c78); // base, normal, metallic-roughness, emissive
+float4 PbrTextureCoordinateSets2 : register(c79); // occlusion, specular, specular-colour
+#endif
 
 #if CNA_D3D9_SHADOWS
 #include "ShadowSampling3D.fxh"
@@ -160,8 +222,27 @@ struct PSInput
     float2 UV        : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+#if CNA_D3D9_DUAL_UV
+    float2 UV1       : TEXCOORD5;
+#endif
     float4 Color     : COLOR0;
 };
+
+float2 CnaPbrUv(PSInput pin, int slot)
+{
+#if CNA_D3D9_DUAL_UV
+    float setIndex = slot == 0 ? PbrTextureCoordinateSets.x
+        : slot == 1 ? PbrTextureCoordinateSets.y
+        : slot == 2 ? PbrTextureCoordinateSets.z
+        : slot == 3 ? PbrTextureCoordinateSets.w
+        : slot == 4 ? PbrTextureCoordinateSets2.x
+        : slot == 5 ? PbrTextureCoordinateSets2.y
+                    : PbrTextureCoordinateSets2.z;
+    return setIndex > 0.5 ? pin.UV1 : pin.UV;
+#else
+    return pin.UV;
+#endif
+}
 
 float3 CnaSrgbToLinear(float3 color)
 {
@@ -243,9 +324,41 @@ float3 CnaPunctualLight(float3 worldPos, float3 normal)
            CnaPunctualShadow(worldPos, toLight, distanceToLight);
 }
 
-float4 PSPbr3D(PSInput pin) : SV_Target0
+#if CNA_D3D9_IBL
+// Same split-sum equation used by EasyGL, Software and WebGPU. texCUBElod makes the authored
+// roughness-to-mip rule explicit and lets sampler slot 11 choose point versus linear mip blending.
+float3 CnaIblAmbient(float3 N, float3 V, float3 albedo, float3 F0, float roughness,
+                     float metallic, float occlusion)
 {
-    float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(pin.UV, 0));
+    if (IblParams.x < 0.5)
+        return float3(0.0, 0.0, 0.0);
+    float NdotV = clamp(dot(N, V), 1e-4, 1.0);
+    float3 kS = F0 + (max(float3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0) - F0)
+        * pow(1.0 - NdotV, 5.0);
+    float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
+    float3 diffuse = texCUBElod(IblIrradiance, float4(N, 0.0)).rgb * albedo * kD;
+    float3 R = reflect(-V, N);
+    float lod = roughness * max(IblParams.y - 1.0, 0.0);
+    float3 prefiltered = texCUBElod(IblSpecular, float4(R, lod)).rgb;
+    float2 ab = tex2Dlod(IblBrdfLut, float4(NdotV, roughness, 0.0, 0.0)).rg;
+    float3 specular = prefiltered * (kS * ab.x + ab.y);
+    return (diffuse + specular) * IblParams.z * occlusion;
+}
+#else
+float3 CnaIblAmbient(float3 N, float3 V, float3 albedo, float3 F0, float roughness,
+                     float metallic, float occlusion)
+{
+    return float3(0.0, 0.0, 0.0);
+}
+#endif
+
+#if CNA_D3D9_DOUBLE_SIDED
+float4 PSPbr3D(PSInput pin, float face : VFACE) : SV_Target0
+#else
+float4 PSPbr3D(PSInput pin) : SV_Target0
+#endif
+{
+    float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(CnaPbrUv(pin, 0), 0));
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
     float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
@@ -261,21 +374,33 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
     float3 N = normalize(pin.Normal);
     float3 T = normalize(pin.TangentWS.xyz - N * dot(N, pin.TangentWS.xyz));
     float3 B = cross(N, T) * pin.TangentWS.w;
+#if CNA_D3D9_DOUBLE_SIDED
+    // D3D9 VFACE is positive for the native front face. A mirroring World reverses the
+    // rasterized winding, so its determinant sign reverses which VFACE needs the basis flip.
+    if (PbrDoubleSidedParams.x != 0.0 && face * PbrDoubleSidedParams.x < 0.0)
+    {
+        N = -N;
+        T = -T;
+        B = -B;
+    }
+#endif
     float3x3 TBN = float3x3(T, B, N);
 
-    float3 sampledNormal = tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0;
+    float3 sampledNormal = tex2D(
+        NormalMap, CnaPbrTransformUv(CnaPbrUv(pin, 1), 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= MetallicRoughnessFactor.z;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
-    float4 mr = tex2D(MetallicRoughnessMap, CnaPbrTransformUv(pin.UV, 2));
+    float4 mr = tex2D(
+        MetallicRoughnessMap, CnaPbrTransformUv(CnaPbrUv(pin, 2), 2));
     float roughness = clamp(mr.g * MetallicRoughnessFactor.y, 0.045, 1.0);
     float metallic = clamp(mr.b * MetallicRoughnessFactor.x, 0.0, 1.0);
 
     float3 V = normalize(EyePosition - pin.WorldPos);
     float specularWeight = SpecularFresnelInputs.w
-        * tex2D(SpecularMap, CnaPbrSpecularTransformUv(pin.UV, 0)).a;
+        * tex2D(SpecularMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 5), 0)).a;
     float3 specularColorTex = tex2D(
-        SpecularColorMap, CnaPbrSpecularTransformUv(pin.UV, 1)).rgb;
+        SpecularColorMap, CnaPbrSpecularTransformUv(CnaPbrUv(pin, 6), 1)).rgb;
     specularColorTex = lerp(
         specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x);
     float3 dielectricF0 = min(SpecularFresnelInputs.xyz * specularColorTex, 1.0)
@@ -291,10 +416,13 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
     Lo *= CnaShadowFactor(pin.WorldPos);
     Lo += CnaPunctualLight(pin.WorldPos, finalNormal) * albedo;
 
-    float occlusion = tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r;
+    float occlusion = tex2D(
+        OcclusionMap, CnaPbrTransformUv(CnaPbrUv(pin, 4), 4)).r;
     occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
-    float3 ambient = AmbientColor.xyz * albedo * occlusion;
-    float3 emissiveSample = tex2D(EmissiveMap, CnaPbrTransformUv(pin.UV, 3)).rgb;
+    float3 ambient = AmbientColor.xyz * albedo * occlusion
+        + CnaIblAmbient(finalNormal, V, albedo, F0, roughness, metallic, occlusion);
+    float3 emissiveSample = tex2D(
+        EmissiveMap, CnaPbrTransformUv(CnaPbrUv(pin, 3), 3)).rgb;
     emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w);
     float3 emissive = EmissiveColor.xyz * emissiveSample;
 

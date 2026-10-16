@@ -1005,12 +1005,16 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
 
+        /** @brief Maps an MSAA request to the portable, live-driver-supported FNA3D count. */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override;
+
         /**
          * @brief Reports the depth/stencil format FNA3D creates for a request.
          *
-         * The request the back buffer was last made for is answered with what FNA3D reports it
-         * created (OpenGL's window may carry more than was asked for); any other request is about
-         * to reach UpdatePresentationFormatEXT, and FNA3D's ResetBackbuffer allocates exactly it.
+         * FNA3D allocates the requested logical format. A driver may expose incidental extra
+         * native bits (OpenGL commonly supplies D24S8 for a Depth24 visual), which are not part of
+         * XNA's public PresentationParameters contract.
          *
          * @param requestedFormat Requested `DepthFormat` ordinal.
          * @return The applied ordinal.
@@ -1440,6 +1444,16 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+        /** @brief CNA's compiled stock/PBR effects sample directional and punctual shadow maps. */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override
+        {
+            return device_ != nullptr && maxTextureSlots_ >= 10;
+        }
+        /** @brief FNA3D's CNA PBR effects sample the shared split-sum IBL resource set. */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override
+        {
+            return device_ != nullptr && maxTextureSlots_ >= 13;
+        }
 
         /**
          * @brief Classifies Texture2D formats backed by the selected FNA3D driver.
@@ -1599,7 +1613,10 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param params     Flattened effect parameters.
          */
         void ApplyStockEffectEXT(const Matrix& world, const Matrix& view, const Matrix& projection,
-                                 const GpuDrawParams& params);
+                                 const GpuDrawParams& params,
+                                 bool vertexColorDeclared = false);
+        ITextureRenderer* GetOrCreatePbrWhiteTextureEXT();
+        ITextureRenderer* GetOrCreatePbrFlatNormalTextureEXT();
 
         /**
          * @brief CNAEXT. Binds every declared vertex stream for the draw about to be submitted.
@@ -1641,6 +1658,8 @@ namespace CNA::Internal::Renderers::Fna3d
         void ApplyLightingParamsEXT(Fna3dStockEffect& effect, const Matrix& world,
                                     const Matrix& view, const GpuDrawParams& params,
                                     bool withSpecular);
+        void SetShadowParamsEXT(Fna3dStockEffect& effect, const GpuDrawParams& params);
+        void BindShadowMapsEXT(Fna3dStockEffect& effect, const GpuDrawParams& params);
 
         /**
          * @brief CNAEXT. Reads back the native sampler state this renderer holds for one slot.
@@ -1679,7 +1698,6 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_Device* device_ = nullptr;
         FNA3D_PresentationParameters presentation_{};
         /// The `DepthFormat` ordinal the game last asked for; presentation_ may hold a substitute.
-        int requestedDepthStencilFormat_ = 0;
         PresentationLayout layout_{};
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
 
@@ -1695,6 +1713,10 @@ namespace CNA::Internal::Renderers::Fna3d
         std::array<FNA3D_Texture*, 4> boundVertexTextures_{};
 
         std::array<Fna3dStockEffect, static_cast<std::size_t>(StockEffectKind::Count)> effects_{};
+
+        /// Lazy 1x1 fallbacks for optional PBR maps (white factors and tangent-space +Z).
+        std::unique_ptr<ITextureRenderer> pbrDefaultWhiteTexture_;
+        std::unique_ptr<ITextureRenderer> pbrDefaultFlatNormalTexture_;
 
         std::vector<BoundTarget> boundTargets_;
         FNA3D_Renderbuffer* boundDepthBuffer_ = nullptr;

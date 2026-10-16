@@ -183,6 +183,9 @@ function(cna_configure_mojoshader)
         # unclamped on Mesa) and for SPIR-V (FNA3D's SDL_GPU driver): plans/plan_fna3d.md FNA3D-55.
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-desktop-vertex-color-clamp.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vertex-color-clamp.patch"
+        # FNA3D PBR uses seven pixel samplers. The SPIR-V profile accidentally checked the
+        # ps_2/3 sampler index against the four-entry ps_1.x TEXBEM scratch table.
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-pixel-sampler-range.patch"
         # A linked SDL_GPU program is keyed by the number of color targets it draws into, which
         # its SPIR-V transform receives: Vulkan reports a fragment output without an attachment.
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sdlgpu-color-target-count.patch")

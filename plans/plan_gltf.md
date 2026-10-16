@@ -41,6 +41,10 @@ Oracle repository: `openeggbert/cna-gltf-viewer` (`develop`), writable and exerc
 > a row closes, so the correction is mechanical: extract every `| GLTF-nnn | … | <state> |` cell and
 > tally it. Anyone editing a state must re-tally.
 >
+> **Post-campaign update (2026-10-16):** `GLTF-477` accurately records the FNA3D capability at
+> that checkpoint. `plans/plan_fna3d.md` FNA3D-58 later superseded its FNA3D refusal with native
+> rigid/skinned metallic-roughness shading; the OPENGL1 finding remains historical and unchanged.
+>
 > Of 480 rows: **476 are closed (`✔` 275, `✅` 201)** and **4 remain open** — 3 `✅/⬜`
 > (`GLTF-344`, `GLTF-465`, `GLTF-478`) and 1 `⬜` (`GLTF-459`). Re-tallied mechanically on 2026-09-02 after
 > `GLTF-480` closed. The `GLTF-479` tally correction remains worth preserving: the previous line read

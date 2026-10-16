@@ -4,7 +4,13 @@
 // Point/full layout: s7 is the directional map/cascade atlas and s8 the point cube.
 // Spot layout: s7 is the spot map and s8 the directional map/cascade atlas.
 
-#if CNA_D3D9_PUNCTUAL_SHADOW_KIND == 2
+#if CNA_D3D9_FNA_SHADOWS
+sampler2D   CnaShadowMap       : register(s7);
+#if !CNA_D3D9_FNA_DIRECTIONAL_ONLY
+samplerCUBE CnaPunctualCube    : register(s8);
+sampler2D   CnaPunctualMap     : register(s9);
+#endif
+#elif CNA_D3D9_PUNCTUAL_SHADOW_KIND == 2
 sampler2D   CnaPunctualMap     : register(s7);
 sampler2D   CnaShadowMap       : register(s8);
 #else
@@ -147,10 +153,27 @@ float3 CnaCascadeDebugTint(float3 worldPos)
 
 float CnaPunctualShadow(float3 worldPos, float3 toLight, float distanceToLight)
 {
+#if defined(CNA_D3D9_FNA_DIRECTIONAL_ONLY) && CNA_D3D9_FNA_DIRECTIONAL_ONLY
+    return 1.0;
+#else
     if (CnaPunctualShadowParams.x < 0.5)
         return 1.0;
     float here = saturate(distanceToLight / PunctualPositionRange.w);
-#if CNA_D3D9_PUNCTUAL_SHADOW_KIND == 2
+#if CNA_D3D9_FNA_SHADOWS
+    if (PunctualDirectionKind.w > 1.5)
+    {
+        float4 clip = mul(float4(worldPos, 1.0), CnaPunctualViewProj);
+        if (clip.w <= 0.0)
+            return 1.0;
+        float3 uv = clip.xyz / clip.w * 0.5 + 0.5;
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+            return 1.0;
+        float occluder = tex2D(CnaPunctualMap, uv.xy).r;
+        return (here - CnaPunctualShadowParams.y <= occluder) ? 1.0 : 0.0;
+    }
+    float occluder = texCUBE(CnaPunctualCube, -toLight).r;
+    return (here - CnaPunctualShadowParams.y <= occluder) ? 1.0 : 0.0;
+#elif CNA_D3D9_PUNCTUAL_SHADOW_KIND == 2
     float4 clip = mul(float4(worldPos, 1.0), CnaPunctualViewProj);
     if (clip.w <= 0.0)
         return 1.0;
@@ -165,5 +188,6 @@ float CnaPunctualShadow(float3 worldPos, float3 toLight, float distanceToLight)
 #else
     float occluder = texCUBE(CnaPunctualCube, -toLight).r;
     return (here - CnaPunctualShadowParams.y <= occluder) ? 1.0 : 0.0;
+#endif
 #endif
 }

@@ -820,6 +820,25 @@ TEST(Fna3dCompiledEffectTest, StockFixtureHashesMatchDocumentedFnaRevision)
     }
 }
 
+TEST(Fna3dCompiledEffectTest, CnaExtensionFixtureHashesMatchDocumentedBuilds)
+{
+    constexpr std::pair<const char*, const char*> fixtures[] = {
+        {"CnaPunctualEffect.fxb", "f48d8880f1d2984f6ade586778ac0e707903bb1b5828bf5055250ea49c061c70"},
+        {"CnaShadowEffect.fxb", "94aca82454f874cd81d40be80dae9b4cb022bd654951536245b723a1238eee6f"},
+        {"CnaShadowVertexColorEffect.fxb", "7721323489b7bba0f7f989f45d35de785827acbb941bb74244d94a9710be3610"},
+        {"CnaPbrEffect.fxb", "89affaab64d924a7f545a6fbb30888a5fbc734e8694b914a22350967455908fa"},
+        {"CnaSkinnedPbrEffect.fxb", "7796d051a2624176fa9d1dffaa4ebf03474685cf7bda43c522e66b71d8bcf0f8"},
+    };
+    for (const auto& [name, expected] : fixtures)
+    {
+        SCOPED_TRACE(name);
+        const auto bytes = LoadStockEffect(name);
+        ASSERT_FALSE(bytes.empty());
+        System::Security::Cryptography::SHA256 sha;
+        EXPECT_EQ(HexDigest(sha.ComputeHash(bytes)), expected);
+    }
+}
+
 TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndExactPasses)
 {
     using System::InvalidOperationException;

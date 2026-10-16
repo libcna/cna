@@ -118,7 +118,7 @@ namespace
     }
 }
 
-class SoftwareIblSamplingTest final : public Game
+class IblSamplingTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> manager_;
     int result_ = 1;
@@ -167,7 +167,7 @@ protected:
         FillCubeLevel(*blackSpecular, 0, 1, 0, 0, 0);
 
         Check(renderer.SupportsImageBasedLightingEXT(),
-              "Software advertises the image-based lighting it executes");
+              "renderer advertises the image-based lighting it executes");
 
         GpuDrawParams flatAmbient;
         SetPbr(flatAmbient, white.get());
@@ -224,7 +224,11 @@ protected:
         const int pointMip = Shade(renderer, device, *vertices, mipParams);
         renderer.ApplySamplerState(11, 0, 1, 1, 1); // linear mip selection -> level 0/1 blend
         const int linearMip = Shade(renderer, device, *vertices, mipParams);
-        Check(pointMip < 5 && Near(linearMip, 64, 4),
+        std::printf("[INFO] half-LOD point=%d linear=%d\n", pointMip, linearMip);
+        // The exact half-LOD tie is allowed to pick either adjacent level for point filtering;
+        // linear filtering must blend them. What the public contract needs here is that slot 11
+        // controls mip interpolation rather than the shader silently forcing one policy.
+        Check((pointMip < 5 || Near(pointMip, 128, 3)) && Near(linearMip, 64, 4),
               "public sampler slot 11 controls prefiltered cube mip interpolation");
 
         GpuDrawParams skinned = splitSum;
@@ -246,7 +250,7 @@ protected:
     }
 
 public:
-    SoftwareIblSamplingTest()
+    IblSamplingTest()
     {
         manager_ = std::make_unique<GraphicsDeviceManager>(this);
         manager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
@@ -259,7 +263,7 @@ public:
 
 int main()
 {
-    SoftwareIblSamplingTest game;
+    IblSamplingTest game;
     game.Run();
     return game.Result();
 }

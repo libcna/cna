@@ -302,7 +302,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # channel-discriminating normal/occlusion semantics, XY-only normal scale and the
         # specification's occlusion-strength formula.
         cna_easygl_test(cna_test_easygl_pbr_material_maps
-                        easygl_pbr_material_maps_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_material_maps_test.cpp)
         cna_register_renderer_test(NAME EasyGL_Pbr_MaterialMaps COMMAND cna_test_easygl_pbr_material_maps
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

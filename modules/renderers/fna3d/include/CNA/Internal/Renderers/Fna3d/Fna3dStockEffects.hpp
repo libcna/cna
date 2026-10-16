@@ -15,7 +15,7 @@ namespace CNA::Internal::Renderers::Fna3d
      *
      * FNA3D can only execute Direct3D 9 Effect Framework binaries, so every draw this renderer
      * issues goes through one of the six XNA stock effects vendored under the module's `effects/`
-     * directory, or CNA's compiled punctual-light extension. Selection is made from
+     * directory, or CNA's compiled punctual-light/PBR extensions. Selection is made from
      * `GpuDrawParams`, not from the public `Effect` object, because the shared graphics layer
      * hands renderers the flattened parameter block.
      */
@@ -35,7 +35,15 @@ namespace CNA::Internal::Renderers::Fna3d
         Skinned,
         /** @brief CNA's Basic/Skinned extension for one point or spot light. */
         Punctual,
-        /** @brief Number of stock effects; not an effect itself. */
+        /** @brief CNA's compact Basic/Skinned directional-shadow extension. */
+        Shadow,
+        /** @brief Directional-shadow extension whose sole pixel shape consumes COLOR0. */
+        ShadowVertexColor,
+        /** @brief CNA's rigid metallic-roughness effect. */
+        Pbr,
+        /** @brief CNA's skinned metallic-roughness effect. */
+        SkinnedPbr,
+        /** @brief Number of embedded effect kinds; not an effect itself. */
         Count
     };
 
@@ -264,6 +272,14 @@ namespace CNA::Internal::Renderers::Fna3d
         void SetMatrix(const char* name, const Matrix& matrix) const;
 
         /**
+         * @brief Writes flattened row-major 4x4 matrices into an Effect matrix array.
+         * @param name   Parameter name.
+         * @param source Source matrices in CNA/XNA `M11..M44` member order.
+         * @param count  Number of matrices to write, bounded by the reflected parameter.
+         */
+        void SetMatrixArray(const char* name, const float* source, int count) const;
+
+        /**
          * @brief Writes an array of flattened 4x4 matrices as a `float4x3` parameter.
          *
          * @p source holds `count` matrices in the element order `Matrix::ToColumnMajor` produces:
@@ -290,6 +306,19 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param passIndex Pass within technique 0 (zero for every XNA stock effect).
          */
         void Apply(FNA3D_Device* device, int passIndex = 0);
+
+        /**
+         * @brief Returns the physical pixel-sampler register selected by the applied pass.
+         *
+         * Effect Framework compilation may compact sampler registers even when the source carries
+         * explicit `register(sN)` annotations. MojoShader exposes the resulting name/register map
+         * only after `Apply()`, so renderer-owned extension effects bind textures through this map
+         * instead of assuming source-order slots.
+         *
+         * @param name Sampler symbol in the compiled shader.
+         * @return Register index, or -1 when the applied pixel shader declares no such sampler.
+         */
+        [[nodiscard]] int FindPixelSamplerRegister(const char* name) const;
 
         /** @brief The parsed MojoShader effect, or nullptr when not loaded. */
         [[nodiscard]] MOJOSHADER_effect* GetEffectData() const { return effectData_; }

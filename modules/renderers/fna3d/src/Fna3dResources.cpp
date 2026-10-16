@@ -26,6 +26,14 @@ namespace CNA::Internal::Renderers::Fna3d
             return extent > 0 ? extent : 1;
         }
 
+        /** XNA's ClosestMSAAPower, with CNA's portable FNA3D contract capped at 4x. */
+        int CanonicalMultiSampleCount(int requested)
+        {
+            if (requested >= 4) return 4;
+            if (requested >= 2) return 2;
+            return 0;
+        }
+
         /**
          * FNA3D_SupportsNoOverwrite reports whether the running driver can honour a no-overwrite
          * upload; FNA itself downgrades to the plain option when it cannot, and forwarding it
@@ -340,10 +348,11 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         FNA3D_SetTextureName(device, texture_, "CNA RenderTarget2D");
 
-        if (multiSampleCount > 1)
+        const int canonicalMultiSampleCount = CanonicalMultiSampleCount(multiSampleCount);
+        if (canonicalMultiSampleCount > 1)
         {
             const int applied =
-                FNA3D_GetMaxMultiSampleCount(device, format, multiSampleCount);
+                FNA3D_GetMaxMultiSampleCount(device, format, canonicalMultiSampleCount);
             if (applied > 1)
             {
                 multiSampleCount_ = applied;
@@ -603,10 +612,11 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         FNA3D_SetTextureName(device, texture_, "CNA RenderTargetCube");
 
-        if (multiSampleCount > 1)
+        const int canonicalMultiSampleCount = CanonicalMultiSampleCount(multiSampleCount);
+        if (canonicalMultiSampleCount > 1)
         {
             const int applied = FNA3D_GetMaxMultiSampleCount(device, FNA3D_SURFACEFORMAT_COLOR,
-                                                             multiSampleCount);
+                                                             canonicalMultiSampleCount);
             if (applied > 1)
             {
                 multiSampleCount_ = applied;
