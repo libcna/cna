@@ -19,6 +19,42 @@
 #include <memory>
 #endif
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+namespace {
+    // Set when Windows detaches this library from a terminating process; see DllMain below.
+    bool processTerminating = false;
+
+    // Keeps objects the process abandons reachable, so a leak checker does not report what is
+    // deliberate.
+    void Abandon(std::shared_ptr<void> object)
+    {
+        static auto* const abandoned = new std::vector<std::shared_ptr<void>>();
+        abandoned->push_back(std::move(object));
+    }
+}
+
+#if defined(_WIN32)
+// Windows calls this before it runs the library's atexit handlers and static destructors. When the
+// process is terminating (reserved is not null), every other thread is already gone: a device whose
+// teardown waits for its own worker threads -- SDL_GPU's Direct3D 12 backend -- would wait forever,
+// so the objects a game left alive are abandoned to the operating system, as Windows prescribes for
+// that case. A library unloaded with FreeLibrary still destroys them.
+extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID reserved)
+{
+    if (reason == DLL_PROCESS_DETACH && reserved != nullptr) processTerminating = true;
+    return TRUE;
+}
+#endif
+
 namespace CNA::C::Detail {
 
 namespace {
@@ -641,13 +677,11 @@ uint32_t NextHandleGeneration(const uint32_t current) noexcept
 
 HandleRegistry::~HandleRegistry()
 {
-    // Held rather than dropped, so the objects stay reachable and a leak checker does not report
-    // what is deliberate; the process is ending.
-    static auto* const abandoned = new std::vector<std::shared_ptr<void>>();
+    // Held rather than dropped; the process is ending.
     const std::thread::id current = std::this_thread::get_id();
     for (Slot& slot : slots_) {
-        if (slot.object != nullptr && slot.creationThread != current) {
-            abandoned->push_back(std::move(slot.object));
+        if (slot.object != nullptr && (processTerminating || slot.creationThread != current)) {
+            Abandon(std::move(slot.object));
         }
     }
 }
@@ -755,6 +789,11 @@ void HandleRegistry::DestroyAll() noexcept
     {
         std::lock_guard lock(mutex_);
         slots.swap(slots_);
+    }
+    if (processTerminating) {
+        for (Slot& slot : slots) {
+            if (slot.object != nullptr) Abandon(std::move(slot.object));
+        }
     }
     // Destroyed outside the lock: an object's destructor may release handles of its own, which
     // the now empty registry answers as invalid.

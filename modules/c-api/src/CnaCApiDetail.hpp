@@ -751,7 +751,9 @@ public:
      *
      * For process exit: an object still registered then is destroyed while the libraries it was
      * created with are still loaded, rather than from the static destructor, which runs after
-     * the static teardown of any library loaded later than the registry was constructed.
+     * the static teardown of any library loaded later than the registry was constructed. When
+     * Windows is terminating the process, whose other threads are already gone, the objects are
+     * abandoned to the operating system instead.
      */
     void DestroyAll() noexcept;
 
