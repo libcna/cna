@@ -81,6 +81,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BasicEffect_PunctualLight COMMAND cna_test_software_punctual_light
         TIMEOUT 30 LABELS "Software")
 
+    # CNAEXT shadow receivers must sample single/cascade directional maps and punctual cube/2D
+    # maps in both PBR and classic lighting without darkening ambient light.
+    cna_software_test(cna_test_software_shadow_sampling software_shadow_sampling_test.cpp)
+    cna_register_renderer_test(NAME Software_ShadowSampling
+        COMMAND cna_test_software_shadow_sampling TIMEOUT 30 LABELS "Software")
+
     cna_software_test(cna_test_software_effects software_effects_test.cpp)
     cna_register_renderer_test(NAME Software_Effects COMMAND cna_test_software_effects
         TIMEOUT 30 LABELS "Software")

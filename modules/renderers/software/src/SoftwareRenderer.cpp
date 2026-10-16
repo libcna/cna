@@ -1564,10 +1564,10 @@ namespace CNA::Internal::Renderers::Software
 
         /// The point or spot light a BasicEffect can carry (BasicEffect.PunctualLightEXT, GpuDrawParams::punctualKind).
         /// The same equation as the EasyGL stock shaders' cnaPunctualLight -- inverse-square falloff windowed to zero at
-        /// the range, a squared smoothstep-free cone for a spot -- so the two renderers light a scene alike. Its shadow
-        /// map is not evaluated here: this renderer lights without shadowing the punctual light.
+        /// the range, a squared smoothstep-free cone for a spot -- so the two renderers light a scene alike.
         void AddPunctualDiffuse(const Vector3& worldPosition, const Vector3& worldNormal,
-                                const GpuDrawParams& params, float (&diffuseSum)[3])
+                                const GpuDrawParams& params, float (&diffuseSum)[3],
+                                float visibility = 1.0f)
         {
             if (params.punctualKind <= 0) return;
             const Vector3 offset(params.punctualPosition[0] - worldPosition.X,
@@ -1591,14 +1591,15 @@ namespace CNA::Internal::Renderers::Software
             }
             const float nDotL = std::max(worldNormal.X * toLight.X + worldNormal.Y * toLight.Y + worldNormal.Z * toLight.Z, 0.0f);
             for (int channel = 0; channel < 3; ++channel)
-                diffuseSum[channel] += params.punctualDiffuse[channel] * nDotL * attenuation;
+                diffuseSum[channel] += params.punctualDiffuse[channel] * nDotL * attenuation * visibility;
         }
 
         /// SOFTWARE-113/114/115: FNA StockEffects/HLSL/Lighting.fxh ComputeLights. Effect-specific
         /// FillGpuDrawParams prepares ambient/emissive consistently before this shared equation.
         [[nodiscard]] ClassicLightingResult ComputeClassicLighting(
             const Vector3& worldPosition, const Vector3& worldNormal,
-            const GpuDrawParams& params)
+            const GpuDrawParams& params, float directionalVisibility = 1.0f,
+            float punctualVisibility = 1.0f)
         {
             const Vector3 eye = NormalizeOrZero(Vector3(
                 params.eyePositionWorld[0] - worldPosition.X,
@@ -1633,13 +1634,13 @@ namespace CNA::Internal::Renderers::Software
                 for (int channel = 0; channel < 3; ++channel)
                 {
                     diffuseSum[channel] +=
-                        diffuseWeight * diffuseColors[light][channel];
+                        diffuseWeight * diffuseColors[light][channel] * directionalVisibility;
                     specularSum[channel] +=
-                        specularWeight * specularColors[light][channel];
+                        specularWeight * specularColors[light][channel] * directionalVisibility;
                 }
             }
 
-            AddPunctualDiffuse(worldPosition, worldNormal, params, diffuseSum);
+            AddPunctualDiffuse(worldPosition, worldNormal, params, diffuseSum, punctualVisibility);
 
             ClassicLightingResult result;
             for (int channel = 0; channel < 3; ++channel)
@@ -1665,6 +1666,13 @@ namespace CNA::Internal::Renderers::Software
                 m[0] * v.X + m[4] * v.Y + m[8]  * v.Z + m[12] * w,
                 m[1] * v.X + m[5] * v.Y + m[9]  * v.Z + m[13] * w,
                 m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
+        }
+
+        [[nodiscard]] bool UsesFragmentShadows(const GpuDrawParams& params)
+        {
+            return (params.shadowsEnabled && params.shadowMap != nullptr) ||
+                   (params.punctualKind == 1 && params.punctualShadowCube != nullptr) ||
+                   (params.punctualKind == 2 && params.punctualShadowMap != nullptr);
         }
 
         [[nodiscard]] float AffineHandedness(const float* m)
@@ -1737,7 +1745,10 @@ namespace CNA::Internal::Renderers::Software
             vertex.ny = worldNormal.Y;
             vertex.nz = worldNormal.Z;
 
-            if (params.preferPerPixelLighting)
+            // A vertex-lit result has already combined ambient, directional and punctual terms.
+            // Shadow maps attenuate only their own light, so active reception must keep those terms
+            // separate until the fragment position is known.
+            if (params.preferPerPixelLighting || UsesFragmentShadows(params))
                 return;
 
             const ClassicLightingResult lighting =
@@ -2026,6 +2037,214 @@ namespace CNA::Internal::Renderers::Software
                 g_cubeTrace.sampleR = r; g_cubeTrace.sampleG = g;
                 g_cubeTrace.sampleB = b; g_cubeTrace.sampleA = a;
             }
+        }
+
+        /// Samples the red channel exactly as the stock shadow shaders' point-clamped samplers do.
+        [[nodiscard]] float SampleShadowRed(const SoftwareColorSurface& surface, float u, float v)
+        {
+            const int width = std::max(1, surface.ColorWidth());
+            const int height = std::max(1, surface.ColorHeight());
+            const int x = std::clamp(static_cast<int>(u * static_cast<float>(width)), 0, width - 1);
+            const int y = std::clamp(static_cast<int>(v * static_cast<float>(height)), 0, height - 1);
+            float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+            surface.FetchColorTexel(0, x, y, r, g, b, a);
+            return r;
+        }
+
+        void TransformProjectiveColumnMajor(const float* matrix, const Vector3& position,
+                                            float& x, float& y, float& z, float& w)
+        {
+            x = matrix[0] * position.X + matrix[4] * position.Y +
+                matrix[8] * position.Z + matrix[12];
+            y = matrix[1] * position.X + matrix[5] * position.Y +
+                matrix[9] * position.Z + matrix[13];
+            z = matrix[2] * position.X + matrix[6] * position.Y +
+                matrix[10] * position.Z + matrix[14];
+            w = matrix[3] * position.X + matrix[7] * position.Y +
+                matrix[11] * position.Z + matrix[15];
+        }
+
+        [[nodiscard]] float SampleDirectionalShadowPcf(
+            const SoftwareColorSurface& map, float u, float v, float depth, float bias,
+            int radius, float minU, float minV, float maxU, float maxV)
+        {
+            if (depth > 1.0f) return 1.0f;
+            const float texelU = 1.0f / static_cast<float>(std::max(1, map.ColorWidth()));
+            const float texelV = 1.0f / static_cast<float>(std::max(1, map.ColorHeight()));
+            radius = std::clamp(radius, 0, 2);
+            float lit = 0.0f;
+            int taps = 0;
+            for (int y = -radius; y <= radius; ++y)
+            {
+                for (int x = -radius; x <= radius; ++x)
+                {
+                    const float sampleU = std::clamp(u + static_cast<float>(x) * texelU,
+                                                     minU, maxU);
+                    const float sampleV = std::clamp(v + static_cast<float>(y) * texelV,
+                                                     minV, maxV);
+                    lit += depth - bias <= SampleShadowRed(map, sampleU, sampleV) ? 1.0f : 0.0f;
+                    ++taps;
+                }
+            }
+            return lit / static_cast<float>(std::max(1, taps));
+        }
+
+        [[nodiscard]] int SelectShadowCascade(const Vector3& worldPosition,
+                                               const GpuDrawParams& params)
+        {
+            const int count = std::clamp(params.cascadeCount, 1, 4);
+            const float viewDepth = -(worldPosition.X * params.cascadeViewZRow[0] +
+                                      worldPosition.Y * params.cascadeViewZRow[1] +
+                                      worldPosition.Z * params.cascadeViewZRow[2] +
+                                      params.cascadeViewZRow[3]);
+            int selected = count - 1;
+            for (int cascade = 0; cascade < count; ++cascade)
+            {
+                if (viewDepth <= params.cascadeSplits[cascade])
+                {
+                    selected = cascade;
+                    break;
+                }
+            }
+            return selected;
+        }
+
+        [[nodiscard]] float SampleCascadeShadow(const SoftwareColorSurface& map,
+                                                 const Vector3& worldPosition,
+                                                 const GpuDrawParams& params, int cascade)
+        {
+            const int count = std::clamp(params.cascadeCount, 1, 4);
+            float x, y, z, w;
+            TransformProjectiveColumnMajor(params.cascadeMatricesColMajor + cascade * 16,
+                                           worldPosition, x, y, z, w);
+            if (!(std::abs(w) > 1e-12f)) return 1.0f;
+            const float u = x / w;
+            const float v = y / w;
+            const float depth = z / w;
+            const float slice = 1.0f / static_cast<float>(count);
+            const float sliceMin = static_cast<float>(cascade) * slice;
+            const float sliceMax = sliceMin + slice;
+            if (u < sliceMin || u > sliceMax || v < 0.0f || v > 1.0f) return 1.0f;
+
+            const float texelU = 1.0f / static_cast<float>(std::max(1, map.ColorWidth()));
+            const float texelV = 1.0f / static_cast<float>(std::max(1, map.ColorHeight()));
+            float minU = sliceMin + texelU;
+            float maxU = sliceMax - texelU;
+            float minV = texelV;
+            float maxV = 1.0f - texelV;
+            // Tiny synthetic atlases may not contain a full one-texel inset. Collapse such a
+            // dimension to its slice centre instead of passing inverted bounds to std::clamp.
+            if (minU > maxU) minU = maxU = (sliceMin + sliceMax) * 0.5f;
+            if (minV > maxV) minV = maxV = 0.5f;
+            return SampleDirectionalShadowPcf(map, u, v, depth, params.shadowDepthBias,
+                                              params.shadowPcfRadius,
+                                              minU, minV, maxU, maxV);
+        }
+
+        [[nodiscard]] float DirectionalShadowVisibility(const SoftwareColorSurface* map,
+                                                        const Vector3& worldPosition,
+                                                        const GpuDrawParams& params)
+        {
+            if (!params.shadowsEnabled || map == nullptr) return 1.0f;
+            if (params.cascadeCount > 0)
+            {
+                const int cascade = SelectShadowCascade(worldPosition, params);
+                float visibility = SampleCascadeShadow(*map, worldPosition, params, cascade);
+                const int count = std::clamp(params.cascadeCount, 1, 4);
+                const float viewDepth = -(worldPosition.X * params.cascadeViewZRow[0] +
+                                          worldPosition.Y * params.cascadeViewZRow[1] +
+                                          worldPosition.Z * params.cascadeViewZRow[2] +
+                                          params.cascadeViewZRow[3]);
+                const float split = params.cascadeSplits[cascade];
+                if (params.cascadeBlendBand > 0.0f && cascade + 1 < count &&
+                    viewDepth > split - params.cascadeBlendBand)
+                {
+                    const float blend = std::clamp(
+                        (viewDepth - (split - params.cascadeBlendBand)) /
+                            params.cascadeBlendBand,
+                        0.0f, 1.0f);
+                    const float next = SampleCascadeShadow(
+                        *map, worldPosition, params, cascade + 1);
+                    visibility += (next - visibility) * blend;
+                }
+                return visibility;
+            }
+
+            float x, y, z, w;
+            TransformProjectiveColumnMajor(params.lightViewProjColMajor,
+                                           worldPosition, x, y, z, w);
+            if (!(std::abs(w) > 1e-12f)) return 1.0f;
+            const float u = x / w * 0.5f + 0.5f;
+            const float v = y / w * 0.5f + 0.5f;
+            const float depth = z / w * 0.5f + 0.5f;
+            if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return 1.0f;
+            return SampleDirectionalShadowPcf(*map, u, v, depth, params.shadowDepthBias,
+                                              params.shadowPcfRadius,
+                                              0.0f, 0.0f, 1.0f, 1.0f);
+        }
+
+        [[nodiscard]] float PunctualShadowVisibility(
+            const SoftwareCubeSurface* cube, const SoftwareColorSurface* map,
+            const Vector3& worldPosition, const GpuDrawParams& params)
+        {
+            if (params.punctualKind <= 0 || !(params.punctualRange > 0.0f)) return 1.0f;
+            const Vector3 offset(params.punctualPosition[0] - worldPosition.X,
+                                 params.punctualPosition[1] - worldPosition.Y,
+                                 params.punctualPosition[2] - worldPosition.Z);
+            const float distance = std::sqrt(offset.X * offset.X + offset.Y * offset.Y +
+                                             offset.Z * offset.Z);
+            if (!(distance > 1e-5f)) return 1.0f;
+            const Vector3 toLight(offset.X / distance, offset.Y / distance, offset.Z / distance);
+            const float here = std::clamp(distance / params.punctualRange, 0.0f, 1.0f);
+            if (params.punctualKind == 1)
+            {
+                if (cube == nullptr) return 1.0f;
+                float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+                const SoftwareSamplerState pointClamp{1, 1, 1, 1, 1, 0, 0.0f};
+                SampleCubeMap(*cube, pointClamp, true, 0.0f,
+                              Vector3(-toLight.X, -toLight.Y, -toLight.Z), r, g, b, a);
+                return here - params.punctualShadowBias <= r ? 1.0f : 0.0f;
+            }
+            if (map == nullptr) return 1.0f;
+
+            float x, y, z, w;
+            TransformProjectiveColumnMajor(params.punctualViewProjColMajor,
+                                           worldPosition, x, y, z, w);
+            if (!(w > 0.0f)) return 1.0f;
+            const float u = x / w * 0.5f + 0.5f;
+            const float v = y / w * 0.5f + 0.5f;
+            if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return 1.0f;
+            const float texelU = 1.0f / static_cast<float>(std::max(1, map->ColorWidth()));
+            const float texelV = 1.0f / static_cast<float>(std::max(1, map->ColorHeight()));
+            float lit = 0.0f;
+            for (int sampleY = -1; sampleY <= 1; ++sampleY)
+            {
+                for (int sampleX = -1; sampleX <= 1; ++sampleX)
+                {
+                    const float sampleU = std::clamp(
+                        u + static_cast<float>(sampleX) * texelU, 0.0f, 1.0f);
+                    const float sampleV = std::clamp(
+                        v + static_cast<float>(sampleY) * texelV, 0.0f, 1.0f);
+                    lit += here - params.punctualShadowBias <=
+                        SampleShadowRed(*map, sampleU, sampleV) ? 1.0f : 0.0f;
+                }
+            }
+            return lit / 9.0f;
+        }
+
+        void ApplyCascadeDebugTint(float& r, float& g, float& b,
+                                   const Vector3& worldPosition,
+                                   const GpuDrawParams& params)
+        {
+            if (!params.cascadeDebugTint || !params.shadowsEnabled || params.cascadeCount <= 0)
+                return;
+            static constexpr float tint[4][3] = {
+                {1.0f, 0.6f, 0.6f}, {0.6f, 1.0f, 0.6f},
+                {0.6f, 0.6f, 1.0f}, {1.0f, 1.0f, 0.6f}};
+            const int cascade = SelectShadowCascade(worldPosition, params);
+            r *= tint[cascade][0];
+            g *= tint[cascade][1];
+            b *= tint[cascade][2];
         }
 
         /// This triangle's cube texel rate -- the footprint the MIPMAP component of
@@ -4706,6 +4925,9 @@ namespace CNA::Internal::Renderers::Software
             const SoftwareColorSurface* texture0;
             const SoftwareColorSurface* texture1;
             const SoftwareCubeSurface* envMap;
+            const SoftwareColorSurface* shadowMap;
+            const SoftwareCubeSurface* punctualShadowCube;
+            const SoftwareColorSurface* punctualShadowMap;
             /// Normal, metallic-roughness, emissive, occlusion, specular-strength and
             /// specular-colour maps. PBR uses the ordinary slot-0 sampler state on this CPU path.
             std::array<const SoftwareColorSurface*, 6> pbrTextures;
@@ -4793,7 +5015,7 @@ namespace CNA::Internal::Renderers::Software
                                     const float* direction, const float* lightColor,
                                     const float (&albedo)[3], const float (&f0)[3],
                                     const float (&f90)[3], float roughness, float metallic,
-                                    float (&sum)[3])
+                                    float (&sum)[3], float visibility = 1.0f)
         {
             const Vector3 light = NormalizeOrZero(Vector3(
                 -direction[0], -direction[1], -direction[2]));
@@ -4823,7 +5045,8 @@ namespace CNA::Internal::Renderers::Software
                     std::max(4.0f * nDotV * nDotL, 1e-4f);
                 const float diffuse =
                     (1.0f - fresnel) * albedo[channel] * (1.0f - metallic) / kPi;
-                sum[channel] += (diffuse + specular) * lightColor[channel] * nDotL;
+                sum[channel] +=
+                    (diffuse + specular) * lightColor[channel] * nDotL * visibility;
             }
         }
 
@@ -5013,18 +5236,24 @@ namespace CNA::Internal::Renderers::Software
                     f90[channel] = specularWeight * (1.0f - metallic) + metallic;
                 }
 
+                const float directionalVisibility = DirectionalShadowVisibility(
+                    ctx.shadowMap, worldPosition, ctx.params);
+                const float punctualVisibility = PunctualShadowVisibility(
+                    ctx.punctualShadowCube, ctx.punctualShadowMap,
+                    worldPosition, ctx.params);
                 float direct[3] = {0.0f, 0.0f, 0.0f};
                 AddPbrDirectionalLight(normal, view, ctx.params.light0Dir,
                                        ctx.params.light0Diffuse, albedo, f0, f90,
-                                       roughness, metallic, direct);
+                                       roughness, metallic, direct, directionalVisibility);
                 AddPbrDirectionalLight(normal, view, ctx.params.light1Dir,
                                        ctx.params.light1Diffuse, albedo, f0, f90,
-                                       roughness, metallic, direct);
+                                       roughness, metallic, direct, directionalVisibility);
                 AddPbrDirectionalLight(normal, view, ctx.params.light2Dir,
                                        ctx.params.light2Diffuse, albedo, f0, f90,
-                                       roughness, metallic, direct);
+                                       roughness, metallic, direct, directionalVisibility);
                 float punctual[3] = {0.0f, 0.0f, 0.0f};
-                AddPunctualDiffuse(worldPosition, normal, ctx.params, punctual);
+                AddPunctualDiffuse(
+                    worldPosition, normal, ctx.params, punctual, punctualVisibility);
 
                 float occlusionR = 1.0f, occlusionG = 1.0f;
                 float occlusionB = 1.0f, occlusionA = 1.0f;
@@ -5052,14 +5281,20 @@ namespace CNA::Internal::Renderers::Software
                 float specularR;
                 float specularG;
                 float specularB;
-                if (ctx.params.preferPerPixelLighting)
+                if (ctx.params.preferPerPixelLighting || UsesFragmentShadows(ctx.params))
                 {
                     const Vector3 worldPosition(
                         pwpx / invW, pwpy / invW, pwpz / invW);
                     const Vector3 worldNormal = NormalizeOrZero(Vector3(
                         pnx / invW, pny / invW, pnz / invW));
+                    const float directionalVisibility = DirectionalShadowVisibility(
+                        ctx.shadowMap, worldPosition, ctx.params);
+                    const float punctualVisibility = PunctualShadowVisibility(
+                        ctx.punctualShadowCube, ctx.punctualShadowMap,
+                        worldPosition, ctx.params);
                     const ClassicLightingResult lighting =
-                        ComputeClassicLighting(worldPosition, worldNormal, ctx.params);
+                        ComputeClassicLighting(worldPosition, worldNormal, ctx.params,
+                                               directionalVisibility, punctualVisibility);
                     r *= lighting.diffuse[0];
                     g *= lighting.diffuse[1];
                     b *= lighting.diffuse[2];
@@ -5088,6 +5323,13 @@ namespace CNA::Internal::Renderers::Software
                 g *= ctx.params.diffuseColor[1];
                 b *= ctx.params.diffuseColor[2];
                 a *= ctx.params.diffuseColor[3];
+            }
+
+            if (ctx.params.pbr || UsesClassicEffectLighting(ctx.params))
+            {
+                const Vector3 worldPosition(
+                    pwpx / invW, pwpy / invW, pwpz / invW);
+                ApplyCascadeDebugTint(r, g, b, worldPosition, ctx.params);
             }
 
             // FNA's AlphaTestEffect pixel shader evaluates texture * vertex colour * diffuse/alpha,
@@ -5237,6 +5479,11 @@ namespace CNA::Internal::Renderers::Software
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
             const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
+            const auto* shadowMap = dynamic_cast<const SoftwareColorSurface*>(params.shadowMap);
+            const auto* punctualShadowCube =
+                dynamic_cast<const SoftwareCubeSurface*>(params.punctualShadowCube);
+            const auto* punctualShadowMap =
+                dynamic_cast<const SoftwareColorSurface*>(params.punctualShadowMap);
             const std::array<const SoftwareColorSurface*, 6> pbrTextures = {
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrNormalMap),
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrMetallicRoughnessMap),
@@ -5247,7 +5494,8 @@ namespace CNA::Internal::Renderers::Software
             const bool useDualTexture = params.dualTexture;
             const bool useEnvMap = params.envMapping;
             const bool needUV = useDualTexture || useEnvMap || params.textureEnabled || params.pbr;
-            return ShadedContext{params, texture0, texture1, envMap, pbrTextures,
+            return ShadedContext{params, texture0, texture1, envMap,
+                                 shadowMap, punctualShadowCube, punctualShadowMap, pbrTextures,
                                  useDualTexture, useEnvMap,
                                  needUV, blendState, blendFactor, depthState, stencilState,
                                  colorWriteMask, multiSampleMask, occlusionQuery, sampler0, sampler1,
@@ -5371,6 +5619,11 @@ namespace CNA::Internal::Renderers::Software
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
             const auto* envMap = dynamic_cast<const SoftwareCubeSurface*>(params.envMap);
+            const auto* shadowMap = dynamic_cast<const SoftwareColorSurface*>(params.shadowMap);
+            const auto* punctualShadowCube =
+                dynamic_cast<const SoftwareCubeSurface*>(params.punctualShadowCube);
+            const auto* punctualShadowMap =
+                dynamic_cast<const SoftwareColorSurface*>(params.punctualShadowMap);
             const std::array<const SoftwareColorSurface*, 6> pbrTextures = {
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrNormalMap),
                 dynamic_cast<const SoftwareColorSurface*>(params.pbrMetallicRoughnessMap),
@@ -5408,7 +5661,8 @@ namespace CNA::Internal::Renderers::Software
                                                std::max(1, envMap->CubeSize()))
                 : TextureFootprint{};
             const float rhoCube = footprintCube.isotropicRate;
-            const ShadedContext ctx{params, texture0, texture1, envMap, pbrTextures,
+            const ShadedContext ctx{params, texture0, texture1, envMap,
+                                    shadowMap, punctualShadowCube, punctualShadowMap, pbrTextures,
                                     useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
                                     depthState, faceStencil, colorWriteMask, multiSampleMask,

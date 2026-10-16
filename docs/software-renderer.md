@@ -626,9 +626,16 @@ can execute an opcode and still accept invalid classic bytecode.
   Rigid and skinned tangent frames use inverse-transpose normals and fold World, instance and joint
   determinant signs into tangent handedness. The shared hand-derived oracle matches `(91,91,91)`,
   `(97,0,0)`, `(27,4,4)` and the mirrored-joint normal-map result `(79,79,79)` exactly; the
-  1,600-draw parameter-ring and five-case vertex-colour tests also pass. IBL and shadow-map sampling
-  remain intentionally absent from this CPU path and are reported through their existing renderer
-  capabilities.
+  1,600-draw parameter-ring and five-case vertex-colour tests also pass. Image-based lighting
+  remains intentionally absent and capability-gated.
+- **Classic and PBR shadow reception is complete.** The CPU fragment path samples single and
+  cascaded directional maps with configurable 1/9/25-tap PCF, cascade blending/debug tint, point
+  cube maps and spot 2D maps. Directional and punctual visibility attenuate only their respective
+  direct-light terms, preserving ambient and emissive contributions. Active classic shadows defer
+  XNA's normally per-vertex lighting to the fragment path so those terms remain separable. The
+  eight-case deterministic oracle covers capability reporting, rigid/skinned and hard/soft
+  directional shadows, cascade slice selection, point and spot shadows, and classic ambient
+  isolation.
 - **Classic stock-effect fog is complete** (`SOFTWARE-112`). `BasicEffect`, `AlphaTestEffect`,
   `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` use FNA's view-space fog vector,
   including transformed World/View matrices, the degenerate start=end case and SkinnedEffect's
