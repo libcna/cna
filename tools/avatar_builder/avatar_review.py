@@ -351,7 +351,7 @@ def quality_jobs(catalogs, library, manifest, version):
                 face[controls.index(key)] = max(0, min(255, int(round(128 + value * 127))))
         return face
 
-    def avatar(body, skin, hair_colour, eyes, hair, preset, extras, top=None, bottom=None):
+    def avatar(body, skin, hair_colour, eyes, hair, preset, extras, top=None, bottom=None, group="face"):
         authored = manifest["bodies"][("female", "male")[body]]["authoredHeightMillimeters"]
         colors = {"skin": TONES[skin], "hair": hair_colour, "eyes": eyes, "top": CLOTH[(skin * 3 + body) % len(CLOTH)],
                   "bottom": CLOTH[9 if body else 5], "shoes": CLOTH[8], "accessory": CLOTH[0]}
@@ -363,7 +363,7 @@ def quality_jobs(catalogs, library, manifest, version):
         items = {"hair": names[hair], "top": top or names["top_tshirt"], "bottom": bottom or names["bottom_jeans"],
                  "shoes": names["shoes_sneakers"], "glasses": extras.get("glasses", 0), "hat": extras.get("hat", 0)}
         d = Descriptor(body, authored, 128, version, colors, items, extras.get("facial_hair", 0),
-                       shaped(presets.get(("face", preset), {})), accessories=extras.get("accessories"),
+                       shaped(presets.get((group, preset), {})), accessories=extras.get("accessories"),
                        makeup=extras.get("makeup"), item_formats=fmt)
         return d
     for index, spec in enumerate(PORTRAITS):
@@ -402,6 +402,123 @@ def quality_jobs(catalogs, library, manifest, version):
             for view, yaw in (("front", 0.0), ("3/4", -35.0), ("side", -90.0)):
                 jobs.append(job("bodies-%d-%s-%s" % (body, label.replace(" ", ""), view.replace("/", "")), "bodies", d, eye, target,
                                 fov, yaw, label="%s %s %s" % (("female", "male")[body], label, view)))
+    return jobs + focus_jobs(catalogs, library, manifest, version, avatar)
+
+
+def posed_point(catalogs, library, description, point, yaw=0.0, animation="Stand0", time=0.0, bone="Head"):
+    """Where a bind-pose model point carried by `bone` is in a posed avatar turned by yaw."""
+    model = preview.assemble(catalogs, description)
+    rotations, root, _ = library.sample(animation, time)
+    skins = preview.skin_matrices(model, rotations, root, library.bind)
+    return (preview.yaw_matrix(yaw) @ skins[rig.INDEX[bone]] @ np.append(np.asarray(point, dtype=float), 1.0))[:3]
+
+
+# Focus avatars: (body, skin, hair colour, eye colour, hair, face preset, extras) -- light, medium and dark
+# skin on both bodies, with and without makeup, a beard and glasses.
+FOCUS = [
+    (0, 0, (120, 78, 40), (70, 130, 90), "hair_ponytail", "Balanced", {}),
+    (1, 1, (74, 48, 30), (70, 46, 30), "hair_crew", "Balanced", {}),
+    (0, 2, (36, 28, 24), (88, 56, 34), "hair_bun", "Heart",
+     {"makeup": {"lips": 671, "eyeliner": 650, "eyeShadow": 640}, "lips": (166, 70, 80), "eyeShadow": (138, 108, 98)}),
+    (1, 3, (28, 24, 22), (58, 38, 28), "hair_fade", "Square", {"facial_hair": 482}),
+    (0, 4, (28, 24, 22), (58, 38, 28), "hair_highponytail", "Oval", {}),
+    (1, 0, (160, 118, 74), (72, 112, 158), "hair_sidepart", "Long", {"glasses": 81}),
+]
+
+
+def focus_jobs(catalogs, library, manifest, version, avatar):
+    """Close focus sheets for the face's details: `eyes` and `mouth` (front, three-quarter, profile, above,
+    below), `temples` (every hairstyle beside the ear, wearing hoops), `profiles` (both sides, head and
+    shoulders), `hands` (close, posed and gloved) and `presetgroups` (the eye, brow, nose, mouth and ear
+    presets)."""
+    jobs = []
+    names = {i["name"]: i["id"] for i in manifest["items"]}
+    views = (("front", 0.0, 0.0), ("3/4", -35.0, 0.0), ("profile", -90.0, 0.0), ("above", -25.0, 0.45), ("below", -20.0, -0.4))
+    for index, spec in enumerate(FOCUS):
+        d = avatar(*spec)
+        data = d.encode()
+        body = ("female", "male")[spec[0]]
+        eyes = [np.array(manifest["faceAnchors"][body][k]) for k in ("eyeLeft", "eyeRight")]
+        mid = (eyes[0] + eyes[1]) / 2.0
+        mouth = mid + np.array([0.0, -0.071 * (1.08 if spec[0] == 0 else 1.12), 0.004])
+        for sheet, centre, span in (("eyes", mid + np.array([0.0, 0.012, 0.0]), 0.18), ("mouth", mouth, 0.11)):
+            for label, yaw, lift in views:
+                # A three-quarter or profile view looks at the eye toward the camera.
+                if sheet == "eyes" and yaw <= -60.0:
+                    posed = max((posed_point(catalogs, library, data, e + np.array([0.0, 0.012, 0.0]), yaw) for e in eyes),
+                                key=lambda q: q[2])
+                else:
+                    posed = posed_point(catalogs, library, data, centre, yaw)
+                distance = 0.5 * span / np.tan(0.14)
+                eye = posed + np.array([0.0, lift * span, distance])
+                jobs.append(job("%s-%d-%s" % (sheet, index, label.replace("/", "")), sheet, d, eye, posed, 0.28, yaw=yaw,
+                                label="%s %s %s" % (body, spec[5], label)))
+    # Every hairstyle beside the ear (the side it suits), with hoops: temples, sideburns, the hairline
+    # over the ear and what of the ear and the earring the hair lets show.
+    for item in (i for i in manifest["items"] if i["slot"] == "hair"):
+        b = 1 if item["random"]["male"] > item["random"]["female"] else 0
+        d = avatar(b, 1, (120, 78, 40), (70, 130, 90), item["name"], "Balanced", {"accessories": {"earrings": 512}})
+        data = d.encode()
+        body = ("female", "male")[b]
+        ear_point = np.array(manifest["faceAnchors"][body]["earLeft"])
+        for label, yaw in (("front-side", -50.0), ("side", -90.0), ("back-side", -130.0)):
+            posed = posed_point(catalogs, library, data, ear_point + np.array([0.0, 0.02, 0.03]), yaw)
+            span = 0.26
+            jobs.append(job("temples-%03d-%s" % (item["id"], label), "temples", d, posed + np.array([0.0, 0.0, 0.5 * span / np.tan(0.14)]),
+                            posed, 0.28, yaw=yaw, label="%s %s" % (item["name"][5:], label)))
+    # Both profiles, head and shoulders.
+    for index, spec in enumerate(PORTRAITS[:8]):
+        d = avatar(*spec)
+        data = d.encode()
+        head, span = head_height(catalogs, library, data)
+        k = span / REFERENCE_SPAN
+        for label, yaw in (("left", -90.0), ("right", 90.0)):
+            c = head_centre(catalogs, library, data, yaw)
+            jobs.append(job("profiles-%02d-%s" % (index, label), "profiles", d, (c[0], head - 0.06 * k, c[2] + 2.3 * k),
+                            (c[0], head - 0.10 * k, c[2]), 0.28, yaw=yaw, label="%s %s %s" % (spec[5], spec[4][5:], label)))
+    # Hands: close from the palm side and the back, standing, swinging, waving and clapping; gloves and rings.
+    hand_cases = []
+    for b in (0, 1):
+        for skin in (0, 3):
+            hand_cases.append((b, skin, {}, "bare"))
+    hand_cases += [(0, 2, {"accessories": {"gloves": 550}}, "knit"), (1, 1, {"accessories": {"gloves": 551}}, "fingerless"),
+                   (1, 4, {"accessories": {"gloves": 552}}, "work"), (0, 1, {"accessories": {"gloves": 553}}, "formal"),
+                   (0, 4, {"accessories": {"rings": 562}}, "gem ring"), (1, 2, {"accessories": {"rings": 561}}, "signet")]
+    poses = (("palm", "Stand0", 0.0, np.array([-0.06, 0.03, 0.42])), ("back", "Stand0", 0.0, np.array([-0.40, 0.05, 0.12])),
+             ("side", "Stand0", 0.0, np.array([0.0, 0.02, -0.42])))
+    for index, (b, skin, extras, label) in enumerate(hand_cases):
+        d = avatar(b, skin, (70, 48, 34), (88, 56, 34), "hair_ponytail" if b == 0 else "hair_crew", "Balanced", extras)
+        data = d.encode()
+        for view, animation, time, offset in poses:
+            wrist, _ = posed_joint(catalogs, library, data, animation, time, "WristRight")
+            tip, _ = posed_joint(catalogs, library, data, animation, time, "FingerMiddle3Right")
+            hand = (wrist + tip) / 2.0
+            jobs.append(job("hands-%02d-%s" % (index, view), "hands", d, hand + offset, hand, 0.45, animation=animation, time=time,
+                            label="%s %s %s" % (("female", "male")[b], label, view)))
+    library_clips = library.clips
+    for index, (animation, fraction) in enumerate((("Wave", 0.35), ("Clap", 0.45), ("Celebrate", 0.5), ("Stand3", 0.5))):
+        b = index % 2
+        d = avatar(b, 2, (70, 48, 34), (88, 56, 34), "hair_ponytail" if b == 0 else "hair_crew", "Balanced", {})
+        data = d.encode()
+        time = library_clips[animation]["duration"] * fraction
+        wrist, _ = posed_joint(catalogs, library, data, animation, time, "WristRight")
+        tip, _ = posed_joint(catalogs, library, data, animation, time, "FingerMiddle3Right")
+        hand = (wrist + tip) / 2.0
+        jobs.append(job("hands-anim-%d" % index, "hands", d, hand + np.array([-0.10, 0.04, 0.50]), hand, 0.5, animation=animation,
+                        time=time, label="%s %s" % (("female", "male")[b], animation)))
+    # The eye, brow, nose, mouth and ear presets on both bodies.
+    presets = [(p["group"], p["name"]) for p in manifest.get("facePresets", []) if p["group"] in ("eyes", "brows", "nose", "mouth", "ears")]
+    for b in (0, 1):
+        for group, name in presets:
+            d = avatar(b, 1 + b, (70, 48, 34), (88, 56, 34), "hair_ponytail" if b == 0 else "hair_crew", name, {}, group=group)
+            data = d.encode()
+            head, span = head_height(catalogs, library, data)
+            k = span / REFERENCE_SPAN
+            yaw = -90.0 if group == "ears" else (-35.0 if group == "nose" else -15.0)
+            c = head_centre(catalogs, library, data, yaw)
+            jobs.append(job("presetgroups-%d-%s-%s" % (b, group, name.lower().replace(" ", "")), "presetgroups", d,
+                            (c[0], head - 0.02 * k, c[2] + 1.3 * k), (c[0], head - 0.05 * k, c[2]), 0.28, yaw=yaw,
+                            label="%s %s %s" % (("female", "male")[b], group, name)))
     return jobs
 
 
@@ -464,7 +581,8 @@ def cmd_sheets(args):
     data = json.loads(args.jobs.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
     columns = {"views": 8, "diverse": 8, "animations": 8, "expressions": 8, "faces": 8, "hair": 8, "hairback": 8, "headwear": 8,
-               "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8, "portraits": 10, "presets": 9, "bodies": 6, "random": 10, "randomface": 10}
+               "wardrobe": 8, "facial": 8, "accessories": 8, "makeup": 8, "portraits": 10, "presets": 9, "bodies": 6, "random": 10, "randomface": 10,
+               "eyes": 10, "mouth": 10, "temples": 9, "profiles": 8, "hands": 9, "presetgroups": 10}
     cell = args.cell
     sheets = {}
     for j in data["jobs"]:
