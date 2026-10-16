@@ -406,7 +406,10 @@ def _beard_region(my, full, chin_only=False, sideburns=False, mutton=False, chin
                 return side * back * smoothstep(front + 0.016, front, z) * smoothstep(-0.116, -0.096, y)
             return side * back * smoothstep(0.038, 0.022, z) * smoothstep(-0.064, -0.046, y)
         if chin_only:
-            return smoothstep(0.040, 0.026, ax) * smoothstep(my - 0.020, my - 0.034, y) * smoothstep(-0.02, 0.02, z)
+            # A soft inverted oval round the chin from just under the lower lip (revision 3's straight
+            # sides and flat top read as a block).
+            q = (ax / 0.033) ** 2 + ((y - (my - 0.047)) / 0.027) ** 2
+            return smoothstep(1.18, 0.82, q) * smoothstep(my - 0.013, my - 0.022, y) * smoothstep(-0.02, 0.02, z)
         if full:
             # Clear of the mouth, the beard grows from just under the lower lip round to the jaw
             # (revision 3 left a bare patch under the lip, cut off square at 4 cm either side).
@@ -554,7 +557,7 @@ def stubble_texture(body_type, density, width=384, height=192, dilate=0.0):
     return textures.image_rgba(width, height, fn)
 
 
-def _hanging_beard(body_type, from_y, half_width, length_, seed, thick, count=7):
+def _hanging_beard(body_type, from_y, half_width, length_, seed, thick, count=7, groove=0.78):
     """A beard grown long: strands from under the chin and along the jaw hanging down onto the
     chest and drawn together toward a rounded point (a hair mass), from head-local height from_y
     across half_width each side."""
@@ -571,7 +574,7 @@ def _hanging_beard(body_type, from_y, half_width, length_, seed, thick, count=7)
     # Short beards end in soft rounded clumps, long ones taper to points.
     pointed = smoothstep(0.03, 0.09, length_)
     return shell(ob, roots, length_ * s, flow, lambda t: thick * s * (1.0 - 0.55 * t), seed, closed=False,
-                 tip=0.15 + 0.75 * pointed, notch=(0.008 + 0.032 * pointed) * s, tip_round=0.85, groove=0.78, sub_columns=5)
+                 tip=0.15 + 0.75 * pointed, notch=(0.008 + 0.032 * pointed) * s, tip_round=0.85, groove=groove, sub_columns=5)
 
 
 def facial_hair(body_type, style):
@@ -657,10 +660,12 @@ def facial_hair(body_type, style):
     if style == "facial_longbeard":
         add_part(_hanging_beard(body_type, my - 0.055, 0.050, 0.11, 491, 0.012), "hair_clump")
     elif style in ("facial_goatee", "facial_vandyke"):
-        add_part(_hanging_beard(body_type, my - 0.052, 0.018, 0.022 if style == "facial_goatee" else 0.040, 492, 0.008),
-                 "hair_clump")
+        # Short hanging hair is the beard's own (in a lighter strand texture with deep grooves it
+        # read as a comb under the chin).
+        add_part(_hanging_beard(body_type, my - 0.052, 0.018, 0.022 if style == "facial_goatee" else 0.040, 492, 0.008,
+                                groove=0.55))
     elif style == "facial_chinbeard":
-        add_part(_hanging_beard(body_type, my - 0.052, 0.026, 0.030, 493, 0.010), "hair_clump")
+        add_part(_hanging_beard(body_type, my - 0.052, 0.026, 0.030, 493, 0.010, groove=0.55))
     if not parts:
         raise ValueError(style)
     if style in ("facial_beard", "facial_shortbeard", "facial_longbeard", "facial_muttonchops", "facial_chinstrap"):

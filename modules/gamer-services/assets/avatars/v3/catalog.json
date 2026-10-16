@@ -358,13 +358,13 @@
   },
   {
    "name": "facial_chinbeard.female.glb",
-   "sha256": "adefb5f005d10d1692302b3a6f82022ba59257bc3e74ef6edb9161dccad850af",
-   "size": 71212
+   "sha256": "ed42e9d7e212e46d655f225657a9163d9d4050067e3e09399125c7805bf1c15b",
+   "size": 53364
   },
   {
    "name": "facial_chinbeard.male.glb",
-   "sha256": "9ed266aed6c90816feeca33f184f2e45b58b03a3e1c3c72d0a72ffe1952942d9",
-   "size": 71096
+   "sha256": "220aa47e8394533ae9f0b68f031824a5720ce94763467878bda43e47b6821538",
+   "size": 52928
   },
   {
    "name": "facial_chinstrap.female.glb",
@@ -378,13 +378,13 @@
   },
   {
    "name": "facial_goatee.female.glb",
-   "sha256": "1887ea00119635fa1a842137dcd3df7f19f1d371fa9fcbe628478ef7963d1720",
-   "size": 76780
+   "sha256": "4fd4a373c9d8e866cc1cfb16d485de7613d7dc6b76157ec0e726605b7226e949",
+   "size": 58932
   },
   {
    "name": "facial_goatee.male.glb",
-   "sha256": "aecdc6f74dbad454cd4f10473c4086523ea8465f8529e59175ba0ff7df9bb88e",
-   "size": 76932
+   "sha256": "e4087e76d95aa54e1bb1cba6ecf3aca830a521420067271566717d9be9d17756",
+   "size": 58752
   },
   {
    "name": "facial_handlebar.female.glb",
@@ -498,13 +498,13 @@
   },
   {
    "name": "facial_vandyke.female.glb",
-   "sha256": "209b21f8a005b06c1b3ee304345d93074992179dcc9eaaa8b4fa66a35a717ca6",
-   "size": 76140
+   "sha256": "37ba50a1baf8bcd3b4352be215ba86ad68d050b3b34898b5561111d862c03d87",
+   "size": 58408
   },
   {
    "name": "facial_vandyke.male.glb",
-   "sha256": "ea0c57bab5e6de4775e510ad2581c94a6a3046232bb38a39369f0f60ff15a509",
-   "size": 76568
+   "sha256": "31632adb7287b169c6ff64c84315909c58ebed293e29213668a16394323adb91",
+   "size": 58512
   },
   {
    "name": "glasses_aviator.female.glb",
