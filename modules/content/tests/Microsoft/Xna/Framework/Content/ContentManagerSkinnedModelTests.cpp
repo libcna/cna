@@ -13,6 +13,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -202,6 +205,51 @@ TEST_F(ContentManagerSkinnedModelTest, OutOfRangeIndexThrows)
     std::vector<std::uint8_t> idxBytes;
     AppendValue<std::uint16_t>(idxBytes, 5); // references vertex 5, but only 1 vertex exists
     WriteBytes(root.path() / "test.idx.bin", idxBytes);
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(
+        cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"),
+        ContentLoadException);
+}
+
+// A loaded part draws through SkinnedEffect, and XNA's GraphicsDevice refuses a skinned draw whose
+// declaration does not name BlendIndices0/BlendWeight0: the part's buffer must be declared as the
+// VertexPositionNormalTextureSkinned record its 52-byte stride stands for. It used to be an
+// undeclared raw buffer, which every SkinnedEffect draw refused.
+TEST_F(ContentManagerSkinnedModelTest, PartBufferDeclaresTheSkinnedRecord)
+{
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    ScratchContentRoot root;
+    WriteManifestWithOnePart(root.path(), 52);
+    WriteBytes(root.path() / "test.verts.bin", std::vector<std::uint8_t>(52, 0));
+    WriteBytes(root.path() / "test.idx.bin", std::vector<std::uint8_t>(6, 0));
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+    auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
+
+    ASSERT_EQ(1u, model->Parts.size());
+    ASSERT_NE(nullptr, model->Parts[0].Part);
+    const auto& declaration =
+        model->Parts[0].Part->getVertexBufferProperty()->getVertexDeclarationProperty();
+    const auto& expected =
+        Microsoft::Xna::Framework::Graphics::VertexPositionNormalTextureSkinned::getVertexDeclarationStatic();
+    EXPECT_EQ(expected.getVertexStrideProperty(), declaration.getVertexStrideProperty());
+    EXPECT_EQ(expected.GetVertexElements(), declaration.GetVertexElements());
+}
+
+// Any other stride names no record the loader can declare, so it is refused when loaded rather
+// than producing a model no SkinnedEffect draw accepts.
+TEST_F(ContentManagerSkinnedModelTest, AStrideOtherThanTheSkinnedRecordsThrows)
+{
+    ScratchContentRoot root;
+    WriteManifestWithOnePart(root.path(), 56);
+    WriteBytes(root.path() / "test.verts.bin", std::vector<std::uint8_t>(56, 0));
+    WriteBytes(root.path() / "test.idx.bin", std::vector<std::uint8_t>(6, 0));
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);

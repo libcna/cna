@@ -4727,6 +4727,18 @@ namespace Microsoft::Xna::Framework::Content
 
                     if (vertFile.empty() || idxFile.empty()) { continue; }
                     if (stride <= 0) { continue; }
+                    // The part's record is VertexPositionNormalTextureSkinned's, and its buffer is
+                    // declared as one: XNA has no undeclared vertex buffers, and GraphicsDevice
+                    // refuses a SkinnedEffect draw that does not name BlendIndices/BlendWeight.
+                    const auto& skinnedDeclaration =
+                        Graphics::VertexPositionNormalTextureSkinned::getVertexDeclarationStatic();
+                    if (stride != skinnedDeclaration.getVertexStrideProperty())
+                    {
+                        throw ContentLoadException(
+                            "SkinnedModel part '" + name + "' vertexStride " + std::to_string(stride)
+                                + " is not the " + std::to_string(skinnedDeclaration.getVertexStrideProperty())
+                                + "-byte VertexPositionNormalTextureSkinned record: " + path);
+                    }
 
                     const std::string vertPath = ResolveManifestRelativeSidecarPath(
                         cm, path, "vertices", vertFile);
@@ -4778,7 +4790,8 @@ namespace Microsoft::Xna::Framework::Content
                         }
                     }
 
-                    auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
+                    auto vb = std::make_unique<Graphics::VertexBuffer>(
+                        device, skinnedDeclaration, numVertices, Graphics::BufferUsage::None);
                     vb->SetDataRaw(vertBytes.data(), numVertices, stride);
 
                     auto ib = std::make_unique<Graphics::IndexBuffer>(device, numIndices);
