@@ -923,8 +923,10 @@ namespace CNA::Internal::Net
                 // reliable for the session itself to function coherently and was never part of the
                 // real XNA API surface these properties govern), and not to a host's own relay hop
                 // for two *other* peers just passing through (not data this machine's own game
-                // code ever sees - see the relay branch below, unaffected).
-                if (ShouldDropForSimulatedLoss(session->getSimulatedPacketLossProperty()))
+                // code ever sees - see the relay branch below, unaffected). As in XNA, packets
+                // sent with SendDataOptions::Reliable are not affected by the simulated loss.
+                if ((msg.Options & SendDataOptions::Reliable) == SendDataOptions::None
+                    && ShouldDropForSimulatedLoss(session->getSimulatedPacketLossProperty()))
                 {
                     return;
                 }

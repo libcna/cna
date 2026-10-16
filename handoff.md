@@ -138,14 +138,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
 3. **The XACT natural-completion tests are timing-dependent.** `CueTests.cpp`, `SoundBankTests.cpp`
    and `WaveBankTests.cpp` wait with fixed 50 ms sleeps; under parallel load a rotating subset fails
    (`misc/known_bugs.md` §5). They pass on an idle machine.
-4. **`SendDataOptions` is not a flags enum, so `Chat` cannot be combined** (checked 2026-10-11;
-   found by `GS-AUDIT-016`). XNA declares it `[Flags]` and documents `Chat` combined with
-   `Reliable` and/or `InOrder`, with ordered chat packets ordered only among themselves
-   (`xna4-spec/Microsoft.Xna.Framework.Net/SendDataOptions.xml`). CNA's
-   `SendDataOptions.hpp` is an `enum class` without bitwise operators, and its comment wrongly says
-   the values are not powers of two (`Reliable` 1, `InOrder` 2, `Chat` 4; `ReliableInOrder` is
-   1|2). `NetPacketCodec::SendDataOptionsToEnetFlags` sends `Chat` exactly like `Reliable`, and a
-   combined value 5-7 falls through to the same default.
 5. *(Fixed 2026-10-14.)* `WEBGPU` counted only the draws after a `Clear` inside one occlusion
    run, because a query slot may be written once per resolve and the Clear splits the run across
    render passes; a later run now records into a fresh slot and the readback sums the query's
@@ -321,6 +313,13 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     `_dual_texture_uv1`, `_basic_effect_vertex_color` and `EasyGL_InstancedTexturedDraw` stop on
     Normal0/TextureCoordinate1. `EasyGL_SurfaceFormat_Throws` expects a different exception type for
     the `*EXT` formats.
+19. **`NetworkSession.SimulatedPacketLoss`/`SimulatedLatency` act on the receiving machine** (found
+    2026-10-16 while making `SendDataOptions` a flags enumeration). XNA applies both on the sending
+    machine, to every recipient including local gamers, and gives unordered packets a normally
+    distributed latency (`xna4-spec/Microsoft.Xna.Framework.Net/NetworkSession.xml`, the decompiled
+    `NetworkSimulator`). CNA's `ENetBackend::HandleAppData` applies them to AppData arriving for a
+    local gamer, so the receiver's setting governs, local-to-local packets are never affected and
+    the latency is a constant. Packets sent with `Reliable` are exempt from the loss, as in XNA.
 ### 5.2 Limitations
 
 - `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves

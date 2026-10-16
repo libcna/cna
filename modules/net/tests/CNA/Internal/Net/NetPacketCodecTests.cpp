@@ -6,6 +6,7 @@
 #include "System/IO/EndOfStreamException.hpp"
 #include <enet/enet.h>
 #include <limits>
+#include <stdexcept>
 
 using namespace CNA::Internal::Net;
 
@@ -288,7 +289,35 @@ TEST(NetPacketCodecTest, SendDataOptionsToEnetFlagsMapping) {
     EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::InOrder), 0u);
     EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Reliable), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
     EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::ReliableInOrder), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
-    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Chat), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
+    // Chat changes neither reliability nor ordering: alone it is as unguaranteed as None, and it
+    // combines with Reliable and/or InOrder (5, 6, 7) exactly as those flags map without it.
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Chat), static_cast<uint32_t>(ENET_PACKET_FLAG_UNSEQUENCED));
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Chat | SendDataOptions::Reliable), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Chat | SendDataOptions::InOrder), 0u);
+    EXPECT_EQ(NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions::Chat | SendDataOptions::ReliableInOrder), static_cast<uint32_t>(ENET_PACKET_FLAG_RELIABLE));
+}
+
+TEST(NetPacketCodecTest, AppDataCarriesEveryFlagCombinationAndRefusesUndefinedBits) {
+    for (int value = 0; value <= 7; ++value) {
+        AppDataMessage message;
+        message.SenderWireId = 1;
+        message.TargetWireId = 2;
+        message.Options = static_cast<SendDataOptions>(value);
+        message.Payload = {7};
+        const auto decoded = NetPacketCodec::DecodeAppData(NetPacketCodec::Encode(message));
+        EXPECT_EQ(decoded.Options, message.Options) << value;
+        EXPECT_EQ(decoded.Payload, message.Payload) << value;
+    }
+
+    AppDataMessage undefined;
+    undefined.Options = static_cast<SendDataOptions>(8);
+    EXPECT_THROW(NetPacketCodec::Encode(undefined), std::runtime_error);
+
+    AppDataMessage valid;
+    valid.Options = SendDataOptions::Chat;
+    auto bytes = NetPacketCodec::Encode(valid);
+    bytes[3] = 0x0c; // Chat plus an undefined bit
+    EXPECT_THROW(NetPacketCodec::DecodeAppData(bytes), std::runtime_error);
 }
 
 TEST(NetPacketCodecTest, VoiceFramesRoundTripAndMalformedOnesAreRefused) {

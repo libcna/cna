@@ -71,3 +71,21 @@ TEST(SendDataOptionsTest, OrdinalValuesMatchFNAAndAreWireStable) {
     EXPECT_EQ(static_cast<int>(SendDataOptions::ReliableInOrder), 3);
     EXPECT_EQ(static_cast<int>(SendDataOptions::Chat), 4);
 }
+
+// XNA declares SendDataOptions [Flags]: ReliableInOrder is Reliable | InOrder, and Chat combines
+// with either or both of them.
+TEST(SendDataOptionsTest, CombinesAsFlags) {
+    static_assert((SendDataOptions::Reliable | SendDataOptions::InOrder) == SendDataOptions::ReliableInOrder);
+    EXPECT_EQ(static_cast<int>(SendDataOptions::Chat | SendDataOptions::Reliable), 5);
+    EXPECT_EQ(static_cast<int>(SendDataOptions::Chat | SendDataOptions::InOrder), 6);
+    EXPECT_EQ(static_cast<int>(SendDataOptions::Chat | SendDataOptions::ReliableInOrder), 7);
+    EXPECT_EQ(SendDataOptions::ReliableInOrder & SendDataOptions::InOrder, SendDataOptions::InOrder);
+    EXPECT_EQ(SendDataOptions::Chat & SendDataOptions::Reliable, SendDataOptions::None);
+    EXPECT_EQ(SendDataOptions::ReliableInOrder & ~SendDataOptions::Reliable, SendDataOptions::InOrder);
+
+    SendDataOptions options = SendDataOptions::Chat;
+    options |= SendDataOptions::InOrder;
+    EXPECT_EQ(static_cast<int>(options), 6);
+    options &= SendDataOptions::Chat;
+    EXPECT_EQ(options, SendDataOptions::Chat);
+}

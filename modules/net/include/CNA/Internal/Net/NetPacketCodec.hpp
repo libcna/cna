@@ -303,21 +303,28 @@ namespace CNA::Internal::Net
         static AppDataMessage DecodeAppData(const std::vector<SharpRuntime::bytecs>& data);
 
         /**
-         * @brief Maps a SendDataOptions value to the ENet packet flags used to send it.
+         * @brief Maps a SendDataOptions flag combination to the ENet packet flags used to send it.
          *
-         * `None` -> `ENET_PACKET_FLAG_UNSEQUENCED` (true best-effort: may drop or reorder).
-         * `InOrder` -> `0` (ENet's plain unreliable send is already sequenced per-channel and
-         * never delivered out of order — an exact match for "in order" without "reliable").
-         * `Reliable`/`ReliableInOrder` -> `ENET_PACKET_FLAG_RELIABLE` (ENet's reliable delivery
-         * is inherently ordered too, so both collapse onto the same flag — ENet has no
-         * "reliable but unordered" primitive). `Chat` -> `ENET_PACKET_FLAG_RELIABLE` (a judgment
-         * call: FNA never implements real delivery for this value, so there is no behavior to
-         * match; text should not silently drop).
+         * With `Reliable` set -> `ENET_PACKET_FLAG_RELIABLE` (ENet has no "reliable but
+         * unordered" primitive; its reliable delivery is ordered within the channel, which is
+         * stronger than `Reliable` alone asks for). Otherwise `InOrder` -> `0` (ENet's plain
+         * unreliable send is sequenced per channel and never delivered out of order), and neither
+         * -> `ENET_PACKET_FLAG_UNSEQUENCED` (may drop or reorder). `Chat` changes neither: CNA's
+         * transport never encrypts, and an ordered chat packet that shares a channel with other
+         * ordered data is still ordered relative to the other chat packets, as XNA requires.
          *
-         * @param options The delivery option to map.
+         * @param options The delivery options to map; only the defined flags are read.
          * @return The corresponding ENet packet flags (an `enet_uint32` bitmask).
          */
         static uint32_t SendDataOptionsToEnetFlags(SendDataOptions options);
+
+        /**
+         * @brief Tells whether @p options sets no bit beyond `Reliable`, `InOrder` and `Chat`.
+         *
+         * @param options The delivery options to check.
+         * @return True when every set bit is a defined SendDataOptions flag.
+         */
+        static bool HasOnlyDefinedSendDataOptions(SendDataOptions options);
 
         /** @brief Extracts the bytes written so far from a PacketWriter's backing buffer. */
         static std::vector<SharpRuntime::bytecs> ExtractBytes(PacketWriter& writer);

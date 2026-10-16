@@ -1232,7 +1232,9 @@ TEST(ENetBackendTest, ZeroSimulatedLatencyAndPacketLossDeliverAppDataImmediately
     EXPECT_EQ(received, (std::vector<SharpRuntime::bytecs>{10, 20, 30}));
 }
 
-TEST(ENetBackendTest, SimulatedPacketLossOfOneDropsAllAppDataDeterministically) {
+// XNA: "Packets sent using SendDataOptions.Reliable are not affected by this setting" -- whatever
+// else is combined with Reliable. Every other combination is dropped at a loss of exactly 1.
+TEST(ENetBackendTest, SimulatedPacketLossOfOneDropsEveryUnreliablePacketAndNoReliableOne) {
     SystemLinkSessionFixture host("HostPlayer");
     host.session->setSimulatedPacketLossProperty(1.0f);
 
@@ -1240,23 +1242,35 @@ TEST(ENetBackendTest, SimulatedPacketLossOfOneDropsAllAppDataDeterministically) 
     ENetPeer* peerFromClientSide = nullptr;
     uint8_t remoteWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
 
-    for (SharpRuntime::bytecs i = 0; i < 5; ++i) {
+    for (SharpRuntime::bytecs value = 0; value <= 7; ++value) {
         AppDataMessage appData;
         appData.SenderWireId = remoteWireId;
         appData.TargetWireId = 0;
-        appData.Options = SendDataOptions::Reliable;
-        appData.Payload = {i};
+        appData.Options = static_cast<SendDataOptions>(value);
+        appData.Payload = {value};
         auto appDataBytes = NetPacketCodec::Encode(appData);
         fakeClient.Send(peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     }
     fakeClient.Flush();
 
     LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
-    for (int i = 0; i < 100; ++i, PollYield()) {
+    std::vector<SharpRuntime::bytecs> delivered;
+    for (int i = 0; i < 200 && delivered.size() < 4; ++i, PollYield()) {
+        host.session->Update();
+        while (hostLocalGamer->getIsDataAvailableProperty()) {
+            std::vector<SharpRuntime::bytecs> received(1);
+            NetworkGamer* sender = nullptr;
+            hostLocalGamer->ReceiveData(received, sender);
+            delivered.push_back(received[0]);
+        }
+    }
+    for (int i = 0; i < 20; ++i, PollYield()) {
         host.session->Update();
     }
-    EXPECT_FALSE(hostLocalGamer->getIsDataAvailableProperty())
-        << "SimulatedPacketLoss=1.0 should drop every one of the 5 packets sent";
+    EXPECT_FALSE(hostLocalGamer->getIsDataAvailableProperty());
+    // Reliable, ReliableInOrder, Chat|Reliable, Chat|ReliableInOrder -- in the order sent.
+    EXPECT_EQ(delivered, (std::vector<SharpRuntime::bytecs>{1, 3, 5, 7}))
+        << "SimulatedPacketLoss=1.0 drops exactly the packets without Reliable";
 }
 
 TEST(ENetBackendTest, SimulatedPacketLossOfZeroDropsNoAppData) {

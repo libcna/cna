@@ -354,7 +354,7 @@ typedef struct CNA_NetworkEventInfo {
     /** @brief One of the `CNA_NETWORK_EVENT_TYPE_*` identities. */
     CNA_NetworkEventType type;
 
-    /** @brief One of the `CNA_SEND_DATA_OPTIONS_*` identities, for a packet event. */
+    /** @brief A combination of `CNA_SEND_DATA_OPTIONS_*` flags, for a packet event. */
     CNA_SendDataOptions reliable;
 
     /** @brief One of the `CNA_NETWORK_SESSION_STATE_*` identities, for a state-change event. */
@@ -1325,7 +1325,7 @@ CNA_C_API CNA_Result cna_local_network_gamer_receive_data_into_packet_reader(
  * @param gamer Gamer handle naming a local gamer.
  * @param data Caller-owned bytes copied during this call, or null only when @p count is zero.
  * @param count Number of bytes beginning at @p data.
- * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
  * gamer, or a documented argument/thread/native failure.
  */
@@ -1343,7 +1343,7 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data(
  * @param count Number of bytes beginning at @p data.
  * @param offset Offset within @p data to begin sending from.
  * @param length Number of bytes to send.
- * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
  * gamer, or a documented argument/thread/native failure.
  */
@@ -1361,7 +1361,7 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data_range(
  * @param gamer Gamer handle naming a local gamer.
  * @param data Caller-owned bytes copied during this call, or null only when @p count is zero.
  * @param count Number of bytes beginning at @p data.
- * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
  * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle does not name the right
  * kind of gamer, or a documented argument/thread/native failure.
@@ -1381,7 +1381,7 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data_to(
  * @param count Number of bytes beginning at @p data.
  * @param offset Offset within @p data to begin sending from.
  * @param length Number of bytes to send.
- * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
  * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle does not name the right
  * kind of gamer, or a documented argument/thread/native failure.
@@ -1400,7 +1400,7 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data_range_to(
  *
  * @param gamer Gamer handle naming a local gamer.
  * @param writer Owned packet-writer handle.
- * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle is not the right kind,
  * or a documented argument/thread/native failure.
  */
@@ -1414,7 +1414,7 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_packet_writer(
  *
  * @param gamer Gamer handle naming a local gamer.
  * @param writer Owned packet-writer handle.
- * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
  * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle is not the right kind,
  * or a documented argument/thread/native failure.

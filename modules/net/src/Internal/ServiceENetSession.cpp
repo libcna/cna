@@ -192,7 +192,7 @@ struct ServiceENetSession::Impl {
             ||bytes.front()==static_cast<unsigned char>(MessageTag::VoiceData));
         if((data&&(outgoing->dataCount>=128||outgoing->dataBytes+bytes.size()>MaxRelayWaitingBytes))
             ||(!data&&(outgoing->controlCount>=64||outgoing->controlBytes+bytes.size()>64*4096))){++rejected;return false;}
-        const unsigned char channel=options==SendDataOptions::None||options==SendDataOptions::InOrder?1:0;
+        const unsigned char channel=(options&SendDataOptions::Reliable)==SendDataOptions::None?1:0;
         auto allocation=std::make_unique<OutgoingAllocation>(OutgoingAllocation{outgoing,bytes.size(),data});
         auto* packet=enet_packet_create(bytes.data(),bytes.size(),NetPacketCodec::SendDataOptionsToEnetFlags(options));
         if(!packet)throw ServiceOperationError("GAME_TRANSPORT_UNAVAILABLE");
@@ -538,7 +538,7 @@ struct ServiceENetSession::Impl {
     }
     void send(unsigned char sender,unsigned char target,const std::vector<unsigned char>& payload,SendDataOptions options) {
         checkOwner();
-        if(payload.size()>MaxRelayGamePacketBytes-4 || static_cast<unsigned char>(options)>static_cast<unsigned char>(SendDataOptions::Chat))invalid();
+        if(payload.size()>MaxRelayGamePacketBytes-4 || !NetPacketCodec::HasOnlyDefinedSendDataOptions(options))invalid();
         if(!ready||stopped)throw ServiceOperationError("INVALID_STATE");
         if(std::find(localIds.begin(),localIds.end(),sender)==localIds.end())throw ServiceOperationError("NOT_AUTHORIZED");
         const bool local=std::find(localIds.begin(),localIds.end(),target)!=localIds.end();

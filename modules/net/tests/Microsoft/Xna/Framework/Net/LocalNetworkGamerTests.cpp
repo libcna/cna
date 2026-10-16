@@ -182,6 +182,52 @@ TEST(LocalNetworkGamerTest, ReusedPacketWriterRecipientSendDoesNotSendStaleTrail
               (std::vector<SharpRuntime::bytecs>{9}));
 }
 
+// XNA's SendDataOptions is a flags enumeration: Chat combines with Reliable and/or InOrder, and
+// every combination is sent and delivered.
+TEST(LocalNetworkGamerTest, SendDataDeliversChatCombinedWithReliableAndInOrder) {
+    SystemLinkGamerFixture fixture;
+    const SendDataOptions combinations[] = {
+        SendDataOptions::Chat,
+        SendDataOptions::Chat | SendDataOptions::Reliable,
+        SendDataOptions::Chat | SendDataOptions::InOrder,
+        SendDataOptions::Chat | SendDataOptions::ReliableInOrder,
+    };
+    SharpRuntime::bytecs marker = 1;
+    for (const SendDataOptions options : combinations) {
+        fixture.gamer->SendData(std::vector<SharpRuntime::bytecs>{marker}, options, fixture.gamer);
+        EXPECT_EQ(ReceivePendingPacket(fixture), (std::vector<SharpRuntime::bytecs>{marker}))
+            << static_cast<int>(options);
+        ++marker;
+    }
+
+    PacketWriter writer;
+    writer.Write(static_cast<SharpRuntime::bytecs>(42));
+    fixture.gamer->SendData(writer, SendDataOptions::Chat | SendDataOptions::ReliableInOrder);
+    EXPECT_EQ(ReceivePendingPacket(fixture), (std::vector<SharpRuntime::bytecs>{42}));
+}
+
+// A bit outside Reliable, InOrder and Chat is refused by every overload before anything is queued,
+// and a refused PacketWriter keeps its contents.
+TEST(LocalNetworkGamerTest, SendDataRefusesOptionBitsSendDataOptionsDoesNotDefine) {
+    SystemLinkGamerFixture fixture;
+    const auto undefined = static_cast<SendDataOptions>(8) | SendDataOptions::Reliable;
+    const std::vector<SharpRuntime::bytecs> payload{1, 2};
+    EXPECT_THROW(fixture.gamer->SendData(payload, undefined), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fixture.gamer->SendData(payload, 0, 1, undefined), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fixture.gamer->SendData(payload, undefined, fixture.gamer), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fixture.gamer->SendData(payload, 0, 1, undefined, fixture.gamer),
+                 System::ArgumentOutOfRangeException);
+
+    PacketWriter writer;
+    writer.Write(static_cast<int32_t>(7));
+    EXPECT_THROW(fixture.gamer->SendData(writer, undefined), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(fixture.gamer->SendData(writer, undefined, fixture.gamer), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(writer.getPositionProperty(), 4);
+
+    fixture.session->Update();
+    EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
+}
+
 // Reference ReceiveData: the offset is checked before anything else, a packet that does not fit is
 // refused and stays queued, and both overloads return the packet size (the reader is sized to it).
 TEST(LocalNetworkGamerTest, ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequeuing) {

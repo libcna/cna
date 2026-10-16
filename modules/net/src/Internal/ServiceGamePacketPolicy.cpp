@@ -114,7 +114,8 @@ AppDataMessage ServiceGamePacketPolicy::application(const std::string& source,st
     unsigned char channel,bool established,const std::vector<std::string>& admitted) const {
     // The existing connected-channel AppData codec has a four-byte tag/sender/target/options prefix.
     if(bytes.size()<4 || bytes.size()>MaxRelayGamePacketBytes || channel>1
-        ||bytes[0]!=static_cast<unsigned char>(MessageTag::AppData) || bytes[3]>static_cast<unsigned char>(SendDataOptions::Chat))packet();
+        ||bytes[0]!=static_cast<unsigned char>(MessageTag::AppData)
+        || !NetPacketCodec::HasOnlyDefinedSendDataOptions(static_cast<SendDataOptions>(bytes[3])))packet();
     routeGuard(source,bytes[1],bytes[2],established,admitted);
     AppDataMessage result;result.SenderWireId=bytes[1];result.TargetWireId=bytes[2];
     result.Options=static_cast<SendDataOptions>(bytes[3]);result.Payload.assign(bytes.begin()+4,bytes.end());return result;

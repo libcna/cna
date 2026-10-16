@@ -56,22 +56,24 @@ typedef uint32_t CNA_NetworkSessionType;
 #define CNA_NETWORK_SESSION_TYPE_LOCAL_WITH_LEADERBOARDS UINT32_C(4)
 
 /**
- * @brief Fixed-width identity describing how a network packet should be delivered.
+ * @brief Fixed-width flags describing how a network packet should be delivered.
  *
- * The canonical enumeration is marked as flags but uses plain sequential values, so these are
- * discrete identities and must not be combined bitwise.
+ * As in XNA, the values are flags: `CNA_SEND_DATA_OPTIONS_RELIABLE_IN_ORDER` is
+ * `CNA_SEND_DATA_OPTIONS_RELIABLE | CNA_SEND_DATA_OPTIONS_IN_ORDER`, and
+ * `CNA_SEND_DATA_OPTIONS_CHAT` can be combined with either or both of them. A value with any other
+ * bit set is refused.
  */
 typedef uint32_t CNA_SendDataOptions;
 
-/** @brief No delivery guarantees; packets may be dropped or reordered. */
+/** @brief No delivery guarantees; packets may be dropped or arrive in any order. */
 #define CNA_SEND_DATA_OPTIONS_NONE UINT32_C(0)
-/** @brief The packet is guaranteed to arrive. */
+/** @brief Reliable delivery without special ordering. */
 #define CNA_SEND_DATA_OPTIONS_RELIABLE UINT32_C(1)
-/** @brief The packet is guaranteed to arrive in order relative to other in-order packets. */
+/** @brief Guaranteed ordering without reliable delivery. */
 #define CNA_SEND_DATA_OPTIONS_IN_ORDER UINT32_C(2)
-/** @brief The packet is guaranteed to arrive, in order. */
+/** @brief Reliable delivery in the order the packets were sent. */
 #define CNA_SEND_DATA_OPTIONS_RELIABLE_IN_ORDER UINT32_C(3)
-/** @brief The packet contains chat data. */
+/** @brief Marks chat data; in-order chat packets are ordered relative to other chat packets. */
 #define CNA_SEND_DATA_OPTIONS_CHAT UINT32_C(4)
 
 /**

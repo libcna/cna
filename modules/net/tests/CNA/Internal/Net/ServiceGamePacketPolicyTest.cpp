@@ -116,7 +116,7 @@ TEST(ServiceGamePacketPolicyTest, ApplicationHeaderLengthOptionsAndChannelsAreBo
     auto value=data();for(std::size_t size=0;size<4;++size)
         refused([&]{(void)policy.application(remote,std::span(value).first(size),0,true,{remote});},"INVALID_SERVICE_PACKET");
     value[0]=0x7f;refused([&]{(void)policy.application(remote,value,0,true,{remote});},"INVALID_SERVICE_PACKET");
-    value=data();value[3]=5;refused([&]{(void)policy.application(remote,value,0,true,{remote});},"INVALID_SERVICE_PACKET");
+    value=data();value[3]=8;refused([&]{(void)policy.application(remote,value,0,true,{remote});},"INVALID_SERVICE_PACKET");
     refused([&]{(void)policy.application(remote,data(),2,true,{remote});},"INVALID_SERVICE_PACKET");
     value=data();value.resize(MaxRelayGamePacketBytes+1);
     refused([&]{(void)policy.application(remote,value,0,true,{remote});},"INVALID_SERVICE_PACKET");
@@ -124,7 +124,7 @@ TEST(ServiceGamePacketPolicyTest, ApplicationHeaderLengthOptionsAndChannelsAreBo
 }
 TEST(ServiceGamePacketPolicyTest, EmptyPayloadAndEveryDeliveryOptionRoundTripWithoutInventedFlags) {
     ServiceGamePacketPolicy policy(fixture());
-    for(int option=0;option<=4;++option) {
+    for(int option=0;option<=7;++option) {
         auto bytes=data(3,1,static_cast<SendDataOptions>(option));bytes.resize(4);
         auto value=policy.application(remote,bytes,static_cast<unsigned char>(option%2),true,{remote});
         EXPECT_TRUE(value.Payload.empty());EXPECT_EQ(option,static_cast<int>(value.Options));EXPECT_EQ(bytes,NetPacketCodec::Encode(value));

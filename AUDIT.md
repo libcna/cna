@@ -2202,7 +2202,7 @@ code path in this namespace.
 | NetworkSessionState (enum) | ✅ | Complete |
 | NetworkSessionEndReason (enum) | ✅ | Complete |
 | NetworkSessionJoinError (enum) | ✅ | Complete |
-| SendDataOptions (enum) | ✅ | Complete; FNA marks `[Flags]` but values are sequential (0-4), not real bit flags — ported plain, no bitwise operators added |
+| SendDataOptions (enum) | ✅ | Complete; a `[Flags]` enumeration as in XNA (`ReliableInOrder` = `Reliable \| InOrder`, `Chat` combines with both), with `\|`, `&`, `~`, `\|=` and `&=` |
 | NetworkSessionProperties | ✅ | GS-007b: eight fixed nullable integers, slots 0..7, structural mutation unsupported, IsReadOnly false per managed reference. Host-only writes and advertised read-only snapshots enforced before mutation, including retained indexed proxies; transport updates preserve guards. Tests cover all slots, enumeration/copy/bounds and host/disposal permission. Xbox console event details remain unmeasured |
 | NetworkSession | ✅ | Full XNA property surface: SystemLink over ENet, PlayerMatch/Ranked through the CNA service directory and relay (invitations, host migration, AddLocalGamer, Ranked arbitration), voice where libopus exists. `SessionProperties` exposes the mutable get-only XNA collection; the host includes the current complete sparse collection in its welcome and reliably publishes later changes during `Update()`. Clients accept replacements only from their authoritative host. |
 | QualityOfService | ✅ | Full port; SystemLink search results measure the round trip and both bandwidths, service search results are unmeasured (`IsAvailable` false) |

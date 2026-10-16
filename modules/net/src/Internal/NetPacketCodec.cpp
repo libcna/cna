@@ -491,6 +491,8 @@ namespace CNA::Internal::Net
 
     std::vector<bytecs> NetPacketCodec::Encode(const AppDataMessage& message)
     {
+        if (!HasOnlyDefinedSendDataOptions(message.Options))
+            throw std::runtime_error("NetPacketCodec: AppData options");
         PacketWriter writer;
         writer.Write(static_cast<bytecs>(MessageTag::AppData));
         writer.Write(message.SenderWireId);
@@ -513,6 +515,8 @@ namespace CNA::Internal::Net
         message.SenderWireId = reader.ReadByte();
         message.TargetWireId = reader.ReadByte();
         message.Options = static_cast<SendDataOptions>(reader.ReadByte());
+        if (!HasOnlyDefinedSendDataOptions(message.Options))
+            throw std::runtime_error("NetPacketCodec: AppData options");
 
         int remaining = reader.getLengthProperty() - reader.getPositionProperty();
         message.Payload.resize(static_cast<size_t>(remaining > 0 ? remaining : 0));
@@ -561,17 +565,17 @@ namespace CNA::Internal::Net
 
     uint32_t NetPacketCodec::SendDataOptionsToEnetFlags(SendDataOptions options)
     {
-        switch (options)
-        {
-            case SendDataOptions::None:
-                return ENET_PACKET_FLAG_UNSEQUENCED;
-            case SendDataOptions::InOrder:
-                return 0;
-            case SendDataOptions::Reliable:
-            case SendDataOptions::ReliableInOrder:
-            case SendDataOptions::Chat:
-                return ENET_PACKET_FLAG_RELIABLE;
-        }
-        return ENET_PACKET_FLAG_RELIABLE;
+        if ((options & SendDataOptions::Reliable) != SendDataOptions::None)
+            return ENET_PACKET_FLAG_RELIABLE;
+        if ((options & SendDataOptions::InOrder) != SendDataOptions::None)
+            return 0;
+        return ENET_PACKET_FLAG_UNSEQUENCED;
+    }
+
+    bool NetPacketCodec::HasOnlyDefinedSendDataOptions(SendDataOptions options)
+    {
+        constexpr SendDataOptions defined =
+            SendDataOptions::Reliable | SendDataOptions::InOrder | SendDataOptions::Chat;
+        return (options & ~defined) == SendDataOptions::None;
     }
 }

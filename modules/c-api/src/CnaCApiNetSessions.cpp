@@ -1481,9 +1481,11 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
 
 [[nodiscard]] CNA_Result ValidateSendOptions(const CNA_SendDataOptions options)
 {
-    if (options > CNA_SEND_DATA_OPTIONS_CHAT) {
+    constexpr CNA_SendDataOptions defined =
+        CNA_SEND_DATA_OPTIONS_RELIABLE | CNA_SEND_DATA_OPTIONS_IN_ORDER | CNA_SEND_DATA_OPTIONS_CHAT;
+    if ((options & ~defined) != 0) {
         return InvalidArgument(
-            "The requested option is not a canonical SendDataOptions identity.");
+            "The requested options set a bit that is not a SendDataOptions flag.");
     }
     return CNA_RESULT_SUCCESS;
 }

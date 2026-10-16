@@ -16,9 +16,9 @@ transport at all.
 `CNA_NetworkSessionType` and `CNA_SendDataOptions` carry the canonical ordinals exactly, pinned by
 adapter static assertions.
 
-`CNA_SendDataOptions` deserves one note: the canonical enumeration is marked as flags, but its
-members use plain sequential values and `ReliableInOrder` is its own discrete member rather than a
-composition. The C identities are therefore discrete too and must never be combined bitwise.
+`CNA_SendDataOptions` is a set of flags, as XNA's `[Flags]` enumeration is: `RELIABLE_IN_ORDER` is
+`RELIABLE | IN_ORDER`, and `CHAT` combines with either or both of them (5, 6 and 7). A value with any
+other bit set is refused with `CNA_RESULT_INVALID_ARGUMENT`.
 
 ## Quality of service
 

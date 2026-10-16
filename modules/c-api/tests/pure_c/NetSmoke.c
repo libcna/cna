@@ -1489,6 +1489,19 @@ static int validate_local_gamer_sends(const CNA_NetworkGamerHandle local)
             local, writer, CNA_SEND_DATA_OPTIONS_RELIABLE_IN_ORDER) == CNA_RESULT_SUCCESS &&
         cna_local_network_gamer_send_packet_writer_to(
             local, writer, CNA_SEND_DATA_OPTIONS_RELIABLE, local) == CNA_RESULT_SUCCESS &&
+        /* The options are flags: Chat combines with Reliable and/or InOrder (5, 6, 7). */
+        cna_local_network_gamer_send_data(
+            local, payload, UINT64_C(4),
+            CNA_SEND_DATA_OPTIONS_CHAT | CNA_SEND_DATA_OPTIONS_RELIABLE) == CNA_RESULT_SUCCESS &&
+        cna_local_network_gamer_send_data_to(
+            local, payload, UINT64_C(4),
+            CNA_SEND_DATA_OPTIONS_CHAT | CNA_SEND_DATA_OPTIONS_IN_ORDER, local) ==
+            CNA_RESULT_SUCCESS &&
+        cna_local_network_gamer_send_packet_writer(
+            local, writer, CNA_SEND_DATA_OPTIONS_CHAT | CNA_SEND_DATA_OPTIONS_RELIABLE_IN_ORDER) ==
+            CNA_RESULT_SUCCESS &&
+        cna_local_network_gamer_send_data(local, payload, UINT64_C(4), UINT32_C(8)) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
         cna_local_network_gamer_send_data(local, payload, UINT64_C(4), UINT32_C(9)) ==
             CNA_RESULT_INVALID_ARGUMENT &&
         cna_local_network_gamer_send_data(local, 0, UINT64_C(4), CNA_SEND_DATA_OPTIONS_NONE) ==

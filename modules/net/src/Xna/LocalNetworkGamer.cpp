@@ -7,6 +7,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
+#include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include <algorithm>
@@ -29,6 +30,17 @@ namespace Microsoft::Xna::Framework::Net
             packet.resize(static_cast<std::size_t>(data.getPositionProperty()));
             data.setPositionProperty(0);
             return packet;
+        }
+
+        // XNA's SendDataWorker hands any value to its native packet buffer unchecked. CNA's
+        // transport carries only the defined flags, so a bit beyond them is refused rather than
+        // silently neither honoured nor sent (CHECKLIST.md, accepted deviations).
+        void ValidateSendDataOptions(SendDataOptions options)
+        {
+            if (!CNA::Internal::Net::NetPacketCodec::HasOnlyDefinedSendDataOptions(options))
+            {
+                throw System::ArgumentOutOfRangeException("options");
+            }
         }
     }
 
@@ -169,6 +181,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentException("offset");
         }
+        ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
         {
@@ -196,6 +209,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentException("offset");
         }
+        ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         NetworkSession::NetworkEvent evt;
         evt.Type = NetworkSession::NetworkEventType::PacketSend;
@@ -209,6 +223,7 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
 
         for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
@@ -226,6 +241,7 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
 
         NetworkSession::NetworkEvent evt;

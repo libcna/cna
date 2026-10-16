@@ -108,6 +108,24 @@ TEST(ServiceENetSessionTest, ReliableFragmentedAndUnreliableDataReachBothLocalAc
     auto found=std::find_if(fixture.hostEvents.begin(),fixture.hostEvents.end(),[](const auto& event){return event.data&&event.data->SenderWireId==4;});
     ASSERT_NE(fixture.hostEvents.end(),found);EXPECT_EQ(large,found->data->Payload);EXPECT_EQ(2,found->data->TargetWireId);
 }
+// SendDataOptions is a flags enumeration: Chat combined with Reliable and/or InOrder is sent, on the
+// reliable or the unreliable channel as its Reliable bit says, and arrives with the flags it was sent with.
+TEST(ServiceENetSessionTest, ChatCombinedWithReliableAndInOrderArrivesWithItsFlags) {
+    Fixture fixture;fixture.pair();
+    const SendDataOptions sent[]={SendDataOptions::Chat|SendDataOptions::Reliable,SendDataOptions::Chat|SendDataOptions::ReliableInOrder,
+        SendDataOptions::Chat|SendDataOptions::InOrder};
+    for(const auto options:sent)fixture.host->send(1,3,{static_cast<unsigned char>(options)},options);
+    fixture.until([&]{return Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Data)>=2;});
+    for(int index=0;index<20;++index)fixture.tick();
+    std::vector<int> reliable;int unreliable=0;
+    for(const auto& event:fixture.clientEvents)if(event.data){
+        ASSERT_EQ(1,event.data->Payload.size());EXPECT_EQ(event.data->Payload[0],static_cast<unsigned char>(event.data->Options));
+        if((event.data->Options&SendDataOptions::Reliable)!=SendDataOptions::None)reliable.push_back(static_cast<int>(event.data->Options));
+        else{EXPECT_EQ(6,static_cast<int>(event.data->Options));++unreliable;}}
+    // The reliable pair arrives in order on its channel; the unreliable Chat|InOrder packet travels
+    // on the other channel, so it may arrive before or after them, at most once.
+    EXPECT_EQ((std::vector<int>{5,7}),reliable);EXPECT_LE(unreliable,1);
+}
 TEST(ServiceENetSessionTest, LocalDeliveryIsQueuedUntilUpdateAndBoundedByCountAndBytes) {
     Fixture fixture;fixture.host=std::make_unique<ServiceENetSession>(fixture.prepare(),std::vector<std::string>{"Alice","Charlie"},fixture.routes());
     for(int index=0;index<128;++index)fixture.host->send(1,2,{7},SendDataOptions::Reliable);
