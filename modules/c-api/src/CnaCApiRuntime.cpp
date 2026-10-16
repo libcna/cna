@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -60,6 +61,17 @@ struct RuntimeState final {
 {
     static RuntimeState state;
     return state;
+}
+
+// A C caller that leaves objects alive at process exit leaks the handles, and the registry still
+// destroys the objects (TeardownLifetimeSmoke.c). The registry is a static constructed before any
+// game, so its own destructor runs after the static teardown of every library a game's device
+// loaded afterwards -- the Vulkan validation layer under a Debug SDL_GPU device, whose finalized
+// state SDL's VULKAN_Wait then called into. A handler registered once each game exists runs before
+// those libraries are finalized, and destroys what is left while they are still usable.
+void DestroyRegisteredObjectsAtExit() noexcept
+{
+    GetRuntimeState().handles.DestroyAll();
 }
 
 [[nodiscard]] bool IsSupportedGameCallbacks(const CNA_GameCallbacks* const callbacks) noexcept
@@ -739,6 +751,9 @@ namespace {
     }
     game->SetHandle(*outGame);
     state.hasActiveGame = true;
+    // After the game and its device exist: see DestroyRegisteredObjectsAtExit. Registering again
+    // for a later game covers libraries that game's device loads anew; a later run finds nothing.
+    (void)std::atexit(DestroyRegisteredObjectsAtExit);
     return CNA_RESULT_SUCCESS;
 }
 

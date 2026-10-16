@@ -259,15 +259,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     no-op because managed textures need no recovery registry; `MaxMipLevel`, whole-target `Clear`,
     the device texture slot after `Apply()`, HiDef in back-buffer-reading examples and
     `DirectX9_FrameRecovery`'s window were fixed earlier in the same pass.
-16. **A C API game still alive at process exit crashes `SDL_GPU` in a Debug build** (first C API run
-    with `SDL_GPU`, `cmake-build-sdlgpu`, 2026-10-14): the five `CApi_TeardownLifetime_*` cases that
-    leave a game alive segfault. The C API's static `RuntimeState` destroys the game during
-    `exit()`, `SdlGpuRenderer`'s destructor calls `SDL_ReleaseWindowFromGPUDevice`, and SDL's
-    `VULKAN_Wait` calls into `libVkLayer_khronos_validation.so`, which has already been finalised.
-    The validation layer is loaded because Debug builds create the device in debug mode: with
-    `SDL_GPU` selected at run time the same case segfaults in the Debug multi-renderer tree and all
-    seven teardown cases pass in the Release one (`build-probe`, 2026-10-14). Every other C API case
-    passes on `SDL_GPU`, including `CApi_GraphicsExtSmoke` with the extension layer.
 19. **`NetworkSession.SimulatedPacketLoss`/`SimulatedLatency` act on the receiving machine** (found
     2026-10-16 while making `SendDataOptions` a flags enumeration). XNA applies both on the sending
     machine, to every recipient including local gamers, and gives unordered packets a normally

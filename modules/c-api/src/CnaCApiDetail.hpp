@@ -745,6 +745,16 @@ public:
 
     CNA_Result Release(CNA_Handle handle);
 
+    /**
+     * @brief Destroys every registered object now, in slot order, as the registry's own
+     * destructor would, and leaves the registry empty.
+     *
+     * For process exit: an object still registered then is destroyed while the libraries it was
+     * created with are still loaded, rather than from the static destructor, which runs after
+     * the static teardown of any library loaded later than the registry was constructed.
+     */
+    void DestroyAll() noexcept;
+
 private:
     struct Slot final {
         uint32_t generation = 1;

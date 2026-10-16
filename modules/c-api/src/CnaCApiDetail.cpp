@@ -749,6 +749,17 @@ CNA_Result HandleRegistry::SetUserTag(
     return CNA_RESULT_SUCCESS;
 }
 
+void HandleRegistry::DestroyAll() noexcept
+{
+    std::vector<Slot> slots;
+    {
+        std::lock_guard lock(mutex_);
+        slots.swap(slots_);
+    }
+    // Destroyed outside the lock: an object's destructor may release handles of its own, which
+    // the now empty registry answers as invalid.
+}
+
 CNA_Result HandleRegistry::Release(const CNA_Handle handle)
 {
     std::shared_ptr<void> releasedObject;
