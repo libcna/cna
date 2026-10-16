@@ -299,8 +299,11 @@ def _fade(body, ob, s):
     top = line(0.30, 0.33, 0.30, 0.34)
     locks = _crown(body, ob, s, 0.10 * PI, PI, 18, 132, top, taper_thickness(0.012 * s, 0.004 * s), scale=1.06,
                    tip=0.35, tip_round=0.7)
-    # The faded sides are the scalp shell itself, over the ends of the top's locks.
-    return locks, cap(body, line(*STANDARD), 0.0026 * s)
+    # The faded sides are the scalp shell itself: under the top it stays below the locks, rising to
+    # the sides' height past where they end (one height for both tore the top's edge into a ragged
+    # band where the locks' ends crossed it).
+    rise = lambda theta, phi: (0.0026 - UNDER_LOCKS) * s * smoothstep(top(phi) * 1.02, top(phi) * 1.12, theta)
+    return locks, cap(body, line(*STANDARD), UNDER_LOCKS * s, bulge=rise)
 
 
 def _spiky(body, ob, s):
