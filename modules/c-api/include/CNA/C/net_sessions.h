@@ -712,7 +712,8 @@ CNA_C_API CNA_Result cna_network_session_get_simulated_latency_ticks(
  *
  * @param session Owned session handle.
  * @param ticks The latency in 100-nanosecond ticks.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative latency, or a
+ *         documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_set_simulated_latency_ticks(
     CNA_NetworkSessionHandle session,
@@ -734,7 +735,8 @@ CNA_C_API CNA_Result cna_network_session_get_simulated_packet_loss(
  *
  * @param session Owned session handle.
  * @param value The loss fraction.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a fraction outside 0 to 1, or a
+ *         documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_session_set_simulated_packet_loss(
     CNA_NetworkSessionHandle session,

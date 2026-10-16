@@ -864,6 +864,13 @@ static int validate_session_state(const CNA_NetworkSessionHandle session)
         ticks != INT64_C(1000) ||
         cna_network_session_set_simulated_packet_loss(session, 0.25F) != CNA_RESULT_SUCCESS ||
         cna_network_session_get_simulated_packet_loss(session, &loss) != CNA_RESULT_SUCCESS ||
+        loss != 0.25F ||
+        cna_network_session_set_simulated_latency_ticks(session, INT64_C(-1)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_session_set_simulated_packet_loss(session, 1.5F) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_session_get_simulated_latency_ticks(session, &ticks) != CNA_RESULT_SUCCESS ||
+        ticks != INT64_C(1000) ||
+        cna_network_session_get_simulated_packet_loss(session, &loss) != CNA_RESULT_SUCCESS ||
         loss != 0.25F) {
         return 0;
     }

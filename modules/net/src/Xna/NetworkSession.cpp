@@ -26,6 +26,7 @@
 #include <map>
 #include <tuple>
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "../Internal/NetworkSimulator.hpp"
 #include "../Internal/OnlineSessionBinding.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "System/NotSupportedException.hpp"
@@ -314,8 +315,7 @@ namespace Microsoft::Xna::Framework::Net
             }
         });
 
-        simulatedLatency_ = System::TimeSpan::Zero;
-        simulatedPacketLoss_ = 0.0f;
+        simulator_ = std::make_unique<CNA::Internal::Net::NetworkSimulator>();
         isDisposed_ = false;
 
         bytesPerSecondReceived_ = 0;
@@ -455,11 +455,38 @@ namespace Microsoft::Xna::Framework::Net
     NetworkSessionState NetworkSession::getSessionStateProperty() const { return sessionState_; }
     NetworkSessionType NetworkSession::getSessionTypeProperty() const { return sessionType_; }
 
-    System::TimeSpan NetworkSession::getSimulatedLatencyProperty() const { return simulatedLatency_; }
-    void NetworkSession::setSimulatedLatencyProperty(System::TimeSpan value) { simulatedLatency_ = value; }
+    System::TimeSpan NetworkSession::getSimulatedLatencyProperty() const { return simulator_->getSimulatedLatency(); }
+    void NetworkSession::setSimulatedLatencyProperty(System::TimeSpan value) { simulator_->setSimulatedLatency(value); }
 
-    float NetworkSession::getSimulatedPacketLossProperty() const { return simulatedPacketLoss_; }
-    void NetworkSession::setSimulatedPacketLossProperty(float value) { simulatedPacketLoss_ = value; }
+    float NetworkSession::getSimulatedPacketLossProperty() const { return simulator_->getSimulatedPacketLoss(); }
+    void NetworkSession::setSimulatedPacketLossProperty(float value) { simulator_->setSimulatedPacketLoss(value); }
+
+    void NetworkSession::SendDataInternal(LocalNetworkGamer* sender, std::vector<SharpRuntime::bytecs> data,
+                                          SendDataOptions options, NetworkGamer* recipient)
+    {
+        if (!simulator_->SendData(data, options, sender, recipient))
+            SendDataNowInternal(sender, std::move(data), options, recipient);
+    }
+
+    void NetworkSession::SendDataNowInternal(LocalNetworkGamer* sender, std::vector<SharpRuntime::bytecs> data,
+                                             SendDataOptions options, NetworkGamer* recipient)
+    {
+        const auto send = [&](NetworkGamer* gamer, std::vector<SharpRuntime::bytecs> packet) {
+            NetworkEvent evt;
+            evt.Type = NetworkEventType::PacketSend;
+            evt.Gamer = gamer;
+            evt.Sender = sender;
+            evt.Packet = std::move(packet);
+            evt.Reliable = options;
+            SendNetworkEvent(std::move(evt));
+        };
+        if (recipient != nullptr)
+        {
+            send(recipient, std::move(data));
+            return;
+        }
+        for (NetworkGamer* gamer : allGamers_) send(gamer, data);
+    }
 
     // --- Public methods ---
 
@@ -538,6 +565,7 @@ namespace Microsoft::Xna::Framework::Net
         // Task 3.1: frees every gamer this session ever owned - after TeardownSession above, so
         // ENetBackend's own per-session wire-id maps (which can hold these same raw pointers) are
         // already torn down first, never left holding a reference to now-freed memory.
+        simulator_->Clear();
         ownedGamers_.clear();
         // Defense-in-depth, independent of the isDisposed_ guard above: localGamers_/remoteGamers_/
         // allGamers_/previousGamers_ are all non-owning raw-pointer views that can still hold
@@ -578,6 +606,14 @@ namespace Microsoft::Xna::Framework::Net
         if (isDisposed_)
         {
             throw System::ObjectDisposedException("this");
+        }
+
+        // The simulated latency's due packets go out first, as XNA's NetworkSimulator.Update does.
+        for (auto& packet : simulator_->TakeDuePackets())
+        {
+            if (packet.Sender->getHasLeftSessionProperty()) continue;
+            if (packet.Recipient != nullptr && packet.Recipient->getHasLeftSessionProperty()) continue;
+            SendDataNowInternal(packet.Sender, std::move(packet.Data), packet.Options, packet.Recipient);
         }
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))

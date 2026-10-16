@@ -198,12 +198,10 @@ void SimGame::Update(GameTime& gameTime)
     localPaddlePos_.Y = std::clamp(localPaddlePos_.Y, 0.0f, kScreenHeight - kPaddleHeight);
 
     // 1/2 lower/raise simulated latency by 100ms per frame while held; 3/4 lower/raise simulated
-    // packet loss by 10 percentage points per frame while held. Task 6.1-6.5 (plans/plan_net.md
-    // Phase 6): both drive the receive-side delayed-delivery queue and probabilistic drop in
-    // ENetBackend - raising either one visibly stutters/drops the remote paddle and (on the client)
-    // the host-authoritative ball position. The real measured RTT the console prints does not move
-    // in response: ENet measures it per peer at the transport level, below this simulated-delivery
-    // layer.
+    // packet loss by 10 percentage points per frame while held. Both act on what this machine
+    // sends (XNA's NetworkSimulator), so the other machine sees this paddle and, from the host, the
+    // ball stutter. The real measured RTT the console prints does not move in response: ENet
+    // measures it per peer at the transport level, below the simulation.
     if (keys.IsKeyDown(Keys::D1))
     {
         simulatedLatency_ = System::TimeSpan::FromMilliseconds(

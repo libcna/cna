@@ -328,6 +328,14 @@ TEST(NetworkSessionTest, SimulatedLatencyAndPacketLossGetSet) {
     session->setSimulatedPacketLossProperty(0.25f);
     EXPECT_FLOAT_EQ(session->getSimulatedPacketLossProperty(), 0.25f);
 
+    // XNA's NetworkSimulator refuses a negative latency and a loss outside 0..1, keeping the old value.
+    EXPECT_THROW(session->setSimulatedLatencyProperty(System::TimeSpan::FromMilliseconds(-1)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(session->setSimulatedPacketLossProperty(-0.5f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(session->setSimulatedPacketLossProperty(1.5f), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(session->getSimulatedLatencyProperty(), System::TimeSpan::FromMilliseconds(50));
+    EXPECT_FLOAT_EQ(session->getSimulatedPacketLossProperty(), 0.25f);
+
     session->Dispose();
 }
 

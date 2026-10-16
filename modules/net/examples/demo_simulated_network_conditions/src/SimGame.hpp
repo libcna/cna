@@ -19,11 +19,9 @@
 // ENet, rendered as a small Pong-style match (two paddles, one host-authoritative ball). Number
 // keys 1/2/3/4 raise/lower NetworkSession::SimulatedLatencyProperty/SimulatedPacketLossProperty
 // live; the HUD shows the requested simulated values, and the console prints them once a second
-// beside the real measured RTT (Task 4.1). The simulated values delay (a receive-side queue) and
-// randomly drop the AppData delivered to this machine's local gamers (Task 6.1-6.5,
-// plans/plan_net.md Phase 6; see ENetBackend.cpp's own HandleAppData comment for why
-// session-management traffic and host-relay traffic stay unaffected), so raising them makes the
-// remote paddle and ball visibly stutter.
+// beside the real measured RTT (Task 4.1). As in XNA, the simulated values delay and randomly drop
+// what this machine sends, so raising them makes this machine's paddle (and, on the host, the
+// ball) visibly stutter on the other machine.
 class SimGame : public Microsoft::Xna::Framework::Game
 {
 public:

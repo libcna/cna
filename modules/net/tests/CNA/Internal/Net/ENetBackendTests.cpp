@@ -9,6 +9,7 @@
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "CNA/Internal/Net/VoiceChat.hpp"
 #include "CNA/Internal/GamerServices/VoiceMutes.hpp"
+#include "../../../../src/Internal/NetworkSimulator.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -22,6 +23,8 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -1184,59 +1187,63 @@ TEST(ENetBackendTest, HostRelaysAppDataBetweenTwoNonLocalPeers) {
     EXPECT_FALSE(sawAppDataAtA);
 }
 
-// Task 4.3: SimulatedLatency/SimulatedPacketLoss are stored but have no effect on actual traffic
-// timing or delivery, matching FNA's own reference (a plain get/set auto-property there too, with
-// no delay queue or synthetic-drop logic anywhere in FNA's source) - confirmed no such logic
-// exists anywhere in ENetBackend/ENetHostHandle either. Locks in the documented (inert) behavior:
-// even with extreme simulated values set, a real handshake and AppData delivery complete just as
-// promptly and reliably as SendDataOptionsToRecipientTransmitsAppDataToHost/
-// HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue do without them.
-// --- Task 6.1-6.5 (plans/plan_net.md Phase 6): real SimulatedLatency/SimulatedPacketLoss ---
+// --- NetworkSession.SimulatedPacketLoss/SimulatedLatency ---
 //
-// All 4 tests below share the same real host + raw-ENetHostHandle-fake-client loopback setup as
-// every other AppData test in this file (see ConnectFakeClientAndCompleteHandshake) - real ENet
-// traffic end-to-end, not unit-level queue logic, satisfying Task 6.5's own requirement together
-// with Task 6.4's determinism requirement in the same tests (SetClockForTesting/
-// ResetClockForTesting make the delay case exact; 0.0/1.0 loss need no RNG seeding at all - see
-// ShouldDropForSimulatedLoss's own comment in ENetBackend.cpp).
+// XNA applies both on the sending machine, to every recipient including the sender's own local
+// gamers ("only outgoing packets will be affected by the local value of the property"). A real
+// host session sends and receives here; a raw ENet client stands in for the other machine.
 
-TEST(ENetBackendTest, ZeroSimulatedLatencyAndPacketLossDeliverAppDataImmediately) {
-    SystemLinkSessionFixture host("HostPlayer");
-    // Explicit defaults - regression guard for Task 6.4's own "behaves exactly as before" case.
-    ASSERT_EQ(host.session->getSimulatedLatencyProperty(), System::TimeSpan::Zero);
-    ASSERT_EQ(host.session->getSimulatedPacketLossProperty(), 0.0f);
+namespace {
+    // Freezes the simulator's clock and gives every packet exactly the set latency: with u2 = 0.25
+    // the normal deviate is cos(pi/2) = 0.
+    struct FrozenSimulatorClock {
+        NetworkSimulator::Clock::time_point start{NetworkSimulator::Clock::now()};
+        FrozenSimulatorClock() {
+            NetworkSimulator::SetClockForTesting(start);
+            NetworkSimulator::SetRandomForTesting([] { return 0.25; });
+        }
+        ~FrozenSimulatorClock() {
+            NetworkSimulator::ResetClockForTesting();
+            NetworkSimulator::ResetRandomForTesting();
+        }
+    };
 
-    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
-    ENetPeer* peerFromClientSide = nullptr;
-    uint8_t remoteWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
-
-    AppDataMessage appData;
-    appData.SenderWireId = remoteWireId;
-    appData.TargetWireId = 0; // the host's own local gamer
-    appData.Options = SendDataOptions::Reliable;
-    appData.Payload = {10, 20, 30};
-    auto appDataBytes = NetPacketCodec::Encode(appData);
-    fakeClient.Send(peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
-    fakeClient.Flush();
-
-    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
-    for (int i = 0; i < 200 && !hostLocalGamer->getIsDataAvailableProperty(); ++i, PollYield()) {
-        host.session->Update();
+    NetworkGamer* FindGamer(NetworkSession* session, const std::string& gamertag) {
+        for (NetworkGamer* gamer : session->getAllGamersProperty()) {
+            if (gamer->getGamertagProperty() == gamertag) return gamer;
+        }
+        return nullptr;
     }
-    ASSERT_TRUE(hostLocalGamer->getIsDataAvailableProperty());
 
-    std::vector<SharpRuntime::bytecs> received(3);
-    NetworkGamer* sender = nullptr;
-    int len = hostLocalGamer->ReceiveData(received, sender);
-    EXPECT_EQ(len, 3);
-    EXPECT_EQ(received, (std::vector<SharpRuntime::bytecs>{10, 20, 30}));
+    // One Update of the host, then every AppData payload the fake client and the host's own local
+    // gamer received.
+    void PumpAndCollect(NetworkSession* host, ENetHostHandle& fakeClient,
+                        std::vector<std::vector<SharpRuntime::bytecs>>& remote,
+                        std::vector<std::vector<SharpRuntime::bytecs>>& local) {
+        host->Update();
+        ENetEvent evt{};
+        while (fakeClient.Service(0, evt) > 0) {
+            if (evt.type != ENET_EVENT_TYPE_RECEIVE) continue;
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            enet_packet_destroy(evt.packet);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::AppData) {
+                remote.push_back(NetPacketCodec::DecodeAppData(data).Payload);
+            }
+        }
+        LocalNetworkGamer* gamer = host->getLocalGamersProperty()[0];
+        while (gamer->getIsDataAvailableProperty()) {
+            std::vector<SharpRuntime::bytecs> received(16);
+            NetworkGamer* sender = nullptr;
+            received.resize(static_cast<std::size_t>(gamer->ReceiveData(received, sender)));
+            local.push_back(received);
+        }
+    }
 }
 
-// XNA: "Packets sent using SendDataOptions.Reliable are not affected by this setting" -- whatever
-// else is combined with Reliable. Every other combination is dropped at a loss of exactly 1.
-TEST(ENetBackendTest, SimulatedPacketLossOfOneDropsEveryUnreliablePacketAndNoReliableOne) {
+TEST(ENetBackendTest, TheReceivingMachinesSimulationLeavesIncomingAppDataAlone) {
     SystemLinkSessionFixture host("HostPlayer");
     host.session->setSimulatedPacketLossProperty(1.0f);
+    host.session->setSimulatedLatencyProperty(System::TimeSpan::FromSeconds(30));
 
     ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
     ENetPeer* peerFromClientSide = nullptr;
@@ -1245,7 +1252,7 @@ TEST(ENetBackendTest, SimulatedPacketLossOfOneDropsEveryUnreliablePacketAndNoRel
     for (SharpRuntime::bytecs value = 0; value <= 7; ++value) {
         AppDataMessage appData;
         appData.SenderWireId = remoteWireId;
-        appData.TargetWireId = 0;
+        appData.TargetWireId = 0; // the host's own local gamer
         appData.Options = static_cast<SendDataOptions>(value);
         appData.Payload = {value};
         auto appDataBytes = NetPacketCodec::Encode(appData);
@@ -1253,24 +1260,42 @@ TEST(ENetBackendTest, SimulatedPacketLossOfOneDropsEveryUnreliablePacketAndNoRel
     }
     fakeClient.Flush();
 
-    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
-    std::vector<SharpRuntime::bytecs> delivered;
-    for (int i = 0; i < 200 && delivered.size() < 4; ++i, PollYield()) {
-        host.session->Update();
-        while (hostLocalGamer->getIsDataAvailableProperty()) {
-            std::vector<SharpRuntime::bytecs> received(1);
-            NetworkGamer* sender = nullptr;
-            hostLocalGamer->ReceiveData(received, sender);
-            delivered.push_back(received[0]);
-        }
+    std::vector<std::vector<SharpRuntime::bytecs>> remote, local;
+    for (int i = 0; i < 200 && local.size() < 8; ++i, PollYield()) {
+        PumpAndCollect(host.session, fakeClient, remote, local);
+    }
+    EXPECT_EQ(local, (std::vector<std::vector<SharpRuntime::bytecs>>{{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}}))
+        << "the receiver's own SimulatedPacketLoss and SimulatedLatency must not touch what it receives";
+}
+
+// "Packets sent using SendDataOptions.Reliable are not affected by this setting" -- whatever else
+// is combined with Reliable. Every other combination is dropped at a loss of exactly 1, for the
+// remote machine and for the sender's own local gamer alike.
+TEST(ENetBackendTest, SimulatedPacketLossOfOneDropsEveryOutgoingUnreliablePacketForEveryRecipient) {
+    SystemLinkSessionFixture host("HostPlayer");
+    host.session->setSimulatedPacketLossProperty(1.0f);
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromClientSide = nullptr;
+    ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
+    ASSERT_NE(FindGamer(host.session, "RemotePlayer"), nullptr);
+
+    LocalNetworkGamer* sender = host.session->getLocalGamersProperty()[0];
+    for (SharpRuntime::bytecs value = 0; value <= 7; ++value) {
+        sender->SendData(std::vector<SharpRuntime::bytecs>{value}, static_cast<SendDataOptions>(value));
+    }
+
+    std::vector<std::vector<SharpRuntime::bytecs>> remote, local;
+    for (int i = 0; i < 200 && (remote.size() < 4 || local.size() < 4); ++i, PollYield()) {
+        PumpAndCollect(host.session, fakeClient, remote, local);
     }
     for (int i = 0; i < 20; ++i, PollYield()) {
-        host.session->Update();
+        PumpAndCollect(host.session, fakeClient, remote, local);
     }
-    EXPECT_FALSE(hostLocalGamer->getIsDataAvailableProperty());
-    // Reliable, ReliableInOrder, Chat|Reliable, Chat|ReliableInOrder -- in the order sent.
-    EXPECT_EQ(delivered, (std::vector<SharpRuntime::bytecs>{1, 3, 5, 7}))
-        << "SimulatedPacketLoss=1.0 drops exactly the packets without Reliable";
+    const std::vector<std::vector<SharpRuntime::bytecs>> reliable{{1}, {3}, {5}, {7}};
+    EXPECT_EQ(local, reliable) << "the sender's own local gamer is subject to the simulation too";
+    std::sort(remote.begin(), remote.end());
+    EXPECT_EQ(remote, reliable);
 }
 
 TEST(ENetBackendTest, SimulatedPacketLossOfZeroDropsNoAppData) {
@@ -1279,81 +1304,54 @@ TEST(ENetBackendTest, SimulatedPacketLossOfZeroDropsNoAppData) {
 
     ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
     ENetPeer* peerFromClientSide = nullptr;
-    uint8_t remoteWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
+    ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
+    NetworkGamer* remoteGamer = FindGamer(host.session, "RemotePlayer");
+    ASSERT_NE(remoteGamer, nullptr);
 
+    LocalNetworkGamer* sender = host.session->getLocalGamersProperty()[0];
     constexpr int kSentCount = 5;
     for (SharpRuntime::bytecs i = 0; i < kSentCount; ++i) {
-        AppDataMessage appData;
-        appData.SenderWireId = remoteWireId;
-        appData.TargetWireId = 0;
-        appData.Options = SendDataOptions::Reliable;
-        appData.Payload = {i};
-        auto appDataBytes = NetPacketCodec::Encode(appData);
-        fakeClient.Send(peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+        sender->SendData(std::vector<SharpRuntime::bytecs>{i}, SendDataOptions::Reliable, remoteGamer);
+        sender->SendData(std::vector<SharpRuntime::bytecs>{i}, SendDataOptions::Reliable, sender);
     }
-    fakeClient.Flush();
 
-    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
-    int receivedCount = 0;
-    for (int i = 0; i < 200 && receivedCount < kSentCount; ++i, PollYield()) {
-        host.session->Update();
-        while (hostLocalGamer->getIsDataAvailableProperty()) {
-            std::vector<SharpRuntime::bytecs> received(1);
-            NetworkGamer* sender = nullptr;
-            hostLocalGamer->ReceiveData(received, sender);
-            ++receivedCount;
-        }
+    std::vector<std::vector<SharpRuntime::bytecs>> remote, local;
+    for (int i = 0; i < 200 && (remote.size() < kSentCount || local.size() < kSentCount); ++i, PollYield()) {
+        PumpAndCollect(host.session, fakeClient, remote, local);
     }
-    EXPECT_EQ(receivedCount, kSentCount) << "SimulatedPacketLoss=0.0 should drop nothing";
+    EXPECT_EQ(remote.size(), static_cast<std::size_t>(kSentCount));
+    EXPECT_EQ(local.size(), static_cast<std::size_t>(kSentCount));
 }
 
-TEST(ENetBackendTest, SimulatedLatencyDelaysAppDataDeliveryUntilTheClockAdvances) {
-    struct ClockGuard {
-        ~ClockGuard() { ENetBackend::ResetClockForTesting(); }
-    } clockGuard;
-
+TEST(ENetBackendTest, SimulatedLatencyHoldsOutgoingAppDataOnTheSendingMachine) {
     SystemLinkSessionFixture host("HostPlayer");
-    constexpr int kLatencyMs = 200;
-    host.session->setSimulatedLatencyProperty(System::TimeSpan::FromMilliseconds(kLatencyMs));
-
     ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
     ENetPeer* peerFromClientSide = nullptr;
-    uint8_t remoteWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
+    ConnectFakeClientAndCompleteHandshake(fakeClient, host.session, &peerFromClientSide);
+    ASSERT_NE(FindGamer(host.session, "RemotePlayer"), nullptr);
 
-    auto frozenNow = std::chrono::steady_clock::now();
-    ENetBackend::SetClockForTesting(frozenNow);
+    FrozenSimulatorClock clock;
+    host.session->setSimulatedLatencyProperty(System::TimeSpan::FromMilliseconds(200));
+    host.session->getLocalGamersProperty()[0]->SendData(std::vector<SharpRuntime::bytecs>{42}, SendDataOptions::Reliable);
 
-    AppDataMessage appData;
-    appData.SenderWireId = remoteWireId;
-    appData.TargetWireId = 0;
-    appData.Options = SendDataOptions::Reliable;
-    appData.Payload = {42};
-    auto appDataBytes = NetPacketCodec::Encode(appData);
-    fakeClient.Send(peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
-    fakeClient.Flush();
-
-    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
-    // Real ENet delivery of the wire packet itself still needs real polling time - the clock
-    // freeze only holds back ReleaseDuePendingDeliveries, not ENet's own transport, so this loop
-    // drives real Update() calls (each reading the *frozen* Now()) until the packet has genuinely
-    // arrived and been queued internally, then asserts it's deliberately still being held back.
-    for (int i = 0; i < 200; ++i, PollYield()) {
-        host.session->Update();
+    // The transport keeps running on real time; only the held packet waits for the frozen clock.
+    std::vector<std::vector<SharpRuntime::bytecs>> remote, local;
+    for (int i = 0; i < 50; ++i, PollYield()) {
+        PumpAndCollect(host.session, fakeClient, remote, local);
     }
-    EXPECT_FALSE(hostLocalGamer->getIsDataAvailableProperty())
-        << "a packet queued under 200ms of simulated latency must not be delivered while the "
-           "clock is still frozen at the moment it was sent";
+    NetworkSimulator::SetClockForTesting(clock.start + std::chrono::milliseconds(199));
+    for (int i = 0; i < 50; ++i, PollYield()) {
+        PumpAndCollect(host.session, fakeClient, remote, local);
+    }
+    EXPECT_TRUE(remote.empty()) << "a packet under 200 ms of simulated latency left early";
+    EXPECT_TRUE(local.empty()) << "the sender's own local gamer received a held packet early";
 
-    ENetBackend::SetClockForTesting(frozenNow + std::chrono::milliseconds(kLatencyMs));
-    host.session->Update();
-    EXPECT_TRUE(hostLocalGamer->getIsDataAvailableProperty())
-        << "advancing the clock by exactly the simulated latency must release the held packet";
-
-    std::vector<SharpRuntime::bytecs> received(1);
-    NetworkGamer* sender = nullptr;
-    int len = hostLocalGamer->ReceiveData(received, sender);
-    EXPECT_EQ(len, 1);
-    EXPECT_EQ(received[0], 42);
+    NetworkSimulator::SetClockForTesting(clock.start + std::chrono::milliseconds(200));
+    for (int i = 0; i < 200 && (remote.empty() || local.empty()); ++i, PollYield()) {
+        PumpAndCollect(host.session, fakeClient, remote, local);
+    }
+    EXPECT_EQ(remote, (std::vector<std::vector<SharpRuntime::bytecs>>{{42}}));
+    EXPECT_EQ(local, (std::vector<std::vector<SharpRuntime::bytecs>>{{42}}));
 }
 
 TEST(ENetBackendTest, ClientSendDataTransmitsAppDataToHost) {

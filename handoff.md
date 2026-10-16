@@ -221,13 +221,7 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     no-op because managed textures need no recovery registry; `MaxMipLevel`, whole-target `Clear`,
     the device texture slot after `Apply()`, HiDef in back-buffer-reading examples and
     `DirectX9_FrameRecovery`'s window were fixed earlier in the same pass.
-19. **`NetworkSession.SimulatedPacketLoss`/`SimulatedLatency` act on the receiving machine** (found
-    2026-10-16 while making `SendDataOptions` a flags enumeration). XNA applies both on the sending
-    machine, to every recipient including local gamers, and gives unordered packets a normally
-    distributed latency (`xna4-spec/Microsoft.Xna.Framework.Net/NetworkSession.xml`, the decompiled
-    `NetworkSimulator`). CNA's `ENetBackend::HandleAppData` applies them to AppData arriving for a
-    local gamer, so the receiver's setting governs, local-to-local packets are never affected and
-    the latency is a constant. Packets sent with `Reliable` are exempt from the loss, as in XNA.
+
 ### 5.2 Limitations
 
 - `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves

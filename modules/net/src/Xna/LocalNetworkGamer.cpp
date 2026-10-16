@@ -183,16 +183,7 @@ namespace Microsoft::Xna::Framework::Net
         }
         ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
-        for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
-        {
-            NetworkSession::NetworkEvent evt;
-            evt.Type = NetworkSession::NetworkEventType::PacketSend;
-            evt.Gamer = gamer;
-            evt.Sender = this;
-            evt.Packet = mem;
-            evt.Reliable = options;
-            getSessionProperty()->SendNetworkEvent(std::move(evt));
-        }
+        getSessionProperty()->SendDataInternal(this, std::move(mem), options, nullptr);
     }
 
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, SendDataOptions options, NetworkGamer* recipient)
@@ -211,13 +202,7 @@ namespace Microsoft::Xna::Framework::Net
         }
         ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
-        NetworkSession::NetworkEvent evt;
-        evt.Type = NetworkSession::NetworkEventType::PacketSend;
-        evt.Gamer = recipient;
-        evt.Sender = this;
-        evt.Packet = std::move(mem);
-        evt.Reliable = options;
-        getSessionProperty()->SendNetworkEvent(std::move(evt));
+        getSessionProperty()->SendDataInternal(this, std::move(mem), options, recipient);
     }
 
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options)
@@ -225,17 +210,7 @@ namespace Microsoft::Xna::Framework::Net
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
-
-        for (NetworkGamer* gamer : getSessionProperty()->getAllGamersProperty())
-        {
-            NetworkSession::NetworkEvent evt;
-            evt.Type = NetworkSession::NetworkEventType::PacketSend;
-            evt.Gamer = gamer;
-            evt.Sender = this;
-            evt.Packet = packet;
-            evt.Reliable = options;
-            getSessionProperty()->SendNetworkEvent(std::move(evt));
-        }
+        getSessionProperty()->SendDataInternal(this, std::move(packet), options, nullptr);
     }
 
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient)
@@ -243,14 +218,7 @@ namespace Microsoft::Xna::Framework::Net
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
-
-        NetworkSession::NetworkEvent evt;
-        evt.Type = NetworkSession::NetworkEventType::PacketSend;
-        evt.Gamer = recipient;
-        evt.Sender = this;
-        evt.Packet = std::move(packet);
-        evt.Reliable = options;
-        getSessionProperty()->SendNetworkEvent(std::move(evt));
+        getSessionProperty()->SendDataInternal(this, std::move(packet), options, recipient);
     }
 
     void LocalNetworkGamer::ClearPacketQueue()

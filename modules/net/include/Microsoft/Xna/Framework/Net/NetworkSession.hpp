@@ -42,6 +42,7 @@ namespace CNA::Internal::GamerServices {class IGamerServicesBackend;}
 namespace CNA::Internal::Net
 {
     class ENetBackend;
+    class NetworkSimulator;
     class OnlineSessionBinding;
     class OnlineSessionOperation;
     class VoiceChat;
@@ -314,54 +315,39 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] NetworkSessionType getSessionTypeProperty() const;
 
         /**
-         * @brief Gets the artificially simulated network latency.
+         * @brief Gets the amount of simulated network latency.
          *
-         * Task 6.1-6.5 (plans/plan_net.md Phase 6): real, receive-side implementation - `ENetBackend`
-         * holds AppData bound for one of this session's own local gamers in a per-session delayed-
-         * delivery queue, releasing it once `now >= receiveTime + SimulatedLatency` (see
-         * `ENetBackend.cpp`'s `HandleAppData`/`ReleaseDuePendingDeliveries`). Scoped to AppData
-         * only - the CNA-internal session-management protocol (join/leave/state-change messages)
-         * and a host's own relay hop for two *other* peers stay unaffected (see `HandleAppData`'s
-         * own comment for why). This is not FNA's own behavior (FNA's `SimulatedLatency` is a
-         * plain, inert auto-property with no delay queue anywhere in its stubbed-out source).
+         * Applied on the sending machine, to every SendData including one to a local gamer: each
+         * packet is held for a normally distributed time around this value, so unordered packets
+         * are also reordered while InOrder ones are only delayed.
          *
-         * @return The simulated latency.
+         * @return The simulated latency. The default is zero.
          */
         [[nodiscard]] System::TimeSpan getSimulatedLatencyProperty() const;
 
         /**
-         * @brief Sets the artificially simulated network latency.
-         *
-         * Implementation note: see getSimulatedLatencyProperty()'s doc comment for the real delay
-         * behavior this now drives.
+         * @brief Sets the amount of simulated network latency.
          *
          * @param value The new simulated latency.
+         * @throws System::ArgumentOutOfRangeException @p value is negative.
          */
         void setSimulatedLatencyProperty(System::TimeSpan value);
 
         /**
-         * @brief Gets the artificially simulated packet loss fraction.
+         * @brief Gets the amount of simulated packet loss.
          *
-         * Task 6.1-6.5 (plans/plan_net.md Phase 6): real implementation - each AppData packet bound for
-         * one of this session's own local gamers is probabilistically dropped before ever
-         * reaching game code, at exactly this rate (`ENetBackend.cpp`'s
-         * `ShouldDropForSimulatedLoss`; 0.0 and 1.0 are handled deterministically without touching
-         * any RNG). Scoped to AppData only - see `getSimulatedLatencyProperty()`'s own doc comment
-         * for why session-management/relay traffic stays unaffected. Not FNA's own behavior (FNA's
-         * `SimulatedPacketLoss` is a plain, inert auto-property with no synthetic-drop logic
-         * anywhere in its stubbed-out source).
+         * Applied on the sending machine, to every SendData including one to a local gamer.
+         * Packets sent with SendDataOptions::Reliable are not affected.
          *
-         * @return The simulated packet loss, from 0.0 to 1.0.
+         * @return The probability that a packet is lost, from 0 to 1. The default is zero.
          */
         [[nodiscard]] float getSimulatedPacketLossProperty() const;
 
         /**
-         * @brief Sets the artificially simulated packet loss fraction.
+         * @brief Sets the amount of simulated packet loss.
          *
-         * Implementation note: see getSimulatedPacketLossProperty()'s doc comment for the real
-         * drop behavior this now drives.
-         *
-         * @param value The new simulated packet loss, from 0.0 to 1.0.
+         * @param value The new probability, from 0 to 1.
+         * @throws System::ArgumentOutOfRangeException @p value is outside 0 to 1.
          */
         void setSimulatedPacketLossProperty(float value);
 
@@ -1040,8 +1026,13 @@ namespace Microsoft::Xna::Framework::Net
         NetworkSessionProperties sessionProperties_;
         NetworkSessionState sessionState_{NetworkSessionState::Lobby};
         NetworkSessionType sessionType_{NetworkSessionType::Local};
-        System::TimeSpan simulatedLatency_;
-        float simulatedPacketLoss_{0.0f};
+        // SimulatedLatency/SimulatedPacketLoss and the packets they hold (LocalNetworkGamer.SendData
+        // passes through SendDataInternal, which hands the simulator each send first).
+        std::unique_ptr<CNA::Internal::Net::NetworkSimulator> simulator_;
+        void SendDataInternal(LocalNetworkGamer* sender, std::vector<SharpRuntime::bytecs> data,
+                              SendDataOptions options, NetworkGamer* recipient);
+        void SendDataNowInternal(LocalNetworkGamer* sender, std::vector<SharpRuntime::bytecs> data,
+                                 SendDataOptions options, NetworkGamer* recipient);
 
         int maxLocalGamers_{0};
         // Task 2.4: a real monotonic counter for locally-assigned placeholder ids, separate from
