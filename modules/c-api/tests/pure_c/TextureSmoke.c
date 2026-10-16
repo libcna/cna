@@ -108,7 +108,8 @@ static int use_texture_on_wrong_thread(void* const context)
 
 static int validate_default_texture(void)
 {
-    static const char TypeName[] = "Texture2D";
+    /* The exact native type name: XNA's fully qualified one, as Texture2D::GetTypeName answers. */
+    static const char TypeName[] = "Microsoft.Xna.Framework.Graphics.Texture2D";
     CNA_Handle texture = CNA_INVALID_HANDLE;
     CNA_TextureInfo info = {sizeof(CNA_TextureInfo), UINT32_C(1), UINT32_MAX, UINT32_MAX};
     CNA_Texture2DInfo info_2d = {

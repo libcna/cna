@@ -22,7 +22,7 @@ CNA_Result cna_vertex_buffer_get_type_name_byte_count(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_byte_count);
+        return CNA::C::Detail::ReportTextSize(object->value->Microsoft::Xna::Framework::Graphics::VertexBuffer::GetTypeName(), out_byte_count);
     });
 }
 
@@ -42,7 +42,7 @@ CNA_Result cna_vertex_buffer_copy_type_name(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_byte_count);
+        return CNA::C::Detail::CopyText(object->value->Microsoft::Xna::Framework::Graphics::VertexBuffer::GetTypeName(), destination, capacity, out_byte_count);
     });
 }
 

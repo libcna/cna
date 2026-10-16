@@ -6,8 +6,10 @@ lookup = "GetBuffer"
 object = "std::shared_ptr<VertexBufferResource>"
 
 [buffer.routes]
-cna_vertex_buffer_get_type_name_byte_count = { size = "object->value->GetTypeName()" }
-cna_vertex_buffer_copy_type_name = { copy = "object->value->GetTypeName()" }
+# One handle type stands for the static and the dynamic kind, and the ABI names both with
+# CNA_VERTEX_BUFFER_TYPE_NAME: the qualified call reads the base type's name, not the dynamic type's.
+cna_vertex_buffer_get_type_name_byte_count = { size = "object->value->Microsoft::Xna::Framework::Graphics::VertexBuffer::GetTypeName()" }
+cna_vertex_buffer_copy_type_name = { copy = "object->value->Microsoft::Xna::Framework::Graphics::VertexBuffer::GetTypeName()" }
 
 # The routes whose logic is a hand-written helper of the same name, in CamelCase. The
 # generated half refuses null out_* outputs, clears handle outputs and checks CNA_Bool
