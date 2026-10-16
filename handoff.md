@@ -158,9 +158,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
       and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
       them. A capability boundary, reported as such.
-    - SDL_GPU `ShaderEffect` 3D route: the portable probe draws nothing on the one-stream routes
-      (`shader_effect_3d_layout` A-C, G), two vertex streams are refused (D/E), and the
-      first-instance leg J fails for G's reason -- the route binds no per-instance stream.
     - SDL_GPU compiled XNA effects (`SdlGpuCompiledEffectDrawTest`, the shared helpers in
       `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`): a quad covering pixels 1-2
       under Direct3D 9's pixel-centre convention lands half a pixel up and left

@@ -1367,13 +1367,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             return vertexInputLocationsEXT_;
         }
 
-        /** @brief Overlays this effect's own uniform values onto a 3D draw's block. CNAEXT. SMG-0019.
+        /** @brief Turns a 3D draw's block into this effect's own, keeping the draw's matrix. CNAEXT.
+         * SMG-0019.
          *
-         * The renderer fills the world-view-projection matrix and the stock slots first; whatever
-         * the effect itself set through `SetUniform*` then wins, because those are the values the
-         * game asked for.
+         * The block arrives holding the draw's world-view-projection at byte 16 and leaves as the
+         * effect's 128-byte block (viewport size, matrix, vector, scalar), with that matrix unless
+         * the game set its own through `SetUniformMat4`.
          *
-         * @param block The 128-byte per-draw block to overlay onto.
+         * @param block The 128-byte per-draw block.
          */
         CNAEXT void Apply3DUniformsEXT(std::array<float, 32>& block) const;
 
@@ -1476,7 +1477,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return The pipeline, or null when creation failed.
          */
         CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreate3DPipelineEXT(
-            const std::vector<SDL_GPUVertexAttribute>& attributes, Uint32 stride,
+            const std::vector<SDL_GPUVertexAttribute>& attributes,
+            const std::vector<SDL_GPUVertexBufferDescription>& vertexBuffers,
             SDL_GPUPrimitiveType topology,
             const std::array<SDL_GPUColorTargetDescription, 4>& colorTargets,
             SDL_GPUSampleCount sampleCount, SDL_GPUTextureFormat depthStencilFormat,
@@ -1500,6 +1502,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUShader* fragmentShader_ = nullptr;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pipelines_;
         std::array<float, 32> pushConst_{};
+        /// The game set the block's matrix itself; until then a 3D draw's world*view*projection
+        /// fills that slot (WebGPUEffectRenderer's VULKAN-255 rule).
+        bool matrixSetByGame_ = false;
         std::string compileError_;
         bool valid_ = false;
         /// SMG-0007: what each stage's SPIR-V declared, and where SDL_gpu now expects it.
@@ -2176,7 +2181,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         struct CustomEffect3DDrawCommand
         {
-            /** @brief Vertex bytes, already offset by the draw's `vertexStart`. */
+            /** @brief The first stream's vertex bytes, already offset by the draw's `vertexStart`. */
             std::vector<std::uint8_t> vertexData;
             /** @brief Index bytes; empty for a non-indexed draw. */
             std::vector<std::uint8_t> indexData;
@@ -2196,8 +2201,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             Uint32 stride = 0;
             /** @brief Native topology. */
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-            /** @brief The vertex attributes this effect's own shader consumes. */
+            /** @brief The vertex attributes this effect's own shader consumes, by stream slot. */
             std::vector<SDL_GPUVertexAttribute> attributes;
+            /** @brief One description per bound stream, per-vertex or per-instance. */
+            std::vector<SDL_GPUVertexBufferDescription> vertexBuffers;
+            /** @brief Streams after the first, already offset or instance-expanded. */
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             /** @brief The effect's fixed 128-byte per-draw block, world-view-projection included. */
             std::array<float, 32> uniforms{};
             /** @brief The effect's std140 arrays, or null when it set none. */
