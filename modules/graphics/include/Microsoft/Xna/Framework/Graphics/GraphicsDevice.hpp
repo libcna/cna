@@ -1963,6 +1963,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /// effect flags) must be present in the bound per-vertex declarations, or the draw throws
         /// InvalidOperationException naming the missing element.
         void RequireStockEffectInputs(const CNA::Internal::Renderers::GpuDrawParams& p) const;
+        /// The same check for a DrawUser* draw, against the declaration it uploads with.
+        void RequireStockEffectInputs(const CNA::Internal::Renderers::GpuDrawParams& p,
+                                      const VertexDeclaration& declaration) const;
+        /// The check itself, against the union of @p declarations.
+        void RequireStockEffectInputs(
+            const CNA::Internal::Renderers::GpuDrawParams& p,
+            const std::vector<const VertexDeclaration*>& declarations) const;
         void ValidateVertexStreamCapability(
             const CNA::Internal::Renderers::GpuDrawParams& p) const;
 

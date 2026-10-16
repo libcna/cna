@@ -42,6 +42,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -124,7 +125,7 @@ class DualTextureEffectVertexColorTest : public Game
             // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real
             // default RasterizerState -- needs CullNone.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
                 break; // skip blank/black readback frames

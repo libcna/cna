@@ -40,6 +40,7 @@
 
 #include <cstdio>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -121,7 +122,7 @@ protected:
             { tl, uv0 }, { bl, uv1 }, { br, uv2 },
             { tl, uv0 }, { br, uv2 }, { tr, uv3 },
         };
-        dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, q, 0, 2);
 
         if (frame_ == 1 && !capturedFrame1Set_)
         {

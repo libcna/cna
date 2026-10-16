@@ -30,6 +30,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -213,7 +214,7 @@ class BasicEffectUnlitContractTest final : public Game
             {Vector3( 1, -1, 0), Vector2(1, 1)}, {Vector3(-1,  1, 0), Vector2(0, 0)},
             {Vector3( 1, -1, 0), Vector2(1, 1)}, {Vector3( 1,  1, 0), Vector2(1, 0)},
         };
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(device, PrimitiveType::TriangleList, quad, 0, 2);
         return FinishTarget(device);
     }
 

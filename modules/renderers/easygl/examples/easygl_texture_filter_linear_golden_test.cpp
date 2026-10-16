@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 #include <vector>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -92,7 +93,7 @@ protected:
         device.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding -- same as Task 297's own comment.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(device, PrimitiveType::TriangleList, verts, 0, 2);
 
         const int samplePx = 384;
         // Cross-check against the independently-derived expected blend, matching Task 297's

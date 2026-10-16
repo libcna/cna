@@ -1712,26 +1712,42 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::RequireStockEffectInputs(
         const CNA::Internal::Renderers::GpuDrawParams& p) const
     {
-        // Compiled (authentic XNA) effects, a custom ShaderEffect (its source decides which inputs it reads, and SpriteBatch-style
-        // sources name a colour input a 3D mesh never supplies) and CNA's PBR extension carry their own input contracts; the
-        // legacy empty-declaration route has no elements to check against.
-        if (p.compiledEffectRuntime != nullptr || p.customEffectRenderer != nullptr || p.customEffectRequested || p.pbr) return;
         // The streams the draw reads, the same way FillVertexStreamBindings resolves them: the
         // SetVertexBuffers list when it describes the bound buffer, otherwise that buffer alone.
         // Every stream counts, per-instance ones included: Direct3D 9 validates the shader's
         // inputs against the union of the streams.
-        std::vector<const VertexBuffer*> streams;
+        std::vector<const VertexDeclaration*> declarations;
         if (!currentVertexBuffers_.empty() &&
             currentVertexBuffers_[0].getVertexBufferProperty() == currentVertexBuffer_)
         {
             for (const VertexBufferBinding& binding : currentVertexBuffers_)
                 if (binding.getVertexBufferProperty() != nullptr)
-                    streams.push_back(binding.getVertexBufferProperty());
+                    declarations.push_back(
+                        &binding.getVertexBufferProperty()->getVertexDeclarationProperty());
         }
         else if (currentVertexBuffer_ != nullptr)
         {
-            streams.push_back(currentVertexBuffer_);
+            declarations.push_back(&currentVertexBuffer_->getVertexDeclarationProperty());
         }
+        RequireStockEffectInputs(p, declarations);
+    }
+
+    void GraphicsDevice::RequireStockEffectInputs(
+        const CNA::Internal::Renderers::GpuDrawParams& p, const VertexDeclaration& declaration) const
+    {
+        // DrawUserPrimitives and DrawUserIndexedPrimitives read the one declaration they upload
+        // with, and XNA checks it against the shader exactly as it checks a bound buffer's.
+        RequireStockEffectInputs(p, std::vector<const VertexDeclaration*>{&declaration});
+    }
+
+    void GraphicsDevice::RequireStockEffectInputs(
+        const CNA::Internal::Renderers::GpuDrawParams& p,
+        const std::vector<const VertexDeclaration*>& declarations) const
+    {
+        // Compiled (authentic XNA) effects, a custom ShaderEffect (its source decides which inputs it reads, and SpriteBatch-style
+        // sources name a colour input a 3D mesh never supplies) and CNA's PBR extension carry their own input contracts; the
+        // legacy empty-declaration route has no elements to check against.
+        if (p.compiledEffectRuntime != nullptr || p.customEffectRenderer != nullptr || p.customEffectRequested || p.pbr) return;
         bool anyDeclared = false;
         bool provided[static_cast<std::size_t>(VertexElementUsage::TessellateFactor) + 1u]
                      [16] = {};
@@ -1740,10 +1756,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // free index of that usage. Validate the same effective declaration, rather than the raw
         // per-buffer declarations, or a legitimate split TEXCOORD0/TEXCOORD0 layout is rejected
         // before the renderer can consume it as TEXCOORD0/TEXCOORD1.
-        for (const VertexBuffer* buffer : streams)
+        for (const VertexDeclaration* declaration : declarations)
         {
-            const auto& elements =
-                buffer->getVertexDeclarationProperty().GetVertexElements();
+            const auto& elements = declaration->GetVertexElements();
             if (!elements.empty()) anyDeclared = true;
             for (const VertexElement& element : elements)
             {
@@ -2282,6 +2297,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Renderers::GpuDrawParams drawParams;
         currentEffect_->FillGpuDrawParams(drawParams);
         drawParams.vertexColorEnabled = true;
+        RequireStockEffectInputs(drawParams, VertexPositionColor::getVertexDeclarationStatic());
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(*tmpVb, world, view, proj, primitiveType, primitiveCount,
                                     drawParams);
@@ -2338,6 +2354,7 @@ namespace Microsoft::Xna::Framework::Graphics
         currentEffect_->FillGpuDrawParams(drawParams);
         drawParams.vertexColorEnabled = true;
         drawParams.numVertices = numVertices;
+        RequireStockEffectInputs(drawParams, VertexPositionColor::getVertexDeclarationStatic());
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*tmpVb, *tmpIb, world, view, proj, primitiveType,
                                            primitiveCount, drawParams);
@@ -2624,6 +2641,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionColor::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
           CNA_RECORD_GRAPHICS_DRAW(false, count); }
@@ -2656,6 +2674,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
           CNA_RECORD_GRAPHICS_DRAW(false, count); }
@@ -2688,6 +2707,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionColorTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
           CNA_RECORD_GRAPHICS_DRAW(false, count); }
@@ -2720,6 +2740,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionNormalTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, count, p);
           CNA_RECORD_GRAPHICS_DRAW(false, count); }
@@ -2758,6 +2779,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        RequireStockEffectInputs(p, vertexDeclaration);
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
         CNA_RECORD_GRAPHICS_DRAW(false, primitiveCount);
@@ -2873,6 +2895,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionColor::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -2910,6 +2933,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -2947,6 +2971,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionColorTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -2984,6 +3009,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionNormalTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3023,6 +3049,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionColor::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3060,6 +3087,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3097,6 +3125,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionColorTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3134,6 +3163,7 @@ namespace Microsoft::Xna::Framework::Graphics
         { Matrix world, view, proj;
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+          RequireStockEffectInputs(p, VertexPositionNormalTexture::getVertexDeclarationStatic());
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3175,6 +3205,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        RequireStockEffectInputs(p, vd);
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
         CNA_RECORD_GRAPHICS_DRAW(true, primCount);
@@ -3211,6 +3242,7 @@ namespace Microsoft::Xna::Framework::Graphics
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
+        RequireStockEffectInputs(p, vd);
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
         CNA_RECORD_GRAPHICS_DRAW(true, primCount);

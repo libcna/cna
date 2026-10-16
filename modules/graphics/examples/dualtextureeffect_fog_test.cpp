@@ -36,6 +36,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -147,7 +148,7 @@ class DualTextureFogTest : public Game
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 #else
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
 #endif
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)

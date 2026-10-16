@@ -104,6 +104,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -632,7 +633,7 @@ class RenderTargetProducerConsumerTest : public Game
                     fx.setTextureProperty(src);
                     fx.setTexture2Property(&whiteTex_);
                     fx.Apply();
-                    dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+                    CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, q, 0, 2);
                 }
                 else
                 {

@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -79,7 +80,7 @@ class DualTextureNullTexture2Test : public Game
 
     void drawQuad(GraphicsDevice& dev, const VertexPositionTexture (&quad)[6])
     {
-        dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
     }
 
 protected:

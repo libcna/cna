@@ -40,6 +40,7 @@
 
 #include <cstdio>
 #include <vector>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -139,7 +140,7 @@ protected:
         // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
         // RasterizerState — needs CullNone.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(device, PrimitiveType::TriangleList, verts, 0, 2);
     }
 
     void Draw(const GameTime&) override

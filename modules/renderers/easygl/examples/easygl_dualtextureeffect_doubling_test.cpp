@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -126,7 +127,7 @@ protected:
             // quad's winding is culled by the real default RasterizerState once EasyGL pushes it at
             // construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             check(colourMatch(got, Color(200, 200, 200, 255)),
                   "(a) tex0=gray(100)×2, tex1=white → gray(200)", got, Color(200, 200, 200, 255));
@@ -144,7 +145,7 @@ protected:
             // quad's winding is culled by the real default RasterizerState once EasyGL pushes it at
             // construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             check(colourMatch(got, Color(255, 0, 0, 255)),
                   "(b) two white textures, diffuse=red → red", got, Color(255, 0, 0, 255));

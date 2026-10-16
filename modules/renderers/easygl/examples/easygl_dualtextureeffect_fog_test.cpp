@@ -41,6 +41,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -129,7 +130,7 @@ class DualTextureFogTest : public Game
             // GraphicsDevice's real default RasterizerState is pushed to every renderer,
             // this quad's winding is culled unless explicitly disabled.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
                 break; // skip blank/black frames

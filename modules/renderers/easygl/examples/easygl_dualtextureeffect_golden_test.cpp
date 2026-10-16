@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -73,7 +74,7 @@ protected:
         device.setBlendStateProperty(BlendState::Opaque);
         // Task 896 finding -- same as Task 389's own comment.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(device, PrimitiveType::TriangleList, q, 0, 2);
 
         // Cross-check against Task 389's own derived expected value, independent of the golden
         // PNG's own contents (same rationale as Tasks 464-468).

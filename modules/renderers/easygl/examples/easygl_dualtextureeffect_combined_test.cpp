@@ -47,6 +47,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -151,7 +152,7 @@ protected:
                 // Task 896 finding (mirrors the Task 364/884 fix on Bgfx, retired 2026-09-17): this quad's winding
                 // is culled by the real default RasterizerState once EasyGL pushes it at construction.
                 dev.setRasterizerStateProperty(RasterizerState::CullNone);
-                dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+                CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, q, 0, 2);
                 got = readCenter(dev);
                 if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
                     break; // skip blank/black frames

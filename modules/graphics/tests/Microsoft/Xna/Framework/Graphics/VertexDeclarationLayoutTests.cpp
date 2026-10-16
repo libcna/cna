@@ -84,6 +84,8 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "System/InvalidOperationException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
@@ -296,6 +298,10 @@ namespace
     /// The SAME SEMANTICS as `positionColor16` with legal trailing padding. A stride-keyed guess
     /// reads it as Position+Normal+TexCoord.
     constexpr DeclarationCase kPositionColorPadded32{"positionColorPadded32", 32, true, 0, 12, -1, true};
+    /// Position alone at stride 16 drawn with VertexColorEnabled: the effect reads COLOR0 and the
+    /// declaration does not supply it. XNA's GraphicsDevice refuses that draw on every renderer
+    /// ("Color0 is missing") before a renderer sees it. Not part of kMatrix: no renderer may draw it.
+    constexpr DeclarationCase kColorUndeclared16{"colorUndeclared16", 16, true, 0, -1, -1, true};
 
     constexpr std::array<DeclarationCase, 7> kMatrix{
         kPositionOnly12, kPositionColor16, kColorPosition16, kPositionTexture20,
@@ -502,6 +508,10 @@ protected:
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
         device.setScissorRectangleProperty(Rectangle(0, 0, kTargetSize, kTargetSize));
+        // The 32-bit index routes are HiDef: under Reach the index buffer itself is refused, which
+        // the staircase accepted as a legible refusal and the guard legs as a boundary, so neither
+        // ever drew through a 32-bit index buffer.
+        device.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     }
 
     [[nodiscard]] RenderTarget2D MakeTarget()
@@ -862,13 +872,15 @@ TEST_F(VertexDeclarationLayoutTest, DeclarationTransitionsDoNotReuseAStaleLayout
 }
 
 // ---------------------------------------------------------------------------
-// On renderers that still infer layouts, these legs prove the boundary's
-// contract: refusing costs the caller nothing, happens before anything native is produced, and
-// covers every route into the renderer -- not only the one the collision matrix happens to use.
+// The refusal legs prove the boundary's contract: refusing costs the caller nothing, happens
+// before anything native is produced, and covers every route into the renderer -- not only the
+// one the collision matrix happens to use.
 //
-// Declaration-driven renderers skip the refusal legs and run the positive translating control
-// below. The asymmetry is the point: the guard is a per-renderer capability boundary, not a claim
-// that these declarations are globally invalid.
+// Each renderer is probed for a declaration it really refuses. Where it infers layouts from the
+// stride, that is a colliding declaration of the matrix; where it translates every one of those
+// (the translating control below renders them), it is a declaration lacking an element the effect
+// reads, which GraphicsDevice refuses on every renderer, as XNA does. The legs used to skip every
+// translating renderer, which left them running nowhere.
 // ---------------------------------------------------------------------------
 
 class DeclarationGuardTest : public VertexDeclarationLayoutTest
@@ -908,6 +920,8 @@ protected:
     struct GuardedDraw
     {
         bool rendered = false;
+        /// The refusal was XNA's InvalidOperationException, not some other failure.
+        bool invalidOperation = false;
         std::string rejection;
         FrameSnapshot frame;
     };
@@ -956,6 +970,12 @@ protected:
             device.SetRenderTarget(nullptr);
             out.rendered = true;
         }
+        catch (const System::InvalidOperationException& e)
+        {
+            out.invalidOperation = true;
+            out.rejection = e.what();
+            device.SetRenderTarget(nullptr);
+        }
         catch (const std::exception& e)
         {
             out.rejection = e.what();
@@ -966,30 +986,44 @@ protected:
         out.frame = Capture(target);
         return out;
     }
+
+    /// The first candidate the active renderer refuses: a colliding declaration where it infers
+    /// layouts, otherwise the undeclared-input one GraphicsDevice refuses everywhere. Null when it
+    /// draws them all, which the legs report as a failure rather than a skip.
+    const DeclarationCase* RefusedDeclaration()
+    {
+        for (const DeclarationCase* c : {&kColorPosition16, &kPositionTextureColor24,
+                                         &kPositionColorPadded32, &kColorUndeclared16})
+        {
+            RenderTarget2D target = MakeTarget();
+            if (!DrawInto(target, *c, false, false).rendered)
+                return c;
+        }
+        return nullptr;
+    }
 };
 
 // A refused draw must produce NOTHING: no partial geometry, no half-queued command that a later
 // Present flushes. The target still holds exactly the clear colour it was given.
 TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
-    // refusing it, so the refusal contract below is not its contract -- see
-    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (TranslatesDeclarations())
-        GTEST_SKIP() << RendererName()
-                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
+    const DeclarationCase* const refusedCase = RefusedDeclaration();
+    ASSERT_NE(nullptr, refusedCase) << RendererName() << " drew every candidate declaration";
     RenderTarget2D target = MakeTarget();
-    const GuardedDraw got = DrawInto(target, kColorPosition16, false, false);
-    std::cout << "[ DECL-GUARD ] " << RendererName() << " colorPosition16 refusal: "
+    const GuardedDraw got = DrawInto(target, *refusedCase, false, false);
+    std::cout << "[ DECL-GUARD ] " << RendererName() << ' ' << refusedCase->name << " refusal: "
               << (got.rendered ? std::string("ACCEPTED") : '"' + got.rejection + '"') << std::endl;
     ASSERT_FALSE(got.rendered)
-        << "a declaration this renderer infers no faithful layout for was accepted"
-        << DescribeFrame(got.frame);
+        << "a declaration this renderer refused once was accepted" << DescribeFrame(got.frame);
+    EXPECT_TRUE(got.invalidOperation)
+        << "a draw its declaration cannot feed is XNA's InvalidOperationException: " << got.rejection;
     EXPECT_FALSE(got.rejection.empty()) << "the refusal must say why";
+    if (refusedCase == &kColorUndeclared16)
+        EXPECT_NE(std::string::npos, got.rejection.find("Color0 is missing")) << got.rejection;
     EXPECT_TRUE(Untouched(got.frame))
         << "the refused draw still rasterized something -- the boundary is downstream of the "
            "work it was supposed to prevent" << DescribeFrame(got.frame);
@@ -1000,23 +1034,19 @@ TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
 // render its own declaration exactly.
 TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
-    // refusing it, so the refusal contract below is not its contract -- see
-    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (TranslatesDeclarations())
-        GTEST_SKIP() << RendererName()
-                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
+    const DeclarationCase* const refusedCase = RefusedDeclaration();
+    ASSERT_NE(nullptr, refusedCase) << RendererName() << " drew every candidate declaration";
     RenderTarget2D target = MakeTarget();
 
     const GuardedDraw before = DrawInto(target, kPositionColor16, false, false);
     ASSERT_TRUE(before.rendered) << before.rejection;
     ExpectContract(before.frame, kPositionColor16, "before the refusal");
 
-    const GuardedDraw refused = DrawInto(target, kColorPosition16, false, false);
+    const GuardedDraw refused = DrawInto(target, *refusedCase, false, false);
     ASSERT_FALSE(refused.rendered);
 
     const GuardedDraw after = DrawInto(target, kPositionColor16, false, false);
@@ -1038,23 +1068,19 @@ TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
 // covers the one upload path the collision matrix happens to use is not a boundary.
 TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
-    // refusing it, so the refusal contract below is not its contract -- see
-    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (TranslatesDeclarations())
-        GTEST_SKIP() << RendererName()
-                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
+    const DeclarationCase* const refusedCase = RefusedDeclaration();
+    ASSERT_NE(nullptr, refusedCase) << RendererName() << " drew every candidate declaration";
     for (const bool dynamicUpload : {false, true})
     {
         for (const bool use32 : {false, true})
         {
             RenderTarget2D target = MakeTarget();
-            const GuardedDraw got = DrawInto(target, kColorPosition16, dynamicUpload, use32);
-            std::cout << "[ DECL-GUARD ] " << RendererName() << " colorPosition16 "
+            const GuardedDraw got = DrawInto(target, *refusedCase, dynamicUpload, use32);
+            std::cout << "[ DECL-GUARD ] " << RendererName() << ' ' << refusedCase->name << ' ' 
                       << (dynamicUpload ? "dynamic" : "static") << '/'
                       << (use32 ? "index32" : "index16") << ": "
                       << (got.rendered ? std::string("ACCEPTED") : "refused") << std::endl;
@@ -1062,6 +1088,7 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
                 << (dynamicUpload ? "dynamic" : "static") << '/'
                 << (use32 ? "index32" : "index16")
                 << " slipped past the declaration guard" << DescribeFrame(got.frame);
+            EXPECT_TRUE(got.invalidOperation) << got.rejection;
             EXPECT_TRUE(Untouched(got.frame)) << DescribeFrame(got.frame);
         }
     }
@@ -1072,16 +1099,12 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
 // works.
 TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
-    // refusing it, so the refusal contract below is not its contract -- see
-    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
-    if (TranslatesDeclarations())
-        GTEST_SKIP() << RendererName()
-                     << " translates colliding declarations instead of refusing them";
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
+    const DeclarationCase* const refusedCase = RefusedDeclaration();
+    ASSERT_NE(nullptr, refusedCase) << RendererName() << " drew every candidate declaration";
     RenderTarget2D target = MakeTarget();
     BasicEffect effect(device);
 
@@ -1106,8 +1129,8 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
         return rejection;
     };
 
-    const std::string refused = drawUser(kColorPosition16);
-    std::cout << "[ DECL-GUARD ] " << RendererName() << " DrawUser colorPosition16: "
+    const std::string refused = drawUser(*refusedCase);
+    std::cout << "[ DECL-GUARD ] " << RendererName() << " DrawUser " << refusedCase->name << ": "
               << (refused.empty() ? std::string("ACCEPTED") : '"' + refused + '"') << std::endl;
     EXPECT_FALSE(refused.empty())
         << "DrawUserIndexedPrimitives bypassed the declaration guard"

@@ -29,6 +29,7 @@
 
 #include <cstdio>
 #include <vector>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -87,7 +88,7 @@ protected:
         // winding is culled by the real default RasterizerState once EasyGL pushes it at
         // construction.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(device, PrimitiveType::TriangleList, verts, 0, 2);
 
         // Centre pixel: magenta × yellow = (1,0,1)×(1,1,0) = (1,0,0) = red.
         const Rectangle centReg(W / 2, H / 2, 1, 1);

@@ -30,6 +30,7 @@
 
 #include <cstdio>
 #include <memory>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -121,7 +122,7 @@ protected:
             fx.setTextureProperty(&texWhite);
             fx.setTexture2Property(&texBlue);
             fx.Apply();
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             check(colourMatch(got, kBlue), "(a) tex1=white tex2=blue → blue", got, kBlue);
         }
@@ -133,7 +134,7 @@ protected:
             fx.setTextureProperty(&texRed);
             fx.setTexture2Property(&texWhite);
             fx.Apply();
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             check(colourMatch(got, kRed), "(b) tex1=red tex2=white → red", got, kRed);
         }
@@ -146,7 +147,7 @@ protected:
             fx.setTexture2Property(&texWhite);
             fx.setDiffuseColorProperty(Vector3(0.0f, 1.0f, 0.0f));
             fx.Apply();
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             check(colourMatch(got, kGreen), "(c) diffuse=green → green", got, kGreen);
         }
@@ -159,7 +160,7 @@ protected:
             fx.setTextureProperty(&texYellow);
             fx.setTexture2Property(&texCyan);
             fx.Apply();
-            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            CNA::Examples::DrawUserDualTexturePrimitives(dev, PrimitiveType::TriangleList, quad, 0, 2);
             Color got = readCenter(dev);
             check(colourMatch(got, kGreen), "(d) yellow×cyan → green", got, kGreen);
         }

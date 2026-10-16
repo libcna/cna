@@ -205,15 +205,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
     2026-09-07, one step from failing; the other golden scenes measure 0-1. Confirm today's render
     is the corrected picture, re-capture with `CNA_UPDATE_GOLDEN=1` and lower the tolerance in the
     same commit. (`VULKAN-186`, finding F-33.)
-12. **Test-coverage defect: `DeclarationGuardTest`'s refusal legs never run on a renderer that also
-    translates declarations.** `TranslatesDeclarations()` (`VertexDeclarationLayoutTests.cpp`) is a
-    per-renderer boolean, true for `OpenGLES3`, `OpenGL33`, `WebGL2`, `WebGPU`, `Software` and
-    `SdlGpu`, and each refusal leg opens with `if (TranslatesDeclarations()) GTEST_SKIP()`. Those
-    renderers translate what they can and still refuse the rest by name, so none of them asserts
-    that a refused draw rasterizes nothing, leaves the device usable, and is refused identically by
-    every upload route. Fix: probe candidate declarations for one the renderer really refuses and
-    run the legs against it. (`VULKAN-203`, finding F-38.)
-
 13. **Compiled XNA effects on the MojoShader SPIR-V route (`SDL_GPU`, `WEBGPU`) get two Shader
     Model 1-3 cases wrong** (found 2026-10-08 by `AM4-144` on the retired `METAL` route, fixed only
     in that renderer's adapter, not re-measured since): `vPos` is not the integer pixel Direct3D 9

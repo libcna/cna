@@ -47,6 +47,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "common/DualTextureUserDraw.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -216,7 +217,7 @@ class StockEffectFogContractTest final : public Game
             {Vector3( 1, -1, z), Vector2(1, 1)}, {Vector3(-1,  1, z), Vector2(0, 0)},
             {Vector3( 1, -1, z), Vector2(1, 1)}, {Vector3( 1,  1, z), Vector2(1, 0)},
         };
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+        CNA::Examples::DrawUserDualTexturePrimitives(device, PrimitiveType::TriangleList, vertices, 0, 2);
         return Finish(device, target);
     }
 
