@@ -1082,6 +1082,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /// Compiles one WGSL string into a module inside a validation error scope; null on failure.
         WGPUShaderModule CompileModule(const std::string& wgsl, const char* label);
+        /// Hands every member but the owner to @p heir, leaving this effect empty: how the GPU
+        /// state of an effect destroyed with draws still queued outlives it until their replay.
+        void MoveStateToEXT(WebGPUEffectRenderer& heir) noexcept;
         /// Copies @p byteCount bytes from @p data into the staging block at @p name's offset.
         void WriteUniformBytes(const char* name, const void* data, int byteCount);
 
@@ -5704,6 +5707,10 @@ namespace CNA::Internal::Renderers::WebGPU
             /// the stock instanced family: wgpu-native v29.0.1.1's `WGPUVertexBufferLayout` carries
             /// a step MODE but no step rate, so a divisor is a data-preparation question here.
             std::vector<InstanceStream> instanceStreams;
+            /// Every per-vertex stream after the first, in slot order and with the same record
+            /// shape, stepped per vertex. Their locations continue after the first stream's
+            /// elements, and the instance streams' after theirs.
+            std::vector<InstanceStream> vertexStreams;
             /// How many instances to draw. 1 on an ordinary draw, which is the same command.
             std::uint32_t instanceCount = 1;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
@@ -5858,15 +5865,22 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WebGPUSampledTextureEXT ResolveCompiledEffectTextureEXT(
             Microsoft::Xna::Framework::Graphics::Texture* texture) const;
 #endif
-        /// WMG-0021: uploads and binds one custom-effect draw's per-instance records, slot 1 up.
+        /// WMG-0021: uploads and binds one custom-effect draw's streams after the first, slot 1 up:
+        /// the further per-vertex streams, then the per-instance ones.
         /// @param pass The open render pass.
         /// @param command The queued draw.
-        /// @return The transient buffers to recycle after submission; empty when the draw has no
-        ///         per-instance stream and nothing was bound.
-        std::vector<WGPUBuffer> BindCustomEffectInstanceStreamsEXT(
+        /// @return The transient buffers to recycle after submission; empty when the draw has one
+        ///         stream and nothing was bound.
+        std::vector<WGPUBuffer> BindCustomEffectStreamsEXT(
             WGPURenderPassEncoder pass, const CustomEffectDrawCommand& command);
+        /// Refuses a draw whose declarations supply no attribute at one of @p consumed's locations.
+        /// @param command The draw being queued or built.
+        /// @param consumed The vertex stage's @location list.
+        /// @throws System::NotSupportedException Naming the first location no declaration supplies.
+        static void RequireCustomEffectInputsSuppliedEXT(
+            const CustomEffectDrawCommand& command, const std::vector<std::uint32_t>& consumed);
         /// WMG-0021: builds one custom-effect draw's vertex buffer layouts -- the per-vertex
-        /// stream at slot 0 and, when the draw is instanced, the per-instance stream at slot 1.
+        /// stream at slot 0, then any further per-vertex streams and the per-instance ones.
         /// @param command The queued draw.
         /// @param consumed The vertex stage's sorted @location list, or null where the contract
         ///        carries no reflection and every declared attribute is offered.
@@ -5983,6 +5997,19 @@ namespace CNA::Internal::Renderers::WebGPU
         CNAEXT void ForgetEffectEXT(WebGPUEffectRenderer* effect) noexcept;
 
         /**
+         * @brief Keeps the GPU state of an effect being destroyed for the draws still queued with
+         *        it, which then replay as issued.
+         *
+         * XNA submits each draw at the call, so a game may dispose an effect right after
+         * SpriteBatch.End() or a draw; this renderer replays later. The state moves to an heir the
+         * renderer owns until the queued commands are discarded.
+         *
+         * @param effect The dying effect renderer.
+         * @return False only when the heir could not be created; the caller then forgets the draws.
+         */
+        CNAEXT [[nodiscard]] bool RetainEffectForQueuedDrawsEXT(WebGPUEffectRenderer& effect) noexcept;
+
+        /**
          * @brief PSG-0006: how many queued draws were dropped because their effect was destroyed
          *        before the frame carrying them was flushed.
          * @return The running count since construction.
@@ -5993,6 +6020,8 @@ namespace CNA::Internal::Renderers::WebGPU
         }
     private:
         int droppedDrawsForDestroyedEffectsEXT_ = 0;
+        /// Heirs of effects destroyed while draws using them were queued; freed with those draws.
+        std::vector<std::unique_ptr<WebGPUEffectRenderer>> retiredEffectsEXT_;
 
         void IssueDescriptorEffectDrawEXT(WGPURenderPassEncoder pass,
                                           const CustomEffectDrawCommand& command,

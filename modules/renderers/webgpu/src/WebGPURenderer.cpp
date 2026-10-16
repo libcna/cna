@@ -3115,7 +3115,21 @@ namespace CNA::Internal::Renderers::WebGPU
              std::find(owner_->mrtExtraTargets_.begin(), owner_->mrtExtraTargets_.end(), this) !=
                  owner_->mrtExtraTargets_.end()))
         {
-            owner_->FlushCurrentRenderTarget();
+            // A destructor cannot report a failed flush by throwing -- the process would
+            // terminate. Every refusal a draw can earn is made by the draw call itself, so what
+            // fails here is native work at replay: reported, and the queued frame abandoned.
+            try
+            {
+                owner_->FlushCurrentRenderTarget();
+            }
+            catch (const std::exception& error)
+            {
+                std::fprintf(stderr,
+                             "[WebGPU] a render target destroyed while bound could not flush its "
+                             "queued draws, which are discarded: %s\n",
+                             error.what());
+                owner_->DiscardQueuedCommands();
+            }
             owner_->currentRenderTarget_ = nullptr;
             owner_->mrtExtraTargets_.clear();
         }
@@ -9117,6 +9131,37 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         compiledEffectDrawCommands_.clear();
 #endif
+        // The heirs of effects destroyed with draws queued go with those draws. Moved out first:
+        // an heir's destructor calls back into this renderer.
+        std::vector<std::unique_ptr<WebGPUEffectRenderer>> retired = std::move(retiredEffectsEXT_);
+        retiredEffectsEXT_.clear();
+        retired.clear();
+    }
+
+    bool WebGPURenderer::RetainEffectForQueuedDrawsEXT(WebGPUEffectRenderer& effect) noexcept
+    {
+        const bool queued =
+            std::any_of(spriteCommands_.begin(), spriteCommands_.end(),
+                        [&](const SpriteCommand& sprite) { return sprite.customEffect == &effect; }) ||
+            std::any_of(customEffectDrawCommands_.begin(), customEffectDrawCommands_.end(),
+                        [&](const CustomEffectDrawCommand& draw) { return draw.effect == &effect; });
+        if (!queued) return true;
+        try
+        {
+            auto heir = std::make_unique<WebGPUEffectRenderer>(this);
+            retiredEffectsEXT_.reserve(retiredEffectsEXT_.size() + 1);
+            effect.MoveStateToEXT(*heir);
+            for (SpriteCommand& sprite : spriteCommands_)
+                if (sprite.customEffect == &effect) sprite.customEffect = heir.get();
+            for (CustomEffectDrawCommand& draw : customEffectDrawCommands_)
+                if (draw.effect == &effect) draw.effect = heir.get();
+            retiredEffectsEXT_.push_back(std::move(heir));
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     void WebGPURenderer::ForgetEffectEXT(WebGPUEffectRenderer* effect) noexcept
@@ -9347,10 +9392,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             // plans/plan_pre_sdlgpu_closeout.md PSG-0006: a queued sprite or custom-effect draw
             // holds this object as a RAW pointer and the frame carrying it may not have flushed
-            // yet, so it must let go before the memory does. Without this the replay read a freed
-            // effect -- CNAEXT_LeakLoop's segfault, where `valid_` still read true from freed
-            // memory and the program layout read null.
-            owner_->ForgetEffectEXT(this);
+            // yet, so it must let go before the memory does (CNAEXT_LeakLoop's use-after-free).
+            // XNA had drawn it at the call, so the draw keeps it: the state moves to an heir the
+            // renderer frees with the queued commands, and only if that cannot be allocated are
+            // the draws forgotten.
+            if (!owner_->RetainEffectForQueuedDrawsEXT(*this)) owner_->ForgetEffectEXT(this);
             owner_->CountUnrecoverableResourceEXT(-1);
         }
         for (auto& [key, pipe] : pipelineCache_)
@@ -9361,6 +9407,34 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (sampler_ != nullptr) wgpuSamplerRelease(sampler_);
         if (fragmentModule_ != nullptr) wgpuShaderModuleRelease(fragmentModule_);
         if (vertexModule_ != nullptr) wgpuShaderModuleRelease(vertexModule_);
+    }
+
+    void WebGPUEffectRenderer::MoveStateToEXT(WebGPUEffectRenderer& heir) noexcept
+    {
+        std::swap(contract_, heir.contract_);
+        std::swap(programLayout_, heir.programLayout_);
+        std::swap(vertexEntryPoint_, heir.vertexEntryPoint_);
+        std::swap(fragmentEntryPoint_, heir.fragmentEntryPoint_);
+        std::swap(vertexInputLocations_, heir.vertexInputLocations_);
+        std::swap(colorOutputCount_, heir.colorOutputCount_);
+        std::swap(scalarBlock_, heir.scalarBlock_);
+        std::swap(arrays_, heir.arrays_);
+        std::swap(descriptorTextures_, heir.descriptorTextures_);
+        std::swap(descriptorCubes_, heir.descriptorCubes_);
+        std::swap(descriptorVolumes_, heir.descriptorVolumes_);
+        std::swap(vertexModule_, heir.vertexModule_);
+        std::swap(fragmentModule_, heir.fragmentModule_);
+        std::swap(bindGroupLayout_, heir.bindGroupLayout_);
+        std::swap(pipelineLayout_, heir.pipelineLayout_);
+        std::swap(sampler_, heir.sampler_);
+        std::swap(valid_, heir.valid_);
+        std::swap(matrixSetByGame_, heir.matrixSetByGame_);
+        std::swap(samplesTexture_, heir.samplesTexture_);
+        std::swap(compileError_, heir.compileError_);
+        std::swap(uniformStaging_, heir.uniformStaging_);
+        std::swap(uniformOffsets_, heir.uniformOffsets_);
+        std::swap(boundTexture0_, heir.boundTexture0_);
+        std::swap(pipelineCache_, heir.pipelineCache_);
     }
 
     WGPUShaderModule WebGPUEffectRenderer::CompileModule(const std::string& wgsl, const char* label)
@@ -9732,31 +9806,17 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         };
 
         attributeStorage.clear();
-        attributeStorage.reserve(1 + command.instanceStreams.size());
+        attributeStorage.reserve(1 + command.vertexStreams.size() + command.instanceStreams.size());
         attributeStorage.push_back(collect(command.attributes));
+        for (const auto& stream : command.vertexStreams)
+            attributeStorage.push_back(collect(stream.attributes));
         for (const auto& stream : command.instanceStreams)
             attributeStorage.push_back(collect(stream.attributes));
 
-        if (consumed != nullptr)
-        {
-            for (const std::uint32_t location : *consumed)
-            {
-                const bool supplied = std::any_of(
-                    attributeStorage.begin(), attributeStorage.end(),
-                    [location](const std::vector<WGPUVertexAttribute>& group) {
-                        return std::any_of(group.begin(), group.end(),
-                                           [location](const WGPUVertexAttribute& a) {
-                                               return a.shaderLocation == location;
-                                           });
-                    });
-                if (!supplied)
-                    throw System::NotSupportedException(
-                        "CNA WebGPU: this ShaderEffect's vertex stage consumes @location(" +
-                        std::to_string(location) +
-                        "), but the active vertex/instance declarations do not supply it");
-            }
-        }
+        if (consumed != nullptr) RequireCustomEffectInputsSuppliedEXT(command, *consumed);
 
+        // One layout per bound stream, in the slot order BindCustomEffectStreamsEXT binds them --
+        // a stream none of whose attributes the shader reads keeps its slot, with no attributes.
         layouts.clear();
         layouts.reserve(attributeStorage.size());
         WGPUVertexBufferLayout perVertex{};
@@ -9766,32 +9826,69 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         perVertex.attributes = attributeStorage[0].data();
         layouts.push_back(perVertex);
 
-        for (std::size_t i = 0; i < command.instanceStreams.size(); ++i)
+        std::size_t group = 1;
+        const auto append = [&](const std::vector<CustomEffectDrawCommand::InstanceStream>& streams,
+                                WGPUVertexStepMode stepMode) {
+            for (const auto& stream : streams)
+            {
+                const std::vector<WGPUVertexAttribute>& attributes = attributeStorage[group++];
+                if (stream.arrayStride == 0 || stream.data.empty()) continue;
+                WGPUVertexBufferLayout layout{};
+                layout.arrayStride = stream.arrayStride;
+                layout.stepMode = stepMode;
+                layout.attributeCount = attributes.size();
+                layout.attributes = attributes.empty() ? nullptr : attributes.data();
+                layouts.push_back(layout);
+            }
+        };
+        append(command.vertexStreams, WGPUVertexStepMode_Vertex);
+        append(command.instanceStreams, WGPUVertexStepMode_Instance);
+    }
+
+    void WebGPURenderer::RequireCustomEffectInputsSuppliedEXT(
+        const CustomEffectDrawCommand& command, const std::vector<std::uint32_t>& consumed)
+    {
+        const auto supplies = [](const std::vector<CustomEffectVertexAttr>& attributes,
+                                 std::uint32_t location) {
+            return std::any_of(attributes.begin(), attributes.end(),
+                               [location](const CustomEffectVertexAttr& a) {
+                                   return a.shaderLocation == location;
+                               });
+        };
+        for (const std::uint32_t location : consumed)
         {
-            const auto& stream = command.instanceStreams[i];
-            if (stream.arrayStride == 0 || attributeStorage[i + 1].empty()) continue;
-            WGPUVertexBufferLayout perInstance{};
-            perInstance.arrayStride = stream.arrayStride;
-            perInstance.stepMode = WGPUVertexStepMode_Instance;
-            perInstance.attributeCount = attributeStorage[i + 1].size();
-            perInstance.attributes = attributeStorage[i + 1].data();
-            layouts.push_back(perInstance);
+            bool supplied = supplies(command.attributes, location);
+            for (const auto& stream : command.vertexStreams)
+                supplied = supplied || supplies(stream.attributes, location);
+            for (const auto& stream : command.instanceStreams)
+                supplied = supplied || supplies(stream.attributes, location);
+            if (!supplied)
+            {
+                throw System::NotSupportedException(
+                    "CNA WebGPU: this ShaderEffect's vertex stage reads vertex input location " +
+                    std::to_string(location) + " (@location(" + std::to_string(location) +
+                    ")), but no active vertex or instance declaration supplies it");
+            }
         }
     }
 
-    // WMG-0021: uploads and binds one draw's per-instance records, slot 1 upwards, and returns
-    // the transient buffers to recycle after submission. Empty when the draw has no instance
-    // stream, which is every ordinary draw.
-    std::vector<WGPUBuffer> WebGPURenderer::BindCustomEffectInstanceStreamsEXT(
+    // WMG-0021: uploads and binds one draw's streams after the first, slot 1 upwards -- further
+    // per-vertex streams, then the per-instance records -- and returns the transient buffers to
+    // recycle after submission. Empty for a one-stream draw, which is every ordinary draw.
+    std::vector<WGPUBuffer> WebGPURenderer::BindCustomEffectStreamsEXT(
         WGPURenderPassEncoder pass, const CustomEffectDrawCommand& command)
     {
         std::vector<WGPUBuffer> buffers;
         std::uint32_t slot = 1;
-        for (const auto& stream : command.instanceStreams)
+        std::vector<const CustomEffectDrawCommand::InstanceStream*> streams;
+        for (const auto& stream : command.vertexStreams) streams.push_back(&stream);
+        for (const auto& stream : command.instanceStreams) streams.push_back(&stream);
+        for (const CustomEffectDrawCommand::InstanceStream* bound : streams)
         {
+            const auto& stream = *bound;
             if (stream.data.empty() || stream.arrayStride == 0) continue;
             WGPUBufferDescriptor descriptor{};
-            descriptor.label = StringView("CNA WebGPU ShaderEffect InstanceBuffer");
+            descriptor.label = StringView("CNA WebGPU ShaderEffect StreamBuffer");
             descriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
             descriptor.size = (stream.data.size() + 3u) & ~std::size_t{3u};
             WGPUBuffer buffer = AcquireTransientBuffer(descriptor.usage, descriptor.size);
@@ -9812,10 +9909,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         auto* effect = static_cast<WebGPUEffectRenderer*>(params.customEffectRenderer);
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        // WEBGPU-172: a custom WGSL ShaderEffect owns its own vertex layout, which this renderer
-        // still derives from one buffer's stride and declaration. Refuse a split vertex by name
-        // rather than render it from stream 0 alone.
-        RequireSingleStreamRouteEXT(params, "custom ShaderEffect");
+        // A ShaderEffect's inputs are located by declaration element order, so a buffer without a
+        // declaration has none to offer; refused here, by the draw call, not later at the flush.
+        if (webgpuVb.Declaration().GetElements().empty())
+        {
+            throw System::NotSupportedException(
+                "CNA WebGPU: a ShaderEffect draw locates its vertex inputs through the vertex "
+                "buffer's VertexDeclaration, and the bound buffer has none.");
+        }
 
         CustomEffectDrawCommand command;
         command.effect = effect;
@@ -9858,7 +9959,18 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.texture = ResolveSamplable(effect->boundTexture0_);
         }
 
-        const int vertexStart = params.vertexStart;
+        // The first per-vertex binding is `vb`; with several streams bound each binding carries the
+        // part of its VertexOffset the shared vertexStart does not (GraphicsDevice folds the rest).
+        int firstStreamOffset = 0;
+        for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+        {
+            const GpuVertexStreamBinding& binding =
+                params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+            if (binding.instanceFrequency > 0 || binding.buffer == nullptr) continue;
+            firstStreamOffset = std::max(0, binding.vertexOffset);
+            break;
+        }
+        const int vertexStart = params.vertexStart + firstStreamOffset;
         const std::size_t stride = webgpuVb.Stride();
         command.arrayStride = static_cast<std::uint64_t>(stride);
         const auto& shadow = webgpuVb.ShadowData();
@@ -9887,12 +9999,56 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             command.attributes.push_back(attr);
         }
 
+        // Every per-vertex stream after the first, in slot order, its locations continuing after
+        // the first stream's elements (EasyGL's convention, below for the instance streams too).
+        auto nextLocation = static_cast<std::uint32_t>(elements.size());
+        bool firstVertexStream = true;
+        for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+        {
+            const GpuVertexStreamBinding& binding =
+                params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+            if (binding.instanceFrequency > 0 || binding.buffer == nullptr) continue;
+            if (firstVertexStream)
+            {
+                firstVertexStream = false;
+                continue;
+            }
+            const auto& streamVb = static_cast<const WebGPUVertexBufferRenderer&>(*binding.buffer);
+            const auto& streamElements = streamVb.Declaration().GetElements();
+            if (streamElements.empty())
+            {
+                throw System::NotSupportedException(
+                    "CNA WebGPU: a ShaderEffect draw locates its vertex inputs through every bound "
+                    "vertex buffer's VertexDeclaration, and one of this draw's streams has none.");
+            }
+            const std::size_t streamStride = streamVb.Stride();
+            CustomEffectDrawCommand::InstanceStream stream;
+            stream.arrayStride = static_cast<std::uint64_t>(streamStride);
+            for (std::size_t i = 0; i < streamElements.size(); ++i)
+            {
+                CustomEffectVertexAttr attr;
+                attr.format =
+                    WebGPUVertexFormatFromVEF(streamElements[i].getVertexElementFormatProperty());
+                attr.offset = static_cast<std::uint64_t>(streamElements[i].getOffsetProperty());
+                attr.shaderLocation = nextLocation + static_cast<std::uint32_t>(i);
+                stream.attributes.push_back(attr);
+            }
+            nextLocation += static_cast<std::uint32_t>(streamElements.size());
+            const auto& streamShadow = streamVb.ShadowData();
+            const std::size_t streamOffset =
+                static_cast<std::size_t>(params.vertexStart + std::max(0, binding.vertexOffset)) *
+                streamStride;
+            if (streamOffset <= streamShadow.size())
+                stream.data.assign(streamShadow.begin() + static_cast<std::ptrdiff_t>(streamOffset),
+                                   streamShadow.end());
+            command.vertexStreams.push_back(std::move(stream));
+        }
+
         // WMG-0021: every bound per-instance stream, in slot order. Their attribute locations
-        // continue after the per-vertex declaration's element count and then across the streams --
-        // EasyGL's convention (PerVertexLocationCount; the retired VULKAN renderer copied it in
+        // continue after the per-vertex declarations' element counts and then across the streams
+        // -- EasyGL's convention (PerVertexLocationCount; the retired VULKAN renderer copied it in
         // VULKAN-168) -- so a single shader source describes its inputs on both renderers.
         command.instanceCount = static_cast<std::uint32_t>(std::max(1, instanceCount));
-        auto nextLocation = static_cast<std::uint32_t>(elements.size());
         for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
         {
             const GpuVertexStreamBinding& binding =
@@ -9991,6 +10147,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             ExpandTriangleEdgesForWireframeEXT(command, primitive, primitiveCount,
                                                static_cast<const WebGPUIndexBufferRenderer*>(ib), params.startIndex);
 
+        // A shader input no active declaration supplies is refused by the draw call itself: a draw
+        // that returned has told the caller it succeeded (MOD-2237's rule, checked here as well as
+        // where the pipeline is built, so the queued draw cannot throw at the flush instead).
+        RequireCustomEffectInputsSuppliedEXT(command, effect->VertexInputLocationsEXT());
+
         customEffectDrawCommands_.push_back(std::move(command));
         RecordDrawOrder(DrawFamily::CustomEffect, customEffectDrawCommands_.size() - 1);
         framePending_ = true;
@@ -10068,6 +10229,15 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             for (const auto& a : stream.attributes)
                 key = mix(key, (static_cast<std::uint64_t>(a.format) << 44) ^
                                (a.offset << 12) ^ (a.shaderLocation + 1u));
+        }
+        // ... and so is every further per-vertex stream, ahead of them in slot order.
+        key = mix(key, static_cast<std::uint64_t>(command.vertexStreams.size()));
+        for (const auto& stream : command.vertexStreams)
+        {
+            key = mix(key, stream.arrayStride);
+            for (const auto& a : stream.attributes)
+                key = mix(key, (static_cast<std::uint64_t>(a.format) << 48) ^
+                               (a.offset << 16) ^ (a.shaderLocation + 2u));
         }
 
         WGPURenderPipeline pipe = nullptr;
@@ -10186,7 +10356,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                              vertexSource.size);
         // WMG-0021: slot 1 up, the per-instance records this draw expanded at queue time.
         const std::vector<WGPUBuffer> instanceBuffers =
-            BindCustomEffectInstanceStreamsEXT(pass, command);
+            BindCustomEffectStreamsEXT(pass, command);
 
         if (command.indexed && HasIndexSourceEXT(command))
         {
@@ -10431,6 +10601,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 key = mix(key, (static_cast<std::uint64_t>(a.format) << 44) ^ (a.offset << 12) ^
                                    (a.shaderLocation + 1u));
         }
+        key = mix(key, static_cast<std::uint64_t>(command.vertexStreams.size()));
+        for (const auto& stream : command.vertexStreams)
+        {
+            key = mix(key, stream.arrayStride);
+            for (const auto& a : stream.attributes)
+                key = mix(key, (static_cast<std::uint64_t>(a.format) << 48) ^ (a.offset << 16) ^
+                                   (a.shaderLocation + 2u));
+        }
 
         WGPURenderPipeline pipe = nullptr;
         if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
@@ -10513,7 +10691,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                              vertexSource.size);
         // WMG-0021: slot 1 up, the per-instance records this draw expanded at queue time.
         const std::vector<WGPUBuffer> instanceBuffers =
-            BindCustomEffectInstanceStreamsEXT(pass, command);
+            BindCustomEffectStreamsEXT(pass, command);
         if (command.indexed && HasIndexSourceEXT(command))
         {
             WGPUBuffer indexBuffer =

@@ -158,11 +158,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
       and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
       them. A capability boundary, reported as such.
-    - WebGPU: a `ShaderEffect` disposed after `End()` and before the flush drops its draw
-      (`deferred_effect_query_lifetime` E2-E4; `webgpu_effect_outlived_by_draw_test` Check B asserts
-      the drop, contrary to XNA); two vertex streams into a `ShaderEffect` are refused, and a missing
-      input is refused only at replay, after which the queued draw throws again from a destructor
-      and terminates the process (`shader_effect_3d_layout` D/E, F/H, run last for that reason).
 
 9. **The stock PBR programs of `DIRECTX9` have no guard for a zero normal or tangent.** They
    normalise the interpolated normal and the Gram-Schmidt tangent without checking its length

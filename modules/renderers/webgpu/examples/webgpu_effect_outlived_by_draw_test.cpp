@@ -8,10 +8,11 @@
 // layout read null, and the pipeline built from it dereferenced nothing. AddressSanitizer named it
 // exactly -- `heap-use-after-free ... in IssueSpriteWithCustomEffect`.
 //
-// The renderer's answer is to let go rather than to guess: `ForgetEffectEXT`, from the effect's own
-// destructor, drops every queued draw that still names it and counts the drop. A draw whose effect
-// no longer exists cannot be honoured, and dropping it is what every issue path's existing
-// "effect == nullptr" guard already means.
+// XNA submits a draw to Direct3D 9 at the call, so disposing the effect afterwards cannot take the
+// draw back. The renderer's answer is `RetainEffectForQueuedDrawsEXT`: from the effect's own
+// destructor, the effect's GPU state moves to an heir the renderer owns until the queued commands
+// are discarded, so the draw replays as issued. Only if the heir cannot be allocated does
+// `ForgetEffectEXT` drop the draws, and count them.
 //
 // The test is deterministic -- no frame counts, no soak. It arranges exactly the window:
 //
@@ -20,11 +21,12 @@
 //     force the flush                           the replay would read freed memory
 //
 // Check A -- the flush completes and the process survives.
-// Check B -- the renderer counted the drop, so the draw was refused rather than silently skipped.
-// Check C -- an effect disposed with NO queued draw counts nothing, so the counter measures the
-//            real window and not merely "an effect was destroyed".
-// Check D -- an ORDINARY sprite drawn afterwards still reaches the target, so forgetting one
-//            effect left the command queue usable.
+// Check B -- the draw was kept: nothing was counted as dropped. Whether this file's own
+//            descriptor-contract sprite shader produces pixels is not its question (Check D's note);
+//            deferred_effect_query_lifetime E2-E4 prove the kept draw's pixels, on every renderer.
+// Check C -- an effect disposed with NO queued draw counts nothing either.
+// Check D -- an ORDINARY sprite drawn afterwards still reaches the target, so the effect's
+//            departure left the command queue usable.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs, 77 = this renderer runs no ShaderEffect source.
 
@@ -152,8 +154,8 @@ protected:
 
         std::printf("    dropped draws for destroyed effects: %d -> %d\n", before, after);
         check(true, "Check A: the flush completed and the process survived the freed effect");
-        check(after > before,
-              "Check B: the renderer counted the drop rather than reading the freed effect");
+        check(after == before,
+              "Check B: the draw queued before the effect was disposed was kept, not dropped");
 
         // ---- D: the queue is not poisoned --------------------------------------------------
         // Deliberately an ORDINARY sprite, with no effect at all. The claim under test is that
