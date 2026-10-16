@@ -354,7 +354,7 @@ def eyebrow(state, side, style="classic"):
         widths.append(w0 + (w1 - w0) * (u / p["peak"]) if u <= p["peak"] else w1 + (w2 - w1) * ((u - p["peak"]) / (1.0 - p["peak"])))
     # Keep the stroke inside its tile, round caps, feathered edge and all.
     reach = max(abs(x) + w * 0.5 for (x, _), w in zip(pts, widths))
-    limit = 0.94 - 0.05 - 0.04 * p["feather"]
+    limit = 0.94 - 0.035 - 0.025 * p["feather"]
     if reach > limit:
         k = limit / reach
         pts = [(x * k, y) for x, y in pts]
@@ -392,19 +392,23 @@ def eyebrow(state, side, style="classic"):
         d = shape(x, y)
         core = smoothstep(0.02, -0.10, d)
         h = hairs(x, y)
-        return mix((255, 255, 255), (178, 178, 178), clamp(0.45 * core + 0.30 * h * core, 0.0, 1.0))
+        return mix((255, 255, 255), (168, 168, 168), clamp(0.50 * core + 0.30 * h * core, 0.0, 1.0))
 
     def opacity(x, y):
         # The head starts soft and the tail thins to a point; the edge feathers into single hairs
         # (feathered styles break it further), so the brow grows from the skin.
         u = along(x)
         d = shape(x, y)
-        body = (0.32 + 0.68 * smoothstep(0.0, 0.32, u)) * (1.0 - 0.30 * smoothstep(0.78, 1.0, u))
+        body = (0.50 + 0.50 * smoothstep(0.0, 0.30, u)) * (1.0 - 0.25 * smoothstep(0.80, 1.0, u))
         h = hairs(x, y)
-        inside = smoothstep(0.0, 0.07 + 0.05 * feather, -d) * (0.80 + 0.20 * h)
-        fringe = stray(x, y) * smoothstep(0.045 + 0.04 * feather, -0.02, d) * (0.55 + 0.35 * feather)
-        return body * max(inside, fringe)
-    return [(grow(shape, 0.05 + 0.04 * feather), colour, opacity)]
+        # The soft edge is centred on the stroke's own edge, so each style keeps its width.
+        soft = 0.035 + 0.025 * feather
+        inside = smoothstep(-soft, soft, -d) * (0.90 + 0.10 * h)
+        fringe = stray(x, y) * smoothstep(soft + 0.045 + 0.04 * feather, soft, d) * (0.55 + 0.35 * feather)
+        # Nothing reaches the tile's border (the patch's edge samples it).
+        border = smoothstep(0.985, 0.94, max(abs(x), abs(y)))
+        return body * max(inside, fringe) * border
+    return [(grow(shape, 0.11 + 0.065 * feather), colour, opacity)]
 
 
 def _hash(k, seed):
@@ -492,7 +496,7 @@ def blush(style, side):
 def lips_mask(state):
     """Where lip colour goes for a mouth state: the lips of mouth(state), opaque inside with a soft
     edge (the style's opacity and colour come from the description)."""
-    return [(shape, (255, 255, 255), _feathered(shape, 1.0, 0.05)) for shape, colour, opacity in mouth(state) if colour == LIP]
+    return [(shape, (255, 255, 255), _feathered(shape, 1.0, 0.03)) for shape, colour, opacity in mouth(state) if colour == LIP]
 
 
 # ----- mouths -----------------------------------------------------------------------------------
