@@ -484,6 +484,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_RenderTargetCube_PluralBinding PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # living-room-simulator's PBR basis, EasyGL's programs the oracle: a zero normal or tangent must
+    # not shade NaN, and a glTF double-sided back face is shaded with its basis reversed.
+    cna_sdlgpu_test(cna_test_sdlgpu_pbr_degenerate_basis
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_degenerate_basis_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Pbr_DegenerateBasis
+        COMMAND cna_test_sdlgpu_pbr_degenerate_basis
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    cna_sdlgpu_test(cna_test_sdlgpu_pbr_double_sided
+                    ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_double_sided_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Pbr_DoubleSided
+        COMMAND cna_test_sdlgpu_pbr_double_sided
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Pbr_DegenerateBasis SdlGpu_Pbr_DoubleSided PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # A depthless cube-face SpriteBatch draw must use a graphics pipeline whose
     # target info also has no depth/stencil target. Pixel checks prove exact face selection; make
     # the Vulkan compatibility VUID independently fatal so validation-cleanliness cannot be hidden

@@ -5322,9 +5322,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
             std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
-            /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
-            /// and the two specular map transforms.
-            std::array<float, 76> pbrFactors{};
+            /// plans/plan_gltf.md GLTF-344: the base 56 floats plus specular F0/factor and the two
+            /// specular map transforms (76), then the glTF doubleSided sign: 80 (320 bytes).
+            std::array<float, 80> pbrFactors{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -5586,9 +5586,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
             std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
-            /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
-            /// and the two specular map transforms.
-            std::array<float, 76> pbrFactors{};
+            /// plans/plan_gltf.md GLTF-344: the base 56 floats plus specular F0/factor and the two
+            /// specular map transforms (76), then the glTF doubleSided sign: 80 (320 bytes).
+            std::array<float, 80> pbrFactors{};
             std::array<float, 4 + 72 * 16> skinningParams{};
             bool depthTest = false;
             bool depthWrite = false;

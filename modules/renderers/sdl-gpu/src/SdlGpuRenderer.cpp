@@ -8138,6 +8138,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             haveIbl ? 1.0f : 0.0f,
             static_cast<float>(params.iblPrefilteredMipCount > 0 ? params.iblPrefilteredMipCount : 1),
             params.iblIntensity, 0.0f};
+        // glTF doubleSided, EasyGL's encoding: a mirroring World reverses the on-screen winding,
+        // so gl_FrontFacing then names the back face and the shader reads it the other way round.
+        if (params.pbrDoubleSided)
+        {
+            const float* w = params.worldColMajor;
+            const float det = w[0] * (w[5] * w[10] - w[9] * w[6])
+                            - w[4] * (w[1] * w[10] - w[9] * w[2])
+                            + w[8] * (w[1] * w[6] - w[5] * w[2]);
+            command.doubleSided = det < 0.0f ? -1.0f : 1.0f;
+        }
 
         if (ib != nullptr)
         {
@@ -9039,7 +9049,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
         // SMG-0032: the stock sampler LOD biases ride at the end of PbrParams (lodBias0To3,
         // lodBias4To7), which frees fragment uniform slot 3 for the shadow parameter block.
-        std::array<float, 88> pbrBlock{};
+        std::array<float, 92> pbrBlock{};
         std::copy(command.pbrParams.begin(), command.pbrParams.end(), pbrBlock.begin());
         const std::array<float, 8> lodBiases{
             command.lodBias,
@@ -9054,6 +9064,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::copy(command.iblParams.begin(), command.iblParams.end(), pbrBlock.begin() + 80);
         for (std::size_t i = 0; i < command.iblSamplers.size(); ++i)
             pbrBlock[84 + i] = command.iblSamplers[i].lodBias;
+        pbrBlock[88] = command.doubleSided;  // materialFlags.x
         SDL_PushGPUFragmentUniformData(cmd, 2, pbrBlock.data(), sizeof(pbrBlock));
 
         SDL_GPUBufferBinding vbBinding{};

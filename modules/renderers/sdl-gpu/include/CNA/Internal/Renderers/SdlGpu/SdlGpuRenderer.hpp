@@ -2647,6 +2647,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<SamplerSlotState, 3> iblSamplers{};
             /// STREETS-0002: x = enabled, y = prefiltered mip count, z = intensity.
             std::array<float, 4> iblParams{};
+            /// glTF doubleSided: 0 single-sided, +1 double-sided, -1 under a mirroring World.
+            float doubleSided = 0.0f;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             /** @brief STREETPERF-0002: byte offset of the first vertex in `uploadedVertexBuffer`. */

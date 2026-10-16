@@ -1137,6 +1137,8 @@ struct PbrFactors {
     // specularColorTexture multiplies before the min(...,1) below.
     specularFresnelInputs: vec4f,
     specularTextureTransformRows: array<vec4f, 4>,
+    // x = glTF doubleSided: 0 single-sided, +1 double-sided, -1 double-sided under a mirroring World.
+    materialFlags: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -1229,7 +1231,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                  dot(value, pf.textureTransformRows[slot * 2u + 1u].xyz));
 }
 
-@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+@fragment fn fs_main(input: VertexOutput, @builtin(front_facing) frontFacing: bool) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
     // plans/plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
@@ -1248,9 +1250,25 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         discard;
     }
 
-    let n0 = normalize(input.worldNormal);
-    let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
-    let b0 = cross(n0, t0) * input.bitangentSign;
+    // A singular World leaves a zero normal, and a missing, zero or normal-parallel tangent a zero
+    // residual; normalize() of either is NaN. As EasyGL: the normal is divided by its largest
+    // component first, which only an exactly zero vector fails, and the residual is judged relative
+    // to the tangent it came from.
+    let normalScale = max(max(abs(input.worldNormal.x), abs(input.worldNormal.y)), abs(input.worldNormal.z));
+    var n0 = select(vec3f(0.0, 0.0, 1.0), normalize(input.worldNormal / normalScale), normalScale > 0.0);
+    let tangentResidual = input.worldTangent - n0 * dot(n0, input.worldTangent);
+    let fallbackTangent = normalize(cross(n0, select(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), abs(n0.x) < 0.9)));
+    var t0 = select(fallbackTangent, normalize(tangentResidual),
+                    dot(tangentResidual, tangentResidual) > 1e-8 * dot(input.worldTangent, input.worldTangent));
+    var b0 = cross(n0, t0) * input.bitangentSign;
+    // glTF doubleSided: a back face is shaded with its whole basis reversed. The native front face
+    // is counter-clockwise as displayed, glTF's front face; a mirroring World (-1) reverses which
+    // face front_facing names.
+    if (pf.materialFlags.x != 0.0 && frontFacing == (pf.materialFlags.x < 0.0)) {
+        n0 = -n0;
+        t0 = -t0;
+        b0 = -b0;
+    }
     let tbn = mat3x3f(t0, b0, n0);
     var sampledNormal = textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0;
     sampledNormal.x *= pf.metallicRoughness.z;
@@ -1883,6 +1901,8 @@ struct PbrFactors {
     // specularColorTexture multiplies before the min(...,1) below.
     specularFresnelInputs: vec4f,
     specularTextureTransformRows: array<vec4f, 4>,
+    // x = glTF doubleSided: 0 single-sided, +1 double-sided, -1 double-sided under a mirroring World.
+    materialFlags: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -1967,7 +1987,11 @@ fn pbrDirectionHandedness(m: mat3x3f) -> f32 {
     // transpose. The tangent stays on raw worldMat3: tangents transform as directions, not as
     // normals (glTF convention, unchanged).
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
-    output.worldNormal = normalize(normalMatrix * pbrSkinNormal(skinMat3, input.normal));
+    // A zero normal (a singular World) stays zero rather than NaN; the fragment stage substitutes one.
+    let skinnedNormal = normalMatrix * pbrSkinNormal(skinMat3, input.normal);
+    let skinnedNormalScale = max(max(abs(skinnedNormal.x), abs(skinnedNormal.y)), abs(skinnedNormal.z));
+    output.worldNormal = select(vec3f(0.0), normalize(skinnedNormal / skinnedNormalScale),
+                                skinnedNormalScale > 0.0);
     output.worldTangent = worldMat3 * (skinMat3 * input.tangent.xyz);
     output.bitangentSign = input.tangent.w * pbrDirectionHandedness(worldMat3)
                                            * pbrDirectionHandedness(skinMat3);
@@ -2020,7 +2044,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                  dot(value, pf.textureTransformRows[slot * 2u + 1u].xyz));
 }
 
-@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+@fragment fn fs_main(input: VertexOutput, @builtin(front_facing) frontFacing: bool) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
     // plans/plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
@@ -2039,9 +2063,25 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         discard;
     }
 
-    let n0 = normalize(input.worldNormal);
-    let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
-    let b0 = cross(n0, t0) * input.bitangentSign;
+    // A singular World leaves a zero normal, and a missing, zero or normal-parallel tangent a zero
+    // residual; normalize() of either is NaN. As EasyGL: the normal is divided by its largest
+    // component first, which only an exactly zero vector fails, and the residual is judged relative
+    // to the tangent it came from.
+    let normalScale = max(max(abs(input.worldNormal.x), abs(input.worldNormal.y)), abs(input.worldNormal.z));
+    var n0 = select(vec3f(0.0, 0.0, 1.0), normalize(input.worldNormal / normalScale), normalScale > 0.0);
+    let tangentResidual = input.worldTangent - n0 * dot(n0, input.worldTangent);
+    let fallbackTangent = normalize(cross(n0, select(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), abs(n0.x) < 0.9)));
+    var t0 = select(fallbackTangent, normalize(tangentResidual),
+                    dot(tangentResidual, tangentResidual) > 1e-8 * dot(input.worldTangent, input.worldTangent));
+    var b0 = cross(n0, t0) * input.bitangentSign;
+    // glTF doubleSided: a back face is shaded with its whole basis reversed. The native front face
+    // is counter-clockwise as displayed, glTF's front face; a mirroring World (-1) reverses which
+    // face front_facing names.
+    if (pf.materialFlags.x != 0.0 && frontFacing == (pf.materialFlags.x < 0.0)) {
+        n0 = -n0;
+        t0 = -t0;
+        b0 = -b0;
+    }
     let tbn = mat3x3f(t0, b0, n0);
     var sampledNormal = textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0;
     sampledNormal.x *= pf.metallicRoughness.z;

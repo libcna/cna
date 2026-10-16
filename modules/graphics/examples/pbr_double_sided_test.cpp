@@ -4,17 +4,18 @@
 // plainly falling on it. glTF (and its Sample Viewer) shade a double-sided back face with the whole
 // tangent basis reversed.
 //
-// Camera and light both look down -Z at a quad in the XY plane. A face whose normal points at the
-// camera is lit; the same quad authored to face away shows the camera its back, which must stay
+// Renderer-neutral public-effect oracle. Camera and light both look down -Z at a quad in the XY
+// plane. A face whose normal points at the camera is lit; the same quad authored to face away
+// shows the camera its back, which must stay
 // dark while single-sided and be lit exactly like the front once double-sided. A mirroring World
-// reverses the on-screen winding, so gl_FrontFacing then names the other face; a double-sided
-// front face must stay lit there too. Rigid and skinned programs, into a Vector4 target.
+// reverses the on-screen winding, so the rasterizer's face predicate then names the other face;
+// a double-sided front face must stay lit there too. Rigid and skinned programs draw into a Color target so the
+// same proof runs on renderers that do not expose float render targets.
 
 #include "common/PixelTestGame.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
-#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
@@ -25,11 +26,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -104,7 +103,7 @@ protected:
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
-        RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Vector4, DepthFormat::None);
+        RenderTarget2D target(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
 
         struct Case
         {
@@ -136,7 +135,7 @@ protected:
                 // Lit cases must match the control; the dark case must lose most of its light
                 // (ambient 0.1 against a direct term several times that).
                 const bool pass = std::isfinite(value) &&
-                                  (testCase.lit ? std::fabs(value - control) <= 0.01f
+                                  (testCase.lit ? std::fabs(value - control) <= 3.0f / 255.0f
                                                 : value < control * 0.5f);
                 std::printf("[%s] %s, %s: %.4f (control %.4f)\n", pass ? "PASS" : "FAIL", name,
                             testCase.name, value, control);
@@ -184,9 +183,12 @@ private:
         }
         device.SetRenderTarget(nullptr);
 
-        std::vector<Vector4> pixels(static_cast<std::size_t>(kSize * kSize));
+        std::vector<Color> pixels(static_cast<std::size_t>(kSize * kSize));
         target.GetData(pixels.data(), static_cast<int>(pixels.size()));
-        return pixels[static_cast<std::size_t>(kSize / 2 * kSize + kSize / 2)].X;
+        return static_cast<float>(
+                   pixels[static_cast<std::size_t>(kSize / 2 * kSize + kSize / 2)]
+                       .getRProperty()) /
+               255.0f;
     }
 };
 

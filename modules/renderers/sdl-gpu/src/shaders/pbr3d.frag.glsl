@@ -77,6 +77,8 @@ layout(set = 3, binding = 2) uniform PbrParams {
     // STREETS-0002: MipMapLevelOfDetailBias of sampler slots 10, 11 and 12, applied in the shader
     // like every other slot's here, because this renderer's samplers are created without one.
     vec4 iblLodBias;
+    // x = glTF doubleSided: 0 single-sided, +1 double-sided, -1 double-sided under a mirroring World.
+    vec4 materialFlags;
 } pbrp;
 
 // SMG-0032: shadow reception, from the one shared snippet. The three maps follow the seven
@@ -179,9 +181,26 @@ void main() {
         : (alpha < pbrp.alphaTest.x);
     if ((passesAlphaTest ? pbrp.alphaTest.z : pbrp.alphaTest.w) < 0.0) discard;
 
-    vec3 N = normalize(fragNormal);
-    vec3 T = normalize(fragTangent - N * dot(N, fragTangent));
+    // A singular World leaves a zero normal, and a missing, zero or normal-parallel tangent a zero
+    // residual; normalize() of either is NaN on some drivers and an unlit surface on others. As
+    // EasyGL: the normal is divided by its largest component first, which only an exactly zero
+    // vector fails, and the residual is judged relative to the tangent it came from.
+    float normalScale = max(max(abs(fragNormal.x), abs(fragNormal.y)), abs(fragNormal.z));
+    vec3 N = normalScale > 0.0 ? normalize(fragNormal / normalScale) : vec3(0.0, 0.0, 1.0);
+    vec3 T = fragTangent - N * dot(N, fragTangent);
+    T = dot(T, T) > 1e-8 * dot(fragTangent, fragTangent)
+        ? normalize(T)
+        : normalize(cross(N, abs(N.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0)));
     vec3 B = cross(N, T) * fragBitangentSign;
+    // glTF doubleSided: a back face is shaded with its whole basis reversed. The native front face
+    // is counter-clockwise as displayed, glTF's front face; a mirroring World (-1) reverses which
+    // face gl_FrontFacing names.
+    if (pbrp.materialFlags.x != 0.0 && gl_FrontFacing == (pbrp.materialFlags.x < 0.0))
+    {
+        N = -N;
+        T = -T;
+        B = -B;
+    }
     mat3 TBN = mat3(T, B, N);
     vec3 sampledNormal = texture(
         uNormalMap, cnaPbrTransformUV(fragUV, 1), pbrp.lodBias0To3.y).rgb * 2.0 - 1.0;

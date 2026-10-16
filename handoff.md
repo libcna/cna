@@ -164,20 +164,20 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       input is refused only at replay, after which the queued draw throws again from a destructor
       and terminates the process (`shader_effect_3d_layout` D/E, F/H, run last for that reason).
 
-9. **The stock PBR programs of `SDL_GPU`, `WEBGPU` and `DIRECTX9` have no guard for a zero normal or
-   tangent.** They normalise the interpolated normal and the Gram-Schmidt tangent without checking
-   its length (`sdl-gpu/src/shaders/pbr3d.frag.glsl`, the two WGSL PBR programs in
-   `webgpu_shaders.hpp`, `directx9/src/shaders/cna/Pbr3D.hlsl` and `PbrSkinned3D.hlsl`). A singular
-   World or a missing, zero or normal-parallel tangent reaches `normalize(0)`: NaN on drivers that
-   compute `x*inversesqrt(0)`, or a surface that loses all direct light on llvmpipe. EasyGL falls
-   back to a fixed normal and a perpendicular tangent; `easygl_pbr_degenerate_basis_test` is the
-   oracle. (`GSC-0009`, found by living-room-simulator.)
-10. **Only EasyGL honours glTF `doubleSided` on `PbrEffect`/`SkinnedPbrEffect`.**
-    `GpuDrawParams::pbrDoubleSided` is read only by `EasyGLRenderer.cpp`, which flips N, T and B on
-    the back face and accounts for a mirroring World. `SDL_GPU`, `WEBGPU` and `DIRECTX9` ignore it,
-    so the back of a leaf is shaded with the normal of the side facing away. Each needs the flag,
-    the mirror sign and its own front-facing input checked against its winding convention; the
-    oracle is `easygl_pbr_double_sided_test`. (`GSC-0010`, living-room-simulator R-3.)
+9. **The stock PBR programs of `DIRECTX9` have no guard for a zero normal or tangent.** They
+   normalise the interpolated normal and the Gram-Schmidt tangent without checking its length
+   (`directx9/src/shaders/cna/Pbr3D.hlsl` and `PbrSkinned3D.hlsl`). A singular World or a missing,
+   zero or normal-parallel tangent reaches `normalize(0)`: NaN on drivers that compute
+   `x*inversesqrt(0)`, or a surface that loses all direct light. EasyGL falls back to a fixed
+   normal and a perpendicular tangent, and SDL_GPU and WebGPU now do the same;
+   `easygl_pbr_degenerate_basis_test` is the oracle (also `SdlGpu_`/`WebGPU_Pbr_DegenerateBasis`).
+   (`GSC-0009`, found by living-room-simulator.)
+10. **`DIRECTX9` ignores glTF `doubleSided` on `PbrEffect`/`SkinnedPbrEffect`.** EasyGL, SDL_GPU and
+    WebGPU flip N, T and B on the back face and account for a mirroring World;
+    `GpuDrawParams::pbrDoubleSided` does not reach the Direct3D 9 PBR programs, so the back of a
+    leaf is shaded with the normal of the side facing away. The oracle is
+    `modules/graphics/examples/pbr_double_sided_test.cpp` (`EasyGL_`, `SdlGpu_`,
+    `WebGPU_Pbr_DoubleSided`). (`GSC-0010`, living-room-simulator R-3.)
 14. **The MinGW-w64 cross-build compiles and runs every test binary** (2026-10-15; before, the
     POSIX `setenv`/`unsetenv`/`getpid` calls in the GamerServices and content-pipeline tests stopped
     `CnaTests.exe` compiling). Those calls go through `System::Environment`, the fork-based child

@@ -369,6 +369,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # living-room-simulator's PBR basis, EasyGL's programs the oracle: a zero normal or tangent must
+    # not shade NaN, and a glTF double-sided back face is shaded with its basis reversed.
+    cna_webgpu_test(cna_test_webgpu_pbr_degenerate_basis
+                    ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_degenerate_basis_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_Pbr_DegenerateBasis COMMAND cna_test_webgpu_pbr_degenerate_basis
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_webgpu_test(cna_test_webgpu_pbr_double_sided ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_double_sided_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_Pbr_DoubleSided COMMAND cna_test_webgpu_pbr_double_sided
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plans/plan_webgpu_perf.md WEBGPUPERF-0001..0005/0007: PbrEffect and ShaderEffect draws still
     # reach the right uniforms through the arena's dynamic offsets, a steady frame of PBR, BasicEffect,
     # sprite or ShaderEffect draws creates no bind group, its queue writes do not grow with its draw

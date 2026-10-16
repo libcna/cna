@@ -1308,8 +1308,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // inputs -- the UNCLAMPED dielectric F0 plus the specular factor, and two affine transform
         // rows per specular map. The unclamped value is the point: `specularColorTexture` multiplies
         // BEFORE the min(...,1), so a shader handed the pre-clamped F0 cannot reproduce the
-        // extension's own equation.
-        void FillPbrFactors(std::array<float, 76>& out, const GpuDrawParams& p)
+        // extension's own equation. Float 76 is the glTF doubleSided sign (80 floats, 320 bytes).
+        void FillPbrFactors(std::array<float, 80>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -1341,6 +1341,18 @@ namespace CNA::Internal::Renderers::WebGPU
                 for (int component = 0; component < 4; ++component)
                     out[60 + row * 4 + component] =
                         p.pbrSpecularTextureTransformRows[row][component];
+            // glTF doubleSided, EasyGL's encoding: a mirroring World reverses the on-screen
+            // winding, so front_facing then names the back face and the shader reads it the other
+            // way round.
+            out[76] = 0.0f;
+            if (p.pbrDoubleSided)
+            {
+                const float* w = p.worldColMajor;
+                const float det = w[0] * (w[5] * w[10] - w[9] * w[6])
+                                - w[4] * (w[1] * w[10] - w[9] * w[2])
+                                + w[8] * (w[1] * w[6] - w[5] * w[2]);
+                out[76] = det < 0.0f ? -1.0f : 1.0f;
+            }
         }
 
         // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
@@ -15310,7 +15322,7 @@ namespace
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         // Four material vec4s followed by ten affine texture-transform rows.
-        uboEntries[2].buffer.minBindingSize = 76 * sizeof(float);
+        uboEntries[2].buffer.minBindingSize = 80 * sizeof(float);
         // plans/plan_webgpu_perf.md WEBGPUPERF-0002: the three blocks live in the uniform arena and
         // a draw binds the chunk's one group at its own offsets.
         for (WGPUBindGroupLayoutEntry& entry : uboEntries)
@@ -16585,7 +16597,7 @@ namespace
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
         // Four material vec4s followed by ten affine texture-transform rows.
-        uboEntries[2].buffer.minBindingSize = 76 * sizeof(float);
+        uboEntries[2].buffer.minBindingSize = 80 * sizeof(float);
         uboEntries[3].binding = 3;
         uboEntries[3].visibility = WGPUShaderStage_Vertex;
         uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;

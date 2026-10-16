@@ -851,16 +851,17 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesNormalScaleAndOcclusio
     // match the shader's own struct exactly -- wgpu rejects the pipeline by name when it does not
     // ("Buffer structure size 304 ... greater than the given min_binding_size, which is 256", which
     // is how GLTF-344's own first attempt at this was caught). It grew 56 -> 76 floats when
-    // KHR_materials_specular's unclamped F0, specular factor and two transform rows landed.
+    // KHR_materials_specular's unclamped F0, specular factor and two transform rows landed, and
+    // 76 -> 80 for the glTF doubleSided sign.
     const std::string webgpu = RendererSlotText(renderers, "webgpu");
     const std::string pbrFactorsSize = Normalize(
-        "uboEntries[2].buffer.minBindingSize = 76 * sizeof(float)");
+        "uboEntries[2].buffer.minBindingSize = 80 * sizeof(float)");
     std::size_t pbrFactorsSizeCount = 0;
     for (std::size_t at = webgpu.find(pbrFactorsSize); at != std::string::npos;
          at = webgpu.find(pbrFactorsSize, at + pbrFactorsSize.size()))
         ++pbrFactorsSizeCount;
     EXPECT_EQ(2u, pbrFactorsSizeCount)
-        << "both WebGPU PBR pipeline layouts must expose the complete 304-byte factors block";
+        << "both WebGPU PBR pipeline layouts must expose the complete 320-byte factors block";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesAllFiveTextureTransforms)

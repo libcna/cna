@@ -63,6 +63,24 @@ float cnaDirectionHandedness(mat3 m) {
     return dot(m[0], cross(m[1], m[2])) < 0.0 ? -1.0 : 1.0;
 }
 
+// transpose(inverse(m)) by its cofactors over the determinant, and zero for a singular World
+// (a node scaled flat), as EasyGL computes it: inverse() of a singular matrix is undefined, and the
+// fragment stage substitutes a fixed normal for a zero one.
+mat3 cnaNormalMatrix(mat3 m) {
+    vec3 c0 = cross(m[1], m[2]);
+    vec3 c1 = cross(m[2], m[0]);
+    vec3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    return det != 0.0 ? mat3(c0, c1, c2) * (1.0 / det) : mat3(0.0);
+}
+
+// normalize() that leaves a zero vector zero instead of NaN; dividing by the largest component
+// first keeps a World scaled by 1e5 from underflowing to one.
+vec3 cnaSafeDirection(vec3 v) {
+    float scale = max(max(abs(v.x), abs(v.y)), abs(v.z));
+    return scale > 0.0 ? normalize(v / scale) : vec3(0.0);
+}
+
 void main() {
     gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(inPos, 1.0));
     gl_PointSize = 1.0;  // plans/plan_apple_m4.md AM4-181: PointListEXT draws one pixel per point
@@ -74,8 +92,8 @@ void main() {
     #endif
     // GLSL has a built-in inverse(), matching lit_textured3d.vert.glsl's own normal-matrix
     // convention exactly (no CPU-precomputed normal matrix needed, unlike WebGPU's WGSL path).
-    mat3 normalMatrix = transpose(inverse(mat3(CNA_INSTANCE_WORLD(lp.world))));
-    fragNormal = normalize(normalMatrix * inNormal);
+    mat3 normalMatrix = cnaNormalMatrix(mat3(CNA_INSTANCE_WORLD(lp.world)));
+    fragNormal = cnaSafeDirection(normalMatrix * inNormal);
     // Tangent transforms as a plain direction under mat3(World) (not the inverse-transpose
     // normalMatrix used for the normal) -- correct for uniform-scale World transforms, mirrors
     // EasyGLRenderer::EnsurePbrProgram()'s own documented simplification exactly.
