@@ -118,6 +118,15 @@ sampler2D EmissiveMap          : register(s3);
 sampler2D OcclusionMap         : register(s4);
 sampler2D SpecularMap          : register(s5);
 sampler2D SpecularColorMap     : register(s6);
+#if CNA_D3D9_IBL
+// FNA3D is CNA's Effect-Framework consumer of this otherwise Direct3D-9 shader. Keep the
+// environment on the public slots shared by EasyGL/Software/WebGPU: irradiance=10,
+// prefiltered-specular=11, split-sum LUT=12. DirectX9 leaves CNA_D3D9_IBL undefined, so its
+// compiled shaders and sampler budget are unchanged.
+samplerCUBE IblIrradiance       : register(s10);
+samplerCUBE IblSpecular         : register(s11);
+sampler2D   IblBrdfLut          : register(s12);
+#endif
 
 float4 DiffuseColor           : register(c0);
 float4 AmbientColor            : register(c1); // xyz=color, w=decode base-color texture from sRGB
@@ -144,6 +153,9 @@ float4 PunctualPositionRange   : register(c30); // xyz=world position, w=range
 float4 PunctualDirectionKind   : register(c31); // xyz=spot direction, w=0 none / 1 point / 2 spot
 float4 PunctualDiffuse         : register(c32); // xyz=linear colour/intensity
 float4 PunctualCone            : register(c33); // x=cos(inner), y=cos(outer)
+#if CNA_D3D9_IBL
+float4 IblParams               : register(c34); // x=enabled, y=mip count, z=intensity
+#endif
 
 #if CNA_D3D9_SHADOWS
 #include "ShadowSampling3D.fxh"
@@ -243,6 +255,34 @@ float3 CnaPunctualLight(float3 worldPos, float3 normal)
            CnaPunctualShadow(worldPos, toLight, distanceToLight);
 }
 
+#if CNA_D3D9_IBL
+// Same split-sum equation used by EasyGL, Software and WebGPU. texCUBElod makes the authored
+// roughness-to-mip rule explicit and lets sampler slot 11 choose point versus linear mip blending.
+float3 CnaIblAmbient(float3 N, float3 V, float3 albedo, float3 F0, float roughness,
+                     float metallic, float occlusion)
+{
+    if (IblParams.x < 0.5)
+        return float3(0.0, 0.0, 0.0);
+    float NdotV = clamp(dot(N, V), 1e-4, 1.0);
+    float3 kS = F0 + (max(float3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0) - F0)
+        * pow(1.0 - NdotV, 5.0);
+    float3 kD = (float3(1.0, 1.0, 1.0) - kS) * (1.0 - metallic);
+    float3 diffuse = texCUBElod(IblIrradiance, float4(N, 0.0)).rgb * albedo * kD;
+    float3 R = reflect(-V, N);
+    float lod = roughness * max(IblParams.y - 1.0, 0.0);
+    float3 prefiltered = texCUBElod(IblSpecular, float4(R, lod)).rgb;
+    float2 ab = tex2Dlod(IblBrdfLut, float4(NdotV, roughness, 0.0, 0.0)).rg;
+    float3 specular = prefiltered * (kS * ab.x + ab.y);
+    return (diffuse + specular) * IblParams.z * occlusion;
+}
+#else
+float3 CnaIblAmbient(float3 N, float3 V, float3 albedo, float3 F0, float roughness,
+                     float metallic, float occlusion)
+{
+    return float3(0.0, 0.0, 0.0);
+}
+#endif
+
 float4 PSPbr3D(PSInput pin) : SV_Target0
 {
     float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(pin.UV, 0));
@@ -293,7 +333,8 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
 
     float occlusion = tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r;
     occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
-    float3 ambient = AmbientColor.xyz * albedo * occlusion;
+    float3 ambient = AmbientColor.xyz * albedo * occlusion
+        + CnaIblAmbient(finalNormal, V, albedo, F0, roughness, metallic, occlusion);
     float3 emissiveSample = tex2D(EmissiveMap, CnaPbrTransformUv(pin.UV, 3)).rgb;
     emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w);
     float3 emissive = EmissiveColor.xyz * emissiveSample;

@@ -733,8 +733,13 @@ namespace CNA::Internal::Renderers::Fna3d
                 }
 
                 effect.SetFloats("DiffuseColor", params.diffuseColor, 4);
+                const bool useIbl = params.iblEnabled && params.iblIrradiance != nullptr &&
+                                    params.iblPrefilteredSpecular != nullptr &&
+                                    params.iblBrdfLut != nullptr;
                 const float ambient[4] = {
-                    params.ambientColor[0], params.ambientColor[1], params.ambientColor[2],
+                    useIbl ? 0.0f : params.ambientColor[0],
+                    useIbl ? 0.0f : params.ambientColor[1],
+                    useIbl ? 0.0f : params.ambientColor[2],
                     params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f
                 };
                 const float emissive[4] = {
@@ -776,6 +781,12 @@ namespace CNA::Internal::Renderers::Fna3d
                 const float punctualCone[4] = {
                     params.punctualCosInner, params.punctualCosOuter, 0.0f, 0.0f
                 };
+                const float iblParams[4] = {
+                    useIbl ? 1.0f : 0.0f,
+                    static_cast<float>(params.iblPrefilteredMipCount > 0
+                                           ? params.iblPrefilteredMipCount : 1),
+                    params.iblIntensity, 0.0f
+                };
 
                 effect.SetFloats("AmbientColor", ambient, 4);
                 effect.SetFloats("EmissiveColor", emissive, 4);
@@ -800,6 +811,7 @@ namespace CNA::Internal::Renderers::Fna3d
                 effect.SetFloats("PunctualDirectionKind", punctualDirectionKind, 4);
                 effect.SetFloats("PunctualDiffuse", punctualDiffuse, 4);
                 effect.SetFloats("PunctualCone", punctualCone, 4);
+                effect.SetFloats("IblParams", iblParams, 4);
 
                 effect.Apply(device_, useVertexColor ? 1 : 0);
                 const auto bindPbrTexture = [&](const char* samplerName,
@@ -837,6 +849,44 @@ namespace CNA::Internal::Renderers::Fna3d
                 bindPbrTexture(
                     "SpecularColorMap", params.pbrSpecularColorMap != nullptr
                         ? params.pbrSpecularColorMap : white);
+
+                // The two cube interfaces are siblings of ITextureRenderer, so bind their shared
+                // native sampled-texture mix-in directly. Resolve registers from the applied pass,
+                // exactly as for the seven material maps: MojoShader is free to remap them per
+                // profile even though the authored SM3 registers are public slots 10/11/12.
+                const auto bindPbrSampled = [&](const char* samplerName,
+                                                const Fna3dSampledTexture* sampled) {
+                    const int slot = effect.FindPixelSamplerRegister(samplerName);
+                    if (slot < 0)
+                    {
+                        throw std::runtime_error(
+                            std::string("FNA3D PBR effect: applied pass has no pixel sampler '") +
+                            samplerName + "'.");
+                    }
+                    if (sampled != nullptr && sampled->GetFna3dDeviceStateEXT() != deviceState_)
+                    {
+                        throw std::runtime_error(
+                            "FNA3D renderer: an IBL texture was not created by this graphics device.");
+                    }
+                    FNA3D_Texture* native = sampled != nullptr
+                        ? sampled->GetFna3dTextureEXT() : nullptr;
+                    FNA3D_VerifySampler(device_, slot, native,
+                                        &samplerStates_[static_cast<std::size_t>(slot)]);
+                    boundPixelTextures_[static_cast<std::size_t>(slot)] = native;
+                };
+                const auto* irradiance = useIbl
+                    ? dynamic_cast<const Fna3dSampledTexture*>(params.iblIrradiance) : nullptr;
+                const auto* specular = useIbl
+                    ? dynamic_cast<const Fna3dSampledTexture*>(params.iblPrefilteredSpecular)
+                    : nullptr;
+                if (useIbl && (irradiance == nullptr || specular == nullptr))
+                {
+                    throw std::runtime_error(
+                        "FNA3D renderer: an IBL cube texture was not created by FNA3D.");
+                }
+                bindPbrSampled("IblIrradiance", irradiance);
+                bindPbrSampled("IblSpecular", specular);
+                bindPbrTexture("IblBrdfLut", useIbl ? params.iblBrdfLut : nullptr);
                 break;
             }
 

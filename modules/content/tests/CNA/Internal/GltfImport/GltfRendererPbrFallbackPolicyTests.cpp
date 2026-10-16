@@ -1274,6 +1274,38 @@ TEST(GltfRendererPbrFallbackPolicy, Fna3dSamplesBothKhrMaterialsSpecularTextures
     }
 }
 
+TEST(GltfRendererPbrFallbackPolicy, Fna3dSamplesSplitSumImageBasedLighting)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "fna3d");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "params.iblEnabled && params.iblIrradiance != nullptr",
+             "effect.SetFloats(\"IblParams\", iblParams, 4)",
+             "bindPbrSampled(\"IblIrradiance\", irradiance)",
+             "bindPbrSampled(\"IblSpecular\", specular)",
+             "bindPbrTexture(\"IblBrdfLut\", useIbl ? params.iblBrdfLut : nullptr)",
+             "SupportsImageBasedLightingEXT() const override"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing FNA3D IBL upload/binding evidence: " << evidence;
+    }
+
+    for (const char* evidence : {
+             "samplerCUBE IblIrradiance : register(s10)",
+             "samplerCUBE IblSpecular : register(s11)",
+             "sampler2D IblBrdfLut : register(s12)",
+             "texCUBElod(IblIrradiance, float4(N, 0.0)).rgb",
+             "texCUBElod(IblSpecular, float4(R, lod)).rgb",
+             "tex2Dlod(IblBrdfLut, float4(NdotV, roughness, 0.0, 0.0)).rg",
+             "CnaIblAmbient(finalNormal, V, albedo, F0, roughness, metallic, occlusion)"})
+    {
+        EXPECT_EQ(2u, CountOccurrences(source, Normalize(evidence)))
+            << "both FNA3D PBR source shaders must contain: " << evidence;
+    }
+}
+
 TEST(GltfRendererPbrFallbackPolicy, SdlGpuSamplesBothKhrMaterialsSpecularTextures)
 {
     const std::string source = RendererSlotText(

@@ -1444,6 +1444,11 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+        /** @brief FNA3D's CNA PBR effects sample the shared split-sum IBL resource set. */
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override
+        {
+            return device_ != nullptr && maxTextureSlots_ >= 13;
+        }
 
         /**
          * @brief Classifies Texture2D formats backed by the selected FNA3D driver.

@@ -116,6 +116,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_SkinnedEffect_PunctualLight
         COMMAND cna_test_fna3d_skinnedeffect_punctual_light TIMEOUT 120 LABELS "Fna3d")
 
+    # The shared split-sum oracle covers both rigid and identity-bone skinned PBR, including
+    # public sampler-slot mip filtering. This is the end-to-end witness for the three IBL samplers
+    # in CNA's compiled Effect-Framework shaders.
+    cna_fna3d_test(cna_test_fna3d_ibl_sampling
+                   ${CNA_GRAPHICS_EXAMPLES_DIR}/ibl_sampling_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_ImageBasedLighting
+        COMMAND cna_test_fna3d_ibl_sampling TIMEOUT 120 LABELS "Fna3d")
+
     # RRC-045: the renderer-neutral conformance programs, through FNA3D's own driver. They run under
     # the same FNA3D_FORCE_DRIVER as the rest of this directory (set below).
     include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)

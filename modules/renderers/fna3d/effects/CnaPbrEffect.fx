@@ -6,6 +6,7 @@
 // Rebuild with:
 //   fxc /nologo /Op /T fx_2_0 /Fo CnaPbrEffect.fxb CnaPbrEffect.fx
 
+#define CNA_D3D9_IBL 1
 #include "../../directx9/src/shaders/cna/Pbr3D.hlsl"
 
 technique CnaPbr

@@ -87,16 +87,18 @@ witnesses exercise disabled, in-range/out-of-range point, and aimed/away spot ca
 XNA has no PBR stock effect. These wrappers compile CNA's existing DirectX 9 Shader Model 3 PBR
 sources into the only shader container FNA3D accepts. Two passes per effect cover declarations
 without and with `COLOR0`; the skinned variant additionally carries the 72-bone palette. Both use
-seven pixel samplers, whose physical registers are resolved from MojoShader's applied-pass map
-rather than assumed from source order.
+seven material samplers plus the irradiance cube, prefiltered-specular cube and BRDF LUT for the
+shared split-sum IBL equation. Physical registers are resolved from MojoShader's applied-pass map
+rather than assumed from source order; the three environment resources retain CNA's public
+sampler slots 10/11/12.
 
 The binaries were produced by the same June 2010 `fxc.exe` documented below, with `/Op` so
 MojoShader receives no unsupported preshader operands:
 
 | File | Bytes | SHA-256 |
 |---|---:|---|
-| `CnaPbrEffect.fxb` | 18,748 | `f61b7adf3b58aa225dde1d0c78b273a4e2f4f56b6870e52c71f19c51a9f56ce3` |
-| `CnaSkinnedPbrEffect.fxb` | 33,352 | `93952f5312de4b6f9144db560a0d76ad95cdbdb3b1d0f52306e515ef9411e526` |
+| `CnaPbrEffect.fxb` | 20,388 | `0fec6a3cb26995a4c8fb1a2d87e39c733522defd373811159464423b9cbc19c2` |
+| `CnaSkinnedPbrEffect.fxb` | 34,992 | `8dc38cca2982d4382b6e42de1817692e885f65fa0f61790f9a3ff81a9ccfdaaf` |
 
 ```bash
 fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPbrEffect.fxb CnaPbrEffect.fx
