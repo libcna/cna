@@ -82,6 +82,34 @@ witnesses exercise disabled, in-range/out-of-range point, and aimed/away spot ca
 
 ---
 
+## `CnaPbrEffect` / `CnaSkinnedPbrEffect` — CNA's metallic-roughness extensions
+
+XNA has no PBR stock effect. These wrappers compile CNA's existing DirectX 9 Shader Model 3 PBR
+sources into the only shader container FNA3D accepts. Two passes per effect cover declarations
+without and with `COLOR0`; the skinned variant additionally carries the 72-bone palette. Both use
+seven pixel samplers, whose physical registers are resolved from MojoShader's applied-pass map
+rather than assumed from source order.
+
+The binaries were produced by the same June 2010 `fxc.exe` documented below, with `/Op` so
+MojoShader receives no unsupported preshader operands:
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| `CnaPbrEffect.fxb` | 18,748 | `f61b7adf3b58aa225dde1d0c78b273a4e2f4f56b6870e52c71f19c51a9f56ce3` |
+| `CnaSkinnedPbrEffect.fxb` | 33,352 | `93952f5312de4b6f9144db560a0d76ad95cdbdb3b1d0f52306e515ef9411e526` |
+
+```bash
+fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPbrEffect.fxb CnaPbrEffect.fx
+fxc.exe /nologo /Op /T fx_2_0 /Fo CnaSkinnedPbrEffect.fxb CnaSkinnedPbrEffect.fx
+```
+
+MojoShader's SPIR-V profile formerly rejected `s4` and above because it compared every SM2/3
+sampler against the four-entry PS 1.x TEXBEM scratch table. CNA's pinned patch checks the real
+16-entry sampler register table; the same PBR witnesses pass through FNA3D OpenGL and
+SDL_GPU/Vulkan.
+
+---
+
 ## `CnaConformanceEffect.fx` / `.fxb` — CNA's own conformance fixture (plans/plan_fx.md FX-004)
 
 Everything above is a stock binary Microsoft compiled years ago; `Fna3dCompiledEffectTests.cpp`

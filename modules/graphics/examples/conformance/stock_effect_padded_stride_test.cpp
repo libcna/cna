@@ -177,7 +177,7 @@ class StockEffectPaddedStrideTest final : public CNA::Examples::PixelTestGame
         }
         catch (const std::exception& e)
         {
-            // A renderer with no metallic-roughness model refuses the PbrEffect leg by name (FNA3D).
+            // A renderer with no metallic-roughness model may refuse the PbrEffect leg by name.
             if (allowNamedRefusal && CNA::Examples::Conformance::IsNamedPbrRefusal(e))
             {
                 dev.SetVertexBuffer(nullptr);

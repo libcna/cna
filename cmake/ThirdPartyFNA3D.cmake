@@ -179,7 +179,10 @@ function(cna_configure_mojoshader)
         # The same oD# clamp for desktop GLSL (FNA3D's OpenGL driver drew BasicEffect's lit colour
         # unclamped on Mesa) and for SPIR-V (FNA3D's SDL_GPU driver): plans/plan_fna3d.md FNA3D-55.
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-desktop-vertex-color-clamp.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vertex-color-clamp.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-vertex-color-clamp.patch"
+        # FNA3D PBR uses seven pixel samplers. The SPIR-V profile accidentally checked the
+        # ps_2/3 sampler index against the four-entry ps_1.x TEXBEM scratch table.
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-spirv-pixel-sampler-range.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
     # In order, each patch made on top of the previous ones; a new one is appended at the end

@@ -1599,7 +1599,10 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param params     Flattened effect parameters.
          */
         void ApplyStockEffectEXT(const Matrix& world, const Matrix& view, const Matrix& projection,
-                                 const GpuDrawParams& params);
+                                 const GpuDrawParams& params,
+                                 bool pbrVertexColorDeclared = false);
+        ITextureRenderer* GetOrCreatePbrWhiteTextureEXT();
+        ITextureRenderer* GetOrCreatePbrFlatNormalTextureEXT();
 
         /**
          * @brief CNAEXT. Binds every declared vertex stream for the draw about to be submitted.
@@ -1695,6 +1698,10 @@ namespace CNA::Internal::Renderers::Fna3d
         std::array<FNA3D_Texture*, 4> boundVertexTextures_{};
 
         std::array<Fna3dStockEffect, static_cast<std::size_t>(StockEffectKind::Count)> effects_{};
+
+        /// Lazy 1x1 fallbacks for optional PBR maps (white factors and tangent-space +Z).
+        std::unique_ptr<ITextureRenderer> pbrDefaultWhiteTexture_;
+        std::unique_ptr<ITextureRenderer> pbrDefaultFlatNormalTexture_;
 
         std::vector<BoundTarget> boundTargets_;
         FNA3D_Renderbuffer* boundDepthBuffer_ = nullptr;

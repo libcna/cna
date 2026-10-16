@@ -14,7 +14,9 @@ set(CNA_FNA3D_EMBEDDED_EFFECTS
     DualTextureEffect
     EnvironmentMapEffect
     SkinnedEffect
-    CnaPunctualEffect)
+    CnaPunctualEffect
+    CnaPbrEffect
+    CnaSkinnedPbrEffect)
 
 set(_cna_fna3d_effect_args)
 set(_cna_fna3d_effect_inputs)

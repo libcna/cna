@@ -287,6 +287,11 @@ namespace CNA::Internal::Renderers::Fna3d
         effects_[static_cast<std::size_t>(StockEffectKind::Punctual)]
             .Load(device_, kCnaPunctualEffectFxb, sizeof(kCnaPunctualEffectFxb),
                   "CnaPunctualEffect");
+        effects_[static_cast<std::size_t>(StockEffectKind::Pbr)]
+            .Load(device_, kCnaPbrEffectFxb, sizeof(kCnaPbrEffectFxb), "CnaPbrEffect");
+        effects_[static_cast<std::size_t>(StockEffectKind::SkinnedPbr)]
+            .Load(device_, kCnaSkinnedPbrEffectFxb, sizeof(kCnaSkinnedPbrEffectFxb),
+                  "CnaSkinnedPbrEffect");
 
         ProbeTexture3DReadbackSupport();
         QueryDriverLimits();
@@ -587,6 +592,8 @@ namespace CNA::Internal::Renderers::Fna3d
 
         spriteVertexBuffer_.reset();
         spriteIndexBuffer_.reset();
+        pbrDefaultWhiteTexture_.reset();
+        pbrDefaultFlatNormalTexture_.reset();
         for (Fna3dStockEffect& effect : effects_)
         {
             effect.Destroy(device_);

@@ -170,4 +170,22 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_SetEffectTechnique(device, effect_, &effectData_->techniques[0]);
         FNA3D_ApplyEffect(device, effect_, passIndex, &stateChanges_);
     }
+
+    int Fna3dStockEffect::FindPixelSamplerRegister(const char* name) const
+    {
+        if (name == nullptr)
+        {
+            return -1;
+        }
+        for (unsigned int i = 0; i < stateChanges_.sampler_state_change_count; ++i)
+        {
+            const MOJOSHADER_samplerStateRegister& sampler =
+                stateChanges_.sampler_state_changes[i];
+            if (sampler.sampler_name != nullptr && std::strcmp(sampler.sampler_name, name) == 0)
+            {
+                return static_cast<int>(sampler.sampler_register);
+            }
+        }
+        return -1;
+    }
 }

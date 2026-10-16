@@ -3,21 +3,23 @@
 `-DCNA_GRAPHICS_RENDERER=FNA3D` selects CNA's FNA3D renderer: XNA's programming model rendered
 through **FNA3D**, the C graphics library FNA itself renders through.
 
-## glTF metallic-roughness materials are refused
+## glTF metallic-roughness materials
 
-`SelectStockEffect` maps a draw onto one of FNA's own stock effect binaries — Basic, AlphaTest,
-DualTexture, EnvironmentMap, Skinned — and those binaries contain no metallic-roughness shader.
-A draw from `PbrEffect` or `SkinnedPbrEffect` is therefore **refused by name**.
+`PbrEffect` and `SkinnedPbrEffect` use CNA-owned Effect Framework binaries compiled from the same
+Shader Model 3 sources as the DirectX 9 renderer. The rigid and skinned paths evaluate the GGX
+metallic-roughness BRDF, normal/metallic-roughness/emissive/occlusion/specular maps, texture
+transforms, sRGB conversion, vertex colour and alpha, three directional lights, one point/spot
+light, fog and skinning. Optional maps receive explicit white or flat-normal fallbacks.
 
-**Until 2026-08-18 it was shaded by the nearest stock effect instead** (`plans/plan_gltf.md GLTF-477`):
-`SelectStockEffect` had no PBR case, so a `PbrEffect` draw fell through to `Basic` and a
-`SkinnedPbrEffect` draw to `Skinned`. An authored glTF material was presented as a different
-material, with no refusal and nothing in this document saying so. This renderer reads none of the
-twenty PBR draw parameters, which is why the fix is a refusal rather than a reduction.
+The boundary remains explicit: this direct-light variant does not sample PBR IBL or shadow maps,
+does not select a second UV stream, and does not flip a back-face normal for `doubleSided`; those
+fields follow the renderer contract's accepted-and-ignored convention. Custom shader *source* is
+still unsupported, which is a separate capability from these committed compiled effects.
 
-**This refusal is source-verified only.** `FNA3D_CreateDevice` fails on the development host for
-every driver, including a forced `FNA3D_FORCE_DRIVER=OpenGL`, so the guard compiles and is placed
-at all three params-carrying draw entry points but has never executed here.
+Until 2026-08-18, FNA3D silently shaded PBR draws with Basic/Skinned. GLTF-477 changed that to an
+honest refusal. The native path above now supersedes the refusal and is pixel-verified on both the
+OpenGL and SDL_GPU/Vulkan drivers: analytic rigid/skinned BRDF 5/5, vertex colour 5/5, padded
+declarations 3/3, and a 1,600-draw uniform ring 1,600/1,600.
 
 ## Identity
 
@@ -90,7 +92,7 @@ through MojoShader, is the *only* shader entry point in `FNA3D.h`. There is no c
 the library that compiles a GLSL or HLSL source string, and the drivers refuse to draw without a
 bound MojoShader program.
 
-This renderer draws both the XNA stock effects, vendored under
+This renderer draws the XNA stock effects and CNA's punctual/PBR extensions, vendored under
 `modules/renderers/fna3d/effects/` (provenance and license in that directory's README) and
 embedded into a generated header at build time, and caller-supplied XNA/FNA Effect Framework
 bytecode through `Effect(GraphicsDevice&, byte[])`. It is the only CNA renderer that executes **XNA's
@@ -174,8 +176,9 @@ fixed from the descriptor's own request.
   and address modes, Immediate flushing; large batches are split at 16,384 quads before their
   16-bit indices can wrap, and deferred texture renderers are retained through backend `End` so
   queued submissions cannot dangle.
-- 3D through the stock effects and caller-supplied compiled effects. Hardware instancing is
-  available only to a compiled vertex shader declaring the instance inputs.
+- 3D through the stock effects, rigid/skinned metallic-roughness PBR extensions, and
+  caller-supplied compiled effects. Hardware instancing is available only to a compiled vertex
+  shader declaring the instance inputs.
 - XNA/FNA Effect Framework reflection (parameters, arrays/members, annotations, techniques and
   passes), typed value/texture mutation, native cloning, exact pass application, and legacy
   blend/depth/stencil/rasterizer/sampler state translation.

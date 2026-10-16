@@ -44,10 +44,9 @@ namespace CNA::Examples::Conformance
     /**
      * @brief Whether @p e is the shared refusal of a renderer with no metallic-roughness model.
      *
-     * `CNA::Internal::Renderers::RequirePbrShadingSupportEXT` (plans/plan_gltf.md GLTF-477) refuses
-     * a `PbrEffect`/`SkinnedPbrEffect` draw at the draw call on a renderer that has no PBR shading
-     * path (`FNA3D`). That is a capability answer, not a defect, so a program treats it as the skip
-     * of the leg that drew; any other exception from a draw stays a failure.
+     * GLTF-477's historical diagnostic refuses a `PbrEffect`/`SkinnedPbrEffect` draw at the draw
+     * call on a renderer that has no PBR shading path. Current production renderers no longer emit
+     * it, but shared conformance programs retain the classifier for reduced external builds.
      *
      * @param e The exception a draw threw.
      * @return true when it is that named refusal.
