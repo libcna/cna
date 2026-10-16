@@ -416,6 +416,8 @@ struct AvatarPrimitive {
     int layer=0;
     /** @brief Scale of the renderer's specular highlight (material extra cnaSpecular, default 1). */
     float specular=1.0f;
+    /** @brief How tight the highlight is, the effect's specular power (material extra cnaShininess, default 24). */
+    float shininess=24.0f;
     /** @brief Which of a pair it is (material extra cnaSide): 0 neither, 1 the avatar's left, 2 its right. */
     int side=0;
     /** @brief Drawn translucent over what is beneath (material extra cnaBlend "alpha"): stubble. */
@@ -520,6 +522,8 @@ struct AvatarModelPart {
     int layer=0;
     /** @brief Scale of the specular highlight. */
     float specular=1.0f;
+    /** @brief The highlight's specular power. */
+    float shininess=24.0f;
     /** @brief Opacity (decals and translucent parts). */
     float alpha=1.0f;
     /** @brief Drawn with the decals, translucent over what is beneath, although not a face feature. */

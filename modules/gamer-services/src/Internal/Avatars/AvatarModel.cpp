@@ -602,6 +602,7 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
             part.color=primitive.color*tintColor(descriptor,primitive.tint);
             part.layer=primitive.layer;
             part.specular=primitive.specular;
+            part.shininess=primitive.shininess;
             part.blend=primitive.blend;
             if(!primitive.texture.empty()) {
                 const auto listed=manifest.assets.find(primitive.texture);

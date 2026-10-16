@@ -622,3 +622,43 @@ TEST(AvatarCatalogContentTest, ModelsShareTheTexturesTheyHaveInCommon) {
     for (const auto& image : second->images) shared += mine.contains(image.get());
     EXPECT_GT(shared, 0);
 }
+
+TEST(AvatarCatalogContentTest, MaterialsKeepTheirFamilysHighlight) {
+    // The one light's highlight is set per material family: metal and glasses small and bright,
+    // skin broad and soft, knitted and woven cloth spread into a faint sheen.
+    const auto manifest = catalog();
+    for (int body = 0; body < 2; ++body) {
+        const auto glb = Avatars::parseAvatarGlb(Avatars::resolveAsset(*manifest, manifest->bodies[body])->view);
+        int skin = 0;
+        for (const auto& primitive : glb.primitives) {
+            if (primitive.tint == "skin" && primitive.feature.empty()) {
+                EXPECT_LT(primitive.shininess, 20.0f) << manifest->bodies[body];
+                ++skin;
+            }
+        }
+        EXPECT_GE(skin, 2);
+    }
+    int metal = 0, glasses = 0, knit = 0;
+    for (const auto slot : {AvatarItemSlot::Earrings, AvatarItemSlot::Wristwear, AvatarItemSlot::Rings, AvatarItemSlot::Glasses,
+                            AvatarItemSlot::Top}) {
+        for (const auto* entry : manifest->itemsOf(slot)) {
+            const auto glb = Avatars::parseAvatarGlb(Avatars::resolveAsset(*manifest, entry->assets[0])->view);
+            for (const auto& primitive : glb.primitives) {
+                if (primitive.tint == "jewelry") {
+                    EXPECT_GE(primitive.shininess, 48.0f) << entry->name;
+                    ++metal;
+                } else if (slot == AvatarItemSlot::Glasses) {
+                    EXPECT_GE(primitive.shininess, 40.0f) << entry->name;
+                    ++glasses;
+                } else if (primitive.texture == "tex_knit.png" || primitive.texture == "tex_rib.png" ||
+                           primitive.texture == "tex_fleece.png" || primitive.texture == "tex_cable.png") {
+                    EXPECT_LE(primitive.shininess, 12.0f) << entry->name;
+                    ++knit;
+                }
+            }
+        }
+    }
+    EXPECT_GT(metal, 10);
+    EXPECT_GT(glasses, 10);
+    EXPECT_GT(knit, 10);
+}

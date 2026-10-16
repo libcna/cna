@@ -149,6 +149,8 @@ void readPrimitive(const cgltf_primitive& primitive,const std::vector<int>& skin
     if(out.layer<0||out.layer>1)malformed("layer");
     out.specular=description.value("cnaSpecular",1.0f);
     if(!(out.specular>=0.0f&&out.specular<=4.0f))malformed("specular");
+    out.shininess=description.value("cnaShininess",24.0f);
+    if(!(out.shininess>=1.0f&&out.shininess<=128.0f))malformed("shininess");
     if(description.contains("cnaSide")) {
         const auto side=description["cnaSide"].get<std::string>();
         if(side!="left"&&side!="right")malformed("side");

@@ -523,8 +523,10 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
             effect.setDiffuseColorProperty(part.color);
             effect.setAlphaProperty(part.alpha);
-            // Materials scale the one light's faint highlight: hair and leather shine a little, cloth barely.
+            // Materials scale the one light's faint highlight and set how tight it is: metal small and
+            // bright, hair and leather a sheen, skin broad and soft, cloth barely.
             effect.setSpecularColorProperty(Vector3(part.specular, part.specular, part.specular));
+            effect.setSpecularPowerProperty(part.shininess);
             effect.setTextureProperty(texture);
             effect.Apply();
             const auto& gpu = resources_->parts[index];

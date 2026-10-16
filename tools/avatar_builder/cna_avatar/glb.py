@@ -82,8 +82,10 @@ class GlbBuilder:
         self.gltf.setdefault("textures", []).append({"sampler": 0, "source": len(self.gltf["images"]) - 1})
         return len(self.gltf["textures"]) - 1
 
-    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None, specular=None, texture_file=None):
-        """specular scales the renderer's highlight for this material (cnaSpecular; 1 when absent);
+    def add_material(self, name, tint, color=(1.0, 1.0, 1.0), texture=None, extras=None, specular=None, texture_file=None,
+                     shininess=None):
+        """specular scales the renderer's highlight for this material (cnaSpecular; 1 when absent) and
+        shininess sets its specular power (cnaShininess; 24 when absent);
         texture_file names a catalog texture file shared by many assets (cnaTexture) instead of an
         embedded texture."""
         pbr = {"baseColorFactor": [round(color[0], 4), round(color[1], 4), round(color[2], 4), 1.0], "metallicFactor": 0.0,
@@ -95,6 +97,8 @@ class GlbBuilder:
             material["extras"]["cnaTexture"] = texture_file
         if specular is not None and specular != 1.0:
             material["extras"]["cnaSpecular"] = specular
+        if shininess is not None and shininess != 24.0:
+            material["extras"]["cnaShininess"] = shininess
         self.gltf.setdefault("materials", []).append(material)
         if (extras and "cnaFeature" in extras) or texture_file:
             # Face decals are textured at runtime with the expression's atlas tile, shared textures

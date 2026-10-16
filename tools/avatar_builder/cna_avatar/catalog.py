@@ -14,8 +14,18 @@ FEATURE_TINTS = {"eyeLeft": ("none", "eyes"), "eyeRight": ("none", "eyes"), "eye
 # Highlight scale per material family: wet eyes and lips, hair and leather sheen, matte cloth.
 SPECULAR = {"eyeLeft": (1.2, 3.0), "eyeRight": (1.2, 3.0), "eyebrowLeft": (0.4,), "eyebrowRight": (0.4,), "mouth": (0.9,)}
 CLOTH_SPECULAR = {"knit": 0.35, "rib": 0.35, "cable": 0.3, "fleece": 0.25, "denim": 0.45, "canvas": 0.5, "pleat": 0.4,
-                  "leather": 2.0, "plain": 1.0, "strands": 2.0}
+                  "leather": 2.0, "plain": 1.0, "strands": 2.0, "jersey": 0.55, "check": 0.35, "stripes": 0.4, "quilt": 1.2}
 HAIR_SPECULAR = 1.6
+# How tight each family's highlight is (the effect's specular power; 24 when absent): woven and knit
+# cloth spreads it into a faint sheen, skin keeps it broad and soft, hair a sheen along the locks,
+# leather, nylon and lacquer a little tighter, metal and glasses small and bright, eyes a wet glint.
+CLOTH_SHININESS = {"knit": 8.0, "rib": 8.0, "cable": 8.0, "fleece": 6.0, "denim": 9.0, "canvas": 9.0, "pleat": 10.0,
+                   "jersey": 14.0, "check": 9.0, "stripes": 10.0, "quilt": 18.0, "leather": 32.0, "strands": 20.0}
+SKIN_SPECULAR, SKIN_SHININESS = 0.85, 14.0
+HAIR_SHININESS = 20.0
+METAL_SHININESS, GLASSES_SHININESS = 60.0, 48.0
+FEATURE_SHININESS = {"eyeLeft": (30.0, 64.0), "eyeRight": (30.0, 64.0), "eyebrowLeft": (12.0,), "eyebrowRight": (12.0,),
+                     "mouth": (28.0,)}
 # Makeup decals: (tint, specular, layer).
 MAKEUP_DECALS = {"shadowLeft": ("eyeShadow", 0.6, 0), "shadowRight": ("eyeShadow", 0.6, 0), "blushLeft": ("blush", 0.2, 0),
                  "blushRight": ("blush", 0.2, 0), "lips": ("lips", 1.8, 0), "linerLeft": ("none", 1.0, 1),
@@ -55,24 +65,25 @@ def body_glb(body_type):
     builder = GlbBuilder({"cna": {"asset": "body", "bodyType": body_type, "rig": "cna-avatar-71",
                                   "authoredHeight": rig.PROPORTIONS[body_type]["height"]}})
     skin_index = builder.add_rig(body_type)
-    skin_material = builder.add_material("skin", "skin")
-    parts = [(skin, skin_material), (head, builder.add_material("head", "skin", texture_file=texture_file("skin_head")))]
+    skin_material = builder.add_material("skin", "skin", specular=SKIN_SPECULAR, shininess=SKIN_SHININESS)
+    parts = [(skin, skin_material), (head, builder.add_material("head", "skin", texture_file=texture_file("skin_head"),
+                                                                specular=SKIN_SPECULAR, shininess=SKIN_SHININESS))]
     if details.positions:
         parts.append((details, skin_material))
     decals = face.build_decals(body_type)
     makeup = face.build_makeup(body_type, decals)
 
-    def decal(name, mesh, tint, specular, layer):
-        parts.append((mesh, builder.add_material("%s%d" % (name, layer), tint, specular=specular,
+    def decal(name, mesh, tint, specular, layer, shininess=None):
+        parts.append((mesh, builder.add_material("%s%d" % (name, layer), tint, specular=specular, shininess=shininess,
                                                  extras={"cnaFeature": name, "cnaLayer": layer})))
     # Draw order within a layer is this order: makeup under the features it frames.
     for name in ("shadowLeft", "shadowRight", "blushLeft", "blushRight"):
         decal(name, makeup[name], *MAKEUP_DECALS[name])
     for feature in ("eyeLeft", "eyeRight", "eyebrowLeft", "eyebrowRight"):
         for layer, tint in enumerate(FEATURE_TINTS[feature]):
-            decal(feature, decals[feature], tint, SPECULAR[feature][layer], layer)
+            decal(feature, decals[feature], tint, SPECULAR[feature][layer], layer, FEATURE_SHININESS[feature][layer])
     decal("lips", makeup["lips"], *MAKEUP_DECALS["lips"])
-    decal("mouth", decals["mouth"], "none", SPECULAR["mouth"][0], 0)
+    decal("mouth", decals["mouth"], "none", SPECULAR["mouth"][0], 0, FEATURE_SHININESS["mouth"][0])
     for name in ("linerLeft", "linerRight"):
         decal(name, makeup[name], *MAKEUP_DECALS[name])
     builder.add_skinned_mesh("body", parts, skin_index)
@@ -368,28 +379,32 @@ def item_glb(body_type, item_id, slot, name):
     parts = []
     used = []
 
-    def material(part_name, tint, kind, colour=(1.0, 1.0, 1.0), specular=None, extras=None):
+    def material(part_name, tint, kind, colour=(1.0, 1.0, 1.0), specular=None, extras=None, shininess=None):
         if kind not in used:
             used.append(kind)
-        return builder.add_material(part_name, tint, color=colour, texture_file=texture_file(kind), specular=specular, extras=extras)
+        return builder.add_material(part_name, tint, color=colour, texture_file=texture_file(kind), specular=specular, extras=extras,
+                                    shininess=shininess)
     if slot == "hair":
         locks, scalp, bands = hair.build_parts(body_type, name)
         if scalp.positions:
             # Under the hair the scalp shell is in its shade: darker, so a part or a hairline reads
             # as depth (the shared textures and the renderer have no occlusion of their own).
             shade = (0.88, 0.88, 0.88) if locks.positions else (1.0, 1.0, 1.0)
-            parts.append((scalp, material(name + "_scalp", "hair", "hair_cap", colour=shade, specular=HAIR_SPECULAR)))
+            parts.append((scalp, material(name + "_scalp", "hair", "hair_cap", colour=shade, specular=HAIR_SPECULAR,
+                                          shininess=HAIR_SHININESS)))
         if locks.positions:
             texture = hair.TEXTURE.get(name, "hair_clump")
-            parts.append((locks, material(name, "hair", texture, specular=HAIR_SPECULAR * (0.5 if texture != "hair_clump" else 1.0))))
+            parts.append((locks, material(name, "hair", texture, specular=HAIR_SPECULAR * (0.5 if texture != "hair_clump" else 1.0),
+                                          shininess=HAIR_SHININESS)))
         if bands.positions:
             # Hair ties: a darker band of the hair's own colour where it is gathered.
             parts.append((bands, material(name + "_tie", "hair", "hair_cap", colour=(0.42, 0.40, 0.40), specular=1.2)))
     elif slot == "ears":
         shell, folds = head.ear_meshes(body_type, EAR_SHAPE_OF[name])
         # The shell is in the shade of the rim and folds round it.
-        parts.append((shell, builder.add_material(name + "_shell", "skin", color=(0.93, 0.91, 0.91))))
-        parts.append((folds, builder.add_material(name, "skin")))
+        parts.append((shell, builder.add_material(name + "_shell", "skin", color=(0.93, 0.91, 0.91), specular=SKIN_SPECULAR,
+                                                  shininess=SKIN_SHININESS)))
+        parts.append((folds, builder.add_material(name, "skin", specular=SKIN_SPECULAR, shininess=SKIN_SHININESS)))
     else:
         built = {"top": garments.top, "bottom": garments.bottom, "shoes": garments.shoes, "glasses": accessories.glasses,
                  "hat": accessories.hat, "facialHair": accessories.facial_hair, "earrings": accessories.earrings,
@@ -400,7 +415,9 @@ def item_glb(body_type, item_id, slot, name):
             texture = "hair_clump" if kind == "strands" else kind
             specular = 2.5 if slot == "glasses" else 0.2 if kind.startswith("stubble") else \
                 HAIR_SPECULAR * 0.45 if slot == "facialHair" else 3.0 if tint == "jewelry" else CLOTH_SPECULAR.get(kind, 1.0)
-            parts.append((mesh, material("%s_%d" % (name, index), tint, texture, colour, specular, extras)))
+            shininess = GLASSES_SHININESS if slot == "glasses" else 10.0 if kind.startswith("stubble") else \
+                HAIR_SHININESS if slot == "facialHair" else METAL_SHININESS if tint == "jewelry" else CLOTH_SHININESS.get(kind)
+            parts.append((mesh, material("%s_%d" % (name, index), tint, texture, colour, specular, extras, shininess)))
     builder.add_skinned_mesh(name, parts, skin_index)
     return builder.build(), used
 
