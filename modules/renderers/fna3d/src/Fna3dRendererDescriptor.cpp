@@ -34,6 +34,16 @@ namespace CNA::Internal::Renderers::Fna3d
 
     namespace
     {
+        // GraphicsAdapter asks before an FNA3D device exists, so the selected runtime driver's
+        // native maximum cannot be queried yet. CNA exposes the portable XNA/FNA baseline shared
+        // by the OpenGL, D3D11 and SDL_GPU routes: powers of two through 4x. The live renderer
+        // applies the same ceiling and may still lower it if the chosen driver reports less.
+        int ClampMultiSampleCount(int /*surfaceFormat*/, int requestedMultiSampleCount)
+        {
+            if (requestedMultiSampleCount >= 4) return 4;
+            if (requestedMultiSampleCount >= 2) return 2;
+            return 0;
+        }
     }
 
     /**
@@ -53,6 +63,9 @@ namespace CNA::Internal::Renderers::Fna3d
             .glFramebuffer            = { .depthBits = 24, .stencilBits = 8, .doubleBuffered = true },
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
+            .adapterQueries           = {
+                .clampMultiSampleCount = &ClampMultiSampleCount,
+            },
         };
         return descriptor;
     }

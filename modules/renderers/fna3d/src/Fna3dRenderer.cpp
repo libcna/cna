@@ -53,6 +53,14 @@ namespace CNA::Internal::Renderers::Fna3d
                 default: return FNA3D_PRESENTINTERVAL_ONE;
             }
         }
+
+        /** XNA's ClosestMSAAPower, with CNA's portable FNA3D contract capped at 4x. */
+        int CanonicalMultiSampleCount(int requested)
+        {
+            if (requested >= 4) return 4;
+            if (requested >= 2) return 2;
+            return 0;
+        }
     }
 
     FNA3D_Device* Fna3dDeviceState::RequireDevice(const char* operation) const
@@ -169,12 +177,11 @@ namespace CNA::Internal::Renderers::Fna3d
         // game then never draws 3D with. CNA's GraphicsDevice frequently constructs the renderer
         // before GraphicsDeviceManager.ApplyChanges() has propagated a preference, so a None here
         // would permanently deny depth to every 3D game that sets the preference late.
-        // Depth24Stencil8 is the XNA HiDef default and what UpdatePresentationFormatEXT will
-        // narrow if the game genuinely asks for less.
+        // GraphicsDeviceManager's XNA default is Depth24. UpdatePresentationFormatEXT will widen
+        // it to Depth24Stencil8 if the game genuinely asks for a stencil plane.
         presentation_.depthStencilFormat =
-            args.depthStencilFormat == 0 ? FNA3D_DEPTHFORMAT_D24S8
+            args.depthStencilFormat == 0 ? FNA3D_DEPTHFORMAT_D24
                                          : ToFna3dDepthFormat(args.depthStencilFormat);
-        requestedDepthStencilFormat_ = args.depthStencilFormat;
         presentation_.presentationInterval = ToPresentInterval(args.swapInterval);
         presentation_.displayOrientation = FNA3D_DISPLAYORIENTATION_DEFAULT;
         presentation_.renderTargetUsage = FNA3D_RENDERTARGETUSAGE_DISCARDCONTENTS;
@@ -700,12 +707,13 @@ namespace CNA::Internal::Renderers::Fna3d
 
     int Fna3dRenderer::ClampMultiSampleCount(int requested, int format) const
     {
-        if (requested <= 1)
+        const int canonical = CanonicalMultiSampleCount(requested);
+        if (canonical == 0)
         {
             return 0;
         }
         const int deviceMax = FNA3D_GetMaxMultiSampleCount(
-            device_, static_cast<FNA3D_SurfaceFormat>(format), requested);
+            device_, static_cast<FNA3D_SurfaceFormat>(format), canonical);
         return deviceMax > 1 ? deviceMax : 0;
     }
 
@@ -728,8 +736,6 @@ namespace CNA::Internal::Renderers::Fna3d
         const FNA3D_SurfaceFormat newColor = ToFna3dSurfaceFormat(backBufferFormat);
         const FNA3D_DepthFormat newDepth = ToFna3dDepthFormat(depthStencilFormat);
         const uint8_t newFullScreen = isFullScreen ? 1 : 0;
-        requestedDepthStencilFormat_ = depthStencilFormat;
-
         if (newColor == presentation_.backBufferFormat &&
             newDepth == presentation_.depthStencilFormat &&
             newFullScreen == presentation_.isFullScreen)
@@ -748,18 +754,20 @@ namespace CNA::Internal::Renderers::Fna3d
         return static_cast<int>(FNA3D_GetBackbufferSurfaceFormat(device_));
     }
 
+    int Fna3dRenderer::GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const
+    {
+        return ClampMultiSampleCount(requestedMultiSampleCount,
+                                     static_cast<int>(presentation_.backBufferFormat));
+    }
+
     int Fna3dRenderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
     {
-        // GraphicsDevice::Reset asks this before it hands the request to
-        // UpdatePresentationFormatEXT. Answering a new request with the current format turned it
-        // into the current one, so a GraphicsDeviceManager preference (Depth24Stencil8 over the
-        // implicit Depth24) never reached FNA3D, and its SDL_GPU driver kept a back buffer with no
-        // stencil plane.
-        if (requestedFormat != requestedDepthStencilFormat_)
-        {
-            return requestedFormat;
-        }
-        return static_cast<int>(FNA3D_GetBackbufferDepthFormat(device_));
+        // FNA3D allocates the requested logical format. OpenGL may expose a wider window visual
+        // (for example D24S8 for a Depth24 request), but XNA's PresentationParameters report what
+        // the game requested, not incidental extra native bits. Returning the current native
+        // visual also used to swallow a new Reset request before UpdatePresentationFormatEXT saw
+        // it, so the identity answer is both the public contract and the correct reset ordering.
+        return requestedFormat;
     }
 
     int Fna3dRenderer::GetMultiSampleCount() const

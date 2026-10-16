@@ -1005,12 +1005,16 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
 
+        /** @brief Maps an MSAA request to the portable, live-driver-supported FNA3D count. */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override;
+
         /**
          * @brief Reports the depth/stencil format FNA3D creates for a request.
          *
-         * The request the back buffer was last made for is answered with what FNA3D reports it
-         * created (OpenGL's window may carry more than was asked for); any other request is about
-         * to reach UpdatePresentationFormatEXT, and FNA3D's ResetBackbuffer allocates exactly it.
+         * FNA3D allocates the requested logical format. A driver may expose incidental extra
+         * native bits (OpenGL commonly supplies D24S8 for a Depth24 visual), which are not part of
+         * XNA's public PresentationParameters contract.
          *
          * @param requestedFormat Requested `DepthFormat` ordinal.
          * @return The applied ordinal.
@@ -1682,7 +1686,6 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_Device* device_ = nullptr;
         FNA3D_PresentationParameters presentation_{};
         /// The `DepthFormat` ordinal the game last asked for; presentation_ may hold a substitute.
-        int requestedDepthStencilFormat_ = 0;
         PresentationLayout layout_{};
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
 

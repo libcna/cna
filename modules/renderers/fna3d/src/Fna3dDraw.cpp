@@ -46,7 +46,11 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             if (params.pbr)
                 return params.skinned ? StockEffectKind::SkinnedPbr : StockEffectKind::Pbr;
-            if (params.lightingEnabled && params.punctualKind != 0)
+            // XNA's stock SkinnedEffect binary has no COLOR0 variant. CNA's compiled punctual
+            // effect does, and with punctualKind == 0 its extra lamp contributes exactly zero, so
+            // it is also the native route for CNA's SkinnedEffect.VertexColorEnabled extension.
+            if (params.lightingEnabled &&
+                (params.punctualKind != 0 || (params.skinned && params.vertexColorEnabled)))
                 return StockEffectKind::Punctual;
             if (params.skinned)      return StockEffectKind::Skinned;
             if (params.envMapping)   return StockEffectKind::EnvironmentMap;

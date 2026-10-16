@@ -131,7 +131,7 @@ fixed from the descriptor's own request.
 |---|---|---|
 | `ThreeD` | true | Full `Draw*Primitives` routes |
 | `DepthStencilBuffer` / `StencilBuffer` | true | Backbuffer and per-target depth/stencil renderbuffers |
-| `MultiSampleAntiAlias` | device-dependent | Answered from `FNA3D_GetMaxMultiSampleCount` |
+| `MultiSampleAntiAlias` | portable 0/2/4x contract, then device-dependent | Adapter queries, back buffers and render targets share XNA's round-down rule capped at 4x; the live driver may lower it through `FNA3D_GetMaxMultiSampleCount` |
 | `MultipleRenderTargets` | true | `FNA3D_SetRenderTargets` takes the whole ordered set |
 | `AnisotropicFiltering` | true | `FNA3D_SamplerState::maxAnisotropy` |
 | `WireFrame` | true | `FNA3D_FILLMODE_WIREFRAME` |
