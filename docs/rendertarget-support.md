@@ -36,6 +36,16 @@ texture via `TextureCube::GetRenderer()` (shared with `RenderTargetCube`) and ca
 through virtual dispatch — both the plain cube-texture and render-target-cube renderers override it
 correctly.
 
+The later REMED-GFX-137 orientation audit found that binding alone was insufficient on EasyGL:
+GL rasterizes a rendered face bottom-up while an uploaded cube's first row is sampled as its top.
+The lookup direction is now mirrored only for a `RenderTargetCube` in every stock consumer:
+`EnvironmentMapEffect` and both independent PBR IBL cubes (irradiance and prefiltered specular).
+Source `ShaderEffect` exposes the same correction as an opt-in `uRtCubeFlipV` vector, parallel to
+the existing 2D `uRtFlipV` contract. The shared eight-check GPU witness covers both IBL terms, a
+rendered cube in a source shader, and switching that shader back to an uploaded cube; it passes on
+OPENGLES3 and OPENGL33, and a specular-only mutation fails exactly its two checks. Public readback
+remains top-down and unchanged.
+
 ## 3. Depth buffer functionality (Task 335)
 
 Task 331's property test only proved `getDepthStencilFormatProperty()` round-trips the constructor
@@ -135,7 +145,7 @@ FNA's own delegate-to-native-driver behavior (§7), not a divergence.
 |---|---|
 | `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ |
 | `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ |
-| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ |
+| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`, PBR IBL, opt-in source `ShaderEffect`) | ✅ |
 | Depth buffer functionality (does depth testing work inside an RT) | ✅ |
 | Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) |
 | Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) |

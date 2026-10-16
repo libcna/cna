@@ -42,13 +42,16 @@
 /// down. `flip` is 1 for such a cube; the direction is then mirrored across the plane that turns each face's rows over
 /// (y for the four side faces, z for +Y/-Y), which selects the texel the Direct3D orientation would have read.
 /// Same idea as cnaSampleUV for 2D render targets.
-#define CNA_GL_CUBE_SAMPLE_DECL \
-"uniform float uEnvCubeFlip;\n" \
+#define CNA_GL_CUBE_DIR_DECL \
 "vec3 cnaCubeDir(vec3 d,float flip){\n" \
 "    if(flip<0.5)return d;\n" \
 "    vec3 a=abs(d);\n" \
 "    return (a.y>=a.x&&a.y>=a.z)?vec3(d.x,d.y,-d.z):vec3(d.x,-d.y,d.z);\n" \
 "}\n"
+
+#define CNA_GL_CUBE_SAMPLE_DECL \
+"uniform float uEnvCubeFlip;\n" \
+CNA_GL_CUBE_DIR_DECL
 
 /// Units 4-6, declared only by the shaders that reach that far (PbrEffect).
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
@@ -311,11 +314,14 @@ namespace CNA::Internal::Renderers::GlStockShaders
     // metals get no diffuse at all.
     [[nodiscard]] inline std::string CnaGlIblDecl()
     {
-        const char* const prefilteredSample = "textureLod(uIblSpecular,R,lod)";
+        const char* const prefilteredSample =
+            "textureLod(uIblSpecular,cnaCubeDir(R,uIblCubeFlip.y),lod)";
         return std::string(
+    CNA_GL_CUBE_DIR_DECL
     "uniform samplerCube uIblIrradiance;\n"
     "uniform samplerCube uIblSpecular;\n"
     "uniform sampler2D uIblBrdfLut;\n"
+    "uniform vec2 uIblCubeFlip;\n"
     "uniform float uIblEnabled;\n"
     "uniform float uIblMipCount;\n"
     "uniform float uIblIntensity;\n"
@@ -324,7 +330,7 @@ namespace CNA::Internal::Renderers::GlStockShaders
     "    float NdotV=clamp(dot(N,V),1e-4,1.0);\n"
     "    vec3 kS=F0+(max(vec3(1.0-roughness),F0)-F0)*pow(1.0-NdotV,5.0);\n"
     "    vec3 kD=(1.0-kS)*(1.0-metallic);\n"
-    "    vec3 diffuse=texture(uIblIrradiance,N).rgb*albedo*kD;\n"
+    "    vec3 diffuse=texture(uIblIrradiance,cnaCubeDir(N,uIblCubeFlip.x)).rgb*albedo*kD;\n"
     "    vec3 R=reflect(-V,N);\n"
     "    float lod=roughness*max(uIblMipCount-1.0,0.0);\n"
     "    vec3 prefiltered=") + prefilteredSample + std::string(".rgb;\n"
