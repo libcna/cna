@@ -156,41 +156,76 @@ float headWeight(const AvatarVertex& vertex)
     return weight;
 }
 
-// The displacement face controls give an authored point (summed over every deformer, each from
-// the undeformed position).
-Vector3 faceDisplacement(const Vector3& position,const std::vector<FaceControl>& controls,
+// A face description's deformers, with what depends only on the description worked out once: the
+// scale factors, the move and the rotation for its control's value. Applied in catalog order, so the
+// sum is exactly the same as evaluating each control afresh at every point.
+struct ActiveDeformer {
+    const FaceDeformer* deformer;
+    Vector3 factor;    // Scale: amount^t - 1
+    float t;           // Move: the control's value
+    float cosine,sine; // Rotate
+};
+
+std::vector<ActiveDeformer> activeDeformers(const std::vector<FaceControl>& controls,
     const std::array<std::uint8_t,FaceParameterCount>& face,Scope scope)
 {
-    Vector3 displacement=Vector3::Zero;
+    std::vector<ActiveDeformer> out;
     for(const auto& control:controls) {
         const float t=std::clamp((static_cast<float>(face[static_cast<std::size_t>(control.parameter)])-128.0f)/127.0f,-1.0f,1.0f);
         if(t==0.0f||(!control.wholeHead&&scope!=Scope::Face))continue;
         for(const auto& deformer:control.deformers) {
-            const Vector3 q=position-deformer.centre;
-            const Vector3 n(q.X/deformer.radii.X,q.Y/deformer.radii.Y,q.Z/deformer.radii.Z);
-            const float x=std::clamp((n.Length()-deformer.inner)/(1.0f-deformer.inner),0.0f,1.0f);
-            const float w=1.0f-x*x*(3.0f-2.0f*x);
-            if(w<=0.0f)continue;
-            switch(deformer.kind) {
-            case FaceDeformer::Kind::Scale:
-                displacement+=Vector3(q.X*(std::pow(deformer.amount.X,t)-1.0f),q.Y*(std::pow(deformer.amount.Y,t)-1.0f),
-                                      q.Z*(std::pow(deformer.amount.Z,t)-1.0f))*w;
-                break;
-            case FaceDeformer::Kind::Move:
-                displacement+=deformer.amount*(t*w);
-                break;
-            case FaceDeformer::Kind::Rotate: {
+            ActiveDeformer active{&deformer,Vector3::Zero,t,1.0f,0.0f};
+            if(deformer.kind==FaceDeformer::Kind::Scale)
+                active.factor=Vector3(std::pow(deformer.amount.X,t)-1.0f,std::pow(deformer.amount.Y,t)-1.0f,std::pow(deformer.amount.Z,t)-1.0f);
+            else if(deformer.kind==FaceDeformer::Kind::Rotate) {
                 const float angle=deformer.degrees*t*3.14159265f/180.0f;
-                const Vector3& axis=deformer.amount;
-                const Vector3 rotated=q*std::cos(angle)+Vector3::Cross(axis,q)*std::sin(angle)+
-                    axis*(Vector3::Dot(q,axis)*(1.0f-std::cos(angle)));
-                displacement+=(rotated-q)*w;
-                break;
+                active.cosine=std::cos(angle);
+                active.sine=std::sin(angle);
             }
-            }
+            out.push_back(active);
+        }
+    }
+    return out;
+}
+
+// The displacement face controls give an authored point (summed over every deformer, each from
+// the undeformed position).
+Vector3 faceDisplacement(const Vector3& position,const std::vector<ActiveDeformer>& deformers)
+{
+    Vector3 displacement=Vector3::Zero;
+    for(const auto& active:deformers) {
+        const auto& deformer=*active.deformer;
+        // Outside the ellipsoid's box the weight is 0: most points are outside most deformers.
+        const float qx=position.X-deformer.centre.X,qy=position.Y-deformer.centre.Y,qz=position.Z-deformer.centre.Z;
+        if(std::fabs(qx)>=deformer.radii.X||std::fabs(qy)>=deformer.radii.Y||std::fabs(qz)>=deformer.radii.Z)continue;
+        const float nx=qx/deformer.radii.X,ny=qy/deformer.radii.Y,nz=qz/deformer.radii.Z;
+        const float x=std::clamp((std::sqrt((nx*nx)+(ny*ny)+(nz*nz))-deformer.inner)/(1.0f-deformer.inner),0.0f,1.0f);
+        const float w=1.0f-x*x*(3.0f-2.0f*x);
+        if(w<=0.0f)continue;
+        const Vector3 q(qx,qy,qz);
+        switch(deformer.kind) {
+        case FaceDeformer::Kind::Scale:
+            displacement+=Vector3(q.X*active.factor.X,q.Y*active.factor.Y,q.Z*active.factor.Z)*w;
+            break;
+        case FaceDeformer::Kind::Move:
+            displacement+=deformer.amount*(active.t*w);
+            break;
+        case FaceDeformer::Kind::Rotate: {
+            const Vector3& axis=deformer.amount;
+            const Vector3 rotated=q*active.cosine+Vector3::Cross(axis,q)*active.sine+
+                axis*(Vector3::Dot(q,axis)*(1.0f-active.cosine));
+            displacement+=(rotated-q)*w;
+            break;
+        }
         }
     }
     return displacement;
+}
+
+Vector3 faceDisplacement(const Vector3& position,const std::vector<FaceControl>& controls,
+    const std::array<std::uint8_t,FaceParameterCount>& face,Scope scope)
+{
+    return faceDisplacement(position,activeDeformers(controls,face,scope));
 }
 
 // The face shape (catalog faceControls), applied in proportion to each vertex's Head weight.
@@ -198,9 +233,11 @@ void applyFaceControls(std::vector<AvatarVertex>& vertices,const std::vector<Fac
     const std::array<std::uint8_t,FaceParameterCount>& face,Scope scope)
 {
     if(scope==Scope::None)return;
+    const auto deformers=activeDeformers(controls,face,scope);
+    if(deformers.empty())return;
     for(auto& vertex:vertices) {
         const float weight=headWeight(vertex);
-        if(weight>0.0f)vertex.position+=faceDisplacement(vertex.position,controls,face,scope)*weight;
+        if(weight>0.0f)vertex.position+=faceDisplacement(vertex.position,deformers)*weight;
     }
 }
 
