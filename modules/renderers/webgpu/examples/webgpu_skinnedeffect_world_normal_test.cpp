@@ -44,6 +44,7 @@
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
+#include "common/SkinnedVertexDeclarations.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -59,6 +60,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <cmath>
@@ -150,7 +152,7 @@ class WebGpuSkinnedEffectWorldNormalTest : public Game
             mk( kQuad, -kQuad, 1.0f, 1.0f), mk(-kQuad,  kQuad, 0.0f, 0.0f),
             mk( kQuad, -kQuad, 1.0f, 1.0f), mk( kQuad,  kQuad, 1.0f, 0.0f),
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), 6, BufferUsage::None);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);

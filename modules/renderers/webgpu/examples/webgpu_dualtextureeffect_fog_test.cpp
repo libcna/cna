@@ -6,6 +6,7 @@
 // FogStart==FogEnd (keep=0) collapses to FogColor -- the discriminator that fails if the WGSL fog
 // blend or the fog uniforms are removed.
 
+#include "common/DualTextureUserDraw.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -118,8 +119,8 @@ class WebGpuDualTextureEffectFogTest final : public Game
                 {Vector3(1, -1, 0), Vector2(1, 1)}, {Vector3(-1, 1, 0), Vector2(0, 0)},
                 {Vector3(1, -1, 0), Vector2(1, 1)}, {Vector3(1, 1, 0), Vector2(1, 0)},
             };
-            VertexBuffer vb(device, VertexPositionTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
-            vb.SetData(v, 0, 6);
+            VertexBuffer vb(device, CNA::Examples::DualTextureUserDeclaration(), 6, BufferUsage::None);
+            vb.SetData(CNA::Examples::ToDualTextureUserVertices(v, 0, 6).data(), 0, 6);
             device.SetVertexBuffer(&vb);
             device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             device.SetVertexBuffer(nullptr);
@@ -132,8 +133,9 @@ class WebGpuDualTextureEffectFogTest final : public Game
                 {Vector3(1, -1, 0), w, Vector2(1, 1)}, {Vector3(-1, 1, 0), w, Vector2(0, 0)},
                 {Vector3(1, -1, 0), w, Vector2(1, 1)}, {Vector3(1, 1, 0), w, Vector2(1, 0)},
             };
-            VertexBuffer vb(device, VertexPositionColorTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
-            vb.SetData(v, 0, 6);
+            VertexBuffer vb(device, CNA::Examples::DualTextureColorUserDeclaration(), 6,
+                            BufferUsage::None);
+            vb.SetData(CNA::Examples::ToDualTextureColorUserVertices(v, 0, 6).data(), 0, 6);
             device.SetVertexBuffer(&vb);
             device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             device.SetVertexBuffer(nullptr);

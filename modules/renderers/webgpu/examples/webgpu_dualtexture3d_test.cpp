@@ -22,6 +22,7 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
+#include "common/DualTextureUserDraw.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -72,17 +73,12 @@ namespace
         return pixel;
     }
 
-    VertexDeclaration PosTexDecl()
-    {
-        return VertexDeclaration(20, {
-            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
-        });
-    }
 
+    // DualTextureEffect reads TEXCOORD1, which GraphicsDevice requires the declaration to name, so
+    // each record carries its coordinate set twice (DualTextureUserDraw.hpp).
     VertexBuffer MakePosTexQuad(GraphicsDevice& dev)
     {
-        VertexBuffer vb(dev, PosTexDecl(), 6, BufferUsage::None);
+        VertexBuffer vb(dev, CNA::Examples::DualTextureUserDeclaration(), 6, BufferUsage::None);
         const VertexPositionTexture verts[6] = {
             { Vector3(-1.0f,  1.0f, 0.5f), Vector2(0.0f, 0.0f) },
             { Vector3(-1.0f, -1.0f, 0.5f), Vector2(0.0f, 1.0f) },
@@ -91,18 +87,10 @@ namespace
             { Vector3( 1.0f, -1.0f, 0.5f), Vector2(1.0f, 1.0f) },
             { Vector3( 1.0f,  1.0f, 0.5f), Vector2(1.0f, 0.0f) },
         };
-        vb.SetData(verts, 0, 6);
+        vb.SetData(CNA::Examples::ToDualTextureUserVertices(verts, 0, 6).data(), 0, 6);
         return vb;
     }
 
-    VertexDeclaration PosColorTexDecl()
-    {
-        return VertexDeclaration(24, {
-            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-            VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color,    0),
-            VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
-        });
-    }
 }
 
 class WebGpuDualTexture3DTest : public Game
@@ -174,7 +162,8 @@ protected:
         // Check C: stride 24, VertexColorEnabled=true, white*white*green tint -> green.
         {
             dev.Clear(Color::Black);
-            VertexBuffer vb(dev, PosColorTexDecl(), 6, BufferUsage::None);
+            VertexBuffer vb(dev, CNA::Examples::DualTextureColorUserDeclaration(), 6,
+                            BufferUsage::None);
             const VertexPositionColorTexture verts[6] = {
                 { Vector3(-1.0f,  1.0f, 0.5f), Color::Green, Vector2(0.0f, 0.0f) },
                 { Vector3(-1.0f, -1.0f, 0.5f), Color::Green, Vector2(0.0f, 1.0f) },
@@ -183,7 +172,7 @@ protected:
                 { Vector3( 1.0f, -1.0f, 0.5f), Color::Green, Vector2(1.0f, 1.0f) },
                 { Vector3( 1.0f,  1.0f, 0.5f), Color::Green, Vector2(1.0f, 0.0f) },
             };
-            vb.SetData(verts, 0, 6);
+            vb.SetData(CNA::Examples::ToDualTextureColorUserVertices(verts, 0, 6).data(), 0, 6);
             DualTextureEffect fx(dev);
             fx.setTextureProperty(&white_);
             fx.setTexture2Property(&white_);
@@ -193,20 +182,20 @@ protected:
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             dev.SetVertexBuffer(nullptr);
             check(colorNear(readCenter(dev), Color::Lime),
-                  "stride-24 vertex colour tint (green) survives dual-texture sampling");
+                  "the vertex colour tint (green) survives dual-texture sampling");
         }
 
         // Check D: DrawIndexedPrimitives counterpart of Check B.
         {
             dev.Clear(Color::Black);
-            VertexBuffer vb(dev, PosTexDecl(), 4, BufferUsage::None);
+            VertexBuffer vb(dev, CNA::Examples::DualTextureUserDeclaration(), 4, BufferUsage::None);
             const VertexPositionTexture verts[4] = {
                 { Vector3(-1.0f,  1.0f, 0.5f), Vector2(0.0f, 0.0f) },
                 { Vector3( 1.0f,  1.0f, 0.5f), Vector2(1.0f, 0.0f) },
                 { Vector3(-1.0f, -1.0f, 0.5f), Vector2(0.0f, 1.0f) },
                 { Vector3( 1.0f, -1.0f, 0.5f), Vector2(1.0f, 1.0f) },
             };
-            vb.SetData(verts, 0, 4);
+            vb.SetData(CNA::Examples::ToDualTextureUserVertices(verts, 0, 4).data(), 0, 4);
             IndexBuffer ib(dev, IndexElementSize::SixteenBits, 6, BufferUsage::None);
             const std::uint16_t indices[6] = { 0, 1, 2, 1, 3, 2 };
             ib.SetData(indices, 0, 6);

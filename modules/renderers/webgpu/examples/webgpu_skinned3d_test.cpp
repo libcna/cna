@@ -47,6 +47,7 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
+#include "common/SkinnedVertexDeclarations.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -64,6 +65,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <cstdint>
@@ -137,7 +139,7 @@ namespace
         const SkinnedGpuVertex tr{ xMax,  1, 0.5f,  0,0,-1,  1,0,  1,0,0,0,  0,0,0,0 };
         const std::vector<SkinnedGpuVertex> verts = { tl, bl, br, tl, br, tr };
 
-        VertexBuffer vb(dev, static_cast<int>(verts.size()));
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), static_cast<int>(verts.size()), BufferUsage::None);
         vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedGpuVertex)));
         return vb;
     }
@@ -153,7 +155,7 @@ namespace
         const SkinnedGpuVertex tr{ xMax,  1, 0.5f,  0,0,-1,  1,0,  1,1,0,0,  0,1,0,0 };
         const std::vector<SkinnedGpuVertex> verts = { tl, bl, br, tl, br, tr };
 
-        VertexBuffer vb(dev, static_cast<int>(verts.size()));
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), static_cast<int>(verts.size()), BufferUsage::None);
         vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedGpuVertex)));
         return vb;
     }
@@ -343,7 +345,7 @@ protected:
             AppendColorQuad(verts, -1.0f, -0.5f, 0, 0, 0, 255);  // quad A (left)
             AppendColorQuad(verts, 0.5f, 1.0f, 0, 0, 0, 255);    // quad B (right)
 
-            VertexBuffer vb(dev, static_cast<int>(verts.size()));
+            VertexBuffer vb(dev, CNA::Examples::SkinnedColorVertexDeclaration(), static_cast<int>(verts.size()), BufferUsage::None);
             vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedColorGpuVertex)));
             dev.SetVertexBuffer(&vb);
 
@@ -378,7 +380,7 @@ protected:
                 const SkinnedGpuVertex br{  1, -1, 0,  0,0,1,  1,1,  1,0,0,0,  0,0,0,0 };
                 const SkinnedGpuVertex tr{  1,  1, 0,  0,0,1,  1,0,  1,0,0,0,  0,0,0,0 };
                 const std::vector<SkinnedGpuVertex> verts = { tl, bl, br, tl, br, tr };
-                VertexBuffer vb(dev, static_cast<int>(verts.size()));
+                VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), static_cast<int>(verts.size()), BufferUsage::None);
                 vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedGpuVertex)));
 
                 SkinnedEffect fx(dev);

@@ -12,6 +12,7 @@
 // position (still z=0 -> keep=0.5) could never produce. The alpha<1 check proves the FNA
 // FogColor*outputAlpha premultiply.
 
+#include "common/SkinnedVertexDeclarations.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -32,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <algorithm>
@@ -125,7 +127,7 @@ class WebGpuSkinnedEffectFogTest final : public Game
                 { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3}, {-1, 1, 0, 0,0,-1, 0,0, w0,w1,w2,w3, 0,1,2,3},
                 { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3}, { 1, 1, 0, 0,0,-1, 1,0, w0,w1,w2,w3, 0,1,2,3},
             };
-            VertexBuffer vb(dev, 6);
+            VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), 6, BufferUsage::None);
             vb.SetDataRaw(q, 6, static_cast<int>(sizeof(SkinnedVertex)));
             return vb;
         }
@@ -135,7 +137,7 @@ class WebGpuSkinnedEffectFogTest final : public Game
             { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3, c,c,c,c}, {-1, 1, 0, 0,0,-1, 0,0, w0,w1,w2,w3, 0,1,2,3, c,c,c,c},
             { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3, c,c,c,c}, { 1, 1, 0, 0,0,-1, 1,0, w0,w1,w2,w3, 0,1,2,3, c,c,c,c},
         };
-        VertexBuffer vb(dev, 6);
+        VertexBuffer vb(dev, CNA::Examples::SkinnedColorVertexDeclaration(), 6, BufferUsage::None);
         vb.SetDataRaw(q, 6, static_cast<int>(sizeof(SkinnedColorVertex)));
         return vb;
     }

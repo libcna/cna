@@ -4,8 +4,9 @@
 // DualTextureEffect reads TEXCOORD0 and TEXCOORD1, and XNA's GraphicsDevice refuses a draw whose
 // declaration lacks one ("TextureCoordinate1 is missing"), DrawUserPrimitives included. XNA has no
 // built-in vertex type with two coordinate sets, so these draw single-UV VertexPositionTexture and
-// VertexPositionColorTexture geometry through a declaration whose second set repeats the first --
-// what the example programs that use them always fed the effect.
+// VertexPositionColorTexture geometry -- or build vertex buffers of it -- through a declaration whose
+// second set repeats the first, which is what the example programs that use them always fed the
+// effect.
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -92,6 +93,7 @@ namespace CNA::Examples
                                   DualTextureUserDeclaration());
     }
 
+
     /** @brief Position, Color, TextureCoordinate0 and an equal TextureCoordinate1: 32 bytes. */
     struct DualTextureColorUserVertex
     {
@@ -100,6 +102,47 @@ namespace CNA::Examples
         float u0, v0;
         float u1, v1;
     };
+
+    /**
+     * @brief The declaration of DualTextureColorUserVertex.
+     *
+     * @return Position at 0, Color0 at 12, TextureCoordinate0 at 16, TextureCoordinate1 at 24,
+     *         stride 32.
+     */
+    inline Microsoft::Xna::Framework::Graphics::VertexDeclaration DualTextureColorUserDeclaration()
+    {
+        using namespace Microsoft::Xna::Framework::Graphics;
+        return VertexDeclaration(32, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+    }
+
+    /**
+     * @brief Copies @p count coloured vertices from @p offset, each with its coordinate set repeated.
+     *
+     * @param vertices Source geometry.
+     * @param offset First vertex copied.
+     * @param count Number of vertices copied.
+     * @return The dual-coordinate records.
+     */
+    inline std::vector<DualTextureColorUserVertex> ToDualTextureColorUserVertices(
+        const Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture* vertices, int offset,
+        int count)
+    {
+        std::vector<DualTextureColorUserVertex> out(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& v = vertices[offset + i];
+            const auto uv = v.TextureCoordinate;
+            out[static_cast<std::size_t>(i)] = {v.Position.X, v.Position.Y, v.Position.Z,
+                                                v.Color.getPackedValueProperty(),
+                                                uv.X, uv.Y, uv.X, uv.Y};
+        }
+        return out;
+    }
 
     /**
      * @brief DrawUserPrimitives for a vertex-coloured DualTextureEffect over
@@ -122,22 +165,9 @@ namespace CNA::Examples
         if (type == PrimitiveType::TriangleStrip) vertexCount = primitiveCount + 2;
         else if (type == PrimitiveType::LineList) vertexCount = primitiveCount * 2;
         else if (type == PrimitiveType::LineStrip) vertexCount = primitiveCount + 1;
-        std::vector<DualTextureColorUserVertex> records(static_cast<std::size_t>(vertexCount));
-        for (int i = 0; i < vertexCount; ++i)
-        {
-            const auto& v = vertices[vertexOffset + i];
-            const auto uv = v.TextureCoordinate;
-            records[static_cast<std::size_t>(i)] = {v.Position.X, v.Position.Y, v.Position.Z,
-                                                    v.Color.getPackedValueProperty(),
-                                                    uv.X, uv.Y, uv.X, uv.Y};
-        }
-        const VertexDeclaration declaration(32, {
-            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
-            VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
-            VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
-        });
-        device.DrawUserPrimitives(type, records.data(), 0, primitiveCount, declaration);
+        const auto records = ToDualTextureColorUserVertices(vertices, vertexOffset, vertexCount);
+        device.DrawUserPrimitives(type, records.data(), 0, primitiveCount,
+                                  DualTextureColorUserDeclaration());
     }
 
     /**

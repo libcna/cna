@@ -34,6 +34,7 @@
 // upload or consume GpuDrawParams::fogVector, an existing renderer capability gap recorded before
 // GFX-090. This test changes and verifies only the reachable material path.
 
+#include "common/SkinnedVertexDeclarations.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -52,6 +53,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <cmath>
@@ -237,17 +239,15 @@ class WebGpuSkinnedEffectMaterialTest : public Game
         {
             std::vector<SkinnedColorGpuVertex> vertices;
             AppendColorQuad(vertices, xMin, xMax, vertexColor);
-            VertexBuffer vb(dev, static_cast<int>(vertices.size()));
-            vb.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()),
-                          static_cast<int>(sizeof(SkinnedColorGpuVertex)));
+            VertexBuffer vb(dev, CNA::Examples::SkinnedColorVertexDeclaration(), static_cast<int>(vertices.size()), BufferUsage::None);
+            vb.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()), static_cast<int>(sizeof(SkinnedColorGpuVertex)));
             return vb;
         }
 
         std::vector<SkinnedGpuVertex> vertices;
         AppendPlainQuad(vertices, xMin, xMax);
-        VertexBuffer vb(dev, static_cast<int>(vertices.size()));
-        vb.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()),
-                      static_cast<int>(sizeof(SkinnedGpuVertex)));
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), static_cast<int>(vertices.size()), BufferUsage::None);
+        vb.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()), static_cast<int>(sizeof(SkinnedGpuVertex)));
         return vb;
     }
 
@@ -330,9 +330,8 @@ class WebGpuSkinnedEffectMaterialTest : public Game
         AppendPlainQuad(vertices, -1.0f, -1.0f / 3.0f);
         AppendPlainQuad(vertices, -1.0f / 3.0f, 1.0f / 3.0f);
         AppendPlainQuad(vertices, 1.0f / 3.0f, 1.0f);
-        VertexBuffer vb(dev, static_cast<int>(vertices.size()));
-        vb.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()),
-                      static_cast<int>(sizeof(SkinnedGpuVertex)));
+        VertexBuffer vb(dev, CNA::Examples::SkinnedVertexDeclaration(), static_cast<int>(vertices.size()), BufferUsage::None);
+        vb.SetDataRaw(vertices.data(), static_cast<int>(vertices.size()), static_cast<int>(sizeof(SkinnedGpuVertex)));
 
         dev.SetRenderTarget(target_.get());
         dev.Clear(Color(0, 0, 0, 0));
