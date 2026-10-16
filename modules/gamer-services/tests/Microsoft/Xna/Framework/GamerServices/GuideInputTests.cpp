@@ -6,6 +6,7 @@
 #include "../../../../../../platform/tests/CNA/Platform/PlatformTestDecorator.hpp"
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
+#include "CNA/Internal/GamerServices/DispatcherGraphics.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
@@ -58,6 +59,13 @@ public:
     [[nodiscard]] CNA::Platform::IPlatformTextInput* GetTextInput() override { return &text; }
 };
 
+// The Guide's avatar portraits draw on the gamer-services device, which a game provides through the
+// dispatcher; whether one is ready to draw within a test depends on what earlier tests loaded.
+struct DispatcherDevice {
+    explicit DispatcherDevice(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) { Service::setDispatcherGraphicsDeviceForTesting(&device); }
+    ~DispatcherDevice() { Service::setDispatcherGraphicsDeviceForTesting(nullptr); }
+};
+
 class GuideInputTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -97,6 +105,7 @@ TEST_F(GuideInputTest, AKeyboardDrivesTheGuideFrame) {
     Devices devices;
     CNA::Platform::Testing::ScopedCurrentPlatform scope(devices);
     Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+    DispatcherDevice dispatcherDevice(device);
     auto frame = [&](std::vector<KeyCode> keys) {
         devices.keyboard.snapshot.pressedKeys = std::move(keys);
         Ui::draw(device);
@@ -134,6 +143,7 @@ TEST_F(GuideInputTest, AControllerDrivesTheGuideFrame) {
     Devices devices;
     CNA::Platform::Testing::ScopedCurrentPlatform scope(devices);
     Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+    DispatcherDevice dispatcherDevice(device);
     using Microsoft::Xna::Framework::Input::Buttons;
     auto frame = [&](std::uint32_t buttons) {
         CNA::Platform::GamepadSnapshot snapshot;
@@ -168,6 +178,7 @@ TEST_F(GuideInputTest, TheSignInPickerTurnsTextInputOnWhileItIsUp) {
     Devices devices;
     CNA::Platform::Testing::ScopedCurrentPlatform scope(devices);
     Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+    DispatcherDevice dispatcherDevice(device);
     // A game window, as text input needs one.
     TextInputEXT::setWindowHandleProperty(1);
     TextInputEXT::INTERNAL_setWindowId(1);
