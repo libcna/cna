@@ -128,7 +128,7 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
 
 ### 5.1 Defects
 
-7. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
+1. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
     The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
     of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites, measured on Linux through
     the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan), `WEBGPU`, `SOFTWARE`, `FNA3D`
@@ -156,54 +156,19 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
       them. A capability boundary, reported as such.
 
-14. **The MinGW-w64 cross-build compiles and runs every test binary** (2026-10-15; before, the
-    POSIX `setenv`/`unsetenv`/`getpid` calls in the GamerServices and content-pipeline tests stopped
-    `CnaTests.exe` compiling). Those calls go through `System::Environment`, the fork-based child
-    tests include their POSIX headers only on POSIX, the net harness polls stdin with `_kbhit` on
-    Windows, `libcurl-x64.dll` is copied next to the executables at configure time, and the two
-    helper programs the tests copy elsewhere (`cna_fake_effect_compiler`, `cna_argv_echo`) link
-    libstdc++ statically. First Windows runs under Wine: `CnaGamerServicesTests.exe` 623 pass,
-    `CnaContentPipelineTests.exe` 434 pass, no failures; the tests that need a Python interpreter
-    (XMA stub encoders, the large-model generator, `compare.py`) skip where none can be started.
-    Two Windows defects came out of it: the compiler's writer registries were `std::map` keyed by
-    `std::type_index`, whose libstdc++ ordering mixes pointer and name order for translation-unit
-    local types on MinGW and is not a strict weak ordering (a user writer registered in an anonymous
-    namespace was "not registered"; now hashed, as is the vertex type registry), and `BuildContent`
-    keyed an asset by the project's spelling where the case-folding filesystem said it existed, so
-    the build keyed by the name on disk produced nothing (the real spelling is now read from the
-    directory on Windows). The remaining Windows-only skips: `/dev/full`, a renderer without 3D,
-    aging a directory through `utime`, symbolic links, and the ordering guard for tests that need
-    an uninitialized `GamerServicesDispatcher`.
-
-15. **`DIRECTX9` under Wine+DXVK: one teardown flake and one content gtest failure remain**
-    (re-measured 2026-10-15). The `DIRECTX9` ctest suite passes 58/58 and `CnaGraphicsTests.exe`
-    passes every test (2,660, measured as eight `GTEST_TOTAL_SHARDS` shards because one 2,956-test
-    Wine process dies or hangs at a varying point). The flake is `DirectX9_CompiledEffects`, which
-    about every other run hangs at the end of its first test inside DXVK 2.6.0's
-    `IDirect3DDevice9::Release` (measured 2026-10-15 with teardown markers: every other renderer
-    object -- shaders, caches, the depth surface, the MojoShader context -- is already released, the
-    final device release is the call that never returns, the window is still alive, and every other
-    thread of the hung process is DXVK's, Mesa's disk cache, Wine's or googletest's watcher). A
-    standalone D3D9 program with the same object order (240 create/compile/draw/release cycles under
-    the same Wine, DXVK and private display) never hangs, so the trigger is this process's timing
-    rather than anything CNA asks of the API; a rerun passes. `CnaContentTests.exe`: 1,706 pass, no failures; its two `GltfPerformance` budgets (50 ms a
-    parse, 50 ms a load/unload cycle) hold on an idle machine and miss under a concurrent build. Fixed on the way to green, all
-    under Wine: static vertex/index buffers live in `D3DPOOL_MANAGED` so the
-    resize `Reset` at the first `Present` keeps them and reports the dynamic buffers it empties as
-    content-lost (`DirectX9_BufferResetSurvival`, the `Backbuffer_PassOrder` root cause);
-    `OcclusionQuery.IsComplete` polls with `D3DGETDATA_FLUSH`; `Clear` saturates a float colour
-    before packing it (4.0 wrapped to 252); a depth-less target disables the depth and stencil
-    tests while it is bound; `DrawInstancedPrimitives` without an instance stream repeats the draw;
-    a stock effect over a declaration missing its inputs throws XNA's `InvalidOperationException`
-    (`DualTextureEffect` without `TextureCoordinate1` included, which the glTF stride conformance
-    accepts as the named refusal);
-    compiled effects take their reflection from MojoShader's bytecode profile (the HLSL re-emitter
-    has no `TEXCRD`) and read only the sampler slots the device exposes; the adapter's render-target
-    format query agrees with the renderer, which builds Color targets only (float and classic
-    numeric targets are its declared boundary, like FNA3D's); `SetContextRecoveryEnabled` is a
-    no-op because managed textures need no recovery registry; `MaxMipLevel`, whole-target `Clear`,
-    the device texture slot after `Apply()`, HiDef in back-buffer-reading examples and
-    `DirectX9_FrameRecovery`'s window were fixed earlier in the same pass.
+2. **`DIRECTX9` under Wine + DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or dies in DXVK's device
+   teardown** (re-measured 2026-10-16, `cmake-build-mingw`, Release, `CNA_DIRECTX9_COMPILED_EFFECTS=ON`).
+   Through ctest 6 of 10 runs time out (300 s) inside the suite's first test,
+   `CapabilityAndPublicRuntimeContract`; run directly, 3 of 9 runs failed -- one hang, one
+   `std::system_error` "Thread not joinable" (a string of DXVK's own thread wrapper, in
+   `/usr/lib/dxvk/wine64/d3d9.dll.so`) and one silent exit. On 2026-10-15 teardown markers showed
+   every renderer object released and the final `IDirect3DDevice9::Release` never returning, and a
+   standalone D3D9 program with the same object order (240 create/compile/draw/release cycles under
+   the same Wine, DXVK and private display) never hung, so the trigger is this process's timing
+   rather than anything CNA asks of the API; a rerun passes. The rest of the `DIRECTX9` suite passes
+   (two runs: 60/60, and 59/60 with this test the failure). `CnaGraphicsTests.exe` is run as eight
+   `GTEST_TOTAL_SHARDS` shards because one 2,956-test Wine process dies or hangs at a varying point;
+   every shard passed on 2026-10-15.
 
 ### 5.2 Limitations
 
@@ -220,7 +185,10 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
 - `DIRECTX9` is validated under Wine (+DXVK) only, and `SDL_GPU`'s Direct3D 12 backend under Wine
   (+vkd3d-proton) only; real-Windows hardware validation is not current. The C API's pure-C suites
   run under Wine from the MinGW-w64 build; `MediaLibrarySmoke` reports a skip on Windows, whose
-  known folders cannot be pointed at its fixture.
+  known folders cannot be pointed at its fixture. The MinGW-w64 test binaries also skip on
+  Windows what it cannot provide: a Python interpreter where none can be started, `/dev/full`,
+  aging a directory through `utime`, symbolic links, a renderer without 3D, and the ordering guard
+  for tests that need an uninitialized `GamerServicesDispatcher`.
 - **`SDL_GPU` is the default renderer on Windows, macOS and iOS but is not qualified there** since
   the 2026-10-13 retirement of `DIRECTX11` and `METAL` (`docs/removed-renderers.md`). Evidence that
   exists: the full tree passed with `SDL_GPU` (Metal backend) on a Mac mini M4 in the AM4 campaign,

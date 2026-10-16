@@ -43,6 +43,17 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
+// Last, so its macros cannot reach the CNA headers above.
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 using CnaTest::GltfOracle::CorpusDirectory;
 using CnaTest::GltfOracle::CorpusFixtureIds;
 using CnaTest::GltfOracle::LoadedFixture;
@@ -70,13 +81,16 @@ namespace
     /// 50 ms budgets (plans/plan_apple_m4.md AM4-316), so a sanitized build scales them.
     constexpr double kBudgetScale = kAddressSanitized ? 10.0 : 1.0;
 
-    /// The calling thread's own CPU time where the platform keeps one with useful resolution
-    /// (POSIX), else the steady clock.
-    double NowMilliseconds()
+    /// The calling thread's own CPU time, in milliseconds.
+    double ThreadCpuMilliseconds()
     {
 #if defined(_WIN32)
-        return std::chrono::duration<double, std::milli>(
-                   std::chrono::steady_clock::now().time_since_epoch()).count();
+        FILETIME creation{}, exit{}, kernel{}, user{};
+        GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user);
+        const auto hundredNanoseconds = [](const FILETIME& time) {
+            return (static_cast<unsigned long long>(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+        };
+        return static_cast<double>(hundredNanoseconds(kernel) + hundredNanoseconds(user)) / 1.0e4;
 #else
         timespec now{};
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now);
@@ -84,7 +98,9 @@ namespace
 #endif
     }
 
-    /// The cost of one call of @p work: the FASTEST of @p iterations, on the thread's CPU clock.
+    /// The cost of one call of @p work on the thread's CPU clock: the FASTEST of @p iterations,
+    /// or on Windows, whose thread clock advances only at the scheduler tick (about 15.6 ms), the
+    /// mean over the whole batch.
     ///
     /// These budgets catch a change in the shape of the work, so what they compare is what the
     /// work costs, not what the machine was doing. A mean of wall-clock time is mostly the latter
@@ -95,14 +111,20 @@ namespace
     template <typename Work>
     double MillisecondsPerCall(int iterations, Work&& work)
     {
+#if defined(_WIN32)
+        const double start = ThreadCpuMilliseconds();
+        for (int i = 0; i < iterations; ++i) work();
+        return (ThreadCpuMilliseconds() - start) / iterations;
+#else
         double fastest = std::numeric_limits<double>::infinity();
         for (int i = 0; i < iterations; ++i)
         {
-            const double start = NowMilliseconds();
+            const double start = ThreadCpuMilliseconds();
             work();
-            fastest = std::min(fastest, NowMilliseconds() - start);
+            fastest = std::min(fastest, ThreadCpuMilliseconds() - start);
         }
         return fastest;
+#endif
     }
 
     /// A fixture with a material, a texture-free PBR path and real geometry -- the ordinary case.
