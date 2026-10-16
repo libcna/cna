@@ -175,15 +175,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       input is refused only at replay, after which the queued draw throws again from a destructor
       and terminates the process (`shader_effect_3d_layout` D/E, F/H, run last for that reason).
 
-8. **`EasyGL`'s per-pixel `SkinnedEffect` draws a textured, ambient-only quad white.** With a real
-    red `Texture2D` bound and `PreferPerPixelLighting=true` the draw reads (255,255,255,255); the
-    per-vertex program draws red, as Software did when measured. It does not depend on the lights,
-    the specular colour, the matrices or the draw order (Radeon 780M, `OPENGL33`, 2026-09-21). The
-    fault is in the diffuse path, `litRGB * texColor.rgb` in `EnsureSkinnedProgram`: either
-    `uEmissiveColor` arrives wrong for this program or it does not see the bound texture.
-    `StockEffectNullTextureTest.SkinnedEffectSamplesOpaqueBlack` skips exactly this case
-    (`CNA_RENDERER_IS(OpenGL33, OpenGLES3)`); `WEBGL2` shares the program and was not measured.
-    (`GSC-F1`, `VKPAR-0011`.)
 9. **The stock PBR programs of `SDL_GPU`, `WEBGPU` and `DIRECTX9` have no guard for a zero normal or
    tangent.** They normalise the interpolated normal and the Gram-Schmidt tangent without checking
    its length (`sdl-gpu/src/shaders/pbr3d.frag.glsl`, the two WGSL PBR programs in

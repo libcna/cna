@@ -220,11 +220,6 @@ TEST_F(StockEffectNullTextureTest, SkinnedEffectSamplesOpaqueBlack)
     effect.SetBoneTransforms({Matrix::getIdentityProperty()});
     for (const bool perPixel : {false, true})
     {
-        // plans/plan_graphics_shared_cleanup.md follow-up GSC-F1: EasyGL's per-pixel SkinnedEffect program
-        // draws this red-textured, ambient-only quad white (per-vertex and every other renderer here
-        // draw red), which is a lighting defect of that program rather than the missing-texture rule.
-        if (perPixel && CNA_RENDERER_IS(OpenGL33, OpenGLES3))
-            continue;
         SCOPED_TRACE(perPixel ? "per pixel" : "per vertex");
         effect.setPreferPerPixelLightingProperty(perPixel);
         effect.setTextureProperty(&RedTexture());
