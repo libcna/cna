@@ -211,7 +211,7 @@ class Pose:
         scaled to this body's head), following the head."""
         from . import head
         s = head.SCALE[self.body]
-        on_face = add(head.front_point(self.body, x * s, y * s)[0], (0.0, 0.0, out))
+        on_face = add(_face_point(self.body, x * s, y * s), (0.0, 0.0, out))
         return self._on_head(on_face)
 
     def beside_head(self, side, y=0.0, z=0.0, out=0.05):
@@ -226,3 +226,21 @@ class Pose:
     def _on_head(self, bind_point):
         rot, pos = self.world()
         return add(pos[I["Head"]], quat_rotate(rot[I["Head"]], sub(bind_point, self.bind[I["Head"]])))
+
+
+def _face_point(body, x, y):
+    """The face's surface seen from the front at head-local (x, y). A point past the face's outline
+    (below the chin, beside the jaw) has no such surface point, and the head's Newton solve then
+    wanders to an arbitrary one (revision 3's FemaleYawn and FemaleShocked aimed their hands there):
+    such a point is moved toward the face's middle until the face is under it."""
+    from . import head
+    c = head.centre(body)
+    toward = (0.0, head.MOUTH_Y * head.SCALE[body])
+    for k in range(41):
+        f = k / 40.0
+        px, py = x + (toward[0] - x) * f, y + (toward[1] - y) * f
+        q = head.front_point(body, px, py)[0]
+        if abs(q[0] - c[0] - px) + abs(q[1] - c[1] - py) < 1e-6:
+            return q
+    return head.front_point(body, toward[0], toward[1])[0]
+

@@ -143,12 +143,11 @@ def build(jobs=1):
 # reproduce. FemaleShocked places both hands at face(+-0.13, -0.13), a point the head's Newton
 # solve (cna_avatar.head._solve) has no solution for: its residual wanders between 0.06 and 0.26 for
 # all twelve iterations, and a one-ulp change in the starting guess moves the answer by 11 radians.
-# What v3 froze for those six arm rotations is therefore whatever glibc's libm last bits produced
-# (catalog v3 is released and frozen, docs/avatars.md, so it is not regenerated); every other byte
-# of every file is reproducible anywhere. On another C library the check still requires all of
-# that byte for byte, and of these channels exactly what can be required of them: the same
-# accessors, holding finite values and unit quaternions. The solver itself belongs to a future
-# catalog.
+# What revisions 1-3 froze for those six arm rotations was therefore whatever glibc's libm last bits
+# produced. Revision 4 moves a face target the solve cannot reach toward the face's middle until it
+# can (posing._face_point), so the clip converges; the tolerance below stays as a safety net: on
+# another C library the check still requires every other byte, and of these channels exactly what
+# can be required of them: the same accessors, holding finite values and unit quaternions.
 LIBM_SENSITIVE_CLIP = "FemaleShocked"
 LIBM_SENSITIVE_JOINTS = frozenset(("ShoulderLeft", "ShoulderRight", "ElbowLeft", "ElbowRight",
                                    "WristLeft", "WristRight"))
