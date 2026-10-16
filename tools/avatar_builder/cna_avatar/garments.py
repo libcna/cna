@@ -1862,7 +1862,9 @@ def gloves(body_type, style):
         segments = 1 if style == "gloves_fingerless" else 3
         main.append(body.hand(body_type, side, sign, inflate=inflate, finger_segments=segments, wrist_start=0.030))
         cuff_t = 0.90 if style == "gloves_formal" else 0.955
-        main.append(body.arm(body_type, side, inflate=inflate + 0.001, t_range=(cuff_t, 1.0)))
+        # Closed at the wrist like the arm it covers: open, the arm's own rounded end showed through
+        # between the glove's wrist and its palm.
+        main.append(body.arm(body_type, side, inflate=inflate + 0.001, t_range=(cuff_t, 1.0), cap_end=True))
         trim.append(_limb_ring(body_type, side, "arm", cuff_t, inflate + 0.002, 0.004 if style != "gloves_work" else 0.006))
     parts = [(main, "gloves", texture, (1.0, 1.0, 1.0))]
     parts.append((trim, "gloves" if style != "gloves_work" else "none", "rib" if style != "gloves_work" else "plain",

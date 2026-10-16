@@ -496,7 +496,7 @@ def focus_jobs(catalogs, library, manifest, version, avatar):
             jobs.append(job("hands-%02d-%s" % (index, view), "hands", d, hand + offset, hand, 0.45, animation=animation, time=time,
                             label="%s %s %s" % (("female", "male")[b], label, view)))
     library_clips = library.clips
-    for index, (animation, fraction) in enumerate((("Wave", 0.35), ("Clap", 0.45), ("Celebrate", 0.5), ("Stand3", 0.5))):
+    for index, (animation, fraction) in enumerate((("Wave", 0.35), ("Clap", 0.45), ("Celebrate", 0.5), ("MaleIdleCheckHand", 0.5))):
         b = index % 2
         d = avatar(b, 2, (70, 48, 34), (88, 56, 34), "hair_ponytail" if b == 0 else "hair_crew", "Balanced", {})
         data = d.encode()

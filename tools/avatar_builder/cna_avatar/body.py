@@ -197,10 +197,11 @@ def _clipped(profile, steps, t_range):
 
 
 def limb(start, middle, end, profile, weights, segments=16, steps=20, inflate=0.0, t_range=None, hint=(0.0, 0.0, 1.0),
-         cap_start=True, cap_end=True, flare=0.0):
+         cap_start=True, cap_end=True, flare=0.0, end_depth=0.9):
     """A loft through two straight segments (start-middle-end); profile t is 0 at `start`, the
     middle joint's share of the length at `middle`, 1 at `end` (and may extend past either end).
-    weights(t) gives the skin weights along the limb."""
+    weights(t) gives the skin weights along the limb; end_depth is how far the end's rounded cap
+    reaches, in its radius."""
     upper, lower = length(sub(middle, start)), length(sub(end, middle))
     total = upper + lower
     knee_t = upper / total
@@ -227,7 +228,7 @@ def limb(start, middle, end, profile, weights, segments=16, steps=20, inflate=0.
         rows.append(ring)
         ts.append(t)
     # Rounded caps.
-    def cap(ring_index, direction, count=4):
+    def cap(ring_index, direction, count=4, depth=0.9):
         centre = mul(rows[ring_index][0], 0.0)
         for p in rows[ring_index]:
             centre = add(centre, p)
@@ -236,7 +237,7 @@ def limb(start, middle, end, profile, weights, segments=16, steps=20, inflate=0.
         out = []
         for i in range(1, count + 1):
             a = math.pi * 0.5 * i / count
-            out.append(([add(add(centre, mul(sub(p, centre), math.cos(a) + 1e-4)), mul(direction, radius * 0.9 * math.sin(a)))
+            out.append(([add(add(centre, mul(sub(p, centre), math.cos(a) + 1e-4)), mul(direction, radius * depth * math.sin(a)))
                          for p in rows[ring_index]], ts[ring_index]))
         return out
     if cap_start:
@@ -244,7 +245,7 @@ def limb(start, middle, end, profile, weights, segments=16, steps=20, inflate=0.
         rows = [r for r, _ in reversed(extra)] + rows
         ts = [t for _, t in reversed(extra)] + ts
     if cap_end:
-        extra = cap(len(rows) - 1, axis_b)
+        extra = cap(len(rows) - 1, axis_b, depth=end_depth)
         rows = rows + [r for r, _ in extra]
         ts = ts + [t for _, t in extra]
     last = len(rows) - 1
@@ -331,12 +332,14 @@ def leg_weights(body, side):
     return fn
 
 
-def arm(body, side, inflate=0.0, t_range=None, flare=0.0, segments=16):
+def arm(body, side, inflate=0.0, t_range=None, flare=0.0, segments=16, cap_end=None):
     pos = rig.joint_positions(body)
     sh, el, wr = pos[I["Shoulder" + side]], pos[I["Elbow" + side]], pos[I["Wrist" + side]]
+    # The forearm ends in a shallow cap the palm, which starts inside the forearm, closes over (a deep
+    # one stood out of the back of the wrist, and through gloves and wrist bands).
     return limb(sh, el, wr, ARM[body], arm_weights(body, side), segments=segments, inflate=inflate, t_range=t_range,
-                cap_start=t_range is None or t_range[0] <= 0.03, cap_end=t_range is None, flare=flare,
-                hint=(0.0, 0.0, 1.0))
+                cap_start=t_range is None or t_range[0] <= 0.03, cap_end=t_range is None if cap_end is None else cap_end,
+                flare=flare, hint=(0.0, 0.0, 1.0), end_depth=0.40)
 
 
 def leg(body, side, inflate=0.0, t_range=None, flare=0.0, segments=16, cap_end=None):
@@ -377,16 +380,20 @@ def hand(body, side, sign, inflate=0.0, finger_segments=3, wrist_start=None):
         # thickness grows slowly, so the forearm's rounded end stays inside.
         width = wrist_w + (pw - wrist_w) * (0.55 * smoothstep(0.0, 0.30, t) + 0.45 * smoothstep(0.15, 0.95, t)) + inflate
         thick = (wrist_d + (pt * (1.0 + 0.16 * math.sin(math.pi * min(t * 1.3, 1.0))) - wrist_d) * smoothstep(0.0, 0.62, t)) \
-            * (1.0 - 0.12 * smoothstep(0.8, 1.0, t)) + inflate
+            * (1.0 - 0.05 * smoothstep(0.8, 1.0, t)) + inflate
         ring = []
         for s in range(24):
             a = 2.0 * math.pi * s / 24
             ca, sa = math.cos(a), math.sin(a)
             # A soft rounded box, the back of the hand domed and the palm a little cupped; the
-            # little-finger edge thinner than the thumb's.
-            x = width * math.copysign(abs(ca) ** 0.78, ca)
-            edge = 1.0 - 0.18 * max(0.0, -ca * sign) * smoothstep(0.3, 0.9, t)
-            y = thick * edge * math.copysign(abs(sa) ** 0.72, sa)
+            # little-finger edge thinner than the thumb's, filling out again at the knuckle so the
+            # little finger grows out of it rather than through it.
+            # Round where it starts inside the forearm (a boxy section's corners stood out of the
+            # back of the wrist), squaring off into the hand.
+            box = smoothstep(0.10, 0.40, t)
+            x = width * math.copysign(abs(ca) ** (1.0 - 0.22 * box), ca)
+            edge = 1.0 - 0.18 * max(0.0, -ca * sign) * smoothstep(0.3, 0.9, t) * (1.0 - 0.7 * smoothstep(0.82, 1.0, t))
+            y = thick * edge * math.copysign(abs(sa) ** (1.0 - 0.28 * box), sa)
             if sa * 1.0 > 0.0:
                 y *= 1.0 + 0.10 * (1.0 - abs(ca)) * smoothstep(0.2, 0.8, t)
             # The knuckles lie on an arc, the middle finger's furthest out.
@@ -405,9 +412,11 @@ def hand(body, side, sign, inflate=0.0, finger_segments=3, wrist_start=None):
     palm = Mesh().grid(rows, lambda q, v, u: {wr: 1.0})
     m.append(palm)
     # Thumb pad (thenar), toward the thumb side of the palm.
+    # It sits at the thumb's root and ends short of the wrist (reaching past it, it stood out above
+    # the wrist as a tab).
     thumb_root = pos[I["FingerThumb" + side]]
-    pad = add(lerp(wrist, thumb_root, 0.6), mul(normal, 0.004 * k))
-    m.append(ellipsoid(pad, (spread, along, normal), (0.013 * k + inflate, 0.022 * k + inflate, 0.011 * k + inflate), 16, 10,
+    pad = add(lerp(wrist, thumb_root, 0.74), mul(normal, 0.004 * k))
+    m.append(ellipsoid(pad, (spread, along, normal), (0.013 * k + inflate, 0.017 * k + inflate, 0.010 * k + inflate), 16, 10,
                        lambda q, v, u: {wr: 0.7, I["FingerThumb" + side]: 0.3}))
     for finger in rig.FINGERS + ("Thumb",):
         joints = [I["Finger%s%s" % (finger, side)], I["Finger%s2%s" % (finger, side)], I["Finger%s3%s" % (finger, side)]]
