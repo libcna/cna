@@ -43,6 +43,25 @@ class Obstacles:
         self.torso = [(c, rx + clearance, rz + clearance, n) for c, rx, rz, n in body_module.torso_sections(body)]
         self.torso_top = self.torso[-2][0][1]
         self.collar_y = p["collar"][1]
+        # The ears' frames (the default shape: the tuck below is wide enough for every shape, the
+        # ear controls and an earring hanging from the lobe).
+        self.ears = [(side,) + head._ear_frame(body, side, head.EAR_SHAPES["round"]) for side in (1.0, -1.0)]
+
+    def ear_tuck(self, p):
+        """How firmly hair at p is tucked behind an ear (0..1): hair lies flat against the head under
+        and round the ear, from above its top to below an earring, so the ear sits on the hair and
+        shows whole instead of standing through it."""
+        best = 0.0
+        for side, centre, up, ahead, out in self.ears:
+            if p[0] * side <= 0.0:
+                continue
+            q = sub(p, centre)
+            if dot(q, out) < -0.03 * self.s:
+                continue
+            u = (dot(q, up) / self.s + 0.008) / 0.050
+            f = (dot(q, ahead) / self.s + 0.010) / 0.027
+            best = max(best, smoothstep(1.0, 0.62, math.hypot(u, f)))
+        return best
 
     def radius(self, d):
         """The head surface's distance from the head centre along unit direction d."""
@@ -115,7 +134,7 @@ class Flow:
 
     def __init__(self, gravity=12.0, attract=None, attract_gain=0.0, lift=0.0015, stop=None, step=0.004, rise=0.0,
                  body=True, sweep=None, until=None, cling=1.0, cling_below=0.05, avoid_face=None, behind=0.0,
-                 face_margin=0.0):
+                 face_margin=0.0, ears=False):
         self.gravity, self.attract, self.attract_gain = gravity, attract, attract_gain
         self.lift, self.stop, self.step, self.rise, self.body = lift, stop, step, rise, body
         self.sweep, self.until = sweep, until
@@ -128,9 +147,20 @@ class Flow:
         # How firmly hair reaching the shoulders is turned to fall behind them (long hair rests on
         # the back, not on top of the shoulders or over the arms).
         self.behind = behind
+        # Hair that comes down past the ears is tucked behind them (Obstacles.ear_tuck).
+        self.ears = ears
 
     def settle(self, ob, p, lift):
         """p kept outside the head, body and neck, and drawn down onto the scalp where hair lies on it."""
+        if self.ears:
+            tuck = ob.ear_tuck(p)
+            if tuck > 0.0:
+                v = sub(p, ob.c)
+                r = length(v)
+                d = mul(v, 1.0 / max(r, 1e-9))
+                limit = ob.radius(d) + 0.0010 * ob.s
+                if r > limit:
+                    p = add(ob.c, mul(d, r - (r - limit) * tuck))
         if self.cling > 0.0:
             v = sub(p, ob.c)
             r = length(v)
@@ -406,7 +436,7 @@ def keep_apart(ob, paths, spacing):
 
 
 def ringlets(ob, paths, seed, start=0.12, radius=0.010, pitch=0.034, thick=0.0065, turns_per_step=5, which=None,
-             lift=0.008, segments=5):
+             lift=0.008, segments=5, ears=False):
     """Spiral ringlet curls hanging along strand paths: each a tube coiling round its path from
     `start` metres on, `radius` out and a turn per `pitch` metres, `lift` outside the hair, tapering
     to a rounded end. which(k) picks the paths that carry one."""
@@ -440,7 +470,12 @@ def ringlets(ob, paths, seed, start=0.12, radius=0.010, pitch=0.034, thick=0.006
             a = phase + 2.0 * PI * (x - start) / pitch
             grow = smoothstep(0.0, 0.5, (x - start) / pitch)
             r = radius * grow * (1.0 - 0.25 * (x - start) / span)
-            centre = add(p, mul(n, lift))
+            if ears:
+                held = 1.0 - ob.ear_tuck(p)
+                r *= 0.35 + 0.65 * held
+                centre = add(p, mul(n, lift * held))
+            else:
+                centre = add(p, mul(n, lift))
             pts.append(add(centre, add(mul(n, r * math.sin(a)), mul(side, r * math.cos(a)))))
             radii.append(thick * (0.6 + 0.4 * grow) * (1.0 - 0.35 * (x - start) / span))
         out.append(tube(pts, radii, segments, lambda q: w(q), round_end=True))
@@ -569,6 +604,8 @@ def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=3, samples=24, 
                 side = normalize(cross(outward[c][i], along[c][i]))
                 offset = add(offset, mul(side, flick * (1.0 if k % 2 else -1.0) * math.sin(PI * f) * smoothstep(0.75, 1.0, t) ** 2))
             if offset != (0.0, 0.0, 0.0):
+                if flows[k].ears:
+                    offset = mul(offset, 1.0 - ob.ear_tuck(inner[c][i]))
                 inner[c][i] = add(inner[c][i], offset)
     # The slab: outer rows root to tip, a rounded tip, inner rows back to the root (every other
     # one: it faces the scalp and is seen only where hair hangs free).
@@ -582,9 +619,13 @@ def shell(ob, roots, lengths, flow, thickness, seed, sub_columns=3, samples=24, 
             rise = smoothstep(0.0, 0.08, tn) ** 0.6
             taper = 1.0 - tip_round * smoothstep(0.55, 1.0, tn) ** 1.5
             h = thickness(tn * t_end) * scale * rise * taper
+            if flows[k].ears:
+                # Tucked behind the ear the hair lies flat.
+                h *= 1.0 - 0.86 * ob.ear_tuck(inner[c][i])
             p = add(inner[c][i], mul(outward[c][i], h))
             if bumps is not None and h > 0.0:
-                p = add(p, mul(outward[c][i], bumps(p) * min(1.0, scale) * rise * taper))
+                held = 1.0 - ob.ear_tuck(inner[c][i]) if flows[k].ears else 1.0
+                p = add(p, mul(outward[c][i], bumps(p) * min(1.0, scale) * rise * taper * held))
             col.append(p)
             col_v.append(tn * t_end)
         h_tip = thickness(t_end) * scale * (1.0 - tip_round)

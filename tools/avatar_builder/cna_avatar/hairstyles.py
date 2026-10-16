@@ -28,6 +28,12 @@ SHORT_LINE = (0.30, 0.39, 0.50, 0.70)
 LONG_LINE = (0.28, 0.39, 0.51, 0.74)
 
 
+# Under short hair that lies on the head the scalp shell stays below the locks' inner face (lift
+# 1.2 mm): lifted further it showed through their thin ends and the grooves between them as a
+# ragged dark band at the temples.
+UNDER_LOCKS = 0.0010
+
+
 def taper_thickness(root, tip, power=1.0):
     return lambda t: root + (tip - root) * min(t, 1.0) ** power
 
@@ -238,7 +244,7 @@ def _parted(body, ob, s, start, end, count, seed, hem, thickness, line_, gravity
     # started (hair from the front of the part in front) instead of crossing, which folds the sheet.
     rank = lambda k: min(k, len(hang) - 1 - k)
     main = [Flow(gravity=gravity, lift=0.0015 * s, cling_below=0.0, avoid_face=line_, behind=90.0,
-                 until=lambda p: p[1] < level(p), face_margin=0.04 * min(rank(k), 4)) for k in range(len(hang))]
+                 until=lambda p: p[1] < level(p), face_margin=0.04 * min(rank(k), 4), ears=True) for k in range(len(hang))]
     paths = keep_apart(ob, strand_paths(ob, hang, 1.2 * s, lambda k: main[k], seed,
                                         length_jitter=kw.get("length_jitter", 0.10)), 0.004 * s)
     locks = shell(ob, hang, 1.2 * s, lambda k: main[k], thickness, seed, closed=False, paths=paths, **kw)
@@ -253,8 +259,9 @@ def _crown(body, ob, s, theta, phi, count, seed, line_, thickness, scale=1.0, gr
     """Short hair from a crown swirl lying on the head and ending at the hairline (scaled by `scale`)."""
     roots = crown_roots(ob, theta, phi, count, radius=0.03 * s, seed=seed)
     flow = Flow(gravity=gravity, lift=0.0012 * s, stop=lambda p_: line_(p_) * scale, body=False, cling_below=-1.0)
-    # The hairline ends the strands: clumps end together there, with small notches only.
-    kw.setdefault("notch", 0.012 * s)
+    # The hairline ends the strands: clumps end together there, with small notches only (deeper ones
+    # show the scalp shell between the points as a ragged band at the temples).
+    kw.setdefault("notch", 0.005 * s)
     kw.setdefault("length_jitter", 0.02)
     return shell(ob, roots, 0.40, flow, thickness, seed, **kw)
 
@@ -271,13 +278,13 @@ def _fringe(body, ob, s, theta, half_width, count, end_line, seed, thickness, **
 def _short(body, ob, s):
     locks = _crown(body, ob, s, 0.16 * PI, PI, 22, 101, line(*SHORT_LINE), taper_thickness(0.012 * s, 0.002 * s, 1.4),
                    tip=0.45, tip_round=0.7)
-    return locks, cap(body, line(*STANDARD), 0.0025 * s)
+    return locks, cap(body, line(*STANDARD), UNDER_LOCKS * s)
 
 
 def _crew(body, ob, s):
     locks = _crown(body, ob, s, 0.16 * PI, PI, 20, 131, line(*SHORT_LINE), taper_thickness(0.0065 * s, 0.0015 * s, 1.2),
                    tip=0.3, tip_round=0.8, groove=0.75)
-    return locks, cap(body, line(*STANDARD), 0.0022 * s)
+    return locks, cap(body, line(*STANDARD), UNDER_LOCKS * s)
 
 
 def _buzz(body, ob, s):
@@ -292,6 +299,7 @@ def _fade(body, ob, s):
     top = line(0.30, 0.33, 0.30, 0.34)
     locks = _crown(body, ob, s, 0.10 * PI, PI, 18, 132, top, taper_thickness(0.012 * s, 0.004 * s), scale=1.06,
                    tip=0.35, tip_round=0.7)
+    # The faded sides are the scalp shell itself, over the ends of the top's locks.
     return locks, cap(body, line(*STANDARD), 0.0026 * s)
 
 
@@ -306,7 +314,7 @@ def _spiky(body, ob, s):
     for k in range(8):
         at.append((0.36 * PI + 0.06 * jitter(103, k), PI * (0.62 + 0.38 * k / 7) * (1.0 if k % 2 else -1.0)))
     base.append(spikes(ob, at, 0.060 * s, 0.030 * s, 102))
-    return base, cap(body, line(*STANDARD), 0.0025 * s)
+    return base, cap(body, line(*STANDARD), UNDER_LOCKS * s)
 
 
 def _sidepart(body, ob, s):
@@ -315,7 +323,7 @@ def _sidepart(body, ob, s):
     flow = Flow(gravity=3.0, lift=0.0014 * s, stop=lambda phi: std(phi) * 1.01, body=False, cling_below=-1.0)
     locks = shell(ob, roots, 0.40, flow, taper_thickness(0.014 * s, 0.003 * s, 1.3), 108, tip=0.4, tip_round=0.7,
                   notch=0.012 * s, length_jitter=0.02)
-    return locks, cap(body, line(*STANDARD), 0.0025 * s)
+    return locks, cap(body, line(*STANDARD), UNDER_LOCKS * s)
 
 
 def _slick(body, ob, s):
@@ -329,7 +337,7 @@ def _slick(body, ob, s):
                 until=lambda p: length(sub(p, back)) < 0.03 * s)
     locks = shell(ob, roots, 0.36, flow, taper_thickness(0.009 * s, 0.004 * s), 133, closed=False, tip=0.3, groove=0.72)
     locks.append(_crown(body, ob, s, 0.34 * PI, PI, 12, 134, std, taper_thickness(0.007 * s, 0.002 * s), tip=0.4))
-    return locks, cap(body, line(*STANDARD), 0.0026 * s)
+    return locks, cap(body, line(*STANDARD), UNDER_LOCKS * s)
 
 
 def _quiff(body, ob, s):
@@ -343,14 +351,14 @@ def _quiff(body, ob, s):
     volume = lambda t: (0.006 + 0.030 * math.exp(-((t - 0.22) / 0.20) ** 2)) * s
     sides.append(shell(ob, roots, 0.17 * s, flow, volume, 136, closed=False, tip=0.6, notch=0.03 * s, groove=0.72,
                        tip_round=0.6))
-    return sides, cap(body, line(*STANDARD), 0.0026 * s)
+    return sides, cap(body, line(*STANDARD), UNDER_LOCKS * s)
 
 
 def _crop(body, ob, s):
     fringe_line = line(0.355, 0.39, 0.50, 0.70)
     locks = _crown(body, ob, s, 0.18 * PI, PI, 22, 137, fringe_line, taper_thickness(0.011 * s, 0.004 * s), tip=0.55,
                    tip_round=0.6, flick=0.003 * s)
-    return locks, cap(body, line(*STANDARD), 0.0026 * s)
+    return locks, cap(body, line(*STANDARD), UNDER_LOCKS * s)
 
 
 def _curlyshort(body, ob, s):
@@ -491,7 +499,7 @@ def _curtain(body, ob, s):
 def _curly(body, ob, s):
     face = line(0.30, 0.42, 0.50, 0.74)
     roots = crown_roots(ob, 0.12 * PI, PI, 24, radius=0.03 * s, seed=107)
-    hang = Flow(gravity=10.0, lift=0.004 * s, cling_below=-0.1, avoid_face=face)
+    hang = Flow(gravity=10.0, lift=0.004 * s, cling_below=-0.1, avoid_face=face, ears=True)
     fringe = Flow(gravity=4.0, lift=0.004 * s, stop=lambda phi: face(phi) * 1.03, body=False, cling_below=-1.0)
     flow = lambda k: fringe if roots[k][1][2] > 0.3 else hang
     locks = shell(ob, roots, 0.24 * s, flow, taper_thickness(0.024 * s, 0.016 * s), 107, tip=0.2, tip_round=0.8,
@@ -503,16 +511,26 @@ def _longcurly(body, ob, s):
     std = line(*LONG_LINE)
     roots = part_roots(ob, (0.18 * PI, 0.0), (0.08 * PI, PI * 0.95), 26, seed=154, front_fan=0.08)
     level = lambda p: ob.c[1] - 0.40 * s
-    main = Flow(gravity=13.0, lift=0.0015 * s, cling_below=0.0, avoid_face=std, behind=90.0, until=lambda p: p[1] < level(p))
-    front = Flow(gravity=4.0, lift=0.0015 * s, stop=lambda phi: std(phi) * 1.02, body=False, avoid_face=std)
-    flows = _per_root(roots, {"front": front, "*": main})
-    lengths = _per_root(roots, {"front": 0.10 * s, "*": 1.2 * s})
-    paths = strand_paths(ob, roots, lengths, flows, 154)
+    # As _parted: the long strands hang as one open sheet, each from the front of the part keeping
+    # a little further from the face than the one before it, so they come down beside the face in
+    # order; the short fan at the front of the part is a shell of its own (one loop of short and long
+    # strands gaped beside the face, showing the cheek and the scalp shell through a window).
+    hang = [r for r in roots if r[2] != "front"]
+    rank = lambda k: min(k, len(hang) - 1 - k)
+    main = [Flow(gravity=13.0, lift=0.0015 * s, cling_below=0.0, avoid_face=std, behind=90.0, until=lambda p: p[1] < level(p),
+                 face_margin=0.04 * min(rank(k), 4), ears=True) for k in range(len(hang))]
+    paths = keep_apart(ob, strand_paths(ob, hang, 1.2 * s, lambda k: main[k], 154), 0.004 * s)
     # A soft wavy mass, and spiral ringlets hanging over it from about the ears down.
-    locks = shell(ob, roots, lengths, flows, taper_thickness(0.022 * s, 0.014 * s), 154, tip=0.3, tip_round=0.8, groove=0.6,
-                  wave=(0.008 * s, 0.06 * s, 0.06 * s), paths=paths, bumps=curl_bumps(154, 0.024 * s, 0.006 * s))
+    locks = shell(ob, hang, 1.2 * s, lambda k: main[k], taper_thickness(0.022 * s, 0.014 * s), 154, closed=False, tip=0.3,
+                  tip_round=0.8, groove=0.6, wave=(0.008 * s, 0.06 * s, 0.06 * s), paths=paths,
+                  bumps=curl_bumps(154, 0.024 * s, 0.006 * s))
+    front = Flow(gravity=4.0, lift=0.0015 * s, stop=lambda phi: std(phi) * 1.02, body=False, avoid_face=std)
+    fan = [r for r in roots if r[2] == "front"]
+    if len(fan) >= 2:
+        locks.append(shell(ob, fan, 0.10 * s, front, taper_thickness(0.022 * s, 0.014 * s), 155, closed=False, tip=0.3,
+                           tip_round=0.8, groove=0.6, bumps=curl_bumps(156, 0.024 * s, 0.006 * s)))
     locks.append(ringlets(ob, paths, 155, start=0.14 * s, radius=0.010 * s, pitch=0.036 * s, thick=0.0075 * s,
-                          which=lambda k: roots[k][2] != "front", lift=0.014 * s))
+                          lift=0.014 * s, ears=True))
     return locks, cap(body, std, 0.006 * s)
 
 
