@@ -78,25 +78,15 @@ namespace CNA::Examples::Conformance
     /**
      * @brief Whether this build's renderer evaluates CNA's metallic-roughness lighting model.
      *
-     * `SOFTWARE` draws `PbrEffect`/`SkinnedPbrEffect` through a documented reduced model -- the
-     * base colour, without the BRDF, emissive or image-based terms -- that is outside its scope by
-     * design (docs/graphics-renderer-feature-matrix.md, "Custom ShaderEffect, PBR ..."). A program
-     * whose oracle is a lit or emissive PBR value skips there with that reason. A renderer with no
-     * PBR path at all refuses at the draw instead (`IsNamedPbrRefusal`).
+     * Renderers with a PBR stock path return true. A renderer with no PBR path at all refuses at
+     * the draw instead (`IsNamedPbrRefusal`).
      *
      * @param program The program's name, for the skip line.
      * @return true when the renderer evaluates the model; false after printing `[SKIP]`.
      */
     inline bool ProbePbrLightingEvaluated(const char* program)
     {
-        const GraphicsRendererType type =
-            Internal::Renderers::GraphicsRendererRegistry::Default().type;
-        if (getGraphicsBackendCategory(type) != GraphicsBackendCategory::Software)
-            return true;
-        std::printf("[SKIP] %s: the %s renderer draws PbrEffect through its documented reduced "
-                    "base-colour model, outside its scope, so a lit or emissive PBR oracle cannot "
-                    "judge it\n",
-                    program, std::string(getGraphicsRendererName(type)).c_str());
-        return false;
+        (void)program;
+        return true;
     }
 }

@@ -618,6 +618,17 @@ can execute an opcode and still accept invalid classic bytecode.
   `World`. Both XNA's default per-vertex path and `PreferPerPixelLighting=true` are implemented.
   The shared Software/EasyGL contract passes 19/19 with a two-byte tolerance; the oracle also
   corrected EasyGL's classic bone-normal path without changing its CNAEXT PBR/glTF shaders.
+- **`PbrEffect` and `SkinnedPbrEffect` evaluate the metallic-roughness material** (`SOFTWARE-347`).
+  The CPU fragment path implements the shared GGX/Smith/Schlick direct-light equation for all three
+  directional lights, the existing punctual-light term, base/normal/metallic-roughness/emissive/
+  occlusion and KHR_materials_specular textures, per-map UV selection and affine transforms,
+  normal/occlusion scalars, vertex colour, alpha coverage and glTF sRGB decode/output encode.
+  Rigid and skinned tangent frames use inverse-transpose normals and fold World, instance and joint
+  determinant signs into tangent handedness. The shared hand-derived oracle matches `(91,91,91)`,
+  `(97,0,0)`, `(27,4,4)` and the mirrored-joint normal-map result `(79,79,79)` exactly; the
+  1,600-draw parameter-ring and five-case vertex-colour tests also pass. IBL and shadow-map sampling
+  remain intentionally absent from this CPU path and are reported through their existing renderer
+  capabilities.
 - **Classic stock-effect fog is complete** (`SOFTWARE-112`). `BasicEffect`, `AlphaTestEffect`,
   `DualTextureEffect`, `EnvironmentMapEffect` and `SkinnedEffect` use FNA's view-space fog vector,
   including transformed World/View matrices, the degenerate start=end case and SkinnedEffect's
