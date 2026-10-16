@@ -158,6 +158,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_SkinnedEffect_Fog COMMAND ${_directx9_skinnedeffect_fog_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
+    # CNAEXT BasicEffect point/spot light: the same public, renderer-agnostic pixel witness used by
+    # EasyGL and Software. DIRECTX9 selects its CNA-owned SM3 variant only while the extension is
+    # active; ordinary BasicEffect draws keep Microsoft's original bytecode.
+    cna_directx9_test(cna_test_directx9_basiceffect_punctual_light
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/basiceffect_punctuallight_test.cpp)
+    cna_directx9_ctest_command(_directx9_basiceffect_punctual_light_cmd
+                               cna_test_directx9_basiceffect_punctual_light)
+    cna_register_renderer_test(NAME DirectX9_BasicEffect_PunctualLight
+        COMMAND ${_directx9_basiceffect_punctual_light_cmd}
+        TIMEOUT 60 LABELS "DIRECTX9")
+
     # D9-83: real hardware instancing via SetStreamSourceFreq (CNA's own CNAEXT Instanced3D shader).
     cna_directx9_test(cna_test_directx9_instanced directx9_instanced_test.cpp)
     cna_directx9_ctest_command(_directx9_instanced_cmd cna_test_directx9_instanced)

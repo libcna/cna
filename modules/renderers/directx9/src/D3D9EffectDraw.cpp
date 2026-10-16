@@ -700,6 +700,16 @@ namespace CNA::Internal::Renderers::DirectX9
                 " has no matching CNA vertex layout: the vertex declaration has no" + missing + " (plans/plan_dx9.md D9-82b)");
         }
 
+        // Microsoft's original BasicEffect bytecode has no point/spot-light constants. Keep that
+        // bytecode untouched for the ordinary XNA path, and select CNA's extension shader only
+        // for an active PunctualLightEXT.
+        if (params.lightingEnabled && params.punctualKind >= 1 && params.punctualKind <= 2)
+        {
+            DrawBasicPunctualEffectEXT(
+                vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+
         const bool oneLight = ComputeOneLightEXT(params);
 
         // preferPerPixelLighting now reads GpuDrawParams' real field (plans/plan_dx9.md D9-81 item 1,

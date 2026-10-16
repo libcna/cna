@@ -598,6 +598,14 @@ namespace CNA::Internal::Renderers::DirectX9
                                 std::size_t stride, const Matrix& world, const Matrix& view,
                                 const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                 const GpuDrawParams& params);
+        /// CNAEXT point/spot-light variant for lit BasicEffect draws. The original XNA bytecode
+        /// remains selected whenever no punctual source is active. Defined in
+        /// `D3D9BasicPunctualDraw.cpp`.
+        void DrawBasicPunctualEffectEXT(const IVertexBufferRenderer& vb,
+                                        const IIndexBufferRenderer* ib, std::size_t stride,
+                                        const Matrix& world, const Matrix& view,
+                                        const Matrix& projection, PrimitiveType primitive,
+                                        int primitiveCount, const GpuDrawParams& params);
         /// D9-82c: real `AlphaTestEffect` dispatch -- same shape as `DrawBasicEffectEXT`, simpler
         /// (no lighting, always textured). `isEqNe` sourced losslessly from
         /// `params.alphaTest[1] (tolerance) > 0` per `D9-81`'s own finding. Defined in
@@ -762,6 +770,16 @@ namespace CNA::Internal::Renderers::DirectX9
         ComPtr<IDirect3DVertexShader9> instancedVS_;
         ComPtr<IDirect3DPixelShader9> instancedPS_;
         ComPtr<IDirect3DVertexDeclaration9> instancedVertexDecl_;
+
+        /// CNAEXT BasicEffect point/spot-light variants. Four VS input shapes preserve the
+        /// optional texture-coordinate/vertex-colour contract; textured and untextured PS twins
+        /// avoid sampling an unbound texture. Lazily created and reset-independent.
+        ComPtr<IDirect3DVertexShader9> basicPunctualVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualColorVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualTextureVS_;
+        ComPtr<IDirect3DVertexShader9> basicPunctualTextureColorVS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualPS_;
+        ComPtr<IDirect3DPixelShader9> basicPunctualTexturePS_;
 
         /// D3D9 PBR porting task: CNA's own CNAEXT Pbr3D/PbrSkinned3D shader pairs, lazily created
         /// on first `DrawPbrEffectEXT()` call. Not `D3DPOOL_DEFAULT` resources -- survive `Reset()`
