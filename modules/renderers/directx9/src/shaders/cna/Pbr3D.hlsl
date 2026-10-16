@@ -200,7 +200,7 @@ float4 PunctualCone            : register(c33); // x=cos(inner), y=cos(outer)
 float4 IblParams               : register(c76); // x=enabled, y=mip count, z=intensity
 #endif
 #if CNA_D3D9_DOUBLE_SIDED
-float4 PbrDoubleSidedParams    : register(c77); // x=0 single-sided, +/-1 world orientation
+float4 PbrDoubleSidedParams    : register(c77); // x=VFACE sign of a glTF front face, 0 single-sided
 #endif
 #if CNA_D3D9_DUAL_UV
 float4 PbrTextureCoordinateSets  : register(c78); // base, normal, metallic-roughness, emissive
@@ -214,6 +214,8 @@ float CnaShadowFactor(float3 worldPos) { return 1.0; }
 float3 CnaCascadeDebugTint(float3 worldPos) { return float3(1.0, 1.0, 1.0); }
 float CnaPunctualShadow(float3 worldPos, float3 toLight, float distanceToLight) { return 1.0; }
 #endif
+
+#include "PbrBasis3D.fxh"
 
 struct PSInput
 {
@@ -371,12 +373,12 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
         alpha  *= pin.Color.a;
     }
 
-    float3 N = normalize(pin.Normal);
-    float3 T = normalize(pin.TangentWS.xyz - N * dot(N, pin.TangentWS.xyz));
+    float3 N = CnaPbrShadingNormal(pin.Normal);
+    float3 T = CnaPbrShadingTangent(N, pin.TangentWS.xyz);
     float3 B = cross(N, T) * pin.TangentWS.w;
 #if CNA_D3D9_DOUBLE_SIDED
-    // D3D9 VFACE is positive for the native front face. A mirroring World reverses the
-    // rasterized winding, so its determinant sign reverses which VFACE needs the basis flip.
+    // A face whose VFACE sign differs from a glTF front face's is a back face. The sign depends on
+    // the renderer's winding convention and on a mirroring World, so the renderer supplies it.
     if (PbrDoubleSidedParams.x != 0.0 && face * PbrDoubleSidedParams.x < 0.0)
     {
         N = -N;

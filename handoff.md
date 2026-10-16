@@ -156,20 +156,6 @@ retirement and its close-out, RRC-030..RRC-052, added and re-measured several on
       and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
       them. A capability boundary, reported as such.
 
-9. **The stock PBR programs of `DIRECTX9` have no guard for a zero normal or tangent.** They
-   normalise the interpolated normal and the Gram-Schmidt tangent without checking its length
-   (`directx9/src/shaders/cna/Pbr3D.hlsl` and `PbrSkinned3D.hlsl`). A singular World or a missing,
-   zero or normal-parallel tangent reaches `normalize(0)`: NaN on drivers that compute
-   `x*inversesqrt(0)`, or a surface that loses all direct light. EasyGL falls back to a fixed
-   normal and a perpendicular tangent, and SDL_GPU and WebGPU now do the same;
-   `easygl_pbr_degenerate_basis_test` is the oracle (also `SdlGpu_`/`WebGPU_Pbr_DegenerateBasis`).
-   (`GSC-0009`, found by living-room-simulator.)
-10. **`DIRECTX9` ignores glTF `doubleSided` on `PbrEffect`/`SkinnedPbrEffect`.** EasyGL, SDL_GPU and
-    WebGPU flip N, T and B on the back face and account for a mirroring World;
-    `GpuDrawParams::pbrDoubleSided` does not reach the Direct3D 9 PBR programs, so the back of a
-    leaf is shaded with the normal of the side facing away. The oracle is
-    `modules/graphics/examples/pbr_double_sided_test.cpp` (`EasyGL_`, `SdlGpu_`,
-    `WebGPU_Pbr_DoubleSided`). (`GSC-0010`, living-room-simulator R-3.)
 14. **The MinGW-w64 cross-build compiles and runs every test binary** (2026-10-15; before, the
     POSIX `setenv`/`unsetenv`/`getpid` calls in the GamerServices and content-pipeline tests stopped
     `CnaTests.exe` compiling). Those calls go through `System::Environment`, the fork-based child

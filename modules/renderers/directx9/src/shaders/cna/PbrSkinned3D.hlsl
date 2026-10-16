@@ -107,16 +107,18 @@ struct VSOutput
     float4 Color     : COLOR0;
 };
 
-// Transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
-// no built-in inverse(); vs_3_0 has ample instruction budget for this. Matches Pbr3D.hlsl's own
-// CPU-supplied NormalMatrix and the retired VULKAN renderer's corrected pbr3d_skinned.vert.glsl.
+#include "PbrBasis3D.fxh"
+
+// Transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant), and zero for a singular
+// World (a node scaled flat), as EasyGL computes it. HLSL has no built-in inverse(); vs_3_0 has
+// ample instruction budget for this. Matches Pbr3D.hlsl's own CPU-supplied NormalMatrix.
 float3x3 InverseTranspose3x3(float3x3 m)
 {
     float3 c0 = cross(m[1], m[2]);
     float3 c1 = cross(m[2], m[0]);
     float3 c2 = cross(m[0], m[1]);
     float det = dot(m[0], c0);
-    return float3x3(c0, c1, c2) / det;
+    return float3x3(c0, c1, c2) * ((det != 0.0 ? 1.0 : 0.0) / (det != 0.0 ? det : 1.0));
 }
 
 float3 CnaSkinNormal(float3x3 m, float3 n)
@@ -158,7 +160,7 @@ VSOutput VSPbrSkinned3DBody(VSInput vin, float2 uv1, float4 color)
     // GLTF-264: inverse-transpose both the blended joint matrix and World. Tangent
     // stays on their raw direction matrices.
     float3x3 worldDirectionMat = (float3x3)World;
-    vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3(worldDirectionMat)));
+    vout.Normal = CnaPbrDirectionOrZero(mul(skinnedNormal, InverseTranspose3x3(worldDirectionMat)));
     vout.TangentWS = float4(mul(skinnedTangent, worldDirectionMat),
                             vin.Tangent.w * CnaDirectionHandedness(worldDirectionMat)
                                 * CnaDirectionHandedness(skinNormalMat));
@@ -259,7 +261,7 @@ float4 PunctualCone            : register(c33); // x=cos(inner), y=cos(outer)
 float4 IblParams               : register(c76); // x=enabled, y=mip count, z=intensity
 #endif
 #if CNA_D3D9_DOUBLE_SIDED
-float4 PbrDoubleSidedParams    : register(c77); // x=0 single-sided, +/-1 world orientation
+float4 PbrDoubleSidedParams    : register(c77); // x=VFACE sign of a glTF front face, 0 single-sided
 #endif
 #if CNA_D3D9_DUAL_UV
 float4 PbrTextureCoordinateSets  : register(c78); // base, normal, metallic-roughness, emissive
@@ -424,8 +426,8 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
         alpha  *= pin.Color.a;
     }
 
-    float3 N = normalize(pin.Normal);
-    float3 T = normalize(pin.TangentWS.xyz - N * dot(N, pin.TangentWS.xyz));
+    float3 N = CnaPbrShadingNormal(pin.Normal);
+    float3 T = CnaPbrShadingTangent(N, pin.TangentWS.xyz);
     float3 B = cross(N, T) * pin.TangentWS.w;
 #if CNA_D3D9_DOUBLE_SIDED
     if (PbrDoubleSidedParams.x != 0.0 && face * PbrDoubleSidedParams.x < 0.0)

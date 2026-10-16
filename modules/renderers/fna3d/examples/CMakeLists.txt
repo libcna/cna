@@ -131,6 +131,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_Pbr_DoubleSided
         COMMAND cna_test_fna3d_pbr_double_sided TIMEOUT 120 LABELS "Fna3d")
 
+    # A zero normal or tangent (a singular World, a missing tangent) must not shade NaN or unlit;
+    # EasyGL's programs are the oracle.
+    cna_fna3d_test(cna_test_fna3d_pbr_degenerate_basis
+                   ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_degenerate_basis_test.cpp)
+    cna_register_renderer_test(NAME Fna3d_Pbr_DegenerateBasis
+        COMMAND cna_test_fna3d_pbr_degenerate_basis TIMEOUT 120 LABELS "Fna3d")
+
     # The shared material-map oracle covers all seven map selectors, channel semantics and
     # independent UV0/UV1 selection for both rigid and identity-bone skinned PBR draws.
     cna_fna3d_test(cna_test_fna3d_pbr_material_maps

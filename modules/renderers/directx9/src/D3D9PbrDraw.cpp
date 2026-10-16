@@ -83,6 +83,30 @@ namespace CNA::Internal::Renderers::DirectX9
         struct Vec4Pad { float v[4]; };
         Vec4Pad Pad3(const float v3[3]) { return Vec4Pad{{v3[0], v3[1], v3[2], 0.0f}}; }
 
+        float Determinant3x3(const Matrix& m)
+        {
+            return m.M11 * (m.M22 * m.M33 - m.M23 * m.M32) -
+                   m.M12 * (m.M21 * m.M33 - m.M23 * m.M31) +
+                   m.M13 * (m.M21 * m.M32 - m.M22 * m.M31);
+        }
+
+        // Transpose(Invert(World))'s upper 3x3, by cofactors over the determinant, and zero for a
+        // singular World (a node scaled flat), as EasyGL computes it: Matrix::Invert divides by
+        // that zero determinant, and the shaded normal became NaN.
+        Matrix PbrNormalMatrix(const Matrix& w)
+        {
+            const float det = Determinant3x3(w);
+            const float inv = det != 0.0f ? 1.0f / det : 0.0f;
+            return Matrix(
+                (w.M22 * w.M33 - w.M23 * w.M32) * inv, -(w.M21 * w.M33 - w.M23 * w.M31) * inv,
+                (w.M21 * w.M32 - w.M22 * w.M31) * inv, 0.0f,
+                -(w.M12 * w.M33 - w.M13 * w.M32) * inv, (w.M11 * w.M33 - w.M13 * w.M31) * inv,
+                -(w.M11 * w.M32 - w.M12 * w.M31) * inv, 0.0f,
+                (w.M12 * w.M23 - w.M13 * w.M22) * inv, -(w.M11 * w.M23 - w.M13 * w.M21) * inv,
+                (w.M11 * w.M22 - w.M12 * w.M21) * inv, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f);
+        }
+
         /// EffectParameter.SetValue(Matrix)'s real XNA upload convention -- register k receives
         /// COLUMN k of the row-major matrix (the transpose of Matrix::ToColumnMajor()'s own
         /// row-major-flat reading order). Matches D3D9EffectDraw.cpp's own UploadMatrixConstantVS()
@@ -314,8 +338,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
         else
         {
-            const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
-            UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "NormalMatrix", worldInverseTranspose);
+            UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "NormalMatrix", PbrNormalMatrix(world));
             // Pbr3D (non-skinned) has no WeightsPerVertex, so FogParams carries the
             // FNA view-space fog vector directly (dotted with the object position in the VS).
             const float fogParams[4] = {
@@ -388,6 +411,14 @@ namespace CNA::Internal::Renderers::DirectX9
             device_.Get(), psRegs, psCount, "PunctualDiffuse", punctualDiffuse);
         TryUploadPixelShaderConstantEXT(
             device_.Get(), psRegs, psCount, "PunctualCone", punctualCone);
+        // glTF doubleSided: the VFACE sign of a glTF front face, 0 single-sided. Direct3D's VFACE is
+        // positive on its clockwise front face, which is glTF's counter-clockwise back face; a
+        // mirroring World reverses the on-screen winding and with it the sign.
+        const float doubleSidedParams[4] = {
+            params.pbrDoubleSided ? (Determinant3x3(world) < 0.0f ? 1.0f : -1.0f) : 0.0f,
+            0.0f, 0.0f, 0.0f};
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "PbrDoubleSidedParams", doubleSidedParams);
 
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
         // s4=OcclusionMap, s5=specular strength, s6=specular colour. Base color falls back to

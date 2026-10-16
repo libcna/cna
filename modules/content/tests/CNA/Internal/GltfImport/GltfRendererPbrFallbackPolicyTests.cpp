@@ -1219,12 +1219,13 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX9SamplesBothKhrMaterialsSpecularTextu
              // The pixel bytecode's exact LENGTH, which is what says the committed blob was
              // regenerated from the HLSL beside it rather than left behind by an edit. It moved from
              // 5588 to 5688 when GLTF-465 added the COLOR_0 product and its VertexColorFlags
-             // register, and to 6472 when the PBR pixel shaders gained punctual lights and shadow
-             // sampling; the byte count is the only part of an opaque blob a source audit can
-             // read -- so it is updated deliberately here, alongside the register table below,
-             // rather than loosened into "some bytecode exists".
-             "kPbr3DPSBytecode[6472]",
-             "kPbrSkinned3DPSBytecode[6472]"})
+             // register, to 6472 when the PBR pixel shaders gained punctual lights and shadow
+             // sampling, and to 7236 with the degenerate-basis guard and glTF doubleSided; the byte
+             // count is the only part of an opaque blob a source audit can read -- so it is updated
+             // deliberately here, alongside the register table below, rather than loosened into
+             // "some bytecode exists".
+             "kPbr3DPSBytecode[7236]",
+             "kPbrSkinned3DPSBytecode[7236]"})
     {
         EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
             << "missing DirectX 9 specular binding evidence: " << evidence;
@@ -1326,6 +1327,28 @@ TEST(GltfRendererPbrFallbackPolicy, Fna3dFlipsDoubleSidedPbrTangentBasis)
                       source,
                       Normalize("face * PbrDoubleSidedParams.x < 0.0")))
         << "both FNA3D PBR shaders must reverse the tangent basis from VFACE";
+}
+
+// DIRECTX9 compiles the same two PBR sources into embedded vs_3_0/ps_3_0 bytecode; its double-sided
+// sign has the opposite convention to FNA3D's, because Direct3D's VFACE is positive on its own
+// clockwise front face, glTF's back face (DirectX9_Pbr_DoubleSided measures it under DXVK).
+TEST(GltfRendererPbrFallbackPolicy, DirectX9FlipsDoubleSidedPbrTangentBasis)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "directx9");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "params.pbrDoubleSided ? (Determinant3x3(world) < 0.0f ? 1.0f : -1.0f) : 0.0f",
+             "\"PbrDoubleSidedParams\", doubleSidedParams)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing DirectX 9 double-sided upload evidence: " << evidence;
+    }
+    EXPECT_EQ(8u, CountOccurrences(source, Normalize("{\"PbrDoubleSidedParams\", 'p', 77, 1}")))
+        << "every rigid and skinned PBR pixel shader's register table must name c77";
+    EXPECT_EQ(2u, CountOccurrences(source, Normalize("face * PbrDoubleSidedParams.x < 0.0")))
+        << "both DirectX 9 PBR shaders must reverse the tangent basis from VFACE";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, Fna3dSelectsIndependentPbrTextureCoordinates)

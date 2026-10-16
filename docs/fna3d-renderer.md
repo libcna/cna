@@ -14,7 +14,9 @@ light, fog and skinning. Optional maps receive explicit white or flat-normal fal
 and BRDF-LUT equation used by EasyGL, Software and WebGPU, including explicit roughness mip LOD.
 
 Double-sided materials reverse the complete tangent basis on a back face, including under a
-mirroring World transform. Material maps independently select UV0 or UV1 before their own affine
+mirroring World transform; the face sign is the driver's (`gl_FrontFacing` on OpenGL, Direct3D's
+clockwise-positive `VFACE` on SDL_GPU). A zero normal or tangent falls back as EasyGL's does.
+Material maps independently select UV0 or UV1 before their own affine
 texture transform. The CNA-owned compiled effects sample the shared directional/cascaded,
 point-cube and spot-map shadow contract across Basic, Skinned, PBR and SkinnedPBR. Custom shader
 *source* is still unsupported, which is a separate capability from these committed compiled

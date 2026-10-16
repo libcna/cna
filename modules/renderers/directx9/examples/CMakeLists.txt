@@ -213,6 +213,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Pbr_FresnelFactors COMMAND ${_directx9_pbr_fresnel_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
+    # living-room-simulator's PBR basis, EasyGL's programs the oracle: a zero normal or tangent must
+    # not shade NaN, and a glTF double-sided back face is shaded with its basis reversed.
+    cna_directx9_test(cna_test_directx9_pbr_degenerate_basis
+                      ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_degenerate_basis_test.cpp)
+    cna_directx9_ctest_command(_directx9_pbr_degenerate_cmd cna_test_directx9_pbr_degenerate_basis)
+    cna_register_renderer_test(NAME DirectX9_Pbr_DegenerateBasis COMMAND ${_directx9_pbr_degenerate_cmd}
+        TIMEOUT 60 LABELS "DIRECTX9")
+    cna_directx9_test(cna_test_directx9_pbr_double_sided ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_double_sided_test.cpp)
+    cna_directx9_ctest_command(_directx9_pbr_double_sided_cmd cna_test_directx9_pbr_double_sided)
+    cna_register_renderer_test(NAME DirectX9_Pbr_DoubleSided COMMAND ${_directx9_pbr_double_sided_cmd}
+        TIMEOUT 60 LABELS "DIRECTX9")
+
     # D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own CNAEXT
     # SkinnedVertexColor3D shader (stride 56 -- SkinnedEffect + a vertex Color real XNA's own
     # compiled SkinnedEffect.fx bytecode never carries).

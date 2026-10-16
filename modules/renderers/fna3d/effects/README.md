@@ -104,7 +104,7 @@ of declarations without/with `COLOR0` and without/with `TEXCOORD1`; the skinned 
 carries the 72-bone palette. Both use seven material samplers plus the irradiance cube,
 prefiltered-specular cube and BRDF LUT for the shared split-sum IBL equation. `VFACE` and the World
 determinant reverse the complete tangent basis
-on a double-sided back face. Two selector vectors independently choose UV0 or UV1 before each
+on a double-sided back face, and a zero normal or tangent falls back as EasyGL's does. Two selector vectors independently choose UV0 or UV1 before each
 map's affine transform. Physical registers are resolved from MojoShader's applied-pass map
 rather than assumed from source order; the three environment resources retain CNA's public sampler
 slots 10/11/12.
@@ -114,8 +114,8 @@ MojoShader receives no unsupported preshader operands:
 
 | File | Bytes | SHA-256 |
 |---|---:|---|
-| `CnaPbrEffect.fxb` | 64,336 | `89affaab64d924a7f545a6fbb30888a5fbc734e8694b914a22350967455908fa` |
-| `CnaSkinnedPbrEffect.fxb` | 90,048 | `7796d051a2624176fa9d1dffaa4ebf03474685cf7bda43c522e66b71d8bcf0f8` |
+| `CnaPbrEffect.fxb` | 65,776 | `f776871ba4520f9c8ed30d168918cc9c23a6190fa9acb5aa30c10c6e05f8e6ba` |
+| `CnaSkinnedPbrEffect.fxb` | 92,224 | `9bd3f716aa88673e74487e0a886046624734311c31bf4076431bc97b6aea343c` |
 
 ```bash
 fxc.exe /nologo /Op /T fx_2_0 /Fo CnaPbrEffect.fxb CnaPbrEffect.fx

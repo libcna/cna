@@ -151,8 +151,8 @@ namespace CNA::Internal::Renderers::Fna3d
         // the OpenGL driver asks for SDL_WINDOW_OPENGL (the window itself is always created as one,
         // so its own flags cannot tell) -- and only that driver disables an attribute array the
         // declaration does not fill, so the shader reads (0, 0, 0, 1) for it.
-        driverDefaultsMissingVertexInputs_ =
-            (FNA3D_PrepareWindowAttributes() & SDL_WINDOW_OPENGL) != 0;
+        driverIsOpenGl_ = (FNA3D_PrepareWindowAttributes() & SDL_WINDOW_OPENGL) != 0;
+        driverDefaultsMissingVertexInputs_ = driverIsOpenGl_;
 
         int windowWidth = 0;
         int windowHeight = 0;

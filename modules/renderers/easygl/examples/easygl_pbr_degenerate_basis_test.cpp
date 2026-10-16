@@ -6,7 +6,8 @@
 // lost all direct light; elsewhere the NaN reached a float scene target, which a bloom or a probe
 // convolution then spreads across the frame. Each degenerate case draws into a Vector4 target,
 // where NaN survives readback, and must be finite and lit like the control, on the rigid and the
-// skinned program.
+// skinned program. A renderer without float targets (DIRECTX9) is given the adapter's Color
+// fallback instead; a NaN reaches that as 0, which the comparison with the lit control still catches.
 //
 // plans/plan_apple_m4.md AM4-125: the guards that catch those zero vectors compared squared lengths
 // with an absolute 1e-8, and the rigid program's interpolated normal is not unit length -- it is
@@ -16,6 +17,7 @@
 
 #include "common/PixelTestGame.hpp"
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -120,6 +122,7 @@ protected:
         const std::vector<std::vector<Case>> groups = {
             {
                 {"control", Vector3(1.0f, 0.0f, 0.0f), facing, Matrix::getIdentityProperty()},
+                {"zero normal", Vector3(1.0f, 0.0f, 0.0f), Vector3::Zero, Matrix::getIdentityProperty()},
                 {"zero tangent", Vector3::Zero, facing, Matrix::getIdentityProperty()},
                 {"tangent parallel to the normal", Vector3(0.0f, 0.0f, 1.0f), facing,
                  Matrix::getIdentityProperty()},
@@ -193,7 +196,14 @@ private:
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         device.SetRenderTarget(nullptr);
         std::vector<Vector4> pixels(static_cast<std::size_t>(kSize * kSize));
-        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        if (target.getFormatProperty() == SurfaceFormat::Vector4)
+        {
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            return pixels;
+        }
+        std::vector<Color> bytes(pixels.size());
+        target.GetData(bytes.data(), static_cast<int>(bytes.size()));
+        for (std::size_t i = 0; i < bytes.size(); ++i) pixels[i] = bytes[i].ToVector4();
         return pixels;
     }
 

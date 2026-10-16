@@ -1175,6 +1175,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
             colored_linelist_quad colored_linestrip_quad
         TIMEOUT 30 LABELS "Software")
 
+    # living-room-simulator's PBR basis, EasyGL's programs the oracle: a zero normal or tangent must
+    # not shade NaN or unlit, and a glTF double-sided back face is shaded with its basis reversed.
+    cna_software_test(cna_test_software_pbr_degenerate_basis
+        ${CNA_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_degenerate_basis_test.cpp)
+    cna_register_renderer_test(NAME Software_Pbr_DegenerateBasis
+        COMMAND cna_test_software_pbr_degenerate_basis TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_pbr_double_sided
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_double_sided_test.cpp)
+    cna_register_renderer_test(NAME Software_Pbr_DoubleSided
+        COMMAND cna_test_software_pbr_double_sided TIMEOUT 60 LABELS "Software")
+
     # RRC-045: the renderer-neutral conformance programs (modules/graphics/examples/conformance/),
     # which carry XNA behaviour first proved on retired renderers. SOFTWARE is an independent
     # implementation family, so a contract it passes is no longer held by the GPU families alone.

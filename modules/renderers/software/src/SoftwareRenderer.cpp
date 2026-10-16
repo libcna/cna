@@ -3005,6 +3005,18 @@ namespace CNA::Internal::Renderers::Software
             return area > 0.0f;                                  // CullCounterClockwiseFace (default)
         }
 
+        /// Whether a triangle of this signed area shows glTF's back face: glTF's front face is
+        /// counter-clockwise as displayed (a positive area), and a mirroring World reverses the
+        /// on-screen winding, so its determinant's sign reverses which area that is.
+        bool ShowsGltfBackFace(float area, const float* worldColMajor)
+        {
+            const float* w = worldColMajor;
+            const float det = w[0] * (w[5] * w[10] - w[9] * w[6]) -
+                              w[4] * (w[1] * w[10] - w[9] * w[2]) +
+                              w[8] * (w[1] * w[6] - w[5] * w[2]);
+            return (area > 0.0f) == (det < 0.0f);
+        }
+
         /// Bit flags selecting which of a triangle's three edges a WireFrame pass
         /// rasterizes. Edge bit 0 = v0->v1, bit 1 = v1->v2, bit 2 = v2->v0. A whole (unclipped)
         /// triangle draws all three; the 3D near-plane clipper masks the artificial fan diagonal of a
@@ -4974,6 +4986,8 @@ namespace CNA::Internal::Renderers::Software
             bool magnifyCube;
             float lambdaCube;
             TextureFootprint footprintCube;
+            /// glTF doubleSided: this triangle shows its back, so the PBR basis is reversed.
+            bool pbrBackFace = false;
         };
 
         /// SOFTWARE-111: evaluates the exact stock-effect alpha-test expression shared by FNA's
@@ -5238,20 +5252,37 @@ namespace CNA::Internal::Renderers::Software
                 };
 
                 const Vector3 worldPosition(pwpx / invW, pwpy / invW, pwpz / invW);
+                // A singular World leaves a zero normal, and a missing, zero or normal-parallel
+                // tangent a zero residual. As EasyGL: the normal falls back to +Z, and a residual
+                // small next to the tangent it came from to a perpendicular direction.
                 Vector3 normal = NormalizeOrZero(Vector3(
                     pnx / invW, pny / invW, pnz / invW));
-                Vector3 tangent(ptx / invW, pty / invW, ptz / invW);
-                const float tangentProjection =
-                    normal.X * tangent.X + normal.Y * tangent.Y + normal.Z * tangent.Z;
-                tangent = NormalizeOrZero(Vector3(
-                    tangent.X - normal.X * tangentProjection,
-                    tangent.Y - normal.Y * tangentProjection,
-                    tangent.Z - normal.Z * tangentProjection));
+                if (normal == Vector3::Zero) normal = Vector3(0.0f, 0.0f, 1.0f);
+                const Vector3 vertexTangent(ptx / invW, pty / invW, ptz / invW);
+                const float tangentProjection = normal.X * vertexTangent.X +
+                                                normal.Y * vertexTangent.Y +
+                                                normal.Z * vertexTangent.Z;
+                Vector3 tangent(vertexTangent.X - normal.X * tangentProjection,
+                                vertexTangent.Y - normal.Y * tangentProjection,
+                                vertexTangent.Z - normal.Z * tangentProjection);
+                if (!(tangent.LengthSquared() > 1e-8f * vertexTangent.LengthSquared()))
+                {
+                    const Vector3 axis = std::abs(normal.X) < 0.9f ? Vector3(1.0f, 0.0f, 0.0f)
+                                                                   : Vector3(0.0f, 1.0f, 0.0f);
+                    tangent = Vector3::Cross(normal, axis);
+                }
+                tangent = NormalizeOrZero(tangent);
                 const float sign = ptangentSign / invW < 0.0f ? -1.0f : 1.0f;
-                const Vector3 bitangent(
+                Vector3 bitangent(
                     (normal.Y * tangent.Z - normal.Z * tangent.Y) * sign,
                     (normal.Z * tangent.X - normal.X * tangent.Z) * sign,
                     (normal.X * tangent.Y - normal.Y * tangent.X) * sign);
+                if (ctx.pbrBackFace)
+                {
+                    normal = -normal;
+                    tangent = -tangent;
+                    bitangent = -bitangent;
+                }
 
                 float normalR = 0.5f, normalG = 0.5f, normalB = 1.0f, normalA = 1.0f;
                 samplePbrMap(0, 1, normalR, normalG, normalB, normalA);
@@ -5775,7 +5806,9 @@ namespace CNA::Internal::Renderers::Software
                                     magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     footprint0, footprint1,
-                                    !(rhoCube > 1.0f), LodFromTexelRate(rhoCube), footprintCube};
+                                    !(rhoCube > 1.0f), LodFromTexelRate(rhoCube), footprintCube,
+                                    params.pbr && params.pbrDoubleSided &&
+                                        ShowsGltfBackFace(area, params.worldColMajor)};
 
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
             // Stamp BOTH captured slot descriptions, so the cube trace can print the

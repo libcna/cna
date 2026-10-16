@@ -236,6 +236,25 @@ namespace CNA::Internal::Renderers::Fna3d
                 return dynamic_cast<const Fna3dSampledTexture*>(&textureCube->GetRenderer());
             return nullptr;
         }
+
+        // Transpose(Invert(World))'s upper 3x3, by cofactors over the determinant, and zero for a
+        // singular World (a node scaled flat), as EasyGL computes it: Matrix::Invert divides by
+        // that zero determinant, and the PBR normal became NaN.
+        Microsoft::Xna::Framework::Matrix PbrNormalMatrix(const Microsoft::Xna::Framework::Matrix& w)
+        {
+            const float det = w.M11 * (w.M22 * w.M33 - w.M23 * w.M32) -
+                              w.M12 * (w.M21 * w.M33 - w.M23 * w.M31) +
+                              w.M13 * (w.M21 * w.M32 - w.M22 * w.M31);
+            const float inv = det != 0.0f ? 1.0f / det : 0.0f;
+            return Microsoft::Xna::Framework::Matrix(
+                (w.M22 * w.M33 - w.M23 * w.M32) * inv, -(w.M21 * w.M33 - w.M23 * w.M31) * inv,
+                (w.M21 * w.M32 - w.M22 * w.M31) * inv, 0.0f,
+                -(w.M12 * w.M33 - w.M13 * w.M32) * inv, (w.M11 * w.M33 - w.M13 * w.M31) * inv,
+                -(w.M11 * w.M32 - w.M12 * w.M31) * inv, 0.0f,
+                (w.M12 * w.M23 - w.M13 * w.M22) * inv, -(w.M11 * w.M23 - w.M13 * w.M21) * inv,
+                (w.M11 * w.M22 - w.M12 * w.M21) * inv, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f);
+        }
     }
 
     void Fna3dRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb, const Matrix& world,
@@ -752,7 +771,7 @@ namespace CNA::Internal::Renderers::Fna3d
                 }
                 else
                 {
-                    effect.SetMatrix("NormalMatrix", Matrix::Transpose(Matrix::Invert(world)));
+                    effect.SetMatrix("NormalMatrix", PbrNormalMatrix(world));
                     effect.SetFloats("FogParams", params.fogVector, 4);
                 }
 
@@ -811,6 +830,10 @@ namespace CNA::Internal::Renderers::Fna3d
                                            ? params.iblPrefilteredMipCount : 1),
                     params.iblIntensity, 0.0f
                 };
+                // The VFACE sign of a glTF (counter-clockwise) front face. FNA3D's OpenGL driver
+                // reports gl_FrontFacing, positive there; its SDL_GPU driver reports Direct3D's
+                // VFACE, positive on the clockwise front face, as DIRECTX9 does. A mirroring World
+                // reverses the on-screen winding and with it the sign.
                 float doubleSidedOrientation = 0.0f;
                 if (params.pbrDoubleSided)
                 {
@@ -818,7 +841,8 @@ namespace CNA::Internal::Renderers::Fna3d
                         world.M11 * (world.M22 * world.M33 - world.M23 * world.M32) -
                         world.M12 * (world.M21 * world.M33 - world.M23 * world.M31) +
                         world.M13 * (world.M21 * world.M32 - world.M22 * world.M31);
-                    doubleSidedOrientation = determinant < 0.0f ? -1.0f : 1.0f;
+                    const float frontFace = driverIsOpenGl_ ? 1.0f : -1.0f;
+                    doubleSidedOrientation = determinant < 0.0f ? -frontFace : frontFace;
                 }
                 const float doubleSidedParams[4] = {
                     doubleSidedOrientation, 0.0f, 0.0f, 0.0f
