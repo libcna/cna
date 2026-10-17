@@ -48,12 +48,6 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).
 - [`plan_xnapipeline_parity.md`](plan_xnapipeline_parity.md) — TRUE XNA 4.0 Content Pipeline public API + input-format parity, measured against the genuine SDK.
 
-## Shader language and conformance
-
-- [`plan_csl.md`](plan_csl.md) — CSL, the CSIR intermediate representation, the CNA Shader ABI,
-  the five shader backends, the CPU reference interpreter and the shader conformance framework.
-  Design proposal: [`../misc/csl.md`](../misc/csl.md).
-
 ## Graphics architecture and effects
 
 - [`plan_graphics.md`](plan_graphics.md) — graphics API and shared implementation work.
