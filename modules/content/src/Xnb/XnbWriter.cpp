@@ -521,14 +521,25 @@ namespace CNA::Internal::Xnb
                 options_.compression == XnbOutputCompression::Lzx
                     ? CompressXnbLzxPayload(payload)
                     : CompressXnbLz4Block(payload);
-            std::vector<std::uint8_t> framed;
-            framed.reserve(4u + block.size());
-            for (int shift = 0; shift < 32; shift += 8)
+            constexpr std::size_t kDecompressedSizeBytes = 4u;
+            const std::size_t maxPayloadBytes =
+                static_cast<std::size_t>(options_.limits.maxFileSize) - kHeaderBytes;
+            if (maxPayloadBytes < kDecompressedSizeBytes ||
+                block.size() > maxPayloadBytes - kDecompressedSizeBytes)
             {
-                framed.push_back(
-                    static_cast<std::uint8_t>((decompressedSize >> shift) & 0xFFu));
+                throw XnbWriteException(
+                    "'" + assetName_ + "': the compressed payload and its four-byte size "
+                    "prefix would exceed the configured maximum file size of " +
+                    std::to_string(options_.limits.maxFileSize) + " bytes.");
             }
-            framed.insert(framed.end(), block.begin(), block.end());
+
+            std::vector<std::uint8_t> framed(kDecompressedSizeBytes + block.size());
+            for (std::size_t byte = 0u; byte < kDecompressedSizeBytes; ++byte)
+            {
+                framed[byte] =
+                    static_cast<std::uint8_t>((decompressedSize >> (byte * 8u)) & 0xFFu);
+            }
+            std::copy(block.begin(), block.end(), framed.begin() + kDecompressedSizeBytes);
             payload = std::move(framed);
         }
 

@@ -930,6 +930,26 @@ TEST_F(XnbWriterTest, AFileAboveTheConfiguredSizeLimitIsRefused)
     EXPECT_THROW((void)WriteXnbAsset(values, options, "values"), XnbWriteException);
 }
 
+TEST_F(XnbWriterTest, ACompressedFrameAboveTheFileLimitIsRefusedBeforeAllocation)
+{
+    const std::vector<std::uint8_t> plain = WriteXnbAsset(std::int32_t{1}, {}, "one");
+
+    XnbFileOptions options;
+    options.compression = XnbOutputCompression::Lzx;
+    options.limits.maxFileSize = static_cast<std::int32_t>(plain.size());
+
+    try
+    {
+        (void)WriteXnbAsset(std::int32_t{1}, options, "one");
+        FAIL() << "compression framing must still respect the complete-file ceiling";
+    }
+    catch (const XnbWriteException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("compressed payload"), std::string::npos)
+            << error.what();
+    }
+}
+
 TEST_F(XnbWriterTest, AnEscapingExternalReferenceIsRefused)
 {
     XnbTypeWriterRegistry registry;
