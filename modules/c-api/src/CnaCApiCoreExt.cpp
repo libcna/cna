@@ -6,8 +6,8 @@
 #include "CnaCApiOutput.hpp"
 
 #include "CNA/DesktopOS.hpp"
-#include "CNA/GraphicsBackendCategory.hpp"
-#include "CNA/GraphicsBackendMaturity.hpp"
+#include "CNA/GraphicsRendererCategory.hpp"
+#include "CNA/GraphicsRendererMaturity.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsRendererFallbackRecord.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
@@ -250,18 +250,18 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
 }
 
 [[nodiscard]] CNA_GraphicsBackendCategory MapBackendCategoryToC(
-    const CNA::GraphicsBackendCategory category) noexcept
+    const CNA::GraphicsRendererCategory category) noexcept
 {
     switch (category) {
-        case CNA::GraphicsBackendCategory::Native:
+        case CNA::GraphicsRendererCategory::Native:
             return CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE;
-        case CNA::GraphicsBackendCategory::TranslationLayer:
+        case CNA::GraphicsRendererCategory::TranslationLayer:
             return CNA_GRAPHICS_BACKEND_CATEGORY_TRANSLATION_LAYER;
-        case CNA::GraphicsBackendCategory::Software:
+        case CNA::GraphicsRendererCategory::Software:
             return CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE;
-        case CNA::GraphicsBackendCategory::Web:
+        case CNA::GraphicsRendererCategory::Web:
             return CNA_GRAPHICS_BACKEND_CATEGORY_WEB;
-        case CNA::GraphicsBackendCategory::Diagnostic:
+        case CNA::GraphicsRendererCategory::Diagnostic:
             return CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC;
     }
     return CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC;
@@ -269,23 +269,23 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
 
 [[nodiscard]] CNA_Result MapBackendCategory(
     const CNA_GraphicsBackendCategory category,
-    CNA::GraphicsBackendCategory* const outCategory)
+    CNA::GraphicsRendererCategory* const outCategory)
 {
     switch (category) {
         case CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE:
-            *outCategory = CNA::GraphicsBackendCategory::Native;
+            *outCategory = CNA::GraphicsRendererCategory::Native;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_CATEGORY_TRANSLATION_LAYER:
-            *outCategory = CNA::GraphicsBackendCategory::TranslationLayer;
+            *outCategory = CNA::GraphicsRendererCategory::TranslationLayer;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE:
-            *outCategory = CNA::GraphicsBackendCategory::Software;
+            *outCategory = CNA::GraphicsRendererCategory::Software;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_CATEGORY_WEB:
-            *outCategory = CNA::GraphicsBackendCategory::Web;
+            *outCategory = CNA::GraphicsRendererCategory::Web;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC:
-            *outCategory = CNA::GraphicsBackendCategory::Diagnostic;
+            *outCategory = CNA::GraphicsRendererCategory::Diagnostic;
             return CNA_RESULT_SUCCESS;
         default:
             return InvalidArgument(
@@ -294,18 +294,18 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
 }
 
 [[nodiscard]] CNA_GraphicsBackendMaturity MapBackendMaturityToC(
-    const CNA::GraphicsBackendMaturity maturity) noexcept
+    const CNA::GraphicsRendererMaturity maturity) noexcept
 {
     switch (maturity) {
-        case CNA::GraphicsBackendMaturity::Production:
+        case CNA::GraphicsRendererMaturity::Production:
             return CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION;
-        case CNA::GraphicsBackendMaturity::Supported:
+        case CNA::GraphicsRendererMaturity::Supported:
             return CNA_GRAPHICS_BACKEND_MATURITY_SUPPORTED;
-        case CNA::GraphicsBackendMaturity::Experimental:
+        case CNA::GraphicsRendererMaturity::Experimental:
             return CNA_GRAPHICS_BACKEND_MATURITY_EXPERIMENTAL;
-        case CNA::GraphicsBackendMaturity::Historical:
+        case CNA::GraphicsRendererMaturity::Historical:
             return CNA_GRAPHICS_BACKEND_MATURITY_HISTORICAL;
-        case CNA::GraphicsBackendMaturity::Deprecated:
+        case CNA::GraphicsRendererMaturity::Deprecated:
             return CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED;
     }
     return CNA_GRAPHICS_BACKEND_MATURITY_EXPERIMENTAL;
@@ -313,23 +313,23 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
 
 [[nodiscard]] CNA_Result MapBackendMaturity(
     const CNA_GraphicsBackendMaturity maturity,
-    CNA::GraphicsBackendMaturity* const outMaturity)
+    CNA::GraphicsRendererMaturity* const outMaturity)
 {
     switch (maturity) {
         case CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION:
-            *outMaturity = CNA::GraphicsBackendMaturity::Production;
+            *outMaturity = CNA::GraphicsRendererMaturity::Production;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_MATURITY_SUPPORTED:
-            *outMaturity = CNA::GraphicsBackendMaturity::Supported;
+            *outMaturity = CNA::GraphicsRendererMaturity::Supported;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_MATURITY_EXPERIMENTAL:
-            *outMaturity = CNA::GraphicsBackendMaturity::Experimental;
+            *outMaturity = CNA::GraphicsRendererMaturity::Experimental;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_MATURITY_HISTORICAL:
-            *outMaturity = CNA::GraphicsBackendMaturity::Historical;
+            *outMaturity = CNA::GraphicsRendererMaturity::Historical;
             return CNA_RESULT_SUCCESS;
         case CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED:
-            *outMaturity = CNA::GraphicsBackendMaturity::Deprecated;
+            *outMaturity = CNA::GraphicsRendererMaturity::Deprecated;
             return CNA_RESULT_SUCCESS;
         default:
             return InvalidArgument(
@@ -387,7 +387,7 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
     const CNA_GraphicsBackendCategory category,
     uint64_t* const outBytes)
 {
-    CNA::GraphicsBackendCategory nativeCategory = CNA::GraphicsBackendCategory::Native;
+    CNA::GraphicsRendererCategory nativeCategory = CNA::GraphicsRendererCategory::Native;
     if (const CNA_Result result = MapBackendCategory(category, &nativeCategory);
         result != CNA_RESULT_SUCCESS) {
         return result;
@@ -399,7 +399,7 @@ static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == HighestPublishedIdentity(),
     const CNA_GraphicsBackendMaturity maturity,
     uint64_t* const outBytes)
 {
-    CNA::GraphicsBackendMaturity nativeMaturity = CNA::GraphicsBackendMaturity::Production;
+    CNA::GraphicsRendererMaturity nativeMaturity = CNA::GraphicsRendererMaturity::Production;
     if (const CNA_Result result = MapBackendMaturity(maturity, &nativeMaturity);
         result != CNA_RESULT_SUCCESS) {
         return result;

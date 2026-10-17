@@ -323,7 +323,7 @@ CNA_Result cna_graphics_backend_get_current_category(
         if (out_category == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_graphics_backend_get_current_category: out_category is null.");
         }
-        *out_category = static_cast<CNA_GraphicsBackendCategory>(MapBackendCategoryToC(CNA::getCurrentGraphicsBackendCategory()));
+        *out_category = static_cast<CNA_GraphicsBackendCategory>(MapBackendCategoryToC(CNA::getCurrentGraphicsRendererCategory()));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -335,7 +335,7 @@ CNA_Result cna_graphics_backend_get_current_maturity(
         if (out_maturity == nullptr) {
             return CNA::C::Detail::InvalidArgument("cna_graphics_backend_get_current_maturity: out_maturity is null.");
         }
-        *out_maturity = static_cast<CNA_GraphicsBackendMaturity>(MapBackendMaturityToC(CNA::getCurrentGraphicsBackendMaturity()));
+        *out_maturity = static_cast<CNA_GraphicsBackendMaturity>(MapBackendMaturityToC(CNA::getCurrentGraphicsRendererMaturity()));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -522,7 +522,7 @@ CNA_Result cna_graphics_backend_get_category(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_category = static_cast<CNA_GraphicsBackendCategory>(MapBackendCategoryToC(CNA::getGraphicsBackendCategory(object)));
+        *out_category = static_cast<CNA_GraphicsBackendCategory>(MapBackendCategoryToC(CNA::getGraphicsRendererCategory(object)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -540,7 +540,7 @@ CNA_Result cna_graphics_backend_get_maturity(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_maturity = static_cast<CNA_GraphicsBackendMaturity>(MapBackendMaturityToC(CNA::getGraphicsBackendMaturity(object)));
+        *out_maturity = static_cast<CNA_GraphicsBackendMaturity>(MapBackendMaturityToC(CNA::getGraphicsRendererMaturity(object)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -588,7 +588,7 @@ CNA_Result cna_graphics_backend_category_copy_name(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        CNA::GraphicsBackendCategory object{};
+        CNA::GraphicsRendererCategory object{};
         if (const CNA_Result routeResult = MapBackendCategory(category, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
@@ -608,7 +608,7 @@ CNA_Result cna_graphics_backend_maturity_copy_name(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        CNA::GraphicsBackendMaturity object{};
+        CNA::GraphicsRendererMaturity object{};
         if (const CNA_Result routeResult = MapBackendMaturity(maturity, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;

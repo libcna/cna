@@ -7393,8 +7393,8 @@
       ]
     },
     {
-      "id": "core-backend-category",
-      "qualified_name_regex": "^CNA::GraphicsBackendCategory(?:::[A-Za-z0-9_]+)?$",
+      "id": "core-renderer-category",
+      "qualified_name_regex": "^CNA::GraphicsRendererCategory(?:::[A-Za-z0-9_]+)?$",
       "kinds": [
         "enum",
         "enum-value"
@@ -7404,18 +7404,18 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-67842A8D4500",
-        "CPP-AF1788BA1C6B",
-        "CPP-C1266987C3EF",
-        "CPP-CED00BBF6504",
-        "CPP-F1686771B87C",
-        "CPP-F804BAD577B9"
+        "CPP-0380F6A85200",
+        "CPP-1C14752BD49A",
+        "CPP-7B160DDE9745",
+        "CPP-9B40B7750438",
+        "CPP-DEBC3B349912",
+        "CPP-E44D10621A12"
       ]
     },
     {
-      "id": "core-backend-category-name",
+      "id": "core-renderer-category-name",
       "qualified_name_regex": "^CNA::toStringView$",
-      "signature_regex": "^\\(GraphicsBackendCategory category\\)$",
+      "signature_regex": "^\\(GraphicsRendererCategory category\\)$",
       "kinds": [
         "function"
       ],
@@ -7424,12 +7424,12 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-F86BC8562179"
+        "CPP-B3E49D700B50"
       ]
     },
     {
-      "id": "core-backend-category-of",
-      "qualified_name_regex": "^CNA::getGraphicsBackendCategory$",
+      "id": "core-renderer-category-of",
+      "qualified_name_regex": "^CNA::getGraphicsRendererCategory$",
       "kinds": [
         "function"
       ],
@@ -7438,12 +7438,12 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-E247CADDC38E"
+        "CPP-D6BC7C325540"
       ]
     },
     {
-      "id": "core-backend-category-current",
-      "qualified_name_regex": "^CNA::getCurrentGraphicsBackendCategory$",
+      "id": "core-renderer-category-current",
+      "qualified_name_regex": "^CNA::getCurrentGraphicsRendererCategory$",
       "kinds": [
         "function"
       ],
@@ -7452,12 +7452,12 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-11A3E1AB91EF"
+        "CPP-ADEAA6BAEC8A"
       ]
     },
     {
-      "id": "core-backend-maturity",
-      "qualified_name_regex": "^CNA::GraphicsBackendMaturity(?:::[A-Za-z0-9_]+)?$",
+      "id": "core-renderer-maturity",
+      "qualified_name_regex": "^CNA::GraphicsRendererMaturity(?:::[A-Za-z0-9_]+)?$",
       "kinds": [
         "enum",
         "enum-value"
@@ -7467,18 +7467,18 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-3FF8ED9FCED3",
-        "CPP-6DBAE654859B",
-        "CPP-AB9BB9F592E6",
-        "CPP-CD4593903036",
-        "CPP-CF502DFB7183",
-        "CPP-F7B97C1B41C3"
+        "CPP-0BCDE5335913",
+        "CPP-1C800D071F82",
+        "CPP-533EC97091E3",
+        "CPP-668C3301666F",
+        "CPP-6AD0715C9F5E",
+        "CPP-A61ADE9BC321"
       ]
     },
     {
-      "id": "core-backend-maturity-name",
+      "id": "core-renderer-maturity-name",
       "qualified_name_regex": "^CNA::toStringView$",
-      "signature_regex": "^\\(GraphicsBackendMaturity maturity\\)$",
+      "signature_regex": "^\\(GraphicsRendererMaturity maturity\\)$",
       "kinds": [
         "function"
       ],
@@ -7487,12 +7487,12 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-4027A4705D75"
+        "CPP-46C94C122040"
       ]
     },
     {
-      "id": "core-backend-maturity-of",
-      "qualified_name_regex": "^CNA::getGraphicsBackendMaturity$",
+      "id": "core-renderer-maturity-of",
+      "qualified_name_regex": "^CNA::getGraphicsRendererMaturity$",
       "kinds": [
         "function"
       ],
@@ -7501,12 +7501,12 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-3CAC52FDF8EF"
+        "CPP-0774C6A32D43"
       ]
     },
     {
-      "id": "core-backend-maturity-current",
-      "qualified_name_regex": "^CNA::getCurrentGraphicsBackendMaturity$",
+      "id": "core-renderer-maturity-current",
+      "qualified_name_regex": "^CNA::getCurrentGraphicsRendererMaturity$",
       "kinds": [
         "function"
       ],
@@ -7515,7 +7515,7 @@
       "status": "implemented",
       "task": "CBIND-037A",
       "approved_symbols": [
-        "CPP-EE5468C33A9D"
+        "CPP-3FF5A674B4D1"
       ]
     },
     {

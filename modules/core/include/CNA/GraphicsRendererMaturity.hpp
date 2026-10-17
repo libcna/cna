@@ -7,15 +7,15 @@
 namespace CNA
 {
     /**
-     * @brief How confidently CNA recommends relying on a given graphics backend for real use.
+     * @brief How confidently CNA recommends relying on a given graphics renderer for real use.
      *
-     * Orthogonal to GraphicsBackendCategory, which classifies implementation technology instead
-     * of recommendation confidence. Query getGraphicsBackendMaturity()/
-     * getCurrentGraphicsBackendMaturity() rather than assuming a fixed maturity from a renderer's
-     * name -- maturity can change over time as a backend gains test coverage and real-hardware
+     * Orthogonal to GraphicsRendererCategory, which classifies implementation technology instead
+     * of recommendation confidence. Query getGraphicsRendererMaturity()/
+     * getCurrentGraphicsRendererMaturity() rather than assuming a fixed maturity from a renderer's
+     * name -- maturity can change over time as a renderer gains test coverage and real-hardware
      * verification.
      */
-    enum class GraphicsBackendMaturity
+    enum class GraphicsRendererMaturity
     {
         /** @brief Fully recommended for regular use; broad, verified feature coverage. */
         Production,
@@ -26,7 +26,7 @@ namespace CNA
         /** @brief Actively developed; public behavior may still change. */
         Experimental,
 
-        /** @brief A legacy backend kept for compatibility, research, or demonstrating an old API -- not recommended for new work. Unused by any renderer today. */
+        /** @brief A legacy renderer kept for compatibility, research, or demonstrating an old API -- not recommended for new work. Unused by any renderer today. */
         Historical,
 
         /** @brief No longer recommended; kept only until removal. Unused by any renderer today. */
@@ -34,21 +34,21 @@ namespace CNA
     };
 
     /**
-     * @brief Returns the human-readable name of a GraphicsBackendMaturity value.
+     * @brief Returns the human-readable name of a GraphicsRendererMaturity value.
      *
      * @param maturity The maturity value to name.
      * @return The maturity's name (e.g. "Production", "Experimental"), or "Unknown" if maturity
      *         does not match any declared enumerator.
      */
-    constexpr std::string_view toStringView(GraphicsBackendMaturity maturity)
+    constexpr std::string_view toStringView(GraphicsRendererMaturity maturity)
     {
         switch (maturity)
         {
-            case GraphicsBackendMaturity::Production:   return "Production";
-            case GraphicsBackendMaturity::Supported:    return "Supported";
-            case GraphicsBackendMaturity::Experimental: return "Experimental";
-            case GraphicsBackendMaturity::Historical:   return "Historical";
-            case GraphicsBackendMaturity::Deprecated:   return "Deprecated";
+            case GraphicsRendererMaturity::Production:   return "Production";
+            case GraphicsRendererMaturity::Supported:    return "Supported";
+            case GraphicsRendererMaturity::Experimental: return "Experimental";
+            case GraphicsRendererMaturity::Historical:   return "Historical";
+            case GraphicsRendererMaturity::Deprecated:   return "Deprecated";
         }
         return "Unknown";
     }
@@ -57,45 +57,45 @@ namespace CNA
      * @brief Returns how confidently CNA recommends the given graphics renderer for real use.
      *
      * Callable for any public GraphicsRendererType identity, not only the one compiled into the
-     * current build -- e.g. to list every backend's maturity in a launcher or editor UI without
+     * current build -- e.g. to list every renderer's maturity in a launcher or editor UI without
      * compiling every renderer variant.
      *
      * @param type The renderer identity to classify.
      * @return The renderer's maturity.
      */
-    constexpr GraphicsBackendMaturity getGraphicsBackendMaturity(GraphicsRendererType type)
+    constexpr GraphicsRendererMaturity getGraphicsRendererMaturity(GraphicsRendererType type)
     {
         switch (type)
         {
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::DirectX9:
-                return GraphicsBackendMaturity::Production;
+                return GraphicsRendererMaturity::Production;
 
             case GraphicsRendererType::WebGL2:
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::SdlGpu:
-                return GraphicsBackendMaturity::Supported;
+                return GraphicsRendererMaturity::Supported;
 
             case GraphicsRendererType::Software:
             case GraphicsRendererType::Fna3d:
-                return GraphicsBackendMaturity::Experimental;
+                return GraphicsRendererMaturity::Experimental;
         }
         // Unreachable as long as every GraphicsRendererType member has an arm above; kept as a
         // trailing statement (not `default:`) so an omitted member has no compiler diagnostic to
-        // rely on -- GraphicsBackendMaturityTests.cpp's own exhaustiveness test is what catches it.
-        return GraphicsBackendMaturity::Experimental;
+        // rely on -- GraphicsRendererMaturityTests.cpp's own exhaustiveness test is what catches it.
+        return GraphicsRendererMaturity::Experimental;
     }
 
     /**
      * @brief Returns the maturity of the graphics renderer compiled into this build.
      *
-     * @return getGraphicsBackendMaturity(getCurrentGraphicsRendererType()).
+     * @return getGraphicsRendererMaturity(getCurrentGraphicsRendererType()).
      */
-    constexpr GraphicsBackendMaturity getCurrentGraphicsBackendMaturity()
+    constexpr GraphicsRendererMaturity getCurrentGraphicsRendererMaturity()
     {
-        return getGraphicsBackendMaturity(getCurrentGraphicsRendererType());
+        return getGraphicsRendererMaturity(getCurrentGraphicsRendererType());
     }
 } // CNA

@@ -132,7 +132,7 @@ namespace CNA
         /**
          * @brief Enables fallback across every compiled-in renderer.
          *
-         * The order is derived from CNA::GraphicsBackendMaturity and CNA::GraphicsBackendCategory
+         * The order is derived from CNA::GraphicsRendererMaturity and CNA::GraphicsRendererCategory
          * rather than a ranking invented here: mature GPU renderers first, CPU renderers next,
          * then HEADLESS, which shows no picture, and STUB last.
          *

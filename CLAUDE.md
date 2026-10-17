@@ -565,7 +565,7 @@ with its permanently reserved C ABI value, and at run time as retired rather tha
 number is never reassigned and no surviving renderer is an alias for it. Do not resurrect one
 without a fresh owner instruction -- see `docs/removed-renderers.md`.
 
-`WEBGPU` is supported (`GraphicsBackendMaturity::Supported` since 2026-10-17, the class `SDL_GPU`
+`WEBGPU` is supported (`GraphicsRendererMaturity::Supported` since 2026-10-17, the class `SDL_GPU`
 is in), with a real 3D route (stock effects, instancing, render targets, MSAA, fog parity,
 GPU-native compressed textures, stencil ops) and Emscripten browser support.
 `plans/plan_webgpu.md`'s top-of-file status summary is the single source of truth for current

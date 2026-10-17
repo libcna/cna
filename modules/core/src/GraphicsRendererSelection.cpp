@@ -6,8 +6,8 @@
 
 #include "CNA/GraphicsRendererSelection.hpp"
 
-#include "CNA/GraphicsBackendCategory.hpp"
-#include "CNA/GraphicsBackendMaturity.hpp"
+#include "CNA/GraphicsRendererCategory.hpp"
+#include "CNA/GraphicsRendererMaturity.hpp"
 #include "CNA/Internal/RetiredGraphicsRenderers.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/Logger.hpp"
@@ -221,10 +221,10 @@ namespace CNA
                             return 100;
                         // HEADLESS is a supported renderer that shows no picture, so it follows the
                         // CPU renderer, which does.
-                        const int maturityRank = static_cast<int>(getGraphicsBackendMaturity(type));
-                        const GraphicsBackendCategory category = getGraphicsBackendCategory(type);
-                        const int categoryRank = category == GraphicsBackendCategory::Software     ? 10
-                                                 : category == GraphicsBackendCategory::Diagnostic ? 20
+                        const int maturityRank = static_cast<int>(getGraphicsRendererMaturity(type));
+                        const GraphicsRendererCategory category = getGraphicsRendererCategory(type);
+                        const int categoryRank = category == GraphicsRendererCategory::Software     ? 10
+                                                 : category == GraphicsRendererCategory::Diagnostic ? 20
                                                                                                    : 0;
                         return categoryRank + maturityRank;
                     };

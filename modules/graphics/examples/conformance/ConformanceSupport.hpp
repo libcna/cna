@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include "CNA/GraphicsBackendCategory.hpp"
+#include "CNA/GraphicsRendererCategory.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 
@@ -33,7 +33,7 @@ namespace CNA::Examples::Conformance
     {
         const GraphicsRendererType type =
             Internal::Renderers::GraphicsRendererRegistry::Default().type;
-        if (getGraphicsBackendCategory(type) != GraphicsBackendCategory::Diagnostic)
+        if (getGraphicsRendererCategory(type) != GraphicsRendererCategory::Diagnostic)
             return true;
         std::printf("[SKIP] %s: the %s renderer is a Diagnostic-category renderer and makes no "
                     "pixel claim, so this program's read-back oracle cannot judge it\n",

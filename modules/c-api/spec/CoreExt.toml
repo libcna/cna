@@ -37,8 +37,8 @@ cna_graphics_renderer_copy_current_name = { copy = "CNA::getCurrentGraphicsRende
 [values]
 [values.routes]
 cna_logger_get_minimum_level = { value = "MapLogLevelToC(CNA::Logger::GetMinimumLevel())" }
-cna_graphics_backend_get_current_category = { value = "MapBackendCategoryToC(CNA::getCurrentGraphicsBackendCategory())" }
-cna_graphics_backend_get_current_maturity = { value = "MapBackendMaturityToC(CNA::getCurrentGraphicsBackendMaturity())" }
+cna_graphics_backend_get_current_category = { value = "MapBackendCategoryToC(CNA::getCurrentGraphicsRendererCategory())" }
+cna_graphics_backend_get_current_maturity = { value = "MapBackendMaturityToC(CNA::getCurrentGraphicsRendererMaturity())" }
 cna_platform_get_is_apple_ext = { value = "CNA::isApplePlatform()" }
 cna_platform_get_is_mobile_ext = { value = "CNA::isMobilePlatform()" }
 cna_platform_get_current_name_size_ext = { size = "std::string_view(CNA::getCurrentPlatformName())" }
@@ -67,15 +67,15 @@ lookup = "MapRendererType"
 object = "CNA::GraphicsRendererType"
 
 [renderer_type.routes]
-cna_graphics_backend_get_category = { get = "MapBackendCategoryToC(CNA::getGraphicsBackendCategory(object))" }
-cna_graphics_backend_get_maturity = { get = "MapBackendMaturityToC(CNA::getGraphicsBackendMaturity(object))" }
+cna_graphics_backend_get_category = { get = "MapBackendCategoryToC(CNA::getGraphicsRendererCategory(object))" }
+cna_graphics_backend_get_maturity = { get = "MapBackendMaturityToC(CNA::getGraphicsRendererMaturity(object))" }
 cna_graphics_renderer_set_preferred_ext = { call = "CNA::GraphicsRendererSelection::SetPreferred(object)" }
 cna_graphics_renderer_get_is_available_ext = { get = "CNA::GraphicsRendererSelection::IsAvailable(object)" }
 
 # The lookup maps the C backend category to the canonical one.
 [backend_category]
 lookup = "MapBackendCategory"
-object = "CNA::GraphicsBackendCategory"
+object = "CNA::GraphicsRendererCategory"
 
 [backend_category.routes]
 cna_graphics_backend_category_copy_name = { copy = "CNA::toStringView(object)" }
@@ -83,7 +83,7 @@ cna_graphics_backend_category_copy_name = { copy = "CNA::toStringView(object)" }
 # The lookup maps the C backend maturity to the canonical one.
 [backend_maturity]
 lookup = "MapBackendMaturity"
-object = "CNA::GraphicsBackendMaturity"
+object = "CNA::GraphicsRendererMaturity"
 
 [backend_maturity.routes]
 cna_graphics_backend_maturity_copy_name = { copy = "CNA::toStringView(object)" }

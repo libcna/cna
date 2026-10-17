@@ -7,14 +7,14 @@
 namespace CNA
 {
     /**
-     * @brief What kind of implementation technology a graphics backend uses.
+     * @brief What kind of implementation technology a graphics renderer uses.
      *
-     * Orthogonal to GraphicsBackendMaturity, which classifies recommendation confidence instead
+     * Orthogonal to GraphicsRendererMaturity, which classifies recommendation confidence instead
      * of implementation technology. For example FNA3D and DIRECTX9 both end up on Direct3D, but
      * FNA3D picks its driver at runtime (TranslationLayer) while DIRECTX9 talks to the real
      * Direct3D 9 COM interfaces (Native).
      */
-    enum class GraphicsBackendCategory
+    enum class GraphicsRendererCategory
     {
         /** @brief Compiled against exactly one fixed real graphics API, with no runtime backend negotiation. */
         Native,
@@ -33,21 +33,21 @@ namespace CNA
     };
 
     /**
-     * @brief Returns the human-readable name of a GraphicsBackendCategory value.
+     * @brief Returns the human-readable name of a GraphicsRendererCategory value.
      *
      * @param category The category value to name.
      * @return The category's name (e.g. "Native", "TranslationLayer"), or "Unknown" if category
      *         does not match any declared enumerator.
      */
-    constexpr std::string_view toStringView(GraphicsBackendCategory category)
+    constexpr std::string_view toStringView(GraphicsRendererCategory category)
     {
         switch (category)
         {
-            case GraphicsBackendCategory::Native:           return "Native";
-            case GraphicsBackendCategory::TranslationLayer: return "TranslationLayer";
-            case GraphicsBackendCategory::Software:         return "Software";
-            case GraphicsBackendCategory::Web:              return "Web";
-            case GraphicsBackendCategory::Diagnostic:       return "Diagnostic";
+            case GraphicsRendererCategory::Native:           return "Native";
+            case GraphicsRendererCategory::TranslationLayer: return "TranslationLayer";
+            case GraphicsRendererCategory::Software:         return "Software";
+            case GraphicsRendererCategory::Web:              return "Web";
+            case GraphicsRendererCategory::Diagnostic:       return "Diagnostic";
         }
         return "Unknown";
     }
@@ -61,44 +61,44 @@ namespace CNA
      * @param type The renderer identity to classify.
      * @return The renderer's category.
      */
-    constexpr GraphicsBackendCategory getGraphicsBackendCategory(GraphicsRendererType type)
+    constexpr GraphicsRendererCategory getGraphicsRendererCategory(GraphicsRendererType type)
     {
         switch (type)
         {
             case GraphicsRendererType::OpenGLES3:
             case GraphicsRendererType::OpenGL33:
             case GraphicsRendererType::DirectX9:
-                return GraphicsBackendCategory::Native;
+                return GraphicsRendererCategory::Native;
 
             case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::SdlGpu:
             case GraphicsRendererType::Fna3d:
-                return GraphicsBackendCategory::TranslationLayer;
+                return GraphicsRendererCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
-                return GraphicsBackendCategory::Software;
+                return GraphicsRendererCategory::Software;
 
             case GraphicsRendererType::WebGL2:
-                return GraphicsBackendCategory::Web;
+                return GraphicsRendererCategory::Web;
 
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
-                return GraphicsBackendCategory::Diagnostic;
+                return GraphicsRendererCategory::Diagnostic;
         }
         // Unreachable as long as every GraphicsRendererType member has an arm above; kept as a
         // trailing statement (not `default:`) so an omitted member has no compiler diagnostic to
-        // rely on -- GraphicsBackendCategoryTests.cpp's own exhaustiveness test is what catches it.
-        return GraphicsBackendCategory::Native;
+        // rely on -- GraphicsRendererCategoryTests.cpp's own exhaustiveness test is what catches it.
+        return GraphicsRendererCategory::Native;
     }
 
     /**
      * @brief Returns the implementation-technology category of the graphics renderer compiled
      *        into this build.
      *
-     * @return getGraphicsBackendCategory(getCurrentGraphicsRendererType()).
+     * @return getGraphicsRendererCategory(getCurrentGraphicsRendererType()).
      */
-    constexpr GraphicsBackendCategory getCurrentGraphicsBackendCategory()
+    constexpr GraphicsRendererCategory getCurrentGraphicsRendererCategory()
     {
-        return getGraphicsBackendCategory(getCurrentGraphicsRendererType());
+        return getGraphicsRendererCategory(getCurrentGraphicsRendererType());
     }
 } // CNA
