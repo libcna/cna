@@ -67,7 +67,7 @@ wine "$@" 2>&1 | tee "$logFile"
 wineExit="${PIPESTATUS[0]}"
 
 if [ "${CNA_D3D9_ALLOW_WINED3D:-0}" != "1" ] && [ "${CNA_D3D9_SKIP_DXVK_GATE:-0}" != "1" ]; then
-    if ! grep -Eq 'DXVK: [0-9]+\.[0-9]+' "$logFile"; then
+    if ! grep -Eq 'DXVK: v?[0-9]+\.[0-9]+' "$logFile"; then
         echo "error: D9-5 gate failed -- no 'DXVK: <version>' log line was seen in this run's" >&2
         echo "output, so this looks like a silent WineD3D fallback rather than a real DXVK-backed" >&2
         echo "Direct3D 9 run. This invalidates any D3D9-semantics pixel-test result from this" >&2
