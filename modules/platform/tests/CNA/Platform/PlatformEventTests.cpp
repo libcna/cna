@@ -183,7 +183,8 @@ TEST(PlatformEventTests, WindowEventKindNamesAreDistinct)
         WindowEventKind::CloseRequested, WindowEventKind::Minimized,
         WindowEventKind::Maximized, WindowEventKind::Restored,
         WindowEventKind::Moved,     WindowEventKind::DisplayScaleChanged,
-        WindowEventKind::DisplayChanged};
+        WindowEventKind::DisplayChanged, WindowEventKind::FullscreenEntered,
+        WindowEventKind::FullscreenLeft};
     std::set<std::string> names;
     for (const WindowEventKind kind : kinds)
     {

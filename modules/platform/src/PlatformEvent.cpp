@@ -96,6 +96,8 @@ namespace CNA::Platform {
         static const std::string moved = "Moved";
         static const std::string displayScaleChanged = "DisplayScaleChanged";
         static const std::string displayChanged = "DisplayChanged";
+        static const std::string fullscreenEntered = "FullscreenEntered";
+        static const std::string fullscreenLeft = "FullscreenLeft";
 
         switch (kind)
         {
@@ -111,6 +113,8 @@ namespace CNA::Platform {
             case WindowEventKind::Moved:               return moved;
             case WindowEventKind::DisplayScaleChanged: return displayScaleChanged;
             case WindowEventKind::DisplayChanged:      return displayChanged;
+            case WindowEventKind::FullscreenEntered:   return fullscreenEntered;
+            case WindowEventKind::FullscreenLeft:      return fullscreenLeft;
         }
         return resized;
     }
