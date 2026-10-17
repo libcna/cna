@@ -429,12 +429,11 @@ directory and is shared by all multi-renderer work.
   scripts and backups; build artifacts there are discarded, forcing wasteful full rebuilds.
 - **Use `ccache`** when available (`CNA_USE_CCACHE=ON`; pass
   `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` on a fresh configure if the cache shows it NOTFOUND).
-- **Build parallelism is not capped.** Earlier revisions of this file required `-j3`/`-j4` because
-  the machine had a cooling fault; that hardware was repaired on 2026-08-22 and the ceiling was
-  lifted with it. Use the whole machine — `-j$(nproc)` or plain `--parallel`. The one thing still
-  worth watching is memory rather than heat: sanitizer and template-heavy translation units can
-  each want several GB, so if a specific target starts swapping, lower the job count for that
-  target instead of reinstating a project-wide limit.
+- **Compile with at most 8 parallel jobs** — `cmake --build <dir> --parallel 8`, `ninja -j8`
+  (owner, 2026-10-17; it was 4 from 2026-10-16). Never `-j$(nproc)` or a bare `--parallel`: the
+  machine's 16 cores are shared by every agent. Memory is the other limit: sanitizer and
+  template-heavy translation units can each want several GB, so if a specific target starts
+  swapping, lower the job count for that target.
 
 ### Running GPU/window tests (mandatory)
 

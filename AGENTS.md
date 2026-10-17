@@ -391,6 +391,10 @@ After making changes:
 
 Default debug build dir: `cmake-build-debug/`. SDL_GPU build dir: `cmake-build-sdlgpu/`.
 
+Compile with **at most 8 parallel jobs** — `cmake --build <dir> --parallel 8`, `ninja -j8` (owner,
+2026-10-17); never `-j$(nproc)` or a bare `--parallel`, since the machine's 16 cores are shared by
+every agent. Lower the job count for a single target that runs short of memory.
+
 ### Running GPU/window tests (mandatory)
 
 **Never run tests, examples, demos or oracles on the owner's live desktop** — not `DISPLAY=:0`, not
