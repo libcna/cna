@@ -2704,10 +2704,17 @@ namespace CNA::Internal::GltfImport
         // one segment: the one back to the first vertex, which glTF leaves implicit in the mode.
         // Appending it turns the run into an ordinary LINE_STRIP that every renderer can draw,
         // without the closing segment being lost -- which is what dropping the mode used to do.
-        if (topology != PrimitiveTopology::LineLoop) { return indices; }
-        if (indices.size() < 2) { return indices; }  // fewer than two vertices closes nothing
-        std::vector<std::uint32_t> out(indices);
-        out.push_back(indices.front());
+        const bool close = topology == PrimitiveTopology::LineLoop && indices.size() >= 2u;
+        if (close && indices.size() == indices.max_size())
+        {
+            throw std::length_error("glTF LINE_LOOP has too many indices to close.");
+        }
+        std::vector<std::uint32_t> out(indices.size() + (close ? 1u : 0u));
+        for (std::size_t index = 0u; index < indices.size(); ++index)
+        {
+            out[index] = indices[index];
+        }
+        if (close) { out.back() = indices.front(); }
         return out;
     }
 
