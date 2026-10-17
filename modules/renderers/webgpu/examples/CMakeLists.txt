@@ -34,9 +34,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # archive (must fail closed and remove the archive + stamp) and an unknown/empty hash.
     cna_register_renderer_test(NAME WebGPU_ChecksumVerification COMMAND ${CMAKE_COMMAND}
         -DMODULE=${CNA_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
-        -DCHILD=${CNA_SOURCE_DIR}/cmake/tests/webgpu_checksum_verify_once.cmake
+        -DCHILD=${CNA_SOURCE_DIR}/cmake/Tests/webgpu_checksum_verify_once.cmake
         -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_checksum_tmp
-        -P ${CNA_SOURCE_DIR}/cmake/tests/webgpu_checksum_test.cmake
+        -P ${CNA_SOURCE_DIR}/cmake/Tests/webgpu_checksum_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
     # WEBGPU-151: integration test of the real ThirdPartyWebGPU cache logic (cna_webgpu_prepare_cache
@@ -45,16 +45,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_CacheMigration COMMAND ${CMAKE_COMMAND}
         -DMODULE=${CNA_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
         -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_cache_tmp
-        -P ${CNA_SOURCE_DIR}/cmake/tests/webgpu_cache_test.cmake
+        -P ${CNA_SOURCE_DIR}/cmake/Tests/webgpu_cache_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
     # The official package can live outside a cross compiler's target sysroot. Verify that the
     # explicit package root remains authoritative even when find-root modes are all ONLY.
     cna_register_renderer_test(NAME WebGPU_CrossRootPackageDiscovery COMMAND ${CMAKE_COMMAND}
         -DMODULE=${CNA_SOURCE_DIR}/cmake/ThirdPartyWebGPU.cmake
-        -DPROBE_SOURCE=${CNA_SOURCE_DIR}/cmake/tests/webgpu-discovery-probe
+        -DPROBE_SOURCE=${CNA_SOURCE_DIR}/cmake/Tests/webgpu-discovery-probe
         -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_discovery_tmp
-        -P ${CNA_SOURCE_DIR}/cmake/tests/webgpu_discovery_test.cmake
+        -P ${CNA_SOURCE_DIR}/cmake/Tests/webgpu_discovery_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
     # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
