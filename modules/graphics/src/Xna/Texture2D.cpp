@@ -433,7 +433,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // Block-compressed formats are addressed in padded 4x4 blocks, not per texel: a level's
         // byte count is ceil(w/4) * ceil(h/4) blocks, never the raw texel count used below for
         // every other format (SKIA-140).
-        if (Texture::GetBlockSizeSquaredEXT(format) != 1)
+        const bool blockCompressed = Texture::GetBlockSizeSquaredEXT(format) != 1;
+        if (blockCompressed)
         {
             const std::size_t blockCols = static_cast<std::size_t>((w + 3) / 4);
             const std::size_t blockRows = static_cast<std::size_t>((h + 3) / 4);
@@ -448,9 +449,16 @@ namespace Microsoft::Xna::Framework::Graphics
                                0);
         }
         renderer_   = graphicsDevice.GetRenderer().CreateTexture(data);
-        cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
-        renderer_->ShareCpuPixels(cpuPixels_);
-        MaybeFreeCpuPixels();
+        // A block-compressed texture keeps no CPU shadow. Its blocks live in the renderer, which
+        // answers GetData from them and restores them after a context or device loss; nothing
+        // would ever write or read this zero-filled creation buffer, so it is released here
+        // rather than kept for the texture's lifetime.
+        if (!blockCompressed)
+        {
+            cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
+            renderer_->ShareCpuPixels(cpuPixels_);
+            MaybeFreeCpuPixels();
+        }
 #if CNA_DIAGNOSTICS_LEVEL >= 1
         UpdateDiagnosticResourceEXT(MakeTextureDiagnosticDescriptor(
             CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,

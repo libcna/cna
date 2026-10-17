@@ -2092,6 +2092,8 @@ TEST_F(Texture2DFromStreamFormatTest, DdsRemainsAvailableOnlyThroughNamedExtensi
         std::array<std::uint8_t, 8> block{};
         native.GetData(block.data(), static_cast<int>(block.size()));
         EXPECT_TRUE(std::equal(block.begin(), block.end(), dds.begin() + 128));
+        EXPECT_TRUE(native.GetCpuPixelsWeak().expired())
+            << "a DDS kept compressed holds its blocks in the renderer, not in a CPU shadow";
     }
     else
     {

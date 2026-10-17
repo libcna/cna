@@ -634,9 +634,9 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT std::weak_ptr<ITextureRenderer> GetRendererWeak() const { return renderer_; }
 
         /**
-         * @brief Returns a weak pointer to the CPU-side pixel buffer.
+         * @brief Returns a weak pointer to the CPU-side level-0 pixel buffer, for diagnostics.
          *
-         * Used by context-recovery diagnostics and cache/resource tests.
+         * Always expired for a block-compressed format, which keeps its blocks in the renderer.
          * @return A weak_ptr to the pixel buffer; may be expired if context recovery is disabled.
          */
         CNAEXT std::weak_ptr<std::vector<uint8_t>> GetCpuPixelsWeak() const { return cpuPixels_; }
@@ -756,7 +756,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /// authoritative and whose shared renderer must never be written through.
         bool gpuOnlyContent_ = false;
 
-        /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.
+        /// Frees cpuPixels_ (level 0 only; extraMipLevels_ stay) when context recovery is disabled.
         void MaybeFreeCpuPixels();
 
         /// Builds a single-level Texture2D from transformed/decoded RGBA8 pixel data.

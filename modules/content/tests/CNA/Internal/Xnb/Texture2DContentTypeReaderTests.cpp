@@ -215,6 +215,49 @@ TEST_F(Texture2DContentTypeReaderTest,
     }
 }
 
+// Compressed content a renderer keeps compressed lives in that renderer's block store, so the
+// loaded texture -- a whole mip chain, as content usually has -- holds no level-0 CPU shadow.
+TEST_F(Texture2DContentTypeReaderTest, CompressedContentKeptCompressedHoldsNoLevelZeroCpuShadow)
+{
+    GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters()};
+    int loaded = 0;
+    for (const SurfaceFormat format : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3,
+                                       SurfaceFormat::Dxt5})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        if (!device.GetRenderer().LoadsCompressedContentNativelyEXT() ||
+            !device.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+            continue;
+        ++loaded;
+
+        // 8x8 is two by two blocks; 4x4, 2x2 and 1x1 are one block each.
+        const auto blockBytes = static_cast<std::size_t>(Texture::GetFormatSizeEXT(format));
+        std::vector<std::vector<std::uint8_t>> levels;
+        for (const std::size_t blocks : {4u, 1u, 1u, 1u})
+        {
+            std::vector<std::uint8_t> level(blocks * blockBytes);
+            for (std::size_t index = 0; index < level.size(); ++index)
+                level[index] = static_cast<std::uint8_t>(0x29u + levels.size() * 7u + index * 11u);
+            levels.push_back(std::move(level));
+        }
+
+        Texture2D texture = ReadHandConstructedTexture2D(device, format, 8, 8, levels);
+        ASSERT_EQ(texture.getFormatProperty(), format);
+        ASSERT_EQ(texture.getLevelCountProperty(), 4);
+        EXPECT_TRUE(texture.GetCpuPixelsWeak().expired());
+
+        std::vector<std::uint8_t> level0(levels[0].size(), 0xCDu);
+        texture.GetData(level0.data(), static_cast<int>(level0.size()));
+        EXPECT_EQ(level0, levels[0]);
+        std::vector<std::uint8_t> level1(levels[1].size(), 0xCDu);
+        texture.GetData(1, nullptr, level1.data(), 0, static_cast<int>(level1.size()));
+        EXPECT_EQ(level1, levels[1]);
+    }
+    if (loaded == 0)
+        GTEST_SKIP() << "the active renderer decodes compressed content to Color";
+}
+
 // A NormalizedByte2 texture is TWO bytes per texel, not four. Found by porting Microsoft's
 // DistortionSample, whose own content pipeline extension ends DisplacementMapProcessor with
 // ConvertBitmapType(PixelBitmapContent<NormalizedByte2>): a 2D displacement map has an X and a Y
