@@ -37,6 +37,9 @@ namespace CNA::Internal::Xnb
 
         /** @brief Deepest nested-object graph this writer will follow before failing. */
         std::int32_t maxObjectNestingDepth = 256;
+
+        /** @brief Compares every configured writing ceiling. */
+        bool operator==(const XnbWriteLimits& other) const = default;
     };
 
     /** @brief The process-wide default XnbWriteLimits, used unless a caller supplies its own. */

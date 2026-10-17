@@ -703,6 +703,20 @@ TEST(XnbAssetWriterTest, AFormatVersion4CannotExpressIsRefused)
                  XnbWriteException);
 }
 
+TEST(XnbAssetWriterTest, TextureContentEqualityIncludesShapeAndPayload)
+{
+    const XnbTextureData source = MakeTexture2D();
+    XnbTextureData changed = source;
+    changed.levels[0][0] ^= 0xFFu;
+
+    EXPECT_EQ(XnbTexture2DContent{source}, XnbTexture2DContent{source});
+    EXPECT_NE(XnbTexture2DContent{source}, XnbTexture2DContent{changed});
+    EXPECT_EQ(XnbTexture3DContent{source}, XnbTexture3DContent{source});
+    EXPECT_NE(XnbTexture3DContent{source}, XnbTexture3DContent{changed});
+    EXPECT_EQ(XnbTextureCubeContent{source}, XnbTextureCubeContent{source});
+    EXPECT_NE(XnbTextureCubeContent{source}, XnbTextureCubeContent{changed});
+}
+
 // -- untrusted-input hardening (XNAP-85) -------------------------------------------------------
 
 TEST(XnbAssetWriterTest, ATextureLevelWhoseByteCountDisagreesWithItsDimensionsIsRefused)

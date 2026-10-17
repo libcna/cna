@@ -73,6 +73,9 @@ namespace CNA::Internal::Xnb
 
         /** @brief Raw XNB payloads ordered face-major and then mip-major. */
         std::vector<std::vector<std::uint8_t>> levels;
+
+        /** @brief Compares the complete texture shape, format, platform and payload. */
+        bool operator==(const XnbTextureData& other) const = default;
     };
 
     /** @brief Device-independent SpriteFont fields decoded from an XNB payload. */

@@ -1359,3 +1359,17 @@ TEST_F(XnbWriterTest, AGameCanRegisterItsOwnTypeWriterAndReaderAndRoundTripThrou
     huge.points = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}};
     EXPECT_THROW((void)WriteXnbAsset(huge, options, "huge", registry), XnbWriteException);
 }
+
+TEST(XnbFileOptionsTest, EqualityIncludesEveryWriteLimit)
+{
+    XnbFileOptions first;
+    XnbFileOptions second;
+    EXPECT_EQ(first, second);
+
+    second.limits.maxObjectNestingDepth -= 1;
+    EXPECT_NE(first, second);
+
+    second = first;
+    second.readerNameStyle = XnbReaderNameStyle::Portable;
+    EXPECT_NE(first, second);
+}
