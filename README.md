@@ -341,7 +341,7 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 - SDL3 and SDL3_mixer are built from vendored submodules by default — no system SDL packages required,
   but building them needs the X11, OpenGL and audio development headers.
 - The Debian 13 package list for all of the above, the test environment and the optional features
-  is [docs/programs.md](docs/programs.md).
+  is [docs/development-environment.md](docs/development-environment.md).
 - FFmpeg is optional. `CNA_ENABLE_VIDEO=AUTO` (the default) enables video decoding when
   `libavcodec`, `libavformat`, `libavutil` and `libswresample` development packages are present;
   use `OFF` for a game that does not need video, or `ON` to require them. The XNA video types remain
@@ -398,6 +398,11 @@ cmake --build build-win --target CnaTests
 ```
 
 ### Build (Linux → Windows cross-compilation with MinGW-w64)
+
+GamerServices and Net, both on by default, need a libcurl built for Windows, which Debian does not
+package. Point `CURL_INCLUDE_DIR` and `CURL_LIBRARY` at a MinGW build of curl, or add
+`-DCNA_ENABLE_NET=OFF -DCNA_ENABLE_GAMER_SERVICES=OFF` to the configure below. Details:
+[docs/development-environment.md](docs/development-environment.md), *Windows cross-development*.
 
 ```bash
 # Install cross toolchain
@@ -473,6 +478,7 @@ see [`docs/directx9-renderer.md`](docs/directx9-renderer.md) for what that means
 verified on this repo's own Debian dev machine via the MinGW-w64 cross toolchain, tested locally
 through Wine + DXVK (`scripts/run-wine-dxvk9.sh`). See
 [`docs/directx9-renderer.md`](docs/directx9-renderer.md) and [`plans/plan_dx9.md`](plans/plan_dx9.md) for full detail.
+The Windows libcurl note of the MinGW `SDL_GPU` build above applies here too.
 
 ```bash
 # Install cross toolchain

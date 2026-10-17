@@ -286,7 +286,7 @@ suites (Keyboard, Mouse, MouseCursor, GamePad, Touch, Gesture, TextInputEXT, and
 `SdlInputBridge` bridge tests) on the default EasyGL backend:
 
 ```bash
-git submodule update --init --recursive   # first time only (see README)
+git submodule update --init   # first time only (see README)
 cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
 cmake --build cmake-build-input-easygl --target CnaTests -j"$(nproc)"
 

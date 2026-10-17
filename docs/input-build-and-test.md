@@ -13,7 +13,7 @@ CNA input depends on three kinds of external code:
 
 | Dependency | How it is obtained | Notes |
 |---|---|---|
-| `third_party/SDL`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init --recursive`. Alternative: `-DCNA_USE_SYSTEM_SDL=ON` builds against installed system SDL3/SDL3_mixer packages instead (`find_package(SDL3 REQUIRED)` etc., `cmake/ThirdPartySDL.cmake`) — no Input behavior differs either way, it is purely a build-time source-of-headers/libs choice (P9-025). |
+| `third_party/SDL`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init`. Alternative: `-DCNA_USE_SYSTEM_SDL=ON` builds against installed system SDL3/SDL3_mixer packages instead (`find_package(SDL3 REQUIRED)` etc., `cmake/ThirdPartySDL.cmake`) — no Input behavior differs either way, it is purely a build-time source-of-headers/libs choice (P9-025). |
 | `vendor/googletest` | **git submodule** | test framework |
 | `../sharp-runtime` | **sibling repository** (NOT a submodule) | CNA's C++ `System.*` runtime; must sit next to `cna_input` |
 | `../easy-gl` | **sibling repository** (NOT a submodule) | only for the `OPENGLES3` backend |
@@ -28,7 +28,7 @@ CNA input depends on three kinds of external code:
 
 ```bash
 # 1. The vendored SDL family + googletest (submodules of this repo):
-git submodule update --init --recursive
+git submodule update --init
 
 # 2. The sibling runtime + (for EasyGL) the GL helper, checked out NEXT TO cna_input:
 #    <parent>/cna_input, <parent>/sharp-runtime, <parent>/easy-gl
@@ -93,7 +93,7 @@ Ninja 1.12.1, Debian 13).
 
 The **SDL** dependency is the `third_party/SDL` git submodule (`libsdl-org/SDL`), pinned at commit
 **`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`** (alongside `SDL_mixer`);
-`git submodule update --init --recursive` restores it. **Tag lookup:**
+`git submodule update --init` restores it. **Tag lookup:**
 `git -C third_party/SDL describe --tags` = **`release-3.4.0-685-gcbe3fbe9f`** — 685 commits past the
 `release-3.4.0` tag on SDL `main`, self-reporting as SDL **3.5.0** (in-development). It is **not** a tagged
 release; the nearest **stable release tags** are the `release-3.4.x` line (latest **`release-3.4.8`**).
@@ -124,7 +124,7 @@ still require `xvfb-run` + `SDL_VIDEODRIVER=x11` in CI; the dummy driver may ski
 
 The **continuous** fresh-clone proof is the CI workflow `.github/workflows/input-ci.yml`: every run
 starts from a clean `ubuntu-24.04` runner with **no** warm build dir and **no** `.sdl-prebuilt` cache,
-does `git submodule update --init --recursive` + clones the `sharp-runtime`/`easy-gl` siblings, configures,
+does `git submodule update --init` + clones the `sharp-runtime`/`easy-gl` siblings, configures,
 builds `CnaTests`, and runs `xvfb-run -a ctest -L input` — green across the 5-backend matrix. That is the
 recorded transcript of a clean environment building and passing with no manual patching.
 
@@ -132,14 +132,14 @@ To reproduce locally in a throwaway clone (siblings present next to it):
 
 ```bash
 git clone <cna_input-url> /tmp/cna-fresh && cd /tmp/cna-fresh
-git submodule update --init --recursive
+git submodule update --init
 cmake -S . -B build -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
 cmake --build build --target CnaTests
 xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir build -L input --output-on-failure
 ```
 
 If a dependency is missing, the configure step fails fast with a copy-pasteable remedy (INPUT-BUILD-005):
-a missing `third_party/SDL*` submodule prints `Run: git submodule update --init --recursive`; a missing
+a missing `third_party/SDL*` submodule prints `Run: git submodule update --init`; a missing
 `sharp-runtime`/`easy-gl` sibling prints the exact `git clone … <path>` command (and, for `easy-gl`, the
 option to pick another backend). Verified in `cmake/ThirdPartySDL.cmake` and `CMakeLists.txt`.
 
@@ -185,7 +185,7 @@ Notes:
 
 ## Input verification checklist (task 884)
 
-1. `git submodule update --init --recursive` completes clean.
+1. `git submodule update --init` completes clean.
 2. `../sharp-runtime` and (for EasyGL) `../easy-gl` exist.
 3. Configure succeeds with `-DCNA_BUILD_TESTS=ON`.
 4. `CnaTests` builds with no errors.
@@ -223,7 +223,7 @@ deviations.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init --recursive` |
+| CMake configure fails: `Missing vendored 'SDL' …` | submodules not initialized | `git submodule update --init` |
 | CMake configure fails: `required sibling repository 'sharp-runtime' … not found` | sibling repo not checked out next to `cna_input` | `git -C .. clone <sharp-runtime-url> sharp-runtime` |
 | CMake configure fails: `the OPENGLES3 backend requires … 'easy-gl'` | `easy-gl` sibling missing | clone it next to `cna_input`, or use `-DCNA_GRAPHICS_RENDERER=SDL_GPU` (or `SOFTWARE`) |
 | `ctest -L input` fails on 3 `MouseCursor` cases | headless `SDL_VIDEODRIVER=dummy` (null cursors) | run under a display: `xvfb-run -a env SDL_VIDEODRIVER=x11 ctest -L input` |

@@ -304,7 +304,7 @@ if(NOT EXISTS "${CNA_SHARP_RUNTIME_ROOT}/CMakeLists.txt")
         "default, overridable with -DCNA_SHARP_RUNTIME_ROOT=<path>), not a "
         "git submodule (git submodule update --init will not fetch it). Fix: "
         "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
-        "git clone https://github.com/openeggbert/sharp-runtime.git")
+        "git clone https://github.com/libcna/sharp-runtime.git")
 endif()
 add_subdirectory("${CNA_SHARP_RUNTIME_ROOT}" SHARP_RUNTIME)
 # The sibling releases CNA requires, and the check that enforces them (docs/releasing.md).

@@ -1,4 +1,4 @@
-# programs.md — Debian 13 development environment
+# CNA development environment — Debian 13
 
 What a fresh Debian 13 ("trixie") machine, desktop or headless, needs to build CNA natively and
 run its tests. The configure step is the authority this page is checked against: a missing

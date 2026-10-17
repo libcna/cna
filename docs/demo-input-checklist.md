@@ -11,7 +11,7 @@ each platform you care about; pair it with the platform-specific caveats in
 ## Build & run
 
 ```bash
-git submodule update --init --recursive           # first time only
+git submodule update --init                       # first time only
 cmake -S . -B cmake-build-debug -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake --build cmake-build-debug --target cna_demo_input -j"$(nproc)"
 ./cmake-build-debug/cna_demo_input                 # needs a display

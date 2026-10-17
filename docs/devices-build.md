@@ -34,9 +34,9 @@ indication this was a required, separate clone at all — Task `DEV-BUILD-001` f
 this). From this repo's own parent directory:
 
 ```bash
-git clone https://github.com/openeggbert/sharp-runtime.git
-git clone https://github.com/openeggbert/easy-gl.git
-git clone https://github.com/openeggbert/meta-gl.git
+git clone https://github.com/libcna/sharp-runtime.git
+git clone https://github.com/libcna/easy-gl.git
+git clone https://github.com/libcna/meta-gl.git
 ```
 
 Layout expected (all four as siblings under one parent directory):

@@ -15,7 +15,7 @@
 # src/. Exit 0 = fully reproducible; non-zero = a divergence to investigate before any shader edit.
 #
 # Requires: x86_64-w64-mingw32-g++, wine and the Wine prefix above (see spikes/dx9-spike/README.md
-# and docs/programs.md, "Windows cross-development").
+# and docs/development-environment.md, "Windows cross-development").
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
