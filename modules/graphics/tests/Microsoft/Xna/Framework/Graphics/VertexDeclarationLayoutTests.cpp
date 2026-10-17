@@ -1080,7 +1080,7 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
         {
             RenderTarget2D target = MakeTarget();
             const GuardedDraw got = DrawInto(target, *refusedCase, dynamicUpload, use32);
-            std::cout << "[ DECL-GUARD ] " << RendererName() << ' ' << refusedCase->name << ' ' 
+            std::cout << "[ DECL-GUARD ] " << RendererName() << ' ' << refusedCase->name << ' '
                       << (dynamicUpload ? "dynamic" : "static") << '/'
                       << (use32 ? "index32" : "index16") << ": "
                       << (got.rendered ? std::string("ACCEPTED") : "refused") << std::endl;
