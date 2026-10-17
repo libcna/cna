@@ -2,8 +2,8 @@
 
 ## Status
 
-The WebGPU renderer was activated by the project owner on **2026-07-12** and is an **experimental
-CNA graphics renderer** -- one of the project's 10 public renderer identities, native (wgpu-native)
+The WebGPU renderer was activated by the project owner on **2026-07-12** and has been a **supported
+CNA graphics renderer** (`GraphicsBackendMaturity::Supported`) since 2026-10-17 -- one of the project's 10 public renderer identities, native (wgpu-native)
 on desktop and, since 2026-08-26, also in the browser through Emscripten's emdawnwebgpu port. Select
 it with:
 

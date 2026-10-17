@@ -166,7 +166,9 @@ when it is reproduced.
   `SDL_GPU` since RRC-043 (its stock, instanced-matrix and compiled-effect routes expand per-instance
   streams on the host from the first instance); no other survivor claims it.
 - iOS has simulator smoke evidence only, with `SOFTWARE`.
-- `WEBGPU` is experimental; its open items are in the status summary of `plans/plan_webgpu.md`.
+- `WEBGPU` is supported (promoted from experimental on 2026-10-17) and verified on Linux x86_64
+  and in headless Chrome only; its Windows, macOS and linux-aarch64 wgpu-native packages are
+  unverified (`WEBGPU-1`, `plans/plan_webgpu.md`).
 - `SOFTWARE` is a bounded CPU renderer, and `HEADLESS` and `STUB` make no pixel claim
   (`docs/renderer-registry.md`, "Capability classes").
 - Per-subsystem capability boundaries, by design rather than defect, are in the documents listed

@@ -41,6 +41,12 @@ jobs:
             renderer: SDL_GPU
             audio: SDL3
             display: true
+          # wgpu-native's Vulkan backend on lavapipe; configure downloads the pinned package.
+          - name: SDL3 + WebGPU
+            platform: SDL3
+            renderer: WEBGPU
+            audio: SDL3
+            display: true
           - name: SDL3 + Software
             platform: SDL3
             renderer: SOFTWARE

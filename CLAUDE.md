@@ -564,10 +564,11 @@ with its permanently reserved C ABI value, and at run time as retired rather tha
 number is never reassigned and no surviving renderer is an alias for it. Do not resurrect one
 without a fresh owner instruction -- see `docs/removed-renderers.md`.
 
-`WEBGPU` is experimental but past a 2D baseline, with a real 3D route (stock effects, instancing,
-render targets, MSAA, fog parity, GPU-native compressed textures, stencil ops) and Emscripten
-browser support. `plans/plan_webgpu.md`'s top-of-file status summary is the single source of truth
-for current `WEBGPU-*` task status — do not duplicate it here. See `docs/webgpu-renderer.md` for
+`WEBGPU` is supported (`GraphicsBackendMaturity::Supported` since 2026-10-17, the class `SDL_GPU`
+is in), with a real 3D route (stock effects, instancing, render targets, MSAA, fog parity,
+GPU-native compressed textures, stencil ops) and Emscripten browser support.
+`plans/plan_webgpu.md`'s top-of-file status summary is the single source of truth for current
+`WEBGPU-*` task status — do not duplicate it here. See `docs/webgpu-renderer.md` for
 the capability boundary.
 
 ---
@@ -596,10 +597,10 @@ narrower question; new shader-based code must ask it rather than the coarse capa
 
 ---
 
-## WebGPU Is Active (Experimental)
+## WebGPU Is Supported
 
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
-its renderer implementation.
+its renderer implementation, and promoted it from experimental to supported on **2026-10-17**.
 
 - WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-*`; its top-of-file
   script-counted status summary is the source of truth). Keep task statuses and
@@ -607,9 +608,10 @@ its renderer implementation.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
-- It is past a 2D baseline (stock effects, render targets, MSAA, instancing, stencil, compressed
-  textures; see `docs/webgpu-renderer.md`). Do not describe it as full XNA 3D
-  parity until the remaining tasks in `plans/plan_webgpu.md` are actually complete.
+- It covers stock effects, render targets, MSAA, instancing, stencil and compressed textures
+  (see `docs/webgpu-renderer.md`). It is supported, not production: it is verified on Linux x86_64
+  and in headless Chrome only (`WEBGPU-1`). State its parity only in the words of the plan's
+  status summary, which names the shared gaps that still block a project-wide parity claim.
 - Preserve the established renderers: WebGPU changes should remain renderer-local or common only
   where a common-interface change is genuinely required and verified across existing renderers.
 

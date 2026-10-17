@@ -24,7 +24,7 @@ namespace CNA
         /** @brief WebGL 2 (Emscripten only, GLES 3.0), internally implemented by EasyGL. */
         WebGL2,
 
-        /** @brief WebGPU (experimental). */
+        /** @brief WebGPU, through wgpu-native natively and emdawnwebgpu in the browser. */
         WebGPU,
 
         /** @brief Headless (no GPU/window). */

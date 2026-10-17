@@ -218,7 +218,7 @@ SDK, which exists on no platform CNA builds on. See
 
 ## wgpu-native (optional WebGPU backend dependency)
 
-The experimental `WEBGPU` graphics backend uses `wgpu-native`, a native implementation of the
+The `WEBGPU` graphics backend uses `wgpu-native`, a native implementation of the
 WebGPU C API maintained by the gfx-rs project. CNA's CMake integration downloads or consumes an
 unmodified upstream binary release; the library is not copied into the CNA source tree.
 `wgpu-native` is available under the Apache License 2.0 and MIT License. See the upstream release

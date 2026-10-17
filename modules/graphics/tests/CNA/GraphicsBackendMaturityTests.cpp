@@ -53,12 +53,12 @@ namespace
                 return GraphicsBackendMaturity::Production;
 
             case GraphicsRendererType::WebGL2:
+            case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Headless:
             case GraphicsRendererType::Stub:
             case GraphicsRendererType::SdlGpu:
                 return GraphicsBackendMaturity::Supported;
 
-            case GraphicsRendererType::WebGPU:
             case GraphicsRendererType::Software:
             case GraphicsRendererType::Fna3d:
                 return GraphicsBackendMaturity::Experimental;

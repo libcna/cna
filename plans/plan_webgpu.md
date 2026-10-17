@@ -13,6 +13,13 @@
 `tools/count_webgpu_plan_status.sh`, not by hand). **The only open row is `WEBGPU-1`, whose
 Windows, macOS and aarch64 legs cannot be executed on this machine.**
 
+**Maturity: `Supported` since 2026-10-17.** `GraphicsBackendMaturity` had classified WebGPU as
+`Experimental` since the enum was introduced on 2026-08-12, and the classification was never
+revisited after this plan closed. `SDL_GPU` is `Supported` with the same kind of open platform
+verification, so `WEBGPU-1` is no reason to keep WebGPU a class below it; it is also no claim to
+`Production`. The same day native WebGPU joined CI on lavapipe: a `SDL3 + WebGPU` cell of
+`platform-ci.yml` and a `WEBGPU` leg of `gltf-renderer-stride-ci.yml`.
+
 **`WEBGPU-209` is the 202nd row, added and closed on 2026-10-04.** The native sample qualification
 campaign found that stock SpriteBatch preserved WebGPU's zero-filled missing texture channels
 instead of XNA/D3D9's one-filled values. The shared pixel contract now covers WebGPU, and the

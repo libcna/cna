@@ -47,8 +47,8 @@ EasyGL implementation while keeping distinct public contracts (context, shader p
 | Abstraction layer | `FNA3D` | 1 |
 | **Total** | | **10** |
 
-Notes that must not be misstated anywhere: `WEBGPU` is experimental with a bounded verified
-surface; the `ASCII` identity was **removed** in favour of the renderer-neutral
+Notes that must not be misstated anywhere: `WEBGPU` is supported, not production, with a bounded
+verified surface; the `ASCII` identity was **removed** in favour of the renderer-neutral
 `CNA::Graphics::AsciiPostProcessEffect`.
 
 ## 2. The former "Phase 2" list (no longer a roadmap)

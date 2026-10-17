@@ -184,7 +184,7 @@ device/adapter-model concern rather than a rendering-renderer one.
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Mostly native-only; SAMPLE-061 now supplies a real browser integration gate, not exhaustive pixel coverage |
 | WebGL context-loss handling (`EasyGLRenderer.cpp`) | Three real loss/restore transitions qualified in Racing Game: loading, menu and 3D race |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Core SAMPLE-061 paths verified; optional capabilities remain browser/GPU dependent |
-| WebGPU | Native `wgpu-native` renderer is active and experimental; the browser/Emscripten WebGPU path (same `WEBGPU` identity, via the emdawnwebgpu port) runs the 2D AND 3D paths in headless Chrome as of 2026-08-26 -- 2D SpriteBatch, 3D `BasicEffect`, and every stock effect shader all render in-browser (`WEBGPU-121`/`122` ✅). Run it with `scripts/run-webgpu-browser-test.sh` |
+| WebGPU | Native `wgpu-native` renderer is supported; the browser/Emscripten WebGPU path (same `WEBGPU` identity, via the emdawnwebgpu port) runs the 2D AND 3D paths in headless Chrome as of 2026-08-26 -- 2D SpriteBatch, 3D `BasicEffect`, and every stock effect shader all render in-browser (`WEBGPU-121`/`122` ✅). Run it with `scripts/run-webgpu-browser-test.sh` |
 
 The next high-value browser gates are lifecycle coverage outside an active foreground canvas
 (background/resume and browser-driven GPU-process loss) and the multi-browser/device matrix. The

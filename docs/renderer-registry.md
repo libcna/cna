@@ -47,7 +47,9 @@ retired selector by name, with its reserved value, rather than falling back to a
   SDL picks Vulkan, Direct3D 12 or Metal underneath it. `FNA3D` selects SDL_GPU, Direct3D 11 or
   OpenGL at runtime. Neither internal choice is another CNA identity.
 
-These classes are descriptive, not blanket parity claims. `WEBGPU` remains experimental. `SDL_GPU`
+These classes are descriptive, not blanket parity claims. `WEBGPU` is validated on Linux x86_64
+(native) and in headless Chrome; its Windows, macOS and linux-aarch64 packages are unverified
+(`WEBGPU-1`). `SDL_GPU`
 is validated on Linux (Vulkan) and, cross-compiled, under Wine with vkd3d-proton (Direct3D 12);
 native Windows, macOS and iOS qualification is open (`handoff.md` §5.2). A capability query and
 each renderer document remain authoritative for the narrower operation-level boundary.

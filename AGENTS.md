@@ -445,24 +445,25 @@ the forty-one retired ones -- `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` 
 selectors are refused by name). `SDL_GPU` is the modern native path; SDL owns its Vulkan, Direct3D 12
 and Metal backends. A second opt-in mode compiles
 several renderers into one binary and selects at runtime (`CNA_GRAPHICS_RENDERERS`). `WEBGPU` is
-experimental but well past a 2D baseline — desktop 3D with every stock effect (incl. fog parity across
+supported (`GraphicsBackendMaturity::Supported` since 2026-10-17) — desktop 3D with every stock effect (incl. fog parity across
 BasicEffect/AlphaTest/DualTexture/EnvironmentMap/Skinned), instancing, `RenderTarget2D`/`RenderTargetCube`,
 MSAA, `Texture3D`, MRT, occlusion queries, custom WGSL effects, GPU-native compressed textures, and a
 real browser (Emscripten) path.
 
 ---
 
-## WebGPU Is Active (Experimental)
+## WebGPU Is Supported
 
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized its
-renderer implementation.
+renderer implementation, and promoted it from experimental to supported on **2026-10-17**.
 
 - WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-*`). Its top-of-file status
   summary + "Current limitations" is the source of truth; keep both current as work proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
-- It is well past the initial 2D slice: desktop 3D + every stock effect (with fog parity), instancing,
+- It is supported, not production: verified on Linux x86_64 and in headless Chrome only
+  (`WEBGPU-1`). Desktop 3D + every stock effect (with fog parity), instancing,
   render targets, MSAA, `Texture3D`, MRT, occlusion queries, custom WGSL effects, GPU-native
   compressed textures, and an in-browser Emscripten path all work and are tested. The genuinely open
   items are enumerated in the plan's "Status summary" / "Current limitations" (the authoritative,
