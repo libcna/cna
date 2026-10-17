@@ -167,8 +167,8 @@ TEST(PartialTextureTransfer, ATexture2DSubRectangleOnMipLevelOne)
 // allocation without offsetting by face writes the patch into all of them.
 TEST(PartialTextureTransfer, ACubeFaceSubRectangleLeavesTheOtherFivesAlone)
 {
-    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
-        GTEST_SKIP() << "HEADLESS exposes a bindable cube but deliberately stores no texels";
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Stub))
+        GTEST_SKIP() << "STUB creates no cube-map resource, so a cube face cannot be stored";
     GraphicsDevice device;
     constexpr int kSize = 8;
     constexpr std::array<CubeMapFace, 6> kFaces{

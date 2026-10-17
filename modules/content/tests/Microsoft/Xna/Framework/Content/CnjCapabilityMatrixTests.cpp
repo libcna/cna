@@ -202,12 +202,12 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 #endif  // SOUND_ENABLED
 
 
-// Every renderer stores cube faces and reads every level back; HEADLESS, the last one that
-// refused, keeps them in CPU storage since d73f1aeab (2026-10-16). A renderer that cannot
-// must answer false here, and the tests then assert its refusal instead.
+// Every renderer except STUB stores cube faces and reads every level back -- HEADLESS too, in
+// CPU storage since d73f1aeab (2026-10-16). STUB creates no cube-map resource, so its
+// TextureCube::SetData refuses with NotSupportedException, and the tests assert that instead.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return true;
+    return !CNA_RENDERER_IS(Stub);
 }
 
 TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
@@ -224,7 +224,7 @@ TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
     {
         // SAMPLE-078: a loose-file load reports its reader's failure as ContentLoadException, as
         // XNA does, carrying the cause in its message -- here the renderer's TextureCube refusal,
-        // from SetData on Headless (CNA plans/plan_apple_m4.md AM4-268).
+        // from SetData on STUB (CNA plans/plan_apple_m4.md AM4-268).
         try
         {
             (void)cm.Load<TextureCube>("cube");

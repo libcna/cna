@@ -154,10 +154,10 @@ namespace
         return {file.begin(), file.end()};
     }
 
-    /// Every renderer stores cube faces; HEADLESS, the last one that refused, since d73f1aeab.
+    /// Every renderer except STUB, which creates no cube-map resource, stores cube faces.
     [[nodiscard]] bool CubeStorageSupported()
     {
-        return true;
+        return !CNA_RENDERER_IS(Stub);
     }
 
     class EffectMaterialContentTypeReaderTest : public ::testing::Test

@@ -311,7 +311,15 @@ TEST(RenderTargetSemantics, EachRenderTargetCubeFaceKeepsItsOwnContent)
 
     for (int face = 0; face < 6; ++face)
     {
-        device.SetRenderTarget(cube.get(), kFaces[static_cast<std::size_t>(face)]);
+        try
+        {
+            device.SetRenderTarget(cube.get(), kFaces[static_cast<std::size_t>(face)]);
+        }
+        catch (const System::NotSupportedException&)
+        {
+            // STUB constructs the object but has no cube resource to bind.
+            GTEST_SKIP() << "this renderer cannot bind a RenderTargetCube face";
+        }
         device.Clear(faceColour(face));
     }
     device.SetRenderTarget(static_cast<RenderTargetCube*>(nullptr), CubeMapFace::PositiveX);

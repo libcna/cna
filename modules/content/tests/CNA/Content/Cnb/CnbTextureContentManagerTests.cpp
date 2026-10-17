@@ -72,12 +72,12 @@ namespace
                   static_cast<std::streamsize>(bytes.size()));
     }
 
-    /// Whether the active renderer stores cube faces. Every renderer does; HEADLESS, the last one
-    /// that refused, since d73f1aeab. A refusing renderer's NotSupportedException would pass
-    /// through a .cnb load, as an .xnb load passes a texture constructor's (AM4-268).
+    /// Whether the active renderer stores cube faces: all but STUB, which creates no cube-map
+    /// resource and refuses TextureCube::SetData. A .cnb load passes that NotSupportedException
+    /// through, as an .xnb load passes a texture constructor's (AM4-268).
     [[nodiscard]] bool CubeStorageSupported()
     {
-        return true;
+        return !CNA_RENDERER_IS(CNA::Testing::Renderers::Stub);
     }
 
     /// A 2x2 image whose four texels are all different, so a transposed or shifted upload is
