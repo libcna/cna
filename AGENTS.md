@@ -448,7 +448,10 @@ Renderer selection is compile-time via the `CNA_GRAPHICS_RENDERER` CMake option 
 `FNA3D`; the canonical list is `cmake/RendererIdentities.cmake`, and `docs/removed-renderers.md` lists
 the forty-one retired ones -- `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` among them -- whose
 selectors are refused by name). `SDL_GPU` is the modern native path; SDL owns its Vulkan, Direct3D 12
-and Metal backends. A second opt-in mode compiles
+and Metal backends. CNA's graphics code says **renderer**, never backend, for a CNA graphics
+renderer (`GraphicsRenderer*`, `CNA_GRAPHICS_RENDERER*`, `cna_graphics_renderer_*`; see
+`docs/renderer-registry.md`), and `scripts/check_renderer_identities.py` refuses the old
+graphics-backend identifiers. A second opt-in mode compiles
 several renderers into one binary and selects at runtime (`CNA_GRAPHICS_RENDERERS`). `WEBGPU` is
 supported (`GraphicsRendererMaturity::Supported` since 2026-10-17) — desktop 3D with every stock effect (incl. fog parity across
 BasicEffect/AlphaTest/DualTexture/EnvironmentMap/Skinned), instancing, `RenderTarget2D`/`RenderTargetCube`,

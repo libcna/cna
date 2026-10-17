@@ -167,7 +167,6 @@ VOCABULARY_SKIPPED_DIRS = {"third_party", "vendor", "node_modules", "__pycache__
 # Files that must name the old spellings because recording their removal is their purpose.
 VOCABULARY_RECORDS = {
     "docs/c-api/ABI_VERSIONING.md": "the 0.49.0 release notes list every removed C name",
-    "docs/RendererNamingMigration.md": "the 2026-08 normalization's own historical record",
     "scripts/check_renderer_identities.py": "this check",
 }
 

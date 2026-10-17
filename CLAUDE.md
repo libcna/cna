@@ -550,6 +550,10 @@ EasyGL remains an internal implementation shared by three GL profiles. `SDL_GPU`
 native path: CNA maps XNA 4.0 onto SDL_GPU, and SDL owns its Vulkan, Direct3D 12 and Metal
 backends. The canonical list lives in
 `cmake/RendererIdentities.cmake` and is pinned by `scripts/check_renderer_identities.py`.
+CNA's graphics code says **renderer**, never backend, for a CNA graphics renderer
+(`GraphicsRenderer*`, `CNA_GRAPHICS_RENDERER*`, `cna_graphics_renderer_*`; see
+`docs/renderer-registry.md`), and `scripts/check_renderer_identities.py` refuses the old
+graphics-backend identifiers.
 
 CNA intentionally maintains a curated renderer set. A new renderer is added only when it provides
 meaningful platform coverage, compatibility value, architectural value, or a capability not

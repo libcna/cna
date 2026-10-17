@@ -65,3 +65,12 @@ list, the runtime registry, the C ABI table, the retired-value table and the run
 list to each other. The per-host default (`cmake/RendererIdentityDefault.cmake`) is `WEBGL2` under Emscripten,
 `SDL_GPU` on Windows, macOS (`Darwin`) and iOS, and `OPENGLES3` on every other system -- Linux,
 Android, the BSDs and any host not named above.
+
+CNA's own graphics code calls a CNA graphics renderer a **renderer**, never a backend:
+`GraphicsRenderer*`, `CNA_GRAPHICS_RENDERER*`, `cna_graphics_renderer_*`,
+`CNA::Internal::Renderers`. "Backend" stays for other subsystems (audio, input, `ENetBackend`,
+device test backends) and for an upstream library's own vocabulary, such as SDL_GPU's backends
+above. Inside a family, a class that wraps a native API object keeps that API's prefix
+(`D3D9EffectRenderer`, `D3D9Buffers`); only the identity class and the selection surface carry
+the identity's name (`DirectX9Renderer`, `DIRECTX9`). The same check refuses the old
+graphics-backend identifiers in every active CNA-owned file.
