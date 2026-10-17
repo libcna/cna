@@ -219,9 +219,13 @@ namespace CNA
                         // a last resort rather than a fallback anyone wants silently.
                         if (type == GraphicsRendererType::Stub)
                             return 100;
+                        // HEADLESS is a supported renderer that shows no picture, so it follows the
+                        // CPU renderer, which does.
                         const int maturityRank = static_cast<int>(getGraphicsBackendMaturity(type));
-                        const int categoryRank =
-                            getGraphicsBackendCategory(type) == GraphicsBackendCategory::Software ? 10 : 0;
+                        const GraphicsBackendCategory category = getGraphicsBackendCategory(type);
+                        const int categoryRank = category == GraphicsBackendCategory::Software     ? 10
+                                                 : category == GraphicsBackendCategory::Diagnostic ? 20
+                                                                                                   : 0;
                         return categoryRank + maturityRank;
                     };
                     return rank(a) < rank(b);

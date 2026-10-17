@@ -134,7 +134,7 @@ namespace CNA
          *
          * The order is derived from CNA::GraphicsBackendMaturity and CNA::GraphicsBackendCategory
          * rather than a ranking invented here: mature GPU renderers first, CPU renderers next,
-         * STUB last.
+         * then HEADLESS, which shows no picture, and STUB last.
          *
          * @param enabled Whether to enable automatic fallback.
          * @throws System::InvalidOperationException if the selection is already latched.

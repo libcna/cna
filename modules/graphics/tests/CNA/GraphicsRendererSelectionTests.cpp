@@ -406,6 +406,34 @@ TEST_F(GraphicsRendererSelectionTest, AutomaticFallbackCoversEveryCompiledInRend
     }
 }
 
+TEST_F(GraphicsRendererSelectionTest, AutomaticFallbackTriesEveryPictureBeforeHeadlessAndStub)
+{
+    // A published set rather than this build's own, so the order is checked whatever is compiled
+    // in. Published in reverse, so the ranking decides; only the WEBGPU/SDL_GPU tie keeps the
+    // published order.
+    const std::vector<GraphicsRendererType> published{
+        GraphicsRendererType::Stub,     GraphicsRendererType::Headless,
+        GraphicsRendererType::Software, GraphicsRendererType::Fna3d,
+        GraphicsRendererType::WebGPU,   GraphicsRendererType::SdlGpu,
+        GraphicsRendererType::OpenGLES3};
+    CNA::GraphicsRendererSelectionAccessEXT::PublishAvailable(published,
+                                                              GraphicsRendererType::OpenGLES3);
+    GraphicsRendererSelection::SetPreferred(GraphicsRendererType::OpenGLES3);
+    GraphicsRendererSelection::EnableAutomaticFallback(true);
+
+    // Production, then Supported (in published order), then Experimental; SOFTWARE draws on the
+    // CPU, HEADLESS draws no picture, STUB draws nothing.
+    const std::vector<GraphicsRendererType> expected{
+        GraphicsRendererType::OpenGLES3, GraphicsRendererType::WebGPU,
+        GraphicsRendererType::SdlGpu,    GraphicsRendererType::Fna3d,
+        GraphicsRendererType::Software,  GraphicsRendererType::Headless,
+        GraphicsRendererType::Stub};
+    const auto order = CNA::GraphicsRendererSelectionAccessEXT::GetAttemptOrder();
+    EXPECT_EQ(std::vector<GraphicsRendererType>(order.begin(), order.end()), expected);
+
+    EnsurePublished();
+}
+
 TEST_F(GraphicsRendererSelectionTest, DisablingAutomaticFallbackRestoresTheSingleAttempt)
 {
     GraphicsRendererSelection::EnableAutomaticFallback(true);
