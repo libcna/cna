@@ -179,7 +179,7 @@ namespace
             const auto byte = [](float value) {
                 return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
             };
-            return Color(byte(r), byte(g), byte(b), 255);
+            return Color(byte(r), byte(g), byte(b), byte(1.0f));
         }
 
     private:
