@@ -8,11 +8,9 @@ abstraction (SDL3 is the default implementation) and a pluggable graphics render
 
 ### Source Reference
 
-The authoritative behavioral and API reference is the local FNA source tree:
-
-```text
-/rv/data/library/github.com/FNA-XNA/FNA
-```
+The authoritative behavioral and API reference is the FNA source tree
+(<https://github.com/FNA-XNA/FNA>), read from a local checkout. No particular location is
+required; clone it once outside this repository if none exists.
 
 Do **not** treat old CNA code or AI-generated stubs as authoritative if they conflict with the FNA reference API.
 
