@@ -221,7 +221,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @param model The model whose bones are posed.
      * @param clip The clip to evaluate; must carry `ClipTargetSpaceEXT::SceneNode`.
      * @param time The time to evaluate at, clamped to `[0, clip.Duration]`.
-     * @throws std::invalid_argument if @p clip is not a scene-node clip, since applying a
+     * @throws System::ArgumentException if @p clip is not a scene-node clip, since applying a
      * joint-palette clip's indices to `Model::Bones` would pose the wrong bones silently.
      */
     CNAEXT void ApplyClipToBonesEXT(Model& model, const AnimationClip& clip,
