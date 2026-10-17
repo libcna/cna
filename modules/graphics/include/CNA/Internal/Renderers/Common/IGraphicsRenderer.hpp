@@ -400,8 +400,8 @@ namespace CNA::Internal::Renderers
         virtual void BindGL(int unit = 0) const {}
         /// Shares a reference to the CPU pixel buffer owned by TextureCube::cpuPixels_[face] for
         /// one cube face's level 0, for context- or device-loss restoration -- default no-op.
-        /// EasyGL and WebGPU keep the reference; only WebGPU's device-loss restore reads it
-        /// (RAM.md, section 4).
+        /// EasyGL and WebGPU keep the reference; only WebGPU's device-loss restore reads it,
+        /// and EasyGL restores a cube without it.
         virtual void ShareCpuPixels(int /*face*/, std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
         /// SKIA-149: face width/height in texels. `BindTextureCube(unit, ITextureCubeRenderer*)`
         /// receives only this raw renderer pointer (see `ShaderEffect::SetTexture(unit,

@@ -168,11 +168,10 @@ A new concept alongside `CNA_GRAPHICS_RENDERER`, for example
 - static linking, no `dlopen` (already satisfied),
 - a VFS layer instead of `std::filesystem`—`TitleContainer`/`StorageDevice` must support
   `host0:`/`ux0:`/`sdmc:`/`umd0:` paths and a read-only title sandbox,
-- memory budget: Dreamcast 16 MB, PS2 32 MB, PSP 32/64 MB, 3DS 64/128 MB, Wii 88 MB. Notes in
-  `RAM.md` (for example, `cpuPixels_`: one CPU copy of every uncompressed texture on every renderer,
-  about 34 MiB for mobile-eggbert's startup textures) show
-  that the current design targets desktops and would need a dedicated texture-ownership policy
-  for small consoles.
+- memory budget: Dreamcast 16 MB, PS2 32 MB, PSP 32/64 MB, 3DS 64/128 MB, Wii 88 MB. `Texture2D`
+  keeps one CPU copy (`cpuPixels_`) of every uncompressed texture on every renderer -- about
+  34 MiB for mobile-eggbert's startup textures -- so the current design targets desktops and
+  would need a dedicated texture-ownership policy for small consoles.
 
 ### Phase 4 — first real target: a homebrew console with in-tree SDL3
 
@@ -254,7 +253,7 @@ incremental. Until they are complete, even the simplest console is out of reach.
    repository is irreversible. Repository separation must therefore be decided **before** work
    starts, not during it.
 4. **Memory constraints on small consoles** will not be solved by interface refactoring—they
-   require changes to data ownership (see `cpuPixels_` in `RAM.md`).
+   require changes to data ownership (see `Texture2D::cpuPixels_`).
 5. **Certification** (TRC/XR/Lotcheck) applies to the game, not the framework, but the framework can
    make certification impossible (suspend/resume, user selection, controller-disconnect behavior,
    startup time).
@@ -342,7 +341,7 @@ work without them:
    account-bound user storage, no absolute paths).
 5. Precompiled shaders instead of runtime compilation (`D3DCompile` in DIRECTX11 is currently an
    exception; the Vulkan path is the model).
-6. A memory budget and texture ownership (see `cpuPixels_` in `RAM.md`).
+6. A memory budget and texture ownership (see `Texture2D::cpuPixels_`).
 7. Static linking without `dlopen`—already satisfied today (0 occurrences).
 
 ---
