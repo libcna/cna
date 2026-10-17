@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// input_noxna.md N-013: haptic (force-feedback) tests using a platform fake (no real
+// N-013: haptic (force-feedback) tests using a platform fake (no real
 // FFB hardware). Covers enumeration, open/close (standalone, from-joystick, from-mouse), capabilities,
 // the HapticEffectEXT -> platform descriptor conversion for every effect family, the effect lifecycle
 // (create/update/run/stop/destroy/status), rumble, and gain/autocenter/pause/resume.

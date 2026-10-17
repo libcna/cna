@@ -104,3 +104,7 @@ hardware is still human/hardware-gated** — see `input-manual-verification-resu
   substantial coverage, just not hardware-gated). Extending the demo UI to surface them is a legitimate
   follow-up but is out of this audit/documentation plan's scope (CLAUDE.md: no new features beyond audit/
   repair/test/doc); recorded here so the gap is explicit rather than silently unverifiable.
+- **`CNA::Input::Haptics`/`HapticDevice`** — the same holds for standalone force feedback. No example
+  opens a haptic device, so the effect families and gain/autocenter/pause/resume are verified only
+  against a canned platform service (`SdlHapticBackendTests.cpp`); actuation on a real force-feedback
+  wheel or joystick has not been checked.
