@@ -32,6 +32,23 @@ namespace CNA::Content::Cnb
     {
         using namespace ModelCodecDetail;
 
+        /// Lexicographically orders encoded records without routing through libstdc++'s
+        /// vector comparison, whose optimized byte path triggers GCC's false-positive
+        /// `-Wstringop-overread` for the material lookup below.
+        struct EncodedBytesLess
+        {
+            [[nodiscard]] bool operator()(const std::vector<std::uint8_t>& left,
+                                          const std::vector<std::uint8_t>& right) const noexcept
+            {
+                const std::size_t commonSize = std::min(left.size(), right.size());
+                for (std::size_t index = 0; index < commonSize; ++index)
+                {
+                    if (left[index] != right[index]) { return left[index] < right[index]; }
+                }
+                return left.size() < right.size();
+            }
+        };
+
         /// Interns names into one deduplicated table. Deterministic by construction: an index is
         /// assigned the first time a string is seen, in encode order, so the same model always
         /// produces the same table.
@@ -268,7 +285,8 @@ namespace CNA::Content::Cnb
         // a material (a multi-primitive mesh split only by topology, for one), and storing 368
         // identical bytes per part instead of an index is exactly the kind of waste a compiled
         // format should not have. Deterministic: the first occurrence, in part order, wins.
-        std::map<std::vector<std::uint8_t>, std::uint32_t> materialIndexByBytes;
+        std::map<std::vector<std::uint8_t>, std::uint32_t, EncodedBytesLess>
+            materialIndexByBytes;
 
         for (std::size_t p = 0; p < model.parts.size(); ++p)
         {
