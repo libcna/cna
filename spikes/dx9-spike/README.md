@@ -80,8 +80,10 @@ Radeon HD 5600 Series`) — see `plans/plan_dx9.md` `D9-A4`'s own closure note.
 
 ## Wine prefixes (these DO survive; they live in `$HOME`)
 
-`programs.md` in the repo documents the D3D11 prefix but knows nothing about these two.
-That gap should be closed when this work lands.
+The development-environment guide
+([`docs/development-environment.md`](../../docs/development-environment.md), "Windows
+cross-development") now documents these prefixes; the table below preserves the detailed D9-0/D9-A
+history and the distinction between their roles.
 
 | Prefix | Arch | Contains | Do not confuse with |
 |--------|------|----------|---------------------|
