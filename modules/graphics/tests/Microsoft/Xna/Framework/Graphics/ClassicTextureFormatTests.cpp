@@ -312,6 +312,26 @@ namespace
         return pixels[static_cast<std::size_t>(size / 2) * size + size / 2];
     }
 
+    /// HEADLESS stores cube faces but cannot read a render target back, which the environment-map
+    /// draws below need to measure what they sampled.
+    [[nodiscard]] bool CanReadRenderTargetsBack(GraphicsDevice& device)
+    {
+        try
+        {
+            RenderTarget2D probe(device, 1, 1, false, SurfaceFormat::Color, DepthFormat::None);
+            device.SetRenderTarget(&probe);
+            device.Clear(Color::Black);
+            device.SetRenderTarget(nullptr);
+            Color pixel = Color::White;
+            probe.GetData(&pixel, 1);
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
     [[nodiscard]] Color DrawWithEnvironmentMap(GraphicsDevice& device, TextureCube& cube,
                                                float amount = 1.0f,
                                                bool environmentOnly = false)
@@ -552,6 +572,8 @@ TEST(ClassicTextureFormat, DxtCubeBlocksFeedThePublicEnvironmentMapSampler)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
+    if (!CanReadRenderTargetsBack(device))
+        GTEST_SKIP() << "this renderer cannot read a render target back";
     if (!device.GetRenderer().IsCompressedCubeTransferFormatEXT(
             static_cast<int>(SurfaceFormat::Dxt1)))
         GTEST_SKIP() << "this renderer has no compressed cube transfer route";
@@ -650,6 +672,8 @@ TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsFeedEnvironmentMapSamplin
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
+    if (!CanReadRenderTargetsBack(device))
+        GTEST_SKIP() << "this renderer cannot read a render target back";
 
     VerifyCubeSample(device, SurfaceFormat::Bgr565,
                      Bgr565(0.5f, 0.25f, 1.0f), 132, 65, 255, 4);
@@ -709,6 +733,8 @@ TEST(ClassicTextureFormat, FloatCubeFormatsPreserveHdrEnvironmentMapSampling)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters());
+    if (!CanReadRenderTargetsBack(device))
+        GTEST_SKIP() << "this renderer cannot read a render target back";
 
     VerifyCubeSample(device, SurfaceFormat::Single, 2.0f,
                      128, 64, 64, 3, 0.25f, true);

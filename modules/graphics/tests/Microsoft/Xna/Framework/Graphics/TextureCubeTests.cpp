@@ -86,30 +86,10 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // a renderer that had read nothing at all. The tests below therefore assert the real outcome for
 // this renderer rather than merely that the call returned.
 //
-// Headless stores no pixel data by design. Every other renderer reads level 0 back exactly --
-// Software only at level 0, since it stores no cube mip levels.
-// -----------------------------------------------------------------------
+// Every renderer stores cube faces and reads every level back; HEADLESS, the last one that
+// refused, keeps them in CPU storage since d73f1aeab (2026-10-16). A renderer that cannot
+// must answer false here, and the tests then assert its refusal instead.
 //
-// Adds the write-side half of the same question. `TextureCube::SetData` now has
-// exactly two outcomes too -- the complete requested region is stored, or it throws -- so the
-// "does not throw" tests below became false-positive-capable in the opposite direction: on a
-// renderer with no cube storage they used to pass for a call that discarded the data. Storage
-// support and readback support are the same set (a renderer either owns cube pixels or it does
-// not), so one constant drives both.
-//
-// plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
-// real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
-// Software), even though nothing on this renderer samples a cube texture as a GPU resource yet.
-// plans/plan_runtimerenderer.md RTR-P9-4: evaluated at runtime, so these describe the ACTIVE renderer
-// rather than the build default.
-//
-// The runtime form has no line continuations. The compile-time `defined(...)` chain it replaced lost
-// a renderer to a `//` comment whose last line ended in a backslash: the preprocessor continued the
-// comment onto the next condition and swallowed it. modules/content/tests' cube-storage guards use
-// the same reviewed renderer set as this file, and the lists must stay identical.
-//
-// PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in this "no cube resource exists" set too: no cube override
-// written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
 // ODR: these helpers were `inline` at namespace scope, and
 // modules/content/tests/CNA/Internal/Xnb/Texture3DTextureCubeContentTypeReaderTests.cpp defines the
 // same three names the same way. Two `inline` definitions of one name with different bodies is an
@@ -120,7 +100,7 @@ namespace
 {
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(Headless);
+    return true;
 }
 
 /// Level-0 readback and storage are the same set again.

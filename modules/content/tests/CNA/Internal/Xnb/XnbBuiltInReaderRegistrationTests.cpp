@@ -191,18 +191,12 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 }
 
 
-// Does THIS build's renderer actually store a cube face? Headless stores no pixel
-// data by design, so TextureCube::SetData -- and therefore every content path that uploads a cube
-// -- now refuses deterministically instead of accepting the data and discarding it. Same constant
-// and same reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
-// plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
-// tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
-// plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
-// renderer rather than the build default. PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in the "no cube
-// resource exists" set: no cube override written, v1 scope being 2D-only.
+// Every renderer stores cube faces and reads every level back; HEADLESS, the last one that
+// refused, keeps them in CPU storage since d73f1aeab (2026-10-16). A renderer that cannot
+// must answer false here, and the tests then assert its refusal instead.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(Headless);
+    return true;
 }
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFixtureWithNoOtherSetup)

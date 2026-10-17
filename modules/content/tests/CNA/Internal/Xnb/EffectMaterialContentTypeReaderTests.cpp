@@ -154,9 +154,10 @@ namespace
         return {file.begin(), file.end()};
     }
 
+    /// Every renderer stores cube faces; HEADLESS, the last one that refused, since d73f1aeab.
     [[nodiscard]] bool CubeStorageSupported()
     {
-        return !CNA_RENDERER_IS(Headless);
+        return true;
     }
 
     class EffectMaterialContentTypeReaderTest : public ::testing::Test

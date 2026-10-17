@@ -53,23 +53,12 @@ using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 
 // -----------------------------------------------------------------------
-// Does THIS build's renderer actually read a cube face back? See the identical
-// constant (and its full rationale) in tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
-// -----------------------------------------------------------------------
-// Additionally makes the UPLOAD side of this fixture load-bearing: a renderer that
-// cannot store a cube face now throws System::NotSupportedException out of TextureCubeReader's own
-// SetData call, so the whole ContentManager::Load fails instead of quietly returning an empty cube.
-// Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
-// plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
-// real CPU shadow, so its readback is exact at every level too.
-// plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so these describe the ACTIVE renderer
-// rather than the build default. The three-way split is preserved exactly.
-//
-// PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in the "no cube resource exists" set: no cube override
-// written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
+// Every renderer stores cube faces and reads every level back; HEADLESS, the last one that
+// refused, keeps them in CPU storage since d73f1aeab (2026-10-16). A renderer that cannot
+// must answer false here, and the tests then assert its refusal instead.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(Headless);
+    return true;
 }
 
 [[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }
