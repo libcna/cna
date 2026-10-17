@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
@@ -50,6 +51,25 @@ extern char** environ;
 namespace Pipeline = CNA::Content::Pipeline;
 namespace Cnb = CNA::Content::Cnb;
 namespace Xnb = CNA::Internal::Xnb;
+
+TEST(XnbOutputAssetTypeNameTest, ReturnsFixedAndDynamicRuntimeNames)
+{
+    EXPECT_EQ(Pipeline::XnbOutputAssetTypeName(Pipeline::XnbOutputAssetId::Texture2D),
+              "Microsoft.Xna.Framework.Graphics.Texture2D");
+    EXPECT_EQ(Pipeline::XnbOutputAssetTypeName(Pipeline::XnbOutputAssetId::XnaObject,
+                                               "TestGame.Route"),
+              "TestGame.Route");
+}
+
+TEST(XnbOutputAssetTypeNameTest, RefusesMissingDynamicAndUnknownNames)
+{
+    EXPECT_THROW(
+        (void)Pipeline::XnbOutputAssetTypeName(Pipeline::XnbOutputAssetId::XnaObject),
+        std::invalid_argument);
+    EXPECT_THROW((void)Pipeline::XnbOutputAssetTypeName(
+                     static_cast<Pipeline::XnbOutputAssetId>(999u)),
+                 std::invalid_argument);
+}
 
 namespace
 {

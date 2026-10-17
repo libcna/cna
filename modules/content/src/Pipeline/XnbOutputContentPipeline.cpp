@@ -6,6 +6,7 @@
 
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <variant>
 
@@ -35,6 +36,36 @@ namespace CNA::Content::Pipeline
 
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Xnb::XnbWriteException;
+
+    std::string XnbOutputAssetTypeName(const XnbOutputAssetId asset,
+                                       const std::string_view xnaObjectTypeName)
+    {
+        switch (asset)
+        {
+            case XnbOutputAssetId::Texture2D:
+                return "Microsoft.Xna.Framework.Graphics.Texture2D";
+            case XnbOutputAssetId::Texture3D:
+                return "Microsoft.Xna.Framework.Graphics.Texture3D";
+            case XnbOutputAssetId::TextureCube:
+                return "Microsoft.Xna.Framework.Graphics.TextureCube";
+            case XnbOutputAssetId::SpriteFont:
+                return "Microsoft.Xna.Framework.Graphics.SpriteFont";
+            case XnbOutputAssetId::SoundEffect:
+                return "Microsoft.Xna.Framework.Audio.SoundEffect";
+            case XnbOutputAssetId::Song: return "Microsoft.Xna.Framework.Media.Song";
+            case XnbOutputAssetId::Video: return "Microsoft.Xna.Framework.Media.Video";
+            case XnbOutputAssetId::Model: return "Microsoft.Xna.Framework.Graphics.Model";
+            case XnbOutputAssetId::Curve: return "Microsoft.Xna.Framework.Curve";
+            case XnbOutputAssetId::Effect:
+                return "Microsoft.Xna.Framework.Graphics.Effect";
+            case XnbOutputAssetId::XnaObject:
+                if (!xnaObjectTypeName.empty()) { return std::string(xnaObjectTypeName); }
+                throw std::invalid_argument(
+                    "XnbOutputAssetTypeName(): XnaObject requires a runtime type name.");
+        }
+        throw std::invalid_argument("XnbOutputAssetTypeName(): unknown asset identifier " +
+                                    std::to_string(static_cast<std::uint32_t>(asset)) + ".");
+    }
 
     namespace
     {
@@ -75,36 +106,6 @@ namespace CNA::Content::Pipeline
 
         /** @brief Bumped whenever the serializer's byte output changes for unchanged inputs. */
         constexpr const char* kXnbCodecVersion = "1";
-
-        /**
-         * @brief Returns the XNA runtime type name recorded for one emitted root.
-         *
-         * @param asset The emitted root identifier.
-         * @return A process-lifetime string literal.
-         */
-        [[nodiscard]] const char* XnbOutputAssetTypeName(const XnbOutputAssetId asset) noexcept
-        {
-            switch (asset)
-            {
-                case XnbOutputAssetId::Texture2D:
-                    return "Microsoft.Xna.Framework.Graphics.Texture2D";
-                case XnbOutputAssetId::Texture3D:
-                    return "Microsoft.Xna.Framework.Graphics.Texture3D";
-                case XnbOutputAssetId::TextureCube:
-                    return "Microsoft.Xna.Framework.Graphics.TextureCube";
-                case XnbOutputAssetId::SpriteFont:
-                    return "Microsoft.Xna.Framework.Graphics.SpriteFont";
-                case XnbOutputAssetId::SoundEffect:
-                    return "Microsoft.Xna.Framework.Audio.SoundEffect";
-                case XnbOutputAssetId::Song: return "Microsoft.Xna.Framework.Media.Song";
-                case XnbOutputAssetId::Video: return "Microsoft.Xna.Framework.Media.Video";
-                case XnbOutputAssetId::Model: return "Microsoft.Xna.Framework.Graphics.Model";
-                case XnbOutputAssetId::Curve: return "Microsoft.Xna.Framework.Curve";
-                case XnbOutputAssetId::Effect:
-                    return "Microsoft.Xna.Framework.Graphics.Effect";
-            }
-            return "";
-        }
 
         /**
          * @brief Base of every XNB pipeline writer: identity, format and schema declaration.

@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
@@ -49,6 +50,20 @@ namespace CNA::Content::Pipeline
          */
         XnaObject = 11u,
     };
+
+    /**
+     * @brief Returns the XNA runtime type name recorded for one emitted root.
+     *
+     * Built-in roots have fixed canonical names. `XnaObject` represents arbitrary game types, so
+     * its name must be supplied by the registered XNA-shaped writer.
+     *
+     * @param asset The emitted root identifier.
+     * @param xnaObjectTypeName Dynamic .NET type name required for `XnaObject`.
+     * @return The runtime type name written to the output schema and build result.
+     * @throws std::invalid_argument if @p asset is unknown or an `XnaObject` name is empty.
+     */
+    [[nodiscard]] std::string XnbOutputAssetTypeName(
+        XnbOutputAssetId asset, std::string_view xnaObjectTypeName = {});
 
     /**
      * @brief Returns a canonical, stable digest of the container options a writer is bound to.

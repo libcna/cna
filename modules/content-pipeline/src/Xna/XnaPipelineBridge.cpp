@@ -49,7 +49,8 @@ namespace CNA::Content::Pipeline
                 ContentWriterSchemaIdentity identity;
                 identity.assetTypeId = static_cast<std::uint32_t>(XnbOutputAssetId::XnaObject);
                 identity.assetSchemaVersion = 1u;
-                identity.assetTypeName = typeName_;
+                identity.assetTypeName =
+                    XnbOutputAssetTypeName(XnbOutputAssetId::XnaObject, typeName_);
                 identity.codec = ContentComponentIdentity{"CNA.XnaObjectXnb", "1"};
                 return {identity};
             }
@@ -83,7 +84,8 @@ namespace CNA::Content::Pipeline
                 result.bytes = written.bytes;
                 result.assetTypeId = static_cast<std::uint32_t>(XnbOutputAssetId::XnaObject);
                 result.assetSchemaVersion = 1u;
-                result.assetTypeName = typeName_;
+                result.assetTypeName =
+                    XnbOutputAssetTypeName(XnbOutputAssetId::XnaObject, typeName_);
                 result.rootReaderName = written.rootReaderName;
                 return result;
             }
