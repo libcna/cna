@@ -123,13 +123,14 @@ Guests (`ShowSignIn(onlineOnly)`, GSP-L5), by session type:
 |---|---|
 | Local | yes, through an explicit gamer list or `AddLocalGamer` (the implicit local-gamer selection skips guests) |
 | LocalWithLeaderboards | yes, as Local; a guest's leaderboard writes stay in the local store, not on the service's boards |
-| SystemLink | yes, as Local; `NetworkGamer.IsGuest` is true on the guest's machine, false on the others (the SystemLink roster does not carry it) |
+| SystemLink | yes, as Local; `NetworkGamer.IsGuest` is true on every machine (the roster carries the guest flag) |
 | PlayerMatch, Ranked | no: a guest has no service credential, so `AllowOnlineSessions` is false and the service admits only authenticated accounts |
 
 Friends see the online status (online, away, busy) a player chooses in the Guide
 (`FriendGamer.IsAway`/`IsBusy`). Rich presence is sent during Dispatcher.Update; friend online state
 reflects authenticated activity within 90 seconds; Update schedules an authenticated heartbeat every
-30 seconds. `docs/xna-4-api-coverage.md` §8–9 lists the state per feature. This is not a production
+30 seconds. [`gamer-services-known-limitations.md`](gamer-services-known-limitations.md) lists what
+is not done, done in part, or decided differently from Xbox. This is not a production
 service release: public Internet deployment has not been independently qualified (local and NAT
 relay tests exist, and the server README has a deployment checklist), and no measured Xbox
 event/validation parity across every method is claimed.
@@ -211,7 +212,12 @@ score, zone, reputation, presence and relationship, with the actions that apply 
 the game or the party, message, review, mute, friend request). Edit avatar opens the full-screen
 avatar editor: a live preview with a camera that follows the category, rendered item cards,
 named face controls, try-on before keeping, and a save that asks. Notifications appear at
-`Guide.NotificationPosition`. A keyboard, a pad or the mouse drive every page. Motion is short;
+`Guide.NotificationPosition` (bottom centre by default) inside the title-safe area, one at a time
+for four seconds each, and never take input. A game that calls `EndShowMessageBox` or
+`EndShowKeyboardInput` before the player answers waits, as in XNA: its own Update and Draw stop
+while the Guide keeps reading input and drawing over a cleared screen; with no running `Game` to
+draw it, the early End throws `InvalidOperationException`. A keyboard, a pad or the mouse drive
+every page. Motion is short;
 `CNA_GAMER_SERVICES_REDUCED_MOTION=1` removes it. Quiet system sounds, synthesized by CNA, play
 when a player drives the Guide; `CNA_GAMER_SERVICES_SOUNDS=0` turns them off.
 

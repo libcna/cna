@@ -20,10 +20,12 @@
 //      Immediate sprite straight to the renderer, but `EasyGLSpriteBatchRenderer::Draw` appends to
 //      a vertex batch that is only flushed when the bound texture changes or at End(), and
 //      `VulkanSpriteBatchRenderer::Draw` recorded into `activeBatches_` for replay at Present. Both
-//      therefore rasterized every sprite of the batch against the texture's FINAL contents. That is
-//      a divergence from XNA, it is CNA-wide rather than Vulkan-specific, and it is recorded as
-//      VULKAN-057 rather than papered over here: leg B reports the measurement and asserts only
-//      what Immediate must do regardless (draw every sprite, in place, in issue order).
+//      therefore rasterized every sprite of the batch against the texture's FINAL contents. That
+//      divergence from XNA was CNA-wide rather than Vulkan-specific, and it was recorded as
+//      VULKAN-057 rather than papered over here. SOFTWARE-252 later made EasyGL flush each
+//      Immediate sprite from Draw; the renderers that still diverge are in handoff.md §5.2. Leg B
+//      reports the measurement and asserts only what Immediate must do regardless (draw every
+//      sprite, in place, in issue order).
 //
 //   3. What still discriminates the modes above the renderer is the device-level Immediate
 //      mutual exclusion: XNA coordinates every SpriteBatch on one GraphicsDevice and Immediate is
@@ -232,13 +234,13 @@ protected:
                       Text(immediate[0]) + " right=" + Text(immediate[2]));
 
             // The measurement itself, printed rather than asserted: asserting XNA's answer here
-            // would fail on every CNA renderer, and asserting CNA's would cement the divergence.
-            // VULKAN-057 closed on the second arm of its acceptance -- the divergence is REFUSED
-            // and recorded in docs/xna-4-api-coverage.md, with the cost leg D below as its
-            // evidence. If this line ever prints red/blue, the refusal was reversed: move that
-            // document, do not adjust this print.
+            // would fail on the renderers that still defer, and asserting CNA's would cement the
+            // divergence. VULKAN-057 closed on the second arm of its acceptance -- the divergence
+            // was REFUSED, with the cost leg D below as its evidence. handoff.md §5.2 names the
+            // renderers that still print blue/blue; when a renderer's answer changes, change that
+            // entry, not this print.
             std::printf("[INFO] mid-batch texture mutation under Immediate: left=%s right=%s "
-                        "(XNA would give red/blue; refused and documented, VULKAN-057) -- "
+                        "(XNA gives red/blue; renderers that differ: handoff.md 5.2) -- "
                         "Deferred gave %s/%s\n",
                         Text(immediate[0]).c_str(), Text(immediate[2]).c_str(),
                         Text(deferred[0]).c_str(), Text(deferred[2]).c_str());

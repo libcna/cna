@@ -240,7 +240,9 @@ claim about how Xbox LIVE decided.
   lowest remaining gamer ordinal the host, and that machine's owner the host gamer. A departed host
   is noticed at once when it leaves; a crashed one when its relay connection has been closed for 20
   seconds; a client waits up to 30 seconds for the service's decision, then ends with
-  `HostEndedSession`. The old host's gamers leave (`GamerLeft`) before `HostChanged`.
+  `HostEndedSession`. The old host's gamers leave (`GamerLeft`) before `HostChanged`. SystemLink
+  has no service to decide: every remaining machine promotes the lowest remaining wire ID from its
+  own copy of the roster, so all of them agree without a further exchange.
 - **Reason:** the choice is not observable in XNA; CNA needs a deterministic rule.
 - **Observable impact:** which machine becomes host may differ from what a console would pick.
 - **Porting impact:** none.
@@ -377,7 +379,10 @@ claim about how Xbox LIVE decided.
   from the host's probe train, upstream from the searcher's train timed by the host's responder);
   the round trip is one discovery exchange, so average and minimum are the same value. PlayerMatch
   and Ranked search results report `IsAvailable` false. Joined sessions measure
-  `NetworkGamer.RoundtripTime` and `NetworkSession.BytesPerSecondSent`/`Received` on every transport.
+  `NetworkGamer.RoundtripTime` and `NetworkSession.BytesPerSecondSent`/`Received` on every transport:
+  the byte rates count the transport's wire totals, protocol overhead included, and because a
+  client reaches the other clients through the host, another client's round trip is this
+  machine's to the host plus the host's reported one to that client.
 - **Reason (re-examined 2026-09-30, GSH-05):** an online game's path is searcher -> service relay
   -> host, and before a join there is no such path. The searcher's round trip to the service alone is
   not the game's path, and neither leg's bandwidth can be estimated from the other; reporting either
@@ -552,7 +557,9 @@ claim about how Xbox LIVE decided.
   A configured service is refused (`BROWSER_SERVICE_TRANSPORT_UNAVAILABLE`), so accounts,
   PlayerMatch, Ranked, invitations and parties are unavailable; the relay refuses
   (`BROWSER_RELAY_TRANSPORT_UNAVAILABLE`); SystemLink discovery finds nothing; voice and the event
-  channel are not compiled for Emscripten.
+  channel are not compiled for Emscripten. A page cannot wait inside a frame, so a Guide
+  `EndShowMessageBox`/`EndShowKeyboardInput` called before the player answers throws
+  `InvalidOperationException`.
 - **Reason:** browsers have no UDP and need an asynchronous transport; the owner accepted native
   multiplayer plus a limitations page.
 - **Observable impact:** online and LAN play are unavailable in browsers.

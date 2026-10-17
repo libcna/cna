@@ -347,7 +347,7 @@ release contains, not what changed since a previous tag.
 
 - **XNA 4.0 API surface.** 227 of the 245 public FNA types are present (`Graphics`, `Audio`,
   `Input`/`Touch` and `Storage` complete); `Content` and `Media` are the known gaps. See
-  [`docs/xna-4-api-coverage.md`](docs/xna-4-api-coverage.md).
+  `docs/xna-4-api-coverage.md` at that tag.
 - **Graphics.** Every one of the ~26 major `Microsoft::Xna::Framework::Graphics` classes is
   implemented and test-covered, at a qualified ~90% XNA/FNA behavioural compatibility.
 - **49 renderer identities** selected at compile time through `CNA_GRAPHICS_RENDERER`, plus the

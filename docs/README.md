@@ -42,8 +42,6 @@ on it) rather than assuming either way.
 - **[`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md)** — current
   Microsoft-reference runtime type and member census, with every missing declaration listed;
   the separate [Content Pipeline parity report](xna-content-pipeline-parity-report.md) covers build-time APIs.
-- **[`xna-4-api-coverage.md`](xna-4-api-coverage.md)** — per-class Graphics notes and historical
-  estimates; use the current runtime member census above for API-surface percentages.
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
   game to CNA; consult the current content and effect documentation for format support.
 - **[`content-pipeline.md`](content-pipeline.md)** — the CNA-native build-time

@@ -32,7 +32,7 @@ constant-valued property and CNAEXT in `modules/gamer-services/{src,include}` an
 
 ## Refusals and constants that are CNA limits
 
-Each is documented where it is declared (C++ and C) and in `docs/xna-4-api-coverage.md`.
+Each is documented where it is declared (C++ and C) and in `docs/gamer-services-known-limitations.md`.
 
 | Member | Behaviour | Why |
 |---|---|---|

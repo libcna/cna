@@ -2,9 +2,9 @@
 
 **Written for Task 486 (`plans/plan_graphics.md` Phase 54).** This is a practical guide for someone who
 already has an XNA 4.0 or FNA game and wants to know: can I bring this to CNA, what needs to
-change, and what doesn't work yet. It draws conclusions from `docs/xna-4-api-coverage.md` (Tasks
-482–485) and `docs/graphics-renderer-feature-matrix.md` (Task 451) for a practical audience — see
-those two documents for the full underlying detail; this guide does not repeat their tables.
+change, and what doesn't work yet. It draws conclusions from `docs/graphics-renderer-feature-matrix.md`
+(Task 451), `CHECKLIST.md`'s deviation table and `handoff.md` §5 for a practical audience — see
+those documents for the full underlying detail; this guide does not repeat their tables.
 
 ## What CNA is (and isn't)
 
@@ -70,10 +70,10 @@ time (`-DCNA_GRAPHICS_RENDERER=<OPENGLES3|OPENGL33|WEBGL2|WEBGPU|HEADLESS|SOFTWA
 
 ## What fully works today
 
-Per `docs/xna-4-api-coverage.md`'s per-class table (Task 483): `RenderTarget2D`/`RenderTargetCube`,
-`SpriteFont`, `BasicEffect`'s core rendering, `VertexBuffer`/`VertexDeclaration`, `Viewport`,
-`PresentationParameters`, and `GraphicsAdapter` have **no open gaps on any renderer**. Most of the
-rest of the Graphics API surface is fully correct on at least EasyGL.
+Every public type and documented member of the XNA 4.0 runtime is present
+(`docs/xna-4-runtime-member-coverage.md`, generated); presence is not behaviour. What each renderer
+does is in `docs/graphics-renderer-feature-matrix.md` and each renderer's own document, and what is
+currently broken or limited is `handoff.md` §5.
 
 ## The former blockers that matter to existing ports
 
@@ -123,10 +123,9 @@ Real, currently-open caveats worth knowing about instead:
 - ~~`SkinnedEffect`'s `WeightsPerVertex` is a GPU no-op~~ — **fixed, Task 895** (2026-07-11): each
   renderer's skinning vertex shader now only sums the first `WeightsPerVertex` (1, 2, or 4)
   weight/index pairs, matching FNA's real `Skin(vin, boneCount)` behavior.
-- See `docs/xna-4-api-coverage.md`'s full "Known deviations from XNA/FNA" list (Task 485) for a
-  handful of smaller, permanent, intentional deviations (e.g. `GetHashCode()` returns
-  `std::size_t` not `int`; a couple of `Texture2D` methods have looser null/argument validation
-  than FNA) that are unlikely to affect a typical port but are documented there in full.
+- See `CHECKLIST.md`'s "Known acceptable C++ deviations from FNA/XNA" table for the smaller,
+  permanent, intentional deviations (e.g. `GetHashCode()` returns `std::size_t`, not `int`) that
+  are unlikely to affect a typical port but are documented there in full.
 - `handoff.md` §5 is the actively-maintained current bug list — check it directly for anything not
   covered above before committing to a renderer.
 
@@ -256,7 +255,7 @@ a `Clone()` override backed by a `protected` copy constructor (confirmed by read
 `BasicEffect.cs`/`AlphaTestEffect.cs`/`DualTextureEffect.cs`/`EnvironmentMapEffect.cs`/
 `SkinnedEffect.cs` directly). CNA matches this exactly for all 5: one public
 `explicit EffectName(GraphicsDevice&)` constructor (device passed by reference, this project's
-established convention throughout — see `docs/xna-4-api-coverage.md`'s deviations list) plus a
+established convention throughout) plus a
 `Clone()` override backed by a `private` copy constructor (CNA's accepted mapping for FNA's
 `protected`, per `CLAUDE.md`'s visibility table). No signature or overload-count mismatch found —
 unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
@@ -340,8 +339,7 @@ included) — not repeated here.
 
 ### Is it a bug, or a known limitation?
 
-Before filing anything, check `docs/xna-4-api-coverage.md`'s "Per-renderer Graphics support" table
-(Task 484), "Known deviations from XNA/FNA" list (Task 485), and `handoff.md` §5 (the actively
-maintained current bug list) — most currently-open gaps already have a task number and a documented
-root cause. If your symptom isn't listed there, it's more likely a genuinely new
-finding worth its own task.
+Before filing anything, check `handoff.md` §5 (the actively maintained list of current bugs and
+limitations), `docs/graphics-renderer-feature-matrix.md` for per-renderer support, and
+`CHECKLIST.md`'s deviation table for deliberate differences from XNA/FNA. If your symptom isn't
+listed there, it's more likely a genuinely new finding worth its own task.

@@ -140,6 +140,12 @@ when it is reproduced.
 - `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves
   `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so the mask reaches the renderer and is
   deliberately not applied; `ColorWriteChannels` is honoured.
+- `SDL_GPU` and `WEBGPU` do not draw a `SpriteSortMode::Immediate` sprite before `Draw` returns: a
+  texture changed between two `Draw` calls of one Immediate batch shows its new contents in both
+  sprites, where XNA keeps the old contents in the first. `OPENGLES3`, `SOFTWARE` and `FNA3D` match
+  XNA (EasyGL since SOFTWARE-252). Per-sprite submission was refused on cost grounds (VULKAN-057);
+  `EasyGL_SpriteBatch_SortModeSemantics` prints the answer and that cost on every run (measured on
+  all five, 2026-10-17). A game that changes a texture mid-batch can `End()` the batch first.
 
 - `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does
   not compute — reserved for the human author, see §6.
