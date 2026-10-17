@@ -399,9 +399,9 @@ namespace CNA::Internal::Renderers
         /// Binds this cube map to the requested GL texture unit. No-op on non-GL renderers.
         virtual void BindGL(int unit = 0) const {}
         /// Shares a reference to the CPU pixel buffer owned by TextureCube::cpuPixels_[face] for
-        /// one cube face's level 0. Mirrors ITextureRenderer::ShareCpuPixels()'s own purpose
-        /// exactly (OpenGL-style renderer context-loss restoration) -- default no-op; only OPENGL1
-        /// currently implements it.
+        /// one cube face's level 0, for context- or device-loss restoration -- default no-op.
+        /// EasyGL and WebGPU keep the reference; only WebGPU's device-loss restore reads it
+        /// (RAM.md, section 4).
         virtual void ShareCpuPixels(int /*face*/, std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
         /// SKIA-149: face width/height in texels. `BindTextureCube(unit, ITextureCubeRenderer*)`
         /// receives only this raw renderer pointer (see `ShaderEffect::SetTexture(unit,
@@ -570,9 +570,9 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
         /// Binds the underlying GL texture handle to the requested unit (no-op on non-GL renderers).
         virtual void BindGL(int unit = 0) const {}
-        /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_.
-        /// The renderer stores this reference for OpenGL context-loss restoration instead
-        /// of keeping its own duplicate copy of the pixel data.
+        /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_. Renderers
+        /// that restore textures after a context or device loss (EasyGL, WebGPU) keep it instead
+        /// of a copy of their own; the default ignores it. Block-compressed textures offer none.
         virtual void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
         /**
          * @brief Reads back format-native texels from a sub-rectangle of the given mip level.

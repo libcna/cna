@@ -40,9 +40,10 @@ boxes all round-trip correctly through **EasyGL**.
 
 ## `GetData` — readback
 
-`Texture3D`/`TextureCube` have no CPU-side shadow buffer (unlike `Texture2D`'s `cpuPixels_`) —
-`GetData` depends entirely on the renderer's `ITexture3DRenderer`/`ITextureCubeRenderer::GetData`
-implementation.
+`GetData` of a `Texture3D` or `TextureCube` depends entirely on the renderer's
+`ITexture3DRenderer`/`ITextureCubeRenderer::GetData` implementation: unlike `Texture2D`'s
+`cpuPixels_`, no CPU-side copy is read back. (A `Color` `TextureCube` does keep a level-0 copy of
+each face, which only WebGPU's device-loss restore uses -- `RAM.md` §4.)
 
 | Renderer | `GetData` implemented? |
 |---------|:---:|

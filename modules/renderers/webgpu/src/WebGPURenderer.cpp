@@ -13283,11 +13283,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPU-181. This is FORWARD-LOOKING only, matching the interface's own wording -- "safe
         // to call after renderer creation when no resources have been loaded yet ... future Create*
         // calls will skip ... CPU shadow copies". A texture that already handed its buffer over
-        // keeps it: releasing those would need a registry of live texture renderers, which this
-        // renderer does not have and which WEBGPU-182 will need anyway (a recreate has to walk
-        // them to re-upload). Documented rather than quietly half-done, because the case the
-        // contract names -- called at startup, before any texture exists -- costs exactly nothing
-        // either way.
+        // keeps it: this does not walk WEBGPU-182's registry of live device resources
+        // (liveDeviceResources_) to release the buffers that were shared before the call.
+        // Documented rather than quietly half-done, because the case the contract names --
+        // called at startup, before any texture exists -- costs exactly nothing either
+        // way.
         contextRecoveryEnabled_ = enabled;
     }
 

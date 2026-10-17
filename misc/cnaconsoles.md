@@ -169,7 +169,8 @@ A new concept alongside `CNA_GRAPHICS_RENDERER`, for example
 - a VFS layer instead of `std::filesystem`—`TitleContainer`/`StorageDevice` must support
   `host0:`/`ux0:`/`sdmc:`/`umd0:` paths and a read-only title sandbox,
 - memory budget: Dreamcast 16 MB, PS2 32 MB, PSP 32/64 MB, 3DS 64/128 MB, Wii 88 MB. Notes in
-  `RAM.md` (for example, `cpuPixels_` ~34 MB CPU copies of all textures on the Vulkan path) show
+  `RAM.md` (for example, `cpuPixels_`: one CPU copy of every uncompressed texture on every renderer,
+  about 34 MiB for mobile-eggbert's startup textures) show
   that the current design targets desktops and would need a dedicated texture-ownership policy
   for small consoles.
 
