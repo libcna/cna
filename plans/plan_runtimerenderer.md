@@ -487,38 +487,9 @@ running that family's own smoke/example target where one exists.
 | RTR-P1-D08 | ✅ | `software` → `SOFTWARE` (`needsWindow=false`, `needsVideoSubsystem=false`) |
 | RTR-P1-D09 | ✅ | `stub` → `STUB` (`needsWindow=false`, `needsVideoSubsystem=false`) |
 | RTR-P1-D10 | ✅ | `portablegl` → `PORTABLEGL` (`needsWindow=false`, `needsVideoSubsystem=false`) |
-| RTR-P1-D11 | ✅ | `directx11` → `DIRECTX11` |
-| RTR-P1-D12 | ✅ | `directx12` → `DIRECTX12` (honours `PresentationParameters::HeadlessEXT`) |
-| RTR-P1-D13 | ✅ | `direct2d` → `DIRECT2D` |
-| RTR-P1-D14 | ✅ | `canvas` → `CANVAS` (Emscripten) |
-| RTR-P1-D15 | ✅ | `html-dom` → `HTML_DOM` (Emscripten) |
-| RTR-P1-D16 | ✅ | `svg-dom` → `SVG_DOM` (Emscripten) |
-| RTR-P1-D17 | ✅ | `skia` → `SKIA` |
-| RTR-P1-D18 | ✅ | `blend2d` → `BLEND2D` |
-| RTR-P1-D19 | ✅ | `freedirect` → `FREEDIRECT` |
 | RTR-P1-D20 | ✅ | `directx9` → `DIRECTX9` |
-| RTR-P1-D21 | ✅ | `directx1` → `DIRECTX1` |
-| RTR-P1-D22 | ✅ | `directx2` → `DIRECTX2` |
-| RTR-P1-D23 | ✅ | `directx3` → `DIRECTX3` |
-| RTR-P1-D24 | ✅ | `directx5` → `DIRECTX5` |
-| RTR-P1-D25 | ✅ | `directx6` → `DIRECTX6` |
-| RTR-P1-D26 | ✅ | `directx7` → `DIRECTX7` |
-| RTR-P1-D27 | ✅ | `directx8` → `DIRECTX8` |
-| RTR-P1-D28 | ✅ | `directx10` → `DIRECTX10` |
 | RTR-P1-D29 | ✅ | `sdl-gpu` → `SDL_GPU` |
-| RTR-P1-D30 | ✅ | `opengles1` → `OPENGLES1` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D31 | ✅ | `opengl4` → `OPENGL4` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D32 | ✅ | `opengl1` → `OPENGL1` — owns `applyPreWindowAttributes` (GLX visual: depth 24, stencil 8, double buffer, MSAA) |
-| RTR-P1-D33 | ✅ | `opengl2` → `OPENGL2` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D34 | ✅ | `wicked` → `WICKED` |
-| RTR-P1-D35 | ✅ | `sokol` → `SOKOL` (`SDL_WINDOW_OPENGL`; `CNA_SOKOL_API` stays compile-time) |
-| RTR-P1-D36 | ✅ | `diligent` → `DILIGENT` — `prepareWindowFlags` wraps `ParseDeviceTypeOverride()`; keeps the documented single-flag limitation |
-| RTR-P1-D37 | ✅ | `glide` → `GLIDE` |
-| RTR-P1-D38 | ✅ | `gdi` → `GDI` |
-| RTR-P1-D39 | ✅ | `llgl` → `LLGL` — `prepareWindowFlags` wraps `RendererModuleNeedsOpenGLWindow()` |
-| RTR-P1-D40 | ✅ | `metal` → `METAL` (`SDL_WINDOW_METAL` \| `SDL_WINDOW_HIGH_PIXEL_DENSITY`; descriptor in the `.mm` unit) |
 | RTR-P1-D41 | ✅ | `fna3d` → `FNA3D` — `prepareWindowFlags` wraps `Fna3d::Detail::PrepareWindowFlags()` |
-| RTR-P1-D42 | ✅ | `openvg` → `OPENVG` (`SDL_WINDOW_OPENGL`) |
 | RTR-P1-D43 | ✅ | **Coverage gate.** A test enumerates every identity and fails if any lacks a descriptor in its own configuration — the mechanical equivalent of `check_renderer_identities.py` for descriptors. **Re-established by RTR-P13-4 after it had quietly stopped covering three identities**: the gate was a per-FAMILY check (one `*RendererDescriptor.cpp` each) plus a hand-written 46-entry list in `GraphicsRendererDescriptorTests.cpp`, and neither noticed an IDENTITY with no route into the registry. `check_runtime_renderer_discipline.py` now walks the identity → namespace → accessor → descriptor chain for all 49, and the test's list is derived from the enum. |
 
 ---
@@ -543,48 +514,14 @@ export `GetDescriptor()` with a populated `create` pointer, verify the family's 
 
 | ID | St | Family |
 |---|---|---|
-| RTR-P2-F01 | ✅ | `sdl-renderer` |
 | RTR-P2-F02 | ✅ | `easygl` |
-| RTR-P2-F03 | ✅ | `bgfx` — the namespaced factory and generated-registry entry were subsequently verified end to end by the real BGFX multi-build recorded in RTR-P10-9. |
-| RTR-P2-F04 | ✅ | `vulkan` |
 | RTR-P2-F05 | ✅ | `webgpu` |
-| RTR-P2-F06 | ✅ | `magnum` |
 | RTR-P2-F07 | ✅ | `headless` |
 | RTR-P2-F08 | ✅ | `software` — must not disturb the `CNA_SOFTWARE_2D_ONLY` re-compilation `GDI` depends on |
 | RTR-P2-F09 | ✅ | `stub` |
-| RTR-P2-F10 | ✅ | `portablegl` |
-| RTR-P2-F11 | ✅ | `directx11` |
-| RTR-P2-F12 | ✅ | `directx12` |
-| RTR-P2-F13 | ✅ | `direct2d` |
-| RTR-P2-F14 | ✅ | `canvas` |
-| RTR-P2-F15 | ✅ | `html-dom` |
-| RTR-P2-F16 | ✅ | `svg-dom` — also update the standalone `cna_test_svgdom_host` target |
-| RTR-P2-F17 | ✅ | `skia` |
-| RTR-P2-F18 | ✅ | `blend2d` |
-| RTR-P2-F19 | ✅ | `freedirect` |
 | RTR-P2-F20 | ✅ | `directx9` |
-| RTR-P2-F21 | ✅ | `directx1` |
-| RTR-P2-F22 | ✅ | `directx2` |
-| RTR-P2-F23 | ✅ | `directx3` |
-| RTR-P2-F24 | ✅ | `directx5` |
-| RTR-P2-F25 | ✅ | `directx6` |
-| RTR-P2-F26 | ✅ | `directx7` |
-| RTR-P2-F27 | ✅ | `directx8` |
-| RTR-P2-F28 | ✅ | `directx10` |
 | RTR-P2-F29 | ✅ | `sdl-gpu` |
-| RTR-P2-F30 | ✅ | `opengles1` |
-| RTR-P2-F31 | ✅ | `opengl4` |
-| RTR-P2-F32 | ✅ | `opengl1` — its one-line factory is currently a single packed line; expand it |
-| RTR-P2-F33 | ✅ | `opengl2` |
-| RTR-P2-F34 | ✅ | `wicked` |
-| RTR-P2-F35 | ✅ | `sokol` |
-| RTR-P2-F36 | ✅ | `diligent` |
-| RTR-P2-F37 | ✅ | `glide` |
-| RTR-P2-F38 | ✅ | `gdi` — also update the three `gdi/examples/*` targets that call `CreateGraphicsRenderer` directly |
-| RTR-P2-F39 | ✅ | `llgl` |
-| RTR-P2-F40 | ✅ | `metal` (`.mm` unit) |
 | RTR-P2-F41 | ✅ | `fna3d` |
-| RTR-P2-F42 | ✅ | `openvg` |
 
 ---
 
@@ -612,7 +549,6 @@ Worth doing on its own merits. After this phase, `modules/graphics/src` should c
 | RTR-P3-15 | ✅ | `GDI` multisample write-back: `GraphicsDevice::SetPresentationParameters()` and `createRenderer()` currently special-case `GDI`. Generalize to "always echo `GetMultiSampleCount()` back" — verify no other renderer regresses, since every other one already returns what it was given. |
 | RTR-P3-16 | ✅ | `GraphicsAdapter.cpp` — drop the now-unused `D3D9FormatMapping.hpp`/`D3D9ProfileCapabilities.hpp` includes from the XNA layer. |
 | RTR-P3-17 | ✅ | Verification: a test asserts `grep -c CNA_RENDERER_ modules/graphics/src` is **0**. |
-| RTR-P3-18 | 🟨 | **Skia half done.** `scripts/run-skia-2d-oracle-diff.sh` passes 9/9 against the real-XNA oracle policy — seven scenes pixel-exact, two filtered ones within measured bounds — so P3's move of Skia's format tables behind `IGraphicsRenderer` virtuals changed no rendered pixel. The three SKIA unit failures were each shown pre-existing: two by a clean detached build at `a749fdce3`, and the third by quoting the implementation and test's disagreeing compressed-format lists from that commit. The test was corrected because Skia contains real DXT/BC7 decoders. The D3D9 divergence suite remains undone: it needs a Windows cross-build under Wine, which is out of scope. |
 | RTR-P3-19 | ✅ | **Phase gate.** `DIRECTX9` (Wine), `SKIA`, `GDI` (Wine) and `OPENGLES3` builds all green with their existing suites. |
 
 ---

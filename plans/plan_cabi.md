@@ -432,7 +432,7 @@ the front end.
   (`GraphicsDevice.cpp:3205-3222`) to the public `DeviceLost` / `DeviceResetting` / `DeviceReset`
   events, and sets `deviceStatus_`. This is not a stub: the enum documents `D3DERR_DEVICELOST` and
   "pool-default-equivalent resources" as its origin.
-- **Three renderer families actually raise it**: `directx9`, `direct2d`, `skia`. The other 44 never
+- **Three renderer families actually raise it**: `directx9`, `direct2d`. The other 44 never
   call the callback, because their APIs cannot lose a device.
 - **A real per-resource recreate registry**, in exactly one renderer:
   `OpenGL1ResourceRegistry` / `IOpenGL1Recoverable` (`OpenGL1ContextRecovery.hpp`) with
@@ -486,14 +486,14 @@ Raise `ContentLost` **only where a renderer actually reported loss**, never on a
    with a louder one.
 3. Add `cna_render_target_subscribe_content_lost` / `_unsubscribe_content_lost` mirroring the
    buffer routes. **ABI class C, additive** — the buffer routes need no change.
-4. Test on `directx9`/`direct2d`/`skia`, where the event is reachable. Elsewhere the honest
+4. Test on `directx9`/`direct2d`, where the event is reachable. Elsewhere the honest
    assertion is that it never fires.
 
 ### Why it is not implemented on this branch
 
 It changes XNA-layer behaviour across all 47 renderer families and needs per-renderer verification
-on three backends this branch has not built (`directx9` and `direct2d` need Wine/DXVK; `skia`
-needs its pinned external artifact). The design above is complete and the pieces it depends on all
+on three backends this branch has not built (`directx9` and `direct2d` need Wine/DXVK; 
+The design above is complete and the pieces it depends on all
 exist; what remains is execution plus that verification matrix, which wants its own branch rather
 than the tail of this one.
 
@@ -941,7 +941,7 @@ says: a renderer reported that it lost and recreated its resources.
 
 ### Verified
 
-The three families that can report a reset — `directx9`, `direct2d`, `skia` — are not built here,
+The three families that can report a reset — `directx9`, `direct2d` — are not built here,
 so `cna_content_lost_probe` (`ContentLostProbe`) drives the same entry point the renderer callback
 drives and checks the contract around it:
 

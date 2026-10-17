@@ -139,13 +139,6 @@ implementations select the API's real point-list topology. The shared validation
 all five public primitive types while rejecting an invalid ordinal. No D3D9 mapper retains an
 unnamed default that can silently turn a future topology into a triangle list.
 
-The `SKIA` identity was retired on 2026-08-30 and is not restored; this document previously
-carried a 23-row "Skia CPU-raster 2D companion matrix" beside the tables below. It was removed on
-2026-09-17 with the rest of the retired-renderer documentation: every cell's evidence link pointed
-at a `docs/skia-*.md` page or `plans/plan_skia.md` that was deleted with the renderer, so the
-matrix could no longer be checked against anything. `docs/removed-renderers.md` is the tombstone,
-and the removal commit is the record.
-
 Status legend: ✅ correct and verified · ⚠️ partial/emulated/environment-limited · ❌ known gap, not
 fixed · ⛔ BLOCKED, needs a project-owner architecture decision · 🟨 implemented but not
 independently verified (D3D9 column only, see above) · ⬜ not attempted this session (D3D9 column
