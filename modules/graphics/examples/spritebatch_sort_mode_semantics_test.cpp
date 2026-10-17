@@ -23,7 +23,7 @@
 //      therefore rasterized every sprite of the batch against the texture's FINAL contents. That
 //      divergence from XNA was CNA-wide rather than Vulkan-specific, and it was recorded as
 //      VULKAN-057 rather than papered over here. SOFTWARE-252 later made EasyGL flush each
-//      Immediate sprite from Draw; the renderers that still diverge are in handoff.md §5.2. Leg B
+//      Immediate sprite from Draw; the renderers that still diverge are in handoff.md §5.1. Leg B
 //      reports the measurement and asserts only what Immediate must do regardless (draw every
 //      sprite, in place, in issue order).
 //
@@ -236,11 +236,11 @@ protected:
             // The measurement itself, printed rather than asserted: asserting XNA's answer here
             // would fail on the renderers that still defer, and asserting CNA's would cement the
             // divergence. VULKAN-057 closed on the second arm of its acceptance -- the divergence
-            // was REFUSED, with the cost leg D below as its evidence. handoff.md §5.2 names the
+            // was REFUSED, with the cost leg D below as its evidence. handoff.md §5.1 names the
             // renderers that still print blue/blue; when a renderer's answer changes, change that
             // entry, not this print.
             std::printf("[INFO] mid-batch texture mutation under Immediate: left=%s right=%s "
-                        "(XNA gives red/blue; renderers that differ: handoff.md 5.2) -- "
+                        "(XNA gives red/blue; renderers that differ: handoff.md 5.1) -- "
                         "Deferred gave %s/%s\n",
                         Text(immediate[0]).c_str(), Text(immediate[2]).c_str(),
                         Text(deferred[0]).c_str(), Text(deferred[2]).c_str());

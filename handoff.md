@@ -127,25 +127,24 @@ runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 ## 5. Known bugs and limitations
 
 The single authoritative list. The stabilization pass of 2026-10-16/17 fixed or removed every
-reproduced CNA defect that was on it; what remains are limitations, and an entry says when it was
-last measured.
+reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-None known. That is the state of this list, not a claim that CNA has no bugs: add a defect here
-when it is reproduced.
+- **`SpriteSortMode::Immediate` is batched on `SDL_GPU` and `WEBGPU`** (low priority). Both accept
+  the mode but defer its sprites, so a texture changed between two `Draw` calls of one Immediate
+  batch shows its new contents in both sprites. XNA draws each Immediate sprite with the state and
+  texture contents current at its `Draw`, so the first keeps the old contents. `OPENGLES3`
+  (EasyGL), `SOFTWARE` and `FNA3D` do. Reproducer: `EasyGL_SpriteBatch_SortModeSemantics` (on
+  `SDL_GPU` also `SdlGpu_CrossFamily_SpriteBatch_SortModeSemantics`, elsewhere the same program
+  with `CNA_GRAPHICS_RENDERER`); the test passes, and leg B's `[INFO]` line prints blue/blue where
+  XNA gives red/blue. Reproduced 2026-10-17.
 
 ### 5.2 Limitations
 
 - `SDL_GPU` ignores `BlendState.MultiSampleMask`: the pinned SDL (3.4.0 headers) reserves
   `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so the mask reaches the renderer and is
   deliberately not applied; `ColorWriteChannels` is honoured.
-- `SDL_GPU` and `WEBGPU` do not draw a `SpriteSortMode::Immediate` sprite before `Draw` returns: a
-  texture changed between two `Draw` calls of one Immediate batch shows its new contents in both
-  sprites, where XNA keeps the old contents in the first. `OPENGLES3`, `SOFTWARE` and `FNA3D` match
-  XNA (EasyGL since SOFTWARE-252). Per-sprite submission was refused on cost grounds (VULKAN-057);
-  `EasyGL_SpriteBatch_SortModeSemantics` prints the answer and that cost on every run (measured on
-  all five, 2026-10-17). A game that changes a texture mid-batch can `End()` the batch first.
 
 - `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does
   not compute — reserved for the human author, see §6.
