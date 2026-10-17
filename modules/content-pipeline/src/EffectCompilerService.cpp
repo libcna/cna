@@ -690,13 +690,13 @@ namespace CNA::Content::Pipeline
             if (passes.empty()) { passes.emplace_back(); }
             const std::size_t headerBytes = 8u + 8u * passes.size();
 
-            std::vector<std::uint8_t> wrapped;
-            wrapped.reserve(bytecode.size() + headerBytes);
-            const auto word32 = [&wrapped](std::uint32_t value)
+            std::vector<std::uint8_t> wrapped(bytecode.size() + headerBytes);
+            std::size_t writeOffset = 0;
+            const auto word32 = [&wrapped, &writeOffset](std::uint32_t value)
             {
                 for (int shift = 0; shift < 32; shift += 8)
                 {
-                    wrapped.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+                    wrapped[writeOffset++] = static_cast<std::uint8_t>((value >> shift) & 0xFFu);
                 }
             };
             word32(kXna4EffectWrapperToken);
@@ -706,7 +706,7 @@ namespace CNA::Content::Pipeline
                 word32(pass.stateGroups);
                 word32(pass.samplerRegisters);
             }
-            wrapped.insert(wrapped.end(), bytecode.begin(), bytecode.end());
+            std::copy(bytecode.begin(), bytecode.end(), wrapped.begin() + headerBytes);
             bytecode = std::move(wrapped);
         }
 
