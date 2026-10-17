@@ -328,6 +328,10 @@ TEST(NetPacketCodecTest, VoiceFramesRoundTripAndMalformedOnesAreRefused) {
     frame.Sequence = 0xBEEF;
     frame.Payload = {1, 2, 3, 4};
     const auto bytes = NetPacketCodec::Encode(frame);
+    const std::vector<SharpRuntime::bytecs> expectedBytes = {
+        static_cast<SharpRuntime::bytecs>(MessageTag::VoiceData),
+        3, 9, VoiceFlagTalking, 0xEF, 0xBE, 1, 2, 3, 4};
+    EXPECT_EQ(bytes, expectedBytes);
     EXPECT_EQ(NetPacketCodec::PeekTag(bytes), MessageTag::VoiceData);
     const auto decoded = NetPacketCodec::DecodeVoiceData(bytes);
     EXPECT_EQ(decoded.SenderWireId, 3);

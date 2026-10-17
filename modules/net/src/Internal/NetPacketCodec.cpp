@@ -533,15 +533,14 @@ namespace CNA::Internal::Net
     {
         if (message.Payload.size() > MaxVoicePayloadBytes)
             throw std::runtime_error("NetPacketCodec: voice payload too large");
-        std::vector<bytecs> bytes;
-        bytes.reserve(6 + message.Payload.size());
-        bytes.push_back(static_cast<bytecs>(MessageTag::VoiceData));
-        bytes.push_back(message.SenderWireId);
-        bytes.push_back(message.TargetWireId);
-        bytes.push_back(message.Flags);
-        bytes.push_back(static_cast<bytecs>(message.Sequence & 0xff));
-        bytes.push_back(static_cast<bytecs>(message.Sequence >> 8));
-        bytes.insert(bytes.end(), message.Payload.begin(), message.Payload.end());
+        std::vector<bytecs> bytes(6 + message.Payload.size());
+        bytes[0] = static_cast<bytecs>(MessageTag::VoiceData);
+        bytes[1] = message.SenderWireId;
+        bytes[2] = message.TargetWireId;
+        bytes[3] = message.Flags;
+        bytes[4] = static_cast<bytecs>(message.Sequence & 0xff);
+        bytes[5] = static_cast<bytecs>(message.Sequence >> 8);
+        std::copy(message.Payload.begin(), message.Payload.end(), bytes.begin() + 6);
         return bytes;
     }
 
