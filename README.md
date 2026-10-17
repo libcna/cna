@@ -11,7 +11,7 @@ It is a framework/runtime and abstraction layer—not a game—designed to prese
 ### Quick Start
 
 ```bash
-git submodule update --init --recursive
+git submodule update --init
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake --build build
 tools/platform/run_gpu_tests_private.sh build --output-on-failure   # private display, never the desktop
@@ -337,9 +337,11 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
     - `../sharp-runtime`
     - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES3`/`OPENGL33`/`WEBGL2`
       renderers)
+- libcurl and nlohmann-json development packages (GamerServices and Net, both on by default)
 - SDL3 and SDL3_mixer are built from vendored submodules by default — no system SDL packages required,
-  but building them needs the X11, OpenGL and audio development headers listed in
-  [programs.md](programs.md) §2.
+  but building them needs the X11, OpenGL and audio development headers.
+- The Debian 13 package list for all of the above, the test environment and the optional features
+  is [docs/programs.md](docs/programs.md).
 - FFmpeg is optional. `CNA_ENABLE_VIDEO=AUTO` (the default) enables video decoding when
   `libavcodec`, `libavformat`, `libavutil` and `libswresample` development packages are present;
   use `OFF` for a game that does not need video, or `ON` to require them. The XNA video types remain
@@ -358,25 +360,27 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
 
 ### Initialise Submodules
 
-Before the first build, initialise the vendored SDL submodules:
+Before the first build, initialise the vendored submodules:
 
 ```bash
-git submodule update --init --recursive
+git submodule update --init
 ```
 
-This populates `third_party/SDL` and `third_party/SDL_mixer`.
+This populates `third_party/SDL`, `third_party/SDL_mixer`, `third_party/draco` and
+`vendor/googletest`. `--recursive` is not needed: it only adds SDL_mixer's and Draco's nested
+submodules, which CNA's configuration does not build.
 After that, no system SDL packages are required.
 
 > **Building from a source zip/tarball instead of a Git clone?** GitHub's "Download ZIP"
 > and release archives do **not** include submodule contents, so `third_party/SDL` will be
 > empty and CMake aborts with a clear error (`Missing vendored 'SDL' … Run: git submodule
-> update --init --recursive`, from `cmake/ThirdPartySDL.cmake`). Either clone with Git and run
+> update --init`, from `cmake/ThirdPartySDL.cmake`). Either clone with Git and run
 > the command above, or set `-DCNA_USE_SYSTEM_SDL=ON` to use system-installed SDL3 packages.
 
 ### Build (Linux — OPENGLES3 renderer, default)
 
 ```bash
-git submodule update --init --recursive
+git submodule update --init
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
 cmake --build build --target CnaTests
 ```
@@ -388,7 +392,7 @@ qualification of it is still open). SDL is built from the vendored submodule —
 binaries or `CMAKE_PREFIX_PATH` needed.
 
 ```bash
-git submodule update --init --recursive
+git submodule update --init
 cmake -S . -B build-win -DCNA_GRAPHICS_RENDERER=SDL_GPU
 cmake --build build-win --target CnaTests
 ```
@@ -399,7 +403,7 @@ cmake --build build-win --target CnaTests
 # Install cross toolchain
 sudo apt install mingw-w64
 
-git submodule update --init --recursive
+git submodule update --init
 cmake -S . -B build-windows \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=SDL_GPU
@@ -474,7 +478,7 @@ through Wine + DXVK (`scripts/run-wine-dxvk9.sh`). See
 # Install cross toolchain
 sudo apt install mingw-w64
 
-git submodule update --init --recursive
+git submodule update --init
 cmake -S . -B cmake-build-d3d9 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=DIRECTX9 \

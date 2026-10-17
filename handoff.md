@@ -260,4 +260,4 @@ python3 tools/platform/sdl_inventory.py --check && python3 tools/platform/sdl_cl
   `cmake-build-multi`, …) through the same private runner. Never run several renderers' full suites at the same time: GPU and driver
   contention produces false failures.
 - `CMakePresets.json` has the focused unit, sanitizer, web, Apple and multi-renderer presets.
-- System packages for a fresh Debian machine: [`programs.md`](programs.md).
+- System packages for a fresh Debian machine: [`docs/programs.md`](docs/programs.md).

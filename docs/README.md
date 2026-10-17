@@ -13,6 +13,9 @@ on it) rather than assuming either way.
   **one** authoritative list of current known bugs and limitations; treat it as the source of truth
   for "is X still broken" over any dated snapshot below. Nothing else in the repository keeps a live
   bug list.
+- **[`programs.md`](programs.md)** — the maintained Debian 13 / Linux development environment and
+  system dependency guide: what the default build and its tests need, the sibling checkouts and
+  submodules, and the optional feature, Wayland, Windows/`DIRECTX9` and debugging groups.
 - **[`diagnostics.md`](diagnostics.md)** — CNA's OFF/STATS/FULL profiler architecture, public API,
   renderer-independent engine metrics, bounded event/trace formats, resource accuracy rules, and
   Inspector provider boundary. Performance methodology and measured cost are in

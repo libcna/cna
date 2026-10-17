@@ -549,7 +549,7 @@ function(_cna_ensure_sdl_dep)
     if(_rc)
         message(FATAL_ERROR
             "CNA: ${_A_NAME} cmake configure failed (exit code ${_rc}). On Linux the usual "
-            "cause is a missing development package; programs.md section 2 lists them.")
+            "cause is a missing development package; docs/programs.md lists them.")
     endif()
 
     message(STATUS "CNA: Building ${_A_NAME}...")

@@ -14,8 +14,8 @@
 # the freshly compiled bytecode is byte-identical to what is checked in. It edits NOTHING under
 # src/. Exit 0 = fully reproducible; non-zero = a divergence to investigate before any shader edit.
 #
-# Requires: x86_64-w64-mingw32-g++, wine and the Wine prefix above (see dx9-spike/README.md and
-# programs.md SS10).
+# Requires: x86_64-w64-mingw32-g++, wine and the Wine prefix above (see spikes/dx9-spike/README.md
+# and docs/programs.md, "Windows cross-development").
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
