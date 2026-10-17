@@ -5,11 +5,11 @@ and also carried the dated session log of 2026-07 to 2026-10; that log is in Git
 (`git show 8b5564f1e:NEXT.md`).
 
 **§5 is the one authoritative list of current known bugs and limitations.** No other file keeps a
-live bug list: `misc/known_gaps.md` holds only the measurements behind some §5 limitations, the
-plans under `plans/` are history, and capability documents (renderer docs,
-`docs/gltf-limitations.md`, `docs/gamer-services-known-limitations.md`, `CHECKLIST.md`'s accepted
-deviations) describe what a subsystem does by design, not what is broken. When a bug is fixed,
-delete its §5 entry (and its measurement record, if it has one) in the same commit.
+live bug list: capability documents (renderer docs, `docs/gltf-limitations.md`,
+`docs/gamer-services-known-limitations.md`, `CHECKLIST.md`'s accepted deviations) describe what a
+subsystem does by design, not what is broken; tests are the executable evidence; the plans under
+`plans/` and Git history keep the measurements and discovery history. When a bug is fixed, delete
+its §5 entry in the same commit.
 
 Last reconciled against the code and a full test run: **2026-10-14** (`next`).
 
@@ -148,10 +148,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 - `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does
   not compute — reserved for the human author, see §6.
-- Native `SurfaceFormat::Alpha8` render-target storage is unavailable; an Alpha8 request falls back
-  to `Color` as XNA's preferred-format rule allows (`misc/known_gaps.md` §1).
+- Native `SurfaceFormat::Alpha8` render-target storage is unavailable on every renderer:
+  `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` is false, and a
+  render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows
+  (`GraphicsCapabilityFloatRenderTargetTests.cpp`). Alpha is kept; the one-byte-per-pixel storage
+  is not (`Color` is four). How the Xbox 360 allocated an Alpha8 target was never captured.
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
-  (`misc/known_gaps.md` §4, `docs/browser-network-readiness.md`).
+  (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` §26).
 - `DIRECTX9` is validated under Wine (+DXVK) only, and `SDL_GPU`'s Direct3D 12 backend under Wine
   (+vkd3d-proton) only; real-Windows hardware validation is not current. The C API's pure-C suites
   run under Wine from the MinGW-w64 build; `MediaLibrarySmoke` reports a skip on Windows, whose

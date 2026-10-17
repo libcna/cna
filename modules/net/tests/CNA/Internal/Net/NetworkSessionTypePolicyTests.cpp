@@ -52,7 +52,7 @@ namespace {
         NetworkSessionType::LocalWithLeaderboards,
     };
 
-    // The two that are refused without a configured CNA service (SAMPLE-096, misc/known_gaps.md).
+    // The two that are refused without a configured CNA service (SAMPLE-096).
     // They are matchmaking types: the service finds the peers. With no service, a created session
     // would be a room no peer can reach, so create/find refuse instead of handing one back.
     constexpr NetworkSessionType kMatchmakingTypes[] = {
