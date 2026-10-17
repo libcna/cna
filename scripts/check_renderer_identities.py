@@ -27,6 +27,9 @@ that fixed four such documents still left three wrong, which is what this check
 was written to stop. Prefer not stating a number at all; where a document really
 wants one, this keeps it true.
 
+And it holds the renderer vocabulary itself: no CNA-owned active identifier may call
+a CNA graphics renderer a graphics backend again (OBSOLETE_RENDERER_VOCABULARY below).
+
 Exit codes: 0 ok, 1 mismatch.
 """
 import os
@@ -137,6 +140,36 @@ RETIRED_IDENTITIES = {
 
 # The first value never assigned to any identity, live or retired. A new renderer takes this one.
 NEXT_FREE_ABI_VALUE = 52
+
+# The 2026-08 naming normalization made CNA's graphics subsystem say "renderer" wherever "backend"
+# meant a CNA graphics renderer, and it reached zero such names. Two days later the renderer
+# classifications arrived as GraphicsBackendCategory/GraphicsBackendMaturity and spread through the
+# C++ API, the C ABI, its baseline and the documentation, because nothing checked; they were renamed
+# on 2026-10-17 (C ABI 0.49.0). This is that check, held to identifiers rather than prose: the three
+# spellings below only ever named a CNA renderer, so other subsystems' backends (audio, input,
+# ENetBackend, device test backends) and an upstream library's own backend vocabulary
+# (WGPUBackendType, SDL_GPU's drivers) do not match them.
+OBSOLETE_RENDERER_VOCABULARY = re.compile(
+    r"\b\w*GraphicsBackend\w*|\bCNA_GRAPHICS_BACKEND\w*|\bcna_graphics_backend\w*")
+
+# CNA-owned active trees and root files. plans/ and misc/ are historical ledgers and notes; they
+# record what the code was called when the work was done, and rewriting them would falsify that.
+VOCABULARY_ROOTS = ("modules", "cmake", "scripts", "tools", "tests", "examples", "spikes", "docs",
+                    ".github")
+VOCABULARY_ROOT_FILES = ("CMakeLists.txt", "CMakePresets.json", "Doxyfile", "README.md",
+                         "CLAUDE.md", "AGENTS.md", "CHECKLIST.md", "handoff.md",
+                         "THIRD_PARTY_NOTICES.md", "NOTICE.md")
+VOCABULARY_SUFFIXES = {".hpp", ".h", ".cpp", ".c", ".cc", ".inc", ".mm", ".m", ".py", ".cmake",
+                       ".txt", ".json", ".toml", ".yml", ".yaml", ".sh", ".md", ".js", ".mjs",
+                       ".html", ".in", ".cs"}
+VOCABULARY_SKIPPED_DIRS = {"third_party", "vendor", "node_modules", "__pycache__"}
+
+# Files that must name the old spellings because recording their removal is their purpose.
+VOCABULARY_RECORDS = {
+    "docs/c-api/ABI_VERSIONING.md": "the 0.49.0 release notes list every removed C name",
+    "docs/RendererNamingMigration.md": "the 2026-08 normalization's own historical record",
+    "scripts/check_renderer_identities.py": "this check",
+}
 
 
 def enum_identities():
@@ -460,6 +493,32 @@ def check_runtime_retired_names():
     return problems
 
 
+def vocabulary_files():
+    """Every CNA-owned active text file the renderer-vocabulary check reads, repository-relative."""
+    found = [name for name in VOCABULARY_ROOT_FILES if os.path.isfile(os.path.join(REPO, name))]
+    for root in VOCABULARY_ROOTS:
+        for directory, subdirectories, files in os.walk(os.path.join(REPO, root)):
+            subdirectories[:] = sorted(d for d in subdirectories if d not in VOCABULARY_SKIPPED_DIRS)
+            for name in sorted(files):
+                if os.path.splitext(name)[1] in VOCABULARY_SUFFIXES:
+                    found.append(os.path.relpath(os.path.join(directory, name), REPO)
+                                 .replace(os.sep, "/"))
+    return found
+
+
+def check_renderer_vocabulary():
+    """No CNA-owned active identifier may call a CNA graphics renderer a graphics backend."""
+    problems = []
+    for relative in vocabulary_files():
+        if relative in VOCABULARY_RECORDS:
+            continue
+        with open(os.path.join(REPO, relative), encoding="utf-8", errors="replace") as handle:
+            for number, line in enumerate(handle, 1):
+                for match in OBSOLETE_RENDERER_VOCABULARY.finditer(line):
+                    problems.append(f"{relative}:{number}: {match.group(0)}")
+    return problems
+
+
 def documented_counts(identities, families):
     """Reports every stated count that disagrees with the registry, and every one gone invisible."""
     problems = []
@@ -543,6 +602,15 @@ def main():
         for problem in runtime_retired:
             print(f"  - {problem}")
 
+    vocabulary = check_renderer_vocabulary()
+    if vocabulary:
+        ok = False
+        print("An active file calls a CNA graphics renderer a graphics backend. CNA spells it "
+              "GraphicsRenderer*, CNA_GRAPHICS_RENDERER* and cna_graphics_renderer_*; a name for an "
+              "upstream library's own backend uses that library's term instead:")
+        for problem in vocabulary:
+            print(f"  - {problem}")
+
     families = family_count()
     stale = documented_counts(len(IDENTITIES), families)
     if stale:
@@ -556,7 +624,7 @@ def main():
               f"selection list and the runtime registry, over {families} implementation families; "
               f"every documented count agrees; {len(RETIRED_IDENTITIES)} retired identities stay "
               f"retired with their C ABI values reserved (next free value "
-              f"{NEXT_FREE_ABI_VALUE})")
+              f"{NEXT_FREE_ABI_VALUE}); no active identifier calls a renderer a graphics backend")
         return 0
     return 1
 
