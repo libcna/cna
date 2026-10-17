@@ -145,9 +145,11 @@ the marker is defined in every TU via `CNAHelper.hpp`:
 | `modules/input/src/NoXna/` | `modules/input/src/CnaExt/` | extension source area (module boundaries unchanged) |
 
 Historical ledgers `input_noxna.md`, `input_noxna_progress.md` and
-`noxna_devices.md` keep their names, and active comments citing them keep the
-citations verbatim; their historical task IDs (N01, N-007, …) are unchanged.
-Active CNA preprocessor uses of `NOXNA` are zero.
+`noxna_devices.md` kept their names through the migration, and their task IDs
+(N01, N-007, …) were not renamed. All three were later retired: `noxna_devices.md`
+became `docs/devices-ext.md`, and the two input ledgers were deleted on 2026-10-17
+once the current input documentation covered them. Git history keeps them; active
+comments cite the task IDs alone. Active CNA preprocessor uses of `NOXNA` are zero.
 
 ## 5. Canonical identity registry after normalization
 
