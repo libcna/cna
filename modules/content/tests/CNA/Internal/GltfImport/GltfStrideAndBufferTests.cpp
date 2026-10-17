@@ -19,7 +19,6 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
-#include "System/InvalidOperationException.hpp"
 #include <string>
 #include <system_error>
 #include <vector>
@@ -27,8 +26,6 @@
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/GraphicsCapability.hpp"
-#include "CNA/GraphicsRendererType.hpp"
-#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -204,6 +201,11 @@ TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23Stat
         {VertexElementUsage::Color, 12, VertexElementFormat::Color},
         {VertexElementUsage::TextureCoordinate, 16, VertexElementFormat::Vector2},
     });
+    ExpectStrideLayout(28, {
+        {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
+        {VertexElementUsage::TextureCoordinate, 12, VertexElementFormat::Vector2, 0},
+        {VertexElementUsage::TextureCoordinate, 20, VertexElementFormat::Vector2, 1},
+    });
     ExpectStrideLayout(32, {
         {VertexElementUsage::Position, 0, VertexElementFormat::Vector3},
         {VertexElementUsage::Normal, 12, VertexElementFormat::Vector3},
@@ -265,7 +267,7 @@ TEST(GltfStrideAndBuffer, EveryElementFitsInsideItsOwnStride)
     // The property no individual offset assertion states: an element whose bytes run past the end
     // of the record reads into the next vertex, which produces a mesh that looks progressively
     // more wrong along the buffer rather than uniformly wrong -- the hardest kind to diagnose.
-    for (const int stride : {16, 20, 24, 32, 48, 52, 56, 60, 68, 76})
+    for (const int stride : {16, 20, 24, 28, 32, 48, 52, 56, 60, 68, 76})
     {
         SCOPED_TRACE("stride " + std::to_string(stride));
         const InferredVertexLayout layout =
@@ -294,7 +296,7 @@ TEST(GltfStrideAndBuffer, AStrideOutsideTheTableIsNotGuessedAt)
     // The refusal half of the same contract, and the reason GLTF-157 exists: an unlisted stride
     // must come back unknown rather than with a plausible layout. A guessed layout binds
     // *something* at every location, and the draw then reads whatever those bytes happen to be.
-    for (const int stride : {0, 12, 28, 40, 64, 72})
+    for (const int stride : {0, 12, 36, 40, 64, 72})
     {
         SCOPED_TRACE("stride " + std::to_string(stride));
         EXPECT_FALSE(InferredLayoutForStride(stride, UnlistedStrideLayout::RendererRefusesIt).known);
@@ -311,7 +313,7 @@ TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclar
     // the declaration before SetData/SetDataRaw reached the selected renderer.
     struct Case { const char* fixture; int stride; };
     const Case cases[] = {
-        {"tex-dual-texture-stride", 20},
+        {"tex-dual-texture-stride", 28},
         // GLTF-462: a rigid vertex-coloured primitive keeps its metallic-roughness material now,
         // so it takes the rigid PBR layout and its colour rides in stride 60's own colour slot.
         // Stride 24 is reached only by a coloured primitive whose material declares
@@ -394,20 +396,12 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
         // renderer reaches a record through bytes its layout does not describe. So the rule is the
         // partition: reach the boundary, or refuse with a diagnostic that names why.
         std::string failure;
-        bool xnaRefusal = false;
         try
         {
             model.Draw(identity, identity, identity);
             // Deferred renderers submit the draw here. Without Present, a command can be recorded
             // but never reach the driver's input-layout validation.
             gd.Present();
-        }
-        catch (const System::InvalidOperationException& error)
-        {
-            // XNA's own answer when a stock effect reads an element the declaration lacks
-            // (DualTextureEffect's TextureCoordinate1 at stride 20): DIRECTX9 gives it.
-            failure = error.what();
-            xnaRefusal = true;
         }
         catch (const std::exception& error)
         {
@@ -419,13 +413,10 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
         // reproduce by accident, which is the property that made the narrow check worth having.
         // (GLTF-473's fixed-function layout refusal was the other one; the only renderer that could
         // give it has been retired, and an allowance that can no longer fire is a place for a
-        // regression to hide.)
-        // plans/plan_apple_m4.md AM4-190: and on FNA3D, a stock effect whose vertex shader reads an
-        // input the primitive's layout lacks (DualTextureEffect's TextureCoordinate1 at stride
-        // 20): only FNA3D's OpenGL driver can default it, so its other drivers refuse by name.
-        const bool namedRefusal = xnaRefusal || failure.find("GLTF-477") != std::string::npos ||
-            (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Fna3d) &&
-             failure.find("FNA3D-MISSING-STOCK-INPUT") != std::string::npos);
+        // regression to hide.) The dual-texture fixture's stride-20 layout lacked the
+        // TextureCoordinate1 DualTextureEffect reads, which XNA, DIRECTX9 and FNA3D's non-GL
+        // drivers refused by name; its stride-28 layout carries it, so those allowances are gone.
+        const bool namedRefusal = failure.find("GLTF-477") != std::string::npos;
         EXPECT_TRUE(namedRefusal)
             << "this renderer refused a canonical glTF stride for a reason other than a named "
                "absent shading model: " << failure;

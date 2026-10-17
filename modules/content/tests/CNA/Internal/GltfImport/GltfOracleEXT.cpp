@@ -627,6 +627,10 @@ namespace CnaTest::GltfOracle
         {
             case 20: uvOffset = 12; break;
             case 24: colorOffset = 12; uvOffset = 16; break;
+            // DualTextureEffect. Its TextureCoordinate1 at 20 is the occlusion map's set, the file's
+            // TEXCOORD_0 again unless the map names another; L5 asserts those bytes, and L3 states
+            // only the streams the file authors.
+            case 28: uvOffset = 12; break;
             case 32: normalOffset = 12; uvOffset = 24; break;
             case 48: normalOffset = 12; tangentOffset = 24; uvOffset = 40; break;
             case 52: normalOffset = 12; uvOffset = 24; weightOffset = 32; jointOffset = 48; break;

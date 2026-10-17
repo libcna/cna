@@ -96,6 +96,11 @@ namespace CnaTest::GltfOracle
             case 24:
                 layout.fields = {{"Position", 0, 12}, {"Color", 12, 4}, {"TextureCoordinate", 16, 8}};
                 break;
+            case 28:
+                // DualTextureEffect's layout: Texture2 samples TextureCoordinate1.
+                layout.fields = {{"Position", 0, 12}, {"TextureCoordinate", 12, 8},
+                                 {"TextureCoordinate1", 20, 8}};
+                break;
             case 32:
                 layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"TextureCoordinate", 24, 8}};
                 break;

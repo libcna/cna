@@ -2875,10 +2875,10 @@ namespace CNA::Internal::GltfImport
         // An unskinned, uncolored primitive with both a base-color and an occlusion texture is
         // imported through DualTextureEffect (Texture=base color, Texture2=occlusion) instead of
         // BasicEffect -- real XNA's DualTextureEffect always samples both texture slots (no
-        // TextureEnabled-style toggle) via a single shared UV set at vertex attribute locations
-        // 0/1 with no Normal in between (see EasyGLRenderer::ApplyLayout's stride==20
-        // case), so this reuses the plain VertexPositionTexture layout rather than a new
-        // Position+Normal+Texture+Texture2 vertex format. Skinned/colored meshes keep their
+        // TextureEnabled-style toggle), Texture with TextureCoordinate0 and Texture2 with
+        // TextureCoordinate1, and refuses a declaration lacking either. The stride-28 layout
+        // therefore carries both: the base colour's UV set and the occlusion map's own set (the
+        // same coordinates again when both maps use one set). Skinned/colored meshes keep their
         // existing effect (SkinnedEffect has no Texture2 slot; the colored VertexPositionColor
         // Texture layout has no room for a second UV/texture either) -- a documented scope cut,
         // not an oversight.
@@ -3601,13 +3601,22 @@ namespace CNA::Internal::GltfImport
             ? unpackSemantic(cgltf_attribute_type_texcoord,
                              out.packedTexcoordSourceSetsEXT[0], uvAcc, 2, "TEXCOORD")
             : std::vector<float>();
-        const cgltf_accessor* uv1Acc = out.hasSecondTexcoordEXT
-            ? cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord,
-                                  out.packedTexcoordSourceSetsEXT[1])
+        // DualTextureEffect samples Texture2 (the occlusion map) with TextureCoordinate1, which is
+        // the occlusion map's own set. When that is the base colour's set, TextureCoordinate1
+        // repeats TextureCoordinate0 and no second stream is read.
+        int secondTexcoordSet = out.hasSecondTexcoordEXT ? out.packedTexcoordSourceSetsEXT[1] : -1;
+        if (out.useDualTexture && prim.material != nullptr)
+        {
+            const int occlusionSet = EffectiveTexcoordSetEXT(prim.material->occlusion_texture);
+            if (occlusionSet != out.packedTexcoordSourceSetsEXT[0])
+                secondTexcoordSet = occlusionSet;
+        }
+        const cgltf_accessor* uv1Acc = secondTexcoordSet >= 0
+            ? cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, secondTexcoordSet)
             : nullptr;
         std::vector<float> uvs1 = uv1Acc
             ? unpackSemantic(cgltf_attribute_type_texcoord,
-                             out.packedTexcoordSourceSetsEXT[1], uv1Acc, 2, "TEXCOORD")
+                             secondTexcoordSet, uv1Acc, 2, "TEXCOORD")
             : std::vector<float>();
         // GLTF-461: gathered here, before anything reads them, because a flat-normal split renumbers
         // every per-vertex stream. Tangent generation and the packing loop below both index by the
@@ -3933,8 +3942,10 @@ namespace CNA::Internal::GltfImport
 
             if (out.useDualTexture)
             {
-                // stride 20: Position + TextureCoordinate.
+                // stride 28: Position + TextureCoordinate0 + TextureCoordinate1.
                 AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
+                AppendFloat(out.vertexBytes, uvs1.empty() ? u : u1);
+                AppendFloat(out.vertexBytes, uvs1.empty() ? v : v1);
                 continue;
             }
 
@@ -4535,9 +4546,9 @@ namespace CNA::Internal::GltfImport
             // Unskinned, uncoloured.
             {{false, false, true, false, true}, 60, ""},
             {{false, false, true, false, false}, 48, ""},
-            {{false, false, false, true, false}, 20,
+            {{false, false, false, true, false}, 28,
              "the Normal and Tangent streams: DualTextureEffect's layout is "
-             "Position+TextureCoordinate only, so the primitive cannot be lit"},
+             "Position+TextureCoordinate0+TextureCoordinate1, so the primitive cannot be lit"},
             {{false, false, false, false, false}, 32, ""},
         };
         return table;

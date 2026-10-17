@@ -314,6 +314,15 @@ namespace CNA::Internal::Graphics
             {VertexElementUsage::TextureCoordinate, 0, 12, VertexElementFormat::Vector2},
         };
 
+        // Not a built-in XNA type: the glTF importer's DualTextureEffect layout. XNA's
+        // DualTextureEffect reads TextureCoordinate0 for Texture and TextureCoordinate1 for
+        // Texture2, so both are carried (the shape of the XNA DualTexture sample's vertex type).
+        inline constexpr InferredVertexElement kStride28[] = {
+            {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
+            {VertexElementUsage::TextureCoordinate, 0, 12, VertexElementFormat::Vector2},
+            {VertexElementUsage::TextureCoordinate, 1, 20, VertexElementFormat::Vector2},
+        };
+
         inline constexpr InferredVertexElement kStride24[] = {
             {VertexElementUsage::Position,          0,  0, VertexElementFormat::Vector3},
             {VertexElementUsage::Color,             0, 12, VertexElementFormat::Color},
@@ -440,6 +449,7 @@ namespace CNA::Internal::Graphics
             case 16: return detail::Layout(detail::kStride16);
             case 20: return detail::Layout(detail::kStride20);
             case 24: return detail::Layout(detail::kStride24);
+            case 28: return detail::Layout(detail::kStride28);
             case 32: return detail::Layout(detail::kStride32);
             case 48: return detail::Layout(detail::kStride48);
             case 52: return detail::Layout(detail::kStride52);

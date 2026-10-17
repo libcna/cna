@@ -975,6 +975,10 @@ namespace Microsoft::Xna::Framework::Content
                     verts.emplace_back(readVec3(o), readColor(o + 12), readVec2(o + 16));
                 }
                 vb->SetData(verts.data(), numVertices);
+            } else if (stride == 28) {
+                // The glTF importer's DualTextureEffect layout (Position + two TextureCoordinates).
+                // No built-in XNA vertex type has it, so the clean record goes up as raw bytes.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 28);
             } else if (stride == 32) {
                 std::vector<Graphics::VertexPositionNormalTexture> verts;
                 verts.reserve(static_cast<std::size_t>(numVertices));
@@ -1352,10 +1356,9 @@ namespace Microsoft::Xna::Framework::Content
                     fx = std::make_shared<Graphics::SkinnedEffect>(device);
                 } else if (stockEffectName == "DualTextureEffect") {
                     // CNB-73: real XNA's two-layer multitexturing effect -- always
-                    // samples both texture slots (no TextureEnabled toggle), so its
-                    // vertex buffer must be the stride-20 VertexPositionTexture shape
-                    // (no Normal in between location0/location1, see ApplyLayout's
-                    // stride==20 case) rather than stride-32.
+                    // samples both texture slots (no TextureEnabled toggle), Texture2
+                    // with TextureCoordinate1, so its vertex buffer is the stride-28
+                    // Position + TextureCoordinate0 + TextureCoordinate1 shape.
                     fx = std::make_shared<Graphics::DualTextureEffect>(device);
                 } else if (stockEffectName == "PbrEffect") {
                     // CNB-56/58 (Phase 13A): CNAEXT metallic-roughness PBR effect --

@@ -179,8 +179,8 @@ TEST(VertexDeclarationFidelityTest, ARendererThatRefusesTheStrideKeepsItsOwnReje
     // and they no longer reach this predicate) throw on an out-of-table stride themselves. The
     // guard must abstain there rather than substitute its own message for an established
     // boundary -- including for a declaration it could not otherwise represent.
-    EXPECT_EQ("", Verdict(Elements({Pos(), Col(12)}), 28));
-    EXPECT_EQ("", Verdict(Elements({Col(0), Pos(4)}), 28));
+    EXPECT_EQ("", Verdict(Elements({Pos(), Col(12)}), 36));
+    EXPECT_EQ("", Verdict(Elements({Col(0), Pos(4)}), 36));
 }
 
 // ---------------------------------------------------------------------------
@@ -436,13 +436,13 @@ TEST(VertexDeclarationFidelityTest, StockProgramRefusesUnknownFormatForConsumedS
 //
 // The importer's own selection is
 //     skinned ? (colored ? 56 : (usePbr ? 68 : 52))
-//             : (colored ? 24 : (usePbr ? 48 : (useDualTexture ? 20 : 32)))
+//             : (colored ? 24 : (usePbr ? 48 : (useDualTexture ? 28 : 32)))
 // plus stride 16 from the .cnj path's position+colour layout. Restating it here is deliberate:
 // this test is the coupling, so it has to name both sides.
 
 TEST(VertexDeclarationFidelity, EveryStrideTheGltfImporterCanEmitIsInTheCanonicalTable)
 {
-    for (const int stride : {16, 20, 24, 32, 48, 52, 56, 60, 68, 76})
+    for (const int stride : {16, 20, 24, 28, 32, 48, 52, 56, 60, 68, 76})
     {
         SCOPED_TRACE("stride " + std::to_string(stride));
         const CNA::Internal::Graphics::InferredVertexLayout layout =

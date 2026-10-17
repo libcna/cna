@@ -674,8 +674,8 @@ namespace
 })GLTF";
 
     // CNB-72/73 (Phase 13E): an unskinned, uncolored mesh whose material has both a base-color
-    // and an occlusion texture must import through DualTextureEffect (stride-20 VertexPosition
-    // Texture, Texture=base color, Texture2=occlusion) instead of BasicEffect.
+    // and an occlusion texture must import through DualTextureEffect (stride 28, Position + two
+    // TextureCoordinates, Texture=base color, Texture2=occlusion) instead of BasicEffect.
     const char* kDualTextureGltf = R"GLTF({
   "asset": { "version": "2.0" },
   "scene": 0,
@@ -2054,8 +2054,8 @@ TEST(GltfToCnjToolTest, BaseColorAndOcclusionTexturesImportThroughPbrEffectWithA
     const std::filesystem::path vertsPath = contentRoot.path() / "dualtex_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    // Stride 48 (Position+Normal+Tangent+TextureCoordinate), not the stride-20
-    // VertexPositionTexture layout DualTextureEffect required.
+    // Stride 48 (Position+Normal+Tangent+TextureCoordinate), not DualTextureEffect's stride-28
+    // layout.
     ASSERT_EQ(bytes.size(), 3u * 48u);
 
     GraphicsDevice gd;

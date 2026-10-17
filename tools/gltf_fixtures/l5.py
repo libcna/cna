@@ -35,6 +35,7 @@ from .builder import MODE_NAMES, TRIANGLES, primitive_count_for_mode
 STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
     20: [("Position", 0, 12), ("TextureCoordinate", 12, 8)],
     24: [("Position", 0, 12), ("Color", 12, 4), ("TextureCoordinate", 16, 8)],
+    28: [("Position", 0, 12), ("TextureCoordinate", 12, 8), ("TextureCoordinate1", 20, 8)],
     32: [("Position", 0, 12), ("Normal", 12, 12), ("TextureCoordinate", 24, 8)],
     48: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
          ("TextureCoordinate", 40, 8)],
@@ -129,7 +130,7 @@ def select_stride(primitive: dict[str, Any]) -> int:
     whose stride-24 layout no PBR shader reads.
 
     Textures change the stride in exactly one combination -- a non-PBR material carrying both a
-    base-colour and an occlusion map, which selects DualTextureEffect's stride-20 layout. Every
+    base-colour and an occlusion map, which selects DualTextureEffect's stride-28 layout. Every
     other map is sampled by whatever effect the material model already chose.
     """
     material = primitive.get("material") or {}
@@ -145,13 +146,13 @@ def select_stride(primitive: dict[str, Any]) -> int:
     # is why the L5 goldens are byte-compared rather than derived from the same code.
     non_pbr_model = material.get("model") == "unlit"
     # A textured material only changes the stride in one combination: a NON-PBR material carrying
-    # both a base-colour and an occlusion map selects DualTextureEffect's stride-20 layout. Every
+    # both a base-colour and an occlusion map selects DualTextureEffect's stride-28 layout. Every
     # other map is sampled by whatever effect the material model already chose, so the stride is
     # the untextured one. The refusal is therefore narrowed to that one case rather than to
     # "textured", which used to exclude the whole corpus from having a texture at all.
     if (non_pbr_model and material.get("hasBaseColorTexture")
             and material.get("hasOcclusionTexture")):
-        return 20
+        return 28
     skinned = bool(primitive.get("joints")) and bool(primitive.get("weights"))
     colored = bool(primitive.get("colors"))
     # plans/plan_gltf.md GLTF-462: a vertex-coloured primitive is no longer excluded from the
@@ -223,6 +224,10 @@ def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:
 
     tangents = (_tangents_for(primitive, count)
                 if any(name == "Tangent" for name, _o, _s in layout) else [])
+    # Stride 28 is DualTextureEffect's: TextureCoordinate1 carries the occlusion map's own set, and
+    # every corpus occlusion map samples TEXCOORD_0 (the material record states no other).
+    if stride == 28:
+        texcoords1 = texcoords
 
     out = bytearray()
     for v in range(count):

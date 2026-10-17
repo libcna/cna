@@ -474,7 +474,7 @@ factor-only metallic-roughness material to an untextured white `BasicEffect`.
 | …and the primitive is skinned | `SkinnedPbrEffect` | 68 |
 | `KHR_materials_unlit` | `BasicEffect`, lighting off | 32 |
 | …and the primitive is skinned | `SkinnedEffect` | 52 |
-| a non-PBR model with **both** a base-colour and an occlusion map | `DualTextureEffect` | 20 |
+| a non-PBR model with **both** a base-colour and an occlusion map | `DualTextureEffect` | 28 |
 | any material, when the primitive carries `COLOR_0` | `BasicEffect`/`SkinnedEffect` | 24 / 56 |
 
 Metallic-roughness is glTF's default in two separate ways, so most files take the first row.

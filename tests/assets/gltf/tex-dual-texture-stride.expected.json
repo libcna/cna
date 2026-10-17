@@ -1,6 +1,6 @@
 {
   "id": "tex-dual-texture-stride",
-  "description": "A non-PBR material with both a base-colour and an occlusion texture, which selects DualTextureEffect's stride-20 layout -- the only stride a texture combination decides, and the last of the seven with no golden bytes.",
+  "description": "A non-PBR material with both a base-colour and an occlusion texture, which selects DualTextureEffect's stride-28 layout -- the only stride a texture combination decides, and the last of the seven with no golden bytes.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -34,7 +34,7 @@
       "base-colour texture",
       "occlusion texture",
       "KHR_materials_unlit",
-      "vertex stride 20"
+      "vertex stride 28"
     ],
     "auditFixture": null
   },
@@ -342,7 +342,7 @@
             "normals",
             "tangents"
           ],
-          "droppedReason": "DualTextureEffect's stride-20 layout is Position + TextureCoordinate and has no normal or tangent slot at all, so both authored streams are discarded at import and the primitive cannot be lit (GLTF-086/GLTF-241, documented limits reported by both loaders)."
+          "droppedReason": "DualTextureEffect's stride-28 layout is Position + two TextureCoordinates and has no normal or tangent slot at all, so both authored streams are discarded at import and the primitive cannot be lit (GLTF-086/GLTF-241, documented limits reported by both loaders)."
         },
         "material": {
           "index": 0,
@@ -441,7 +441,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 20,
+        "stride": 28,
         "vertexCount": 4,
         "fields": [
           {
@@ -453,11 +453,16 @@
             "name": "TextureCoordinate",
             "offset": 12,
             "size": 8
+          },
+          {
+            "name": "TextureCoordinate1",
+            "offset": 20,
+            "size": 8
           }
         ],
         "vertexBufferFile": "tex-dual-texture-stride.vb.bin",
-        "vertexBufferBytes": 80,
-        "vertexBufferSha256": "fc9e3bae5aef7c98e933ab380544127daffb0a106142ce20a8296ab91c39584d",
+        "vertexBufferBytes": 112,
+        "vertexBufferSha256": "ba7700474d2bb0e9c06896884c08187acb5459c298b2ef1018cba345da6a4f5f",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "tex-dual-texture-stride.ib.bin",
