@@ -3154,13 +3154,13 @@ namespace CNA::Internal::Renderers::EasyGL
             ::metagl::InternalFormatTarget::Renderbuffer, storage.internalFormat,
             ::metagl::InternalFormatParameter::Samples,
             static_cast<GLsizei>(supported.size()), supported.data());
-        int applied = 0;
+        int formatMax = 0;
         for (const GLint count : supported)
-        {
-            if (count > 1 && count <= requested)
-                applied = std::max(applied, static_cast<int>(count));
-        }
+            formatMax = std::max(formatMax, static_cast<int>(count));
         DrainGlErrors();
+        // The back buffer's rule, bounded by this format's own maximum: any count up to it is a
+        // legal glRenderbufferStorageMultisample request, listed or not.
+        const int applied = formatMax > 1 ? ClampMultiSampleCount(requested, formatMax) : 0;
         const bool normalized16 = !storage.isFloat &&
             (storage.internalFormat == Rg16InternalFormatEXT() ||
              storage.internalFormat == ::metagl::InternalFormat::Rgba16);
@@ -5082,8 +5082,9 @@ namespace CNA::Internal::Renderers::EasyGL
             // had been left on std::cout and broke it.
             std::ostringstream capabilityMessage;
             capabilityMessage
-                      << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
-                      << "x; MRT up to " << maxMrtTargets_
+                      << "CNA: EasyGL capabilities -- MSAA up to "
+                      << std::max(1, ClampMultiSampleCount(kMaxMultiSampleCount, maxSamplesCap))
+                      << "x (GL_MAX_SAMPLES=" << maxSamplesCap << "); MRT up to " << maxMrtTargets_
                       << " targets (GL draw buffers=" << maxDrawBuffers
                       << ", color attachments=" << maxColorAttachments
                       << ", CNA/FNA cap=4); indexed color masks: "
@@ -5150,11 +5151,11 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderer::CreateMsaaBuffers(int w, int h)
     {
-        // Clamp to GL_MAX_SAMPLES so glRenderbufferStorageMultisample never errors.
+        // The rule the adapter promised, within GL_MAX_SAMPLES so glRenderbufferStorageMultisample
+        // never errors.
         GLint maxSamples = 0;
         metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
-        if (maxSamples > 0 && sampleCount_ > static_cast<int>(maxSamples))
-            sampleCount_ = static_cast<int>(maxSamples);
+        sampleCount_ = std::max(1, ClampMultiSampleCount(sampleCount_, static_cast<int>(maxSamples)));
 
         // SOFTWARE-181: the old FBO always carried Depth24 and never stencil, regardless of the
         // selected XNA DepthFormat. Rebuild the small renderer-owned attachment set atomically so
@@ -5217,10 +5218,9 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             GLint maxSamples = 0;
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
-            int candidate = 1;
-            while (candidate <= requestedMultiSampleCount / 2) candidate *= 2;
             if (maxSamples > 1)
-                newSampleCount = std::min(candidate, static_cast<int>(maxSamples));
+                newSampleCount = std::max(
+                    1, ClampMultiSampleCount(requestedMultiSampleCount, static_cast<int>(maxSamples)));
         }
 
         if (newSampleCount == sampleCount_)

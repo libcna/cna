@@ -152,4 +152,33 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         return profile != GlProfile::OpenGL33;
     }
+
+    /**
+     * @brief The most multisample samples EasyGL applies, and so the most its adapter promises.
+     *
+     * OpenGL ES 3.0, WebGL 2 and desktop OpenGL 3.3 all guarantee GL_MAX_SAMPLES >= 4, and an
+     * adapter query is answered before a context exists to ask for more. Promising 8 broke the
+     * promise on implementations that stop at 4, llvmpipe among them.
+     */
+    inline constexpr int kMaxMultiSampleCount = 4;
+
+    /**
+     * @brief XNA's multisample rule as EasyGL applies it, to the back buffer and to render targets
+     *        alike: the largest power of two not above the request, within kMaxMultiSampleCount.
+     *
+     * @param requested The requested sample count; 0 or 1 means none.
+     * @param implementationMax The most samples GL allows here (GL_MAX_SAMPLES, or the format's
+     *        largest GL_SAMPLES entry); 0 or less when no context has been asked.
+     * @return 0, 2 or 4.
+     */
+    [[nodiscard]] constexpr int ClampMultiSampleCount(int requested, int implementationMax)
+    {
+        int limit = requested < kMaxMultiSampleCount ? requested : kMaxMultiSampleCount;
+        if (implementationMax > 0 && implementationMax < limit)
+            limit = implementationMax;
+        int applied = 0;
+        for (int count = 2; count <= limit; count *= 2)
+            applied = count;
+        return applied;
+    }
 }
