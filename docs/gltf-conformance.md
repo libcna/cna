@@ -1380,12 +1380,12 @@ written for this document: two descriptions of the same fixture are two things t
 | `texture-shared-two-samplers` | textures | L1, L2, L3, L4, L5 | shared image; two textures; two samplers; per-slot sampler state; independent U/V addressing |
 | `tex-dual-texture-stride` | textures | L1, L2, L3, L4, L5 | base-colour texture; occlusion texture; KHR_materials_unlit; vertex stride 28 |
 | `skin-armature-ancestor` | skinning | L1, L2, L3, L4 | skin.joints; skin.inverseBindMatrices; armature ancestor above the joint set; JOINTS_0 / WEIGHTS_0 |
-| `skin-mesh-node-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh-space cancellation; skin.inverseBindMatrices; JOINTS_0 / WEIGHTS_0 |
+| `skin-mesh-node-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh node transform ignored; skin.inverseBindMatrices; JOINTS_0 / WEIGHTS_0 |
 | `skin-plus-static-mesh` | skinning | L1, L2, L3, L4 | two mesh groups; skinned and unskinned mesh in one file; skin.joints; skin.inverseBindMatrices |
 | `skin-unlit` | skinning | L1, L2, L3, L4, L5 | KHR_materials_unlit; JOINTS_0 / WEIGHTS_0; vertex stride 52 |
 | `skin-vertex-color` | skinning | L1, L2, L3, L4, L5 | COLOR_0 on a skinned mesh; KHR_materials_unlit; JOINTS_0 / WEIGHTS_0; vertex stride 56 |
-| `skin-vertex-color-pbr` | skinning | L1, L2, L3, L4, L5 | COLOR_0 with a PBR material; COLOR_0 on a skinned mesh; vertex stride 80; authored TANGENT with w = -1; translucent baseColorFactor; alphaMode BLEND; doubleSided; JOINTS_0 / WEIGHTS_0 |
-| `skin-mesh-node-parent-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh-space cancellation; transformed ancestor above the mesh node; JOINTS_0 / WEIGHTS_0 |
+| `skin-vertex-color-pbr` | skinning | L1, L2, L3, L4, L5 | COLOR_0 with a PBR material; COLOR_0 on a skinned mesh; vertex stride 80; authored TANGENT with w = -1; translucent baseColorFactor; alphaMode BLEND; doubleSided; baseColorTexture; normalTexture; metallicRoughnessTexture; JOINTS_0 / WEIGHTS_0 |
+| `skin-mesh-node-parent-transform` | skinning | L1, L2, L3, L4 | skinned mesh node transform; mesh node transform ignored; transformed ancestor above the mesh node; JOINTS_0 / WEIGHTS_0 |
 | `skin-skeleton-hint` | skinning | L1, L2, L3, L4 | skin.skeleton; declared root below a transform-bearing ancestor; declared root above the joints' common ancestor; two joints |
 | `skin-unnormalized` | skinning | L1, L2, L3 | unnormalized WEIGHTS_0; zero-weight vertex; renormalisation policy |
 | `skin-73-joints` | skinning | L1, L2 | skin.joints beyond MaxBones; palette limit; import rejection |
