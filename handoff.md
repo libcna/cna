@@ -84,17 +84,18 @@ planned.
 runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
 `cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
 `OPENGL33`, `WEBGPU`, `SDL_GPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1
-failed (`EasyGL_Conformance_render_target_own_msaa`, §5.1 item 1), 195 skipped;
+failed (`EasyGL_Conformance_render_target_own_msaa`, §5.3), 195 skipped;
 `cmake-build-sdlgpu` 11,284, none failed, 256 skipped; `cmake-build-webgpu` 10,964, none failed, 256
 skipped; `cmake-build-software` 10,982, none failed, 101 skipped; `cmake-build-fna3d` (its OpenGL
 driver) 10,806, 2 failed, 400 skipped -- `ContentPipelineCliTest.ContentBuildGraphReportsALongCycleDeterministically`
 and `Sdl3InputTest.MouseReadsThePointerBesideTheWindowAsXnaDoes`, which pass alone (three of three);
 the second reads the pointer of the private display that parallel tests also move, and failed the
 same way once in an earlier SOFTWARE run. Under Wine, `cmake-build-mingw` (Release, `DIRECTX9` with
-DXVK): `CnaGraphicsTests.exe` in eight shards 2,688/2,688, and the `DIRECTX9` ctest suite 59/59
-without `DirectX9_CompiledEffects` (§5.1 item 2). `cmake-build-headless` was not re-run. Every run
-excluded `XnaPipelineGenuineRuntime` and `XnaDifferentialBuildTest` (Wine-hosted XNA builds), which
-§7 says to run outside the private runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
+DXVK 2.6.0): `CnaGraphicsTests.exe` in eight shards 2,688/2,688, and the `DIRECTX9` ctest suite
+59/59 without `DirectX9_CompiledEffects` (§5.3); with DXVK 3.1.1 the whole suite 60/60, twice.
+`cmake-build-headless` was not re-run. Every run excluded `XnaPipelineGenuineRuntime` and
+`XnaDifferentialBuildTest` (Wine-hosted XNA builds), which §7 says to run outside the private
+runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 `OPENGLES3` and fails on a dirty checkout; the other workflows are subsystem- or platform-specific.
 
 ## 3. Where current information lives
@@ -125,52 +126,14 @@ excluded `XnaPipelineGenuineRuntime` and `XnaDifferentialBuildTest` (Wine-hosted
 
 ## 5. Known bugs and limitations
 
-The single authoritative list. Every 5.1 entry was re-checked against the code on 2026-10-16/17,
-when the stabilization pass fixed or removed the rest; an entry says when it was last measured.
+The single authoritative list. The stabilization pass of 2026-10-16/17 fixed or removed every
+reproduced CNA defect that was on it; what remains are limitations, and an entry says when it was
+last measured.
 
 ### 5.1 Defects
 
-1. **XNA behaviour first proved on the retired renderers that a surviving renderer does not meet.**
-    The `*_Conformance_*` programs (`modules/graphics/examples/conformance/`) carry the XNA knowledge
-    of the retired `VULKAN`, `DIRECTX11`, `METAL` and `SDL_RENDERER` suites, measured on Linux through
-    the private runner with `OPENGLES3` (EasyGL), `SDL_GPU` (Vulkan), `WEBGPU`, `SOFTWARE`, `FNA3D`
-    (its OpenGL driver) and `HEADLESS` (whose pixel-oracle programs skip). Closed on 2026-10-15,
-    verified on SOFTWARE, SDL_GPU, WEBGPU and EasyGL: a stock effect over a declaration missing an
-    element it reads throws XNA's `InvalidOperationException` from `GraphicsDevice` on every renderer
-    (`basic_effect_declaration_inputs` C, `stock_effect_unsupplied_input` C, which also refuses the
-    undeclared skinned draw that drew nothing); `SkinnedEffect.VertexColorEnabled` folds the vertex
-    colour into the diffuse before specular and before the saturate on EasyGL, SDL_GPU and WebGPU
-    (`skinned_effect_vertex_color` F/G); the adapter's multisample answer is the count `Reset` and
-    `RenderTarget2D` apply (SOFTWARE 4, WebGPU 4, SDL_GPU and EasyGL the largest of 2/4/8 not above
-    the request, as their devices apply on this hardware; `graphics_adapter_query`,
-    `multisample_count_clamp`); WebGPU's `Reset` applies the Color back buffer the query selected;
-    an SDL_GPU `ShaderEffect` uniform array beyond its capacity is refused by name
-    (`shader_effect_refusal` E). Still open:
-    - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered edge
-      texel (`render_target_own_msaa` D); 4x resolves as expected, so this is the GL driver's 2x
-      sample pattern meeting the probe's edge, not measured further.
-    - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
-      the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
-      round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
-      `graphics_adapter_query`. FNA3D's driver owns those answers.
-    - SDL_GPU and DIRECTX9: cube faces in a multi-render-target set are refused with
-      `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
-      and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
-      them. A capability boundary, reported as such.
-
-2. **`DIRECTX9` under Wine + DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or dies in DXVK's device
-   teardown** (re-measured 2026-10-16, `cmake-build-mingw`, Release, `CNA_DIRECTX9_COMPILED_EFFECTS=ON`).
-   Through ctest 6 of 10 runs time out (300 s) inside the suite's first test,
-   `CapabilityAndPublicRuntimeContract`; run directly, 3 of 9 runs failed -- one hang, one
-   `std::system_error` "Thread not joinable" (a string of DXVK's own thread wrapper, in
-   `/usr/lib/dxvk/wine64/d3d9.dll.so`) and one silent exit. On 2026-10-15 teardown markers showed
-   every renderer object released and the final `IDirect3DDevice9::Release` never returning, and a
-   standalone D3D9 program with the same object order (240 create/compile/draw/release cycles under
-   the same Wine, DXVK and private display) never hung, so the trigger is this process's timing
-   rather than anything CNA asks of the API; a rerun passes. The rest of the `DIRECTX9` suite passes
-   (two runs: 60/60, and 59/60 with this test the failure). `CnaGraphicsTests.exe` is run as eight
-   `GTEST_TOTAL_SHARDS` shards because one 2,956-test Wine process dies or hangs at a varying point;
-   every shard passed on 2026-10-15.
+None known. That is the state of this list, not a claim that CNA has no bugs: add a defect here
+when it is reproduced.
 
 ### 5.2 Limitations
 
@@ -215,6 +178,38 @@ when the stabilization pass fixed or removed the rest; an entry says when it was
   their own; delete and relink them before reading the suite. Seen on 2026-10-13 in
   `cmake-build-multi` after the link-boundary work's virtual-function additions: 237 bogus
   failures from 1,245 stale executables.
+
+### 5.3 External and driver limitations
+
+Behaviour CNA does not own, measured and reported rather than worked around.
+
+- **Conformance programs on drivers and capability boundaries** (`*_Conformance_*`,
+  `modules/graphics/examples/conformance/`, measured 2026-10-15/17):
+  - EasyGL: a `RenderTarget2D` requested and applied at 2x resolves with no partially covered edge
+    texel (`render_target_own_msaa` D); 4x resolves as expected, so this is the GL driver's 2x
+    sample pattern meeting the probe's edge. It is the one failure of the `cmake-build-multi` run.
+  - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
+    the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
+    round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
+    `graphics_adapter_query`. FNA3D's driver owns those answers.
+  - SDL_GPU and DIRECTX9: cube faces in a multi-render-target set are refused with
+    `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
+    and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
+    them. A capability boundary.
+- **`DIRECTX9` under Wine with DXVK 2.6.0: `DirectX9_CompiledEffects` hangs or aborts in DXVK's
+  device teardown; DXVK 3.1.1 does not** (measured 2026-10-17, `cmake-build-mingw`, Release,
+  `CNA_DIRECTX9_COMPILED_EFFECTS=ON`). Its 31 gtests were run 30 times on each version in one Wine
+  prefix that differed only in the DXVK DLLs: 2.6.0 (Debian's package, `/usr/lib/dxvk`) failed 9 of
+  30 -- hangs inside the first test, `CapabilityAndPublicRuntimeContract`, and `std::system_error`
+  "Thread not joinable", a string of DXVK's own thread wrapper -- while 3.1.1 passed 30 of 30, and
+  with it the whole `DIRECTX9` ctest suite passes 60/60 twice. On 2026-10-15 teardown markers had
+  shown every renderer object released and the final `IDirect3DDevice9::Release` never returning.
+  CNA was not changed for it. `scripts/run-wine-dxvk9.sh` still defaults to `~/.wine-cna-d3d11`,
+  which links the system 2.6.0; `CNA_D3D9_WINEPREFIX=~/deps/wineprefix-cna-dxvk-3.1.1` selects a
+  copy with 3.1.1 (machine-local, outside Git); the script's DXVK gate accepts the `v` official
+  builds print before the version. `CnaGraphicsTests.exe` is run as eight
+  `GTEST_TOTAL_SHARDS` shards because one 2,956-test process under 2.6.0 dies or hangs at a varying
+  point.
 
 ## 6. Reserved for the human author
 
