@@ -103,6 +103,8 @@ namespace
 
 TEST(RenderTargetSemantics, PreserveContentsKeepsWhatWasDrawnAcrossARebind)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Stub))
+        GTEST_SKIP() << "STUB creates a RenderTarget2D but cannot bind one";
     if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
         GTEST_SKIP() << "HEADLESS has no render-target pixel storage to preserve";
     GraphicsDevice device;
@@ -119,6 +121,8 @@ TEST(RenderTargetSemantics, PreserveContentsKeepsWhatWasDrawnAcrossARebind)
 
 TEST(RenderTargetSemantics, DiscardContentsDoesNotKeepIt)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Stub))
+        GTEST_SKIP() << "STUB creates a RenderTarget2D but cannot bind one";
     if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
         GTEST_SKIP() << "HEADLESS has no render-target pixel storage to discard";
     GraphicsDevice device;
@@ -144,6 +148,8 @@ TEST(RenderTargetSemantics, DiscardContentsDoesNotKeepIt)
 // address reuse certain rather than likely.
 TEST(RenderTargetSemantics, ATargetDestroyedWhileBoundIsForgottenByTheDevice)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Stub))
+        GTEST_SKIP() << "STUB creates a RenderTarget2D but cannot bind one";
     GraphicsDevice device;
     const int backBufferWidth = device.getPresentationParametersProperty().getBackBufferWidthProperty();
     ASSERT_NE(backBufferWidth, kSize) << "the viewport check below needs distinguishable sizes";
@@ -247,6 +253,8 @@ TEST(RenderTargetSemantics, ARenderTargetCubeReportsWhatItWasAskedFor)
 // first user of an empty one.
 TEST(RenderTargetSemantics, TargetsWithDifferentSampleCountsBothRenderInOneRun)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Stub))
+        GTEST_SKIP() << "STUB creates a RenderTarget2D but cannot bind one";
     if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
         GTEST_SKIP() << "HEADLESS cannot observe pixels after rebuilding the target state";
     GraphicsDevice device;
