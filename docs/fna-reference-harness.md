@@ -127,7 +127,7 @@ FNA build (version 26.5.0.0) but not yet added to the C++ side.
 
 After fixing those, the comparison found exactly one genuine divergence: `IndexElementSize`'s
 numeric values did not match FNA at the time (`SixteenBits=0`/`ThirtyTwoBits=1` in FNA, `16`/`32` in
-CNA — see `AUDIT.md` and `plans/plan_graphics.md` Task 921). **Fixed by Task 921 on 2026-07-09** — CNA now
+CNA — see `plans/plan_graphics.md` Task 921). **Fixed by Task 921 on 2026-07-09** — CNA now
 uses `SixteenBits=0`/`ThirtyTwoBits=1` too; re-running this comparison today would find no
 divergence here. Every other compared value — all 21 enums, all 16 state presets, all 17
 `PackedVector` types, and all 5 `Viewport` cases — matches the real, running FNA implementation

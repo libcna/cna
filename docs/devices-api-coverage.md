@@ -3,8 +3,8 @@
 A standalone, per-member reference for the XNA 4.0 / Windows Phone 7 API surface in this
 namespace, extracted from `plans/plan_devices.md`'s Phase 0 audit matrices (Tasks
 DEVICES-0002–0008) and updated through Phase 8. This is a flat lookup table — for the
-prose history of *how* each row got here, see `AUDIT.md`'s `Microsoft::Devices::Sensors`
-section; for architecture, see `docs/devices-native-backend-design.md`.
+event and lifetime contract, see `docs/devices-event-contract.md`; for architecture, see
+`docs/devices-native-backend-design.md`.
 
 **Re-verified 2026-07-06 (`DEV-API-001`)** by reading every public header in scope
 (`include/Microsoft/Devices/**/*.hpp`, excluding `Detail/`) directly, rather than trusting

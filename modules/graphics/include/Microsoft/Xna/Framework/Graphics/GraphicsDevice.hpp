@@ -1465,6 +1465,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * Must be called before the device is initialized. Disabling recovery avoids the renderer's
          * CPU shadows on platforms where context or device loss cannot occur.
          *
+         * With recovery disabled, a non-compressed `Texture2D` that is not a render target frees its
+         * level-0 CPU copy after a whole-level upload, and `GetData` of level 0 then throws
+         * `System::NotSupportedException` instead of reading the texture back. Mip levels above 0
+         * keep their CPU copies.
+         *
          * @param enabled Pass false to disable context recovery.
          */
         CNAEXT void SetContextRecoveryEnabled(bool enabled);

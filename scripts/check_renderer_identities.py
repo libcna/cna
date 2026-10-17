@@ -59,10 +59,9 @@ COUNTED_DOCUMENTS = {
     # every one of them read "46" for three identities after the count moved. It is the document
     # a reviewer checks the boundary against, so a stale number there is worse than elsewhere.
     "plans/plan_platform.md": True,
-    # These two deliberately state no total: both used to, and both now name the registry instead,
-    # which is the outcome this check recommends in its own failure message. Listed rather than
-    # dropped so that a count reappearing in them is still checked.
-    "AUDIT.md": False,
+    # This one deliberately states no total: it used to, and now names the registry instead, which
+    # is the outcome this check recommends in its own failure message. Listed rather than dropped
+    # so that a count reappearing in it is still checked.
     "CHECKLIST.md": False,
 }
 

@@ -1875,7 +1875,7 @@ them from becoming 10,000 cases that prove nothing.
 | CSL-2606 | `README.md` and `docs/README.md` entries are complete and current | ⬜ | Extends `CSL-43`/`CSL-45` now that the subsystem exists. |
 | CSL-2607 | `CHANGELOG.md` entry | ⬜ | Following the repository's format. |
 | CSL-2608 | `THIRD_PARTY_NOTICES.md` needs no change | ⬜ | Asserted, since D2 means nothing was vendored — the row records the check rather than assuming it. |
-| CSL-2609 | `AUDIT.md` / `audit/` shards updated for every file the plan created | ⬜ | The `CSL-35` stubs replaced with real audit entries; the rollup reports the true state. |
+| CSL-2609 | `AUDIT.md` / `audit/` shards updated for every file the plan created | ⛔ | Withdrawn: both were retired (Git history only). API presence is the generated `docs/xna-4-runtime-member-coverage.md`; current defects go to `handoff.md` §5. |
 | CSL-2610 | `NEXT_csl.md` final state | ⬜ | Carries the full-suite baseline, every recorded measurement, the decisions that did not survive contact, and what a newcomer should pick up next. |
 | CSL-2611 | A `port-fna-file`-style skill or checklist for adding a CSL backend | ⬜ | Or ⛔ with the reason; the repository's skill mechanism exists and a new backend is a repeatable multi-step job, so the row decides on evidence. |
 

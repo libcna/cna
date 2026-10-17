@@ -166,7 +166,9 @@ name merely begins with two dots is correctly *not* an escape.
 
 Case sensitivity is not part of this model. Windows is usually case-insensitive and case-preserving,
 POSIX usually is not, and CNA does not normalise case anywhere to paper over that. See
-`CNA/Internal/CaseInsensitivePath.hpp` for the one place case is deliberately resolved, and
+`CNA/Internal/CaseInsensitivePath.hpp` for the one place case is deliberately resolved -- the XNA
+asset paths of `TitleContainer`, `ContentManager` and the XACT banks, which accept Windows separators
+and fall back to a unique case-insensitive match so titles open on case-sensitive hosts -- and
 `plans/plan_win32_native_validation.md` WINNATIVE-F26 for the divergence that is recorded rather
 than fixed.
 

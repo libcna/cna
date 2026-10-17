@@ -84,8 +84,8 @@ invented; both throw `std::out_of_range` for an unrecognized enum value.
   unless `elementSizeInBytes` evenly divides `GetFormatSizeEXT(format)`; throws `std::out_of_range`
   for an unrecognized format, same as `GetFormatSizeEXT` itself.
 
-Both are `internal` in FNA; made `public static` on CNA's `Texture` instead (documented, intentional
-deviation — see `AUDIT.md`), since 3 of the 4 real call sites aren't subclasses of `Texture` in CNA.
+Both are `internal` in FNA; they are `public static` on CNA's `Texture` because the C API exports
+them (`modules/c-api/spec/Texture.toml`).
 Wired `ValidateGetDataFormat` into all 4 of FNA's real call sites: `Texture2D::GetData`,
 `Texture3D::GetData`, `TextureCube::GetData`, `GraphicsDevice::GetBackBufferData` — all using
 `elementSizeInBytes = 4` (this project's `Color`/RGBA-raw-bytes convention). Renderer-specific

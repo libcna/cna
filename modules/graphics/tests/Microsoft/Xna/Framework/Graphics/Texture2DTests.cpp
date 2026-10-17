@@ -1784,11 +1784,10 @@ TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)
 //
 // GraphicsDevice::SetContextRecoveryEnabled(false) is a CNAEXT optimization:
 // Texture2D::MaybeFreeCpuPixels() frees the CPU-side pixel shadow
-// (cpuPixels_) after every full upload to save ~1x texture RAM. CNA has no
-// GPU pixel-readback path, so GetData() depends entirely on that shadow —
-// once freed, GetData() throws instead of falling back to a GPU read
-// (FNA's real GetData always reads back from the GPU). See AUDIT.md,
-// "Texture2D CPU shadow storage" for the full write-up.
+// (cpuPixels_) after every full upload to save ~1x texture RAM. A plain
+// texture's level-0 GetData() reads only that shadow — once freed, GetData()
+// throws instead of falling back to a GPU read (FNA's real GetData always
+// reads back from the GPU). See SetContextRecoveryEnabled's documentation.
 // -----------------------------------------------------------------------
 
 class ContextRecoveryTest : public ::testing::Test

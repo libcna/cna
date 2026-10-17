@@ -275,9 +275,9 @@ validators, migration scripts, an editor's "what is this file" inspector).
 
 | Extension | CNA type | Notes |
 |-----------|----------|-------|
-| `.png`, `.jpg`/`.jpeg`, `.bmp` | `Texture2D` | Already implemented today via `Texture2D::FromStream` (CNA's own decoder; see `AUDIT.md`) — this rule formalizes dispatch-by-extension on top of code that already exists. |
-| `.dds` | `Texture2D`/`TextureCube` | `FromStream` already decodes DDS/DXT1/3/5 today (folded into the same function per `AUDIT.md`); this plan only needs a dedicated `DDSFromStreamEXT`-style dispatch by extension, not new decode logic. |
-| `.wav` | `SoundEffect` | Already implemented (`AUDIT.md`: SDL3_mixer-backed `SoundEffect`). |
+| `.png`, `.jpg`/`.jpeg`, `.bmp` | `Texture2D` | Already implemented today via `Texture2D::FromStream` (CNA's own decoder) — this rule formalizes dispatch-by-extension on top of code that already exists. |
+| `.dds` | `Texture2D`/`TextureCube` | `FromStream` already decodes DDS/DXT1/3/5 today (folded into the same function at the time); this plan only needs a dedicated `DDSFromStreamEXT`-style dispatch by extension, not new decode logic. |
+| `.wav` | `SoundEffect` | Already implemented (SDL3_mixer-backed `SoundEffect`). |
 | `.ogg`, `.mp3` | `SoundEffect`/`Song` | If/where CNA's audio backend already supports these container formats; otherwise deferred, same as any other format gap — not a `.cnj`-specific concern. |
 | (future) any format with an existing native CNA loader | whatever that loader produces | The extension-dispatch rule is intentionally generic — adding a new native format later is just adding one more row here, no `.cnj` schema change needed. |
 

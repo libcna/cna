@@ -375,7 +375,10 @@ Rules:
 - `ToString()` must be tested for expected format.
 - `GetHashCode()` must be tested for consistency (equal objects produce equal hashes).
 - Tests that exist before a new implementation lands are insufficient — when adding a new method, add or extend tests in the same task.
-- Do not mark an API as "complete" in AUDIT.md unless its tests are also complete.
+- Do not record an API as complete until its tests are. API presence is the generated
+  `docs/xna-4-runtime-member-coverage.md` (`python3 tools/audit_xna_runtime_surface.py --write-reports`);
+  current defects and limitations are `handoff.md` §5; subsystem behaviour belongs in that
+  subsystem's `docs/` page; finished work is Git history.
 
 ---
 
@@ -411,7 +414,7 @@ default, so registered tests inherit the launcher's `DISPLAY`; the live desktop 
 ## Git Commits — Always Commit After Finishing a Task
 
 **Always create a commit as soon as a task is finished** (build verified, tests passing,
-plan/`AUDIT.md`/`handoff.md` updated) — do not wait for an explicit "commit" request for each
+plan/`handoff.md` updated) — do not wait for an explicit "commit" request for each
 individual task. Do not push unless the user explicitly asks to push.
 
 - Stage only the files that belong to the completed task, by explicit name

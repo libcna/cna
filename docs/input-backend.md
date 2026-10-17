@@ -177,8 +177,8 @@ Where the difference is actually visible:
 
 ## 4. Per-device fidelity notes
 
-Full per-task detail lives in `plans/plan_input.md` (Phases I1–I6) and `AUDIT.md`'s `Input`/
-`Input::Touch` tables (`Runtime` column). Summary of what's real vs. what deviates:
+Full per-task detail lives in `plans/plan_input.md` (Phases I1–I6); the per-member FNA comparison
+is `docs/input-fna-fidelity.md`. Summary of what's real vs. what deviates:
 
 ### Keyboard
 
@@ -239,7 +239,7 @@ Full per-task detail lives in `plans/plan_input.md` (Phases I1–I6) and `AUDIT.
 - `GamePadState::GetHashCode()` (`buttons_.GetHashCode() ^ (packetNumber_ * 31)`) is **not** a
   literal FNA port: FNA's own `GetHashCode()` is `return base.GetHashCode()`, .NET's
   non-deterministic reflection-based default, which has no reproducible C++ equivalent. CNA's
-  formula is a reasonable accepted substitute, documented as such in `AUDIT.md`.
+  formula is a reasonable accepted substitute (`docs/input-fna-fidelity.md`).
 - `FNA_GAMEPAD_NUM_GAMEPADS` env override is ported (task 734), but clamped to 4 slots since
   `PlayerIndex` is frozen XNA API (only One–Four) — going *above* 4 has no addressable slot.
 

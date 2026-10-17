@@ -141,8 +141,7 @@ namespace Microsoft::Devices::Sensors::Detail
      * Compass/Motion Android backends' threading model consistent with
      * Accelerometer/Gyroscope's existing platform-callback-thread model (a game
      * subscribing to CurrentValueChanged must already treat the handler as
-     * running on an unknown thread; see AUDIT.md's "Event-thread model"
-     * note).
+     * running on an unknown thread; see docs/devices-event-contract.md §1).
      *
      * This is CNA-internal plumbing shared by Compass/Motion's future
      * native Android backends (`plans/plan_devices.md` Phase 7/8) — not itself an

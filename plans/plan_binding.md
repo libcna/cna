@@ -490,8 +490,8 @@ sensor: **on every verification tree there is no signed-in gamer and no live ser
 truthful answer is usually "not signed in" or "not available". Report that as the real availability
 -- an ordinary success with the flag clear where the canonical API answers a value, a documented
 refusal where it throws -- rather than pretending a gamer exists. Check `plan_gamer_services.md` and
-`AUDIT.md` for which parts of a type are genuinely implemented before assuming a route has something
-behind it.
+the owning module's tests for which parts of a type are genuinely implemented before assuming a route
+has something behind it.
 
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
@@ -2487,7 +2487,7 @@ done
 ```
 
 A slice is not finished until step 4's delta matches, all three arms are green, and
-`plan_binding.md` / `AUDIT.md` / `NEXT.md` / the `docs/c-api/` pages say what changed.
+`plan_binding.md` / `handoff.md` / the `docs/c-api/` pages say what changed.
 
 ### Verification (do all three arms before committing a slice)
 

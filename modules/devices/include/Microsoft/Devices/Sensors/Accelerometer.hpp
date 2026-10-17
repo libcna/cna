@@ -87,13 +87,10 @@ namespace Microsoft::Devices::Sensors
          * returns) touches the shared token, never `this` again — closing a
          * real use-after-free if a callback destroys (not just Dispose()s)
          * this same instance during its own dispatch. See
-         * plans/plan_devices_phase8.md Task P8-1 for the full analysis, including
-         * the remaining, deliberately-undefended boundary: destroying this
-         * instance from within its own `CurrentValueChanged` handler is
-         * still unsupported, because `DispatchSensorReading()` itself
-         * unconditionally touches `this` again afterward (to decide whether
-         * to also raise the legacy `ReadingChanged` event) — a class-design
-         * property this token cannot fix.
+         * plans/plan_devices_phase8.md Task P8-1 for the full analysis. Destroying
+         * this instance from within its own `CurrentValueChanged` handler is also
+         * safe: `DispatchSensorReading()` snapshots `ReadingChanged` before raising
+         * `CurrentValueChanged` and never touches `this` afterwards (Task LIFE-004).
          */
         std::shared_ptr<std::vector<std::thread::id>> dispatchToken_;
 

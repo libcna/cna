@@ -13,16 +13,15 @@
 
 ## Current runtime type-surface result
 
-The reproducible Microsoft XNA 4.0 runtime XML audit reports **331/331 documented
-public types represented in CNA (100.00%)** and **3,467/3,627 documented
-non-type members represented (95.59%)**. Run
-`python3 tools/audit_xna_runtime_surface.py --write-reports`. The earlier FNA-based type
-estimates in this document are historical and do not measure the current type
-surface. The audit counts the CLR generic and non-generic `ContentTypeReader`
-and `IPackedVector` types separately, explaining why the denominator is 331
-rather than 329. The [member report](xna-4-runtime-member-coverage.md) lists
-all 160 gaps. Behavioral coverage is measured separately, and the runtime
-denominator excludes the Content Pipeline. See `docs/xna-4-enumerator-reference.md`.
+The generated census [`xna-4-runtime-member-coverage.md`](xna-4-runtime-member-coverage.md) is the
+only current measure of XNA 4.0 runtime API presence, with every gap it finds listed; regenerate it
+with `python3 tools/audit_xna_runtime_surface.py --write-reports`. Presence is not behaviour, and the
+runtime census excludes the Content Pipeline (see `xna-content-pipeline-parity-report.md`).
+
+The rest of this file is dated per-subsystem notes, mostly from 2026-06 and 2026-07. Their
+percentages, gap lists and task numbers are historical and in places stale; current defects and
+limitations are [`handoff.md`](../handoff.md) §5. §9 (GamerServices / Net) is the maintained part.
+See `docs/xna-4-enumerator-reference.md` for enumerators.
 
 **Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199; updated 2026-07-03 — Input/Touch
 sections, `feature/input` Phases I1–I6; updated 2026-07-04 — final Input status, `feature/input`
@@ -98,20 +97,19 @@ present, implemented, and already tested for years.
 The tables above rate coverage per-namespace and per-subsystem; this table rates the ~26 major
 `Microsoft::Xna::Framework::Graphics` classes individually against the 5 axes above. It is
 deliberately dense, not exhaustive — for full per-renderer/per-feature detail behind any ⚠️/❌/⛔
-below, see `docs/graphics-renderer-feature-matrix.md` (Task 451, the authoritative current source)
-and `AUDIT.md`'s own per-class FNA-vs-CNA rows (`AUDIT.md` lines ~110–1341); this table does not
-re-derive either, only summarizes and points to them. Legend matches the feature matrix: ✅ correct/
+below, see `docs/graphics-renderer-feature-matrix.md` (Task 451, the authoritative current source);
+this table does not re-derive it, only summarizes and points to it. Legend matches the feature matrix: ✅ correct/
 verified · ⚠️ partial/emulated/known gap · ❌ known gap, not fixed · ⛔ BLOCKED (needs a
 project-owner decision) · N/A not applicable (e.g. a CNAEXT class has no "FNA-compatible" axis).
-Every row below was checked against the real header/`.cpp` and its own `AUDIT.md` entry before
+Every row below was checked against the real header/`.cpp` before
 being rated — not filled in from memory (see Task 482's own post-merge correction above for why
 that check matters).
 
 | Class | Present | Implemented | Tested | FNA-compatible | Key gaps (task #) |
 |---|---|---|---|---|---|
-| `GraphicsDevice` | ✅ | ✅ (some overloads stub) | ✅ | ⚠️ | `ReferenceStencil` unconnected on EasyGL (872); `Clear` ignores `ClearOptions::Stencil` on all renderers (871) |
-| `Texture2D` | ✅ | ⚠️ Partial (🔄 in AUDIT.md) | ✅ | ✅ core | Mip-level `SetData(level>0)` now real GPU upload on EasyGL (924, closed 2026-07-09); missing `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT`; Color-only format |
-| `Texture3D` | ✅ | ✅ (EasyGL) | ✅ | ✅ | Not sampled in shaders on any renderer, architectural (863) |
+| `GraphicsDevice` | ✅ | ✅ | ✅ | ✅ | `ReferenceStencil` is applied on EasyGL (872) and `Clear` honours `ClearOptions::Stencil` on every renderer (871); corrected 2026-10-17 |
+| `Texture2D` | ✅ | ✅ | ✅ | ✅ core | `DDSFromStreamEXT` is real; FNA's `SetDataPointerEXT`/`GetDataPointerEXT`/`TextureDataFromStreamEXT` extensions are not provided (not XNA API); non-`Color` formats are per renderer (`surface-format-support.md`); corrected 2026-10-17 |
+| `Texture3D` | ✅ | ✅ (EasyGL) | ✅ | ✅ | Inherits `Texture` and is sampled through `ShaderEffect::SetTexture` and compiled effects (863, closed 2026-07-18) |
 | `TextureCube` | ✅ | ✅ (EasyGL) | ✅ | ✅ | `DDSFromStreamEXT` real DXT1/3/5 decode (663) |
 | `RenderTarget2D` | ✅ | ✅ | ✅ | ✅ | `DepthStencilFormat` fidelity real on EasyGL |
 | `RenderTargetCube` | ✅ | ✅ | ✅ | ✅ | Same shape as `RenderTarget2D` |
@@ -124,7 +122,7 @@ that check matters).
 | `SkinnedEffect` | ✅ | ✅ | ✅ | ✅ | No open gaps |
 | `ShaderEffect` (CNAEXT) | ✅ | ⚠️ | ✅ | N/A — not XNA API | Not every renderer runs GLSL source: SDL_GPU compiles it out on Windows, Apple and Emscripten; SOFTWARE and HEADLESS accept but ignore it |
 | `BlendState` | ✅ | ✅ | ✅ | ✅ | No open gaps |
-| `DepthStencilState` | ✅ | ✅ | ✅ | ⚠️ | `ReferenceStencil` open on EasyGL (872); `ClearOptions::Stencil` gap is tracked under `GraphicsDevice` above (871) |
+| `DepthStencilState` | ✅ | ✅ | ✅ | ✅ | No open gaps (872 and 871, see `GraphicsDevice` above) |
 | `RasterizerState` | ✅ | ✅ | ✅ | ✅ | No open gaps |
 | `SamplerState` | ✅ | ✅ | ✅ | ✅ | `TextureFilter::Anisotropic` now genuinely applied on EasyGL (918, closed — real `GL_EXT_texture_filter_anisotropic` call, clamped to the live driver cap) |
 | `VertexBuffer` | ✅ | ✅ | ✅ | ✅ | No open gaps |
@@ -146,7 +144,7 @@ adds nothing that source doesn't already contain in more detail.
 
 | Renderer | Overall maturity | Fully correct | Partial / emulated | Architecturally blocked (⛔) | Known pre-existing test-failure baseline |
 |---|---|---|---|---|---|
-| **EasyGL** | Most mature — the primary renderer; nearly everything below is ✅ | All 5 stock effects (core+lighting+specular+fog), `SpriteBatch`/`SpriteFont`, all 4 state classes, `RenderTarget2D`/`Cube` (MSAA/mip/depth-format), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. real mip-level upload, Task 924), `OcclusionQuery` (both directions verified), `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, real `TextureFilter::Anisotropic` (918) | `Texture3D`/`TextureCube` don't inherit `Texture` so can't be sampled in shaders (863, architectural, **NEEDS_HUMAN**) | Non-`Color` `SurfaceFormat` GPU forwarding (732 — conflicts with the already-shipped `Texture::ValidateFormat` contract, Task 176) | 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests` (Task 449's regression, 4510/4513); reconfirmed 4535/4539 as of Task 924, 2026-07-09 |
+| **EasyGL** | Most mature — the primary renderer; nearly everything below is ✅ | All 5 stock effects (core+lighting+specular+fog), `SpriteBatch`/`SpriteFont`, all 4 state classes, `RenderTarget2D`/`Cube` (MSAA/mip/depth-format), `Texture2D/3D/Cube` `SetData`/`GetData` (incl. real mip-level upload, Task 924), `OcclusionQuery` (both directions verified), `VertexBuffer`/`IndexBuffer`/`VertexDeclaration`, real `TextureFilter::Anisotropic` (918) | None recorded here since 863 (`Texture3D`/`TextureCube` inherit `Texture`) | None: non-`Color` formats are classified per renderer (`surface-format-support.md`) | 2026-07-09 baseline: 3 — `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests`. Current measured failures are `handoff.md` §5.3 |
 
 ### Known deviations from XNA/FNA (Task 485, 2026-07-09)
 
@@ -155,7 +153,7 @@ Closes out the Tasks 481-485 documentation arc. Present/Implemented/Tested cover
 API surface that IS present, implemented, and tested, where does CNA's actual runtime behavior
 diverge from real XNA/FNA's**, whether that's a confirmed bug awaiting a fix or a permanent,
 deliberate design decision. Every entry below was re-checked against its cited task row /
-`CHECKLIST.md` / `AUDIT.md` entry before being listed here, not transcribed from memory. Scoped to
+`CHECKLIST.md` entry before being listed here, not transcribed from memory. Scoped to
 `Microsoft::Xna::Framework::Graphics`, matching Task 481's own Graphics-only scoping for this file.
 
 #### Confirmed bugs — all 4 now fixed (2026-07-09)
@@ -174,7 +172,7 @@ historical reference (what was found and how), not as a current "still open" lis
 
 These will not change — they are documented design decisions, not gaps awaiting a task number.
 Full detail and rationale for each lives in `CHECKLIST.md`'s "Known acceptable C++ deviations from
-FNA/XNA" table or the cited `AUDIT.md` section; not re-derived here.
+FNA/XNA" table; not re-derived here.
 
 | Deviation | Why |
 |---|---|
@@ -184,7 +182,7 @@ FNA/XNA" table or the cited `AUDIT.md` section; not re-derived here.
 | `Model::Draw()` defaults a mesh's parent-bone index to `0` when `ModelMesh::ParentBone` is `nullptr`, instead of FNA's `NullReferenceException` | A null dereference is undefined behavior in C++, not a catchable exception like C#'s; defaulting to bone 0 is a strictly safer failure mode (`CHECKLIST.md`, Task 431) |
 | `ModelMesh::Draw()` silently skips a mesh part whose `Effect` is `nullptr`, instead of FNA's `NullReferenceException` on `effect.CurrentTechnique` | Same rationale as the `Model::Draw()` row above — safer failure mode than a null-pointer dereference (`CHECKLIST.md`, Task 431, corrects an earlier inaccurate claim in Task 728) |
 | `Model::CopyBoneTransformsFrom`/`CopyBoneTransformsTo` loop over `Bones.Count`, not the caller-supplied array's length like FNA does | FNA's own loop bound (`sourceBoneTransforms.Length`) makes it throw partway through for an array larger than `Bones.Count`; CNA's bound is a deliberately safer, non-fragile alternative (`CHECKLIST.md`, Task 436) |
-| `Texture::GetFormatSizeEXT`/`ValidateGetDataFormat` are `public static` on `Texture`, not FNA's `internal` | CNA's class hierarchy has no reachable `protected`/friend equivalent across all 3 real call sites (`Texture3D`, `TextureCube`, `GraphicsDevice::GetBackBufferData`), since `Texture3D`/`TextureCube` don't inherit `Texture` in CNA (`AUDIT.md`, Texture3D detailed audit, Task 271-280) |
+| `Texture::GetPixelStoreAlignment`/`ValidateGetDataFormat` are `public static` on `Texture`, not FNA's `internal` | The C API exports both (`modules/c-api/spec/Texture.toml`); `GetFormatSizeEXT` is public in FNA too |
 
 ### Release checklist for Graphics compatibility milestones (Task 490, 2026-07-09)
 
@@ -314,7 +312,7 @@ GamerServices is Xbox-Live-only), but CNA deliberately went beyond FNA's scope h
 made the real Xbox 360 XNA 4.0 reference behavior (not Windows' no-op stubs) the correctness bar,
 since CNA already has its own real avatar/networking implementations to hold to that standard.
 Every class below now exists with a real `.cpp` implementation, not a stub — see §4 for the
-per-class implementation notes and `plans/plan_net.md`/`AUDIT.md` for the line-by-line FNA-fidelity
+per-class implementation notes and `plans/plan_net.md` for the line-by-line FNA-fidelity
 audits behind them:
 
 | Class | Notes |
@@ -394,7 +392,7 @@ All 17 XNA 4.0 PackedVector types are fully implemented:
 
 > Updated 2026-07-04 (Fáze 9 `P9-DOCS-002`) — the entries below describing XACT/`Microphone`/
 > `DynamicSoundEffectInstance` as unimplemented stubs were stale by a full branch's worth of work
-> (`plans/plan_audio.md` Fáze 0–9). See `AUDIT.md`'s Audio table for the per-class summary and
+> (`plans/plan_audio.md` Fáze 0–9). See `CHECKLIST.md`'s Audio rows for the accepted deviations and
 > `plans/plan_audio.md` for the complete file-by-file history.
 
 - `AudioEngine`, `SoundBank`, `WaveBank`, `Cue`: **Implemented.** Real hand-written `.xgs`/`.xsb`/
@@ -886,7 +884,7 @@ they have not been measured on a console.
    `MouseCursor`** (`CNAEXT`) complete for the exposed surface; **platform-dependent** items
    (Wayland global-mouse, live sensors/rumble, gamepad hotplug slot-assignment, `SetPosition`
    letterbox) documented, not headless-verifiable. See `plans/plan_input.md`'s "final split" table,
-   `AUDIT.md`, `docs/platform-input-notes.md`, and `docs/demo-input-checklist.md` for detail.
+   `docs/platform-input-notes.md`, and `docs/demo-input-checklist.md` for detail.
 
 3. **Audio** — ✅ Done: SoundEffect/Instance, and XACT (AudioEngine/SoundBank/WaveBank/Cue) via a
    real hand-written parser + SDL3_mixer. Remaining gaps are documented accepted deviations

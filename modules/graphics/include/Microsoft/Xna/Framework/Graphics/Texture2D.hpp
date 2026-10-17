@@ -618,7 +618,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads raw RGBA pixel data to the texture.
          * @param data       Pointer to the RGBA byte buffer (4 bytes per pixel).
-         * @param pixelCount Total number of pixels (width * height).
+         * @param pixelCount Total number of pixels; must be width * height. It is not checked
+         *                   against the texture: the upload always reads a whole level from data.
          */
         CNAEXT void SetDataRGBA(const uint8_t* data, int pixelCount);
 
