@@ -37,8 +37,8 @@ cna_graphics_renderer_copy_current_name = { copy = "CNA::getCurrentGraphicsRende
 [values]
 [values.routes]
 cna_logger_get_minimum_level = { value = "MapLogLevelToC(CNA::Logger::GetMinimumLevel())" }
-cna_graphics_backend_get_current_category = { value = "MapBackendCategoryToC(CNA::getCurrentGraphicsRendererCategory())" }
-cna_graphics_backend_get_current_maturity = { value = "MapBackendMaturityToC(CNA::getCurrentGraphicsRendererMaturity())" }
+cna_graphics_renderer_get_current_category = { value = "MapRendererCategoryToC(CNA::getCurrentGraphicsRendererCategory())" }
+cna_graphics_renderer_get_current_maturity = { value = "MapRendererMaturityToC(CNA::getCurrentGraphicsRendererMaturity())" }
 cna_platform_get_is_apple_ext = { value = "CNA::isApplePlatform()" }
 cna_platform_get_is_mobile_ext = { value = "CNA::isMobilePlatform()" }
 cna_platform_get_current_name_size_ext = { size = "std::string_view(CNA::getCurrentPlatformName())" }
@@ -67,26 +67,26 @@ lookup = "MapRendererType"
 object = "CNA::GraphicsRendererType"
 
 [renderer_type.routes]
-cna_graphics_backend_get_category = { get = "MapBackendCategoryToC(CNA::getGraphicsRendererCategory(object))" }
-cna_graphics_backend_get_maturity = { get = "MapBackendMaturityToC(CNA::getGraphicsRendererMaturity(object))" }
+cna_graphics_renderer_get_category = { get = "MapRendererCategoryToC(CNA::getGraphicsRendererCategory(object))" }
+cna_graphics_renderer_get_maturity = { get = "MapRendererMaturityToC(CNA::getGraphicsRendererMaturity(object))" }
 cna_graphics_renderer_set_preferred_ext = { call = "CNA::GraphicsRendererSelection::SetPreferred(object)" }
 cna_graphics_renderer_get_is_available_ext = { get = "CNA::GraphicsRendererSelection::IsAvailable(object)" }
 
-# The lookup maps the C backend category to the canonical one.
-[backend_category]
-lookup = "MapBackendCategory"
+# The lookup maps the C renderer category to the canonical one.
+[renderer_category]
+lookup = "MapRendererCategory"
 object = "CNA::GraphicsRendererCategory"
 
-[backend_category.routes]
-cna_graphics_backend_category_copy_name = { copy = "CNA::toStringView(object)" }
+[renderer_category.routes]
+cna_graphics_renderer_category_copy_name = { copy = "CNA::toStringView(object)" }
 
-# The lookup maps the C backend maturity to the canonical one.
-[backend_maturity]
-lookup = "MapBackendMaturity"
+# The lookup maps the C renderer maturity to the canonical one.
+[renderer_maturity]
+lookup = "MapRendererMaturity"
 object = "CNA::GraphicsRendererMaturity"
 
-[backend_maturity.routes]
-cna_graphics_backend_maturity_copy_name = { copy = "CNA::toStringView(object)" }
+[renderer_maturity.routes]
+cna_graphics_renderer_maturity_copy_name = { copy = "CNA::toStringView(object)" }
 
 # The lookup maps the C fallback reason to the canonical one.
 [fallback_reason]
@@ -110,8 +110,8 @@ cna_desktop_os_get_current = { result = "DesktopOsGetCurrent(out_os)" }
 cna_graphics_renderer_copy_available_ext = { result = "GraphicsRendererCopyAvailableExt(destination, capacity, out_count)" }
 cna_graphics_renderer_try_parse_name_ext = { result = "GraphicsRendererTryParseNameExt(name, out_type, out_recognized)" }
 cna_graphics_renderer_get_fallback_at_ext = { result = "GraphicsRendererGetFallbackAtExt(index, out_record)" }
-cna_graphics_backend_category_get_name_size = { result = "GraphicsBackendCategoryGetNameSize(category, out_bytes)", optional = ["out_bytes"] }
-cna_graphics_backend_maturity_get_name_size = { result = "GraphicsBackendMaturityGetNameSize(maturity, out_bytes)", optional = ["out_bytes"] }
+cna_graphics_renderer_category_get_name_size = { result = "GraphicsRendererCategoryGetNameSize(category, out_bytes)", optional = ["out_bytes"] }
+cna_graphics_renderer_maturity_get_name_size = { result = "GraphicsRendererMaturityGetNameSize(maturity, out_bytes)", optional = ["out_bytes"] }
 cna_logger_set_sink_ext = { result = "LoggerSetSinkExt(callback, context)" }
 cna_logger_reset_sink_ext = { result = "LoggerResetSinkExt()" }
 cna_graphics_renderer_set_fallback_chain_ext = { result = "GraphicsRendererSetFallbackChainExt(types, count)" }

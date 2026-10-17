@@ -5,7 +5,7 @@
 `CNA/C/core.h` is the C API's own substrate — results, error categories, the per-thread diagnostic,
 `CNA_StringView` and the small shared value types. `CNA/C/core_ext.h` is a different thing: it maps
 CNA's own `core` module, the part of the framework that is deliberately not XNA — the logger, the
-compile-time platform and renderer identity, and the two backend classifications. Together they
+compile-time platform and renderer identity, and the two renderer classifications. Together they
 close the `core` module: no planned row remains.
 
 Everything here is process-level or compile-time state. Nothing in this header needs a runtime, a
@@ -48,13 +48,13 @@ That conversion is the mapping for `CNA::CNAException` in general: it becomes
 `CNA_RESULT_INVALID_STATE` with the message in the per-thread diagnostic, and no exception object,
 type name or C++ throw is ever exposed.
 
-## Backend classification
+## Renderer classification
 
 Two orthogonal classifications are mapped, each with the same three-route shape:
 
-- `cna_graphics_backend_get_category` / `_get_current_category` — implementation technology
+- `cna_graphics_renderer_get_category` / `_get_current_category` — implementation technology
   (native, translation layer, software, web, diagnostic);
-- `cna_graphics_backend_get_maturity` / `_get_current_maturity` — recommendation confidence
+- `cna_graphics_renderer_get_maturity` / `_get_current_maturity` — recommendation confidence
   (production, supported, experimental, historical, deprecated).
 
 Both classify **any** of the 10 public renderer identities, not only the one compiled into this

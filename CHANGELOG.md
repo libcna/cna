@@ -81,6 +81,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   parameter order -- where families used to differ. In builds without `CNA_CNAEXT`, the DebugDraw
   create route now also sets its handle output to `CNA_INVALID_HANDLE` before answering
   `CNA_RESULT_NOT_SUPPORTED`, as every other compiled-out create route already did.
+- **The renderer classifications say "renderer".** `CNA::GraphicsBackendCategory` and
+  `CNA::GraphicsBackendMaturity` (`CNA/GraphicsBackendCategory.hpp`,
+  `CNA/GraphicsBackendMaturity.hpp`) are `CNA::GraphicsRendererCategory` and
+  `CNA::GraphicsRendererMaturity` (`CNA/GraphicsRendererCategory.hpp`,
+  `CNA/GraphicsRendererMaturity.hpp`), with `get[Current]GraphicsRendererCategory()` and
+  `get[Current]GraphicsRendererMaturity()`; in the C API `CNA_GraphicsBackend*`,
+  `CNA_GRAPHICS_BACKEND_*` and `cna_graphics_backend_*` are `CNA_GraphicsRenderer*`,
+  `CNA_GRAPHICS_RENDERER_CATEGORY_*`/`_MATURITY_*` and `cna_graphics_renderer_*`, and the
+  experimental C ABI goes to `0.49.0` (`docs/c-api/ABI_VERSIONING.md` lists every name). They
+  classify renderer identities, and the 2026-08 naming normalization had retired "backend" for
+  that. Values, answers and the automatic fallback order are unchanged; no alias of an old name
+  is kept.
 
 ### Removed
 

@@ -169,7 +169,7 @@ template<typename TCallable>
 [[nodiscard]] CNA_Result EnsureThreeDSupported(GraphicsDevice& device) noexcept
 {
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-        return NotSupported("The selected graphics backend does not support 3D draw submission.");
+        return NotSupported("The selected graphics renderer does not support 3D draw submission.");
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1380,7 +1380,7 @@ namespace {
     }
     if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::OcclusionQuery)) {
         return NotSupported(
-            "The selected graphics backend does not support occlusion queries.");
+            "The selected graphics renderer does not support occlusion queries.");
     }
 
     auto native = std::make_shared<OcclusionQuery>(*graphicsDevice->value);

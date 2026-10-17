@@ -218,7 +218,7 @@ private:
         return result;
     }
     if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-        return NotSupported("The selected graphics backend does not support index buffers.");
+        return NotSupported("The selected graphics renderer does not support index buffers.");
     }
 
     const auto elementSize =

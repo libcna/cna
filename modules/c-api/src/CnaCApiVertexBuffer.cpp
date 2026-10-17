@@ -340,7 +340,7 @@ private:
         return result;
     }
     if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
-        return NotSupported("The selected graphics backend does not support vertex buffers.");
+        return NotSupported("The selected graphics renderer does not support vertex buffers.");
     }
 
     std::shared_ptr<VertexBuffer> native;

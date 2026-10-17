@@ -902,14 +902,14 @@ static_assert(sizeof(CNA_LogLevel) == sizeof(uint32_t));
 static_assert(sizeof(CNA_LogCategory) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Platform) == sizeof(uint32_t));
 static_assert(sizeof(CNA_DesktopOS) == sizeof(uint32_t));
-static_assert(sizeof(CNA_GraphicsBackendCategory) == sizeof(uint32_t));
-static_assert(sizeof(CNA_GraphicsBackendMaturity) == sizeof(uint32_t));
+static_assert(sizeof(CNA_GraphicsRendererCategory) == sizeof(uint32_t));
+static_assert(sizeof(CNA_GraphicsRendererMaturity) == sizeof(uint32_t));
 static_assert(CNA_LOG_LEVEL_EXPERIMENT == UINT32_C(100));
 static_assert(CNA_LOG_CATEGORY_GPU == UINT32_C(8));
 static_assert(CNA_PLATFORM_WEB == UINT32_C(3));
 static_assert(CNA_DESKTOP_OS_OTHER == UINT32_C(3));
-static_assert(CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC == UINT32_C(4));
-static_assert(CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED == UINT32_C(4));
+static_assert(CNA_GRAPHICS_RENDERER_CATEGORY_DIAGNOSTIC == UINT32_C(4));
+static_assert(CNA_GRAPHICS_RENDERER_MATURITY_DEPRECATED == UINT32_C(4));
 
 static_assert(sizeof(CNA_GamePadType) == sizeof(uint32_t));
 static_assert(CNA_GAMEPAD_TYPE_BIG_BUTTON_PAD == UINT32_C(9));

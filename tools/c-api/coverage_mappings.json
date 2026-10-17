@@ -7399,7 +7399,7 @@
         "enum",
         "enum-value"
       ],
-      "mapping": "`CNA_GraphicsBackendCategory` and the `CNA_GRAPHICS_BACKEND_CATEGORY_*` identities at the canonical ordinals",
+      "mapping": "`CNA_GraphicsRendererCategory` and the `CNA_GRAPHICS_RENDERER_CATEGORY_*` identities at the canonical ordinals",
       "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies every public renderer identity and checks every answer is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7419,7 +7419,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_category_get_name_size` and `cna_graphics_backend_category_copy_name`. The canonical function returns a `std::string_view` at static storage; C gets the project’s count/copy pair instead, so no pointer into CNA storage crosses the ABI",
+      "mapping": "`cna_graphics_renderer_category_get_name_size` and `cna_graphics_renderer_category_copy_name`. The canonical function returns a `std::string_view` at static storage; C gets the project’s count/copy pair instead, so no pointer into CNA storage crosses the ABI",
       "tests": "`CoreExtSmoke.c` round-trips all five names exactly, asserts the requirement is reported and nothing is written when the capacity is too small, and refuses an unknown category and a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7433,7 +7433,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 10 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
+      "mapping": "`cna_graphics_renderer_get_category`, which accepts any of the 10 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
       "tests": "`CoreExtSmoke.c` classifies every public renderer identity, pins three fixed answers a consumer can rely on, and asserts that the unknown identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7447,7 +7447,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_current_category`",
+      "mapping": "`cna_graphics_renderer_get_current_category`",
       "tests": "`CoreExtSmoke.c` asserts it agrees with classifying the compiled-in renderer identity, so the test needs no knowledge of which renderer this build selected, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7462,7 +7462,7 @@
         "enum",
         "enum-value"
       ],
-      "mapping": "`CNA_GraphicsBackendMaturity` and the `CNA_GRAPHICS_BACKEND_MATURITY_*` identities at the canonical ordinals",
+      "mapping": "`CNA_GraphicsRendererMaturity` and the `CNA_GRAPHICS_RENDERER_MATURITY_*` identities at the canonical ordinals",
       "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of every public renderer identity and checks every answer is one of them, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7482,7 +7482,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_maturity_get_name_size` and `cna_graphics_backend_maturity_copy_name`, the same count/copy pair the category name uses, because the canonical overload also returns a static-storage `std::string_view`",
+      "mapping": "`cna_graphics_renderer_maturity_get_name_size` and `cna_graphics_renderer_maturity_copy_name`, the same count/copy pair the category name uses, because the canonical overload also returns a static-storage `std::string_view`",
       "tests": "`CoreExtSmoke.c` round-trips all five names exactly and refuses an unknown maturity and a null output, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7496,7 +7496,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 10 public renderer identities and refuses anything else",
+      "mapping": "`cna_graphics_renderer_get_maturity`, which accepts any of the 10 public renderer identities and refuses anything else",
       "tests": "`CoreExtSmoke.c` reads the maturity of every public renderer identity and asserts that an out-of-range identity, every retired value, every other non-public value up to `CNA_GRAPHICS_RENDERER_MAXIMUM` and a null output are refused, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",
@@ -7510,7 +7510,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_current_maturity`",
+      "mapping": "`cna_graphics_renderer_get_current_maturity`",
       "tests": "`CoreExtSmoke.c` asserts it agrees with reading the maturity of the compiled-in renderer identity, under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A",

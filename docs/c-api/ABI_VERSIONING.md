@@ -2,7 +2,39 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.48.0** (`RRC-031`..`RRC-035`, the 2026-10-13 retirement). It
+The current experimental ABI is **0.49.0** (2026-10-17). It **renames the renderer classification
+surface**, which `CBIND-037A` published in 2026-08 under the "graphics backend" vocabulary the
+2026-08 renderer naming normalization had just retired: both classify a `CNA_GraphicsRendererType`,
+so they are renderer classifications. The C++ types behind them were renamed the same way
+(`CNA::GraphicsRendererCategory`, `CNA::GraphicsRendererMaturity`).
+
+| Removed | Replacement |
+|---|---|
+| `CNA_GraphicsBackendCategory` | `CNA_GraphicsRendererCategory` |
+| `CNA_GraphicsBackendMaturity` | `CNA_GraphicsRendererMaturity` |
+| `CNA_GRAPHICS_BACKEND_CATEGORY_*` (5 constants) | `CNA_GRAPHICS_RENDERER_CATEGORY_*` |
+| `CNA_GRAPHICS_BACKEND_MATURITY_*` (5 constants) | `CNA_GRAPHICS_RENDERER_MATURITY_*` |
+| `cna_graphics_backend_get_category` | `cna_graphics_renderer_get_category` |
+| `cna_graphics_backend_get_current_category` | `cna_graphics_renderer_get_current_category` |
+| `cna_graphics_backend_category_get_name_size` | `cna_graphics_renderer_category_get_name_size` |
+| `cna_graphics_backend_category_copy_name` | `cna_graphics_renderer_category_copy_name` |
+| `cna_graphics_backend_get_maturity` | `cna_graphics_renderer_get_maturity` |
+| `cna_graphics_backend_get_current_maturity` | `cna_graphics_renderer_get_current_maturity` |
+| `cna_graphics_backend_maturity_get_name_size` | `cna_graphics_renderer_maturity_get_name_size` |
+| `cna_graphics_backend_maturity_copy_name` | `cna_graphics_renderer_maturity_copy_name` |
+
+Every constant keeps its value (`NATIVE` `0` through `DIAGNOSTIC` `4`, `PRODUCTION` `0` through
+`DEPRECATED` `4`), every route keeps its signature, result rules and answers, and every renderer
+keeps its category and maturity. No alias of an old name is kept. The change is incompatible in
+source and in binary alike: a binding that names an old typedef or constant no longer compiles,
+and one that calls an old route no longer links or loads, because those eight symbols are no
+longer exported -- eight new ones are, so the library still exports 3,205. Updating a binding is
+a rename with no change in behaviour. Under the `0.x` rule below that takes this minor increment,
+these release notes and an updated baseline.
+
+### Previous ABI 0.48.0
+
+The ABI was **0.48.0** (`RRC-031`..`RRC-035`, the 2026-10-13 retirement). It
 **retires the public renderer identities `SDL_RENDERER` (`1`), `VULKAN` (`8`), `DIRECTX11` (`14`)
 and `METAL` (`42`)** together with the constants `CNA_GRAPHICS_RENDERER_SDL_RENDERER`,
 `CNA_GRAPHICS_RENDERER_VULKAN`, `CNA_GRAPHICS_RENDERER_DIRECTX11` and `CNA_GRAPHICS_RENDERER_METAL`

@@ -79,33 +79,33 @@ typedef uint32_t CNA_DesktopOS;
 /** @brief Any other desktop operating system. */
 #define CNA_DESKTOP_OS_OTHER UINT32_C(3)
 
-/** @brief Fixed-width identity of the implementation technology a graphics backend uses. */
-typedef uint32_t CNA_GraphicsBackendCategory;
+/** @brief Fixed-width identity of the implementation technology a graphics renderer uses. */
+typedef uint32_t CNA_GraphicsRendererCategory;
 
 /** @brief Compiled against exactly one fixed real graphics API, with no runtime negotiation. */
-#define CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE UINT32_C(0)
+#define CNA_GRAPHICS_RENDERER_CATEGORY_NATIVE UINT32_C(0)
 /** @brief An intermediate library picks the real backend, or reimplements another API's surface. */
-#define CNA_GRAPHICS_BACKEND_CATEGORY_TRANSLATION_LAYER UINT32_C(1)
+#define CNA_GRAPHICS_RENDERER_CATEGORY_TRANSLATION_LAYER UINT32_C(1)
 /** @brief Renders entirely on the CPU; no real GPU driver is involved. */
-#define CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE UINT32_C(2)
+#define CNA_GRAPHICS_RENDERER_CATEGORY_SOFTWARE UINT32_C(2)
 /** @brief Only available in a browser or Emscripten build. */
-#define CNA_GRAPHICS_BACKEND_CATEGORY_WEB UINT32_C(3)
+#define CNA_GRAPHICS_RENDERER_CATEGORY_WEB UINT32_C(3)
 /** @brief Never renders a pixel; exists for testing, debugging or reference. */
-#define CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC UINT32_C(4)
+#define CNA_GRAPHICS_RENDERER_CATEGORY_DIAGNOSTIC UINT32_C(4)
 
-/** @brief Fixed-width identity of how confidently CNA recommends a graphics backend. */
-typedef uint32_t CNA_GraphicsBackendMaturity;
+/** @brief Fixed-width identity of how confidently CNA recommends a graphics renderer. */
+typedef uint32_t CNA_GraphicsRendererMaturity;
 
 /** @brief Fully recommended for regular use; broad, verified feature coverage. */
-#define CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION UINT32_C(0)
+#define CNA_GRAPHICS_RENDERER_MATURITY_PRODUCTION UINT32_C(0)
 /** @brief Functional and maintained, but not necessarily at full feature parity yet. */
-#define CNA_GRAPHICS_BACKEND_MATURITY_SUPPORTED UINT32_C(1)
+#define CNA_GRAPHICS_RENDERER_MATURITY_SUPPORTED UINT32_C(1)
 /** @brief Actively developed; public behavior may still change. */
-#define CNA_GRAPHICS_BACKEND_MATURITY_EXPERIMENTAL UINT32_C(2)
-/** @brief A legacy backend kept for compatibility, research or demonstration. */
-#define CNA_GRAPHICS_BACKEND_MATURITY_HISTORICAL UINT32_C(3)
+#define CNA_GRAPHICS_RENDERER_MATURITY_EXPERIMENTAL UINT32_C(2)
+/** @brief A legacy renderer kept for compatibility, research or demonstration. */
+#define CNA_GRAPHICS_RENDERER_MATURITY_HISTORICAL UINT32_C(3)
 /** @brief No longer recommended; kept only until removal. */
-#define CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED UINT32_C(4)
+#define CNA_GRAPHICS_RENDERER_MATURITY_DEPRECATED UINT32_C(4)
 
 /**
  * @brief Logs a message with an explicit level, category and condition.
@@ -391,9 +391,9 @@ CNA_C_API CNA_Result cna_desktop_os_get_current(CNA_DesktopOS* out_os);
  * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for a null output or for a renderer
  *         identity that is not one of the public ones.
  */
-CNA_C_API CNA_Result cna_graphics_backend_get_category(
+CNA_C_API CNA_Result cna_graphics_renderer_get_category(
     CNA_GraphicsRendererType type,
-    CNA_GraphicsBackendCategory* out_category);
+    CNA_GraphicsRendererCategory* out_category);
 
 /**
  * @brief Reports the implementation-technology category of the renderer compiled into this build.
@@ -401,23 +401,23 @@ CNA_C_API CNA_Result cna_graphics_backend_get_category(
  * @param out_category Receives the category identity.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
-CNA_C_API CNA_Result cna_graphics_backend_get_current_category(
-    CNA_GraphicsBackendCategory* out_category);
+CNA_C_API CNA_Result cna_graphics_renderer_get_current_category(
+    CNA_GraphicsRendererCategory* out_category);
 
 /**
- * @brief Reports a backend category's name length without a terminator.
+ * @brief Reports a renderer category's name length without a terminator.
  *
  * @param category The category to name.
  * @param out_bytes Receives the required byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output or an unknown
  *         category.
  */
-CNA_C_API CNA_Result cna_graphics_backend_category_get_name_size(
-    CNA_GraphicsBackendCategory category,
+CNA_C_API CNA_Result cna_graphics_renderer_category_get_name_size(
+    CNA_GraphicsRendererCategory category,
     uint64_t* out_bytes);
 
 /**
- * @brief Copies a backend category's name without a terminator.
+ * @brief Copies a renderer category's name without a terminator.
  *
  * @param category The category to name.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
@@ -426,8 +426,8 @@ CNA_C_API CNA_Result cna_graphics_backend_category_get_name_size(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or `CNA_RESULT_INVALID_ARGUMENT`
  * for a null output or an unknown category. No partial value is written.
  */
-CNA_C_API CNA_Result cna_graphics_backend_category_copy_name(
-    CNA_GraphicsBackendCategory category,
+CNA_C_API CNA_Result cna_graphics_renderer_category_copy_name(
+    CNA_GraphicsRendererCategory category,
     char* destination,
     uint64_t capacity,
     uint64_t* out_bytes);
@@ -441,9 +441,9 @@ CNA_C_API CNA_Result cna_graphics_backend_category_copy_name(
  * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for a null output or for a renderer
  *         identity that is not one of the public ones.
  */
-CNA_C_API CNA_Result cna_graphics_backend_get_maturity(
+CNA_C_API CNA_Result cna_graphics_renderer_get_maturity(
     CNA_GraphicsRendererType type,
-    CNA_GraphicsBackendMaturity* out_maturity);
+    CNA_GraphicsRendererMaturity* out_maturity);
 
 /**
  * @brief Reports the recommendation maturity of the renderer compiled into this build.
@@ -451,23 +451,23 @@ CNA_C_API CNA_Result cna_graphics_backend_get_maturity(
  * @param out_maturity Receives the maturity identity.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
-CNA_C_API CNA_Result cna_graphics_backend_get_current_maturity(
-    CNA_GraphicsBackendMaturity* out_maturity);
+CNA_C_API CNA_Result cna_graphics_renderer_get_current_maturity(
+    CNA_GraphicsRendererMaturity* out_maturity);
 
 /**
- * @brief Reports a backend maturity's name length without a terminator.
+ * @brief Reports a renderer maturity's name length without a terminator.
  *
  * @param maturity The maturity to name.
  * @param out_bytes Receives the required byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output or an unknown
  *         maturity.
  */
-CNA_C_API CNA_Result cna_graphics_backend_maturity_get_name_size(
-    CNA_GraphicsBackendMaturity maturity,
+CNA_C_API CNA_Result cna_graphics_renderer_maturity_get_name_size(
+    CNA_GraphicsRendererMaturity maturity,
     uint64_t* out_bytes);
 
 /**
- * @brief Copies a backend maturity's name without a terminator.
+ * @brief Copies a renderer maturity's name without a terminator.
  *
  * @param maturity The maturity to name.
  * @param destination Caller-owned destination, or null only when @p capacity is zero.
@@ -476,8 +476,8 @@ CNA_C_API CNA_Result cna_graphics_backend_maturity_get_name_size(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or `CNA_RESULT_INVALID_ARGUMENT`
  * for a null output or an unknown maturity. No partial value is written.
  */
-CNA_C_API CNA_Result cna_graphics_backend_maturity_copy_name(
-    CNA_GraphicsBackendMaturity maturity,
+CNA_C_API CNA_Result cna_graphics_renderer_maturity_copy_name(
+    CNA_GraphicsRendererMaturity maturity,
     char* destination,
     uint64_t capacity,
     uint64_t* out_bytes);

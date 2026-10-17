@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 12288,
+  "encoded": 12544,
   "major": 0,
-  "minor": 48,
+  "minor": 49,
   "patch": 0,
-  "runtime": 12288
+  "runtime": 12544
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2150,14 +2150,6 @@
   "cna_graphics_adapter_query_render_target_format",
   "cna_graphics_adapter_set_device_preferences",
   "cna_graphics_adapters_refresh",
-  "cna_graphics_backend_category_copy_name",
-  "cna_graphics_backend_category_get_name_size",
-  "cna_graphics_backend_get_category",
-  "cna_graphics_backend_get_current_category",
-  "cna_graphics_backend_get_current_maturity",
-  "cna_graphics_backend_get_maturity",
-  "cna_graphics_backend_maturity_copy_name",
-  "cna_graphics_backend_maturity_get_name_size",
   "cna_graphics_device_clear_color_depth",
   "cna_graphics_device_clear_options",
   "cna_graphics_device_clear_rgba",
@@ -2290,6 +2282,8 @@
   "cna_graphics_device_unbind_texture",
   "cna_graphics_device_unsubscribe",
   "cna_graphics_ext_is_available",
+  "cna_graphics_renderer_category_copy_name",
+  "cna_graphics_renderer_category_get_name_size",
   "cna_graphics_renderer_copy_available_ext",
   "cna_graphics_renderer_copy_current_name",
   "cna_graphics_renderer_fallback_copy_message_ext",
@@ -2299,13 +2293,19 @@
   "cna_graphics_renderer_get_active_ext",
   "cna_graphics_renderer_get_automatic_fallback_ext",
   "cna_graphics_renderer_get_available_count_ext",
+  "cna_graphics_renderer_get_category",
+  "cna_graphics_renderer_get_current_category",
+  "cna_graphics_renderer_get_current_maturity",
   "cna_graphics_renderer_get_current_name_size",
   "cna_graphics_renderer_get_current_type",
   "cna_graphics_renderer_get_fallback_at_ext",
   "cna_graphics_renderer_get_fallback_count_ext",
   "cna_graphics_renderer_get_is_available_ext",
   "cna_graphics_renderer_get_is_latched_ext",
+  "cna_graphics_renderer_get_maturity",
   "cna_graphics_renderer_get_selected_ext",
+  "cna_graphics_renderer_maturity_copy_name",
+  "cna_graphics_renderer_maturity_get_name_size",
   "cna_graphics_renderer_reset_selection_for_tests_ext",
   "cna_graphics_renderer_set_automatic_fallback_ext",
   "cna_graphics_renderer_set_fallback_chain_ext",
@@ -4075,9 +4075,9 @@
   "CNA_MATH_TWO_PI": 6.2831854820251465
  },
  "integers": {
-  "CNA_ABI_VERSION": 12288,
+  "CNA_ABI_VERSION": 12544,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 48,
+  "CNA_ABI_VERSION_MINOR": 49,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -4763,16 +4763,6 @@
   "CNA_GLTF_IMPORT_SEVERITY_INFORMATION_EXT": 0,
   "CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT": 1,
   "CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT": 1,
-  "CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC": 4,
-  "CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE": 0,
-  "CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE": 2,
-  "CNA_GRAPHICS_BACKEND_CATEGORY_TRANSLATION_LAYER": 1,
-  "CNA_GRAPHICS_BACKEND_CATEGORY_WEB": 3,
-  "CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED": 4,
-  "CNA_GRAPHICS_BACKEND_MATURITY_EXPERIMENTAL": 2,
-  "CNA_GRAPHICS_BACKEND_MATURITY_HISTORICAL": 3,
-  "CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION": 0,
-  "CNA_GRAPHICS_BACKEND_MATURITY_SUPPORTED": 1,
   "CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING": 12,
   "CNA_GRAPHICS_CAPABILITY_ANISOTROPIC_FILTERING": 4,
   "CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS": 13,
@@ -4825,6 +4815,11 @@
   "CNA_GRAPHICS_DEVICE_STATUS_NOT_RESET": 2,
   "CNA_GRAPHICS_PROFILE_HI_DEF": 1,
   "CNA_GRAPHICS_PROFILE_REACH": 0,
+  "CNA_GRAPHICS_RENDERER_CATEGORY_DIAGNOSTIC": 4,
+  "CNA_GRAPHICS_RENDERER_CATEGORY_NATIVE": 0,
+  "CNA_GRAPHICS_RENDERER_CATEGORY_SOFTWARE": 2,
+  "CNA_GRAPHICS_RENDERER_CATEGORY_TRANSLATION_LAYER": 1,
+  "CNA_GRAPHICS_RENDERER_CATEGORY_WEB": 3,
   "CNA_GRAPHICS_RENDERER_DIRECTX9": 22,
   "CNA_GRAPHICS_RENDERER_FALLBACK_INITIALIZATION_FAILED": 2,
   "CNA_GRAPHICS_RENDERER_FALLBACK_MAXIMUM": 3,
@@ -4833,6 +4828,11 @@
   "CNA_GRAPHICS_RENDERER_FALLBACK_WINDOW_KIND_CONFLICT": 3,
   "CNA_GRAPHICS_RENDERER_FNA3D": 43,
   "CNA_GRAPHICS_RENDERER_HEADLESS": 11,
+  "CNA_GRAPHICS_RENDERER_MATURITY_DEPRECATED": 4,
+  "CNA_GRAPHICS_RENDERER_MATURITY_EXPERIMENTAL": 2,
+  "CNA_GRAPHICS_RENDERER_MATURITY_HISTORICAL": 3,
+  "CNA_GRAPHICS_RENDERER_MATURITY_PRODUCTION": 0,
+  "CNA_GRAPHICS_RENDERER_MATURITY_SUPPORTED": 1,
   "CNA_GRAPHICS_RENDERER_MAXIMUM": 43,
   "CNA_GRAPHICS_RENDERER_OPENGL33": 4,
   "CNA_GRAPHICS_RENDERER_OPENGLES3": 3,
@@ -6049,14 +6049,6 @@
    4,
    4
   ],
-  "CNA_GraphicsBackendCategory": [
-   4,
-   4
-  ],
-  "CNA_GraphicsBackendMaturity": [
-   4,
-   4
-  ],
   "CNA_GraphicsCapability": [
    4,
    4
@@ -6089,7 +6081,15 @@
    4,
    4
   ],
+  "CNA_GraphicsRendererCategory": [
+   4,
+   4
+  ],
   "CNA_GraphicsRendererFallbackReason": [
+   4,
+   4
+  ],
+  "CNA_GraphicsRendererMaturity": [
    4,
    4
   ],

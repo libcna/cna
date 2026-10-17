@@ -316,26 +316,26 @@ CNA_Result cna_logger_get_minimum_level(
     });
 }
 
-CNA_Result cna_graphics_backend_get_current_category(
-    CNA_GraphicsBackendCategory* const out_category)
+CNA_Result cna_graphics_renderer_get_current_category(
+    CNA_GraphicsRendererCategory* const out_category)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         if (out_category == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_backend_get_current_category: out_category is null.");
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_get_current_category: out_category is null.");
         }
-        *out_category = static_cast<CNA_GraphicsBackendCategory>(MapBackendCategoryToC(CNA::getCurrentGraphicsRendererCategory()));
+        *out_category = static_cast<CNA_GraphicsRendererCategory>(MapRendererCategoryToC(CNA::getCurrentGraphicsRendererCategory()));
         return CNA_RESULT_SUCCESS;
     });
 }
 
-CNA_Result cna_graphics_backend_get_current_maturity(
-    CNA_GraphicsBackendMaturity* const out_maturity)
+CNA_Result cna_graphics_renderer_get_current_maturity(
+    CNA_GraphicsRendererMaturity* const out_maturity)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         if (out_maturity == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_backend_get_current_maturity: out_maturity is null.");
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_get_current_maturity: out_maturity is null.");
         }
-        *out_maturity = static_cast<CNA_GraphicsBackendMaturity>(MapBackendMaturityToC(CNA::getCurrentGraphicsRendererMaturity()));
+        *out_maturity = static_cast<CNA_GraphicsRendererMaturity>(MapRendererMaturityToC(CNA::getCurrentGraphicsRendererMaturity()));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -509,38 +509,38 @@ CNA_Result cna_logger_set_minimum_level(
     });
 }
 
-CNA_Result cna_graphics_backend_get_category(
+CNA_Result cna_graphics_renderer_get_category(
     const CNA_GraphicsRendererType type,
-    CNA_GraphicsBackendCategory* const out_category)
+    CNA_GraphicsRendererCategory* const out_category)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         if (out_category == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_backend_get_category: out_category is null.");
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_get_category: out_category is null.");
         }
         CNA::GraphicsRendererType object{};
         if (const CNA_Result routeResult = MapRendererType(type, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_category = static_cast<CNA_GraphicsBackendCategory>(MapBackendCategoryToC(CNA::getGraphicsRendererCategory(object)));
+        *out_category = static_cast<CNA_GraphicsRendererCategory>(MapRendererCategoryToC(CNA::getGraphicsRendererCategory(object)));
         return CNA_RESULT_SUCCESS;
     });
 }
 
-CNA_Result cna_graphics_backend_get_maturity(
+CNA_Result cna_graphics_renderer_get_maturity(
     const CNA_GraphicsRendererType type,
-    CNA_GraphicsBackendMaturity* const out_maturity)
+    CNA_GraphicsRendererMaturity* const out_maturity)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         if (out_maturity == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_graphics_backend_get_maturity: out_maturity is null.");
+            return CNA::C::Detail::InvalidArgument("cna_graphics_renderer_get_maturity: out_maturity is null.");
         }
         CNA::GraphicsRendererType object{};
         if (const CNA_Result routeResult = MapRendererType(type, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_maturity = static_cast<CNA_GraphicsBackendMaturity>(MapBackendMaturityToC(CNA::getGraphicsRendererMaturity(object)));
+        *out_maturity = static_cast<CNA_GraphicsRendererMaturity>(MapRendererMaturityToC(CNA::getGraphicsRendererMaturity(object)));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -577,8 +577,8 @@ CNA_Result cna_graphics_renderer_get_is_available_ext(
     });
 }
 
-CNA_Result cna_graphics_backend_category_copy_name(
-    const CNA_GraphicsBackendCategory category,
+CNA_Result cna_graphics_renderer_category_copy_name(
+    const CNA_GraphicsRendererCategory category,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const out_bytes)
@@ -589,7 +589,7 @@ CNA_Result cna_graphics_backend_category_copy_name(
             return routeResult;
         }
         CNA::GraphicsRendererCategory object{};
-        if (const CNA_Result routeResult = MapBackendCategory(category, &object);
+        if (const CNA_Result routeResult = MapRendererCategory(category, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -597,8 +597,8 @@ CNA_Result cna_graphics_backend_category_copy_name(
     });
 }
 
-CNA_Result cna_graphics_backend_maturity_copy_name(
-    const CNA_GraphicsBackendMaturity maturity,
+CNA_Result cna_graphics_renderer_maturity_copy_name(
+    const CNA_GraphicsRendererMaturity maturity,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const out_bytes)
@@ -609,7 +609,7 @@ CNA_Result cna_graphics_backend_maturity_copy_name(
             return routeResult;
         }
         CNA::GraphicsRendererMaturity object{};
-        if (const CNA_Result routeResult = MapBackendMaturity(maturity, &object);
+        if (const CNA_Result routeResult = MapRendererMaturity(maturity, &object);
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
@@ -732,21 +732,21 @@ CNA_Result cna_graphics_renderer_get_fallback_at_ext(
     });
 }
 
-CNA_Result cna_graphics_backend_category_get_name_size(
-    const CNA_GraphicsBackendCategory category,
+CNA_Result cna_graphics_renderer_category_get_name_size(
+    const CNA_GraphicsRendererCategory category,
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GraphicsBackendCategoryGetNameSize(category, out_bytes);
+        return GraphicsRendererCategoryGetNameSize(category, out_bytes);
     });
 }
 
-CNA_Result cna_graphics_backend_maturity_get_name_size(
-    const CNA_GraphicsBackendMaturity maturity,
+CNA_Result cna_graphics_renderer_maturity_get_name_size(
+    const CNA_GraphicsRendererMaturity maturity,
     uint64_t* const out_bytes)
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GraphicsBackendMaturityGetNameSize(maturity, out_bytes);
+        return GraphicsRendererMaturityGetNameSize(maturity, out_bytes);
     });
 }
 

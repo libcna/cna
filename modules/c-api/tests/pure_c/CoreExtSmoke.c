@@ -130,17 +130,17 @@ static int validate_names(void)
 
     for (index = 0U; index < 5U; ++index) {
         memset(buffer, 0, sizeof(buffer));
-        if (cna_graphics_backend_category_get_name_size(index, &bytes) != CNA_RESULT_SUCCESS ||
+        if (cna_graphics_renderer_category_get_name_size(index, &bytes) != CNA_RESULT_SUCCESS ||
             bytes != (uint64_t)strlen(category_names[index]) ||
-            cna_graphics_backend_category_copy_name(
+            cna_graphics_renderer_category_copy_name(
                 index, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
             strcmp(buffer, category_names[index]) != 0) {
             return 0;
         }
         memset(buffer, 0, sizeof(buffer));
-        if (cna_graphics_backend_maturity_get_name_size(index, &bytes) != CNA_RESULT_SUCCESS ||
+        if (cna_graphics_renderer_maturity_get_name_size(index, &bytes) != CNA_RESULT_SUCCESS ||
             bytes != (uint64_t)strlen(maturity_names[index]) ||
-            cna_graphics_backend_maturity_copy_name(
+            cna_graphics_renderer_maturity_copy_name(
                 index, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
             strcmp(buffer, maturity_names[index]) != 0) {
             return 0;
@@ -150,20 +150,20 @@ static int validate_names(void)
     /* A short capacity reports the requirement and writes nothing. */
     memset(buffer, 0, sizeof(buffer));
     bytes = UINT64_C(0);
-    if (cna_graphics_backend_category_copy_name(
-            CNA_GRAPHICS_BACKEND_CATEGORY_TRANSLATION_LAYER, buffer, UINT64_C(4), &bytes) !=
+    if (cna_graphics_renderer_category_copy_name(
+            CNA_GRAPHICS_RENDERER_CATEGORY_TRANSLATION_LAYER, buffer, UINT64_C(4), &bytes) !=
             CNA_RESULT_BUFFER_TOO_SMALL ||
         bytes != UINT64_C(16) || buffer[0] != '\0') {
         return 0;
     }
-    return cna_graphics_backend_category_get_name_size(UINT32_C(5), &bytes) ==
+    return cna_graphics_renderer_category_get_name_size(UINT32_C(5), &bytes) ==
             CNA_RESULT_INVALID_ARGUMENT &&
-        cna_graphics_backend_maturity_get_name_size(UINT32_C(5), &bytes) ==
+        cna_graphics_renderer_maturity_get_name_size(UINT32_C(5), &bytes) ==
             CNA_RESULT_INVALID_ARGUMENT &&
-        cna_graphics_backend_category_get_name_size(
-            CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE, 0) == CNA_RESULT_INVALID_ARGUMENT &&
-        cna_graphics_backend_maturity_copy_name(
-            CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION, buffer, UINT64_C(32), 0) ==
+        cna_graphics_renderer_category_get_name_size(
+            CNA_GRAPHICS_RENDERER_CATEGORY_NATIVE, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_graphics_renderer_maturity_copy_name(
+            CNA_GRAPHICS_RENDERER_MATURITY_PRODUCTION, buffer, UINT64_C(32), 0) ==
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
@@ -205,10 +205,10 @@ static int is_live_renderer_identity(const CNA_GraphicsRendererType identity)
     return 0;
 }
 
-static int validate_backend_classification(void)
+static int validate_renderer_classification(void)
 {
-    CNA_GraphicsBackendCategory category = UINT32_C(999);
-    CNA_GraphicsBackendMaturity maturity = UINT32_C(999);
+    CNA_GraphicsRendererCategory category = UINT32_C(999);
+    CNA_GraphicsRendererMaturity maturity = UINT32_C(999);
     CNA_GraphicsRendererType type = UINT32_C(999);
     CNA_GraphicsRendererType identity = UINT32_C(0);
     size_t live_index = 0U;
@@ -218,35 +218,35 @@ static int validate_backend_classification(void)
          live_index < sizeof(live_renderer_identities) / sizeof(live_renderer_identities[0]);
          ++live_index) {
         identity = live_renderer_identities[live_index];
-        if (cna_graphics_backend_get_category(identity, &category) != CNA_RESULT_SUCCESS ||
-            category > CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC ||
-            cna_graphics_backend_get_maturity(identity, &maturity) != CNA_RESULT_SUCCESS ||
-            maturity > CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED) {
+        if (cna_graphics_renderer_get_category(identity, &category) != CNA_RESULT_SUCCESS ||
+            category > CNA_GRAPHICS_RENDERER_CATEGORY_DIAGNOSTIC ||
+            cna_graphics_renderer_get_maturity(identity, &maturity) != CNA_RESULT_SUCCESS ||
+            maturity > CNA_GRAPHICS_RENDERER_MATURITY_DEPRECATED) {
             return 0;
         }
     }
-    if (cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_UNKNOWN, &category) !=
+    if (cna_graphics_renderer_get_category(CNA_GRAPHICS_RENDERER_UNKNOWN, &category) !=
             CNA_RESULT_INVALID_ARGUMENT ||
-        cna_graphics_backend_get_maturity(
+        cna_graphics_renderer_get_maturity(
             CNA_GRAPHICS_RENDERER_MAXIMUM + UINT32_C(1), &maturity) !=
             CNA_RESULT_INVALID_ARGUMENT ||
-        cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_HEADLESS, 0) !=
+        cna_graphics_renderer_get_category(CNA_GRAPHICS_RENDERER_HEADLESS, 0) !=
             CNA_RESULT_INVALID_ARGUMENT ||
-        cna_graphics_backend_get_maturity(CNA_GRAPHICS_RENDERER_HEADLESS, 0) !=
+        cna_graphics_renderer_get_maturity(CNA_GRAPHICS_RENDERER_HEADLESS, 0) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
 
     /* A fixed classification a caller can rely on without naming this build's renderer. */
-    if (cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_HEADLESS, &category) !=
+    if (cna_graphics_renderer_get_category(CNA_GRAPHICS_RENDERER_HEADLESS, &category) !=
             CNA_RESULT_SUCCESS ||
-        category != CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC ||
-        cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_SOFTWARE, &category) !=
+        category != CNA_GRAPHICS_RENDERER_CATEGORY_DIAGNOSTIC ||
+        cna_graphics_renderer_get_category(CNA_GRAPHICS_RENDERER_SOFTWARE, &category) !=
             CNA_RESULT_SUCCESS ||
-        category != CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE ||
-        cna_graphics_backend_get_category(CNA_GRAPHICS_RENDERER_OPENGL33, &category) !=
+        category != CNA_GRAPHICS_RENDERER_CATEGORY_SOFTWARE ||
+        cna_graphics_renderer_get_category(CNA_GRAPHICS_RENDERER_OPENGL33, &category) !=
             CNA_RESULT_SUCCESS ||
-        category != CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE) {
+        category != CNA_GRAPHICS_RENDERER_CATEGORY_NATIVE) {
         return 0;
     }
 
@@ -259,9 +259,9 @@ static int validate_backend_classification(void)
              ++retired_index) {
             identity = retired_renderer_identities[retired_index];
             if (is_live_renderer_identity(identity) ||
-                cna_graphics_backend_get_category(identity, &category) !=
+                cna_graphics_renderer_get_category(identity, &category) !=
                     CNA_RESULT_INVALID_ARGUMENT ||
-                cna_graphics_backend_get_maturity(identity, &maturity) !=
+                cna_graphics_renderer_get_maturity(identity, &maturity) !=
                     CNA_RESULT_INVALID_ARGUMENT) {
                 return 0;
             }
@@ -269,9 +269,9 @@ static int validate_backend_classification(void)
         for (identity = UINT32_C(1);
              identity <= CNA_GRAPHICS_RENDERER_MAXIMUM; ++identity) {
             if (!is_live_renderer_identity(identity) &&
-                (cna_graphics_backend_get_category(identity, &category) !=
+                (cna_graphics_renderer_get_category(identity, &category) !=
                      CNA_RESULT_INVALID_ARGUMENT ||
-                 cna_graphics_backend_get_maturity(identity, &maturity) !=
+                 cna_graphics_renderer_get_maturity(identity, &maturity) !=
                      CNA_RESULT_INVALID_ARGUMENT)) {
                 return 0;
             }
@@ -284,18 +284,18 @@ static int validate_backend_classification(void)
         type == CNA_GRAPHICS_RENDERER_UNKNOWN || type > CNA_GRAPHICS_RENDERER_MAXIMUM) {
         return 0;
     }
-    if (cna_graphics_backend_get_current_category(0) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_graphics_backend_get_current_category(&category) != CNA_RESULT_SUCCESS ||
-        cna_graphics_backend_get_current_maturity(0) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_graphics_backend_get_current_maturity(&maturity) != CNA_RESULT_SUCCESS) {
+    if (cna_graphics_renderer_get_current_category(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_renderer_get_current_category(&category) != CNA_RESULT_SUCCESS ||
+        cna_graphics_renderer_get_current_maturity(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_renderer_get_current_maturity(&maturity) != CNA_RESULT_SUCCESS) {
         return 0;
     }
     {
-        CNA_GraphicsBackendCategory expected_category = UINT32_C(999);
-        CNA_GraphicsBackendMaturity expected_maturity = UINT32_C(999);
-        if (cna_graphics_backend_get_category(type, &expected_category) != CNA_RESULT_SUCCESS ||
+        CNA_GraphicsRendererCategory expected_category = UINT32_C(999);
+        CNA_GraphicsRendererMaturity expected_maturity = UINT32_C(999);
+        if (cna_graphics_renderer_get_category(type, &expected_category) != CNA_RESULT_SUCCESS ||
             expected_category != category ||
-            cna_graphics_backend_get_maturity(type, &expected_maturity) != CNA_RESULT_SUCCESS ||
+            cna_graphics_renderer_get_maturity(type, &expected_maturity) != CNA_RESULT_SUCCESS ||
             expected_maturity != maturity) {
             return 0;
         }
@@ -717,7 +717,7 @@ int main(void)
     if (!validate_names()) {
         return 4;
     }
-    if (!validate_backend_classification()) {
+    if (!validate_renderer_classification()) {
         return 5;
     }
     if (!validate_renderer_name()) {

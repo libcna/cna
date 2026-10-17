@@ -1069,8 +1069,8 @@ _Static_assert(sizeof(CNA_LogLevel) == sizeof(uint32_t) &&
                    sizeof(CNA_LogCategory) == sizeof(uint32_t) &&
                    sizeof(CNA_Platform) == sizeof(uint32_t) &&
                    sizeof(CNA_DesktopOS) == sizeof(uint32_t) &&
-                   sizeof(CNA_GraphicsBackendCategory) == sizeof(uint32_t) &&
-                   sizeof(CNA_GraphicsBackendMaturity) == sizeof(uint32_t) &&
+                   sizeof(CNA_GraphicsRendererCategory) == sizeof(uint32_t) &&
+                   sizeof(CNA_GraphicsRendererMaturity) == sizeof(uint32_t) &&
                    CNA_LOG_LEVEL_FATAL == UINT32_C(0) &&
                    CNA_LOG_LEVEL_TRACE == UINT32_C(5) &&
                    CNA_LOG_LEVEL_EXPERIMENT == UINT32_C(100) &&
@@ -1080,10 +1080,10 @@ _Static_assert(sizeof(CNA_LogLevel) == sizeof(uint32_t) &&
                    CNA_PLATFORM_WEB == UINT32_C(3) &&
                    CNA_DESKTOP_OS_WINDOWS == UINT32_C(0) &&
                    CNA_DESKTOP_OS_OTHER == UINT32_C(3) &&
-                   CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE == UINT32_C(0) &&
-                   CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC == UINT32_C(4) &&
-                   CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION == UINT32_C(0) &&
-                   CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED == UINT32_C(4),
+                   CNA_GRAPHICS_RENDERER_CATEGORY_NATIVE == UINT32_C(0) &&
+                   CNA_GRAPHICS_RENDERER_CATEGORY_DIAGNOSTIC == UINT32_C(4) &&
+                   CNA_GRAPHICS_RENDERER_MATURITY_PRODUCTION == UINT32_C(0) &&
+                   CNA_GRAPHICS_RENDERER_MATURITY_DEPRECATED == UINT32_C(4),
                "CNA core-extension identities must remain stable");
 
 _Static_assert(sizeof(CNA_GamePadType) == sizeof(uint32_t) &&
