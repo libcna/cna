@@ -251,7 +251,9 @@ namespace Microsoft::Xna::Framework
          * game does not draw into those bounds, it draws into a logical surface that
          * `GraphicsDevice` letterboxes inside them. Widening a window past its own height then
          * reported landscape at a portrait surface, and a game that believes the report lays itself
-         * out for a shape it does not have (SAMPLE-077, `misc/known_bugs.md`).
+         * out for a shape it does not have (SAMPLE-077). XNA on Windows Phone rotates the back
+         * buffer with the device, so its reported orientation and drawing surface always agree;
+         * CNA keeps the virtual resolution fixed and letterboxes, so it asks the surface instead.
          *
          * @param provider Fills width/height and returns true when it can answer; an empty
          *                 provider, or one that declines, falls back to the client bounds.

@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework
         // whenever nothing changed and so cannot be relied on to run at all. Captured as a
         // provider, not a value, because the window re-derives orientation from inside the
         // platform's own resize handling, long after this. See
-        // GameWindow::SetLogicalSizeProviderEXT and misc/known_bugs.md.
+        // GameWindow::SetLogicalSizeProviderEXT.
         {
             auto* const device = graphicsDevice_;
             game_->getWindowProperty().SetLogicalSizeProviderEXT(
