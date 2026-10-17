@@ -7,8 +7,9 @@
 > the DX*/D3D* identities to `DIRECTX*`, `OPENGLES` to `OPENGLES3`, and `NOXNA` to
 > `CNAEXT`. The names below are the ones that were accurate during this campaign and are
 > preserved as historical campaign terminology. The normalization itself is in Git history:
-> commits `edc02f7d8`..`b15a896ec` (2026-08-10; its recorded branch endpoint `16f76cf1a` is
-> not an object in this repository).
+> commits `edc02f7d8`..`b15a896ec` (2026-08-10). Its recorded branch endpoint `16f76cf1a`
+> remains in the repository's history but is not on the current `next` ancestry; `b15a896ec`
+> is its replayed counterpart, with an identical tree.
 
 Campaign: **CNA MODULARIZATION** (FUTURE.md Phase 1) · Branch: `feature/modularization`
 Start HEAD: `5f2c4e94162735c781570209a476400dacbd01b1` (tree `40494b21bcafee517307c932bf588cc2367e7c47`)
