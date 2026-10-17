@@ -292,6 +292,9 @@ def _declarations(node: dict, header: str) -> list[dict]:
                 continue
             child, kind = method, "FunctionDecl"
         if kind in ("CXXMethodDecl", "CXXConstructorDecl", "FunctionDecl", "CXXConversionDecl"):
+            # `= delete` refuses the call at compile time, so it never represents an XNA member.
+            if child.get("explicitlyDeleted"):
+                continue
             param_nodes = [inner for inner in child.get("inner", []) if inner.get("kind") == "ParmVarDecl"]
             params = [inner["type"]["qualType"] for inner in param_nodes]
             signature = child.get("type", {}).get("qualType", "")
@@ -375,7 +378,8 @@ def cna_members(type_findings: list[dict], operator_names: dict[str, set[str]] |
                                         "-Xclang", "-ast-dump-filter=" + namespace + "::operator", *includes, str(path)],
                                        capture_output=True, text=True)
             for tree in _json_objects(operation.stdout):
-                if tree.get("kind") != "FunctionDecl" or tree.get("loc", {}).get("file") != str(path):
+                if (tree.get("kind") != "FunctionDecl" or tree.get("loc", {}).get("file") != str(path) or
+                        tree.get("explicitlyDeleted")):
                     continue
                 signature = tree.get("type", {}).get("qualType", "")
                 params = [inner["type"]["qualType"] for inner in tree.get("inner", [])

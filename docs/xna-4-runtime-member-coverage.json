@@ -90858,7 +90858,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.GamerServices",
         "xna_signature": "Microsoft.Xna.Framework.GamerServices.SignedInGamer.PartySize",
-        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp::getPartySizeProperty()/setPartySizeProperty(int)",
+        "cna_symbol": "modules/gamer-services/include/Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp::getPartySizeProperty()",
         "notes": "XNA property represented by CNA accessor convention.",
         "metadata": {
           "kind": "property",
@@ -111728,7 +111728,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.SamplerStateCollection.Item(System.Int32)",
-        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp::operator[](int)/operator[](int)",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp::operator[](int)/operator()(int, const SamplerState &)",
         "notes": "XNA property represented by CNA accessor convention.",
         "metadata": {
           "kind": "property",

@@ -243,6 +243,50 @@ class RuntimeSurfaceAuditTests(unittest.TestCase):
                               native["Microsoft.Xna.Framework.Example.Mode"]},
                              {"First": 2, "Second": 4})
 
+    def test_deleted_declarations_never_represent_a_member(self):
+        # `= delete` refuses a call at compile time; it is not an implementation. GraphicsDevice
+        # declares a deleted `DrawUserPrimitives(PrimitiveType, const T*, int, int)` above the
+        # callable vector overload, and the census named the deleted one for XNA's
+        # `DrawUserPrimitives<T>(PrimitiveType, T[], int, int)` until deleted declarations were
+        # dropped -- members, constructors and namespace-scope operators alike.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            header = root / "modules/math/include/Microsoft/Xna/Framework/Example.hpp"
+            header.parent.mkdir(parents=True)
+            header.write_text(
+                "#include <vector>\n"
+                "namespace Microsoft::Xna::Framework {\n"
+                "class Example {\n"
+                "public:\n"
+                "  Example();\n"
+                "  Example(const Example&) = delete;\n"
+                "  template<class T> void Draw(const T*, int) = delete;\n"
+                "  template<class T> void Draw(const std::vector<T>&, int);\n"
+                "  void Refused(int) = delete;\n"
+                "};\n"
+                "bool operator==(const Example&, const Example&) = delete;\n"
+                "}\n", encoding="utf-8")
+            relative = str(header.relative_to(root))
+            finding = {"reference_name": "Microsoft.Xna.Framework.Example",
+                       "cpp_name": "Microsoft::Xna::Framework::Example", "header": relative}
+            with patch.object(audit, "REPO", root):
+                native, errors = members.cna_members(
+                    [finding], {finding["reference_name"]: {"operator=="}})
+        self.assertFalse(errors)
+        decls = native[finding["reference_name"]]
+        self.assertEqual([d["parameter_types"] for d in decls if d["name"] == "Draw"],
+                         [["const std::vector<T> &", "int"]])
+        self.assertEqual([d["parameter_types"] for d in decls if d["kind"] == "constructor"], [[]])
+        self.assertNotIn("Refused", [d["name"] for d in decls])
+        self.assertNotIn("operator==", [d["name"] for d in decls])
+        drawn = self._classify("method", "Microsoft.Xna.Framework.Example.Draw``1(``0[],System.Int32)",
+                               self._meta("method", parameters=("``0[]", "System.Int32"), arity=1),
+                               decls)
+        self.assertEqual(drawn["cna_symbol"], relative + "::Draw(const std::vector<T> &, int)")
+        refused = self._classify("method", "Microsoft.Xna.Framework.Example.Refused(System.Int32)",
+                                 self._meta("method", parameters=("System.Int32",)), decls)
+        self.assertEqual(refused["classification"], "MISSING")
+
     def test_documented_explicit_enumerator_anomaly_is_visible(self):
         entry = self._entry("method", "Microsoft.Xna.Framework.Graphics.EffectPassCollection.System#Collections#IEnumerable#GetEnumerator")
         signature = members.reference_signature(entry, {"Microsoft.Xna.Framework.Graphics.EffectPassCollection"})
