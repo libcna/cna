@@ -107,7 +107,10 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] ContainmentType Contains(BoundingSphere sphere) const;
 
         /**
-         * @brief Checks whether a point is outside, inside, or on this sphere.
+         * @brief Classifies a point using a strict squared-distance comparison.
+         *
+         * Like XNA, the value form retains wide intermediates; the output form first
+         * stores the squared distance as float. Neither form returns Intersects.
          *
          * @param point The point to test.
          * @return The containment type describing the relationship.

@@ -145,6 +145,17 @@ consumer checks confirm zero hits after point containment repair; the reserved
 ray implementation/exception remains unchanged. Source/oracles and retained failures:
 `../cna-demos/docs/repair-evidence/geometry/`.
 
+Additional129 precision gate: a genuine2048-case axis-surface probe disproves
+point-overload parity in1012 cases. Value Contains keeps the inlined wide squared
+distance; output Contains explicitly stores it as Single before comparing with
+the wide radius product. A19200-check varied3D/scaled oracle validates these
+boundaries and the underlying Vector3 LengthSquared/DistanceSquared wide
+accumulation. A private arithmetic helper shares the calculation without widening
+public Single results or changing118's squared overflow/underflow contract.
+Native math963PASS/two skips; registered247/247; four-production-TU ASan/UBSan/leak
+13/13; broad consumers1408PASS/four unchanged skips. Actual C ABI/external
+containment closure still pending. Preserve the failed parity hypothesis/log.
+
 The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
 both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
 the recorded rows above are superseded by this checkpoint; permanent evidence is

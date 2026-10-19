@@ -2,6 +2,7 @@
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "MathDisplay.hpp"
+#include "Vector3Arithmetic.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -130,9 +131,12 @@ namespace Microsoft::Xna::Framework
     float Vector3::Length() const
     {
         // Preserve XNA's wide intermediate range until the returned Single.
-        return static_cast<float>(std::sqrt((static_cast<double>(X) * X) + (static_cast<double>(Y) * Y) + (static_cast<double>(Z) * Z)));
+        return static_cast<float>(std::sqrt(CNA::Internal::Math::SquaredLengthWide(*this)));
     }
-    float Vector3::LengthSquared() const { return (X * X) + (Y * Y) + (Z * Z); }
+    float Vector3::LengthSquared() const
+    {
+        return static_cast<float>(CNA::Internal::Math::SquaredLengthWide(*this));
+    }
 
     void Vector3::Normalize()
     {
@@ -290,10 +294,7 @@ namespace Microsoft::Xna::Framework
 
     float Vector3::Distance(Vector3 value1, Vector3 value2)
     {
-        const double x = static_cast<double>(value1.X) - value2.X;
-        const double y = static_cast<double>(value1.Y) - value2.Y;
-        const double z = static_cast<double>(value1.Z) - value2.Z;
-        return static_cast<float>(std::sqrt((x * x) + (y * y) + (z * z)));
+        return static_cast<float>(std::sqrt(CNA::Internal::Math::SquaredDistanceWide(value1, value2)));
     }
 
     void Vector3::Distance(const Vector3& value1, const Vector3& value2, float& result)
@@ -303,8 +304,7 @@ namespace Microsoft::Xna::Framework
 
     float Vector3::DistanceSquared(Vector3 value1, Vector3 value2)
     {
-        return ((value1.X - value2.X) * (value1.X - value2.X)) + ((value1.Y - value2.Y) * (value1.Y - value2.Y)) + ((
-            value1.Z - value2.Z) * (value1.Z - value2.Z));
+        return static_cast<float>(CNA::Internal::Math::SquaredDistanceWide(value1, value2));
     }
 
     void Vector3::DistanceSquared(const Vector3& value1, const Vector3& value2, float& result)

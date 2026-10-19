@@ -220,10 +220,9 @@ TEST(BoundingFrustumTest, ContainsSameFrustumReturnContains)
 {
     BoundingFrustum a = MakeTestFrustum();
     BoundingFrustum b = MakeTestFrustum();
-    // Different objects, same matrix: corners of b lie exactly on the boundary planes of a
-    // (distance = 0 → Intersecting), so FNA-compatible result is Intersects, not Contains.
-    // Contains is only returned for the self-reference case (this == &frustum).
-    EXPECT_EQ(a.Contains(b), ContainmentType::Intersects);
+    // Genuine XNA tests geometric containment, including boundary corners,
+    // rather than limiting Contains to the pointer-identical instance.
+    EXPECT_EQ(a.Contains(b), ContainmentType::Contains);
 }
 
 TEST(BoundingFrustumTest, ContainsDifferentFrustumDiverges)

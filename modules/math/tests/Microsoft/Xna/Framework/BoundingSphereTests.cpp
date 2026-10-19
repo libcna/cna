@@ -242,10 +242,11 @@ TEST(BoundingSphereTest, EqualsDirectCallDifferentCenter)
 
 // --- Contains (Vector3) boundary ---
 
-TEST(BoundingSphereTest, ContainsPointOnBoundaryIsIntersects)
+TEST(BoundingSphereTest, ContainsPointOnBoundaryIsDisjoint)
 {
     BoundingSphere s(Vector3::Zero, 1.0f);
-    EXPECT_EQ(s.Contains(Vector3(1.0f, 0.0f, 0.0f)), ContainmentType::Intersects);
+    // Genuine XNA excludes an exact surface point; FNA's Intersects differs.
+    EXPECT_EQ(s.Contains(Vector3(1.0f, 0.0f, 0.0f)), ContainmentType::Disjoint);
 }
 
 // --- Contains (Vector3) out-ref overload ---
@@ -504,7 +505,7 @@ TEST(BoundingSphereTest, ToStringContainsCenterAndRadius)
 TEST(BoundingSphereTest, CreateFromPointsThrowsOnEmptyVector)
 {
     std::vector<Vector3> empty;
-    EXPECT_THROW(BoundingSphere::CreateFromPoints(empty), System::ArgumentException);
+    EXPECT_THROW((void)BoundingSphere::CreateFromPoints(empty), System::ArgumentException);
 }
 
 // --- CreateMerged containment edge cases ---

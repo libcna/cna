@@ -572,8 +572,8 @@ static int validate_bounding_frustum(void)
             frustum,
             (CNA_Ray){{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
             &hit,
-            &distance) != CNA_RESULT_NOT_SUPPORTED ||
-        hit != CNA_TRUE || !near_float(distance, 77.0F)) {
+            &distance) != CNA_RESULT_SUCCESS ||
+        hit != CNA_TRUE || distance != 0.0F) {
         return 0;
     }
 
@@ -706,6 +706,74 @@ static int validate_stationary_ray_box(void)
     return 1;
 }
 
+static int validate_xna_sphere_containment(void)
+{
+    const CNA_BoundingSphere outer = {{0, 0, 0}, 5};
+    CNA_ContainmentType containment;
+    CNA_Bool hit;
+    if (cna_bounding_sphere_contains_point(outer, (CNA_Vector3){5, 0, 0}, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_DISJOINT ||
+        cna_bounding_sphere_contains_point(outer, (CNA_Vector3){NAN, 0, 0}, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_DISJOINT ||
+        cna_bounding_sphere_contains_sphere(outer, (CNA_BoundingSphere){{0, 0, 0}, 10}, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_INTERSECTS ||
+        cna_bounding_sphere_intersects_sphere(outer, (CNA_BoundingSphere){{10, 0, 0}, 5}, &hit) !=
+            CNA_RESULT_SUCCESS || hit != CNA_FALSE ||
+        cna_bounding_sphere_contains_box(outer, (CNA_BoundingBox){{-3, -4, 0}, {3, 4, 0}}, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_CONTAINS) return 0;
+    return 1;
+}
+
+static int validate_xna_frustum_separation(void)
+{
+    CNA_Matrix identity = {0};
+    identity.m11 = identity.m22 = identity.m33 = identity.m44 = 1.0F;
+    const CNA_BoundingFrustum frustum = {identity};
+    const CNA_BoundingSphere corner_miss = {{1.8F, 1.8F, 0.5F}, 1};
+    const CNA_BoundingBox distant = {{10, 10, 10}, {11, 11, 11}};
+    CNA_ContainmentType containment;
+    CNA_Bool hit;
+    /* XNA's Contains(sphere) is conservative at corners; Intersects is not. */
+    if (cna_bounding_frustum_contains_sphere(frustum, corner_miss, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_INTERSECTS ||
+        cna_bounding_frustum_intersects_sphere(frustum, corner_miss, &hit) !=
+            CNA_RESULT_SUCCESS || hit != CNA_FALSE ||
+        cna_bounding_sphere_intersects_frustum(corner_miss, frustum, &hit) !=
+            CNA_RESULT_SUCCESS || hit != CNA_FALSE ||
+        cna_bounding_sphere_contains_frustum(corner_miss, frustum, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_DISJOINT ||
+        cna_bounding_box_contains_frustum(distant, frustum, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_DISJOINT ||
+        cna_bounding_frustum_contains_frustum(frustum, frustum, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_frustum_contains_point(frustum, (CNA_Vector3){1, 2, 0.5F}, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_DISJOINT) return 0;
+    return 1;
+}
+
+static int validate_squared_vector_arithmetic(void)
+{
+    uint32_t state = 0x12345678U;
+    for (int i = 0; i < 256; ++i) {
+        float fields[6];
+        for (int j = 0; j < 6; ++j) {
+            state = state * 1664525U + 1013904223U;
+            fields[j] = ((int)(state >> 8) % 8193 - 4096) / 1024.0F;
+        }
+        const CNA_Vector3 center = {fields[0], fields[1], fields[2]};
+        const CNA_Vector3 point = {fields[3], fields[4], fields[5]};
+        const double x = (double)point.x - center.x, y = (double)point.y - center.y;
+        const double z = (double)point.z - center.z;
+        const float expected = (float)(x*x + y*y + z*z);
+        const float norm = (float)((double)point.x*point.x + (double)point.y*point.y +
+                                  (double)point.z*point.z);
+        float result;
+        if (cna_vector3_distance_squared(point, center, &result) != CNA_RESULT_SUCCESS || result != expected ||
+            cna_vector3_length_squared(point, &result) != CNA_RESULT_SUCCESS || result != norm) return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
     int original = CNA_TEST_STAGE(validate_plane());
@@ -719,5 +787,8 @@ int main(void)
     const int sphere = CNA_TEST_STAGE(validate_sphere_constructor());
     const int mutated = CNA_TEST_STAGE(validate_mutated_sphere_fields());
     const int stationary = CNA_TEST_STAGE(validate_stationary_ray_box());
-    return original && normalization && shadow && sphere && mutated && stationary ? 0 : 1;
+    const int containment = CNA_TEST_STAGE(validate_xna_sphere_containment());
+    const int separation = CNA_TEST_STAGE(validate_xna_frustum_separation());
+    const int squared = CNA_TEST_STAGE(validate_squared_vector_arithmetic());
+    return original && normalization && shadow && sphere && mutated && stationary && containment && separation && squared ? 0 : 1;
 }

@@ -728,7 +728,10 @@ CNA_C_API CNA_Result cna_bounding_frustum_intersects_plane(
  * @param ray Ray to test.
  * @param out_hit Receives whether a hit exists.
  * @param out_distance Receives distance, or zero on no hit.
- * @return A CNA result code; the native unimplemented boundary-origin case returns not supported.
+ * @note Origins contained by the frustum, including its boundary, return a hit at zero.
+ *       Outside-origin entry intersections remain unimplemented in the native API and
+ *       currently report no hit. This function does not provide full ray clipping.
+ * @return A CNA result code.
  */
 CNA_C_API CNA_Result cna_bounding_frustum_intersects_ray(
     CNA_BoundingFrustum value,

@@ -2,6 +2,7 @@
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "MathDisplay.hpp"
+#include "Vector3Arithmetic.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -59,120 +60,62 @@ namespace Microsoft::Xna::Framework
 
     void BoundingSphere::Contains(const Vector3& point, ContainmentType& result) const
     {
-        result = Contains(point);
+        // Genuine XNA's output form stores DistanceSquared before comparing;
+        // the value form below retains the wide return-register intermediate.
+        float squared;
+        Vector3::DistanceSquared(point, Center, squared);
+        result = squared < static_cast<double>(Radius) * Radius ? ContainmentType::Contains
+                                                               : ContainmentType::Disjoint;
     }
 
     ContainmentType BoundingSphere::Contains(BoundingBox box) const
     {
-        bool inside = true;
+        if (!box.Intersects(*this))
+            return ContainmentType::Disjoint;
+        const float radiusSquared = Radius * Radius;
+        // XNA includes volume corners on the surface, unlike Contains(point).
         for (const Vector3& corner : box.GetCorners())
         {
-            if (Contains(corner) == ContainmentType::Disjoint)
-            {
-                inside = false;
-                break;
-            }
+            const Vector3 difference = corner - Center;
+            if (Vector3::Dot(difference, difference) > radiusSquared)
+                return ContainmentType::Intersects;
         }
-
-        if (inside)
-        {
-            return ContainmentType::Contains;
-        }
-
-        double dmin = 0.0;
-
-        if (Center.X < box.Min.X)
-        {
-            dmin += (Center.X - box.Min.X) * (Center.X - box.Min.X);
-        }
-        else if (Center.X > box.Max.X)
-        {
-            dmin += (Center.X - box.Max.X) * (Center.X - box.Max.X);
-        }
-
-        if (Center.Y < box.Min.Y)
-        {
-            dmin += (Center.Y - box.Min.Y) * (Center.Y - box.Min.Y);
-        }
-        else if (Center.Y > box.Max.Y)
-        {
-            dmin += (Center.Y - box.Max.Y) * (Center.Y - box.Max.Y);
-        }
-
-        if (Center.Z < box.Min.Z)
-        {
-            dmin += (Center.Z - box.Min.Z) * (Center.Z - box.Min.Z);
-        }
-        else if (Center.Z > box.Max.Z)
-        {
-            dmin += (Center.Z - box.Max.Z) * (Center.Z - box.Max.Z);
-        }
-
-        if (dmin <= Radius * Radius)
-        {
-            return ContainmentType::Intersects;
-        }
-
-        return ContainmentType::Disjoint;
+        return ContainmentType::Contains;
     }
 
     ContainmentType BoundingSphere::Contains(const BoundingFrustum& frustum) const
     {
-        bool inside = true;
+        // Genuine BoundingSphere.Contains(BoundingFrustum) delegates convex separation.
+        if (!frustum.Intersects(*this))
+            return ContainmentType::Disjoint;
+        const float radiusSquared = Radius * Radius;
         for (const Vector3& corner : frustum.GetCorners())
         {
-            if (Contains(corner) == ContainmentType::Disjoint)
-            {
-                inside = false;
-                break;
-            }
+            const Vector3 difference = corner - Center;
+            if (Vector3::Dot(difference, difference) > radiusSquared)
+                return ContainmentType::Intersects;
         }
-
-        if (inside)
-        {
-            return ContainmentType::Contains;
-        }
-
-        double dmin = 0.0;
-        if (dmin <= Radius * Radius)
-        {
-            return ContainmentType::Intersects;
-        }
-
-        return ContainmentType::Disjoint;
+        return ContainmentType::Contains;
     }
 
     ContainmentType BoundingSphere::Contains(BoundingSphere sphere) const
     {
-        float sqDistance;
-        Vector3::DistanceSquared(sphere.Center, Center, sqDistance);
-
-        if (sqDistance > (sphere.Radius + Radius) * (sphere.Radius + Radius))
-        {
+        // XNA compares signed radius sums/differences with Distance, not their squares.
+        const float distance = Vector3::Distance(Center, sphere.Center);
+        const double outerRadius = Radius, innerRadius = sphere.Radius;
+        if (!(outerRadius + innerRadius >= distance))
             return ContainmentType::Disjoint;
-        }
-        if (sqDistance <= (Radius - sphere.Radius) * (Radius - sphere.Radius))
-        {
-            return ContainmentType::Contains;
-        }
-        return ContainmentType::Intersects;
+        if (!(outerRadius - innerRadius >= distance))
+            return ContainmentType::Intersects;
+        return ContainmentType::Contains;
     }
 
     ContainmentType BoundingSphere::Contains(Vector3 point) const
     {
-        float sqRadius = Radius * Radius;
-        float sqDistance;
-        Vector3::DistanceSquared(point, Center, sqDistance);
-
-        if (sqDistance > sqRadius)
-        {
-            return ContainmentType::Disjoint;
-        }
-        if (sqDistance < sqRadius)
-        {
-            return ContainmentType::Contains;
-        }
-        return ContainmentType::Intersects;
+        // XNA's value form retains the inlined squared-distance and radius
+        // products through its strict comparison. NaN is Disjoint.
+        return CNA::Internal::Math::SquaredDistanceWide(point, Center) < static_cast<double>(Radius) * Radius
+            ? ContainmentType::Contains : ContainmentType::Disjoint;
     }
 
     bool BoundingSphere::Equals(const std::any& obj) const
@@ -410,9 +353,11 @@ namespace Microsoft::Xna::Framework
 
     void BoundingSphere::Intersects(const BoundingSphere& sphere, bool& result) const
     {
-        float sqDistance;
-        Vector3::DistanceSquared(sphere.Center, Center, sqDistance);
-        result = !(sqDistance > (sphere.Radius + Radius) * (sphere.Radius + Radius));
+        const float distanceSquared = Vector3::DistanceSquared(Center, sphere.Center);
+        // XNA IL uses the expanded expression and a strict comparison (external
+        // tangency and NaN are false); keep its wide products through the comparison.
+        const double a = Radius, b = sphere.Radius;
+        result = a * a + 2.0 * a * b + b * b > distanceSquared;
     }
 
     std::optional<float> BoundingSphere::Intersects(Ray ray) const

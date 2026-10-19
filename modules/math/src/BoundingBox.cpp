@@ -90,41 +90,12 @@ namespace Microsoft::Xna::Framework
 
     ContainmentType BoundingBox::Contains(const BoundingFrustum& frustum) const
     {
-        // Legacy behavior: classify the frustum by testing its corners against this box.
-        auto corners = frustum.GetCorners();
-
-        std::size_t i = 0;
-        ContainmentType contained = ContainmentType::Disjoint;
-
-        for (; i < corners.size(); i += 1)
-        {
-            Contains(corners[i], contained);
-            if (contained == ContainmentType::Disjoint)
-            {
-                break;
-            }
-        }
-
-        if (i == corners.size())
-        {
-            return ContainmentType::Contains;
-        }
-
-        if (i != 0)
-        {
-            return ContainmentType::Intersects;
-        }
-
-        i += 1;
-        for (; i < corners.size(); i += 1)
-        {
-            Contains(corners[i], contained);
-            if (contained != ContainmentType::Contains)
-            {
+        // XNA first separates the convex volumes, then checks every frustum corner.
+        if (!frustum.Intersects(*this))
+            return ContainmentType::Disjoint;
+        for (const Vector3 &corner : frustum.GetCorners())
+            if (Contains(corner) == ContainmentType::Disjoint)
                 return ContainmentType::Intersects;
-            }
-        }
-
         return ContainmentType::Contains;
     }
 

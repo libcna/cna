@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/BoundingFrustum.hpp"
+#include "Gjk.hpp"
 
 #include <cmath>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 
@@ -14,6 +16,54 @@
 
 namespace Microsoft::Xna::Framework
 {
+namespace
+{
+Vector3 Support(const std::array<Vector3, 8> &vertices, const Vector3 &direction)
+{
+    std::size_t best = 0;
+    float maximum = Vector3::Dot(vertices[0], direction);
+    for (std::size_t i = 1; i < vertices.size(); ++i)
+    {
+        const float projection = Vector3::Dot(vertices[i], direction);
+        if (projection > maximum)
+        {
+            maximum = projection;
+            best = i;
+        }
+    }
+    return vertices[best];
+}
+
+template <class OtherSupport>
+bool ConvexIntersects(const std::array<Vector3, 8> &vertices, Vector3 direction,
+                      const OtherSupport &otherSupport)
+{
+    // XNA BoundingFrustum.Intersects uses Gjk, with these relative progress
+    // and simplex-distance thresholds, not its conservative Contains planes.
+    CNA::Internal::Math::Gjk simplex;
+    float distanceSquared = std::numeric_limits<float>::max();
+    float threshold = 0;
+    do
+    {
+        const Vector3 opposite(0.0f - direction.X, 0.0f - direction.Y, 0.0f - direction.Z);
+        const Vector3 point = Support(vertices, opposite) - otherSupport(direction);
+        const double projection = static_cast<double>(direction.X) * point.X +
+                                  static_cast<double>(direction.Y) * point.Y +
+                                  static_cast<double>(direction.Z) * point.Z;
+        if (projection > 0)
+            return false;
+        simplex.AddSupportPoint(point);
+        direction = simplex.ClosestPoint();
+        const float previous = distanceSquared;
+        distanceSquared = Vector3::Dot(direction, direction);
+        if (static_cast<double>(previous) - distanceSquared <= static_cast<double>(1e-5f) * previous)
+            return false;
+        threshold = 4e-5f * simplex.MaxLengthSquared();
+    } while (!simplex.FullSimplex() && distanceSquared >= threshold);
+    return true;
+}
+} // namespace
+
     BoundingFrustum::BoundingFrustum(Matrix value)
         : matrix(value)
     {
@@ -42,28 +92,12 @@ namespace Microsoft::Xna::Framework
 
     ContainmentType BoundingFrustum::Contains(const BoundingFrustum& frustum) const
     {
-        if (this == &frustum)
-        {
-            return ContainmentType::Contains;
-        }
-
-        bool intersects = false;
-        for (int i = 0; i < PlaneCount; i += 1)
-        {
-            PlaneIntersectionType planeIntersectionType;
-            frustum.Intersects(planes[i], planeIntersectionType);
-
-            if (planeIntersectionType == PlaneIntersectionType::Front)
-            {
-                return ContainmentType::Disjoint;
-            }
-            if (planeIntersectionType == PlaneIntersectionType::Intersecting)
-            {
-                intersects = true;
-            }
-        }
-
-        return intersects ? ContainmentType::Intersects : ContainmentType::Contains;
+        if (!Intersects(frustum))
+            return ContainmentType::Disjoint;
+        for (const Vector3 &corner : frustum.corners)
+            if (Contains(corner) == ContainmentType::Disjoint)
+                return ContainmentType::Intersects;
+        return ContainmentType::Contains;
     }
 
     ContainmentType BoundingFrustum::Contains(BoundingBox box) const
@@ -107,27 +141,23 @@ namespace Microsoft::Xna::Framework
 
     void BoundingFrustum::Contains(const BoundingSphere& sphere, ContainmentType& result) const
     {
-        bool intersects = false;
-
-        for (int i = 0; i < PlaneCount; i += 1)
+        // XNA inlines the plane expression here: a public Dot result would add
+        // a Single rounding boundary and misclassify near-tangent spheres.
+        int insidePlanes = 0;
+        for (const Plane &plane : planes)
         {
-            PlaneIntersectionType planeIntersectionType;
-            sphere.Intersects(planes[i], planeIntersectionType);
-
-            switch (planeIntersectionType)
+            const double distance = static_cast<double>(plane.Normal.X) * sphere.Center.X +
+                                    static_cast<double>(plane.Normal.Y) * sphere.Center.Y +
+                                    static_cast<double>(plane.Normal.Z) * sphere.Center.Z + plane.D;
+            if (distance > sphere.Radius)
             {
-            case PlaneIntersectionType::Front:
                 result = ContainmentType::Disjoint;
                 return;
-            case PlaneIntersectionType::Intersecting:
-                intersects = true;
-                break;
-            case PlaneIntersectionType::Back:
-                break;
             }
+            if (distance < -sphere.Radius)
+                ++insidePlanes;
         }
-
-        result = intersects ? ContainmentType::Intersects : ContainmentType::Contains;
+        result = insidePlanes == PlaneCount ? ContainmentType::Contains : ContainmentType::Intersects;
     }
 
     ContainmentType BoundingFrustum::Contains(Vector3 point) const
@@ -139,28 +169,21 @@ namespace Microsoft::Xna::Framework
 
     void BoundingFrustum::Contains(const Vector3& point, ContainmentType& result) const
     {
-        bool intersects = false;
-
-        for (int i = 0; i < PlaneCount; i += 1)
+        // XNA Contains(Vector3) checks all six planes against this tolerance.
+        // An exact plane never terminates the search or changes the result to Intersects.
+        for (const Plane &plane : planes)
         {
-            float classifyPoint = (point.X * planes[i].Normal.X) +
-                (point.Y * planes[i].Normal.Y) +
-                (point.Z * planes[i].Normal.Z) +
-                planes[i].D;
-
-            if (classifyPoint > 0.0f)
+            const float distance =
+                static_cast<float>(static_cast<double>(plane.Normal.X) * point.X +
+                                   static_cast<double>(plane.Normal.Y) * point.Y +
+                                   static_cast<double>(plane.Normal.Z) * point.Z + plane.D);
+            if (distance > 1e-5f)
             {
                 result = ContainmentType::Disjoint;
                 return;
             }
-            if (classifyPoint == 0.0f)
-            {
-                intersects = true;
-                break;
-            }
         }
-
-        result = intersects ? ContainmentType::Intersects : ContainmentType::Contains;
+        result = ContainmentType::Contains;
     }
 
     std::vector<Vector3> BoundingFrustum::GetCorners() const
@@ -183,7 +206,11 @@ namespace Microsoft::Xna::Framework
 
     bool BoundingFrustum::Intersects(const BoundingFrustum& frustum) const
     {
-        return Contains(frustum) != ContainmentType::Disjoint;
+        Vector3 direction = corners[0] - frustum.corners[0];
+        if (Vector3::Dot(direction, direction) < 1e-5f)
+            direction = corners[0] - frustum.corners[1];
+        return ConvexIntersects(corners, direction,
+                                [&frustum](const Vector3 &v) { return Support(frustum.corners, v); });
     }
 
     bool BoundingFrustum::Intersects(BoundingBox box) const
@@ -195,9 +222,13 @@ namespace Microsoft::Xna::Framework
 
     void BoundingFrustum::Intersects(const BoundingBox& box, bool& result) const
     {
-        ContainmentType containment;
-        Contains(box, containment);
-        result = containment != ContainmentType::Disjoint;
+        Vector3 direction = corners[0] - box.Min;
+        if (Vector3::Dot(direction, direction) < 1e-5f)
+            direction = corners[0] - box.Max;
+        result = ConvexIntersects(corners, direction, [&box](const Vector3 &v) {
+            return Vector3(v.X >= 0 ? box.Max.X : box.Min.X, v.Y >= 0 ? box.Max.Y : box.Min.Y,
+                           v.Z >= 0 ? box.Max.Z : box.Min.Z);
+        });
     }
 
     bool BoundingFrustum::Intersects(BoundingSphere sphere) const
@@ -209,9 +240,15 @@ namespace Microsoft::Xna::Framework
 
     void BoundingFrustum::Intersects(const BoundingSphere& sphere, bool& result) const
     {
-        ContainmentType containment;
-        Contains(sphere, containment);
-        result = containment != ContainmentType::Disjoint;
+        Vector3 direction = corners[0] - sphere.Center;
+        if (Vector3::Dot(direction, direction) < 1e-5f)
+            direction = Vector3::UnitX;
+        result = ConvexIntersects(corners, direction, [&sphere](const Vector3 &v) {
+            const float scale = sphere.Radius / v.Length();
+            return Vector3(static_cast<float>(sphere.Center.X + static_cast<double>(v.X) * scale),
+                           static_cast<float>(sphere.Center.Y + static_cast<double>(v.Y) * scale),
+                           static_cast<float>(sphere.Center.Z + static_cast<double>(v.Z) * scale));
+        });
     }
 
     PlaneIntersectionType BoundingFrustum::Intersects(Plane plane) const
