@@ -625,9 +625,52 @@ static int validate_translated_plane_offset(void)
         aliased.normal.x == 0.0F && aliased.normal.y == 1.0F && aliased.normal.z == 0.0F && aliased.d == -7.0F;
 }
 
+static uint32_t plane_float_bits(float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+static int validate_plane_normalization_precision(void)
+{
+    const CNA_Plane near_unit = {{0.8414709568023682F, 0.5403022766113281F, 0.0F}, -2.0F};
+    CNA_Plane result = near_unit;
+    if (cna_plane_normalize(near_unit, &result) != CNA_RESULT_SUCCESS ||
+        result.normal.x != near_unit.normal.x || result.normal.y != near_unit.normal.y ||
+        result.normal.z != 0.0F || result.d != -2.0F ||
+        cna_plane_normalize_in_place(&result) != CNA_RESULT_SUCCESS ||
+        result.normal.x != near_unit.normal.x || result.normal.y != near_unit.normal.y || result.d != -2.0F)
+        return 0;
+    if (cna_plane_normalize((CNA_Plane){{1e20F, 0.0F, 0.0F}, -2.0F}, &result) != CNA_RESULT_SUCCESS ||
+        result.normal.x != 1.0F || plane_float_bits(result.d) != UINT32_C(0x9ebce508) ||
+        cna_plane_normalize((CNA_Plane){{1e-30F, 0.0F, 0.0F}, -2.0F}, &result) != CNA_RESULT_SUCCESS ||
+        result.normal.x != 1.0F || plane_float_bits(result.d) != UINT32_C(0xf1c9f2ca))
+        return 0;
+    return cna_plane_normalize((CNA_Plane){{0.0F, 1.0F, 0.8F}, -2.0F}, &result) == CNA_RESULT_SUCCESS &&
+        plane_float_bits(result.normal.y) == UINT32_C(0x3f47e704) &&
+        plane_float_bits(result.normal.z) == UINT32_C(0x3f1fec04) &&
+        plane_float_bits(result.d) == UINT32_C(0xbfc7e704);
+}
+
+static int validate_normalized_shadow_plane(void)
+{
+    const CNA_Vector3 light = {2.0F, 3.0F, 4.0F};
+    const CNA_Plane near_unit = {{0.8414709568023682F, 0.5403022766113281F, 0.0F}, -2.0F};
+    CNA_Matrix unit = {0}, scaled = {0}, reflection = {0};
+    return cna_matrix_create_shadow(light, (CNA_Plane){{0.0F, 1.0F, 0.0F}, -2.0F}, &unit) == CNA_RESULT_SUCCESS &&
+        cna_matrix_create_shadow(light, (CNA_Plane){{0.0F, 2.0F, 0.0F}, -4.0F}, &scaled) == CNA_RESULT_SUCCESS &&
+        memcmp(&unit, &scaled, sizeof(unit)) == 0 &&
+        cna_matrix_create_reflection(near_unit, &reflection) == CNA_RESULT_SUCCESS &&
+        reflection.m41 == 4.0F * near_unit.normal.x && reflection.m42 == 4.0F * near_unit.normal.y;
+}
+
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_plane()) && CNA_TEST_STAGE(validate_ray()) && CNA_TEST_STAGE(validate_bounding_box()) &&
+    const int original = CNA_TEST_STAGE(validate_plane()) && CNA_TEST_STAGE(validate_ray()) && CNA_TEST_STAGE(validate_bounding_box()) &&
             CNA_TEST_STAGE(validate_bounding_sphere()) && CNA_TEST_STAGE(validate_bounding_frustum()) &&
-            CNA_TEST_STAGE(validate_translated_plane_offset()) ? 0 : 1;
+            CNA_TEST_STAGE(validate_translated_plane_offset());
+    const int normalization = CNA_TEST_STAGE(validate_plane_normalization_precision());
+    const int shadow = CNA_TEST_STAGE(validate_normalized_shadow_plane());
+    return original && normalization && shadow ? 0 : 1;
 }

@@ -71,10 +71,7 @@ namespace Microsoft::Xna::Framework
 
     void Plane::Normalize()
     {
-        float length = Normal.Length();
-        float factor = 1.0f / length;
-        Vector3::Multiply(Normal, factor, Normal);
-        D *= factor;
+        Normalize(*this, *this);
     }
 
     PlaneIntersectionType Plane::Intersects(BoundingBox box) const
@@ -131,10 +128,21 @@ namespace Microsoft::Xna::Framework
 
     void Plane::Normalize(const Plane& value, Plane& result)
     {
-        float length = value.Normal.Length();
-        float factor = 1.0f / length;
-        Vector3::Multiply(value.Normal, factor, result.Normal);
-        result.D = value.D * factor;
+        // XNA keeps these intermediates wide, but explicitly rounds Math.Sqrt
+        // to Single before taking its reciprocal. Preserve its near-unit shortcut.
+        const double x = value.Normal.X;
+        const double y = value.Normal.Y;
+        const double z = value.Normal.Z;
+        const double squared = x*x + y*y + z*z;
+        if (std::abs(squared - 1.0) < 1.1920928955078125e-7)
+        {
+            result = value;
+            return;
+        }
+        const float length = static_cast<float>(std::sqrt(squared));
+        const double factor = 1.0 / static_cast<double>(length);
+        result = Plane(static_cast<float>(x*factor), static_cast<float>(y*factor),
+                       static_cast<float>(z*factor), static_cast<float>(value.D*factor));
     }
 
     Plane Plane::Transform(Plane plane, Matrix matrix)

@@ -98,12 +98,6 @@ namespace Microsoft::Xna::Framework
             return std::fabs(a - b) <= 1.192092896e-07f;
         }
 
-        Plane NormalizePlaneValue(const Plane& value)
-        {
-            const float length = std::sqrt(Dot3(value.Normal, value.Normal));
-            const float factor = 1.0f / length;
-            return Plane(Mul3(value.Normal, factor), value.D * factor);
-        }
     }
 
     Matrix::Matrix()
@@ -836,8 +830,9 @@ namespace Microsoft::Xna::Framework
         return result;
     }
 
-    void Matrix::CreateShadow(const Vector3& lightDirection, const Plane& plane, Matrix& result)
+    void Matrix::CreateShadow(const Vector3& lightDirection, const Plane& value, Matrix& result)
     {
+        const Plane plane = Plane::Normalize(value);
         const float dot = Dot3(plane.Normal, lightDirection);
         const float x = -plane.Normal.X;
         const float y = -plane.Normal.Y;
@@ -910,7 +905,7 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::CreateReflection(const Plane& value, Matrix& result)
     {
-        const Plane plane = NormalizePlaneValue(value);
+        const Plane plane = Plane::Normalize(value);
         const float x = plane.Normal.X;
         const float y = plane.Normal.Y;
         const float z = plane.Normal.Z;
