@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/Color.hpp"
-#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "CNA/Internal/PackedRounding.hpp"
 
 #include <algorithm>
@@ -52,28 +51,6 @@ namespace Microsoft::Xna::Framework
             return static_cast<bytecs>(CNA::Internal::ClampAndRound(
                 value * 255.0f, static_cast<float>(SharpRuntime::BYTE_MIN),
                 static_cast<float>(SharpRuntime::BYTE_MAX)));
-        }
-
-        // Safely narrows a float already destined for the intcs-taking Color constructor (which
-        // clamps again to [0,255] via ToByte() immediately) down to intcs, avoiding the
-        // undefined behavior of casting a non-finite or out-of-intcs-range float directly to a
-        // 32-bit integer. Color::Lerp/Multiply carry the same C++ hazard the conversion above
-        // does -- an interpolation/scale factor that is NaN (e.g. a caller's own 0/0) or
-        // otherwise produces a huge intermediate float reaches a bare static_cast<intcs>(...)
-        // with no guard. They do NOT round: XNA truncates in both (measured color/lerp_half and
-        // color/multiply_half in tests/reference/xna40/framework/framework-packing-oracle.json,
-        // where 127.5 becomes 127), unlike the float constructors, so truncating here is the
-        // faithful behaviour and not an oversight. The exact pre-clamp bound is otherwise
-        // inconsequential -- ToByte()'s own clamp to [0,255] runs right after -- so any range
-        // comfortably inside intcs's representable span is safe to pick.
-        [[nodiscard]] intcs SafeFloatToIntcs(float value)
-        {
-            if (!std::isfinite(value))
-            {
-                return intcs{0};
-            }
-            constexpr float SafeBound = 1'000'000.0f;
-            return static_cast<intcs>(std::clamp(value, -SafeBound, SafeBound));
         }
 
         [[nodiscard]] int ToInt(bytecs value)
@@ -420,20 +397,19 @@ namespace Microsoft::Xna::Framework
 
     Color Color::Lerp(const Color& value1, const Color& value2, float amount)
     {
-        amount = MathHelper::Clamp(amount, 0.0f, 1.0f);
-        return Color(
-            SafeFloatToIntcs(MathHelper::Lerp(
-                static_cast<float>(ToInt(value1.getRProperty())),
-                static_cast<float>(ToInt(value2.getRProperty())), amount)),
-            SafeFloatToIntcs(MathHelper::Lerp(
-                static_cast<float>(ToInt(value1.getGProperty())),
-                static_cast<float>(ToInt(value2.getGProperty())), amount)),
-            SafeFloatToIntcs(MathHelper::Lerp(
-                static_cast<float>(ToInt(value1.getBProperty())),
-                static_cast<float>(ToInt(value2.getBProperty())), amount)),
-            SafeFloatToIntcs(MathHelper::Lerp(
-                static_cast<float>(ToInt(value1.getAProperty())),
-                static_cast<float>(ToInt(value2.getAProperty())), amount)));
+        // XNA packs the factor first (ties to even, NaN -> zero), then uses signed
+        // fixed-point channel deltas. In C++23 the right shift rounds down, including
+        // negative deltas; truncating a floating-point interpolation is not equivalent.
+        const intcs factor = static_cast<intcs>(CNA::Internal::ClampAndRound(amount * 65536.0f, 0.0f, 65536.0f));
+        const auto interpolate = [factor](bytecs first, bytecs second) -> intcs
+        {
+            const intcs start = ToInt(first);
+            return start + (((ToInt(second) - start) * factor) >> 16);
+        };
+        return Color(interpolate(value1.getRProperty(), value2.getRProperty()),
+                     interpolate(value1.getGProperty(), value2.getGProperty()),
+                     interpolate(value1.getBProperty(), value2.getBProperty()),
+                     interpolate(value1.getAProperty(), value2.getAProperty()));
     }
 
     Color Color::FromNonPremultiplied(const Vector4& vector)
@@ -456,11 +432,18 @@ namespace Microsoft::Xna::Framework
 
     Color Color::Multiply(const Color& value, float scale)
     {
-        return Color(
-            SafeFloatToIntcs(static_cast<float>(ToInt(value.getRProperty())) * scale),
-            SafeFloatToIntcs(static_cast<float>(ToInt(value.getGProperty())) * scale),
-            SafeFloatToIntcs(static_cast<float>(ToInt(value.getBProperty())) * scale),
-            SafeFloatToIntcs(static_cast<float>(ToInt(value.getAProperty())) * scale));
+        const float scaled = scale * 65536.0f;
+        // Preserve XNA's 24-bit factor cap, with a defined NaN conversion. The largest
+        // product is 255 * 16777215, which fits uintcs; even infinite scale keeps zero zero.
+        const uintcs factor = !(scaled > 0.0f) ? 0U
+                            : scaled >= 16777215.0f ? 16777215U
+                            : static_cast<uintcs>(scaled);
+        const auto multiply = [factor](bytecs channel) -> intcs
+        {
+            return static_cast<intcs>(std::min(uintcs{255}, (static_cast<uintcs>(channel) * factor) >> 16));
+        };
+        return Color(multiply(value.getRProperty()), multiply(value.getGProperty()),
+                     multiply(value.getBProperty()), multiply(value.getAProperty()));
     }
 
     // ------------------------------------------------------------------

@@ -193,7 +193,22 @@ The rule XNA follows, everywhere a float channel becomes an integer one:
 | and for the colour layouts, which CNA rounded with `+ 0.5f` then truncated | `packed/Alpha8/ties`, `packed/Bgr565/ties`, `packed/Rg32/ties`, `packed/Rgba1010102/ties` | `new Alpha8(0.5f/255)` is `0x00`, not `0x01` |
 | `Color.PackFromVector4` saturates and rounds exactly like the constructor | `color/packfromvector4_out_of_range` | `(2, -1, 0.5, 1)` packs as `{255, 0, 128, 255}`; CNA wrapped to `{254, 1, 127, 255}` |
 | a NaN channel packs as 0, and the infinities saturate | `color/vector4_nan`, `packed/Byte4/nan_and_infinities` | `new Byte4(NaN, +inf, -inf, 1e30f)` is `0xFF00FF00` |
-| `Color.Lerp` and `Color.Multiply` are the exception: they truncate, and `Lerp` clamps its amount | `color/lerp_half`, `color/multiply_odd_ties`, `color/lerp_amount_above_one` | `Lerp(black, white, 0.5f)` is `127`, not `128` |
+| `Color.Lerp` and `Color.Multiply` use fixed-point factors and shifted channel products, not rounded output channels | `color/lerp_half`, `color/multiply_odd_ties`, `color/lerp_amount_above_one`; expanded ISSUE-132 oracle below | `Lerp(black, white, 0.5f)` is `127`, not `128` |
+
+**ISSUE-132 refinement (2026-10-20):** the original half-factor measurements did
+not distinguish float truncation from XNA's actual fixed-point algorithm.
+`../cna-demos/docs/repair-evidence/issue-132/ColorFixedPointOracle.cs` now passes
+1,782 genuine XNA checks over nine colors and eighteen factors; unchanged CNA
+fails162 of the matching native checks. Lerp first packs amount*65536 with
+ties-to-even saturation (NaN ->0), then shifts signed channel deltas by16.
+Multiply truncates the scaled factor after clamping to[0,16777215], multiplies
+unsigned channels, shifts16 and saturates at255. This changes finite factors too,
+for example(10,20,30,40)*1.1 ->(10,21,32,43), and preserves zero channels at+Inf.
+NaN Lerp preserves the first color including its alpha. The original FNA-style
+float implementation and the former all-zero NaN Lerp expectation are not the
+XNA contract. Existing constructor/packing rules and API surface stay unchanged.
+Native regression and strict C smoke retain the prior failure witnesses; the
+shared packing helper handles Lerp rounding without nonfinite integer casts.
 
 FNA truncates in the constructors (`R = (byte) MathHelper.Clamp(color.X * 255, Byte.MinValue,
 Byte.MaxValue);`, `Color.cs`) and neither clamps nor rounds in `PackFromVector4`, which is what

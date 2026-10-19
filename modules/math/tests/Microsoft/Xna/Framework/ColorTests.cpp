@@ -192,17 +192,15 @@ TEST(ColorTest, LerpClampsAboveOne)
     EXPECT_EQ(result.getRProperty(), 255);
 }
 
-// MathHelper::Clamp(NaN, 0, 1) faithfully reproduces FNA's own
-// comparison-based clamp, under which NaN passes through unclamped (matches
-// MathHelper.Clamp's real C# implementation). A NaN `amount` previously reached a bare
-// static_cast<intcs>(NaN) with no guard -- undefined behavior, reachable via this public API.
+// Genuine XNA packs a NaN factor as zero, preserving the entire first color.
+// The earlier all-zero expectation prevented UB but incorrectly erased alpha.
 TEST(ColorTest, LerpWithNaNAmountIsDefinedNotUndefinedBehavior)
 {
     Color result = Color::Lerp(Color::Black, Color::White, std::numeric_limits<float>::quiet_NaN());
     EXPECT_EQ(result.getRProperty(), 0);
     EXPECT_EQ(result.getGProperty(), 0);
     EXPECT_EQ(result.getBProperty(), 0);
-    EXPECT_EQ(result.getAProperty(), 0);
+    EXPECT_EQ(result.getAProperty(), 255);
 }
 
 TEST(ColorTest, LerpWithInfiniteAmountIsDefinedNotUndefinedBehavior)

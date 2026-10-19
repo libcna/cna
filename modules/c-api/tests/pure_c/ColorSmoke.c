@@ -342,8 +342,32 @@ static int validate_named_colors(void)
     return 1;
 }
 
+static int validate_fixed_point_interpolation(void)
+{
+    CNA_Color result;
+    const CNA_Color first = {10, 20, 30, 40}, second = {110, 220, 130, 240};
+    return cna_color_lerp(first, second, NAN, &result) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(result, 10, 20, 30, 40) &&
+        cna_color_lerp(CNA_COLOR_WHITE, CNA_COLOR_TRANSPARENT, 1.0F / 131072.0F, &result) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(result, 255, 255, 255, 255);
+}
+
+static int validate_fixed_point_scaling(void)
+{
+    CNA_Color result;
+    return cna_color_multiply((CNA_Color){0, 1, 254, 255}, INFINITY, &result) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(result, 0, 255, 255, 255) &&
+        cna_color_multiply((CNA_Color){10, 20, 30, 40}, 1.1F, &result) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(result, 10, 21, 32, 43) &&
+        cna_color_multiply(CNA_COLOR_WHITE, NAN, &result) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(result, 0, 0, 0, 0);
+}
+
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_construction()) && CNA_TEST_STAGE(validate_properties_and_strings()) &&
-            CNA_TEST_STAGE(validate_value_operations()) && CNA_TEST_STAGE(validate_named_colors()) ? 0 : 1;
+    const int original = CNA_TEST_STAGE(validate_construction()) && CNA_TEST_STAGE(validate_properties_and_strings()) &&
+        CNA_TEST_STAGE(validate_value_operations()) && CNA_TEST_STAGE(validate_named_colors());
+    const int interpolation = CNA_TEST_STAGE(validate_fixed_point_interpolation());
+    const int scaling = CNA_TEST_STAGE(validate_fixed_point_scaling());
+    return original && interpolation && scaling ? 0 : 1;
 }
