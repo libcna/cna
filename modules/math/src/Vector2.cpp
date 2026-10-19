@@ -120,14 +120,19 @@ namespace Microsoft::Xna::Framework
         // Unsigned wraparound avoids signed-overflow UB (UBSan, INPUT-BUILD-006); result unchanged.
         return static_cast<int>(static_cast<unsigned>(FloatHash(X)) + static_cast<unsigned>(FloatHash(Y)));
     }
-    float Vector2::Length() const { return std::sqrt((X * X) + (Y * Y)); }
+    float Vector2::Length() const
+    {
+        // Preserve XNA's wide intermediate range until the returned Single.
+        return static_cast<float>(std::sqrt((static_cast<double>(X) * X) + (static_cast<double>(Y) * Y)));
+    }
     float Vector2::LengthSquared() const { return (X * X) + (Y * Y); }
 
     void Vector2::Normalize()
     {
-        const float val = 1.0f / std::sqrt((X * X) + (Y * Y));
-        X *= val;
-        Y *= val;
+        // XNA rounds the square root to Single, but not its reciprocal.
+        const double inverse = 1.0 / static_cast<double>(Length());
+        X = static_cast<float>(static_cast<double>(X) * inverse);
+        Y = static_cast<float>(static_cast<double>(Y) * inverse);
     }
 
     std::string Vector2::ToString() const
@@ -198,9 +203,9 @@ namespace Microsoft::Xna::Framework
 
     float Vector2::Distance(Vector2 value1, Vector2 value2)
     {
-        const float x = value1.X - value2.X;
-        const float y = value1.Y - value2.Y;
-        return std::sqrt((x * x) + (y * y));
+        const double x = static_cast<double>(value1.X) - value2.X;
+        const double y = static_cast<double>(value1.Y) - value2.Y;
+        return static_cast<float>(std::sqrt((x * x) + (y * y)));
     }
 
     void Vector2::Distance(const Vector2& value1, const Vector2& value2, float& result)

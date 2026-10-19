@@ -126,15 +126,20 @@ namespace Microsoft::Xna::Framework
         return static_cast<int>(static_cast<unsigned>(FloatHash(X)) + static_cast<unsigned>(FloatHash(Y))
                                 + static_cast<unsigned>(FloatHash(Z)));
     }
-    float Vector3::Length() const { return std::sqrt((X * X) + (Y * Y) + (Z * Z)); }
+    float Vector3::Length() const
+    {
+        // Preserve XNA's wide intermediate range until the returned Single.
+        return static_cast<float>(std::sqrt((static_cast<double>(X) * X) + (static_cast<double>(Y) * Y) + (static_cast<double>(Z) * Z)));
+    }
     float Vector3::LengthSquared() const { return (X * X) + (Y * Y) + (Z * Z); }
 
     void Vector3::Normalize()
     {
-        const float factor = 1.0f / std::sqrt((X * X) + (Y * Y) + (Z * Z));
-        X *= factor;
-        Y *= factor;
-        Z *= factor;
+        // XNA rounds the square root to Single, but not its reciprocal.
+        const double inverse = 1.0 / static_cast<double>(Length());
+        X = static_cast<float>(static_cast<double>(X) * inverse);
+        Y = static_cast<float>(static_cast<double>(Y) * inverse);
+        Z = static_cast<float>(static_cast<double>(Z) * inverse);
     }
 
     std::string Vector3::ToString() const
@@ -281,7 +286,13 @@ namespace Microsoft::Xna::Framework
         result.Z = z;
     }
 
-    float Vector3::Distance(Vector3 value1, Vector3 value2) { return std::sqrt(DistanceSquared(value1, value2)); }
+    float Vector3::Distance(Vector3 value1, Vector3 value2)
+    {
+        const double x = static_cast<double>(value1.X) - value2.X;
+        const double y = static_cast<double>(value1.Y) - value2.Y;
+        const double z = static_cast<double>(value1.Z) - value2.Z;
+        return static_cast<float>(std::sqrt((x * x) + (y * y) + (z * z)));
+    }
 
     void Vector3::Distance(const Vector3& value1, const Vector3& value2, float& result)
     {

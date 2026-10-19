@@ -204,9 +204,33 @@ static int validate_extreme_inverse_and_division(void)
         isfinite(result.w);
 }
 
+static int validate_magnitude_range(void)
+{
+    const float magnitudes[] = {1e20F, -1e20F, 1e-30F, -1e-30F};
+    for (unsigned i = 0; i < sizeof(magnitudes) / sizeof(magnitudes[0]); ++i) {
+        const float magnitude = magnitudes[i], expected = copysignf(1.0F, magnitude);
+        float scalar;
+        CNA_Quaternion quaternion = {magnitude, 0, 0, 0};
+        if (cna_quaternion_length(quaternion, &scalar) != CNA_RESULT_SUCCESS || scalar != fabsf(magnitude) ||
+            cna_quaternion_length_squared(quaternion, &scalar) != CNA_RESULT_SUCCESS ||
+            (i < 2 ? !isinf(scalar) : scalar != 0.0F) ||
+            cna_quaternion_normalize(quaternion, &quaternion) != CNA_RESULT_SUCCESS ||
+            quaternion.x != expected || quaternion.y != 0.0F || quaternion.z != 0.0F || quaternion.w != 0.0F) return 0;
+    }
+    /* Measured XNA rounding: float sqrt, double reciprocal, final float components. */
+    const float length = (float)sqrt(1.0 + (double)0.8F * 0.8F);
+    const double inverse = 1.0 / length;
+    CNA_Quaternion mixed_quaternion = {1.0F, 0.8F, 0, 0};
+    if (cna_quaternion_normalize(mixed_quaternion, &mixed_quaternion) != CNA_RESULT_SUCCESS ||
+        mixed_quaternion.x != (float)inverse || mixed_quaternion.y != (float)(0.8F * inverse)) return 0;
+    return 1;
+}
+
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_construction_and_members()) && CNA_TEST_STAGE(validate_operations()) &&
+    const int magnitude_ok = CNA_TEST_STAGE(validate_magnitude_range());
+    const int prior_ok = CNA_TEST_STAGE(validate_construction_and_members()) && CNA_TEST_STAGE(validate_operations()) &&
         CNA_TEST_STAGE(validate_default_value()) &&
-        CNA_TEST_STAGE(validate_extreme_inverse_and_division()) ? 0 : 1;
+        CNA_TEST_STAGE(validate_extreme_inverse_and_division());
+    return magnitude_ok && prior_ok ? 0 : 1;
 }

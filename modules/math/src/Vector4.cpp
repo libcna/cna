@@ -140,16 +140,21 @@ namespace Microsoft::Xna::Framework
         return static_cast<int>(static_cast<unsigned>(FloatHash(W)) + static_cast<unsigned>(FloatHash(X))
                                 + static_cast<unsigned>(FloatHash(Y)) + static_cast<unsigned>(FloatHash(Z)));
     }
-    float Vector4::Length() const { return std::sqrt((X * X) + (Y * Y) + (Z * Z) + (W * W)); }
+    float Vector4::Length() const
+    {
+        // Preserve XNA's wide intermediate range until the returned Single.
+        return static_cast<float>(std::sqrt((static_cast<double>(X) * X) + (static_cast<double>(Y) * Y) + (static_cast<double>(Z) * Z) + (static_cast<double>(W) * W)));
+    }
     float Vector4::LengthSquared() const { return (X * X) + (Y * Y) + (Z * Z) + (W * W); }
 
     void Vector4::Normalize()
     {
-        const float factor = 1.0f / std::sqrt((X * X) + (Y * Y) + (Z * Z) + (W * W));
-        X *= factor;
-        Y *= factor;
-        Z *= factor;
-        W *= factor;
+        // XNA rounds the square root to Single, but not its reciprocal.
+        const double inverse = 1.0 / static_cast<double>(Length());
+        X = static_cast<float>(static_cast<double>(X) * inverse);
+        Y = static_cast<float>(static_cast<double>(Y) * inverse);
+        Z = static_cast<float>(static_cast<double>(Z) * inverse);
+        W = static_cast<float>(static_cast<double>(W) * inverse);
     }
 
     std::string Vector4::ToString() const
@@ -228,7 +233,14 @@ namespace Microsoft::Xna::Framework
         result = Clamp(value1, min, max);
     }
 
-    float Vector4::Distance(Vector4 value1, Vector4 value2) { return std::sqrt(DistanceSquared(value1, value2)); }
+    float Vector4::Distance(Vector4 value1, Vector4 value2)
+    {
+        const double x = static_cast<double>(value1.X) - value2.X;
+        const double y = static_cast<double>(value1.Y) - value2.Y;
+        const double z = static_cast<double>(value1.Z) - value2.Z;
+        const double w = static_cast<double>(value1.W) - value2.W;
+        return static_cast<float>(std::sqrt((x * x) + (y * y) + (z * z) + (w * w)));
+    }
 
     void Vector4::Distance(const Vector4& value1, const Vector4& value2, float& result)
     {

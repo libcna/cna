@@ -793,14 +793,62 @@ static int validate_wide_products(void)
         cross.x == 1e20F && cross.y == -1e20F && cross.z == 0.0F && !signbit(cross.z);
 }
 
+static int validate_magnitude_range(void)
+{
+    const float magnitudes[] = {1e20F, -1e20F, 1e-30F, -1e-30F};
+    for (unsigned i = 0; i < sizeof(magnitudes) / sizeof(magnitudes[0]); ++i) {
+        const float magnitude = magnitudes[i], expected = copysignf(1.0F, magnitude);
+        float scalar;
+        CNA_Vector2 vector2 = {magnitude, 0};
+        if (cna_vector2_length(vector2, &scalar) != CNA_RESULT_SUCCESS || scalar != fabsf(magnitude) ||
+            cna_vector2_length_squared(vector2, &scalar) != CNA_RESULT_SUCCESS ||
+            (i < 2 ? !isinf(scalar) : scalar != 0.0F) ||
+            cna_vector2_distance(vector2, (CNA_Vector2){0}, &scalar) != CNA_RESULT_SUCCESS ||
+            scalar != fabsf(magnitude) ||
+            cna_vector2_normalize(vector2, &vector2) != CNA_RESULT_SUCCESS ||
+            vector2.x != expected || vector2.y != 0.0F) return 0;
+        CNA_Vector3 vector3 = {magnitude, 0, 0};
+        if (cna_vector3_length(vector3, &scalar) != CNA_RESULT_SUCCESS || scalar != fabsf(magnitude) ||
+            cna_vector3_length_squared(vector3, &scalar) != CNA_RESULT_SUCCESS ||
+            (i < 2 ? !isinf(scalar) : scalar != 0.0F) ||
+            cna_vector3_distance(vector3, (CNA_Vector3){0}, &scalar) != CNA_RESULT_SUCCESS ||
+            scalar != fabsf(magnitude) ||
+            cna_vector3_normalize(vector3, &vector3) != CNA_RESULT_SUCCESS ||
+            vector3.x != expected || vector3.y != 0.0F || vector3.z != 0.0F) return 0;
+        CNA_Vector4 vector4 = {magnitude, 0, 0, 0};
+        if (cna_vector4_length(vector4, &scalar) != CNA_RESULT_SUCCESS || scalar != fabsf(magnitude) ||
+            cna_vector4_length_squared(vector4, &scalar) != CNA_RESULT_SUCCESS ||
+            (i < 2 ? !isinf(scalar) : scalar != 0.0F) ||
+            cna_vector4_distance(vector4, (CNA_Vector4){0}, &scalar) != CNA_RESULT_SUCCESS ||
+            scalar != fabsf(magnitude) ||
+            cna_vector4_normalize(vector4, &vector4) != CNA_RESULT_SUCCESS ||
+            vector4.x != expected || vector4.y != 0.0F || vector4.z != 0.0F || vector4.w != 0.0F) return 0;
+    }
+    /* Measured XNA rounding: float sqrt, double reciprocal, final float components. */
+    const float length = (float)sqrt(1.0 + (double)0.8F * 0.8F);
+    const double inverse = 1.0 / length;
+    CNA_Vector2 mixed_vector2 = {1.0F, 0.8F};
+    if (cna_vector2_normalize(mixed_vector2, &mixed_vector2) != CNA_RESULT_SUCCESS ||
+        mixed_vector2.x != (float)inverse || mixed_vector2.y != (float)(0.8F * inverse)) return 0;
+    CNA_Vector3 mixed_vector3 = {1.0F, 0.8F, 0};
+    if (cna_vector3_normalize(mixed_vector3, &mixed_vector3) != CNA_RESULT_SUCCESS ||
+        mixed_vector3.x != (float)inverse || mixed_vector3.y != (float)(0.8F * inverse)) return 0;
+    CNA_Vector4 mixed_vector4 = {1.0F, 0.8F, 0, 0};
+    if (cna_vector4_normalize(mixed_vector4, &mixed_vector4) != CNA_RESULT_SUCCESS ||
+        mixed_vector4.x != (float)inverse || mixed_vector4.y != (float)(0.8F * inverse)) return 0;
+    return 1;
+}
+
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_construction_and_members()) &&
+    const int magnitude_ok = CNA_TEST_STAGE(validate_magnitude_range());
+    const int prior_ok = CNA_TEST_STAGE(validate_construction_and_members()) &&
         CNA_TEST_STAGE(validate_arithmetic()) && CNA_TEST_STAGE(validate_transforms()) &&
         CNA_TEST_STAGE(validate_vector3_construction_and_members()) &&
         CNA_TEST_STAGE(validate_vector3_arithmetic()) && CNA_TEST_STAGE(validate_vector3_transforms()) &&
         CNA_TEST_STAGE(validate_vector3_compound_assignment()) &&
         CNA_TEST_STAGE(validate_vector4_construction_and_members()) &&
         CNA_TEST_STAGE(validate_vector4_arithmetic()) && CNA_TEST_STAGE(validate_vector4_transforms()) &&
-        CNA_TEST_STAGE(validate_component_bounds()) && CNA_TEST_STAGE(validate_wide_products()) ? 0 : 1;
+        CNA_TEST_STAGE(validate_component_bounds()) && CNA_TEST_STAGE(validate_wide_products());
+    return magnitude_ok && prior_ok ? 0 : 1;
 }

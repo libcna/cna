@@ -70,8 +70,8 @@ namespace Microsoft::Xna::Framework
 
     float Quaternion::Length() const
     {
-        const float num = (X * X) + (Y * Y) + (Z * Z) + (W * W);
-        return std::sqrt(num);
+        // Preserve XNA's wide intermediate range until the returned Single.
+        return static_cast<float>(std::sqrt((static_cast<double>(X) * X) + (static_cast<double>(Y) * Y) + (static_cast<double>(Z) * Z) + (static_cast<double>(W) * W)));
     }
 
     float Quaternion::LengthSquared() const
@@ -81,11 +81,12 @@ namespace Microsoft::Xna::Framework
 
     void Quaternion::Normalize()
     {
-        const float num = 1.0f / std::sqrt((X * X) + (Y * Y) + (Z * Z) + (W * W));
-        X *= num;
-        Y *= num;
-        Z *= num;
-        W *= num;
+        // XNA rounds the square root to Single, but not its reciprocal.
+        const double inverse = 1.0 / static_cast<double>(Length());
+        X = static_cast<float>(static_cast<double>(X) * inverse);
+        Y = static_cast<float>(static_cast<double>(Y) * inverse);
+        Z = static_cast<float>(static_cast<double>(Z) * inverse);
+        W = static_cast<float>(static_cast<double>(W) * inverse);
     }
 
     std::string Quaternion::ToString() const
@@ -507,17 +508,8 @@ namespace Microsoft::Xna::Framework
 
     void Quaternion::Normalize(const Quaternion& quaternion, Quaternion& result)
     {
-        const float num = 1.0f / std::sqrt(
-            (quaternion.X * quaternion.X) +
-            (quaternion.Y * quaternion.Y) +
-            (quaternion.Z * quaternion.Z) +
-            (quaternion.W * quaternion.W)
-        );
-
-        result.X = quaternion.X * num;
-        result.Y = quaternion.Y * num;
-        result.Z = quaternion.Z * num;
-        result.W = quaternion.W * num;
+        result = quaternion;
+        result.Normalize();
     }
 
     Quaternion operator+(Quaternion quaternion1, Quaternion quaternion2)
