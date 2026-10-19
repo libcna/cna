@@ -2087,13 +2087,16 @@
         "math.matrix.perspective"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "RESOLVED",
+      "root_cause": "FOV upper guard uses a float above public Pi; all three perspective factories also throw the wrong general ArgumentException without XNA ParamName. The stale demo std catch aborted its remaining controls.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "2a245b91f",
+      "validation": [
+        "Fresh genuine XNA probe passes 96 checks. Before repair all three new native compatibility tests fail; full math: 886 pass/two unchanged skips/three failures. Native C17 MatrixSmoke fails the Pi control. Updated exact System exception demo executes all 12 controls and exposes four failures under both labels. Local runtime patch now passes 889 native math tests/two unchanged skips; remaining demo/C API validation pending. Evidence repair-117-*. Permanent probe docs/repair-evidence/issue-117/.",
+        "Final checkpoint: native math 889 passed/two unchanged fixture skips; Matrix CTests 98/98; genuine XNA 96/96. Both renderer-label focused demos 12/12, native C17/Werror MatrixSmoke passes, external C factory demo 14 checks passes. Both 95-demo math sweeps have exactly seven cumulative expected changes and zero unexplained deltas. All 732 enabled demo CTests pass (557.06s; 48 skipped/three disabled unchanged); all six exact visual references pass with zero pixel/channel differences. Evidence: ../cna-demos/docs/repair-evidence/issue-117/ and build/linux-full/reports/repair-117-*."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-118",

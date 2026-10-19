@@ -9,30 +9,59 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
-**Latest validated batch:** Curve 002/036/097/137/138 is closed FIXED_VALIDATED by
-CNA `d753d0997`. All 155 historical IDs are retained: five fixed runtime findings,
-23 documentation corrections, seven already-fixed findings, one demonstrated demo
-expectation error, 119 pending final disposition. Demo closure is about to be committed
-after demo HEAD `81bc0e2`; this status supersedes all earlier pending-Curve notes below.
-All 732 enabled demo CTests pass (412.58s, 48 skipped/three disabled unchanged).
-SOFTWARE and private-display OPENGLES3 math sweeps each have 95 demos, 51 passes and
-44 unrelated expected failures. Exact comparisons show only five Curve repairs plus
-earlier 116 oracle correction; every unrelated failed assertion/check count is unchanged.
-Native math 886 passed/two existing fixture skips; aggregate Curve/readers 92/92,
-registered Curve CTests 74/74; native C17/Werror ABI smoke and extended 17-check C demo
-pass. Targeted collection production-TU ASan/UBSan alias probe passes with leak checking.
-Five knownIssue markers removed only after actual passes; all assertions preserved.
+Phase C. CNA runtime HEAD is `2a245b91f`; demo closure HEAD is `dac8228`.
+All 155 IDs remain inventoried: 37 final dispositions, comprising
+six runtime findings, 23 documentation corrections, seven already fixed, and one
+proven demo expectation error; 118 remain pending. No push or merge.
 
-Phase C next batch: ISSUE-117 perspective. Matrix production is still unchanged.
-Three new native MatrixPerspectiveCompatibilityTests and the native C API MatrixSmoke
-Pi boundary regression are uncommitted. Their two-job native rebuild is running in
-`repair-117-native-before-build.log`; capture expected pre-fix failures next. Genuine
-XNA PerspectiveOracle is running (`repair-117-xna{,-build,.stderr}.log`) using the
-existing private Wine environment. Do not confuse these new tests with the completed
-Curve checkpoint. No other production change, no push/merge. Current dirty work is
-these next-batch tests/probe plus closure evidence/status pending their coherent commits.
-Last complete renderer smoke and six exact visuals remain the original baseline;
-this math batch adds both full math sweeps and the full SOFTWARE CTest checkpoint.
+Latest completed repair: perspective 117 (`2a245b91f`) uses public Pi and exact
+ArgumentOutOfRangeException/ParamName for all three factories, preserving output
+atomicity, validation order and IEEE controls. Genuine XNA 96/96; native math 889
+passes/two unchanged missing ShipGame XML fixture skips; Matrix CTests 98/98 (21.43s).
+Native C17/Werror MatrixSmoke passes; both focused labels pass 12 original controls;
+external C factory demo passes 14 checks. Both full 95-demo math sweeps have 52 passes
+and 43 unrelated expected failures: seven cumulative expected status changes only
+(five Curve fixes, oracle 116, perspective 117), no unrelated failed assertion/check
+count changes. Full demo CTest: all 732 enabled pass in 557.06s, 48 skips and three
+disabled unchanged. Six visual references are exact (zero differing pixels/channels);
+representative GLES texture and SOFTWARE font captures were inspected. Logs:
+`../cna-demos/build/linux-full/reports/repair-117-*`. Permanent genuine oracle:
+`../cna-demos/docs/repair-evidence/issue-117/`. Marker removed only after passes;
+original assertions preserved. No pending test processes from this batch.
+
+Previous completed Curve repair `d753d0997`, demo closure `c6f839b`: IDs
+002/036/097/137/138 fixed. Native math 886 passes/two skips; aggregate Curve/readers
+92/92; registered Curve CTests 74/74; genuine XNA 28/28; C17/Werror smoke and 17-check
+C demo pass. Targeted production collection-TU ASan/UBSan alias probe passes with
+leak detection, replacing a proven invalid-vptr failure. Full CTest 732 passes;
+both math sweeps 51 passes/44 expected failures. Earlier notes below are historical.
+Last complete 719-demo SOFTWARE/GLES smoke remains the original baseline; the latest
+batch adds complete math sweeps, complete enabled SOFTWARE CTest and six exact visuals.
+Only SOFTWARE/OPENGLES3 have this batch's runtime labels; no all-platform claim.
+
+Exact next task: add pre-fix native/C ABI regressions for Quaternion 119, then repair
+Inverse/Divide wide intermediates through the final component cast. Genuine dedicated
+XNA oracle `build-probe/repair-119-oracle.cs` passes 41/41, including value/out/input
+aliases, five extreme magnitudes, self division and a mixed numerator/divisor where
+prematurely rounding an inverse component loses a finite final contribution. Logs
+`repair-119-xna{,-build,.stderr}.log`. No 119 production change yet. Preserve zero,
+NaN, infinity, signed-zero and ordinary Hamilton-order controls; do not change
+LengthSquared or conflate 118. Build at most three campaign jobs, private displays only.
+
+118 oracle audit: `repair-range-xna.log` has 12 checks/two failed universal finite
+Distance assertions. All Length/Normalize/Quaternion Inverse/Divide extreme outputs
+remain as expected, but some grouped Distance calls overflow/underflow. The controlled
+`repair-distance-oracle.cs` (NoInlining wrappers plus grouped calls in a smaller
+caller) produces finite results for all six Distance forms. Same genuine XNA assembly
+and inputs, different caller context. Likely x87 JIT spill/inlining effects are not yet
+proven by disassembly. Both sources and bit outputs in ignored demo build-probe/reports
+must be retained; do NOT blindly widen Distance or weaken its oracle. C# specification
+8.3.7 permits wider intermediates; source float locals alone do not settle runtime
+behavior. No 118 production change or final disposition; this does not block 119.
+
+Demo closure is committed as `dac8228`; its worktree is clean. Only this CNA handoff
+and the issue matrix await the matching status commit, after which no uncommitted
+work remains. Runtime/native regressions are already committed as `2a245b91f`.
 
 ## Earlier Phase C progress (superseded by the checkpoint above)
 
