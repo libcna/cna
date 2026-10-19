@@ -12,7 +12,7 @@
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "System/ArgumentException.hpp"
-#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 #include "System/NotFiniteNumberException.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -65,17 +65,21 @@ namespace Microsoft::Xna::Framework
         void CheckArrayRange(std::size_t sourceSize, int sourceIndex, std::size_t destinationSize, int destinationIndex,
                              int length)
         {
-            if (sourceIndex < 0 || destinationIndex < 0 || length < 0)
-            {
-                throw System::ArgumentOutOfRangeException("sourceIndex", "array index and length values must be non-negative");
-            }
-            if (static_cast<std::size_t>(sourceIndex + length) > sourceSize)
+            // XNA validates wide endpoints even for empty/negative-length ranges.
+            const auto sourceEnd = static_cast<std::int64_t>(sourceIndex) + length;
+            const auto destinationEnd = static_cast<std::int64_t>(destinationIndex) + length;
+            if (sourceEnd > 0 && static_cast<std::uint64_t>(sourceEnd) > sourceSize)
             {
                 throw System::ArgumentException("source range exceeds source array size");
             }
-            if (static_cast<std::size_t>(destinationIndex + length) > destinationSize)
+            if (destinationEnd > 0 && static_cast<std::uint64_t>(destinationEnd) > destinationSize)
             {
                 throw System::ArgumentException("destination range exceeds destination array size");
+            }
+            // A nonpositive length performs no access, even with negative indices.
+            if (length > 0 && (sourceIndex < 0 || destinationIndex < 0))
+            {
+                throw System::IndexOutOfRangeException();
             }
         }
     }
