@@ -286,6 +286,9 @@ std::string ModelDigest(const Avatars::AvatarModel& model) {
 TEST(AvatarCatalogTest, V3DescriptionsAssembleExactlyAsRevised) {
     // A v3 description, format 1 or format 2, draws the same model on every machine: these digests
     // pin catalog v3 revision 4 (a later revision changes them on purpose).
+    // The 1950-mm body includes build-projection vertices at a digest rounding boundary.
+    // Keep the catalog recipe's rounding stable when public XNA vector precision changes;
+    // do not regenerate these fingerprints merely to accommodate that numerical change.
     struct Case {
         std::uint8_t body;
         std::uint16_t height;

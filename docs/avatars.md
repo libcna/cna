@@ -291,6 +291,11 @@ URIs, other rigs, non-identity bind rotations, out-of-range indices or weights, 
 Revision 2 needs contract level 2 (`CatalogReaderLevel`): the kinds, styles, rules and material
 extras above. Every renderer draws it with the same two paths it already had (opaque parts, then
 translucent decals); nothing in the catalog is renderer-specific.
+The deformation recipe's dot products retain binary32 rounding at each product
+and addition. This is catalog arithmetic, independent of the wider intermediates
+used by the public XNA vector operations: changing those operations must not move
+unchanged catalog vertices across the model digest's quantization boundaries.
+
 `GamerServices_AvatarCatalogUpToDate` regenerates catalog v3 and compares it byte for byte (on a C library other than glibc, every
 byte except catalog v3's six `FemaleShocked` arm rotations, which a non-convergent head solve froze
 from glibc's libm until revision 4 and are still checked only structurally there; plans/plan_apple_m4.md AM4-166).

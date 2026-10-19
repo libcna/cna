@@ -32,6 +32,19 @@ AvatarImage decodeAvatarImage(std::span<const std::uint8_t> png)
 namespace {
 using Microsoft::Xna::Framework::Vector3;
 
+// Catalog deformation is part of the versioned asset recipe, not an XNA vector
+// operation. Preserve its authored binary32 rounding independently of public Dot's
+// wider intermediates. Otherwise unchanged descriptions can cross a vertex-quantization
+// boundary and change the catalog's model digest. Volatile stores make each rounding
+// boundary explicit, including on targets that retain wider register intermediates.
+float catalogDot(const Vector3& a,const Vector3& b)
+{
+    const volatile float x=a.X*b.X,y=a.Y*b.Y,z=a.Z*b.Z;
+    const volatile float xy=x+y;
+    const volatile float result=xy+z;
+    return result;
+}
+
 // Namespace scope (not function statics): they must outlive the loader thread at exit.
 std::mutex faceLock;
 std::map<std::string,std::shared_ptr<const std::vector<AvatarImage>>,std::less<>> cachedTiles;
@@ -213,7 +226,7 @@ Vector3 faceDisplacement(const Vector3& position,const std::vector<ActiveDeforme
         case FaceDeformer::Kind::Rotate: {
             const Vector3& axis=deformer.amount;
             const Vector3 rotated=q*active.cosine+Vector3::Cross(axis,q)*active.sine+
-                axis*(Vector3::Dot(q,axis)*(1.0f-active.cosine));
+                axis*(catalogDot(q,axis)*(1.0f-active.cosine));
             displacement+=(rotated-q)*w;
             break;
         }
@@ -297,7 +310,7 @@ void applyBuild(std::vector<AvatarVertex>& vertices,const std::array<Vector3,Bon
         Vector3 direction=positions[axis->toward]-origin;
         direction.Normalize();
         const Vector3 offset=vertex.position-origin;
-        const Vector3 along=direction*Vector3::Dot(offset,direction);
+        const Vector3 along=direction*catalogDot(offset,direction);
         vertex.position=origin+along+(offset-along)*factor;
     }
 }
@@ -393,7 +406,7 @@ void applyProportions(std::vector<AvatarVertex>& vertices,const std::array<Vecto
                 offset*=morph.head;
             } else if(morph.stretch[bone]!=1.0f) {
                 const Vector3& axis=morph.axis[bone];
-                offset+=axis*(Vector3::Dot(offset,axis)*(morph.stretch[bone]-1.0f));
+                offset+=axis*(catalogDot(offset,axis)*(morph.stretch[bone]-1.0f));
             }
             moved+=(morph.positions[bone]+offset)*weights[k];
         }
