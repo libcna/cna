@@ -163,7 +163,9 @@ static int validate_construction_properties_and_members(void)
         !vector3_near(translation, 5.0F, 6.0F, 7.0F) ||
         cna_matrix_decompose(zero, &scale, &rotation, &translation, &decomposed) !=
             CNA_RESULT_SUCCESS ||
-        decomposed != CNA_FALSE || !quaternion_near(rotation, 0.0F, 0.0F, 0.0F, 1.0F) ||
+        decomposed != CNA_TRUE ||
+        !vector3_near(scale, 0.0F, 0.0F, 0.0F) ||
+        !isnan(rotation.x) || !isnan(rotation.y) || !isnan(rotation.z) || !isnan(rotation.w) ||
         cna_matrix_decompose(zero, 0, &rotation, &translation, &decomposed) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;

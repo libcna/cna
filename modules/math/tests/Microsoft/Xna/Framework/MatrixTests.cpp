@@ -850,7 +850,7 @@ TEST(MatrixTest, DecomposeScaleMatrix)
     using Microsoft::Xna::Framework::Quaternion;
     Vector3 scale(0,0,0), translation(0,0,0);
     Quaternion rotation = Quaternion::Identity;
-    Matrix::CreateScale(2.0f, 3.0f, 4.0f).Decompose(scale, rotation, translation);
+    EXPECT_TRUE(Matrix::CreateScale(2.0f, 3.0f, 4.0f).Decompose(scale, rotation, translation));
     EXPECT_NEAR(scale.X, 2.0f, kEps);
     EXPECT_NEAR(scale.Y, 3.0f, kEps);
     EXPECT_NEAR(scale.Z, 4.0f, kEps);
@@ -898,20 +898,10 @@ TEST(MatrixTest, DecomposeAxisAlignedQuarterTurnRecoversTheRotationRatherThanIde
     }
 }
 
-TEST(MatrixTest, DecomposeReportsPositiveScaleForAMirroredAffineTransform)
+TEST(MatrixTest, DecomposeRetainsReflectionOnTheLargestScaleAxis)
 {
-    // The boundary of the fix above, stated so nobody has to rediscover it.
-    //
-    // XNA's per-row sign heuristic multiplies the FOURTH column into each product -- M14, M24,
-    // M34 -- and those are zero in every affine transform. The product is therefore always zero
-    // for the matrices anyone actually decomposes, so the sign is always +1 and a mirrored
-    // transform decomposes to POSITIVE scales with the reflection folded into the quaternion.
-    // That is FNA's behaviour, not a CNA shortcut, and behaviour fidelity wins over the more
-    // obviously useful answer.
-    //
-    // The practical consequence: Decompose is not a mirroring test. Anything that needs to know
-    // whether a transform reverses handedness -- glTF's own winding rule among them -- must take
-    // the determinant of the 3x3 instead, which is unambiguous.
+    // CNA-DEMOS-ISSUE-115: genuine XNA retains the reflection on the largest axis.
+    // The former positive-scale expectation pinned FNA's heuristic, not XNA behavior.
     using Microsoft::Xna::Framework::Quaternion;
     Vector3 scale(0, 0, 0), translation(0, 0, 0);
     Quaternion rotation = Quaternion::Identity;
@@ -921,9 +911,13 @@ TEST(MatrixTest, DecomposeReportsPositiveScaleForAMirroredAffineTransform)
     EXPECT_TRUE(m.Decompose(scale, rotation, translation));
     EXPECT_NEAR(2.0f, scale.X, 1e-4f);
     EXPECT_NEAR(3.0f, scale.Y, 1e-4f);
-    EXPECT_NEAR(4.0f, scale.Z, 1e-4f);
+    EXPECT_NEAR(-4.0f, scale.Z, 1e-4f);
 
-    // ...while the determinant does answer the question the scales cannot.
+    const Matrix rebuilt = Matrix::CreateScale(scale) * Matrix::CreateFromQuaternion(rotation);
+    EXPECT_NEAR(m.M11, rebuilt.M11, 1e-4f);
+    EXPECT_NEAR(m.M13, rebuilt.M13, 1e-4f);
+    EXPECT_NEAR(m.M31, rebuilt.M31, 1e-4f);
+    EXPECT_NEAR(m.M33, rebuilt.M33, 1e-4f);
     EXPECT_LT(m.Determinant(), 0.0f) << "the transform really does mirror";
 }
 

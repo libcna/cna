@@ -195,39 +195,63 @@ namespace Microsoft::Xna::Framework
         translation.Y = M42;
         translation.Z = M43;
 
-        // FNA's test is `Math.Sign(row product) < 0`, and Math.Sign returns 0 -- not -1 -- for
-        // negative zero, so FNA takes the +1 branch there. A previous version of this used
-        // std::signbit, which IS true for negative zero, and called the difference an edge case
-        // with no practical impact. It is not an edge case: every axis-aligned quarter turn has
-        // exact zeros in each row, and (-1) * 0 is -0.0, so signbit fired and flipped that row's
-        // sign. With unit scale that turns m1 below into a reflection, and
-        // CreateFromRotationMatrix of a reflection is not a rotation at all -- a node authored
-        // with a 90-degree rotation decomposed to the identity quaternion, silently losing its
-        // orientation. `x < 0.0f` reproduces Math.Sign(x) < 0 exactly, including for -0.0f.
-        const float xs = (M11 * M12 * M13 * M14) < 0.0f ? -1.0f : 1.0f;
-        const float ys = (M21 * M22 * M23 * M24) < 0.0f ? -1.0f : 1.0f;
-        const float zs = (M31 * M32 * M33 * M34) < 0.0f ? -1.0f : 1.0f;
+        Vector3 rows[] = {Vector3(M11, M12, M13), Vector3(M21, M22, M23), Vector3(M31, M32, M33)};
+        scale.X = rows[0].Length();
+        scale.Y = rows[1].Length();
+        scale.Z = rows[2].Length();
 
-        scale.X = xs * std::sqrt(M11 * M11 + M12 * M12 + M13 * M13);
-        scale.Y = ys * std::sqrt(M21 * M21 + M22 * M22 + M23 * M23);
-        scale.Z = zs * std::sqrt(M31 * M31 + M32 * M32 + M33 * M33);
+        // XNA ranks the row lengths, retaining X/Y/Z precedence for ties. Keep
+        // its comparison order for unordered inputs rather than sorting NaNs.
+        unsigned largest, middle, smallest;
+        if (scale.X < scale.Y)
+        {
+            if (scale.Y < scale.Z) { largest = 2; middle = 1; smallest = 0; }
+            else if (scale.X < scale.Z) { largest = 1; middle = 2; smallest = 0; }
+            else { largest = 1; middle = 0; smallest = 2; }
+        }
+        else if (scale.X < scale.Z) { largest = 2; middle = 0; smallest = 1; }
+        else if (scale.Y < scale.Z) { largest = 0; middle = 2; smallest = 1; }
+        else { largest = 0; middle = 1; smallest = 2; }
 
-        if (WithinEpsilon(scale.X, 0.0f) ||
-            WithinEpsilon(scale.Y, 0.0f) ||
-            WithinEpsilon(scale.Z, 0.0f))
+        float* const scales[] = {&scale.X, &scale.Y, &scale.Z};
+        constexpr float decomposeEpsilon = 0.0001f;
+        if (*scales[largest] < decomposeEpsilon)
+        {
+            const Vector3 canonical[] = {Vector3::UnitX, Vector3::UnitY, Vector3::UnitZ};
+            rows[largest] = canonical[largest];
+        }
+        rows[largest].Normalize();
+        // Genuine XNA leaves the middle row in place even when its scale is tiny.
+        // Its smallest-axis fallback writes the cross product into the MIDDLE
+        // row, then normalizes the smallest row. Preserve that observable path:
+        // zero axes succeed with NaN rotation; tiny nonzero axes may be refused.
+        rows[middle].Normalize();
+        if (*scales[smallest] < decomposeEpsilon)
+            rows[middle] = Vector3::Cross(rows[smallest], rows[largest]);
+        rows[smallest].Normalize();
+
+        Matrix basis(
+            rows[0].X, rows[0].Y, rows[0].Z, 0.0f,
+            rows[1].X, rows[1].Y, rows[1].Z, 0.0f,
+            rows[2].X, rows[2].Y, rows[2].Z, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        );
+        float determinant = basis.Determinant();
+        if (determinant < 0.0f)
+        {
+            *scales[largest] = -*scales[largest];
+            if (largest == 0) basis.setRightProperty(-rows[0]);
+            else if (largest == 1) basis.setUpProperty(-rows[1]);
+            else basis.setBackwardProperty(-rows[2]);
+            determinant = -determinant;
+        }
+        determinant -= 1.0f;
+        if (determinant * determinant > decomposeEpsilon)
         {
             rotation = Quaternion::Identity;
             return false;
         }
-
-        const Matrix m1(
-            M11 / scale.X, M12 / scale.X, M13 / scale.X, 0.0f,
-            M21 / scale.Y, M22 / scale.Y, M23 / scale.Y, 0.0f,
-            M31 / scale.Z, M32 / scale.Z, M33 / scale.Z, 0.0f,
-            0.0f, 0.0f, 0.0f, 1.0f
-        );
-
-        rotation = Quaternion::CreateFromRotationMatrix(m1);
+        rotation = Quaternion::CreateFromRotationMatrix(basis);
         return true;
     }
 
