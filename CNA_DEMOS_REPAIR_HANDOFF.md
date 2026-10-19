@@ -9,12 +9,22 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
-Phase C. CNA runtime HEAD is `2a245b91f`; demo closure HEAD is `dac8228`.
-All 155 IDs remain inventoried: 37 final dispositions, comprising
-six runtime findings, 23 documentation corrections, seven already fixed, and one
-proven demo expectation error; 118 remain pending. No push or merge.
+Phase C. CNA runtime HEAD is `df9234202`; demo closure HEAD is `105fc63`.
+All 155 IDs remain inventoried: 38 final dispositions, comprising
+seven runtime findings, 23 documentation corrections, seven already fixed, and one
+proven demo expectation error; 117 remain pending. No push or merge.
 
-Latest completed repair: perspective 117 (`2a245b91f`) uses public Pi and exact
+Latest completed repair: Quaternion 119 (`df9234202`), demo `105fc63`. Genuine XNA
+41/41; native math 893 passes/two unchanged fixture skips; aggregate and registered
+Quaternion tests 109/109; original demos 11/24 checks pass under both labels; native
+C17/Werror smoke and extended C demo 17 checks pass. Both 95-demo math sweeps have
+54 passes/41 unrelated expected failures, exactly nine cumulative expected status
+changes and zero unrelated assertion/check delta. All 732 enabled demo CTests pass
+(408.88s), 48 skips/three disabled unchanged; six visual references match exactly.
+The 119 inventory/matrix is closed. Logs repair-119-*; permanent oracle in demo
+docs/repair-evidence/issue-119/. Current next task is Matrix decomposition 115 below.
+
+Previous completed repair: perspective 117 (`2a245b91f`) uses public Pi and exact
 ArgumentOutOfRangeException/ParamName for all three factories, preserving output
 atomicity, validation order and IEEE controls. Genuine XNA 96/96; native math 889
 passes/two unchanged missing ShipGame XML fixture skips; Matrix CTests 98/98 (21.43s).
@@ -39,12 +49,27 @@ Last complete 719-demo SOFTWARE/GLES smoke remains the original baseline; the la
 batch adds complete math sweeps, complete enabled SOFTWARE CTest and six exact visuals.
 Only SOFTWARE/OPENGLES3 have this batch's runtime labels; no all-platform claim.
 
-Exact next task: add pre-fix native/C ABI regressions for Quaternion 119, then repair
-Inverse/Divide wide intermediates through the final component cast. Genuine dedicated
+Current 119 runtime/tests are committed as `df9234202`: four QuaternionRangeTests and native C17 smoke
+regression reproduce three numerical failures while the IEEE control passes. Whole
+math before repair: 890 passes/two unchanged fixture skips/three failures (895 total).
+Native C smoke fails only its new extreme-range stage. Minimal Inverse/Divide patch
+now keeps intermediates double until final component stores. Both native/demo builds
+pass without warnings. Native math: 893 passes/two unchanged skips; aggregate and
+registered Quaternion tests 109/109 (registered 25.99s). Both original demos pass
+11/24 checks under both labels and the exact C17/Werror smoke passes. Two markers
+removed only after those passes. External C demo gains two extreme-range controls.
+Both math sweeps pass with exactly nine cumulative expected changes and no other
+status/check/failed-assertion delta (54 passes/41 unrelated expected failures).
+Extended C demo passes 17 checks under both labels; all six exact visual references
+pass with zero differing pixels/channels. Full 732-test checkpoint now passes and
+119 is closed. Matrix 115 demo rebuild runs at two jobs, while its native consumer
+test process uses the third. Exact next task: validate 115 focused demo/C ABI, then
+both math sweeps and full checkpoint; do not start another build until a slot is free.
+Genuine dedicated
 XNA oracle `build-probe/repair-119-oracle.cs` passes 41/41, including value/out/input
 aliases, five extreme magnitudes, self division and a mixed numerator/divisor where
 prematurely rounding an inverse component loses a finite final contribution. Logs
-`repair-119-xna{,-build,.stderr}.log`. No 119 production change yet. Preserve zero,
+`repair-119-xna{,-build,.stderr}.log`. Preserve zero,
 NaN, infinity, signed-zero and ordinary Hamilton-order controls; do not change
 LengthSquared or conflate 118. Build at most three campaign jobs, private displays only.
 
@@ -59,9 +84,30 @@ must be retained; do NOT blindly widen Distance or weaken its oracle. C# specifi
 8.3.7 permits wider intermediates; source float locals alone do not settle runtime
 behavior. No 118 production change or final disposition; this does not block 119.
 
-Demo closure is committed as `dac8228`; its worktree is clean. Only this CNA handoff
-and the issue matrix await the matching status commit, after which no uncommitted
-work remains. Runtime/native regressions are already committed as `2a245b91f`.
+Perspective demo closure is committed as `dac8228`, CNA status `5524a76df`.
+119 runtime/native tests are committed as df9234202, demo evidence/closure as 105fc63.
+Current uncommitted work belongs only to 115 plus the matching matrix/handoff status.
+
+Current 115 oracle: permanent `docs/repair-evidence/issue-115/DecomposeOracle.cs`
+passes 90 checks against genuine XNA (logs repair-115-xna-extended*), extending the
+original 48-check probe with explicit boundary/classification/alias assertions and
+printing 28 case classifications. Largest-axis reflection with X/Y/Z tie precedence
+is confirmed; all seven zero-axis combinations return true plus NaN quaternion.
+Tiny 1e-5 axis returns false/Identity; exact 1e-4 succeeds. Shear 0.1 is accepted,
+0.2 is refused; nonaffine fourth column is ignored; NaN/Inf produce true/NaN. Current
+CNA's native reflection test incorrectly calls the inherited FNA heuristic XNA's.
+Read genuine decompiled Matrix.Decompose and local FNA. Five new native cases plus
+the corrected existing reflection oracle yield five pre-fix failures, 893 passes,
+two unchanged skips (900 total). Native C MatrixSmoke's corrected true/NaN zero-matrix
+expectation fails against the unchanged demo library. Minimal local Decompose repair
+is now applied: rank/normalize basis rows, preserve XNA degenerate-row path, flip
+largest axis for a reflection, apply normalized-determinant refusal, retain output
+order. Native after-build passes without warnings; all 898 math tests pass with
+two unchanged fixture skips. Native Matrix/glTF/avatar consumers are running in
+one private-display test process (repair-115-native-consumers.log). The 115 demo
+rebuild now runs at two jobs (repair-115-demo-after-build.log). Uncommitted CNA files: Matrix.cpp, MatrixTests.cpp, new
+MatrixDecomposeCompatibilityTests.cpp, native C MatrixSmoke.c. Demo evidence 115 is
+also uncommitted but separate from 119 closure. No 115 marker change or closure yet.
 
 ## Earlier Phase C progress (superseded by the checkpoint above)
 

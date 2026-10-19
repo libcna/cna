@@ -2048,12 +2048,14 @@
         "math.matrix.decompose"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Inherited FNA row-product sign and zero-scale refusal differ from genuine XNA ranked-basis decomposition, reflection sign selection, degenerate-row behavior and normalized-determinant refusal. Existing native mirrored/zero-matrix oracles pin FNA rather than XNA.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine XNA extended decomposition oracle passes 90 checks. New/corrected native regressions produce five pre-fix failures; whole math 893 pass/two unchanged fixture skips/five failures. Corrected native C17 MatrixSmoke zero-matrix stage fails before repair. Local decomposition patch now passes 898 native math tests/two unchanged skips; downstream glTF/avatar native tests running, demo rebuild must await independent 119 checkpoint. Evidence repair-115-*; permanent oracle docs/repair-evidence/issue-115/."
+      ],
       "final_disposition": null
     },
     {
@@ -2129,13 +2131,16 @@
         "math.quaternion.inverse_and_conjugate"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "RESOLVED",
+      "root_cause": "Float squared norms/reciprocals overflow or underflow; Divide also rounds inverse components before multiplying, losing finite final contributions. Preserve wide intermediates until component stores.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "df9234202",
+      "validation": [
+        "Genuine XNA dedicated oracle 41/41. New native range regressions: three fail before fix, IEEE control passes; native C17 smoke fails new range stage. Local repair passes 893 native math tests/two unchanged fixture skips, aggregate and registered Quaternion tests 109/109. Both original demos pass 11 and 24 checks under both renderer labels; exact C17/Werror smoke now passes. Markers removed after these focused passes; full math/CTest checkpoint pending. Evidence repair-119-*; permanent probe docs/repair-evidence/issue-119/.",
+        "Final checkpoint: all 732 enabled demo CTests pass (408.88s, 48 skipped/three disabled unchanged). Both 95-demo math sweeps: 54 passes/41 unrelated expected failures; exactly nine cumulative expected changes and zero unexplained statuses/check counts/failed assertions. Both focused demos retain 11/24 passing controls; native C17 smoke and 17-check C demo pass. All six exact visual references match with zero pixel/channel differences. Genuine XNA 41/41; native math 893 pass/two unchanged skips; aggregate and registered Quaternion 109/109. Permanent docs/repair-evidence/issue-119/; logs repair-119-*."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-120",
