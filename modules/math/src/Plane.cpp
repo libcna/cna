@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/Plane.hpp"
+#include "MathDisplay.hpp"
 
 #include <cmath>
 #include <functional>
@@ -196,8 +197,9 @@ namespace Microsoft::Xna::Framework
 
     std::string Plane::ToString() const
     {
+        using CNA::Internal::Math::DisplayFloat;
         std::ostringstream ss;
-        ss << "{Normal:" << Normal.ToString() << " D:" << D << "}";
+        ss << "{Normal:" << Normal.ToString() << " D:" << DisplayFloat(D) << "}";
         return ss.str();
     }
 

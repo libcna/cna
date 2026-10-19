@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Ray.hpp"
 
 #include <cmath>
+#include <limits>
 #include <functional>
 #include <optional>
 #include <sstream>
@@ -39,104 +40,31 @@ namespace Microsoft::Xna::Framework
 
     std::optional<float> Ray::Intersects(BoundingBox box) const
     {
-        std::optional<float> tMin;
-        std::optional<float> tMax;
-
-        if (MathHelper::WithinEpsilon(Direction.X, 0.0f))
+        // XNA BoundingBox.Intersects(Ray) IL clips a nonnegative interval and
+        // uses this strict parallel threshold, including stationary/boundary rays.
+        float minimum = 0.0f;
+        float maximum = std::numeric_limits<float>::max();
+        const float origins[] = {Position.X, Position.Y, Position.Z};
+        const float directions[] = {Direction.X, Direction.Y, Direction.Z};
+        const float lower[] = {box.Min.X, box.Min.Y, box.Min.Z};
+        const float upper[] = {box.Max.X, box.Max.Y, box.Max.Z};
+        for (int axis = 0; axis < 3; ++axis)
         {
-            if (Position.X < box.Min.X || Position.X > box.Max.X)
+            if (std::abs(directions[axis]) < 1e-6f)
             {
-                return std::nullopt;
+                if (origins[axis] < lower[axis] || origins[axis] > upper[axis])
+                    return std::nullopt;
+                continue;
             }
+            const float inverse = 1.0f / directions[axis];
+            float nearParameter = (lower[axis] - origins[axis]) * inverse;
+            float farParameter = (upper[axis] - origins[axis]) * inverse;
+            if (nearParameter > farParameter) std::swap(nearParameter, farParameter);
+            minimum = MathHelper::Max(nearParameter, minimum);
+            maximum = MathHelper::Min(farParameter, maximum);
+            if (minimum > maximum) return std::nullopt;
         }
-        else
-        {
-            tMin = (box.Min.X - Position.X) / Direction.X;
-            tMax = (box.Max.X - Position.X) / Direction.X;
-
-            if (*tMin > *tMax)
-            {
-                std::swap(tMin, tMax);
-            }
-        }
-
-        if (MathHelper::WithinEpsilon(Direction.Y, 0.0f))
-        {
-            if (Position.Y < box.Min.Y || Position.Y > box.Max.Y)
-            {
-                return std::nullopt;
-            }
-        }
-        else
-        {
-            float tMinY = (box.Min.Y - Position.Y) / Direction.Y;
-            float tMaxY = (box.Max.Y - Position.Y) / Direction.Y;
-
-            if (tMinY > tMaxY)
-            {
-                std::swap(tMinY, tMaxY);
-            }
-
-            if ((tMin.has_value() && *tMin > tMaxY) ||
-                (tMax.has_value() && tMinY > *tMax))
-            {
-                return std::nullopt;
-            }
-
-            if (!tMin.has_value() || tMinY > *tMin)
-            {
-                tMin = tMinY;
-            }
-            if (!tMax.has_value() || tMaxY < *tMax)
-            {
-                tMax = tMaxY;
-            }
-        }
-
-        if (MathHelper::WithinEpsilon(Direction.Z, 0.0f))
-        {
-            if (Position.Z < box.Min.Z || Position.Z > box.Max.Z)
-            {
-                return std::nullopt;
-            }
-        }
-        else
-        {
-            float tMinZ = (box.Min.Z - Position.Z) / Direction.Z;
-            float tMaxZ = (box.Max.Z - Position.Z) / Direction.Z;
-
-            if (tMinZ > tMaxZ)
-            {
-                std::swap(tMinZ, tMaxZ);
-            }
-
-            if ((tMin.has_value() && *tMin > tMaxZ) ||
-                (tMax.has_value() && tMinZ > *tMax))
-            {
-                return std::nullopt;
-            }
-
-            if (!tMin.has_value() || tMinZ > *tMin)
-            {
-                tMin = tMinZ;
-            }
-            if (!tMax.has_value() || tMaxZ < *tMax)
-            {
-                tMax = tMaxZ;
-            }
-        }
-
-        if (tMin.has_value() && *tMin < 0.0f && tMax.has_value() && *tMax > 0.0f)
-        {
-            return 0.0f;
-        }
-
-        if (tMin.has_value() && *tMin < 0.0f)
-        {
-            return std::nullopt;
-        }
-
-        return tMin;
+        return minimum;
     }
 
     void Ray::Intersects(const BoundingBox& box, std::optional<float>& result) const
@@ -217,7 +145,7 @@ namespace Microsoft::Xna::Framework
     std::string Ray::ToString() const
     {
         std::ostringstream ss;
-        ss << "{{Position:" << Position.ToString() << " Direction:" << Direction.ToString() << "}}";
+        ss << "{Position:" << Position.ToString() << " Direction:" << Direction.ToString() << "}";
         return ss.str();
     }
 

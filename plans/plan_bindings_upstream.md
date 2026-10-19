@@ -115,6 +115,15 @@ All probes use the genuine installed Windows XNA 4.0 assembly, not a replacement
 | 123, vector products | `Vector2/3/4.Dot` retains wide cancellation; `Vector3.Cross` Y is the original subtraction, not a negated reverse subtraction that changes zero signs. | `0e7be08e0`; `../cna-demos/docs/repair-evidence/issue-123/`; external closure pending |
 | 118, magnitudes | `Vector2/3/4` and `Quaternion.Length/Normalize`, plus vector Distance, match genuine method-entry precision: wide squared sums, float square root for normalization, wide reciprocal. Caller-dependent JIT probes are retained separately, not presented as universal behavior. | `bd46b6ffe`; `../cna-demos/docs/repair-evidence/issue-118/`; external closure pending |
 
+Additional measured geometry decisions (2026-10-20; repairs pending external closure):
+
+| Findings | Measured contract and reference | Evidence |
+|---|---|---|
+| 024/126, text | BoundingBox, Ray and the four standard XNA vertex ToString methods use one literal outer brace pair; doubled braces in C# format strings are escapes, not output. Keep three CNA-only extended vertex formats unchanged. | `../cna-demos/docs/repair-evidence/geometry/GeometryValuesOracle.cs`, `GeometryTextConsumersOracle.cs` |
+| 128, sphere construction | BoundingSphere constructor rejects radius < 0 with ArgumentException, but public Radius remains mutable. C marshalling is field copying, not constructor validation. Empty CreateFromPoints was already repaired by `cd211420e3`. | Same geometry oracle; native and C mutated-radius controls |
+| 130, ray/box | BoundingBox.Intersects(Ray) IL starts the clipped interval at zero and uses the strict parallel threshold abs(direction) < 1e-6. Preserve all four public call forms, boundary starts and nonunit directions. | Same oracle: stationary grid, boundaries and threshold controls |
+| 135, negative-zero text | Genuine frustum planes retain seven negative-zero fields for Identity, but .NET Framework Single text prints either zero sign as 0. Do not alter derived plane bits; canonicalize display operands only. | Same oracle: all24 plane bits and seven math text types; disproved positive-zero hypotheses retained |
+
 The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
 both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
 the recorded rows above are superseded by this checkpoint; permanent evidence is

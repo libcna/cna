@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "MathDisplay.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -137,8 +138,9 @@ namespace Microsoft::Xna::Framework
 
     std::string Vector2::ToString() const
     {
+        using CNA::Internal::Math::DisplayFloat;
         std::ostringstream s;
-        s << "{X:" << X << " Y:" << Y << "}";
+        s << "{X:" << DisplayFloat(X) << " Y:" << DisplayFloat(Y) << "}";
         return s.str();
     }
 

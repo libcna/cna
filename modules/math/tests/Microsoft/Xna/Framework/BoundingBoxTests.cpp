@@ -445,10 +445,10 @@ TEST(BoundingBoxTest, ToStringContainsMinAndMax)
 
 TEST(BoundingBoxTest, ToStringMatchesFNAFormat)
 {
-    // FNA: "{{Min:{X:1 Y:2 Z:3} Max:{X:4 Y:5 Z:6}}}"
+    // Genuine XNA and FNA composite-format escapes emit one literal brace pair.
     BoundingBox box(Vector3(1.0f, 2.0f, 3.0f), Vector3(4.0f, 5.0f, 6.0f));
     std::string s = box.ToString();
-    EXPECT_EQ(s.substr(0, 7), "{{Min:{");
+    EXPECT_EQ(s, "{Min:{X:1 Y:2 Z:3} Max:{X:4 Y:5 Z:6}}");
     EXPECT_NE(s.find("Max:{"), std::string::npos);
     EXPECT_EQ(s.back(), '}');
 }

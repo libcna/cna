@@ -175,7 +175,12 @@ namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
 
 [[nodiscard]] inline Xna::BoundingSphere ToNative(const CNA_BoundingSphere value) noexcept
 {
-    return Xna::BoundingSphere(ToNative(value.center), value.radius);
+    // Marshal public fields, not a constructor call: XNA permits Radius mutation
+    // after construction, including values the constructor itself would reject.
+    Xna::BoundingSphere result;
+    result.Center = ToNative(value.center);
+    result.Radius = value.radius;
+    return result;
 }
 
 [[nodiscard]] inline CNA_BoundingSphere ToC(const Xna::BoundingSphere& value) noexcept

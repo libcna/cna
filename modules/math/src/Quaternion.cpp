@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "MathDisplay.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -91,8 +92,9 @@ namespace Microsoft::Xna::Framework
 
     std::string Quaternion::ToString() const
     {
+        using CNA::Internal::Math::DisplayFloat;
         std::ostringstream stream;
-        stream << "{X:" << X << " Y:" << Y << " Z:" << Z << " W:" << W << "}";
+        stream << "{X:" << DisplayFloat(X) << " Y:" << DisplayFloat(Y) << " Z:" << DisplayFloat(Z) << " W:" << DisplayFloat(W) << "}";
         return stream.str();
     }
 

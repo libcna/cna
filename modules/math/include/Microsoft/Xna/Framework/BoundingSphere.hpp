@@ -38,6 +38,7 @@ namespace Microsoft::Xna::Framework
          *
          * @param center The center of the sphere.
          * @param radius The radius of the sphere.
+         * @throws System::ArgumentException If radius is negative.
          */
         BoundingSphere(Vector3 center, float radius);
 

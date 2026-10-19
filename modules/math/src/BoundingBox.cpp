@@ -542,12 +542,7 @@ namespace Microsoft::Xna::Framework
 
     std::string BoundingBox::ToString() const
     {
-        std::ostringstream stream;
-        stream
-            << "{{Min:{X:" << Min.X << " Y:" << Min.Y << " Z:" << Min.Z << "}"
-            << " Max:{X:" << Max.X << " Y:" << Max.Y << " Z:" << Max.Z << "}"
-            << "}}";
-        return stream.str();
+        return "{Min:" + Min.ToString() + " Max:" + Max.ToString() + "}";
     }
 
     bool operator==(const BoundingBox& a, const BoundingBox& b)

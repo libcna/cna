@@ -178,7 +178,7 @@ static int validate_ray(void)
     }
 
     static const char Expected[] =
-        "{{Position:{X:0 Y:0 Z:5} Direction:{X:0 Y:0 Z:-1}}}";
+        "{Position:{X:0 Y:0 Z:5} Direction:{X:0 Y:0 Z:-1}}";
     uint64_t byte_count = 0U;
     char bytes[sizeof(Expected) - 1U];
     char too_small = 'r';
@@ -289,7 +289,7 @@ static int validate_bounding_box(void)
     }
 
     static const char Expected[] =
-        "{{Min:{X:-1 Y:-2 Z:-3} Max:{X:4 Y:5 Z:6}}}";
+        "{Min:{X:-1 Y:-2 Z:-3} Max:{X:4 Y:5 Z:6}}";
     uint64_t byte_count = 0U;
     char bytes[sizeof(Expected) - 1U];
     char too_small = 'b';
@@ -595,9 +595,9 @@ static int validate_bounding_frustum(void)
     }
 
     static const char Expected[] =
-        "{Near:{Normal:{X:-0 Y:-0 Z:-1} D:-0} Far:{Normal:{X:0 Y:0 Z:1} D:-1} "
-        "Left:{Normal:{X:-1 Y:-0 Z:-0} D:-1} Right:{Normal:{X:1 Y:0 Z:0} D:-1} "
-        "Top:{Normal:{X:0 Y:1 Z:0} D:-1} Bottom:{Normal:{X:-0 Y:-1 Z:-0} D:-1}}";
+        "{Near:{Normal:{X:0 Y:0 Z:-1} D:0} Far:{Normal:{X:0 Y:0 Z:1} D:-1} "
+        "Left:{Normal:{X:-1 Y:0 Z:0} D:-1} Right:{Normal:{X:1 Y:0 Z:0} D:-1} "
+        "Top:{Normal:{X:0 Y:1 Z:0} D:-1} Bottom:{Normal:{X:0 Y:-1 Z:0} D:-1}}";
     uint64_t byte_count = 0U;
     char bytes[sizeof(Expected) - 1U];
     char too_small = 'f';
@@ -665,12 +665,59 @@ static int validate_normalized_shadow_plane(void)
         reflection.m41 == 4.0F * near_unit.normal.x && reflection.m42 == 4.0F * near_unit.normal.y;
 }
 
+static int validate_sphere_constructor(void)
+{
+    CNA_BoundingSphere result = {{1, 2, 3}, 4};
+    if (cna_bounding_sphere_init_center_radius((CNA_Vector3){0}, -1.0F, &result) !=
+            CNA_RESULT_INVALID_ARGUMENT || result.center.x != 1 || result.radius != 4) return 0;
+    return 1;
+}
+
+static int validate_mutated_sphere_fields(void)
+{
+    CNA_BoundingSphere result;
+    /* A fieldwise C value may contain a mutated negative radius, just like XNA's
+       public fields. Marshalling is not a second invocation of the constructor. */
+    const CNA_BoundingSphere mutated = {{1, 2, 3}, -1};
+    char text[128];
+    uint64_t size;
+    if (cna_bounding_sphere_copy_string(mutated, text, sizeof(text), &size) != CNA_RESULT_SUCCESS ||
+        size != strlen("{Center:{X:1 Y:2 Z:3} Radius:-1}") ||
+        memcmp(text, "{Center:{X:1 Y:2 Z:3} Radius:-1}", (size_t)size) != 0) return 0;
+    CNA_Matrix identity = {0};
+    identity.m11 = identity.m22 = identity.m33 = identity.m44 = 1.0F;
+    return cna_bounding_sphere_transform(mutated, identity, &result) == CNA_RESULT_SUCCESS &&
+        result.center.x == 1 && result.center.y == 2 && result.center.z == 3 && result.radius == -1;
+}
+
+static int validate_stationary_ray_box(void)
+{
+    const CNA_BoundingBox box = {{4, -1, -1}, {6, 1, 1}};
+    CNA_Bool hit;
+    float parameter;
+    for (int x = 3; x <= 7; ++x) {
+        const CNA_Ray ray = {{(float)x, 0, 0}, {0, 0, 0}};
+        const CNA_Bool expected = x >= 4 && x <= 6 ? CNA_TRUE : CNA_FALSE;
+        if (cna_ray_intersects_box(ray, box, &hit, &parameter) != CNA_RESULT_SUCCESS ||
+            hit != expected || (hit && (parameter != 0.0F || signbit(parameter))) ||
+            cna_bounding_box_intersects_ray(box, ray, &hit, &parameter) != CNA_RESULT_SUCCESS ||
+            hit != expected || (hit && (parameter != 0.0F || signbit(parameter)))) return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
-    const int original = CNA_TEST_STAGE(validate_plane()) && CNA_TEST_STAGE(validate_ray()) && CNA_TEST_STAGE(validate_bounding_box()) &&
-            CNA_TEST_STAGE(validate_bounding_sphere()) && CNA_TEST_STAGE(validate_bounding_frustum()) &&
-            CNA_TEST_STAGE(validate_translated_plane_offset());
+    int original = CNA_TEST_STAGE(validate_plane());
+    original &= CNA_TEST_STAGE(validate_ray());
+    original &= CNA_TEST_STAGE(validate_bounding_box());
+    original &= CNA_TEST_STAGE(validate_bounding_sphere());
+    original &= CNA_TEST_STAGE(validate_bounding_frustum());
+    original &= CNA_TEST_STAGE(validate_translated_plane_offset());
     const int normalization = CNA_TEST_STAGE(validate_plane_normalization_precision());
     const int shadow = CNA_TEST_STAGE(validate_normalized_shadow_plane());
-    return original && normalization && shadow ? 0 : 1;
+    const int sphere = CNA_TEST_STAGE(validate_sphere_constructor());
+    const int mutated = CNA_TEST_STAGE(validate_mutated_sphere_fields());
+    const int stationary = CNA_TEST_STAGE(validate_stationary_ray_box());
+    return original && normalization && shadow && sphere && mutated && stationary ? 0 : 1;
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
+#include "MathDisplay.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -21,6 +22,10 @@ namespace Microsoft::Xna::Framework
     BoundingSphere::BoundingSphere(Vector3 center, float radius)
         : Center(center), Radius(radius)
     {
+        if (radius < 0.0f)
+        {
+            throw System::ArgumentException("radius must not be negative");
+        }
     }
 
     BoundingSphere BoundingSphere::Transform(Matrix matrix) const
@@ -454,8 +459,9 @@ namespace Microsoft::Xna::Framework
 
     std::string BoundingSphere::ToString() const
     {
+        using CNA::Internal::Math::DisplayFloat;
         std::ostringstream ss;
-        ss << "{Center:" << Center.ToString() << " Radius:" << Radius << "}";
+        ss << "{Center:" << Center.ToString() << " Radius:" << DisplayFloat(Radius) << "}";
         return ss.str();
     }
 
