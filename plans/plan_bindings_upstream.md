@@ -91,6 +91,37 @@ one that has.
 
 ---
 
+## Measured XNA decisions from the CNA demos repair campaign
+
+Recorded 2026-10-19 under the same XNA-over-FNA policy. The permanent issue
+inventory is `../cna-demos/docs/CNA_ISSUES.md`; individual dispositions and exact
+validation boundaries are in `CNA_DEMOS_REPAIR_MATRIX.json`. These rows record
+reference decisions, not a claim that every CNA port defect also exists in FNA,
+nor that every listed native repair has completed external regression validation.
+All probes use the genuine installed Windows XNA 4.0 assembly, not a replacement.
+
+| Findings | Measured contract and reference | CNA repair / evidence |
+|---|---|---|
+| 002/036/097/137/138, Curve | `Curve.Evaluate` Step fraction, post-loop final tangent, degenerate spans and NaN evaluation; `CurveKey.CompareTo` NaN ordering; exact key-position collection matching. Preserve the separate C++ value-ownership alias fix. | `d753d0997`; `../cna-demos/docs/repair-evidence/curve/` |
+| 115, Matrix decomposition | `Matrix.Decompose` retains zero-scale/rank-deficient, reflected and shear behavior with XNA output semantics; do not substitute a convenient inverse/determinant rejection. | `705ea2324`; `../cna-demos/docs/repair-evidence/issue-115/` |
+| 117, perspective factories | `Matrix.CreatePerspective*` validates public float Pi, exact argument exceptions/parameter names and order, retaining the measured IEEE edge cases. | `2a245b91f`; `../cna-demos/docs/repair-evidence/issue-117/` |
+| 119, Quaternion inverse/division | `Quaternion.Inverse` and division retain wide intermediate range through the final component store; squared magnitude is not an interchangeable float-returning intermediate. | `df9234202`; `../cna-demos/docs/repair-evidence/issue-119/` |
+| 120, value hashes | .NET Framework Single hashing canonicalizes both zero signs but retains nonzero NaN payload bits. `CurveKey.GetHashCode` adds the field hashes with 32-bit wrap rather than XOR. | `bf209dcbe`; `../cna-demos/docs/repair-evidence/issue-120/` |
+| 121, vector arrays | `Vector2/3/4.Transform*` checks wide endpoints source-first, then accesses elements only for positive lengths; negative indices with actual access have the measured index exception. | `9786d4c93`; `../cna-demos/docs/repair-evidence/issue-121/` |
+| 122/136, bounds | `Vector2/3/4.Clamp` caps then floors reversed bounds; vector Min/Max selects the second operand on ties/unordered comparisons. `MathHelper.Min/Max` propagates the first NaN payload. | `eef23e6f8`; `../cna-demos/docs/repair-evidence/bounds/` |
+| 124/125, integer values | `Point/Rectangle.GetHashCode` uses unchecked sums. `Rectangle.Union` output may alias either input without changing its result. | `5a44d2c50`; `../cna-demos/docs/repair-evidence/integer-values/` |
+| 139, transpose | `Matrix.Transpose(ref,out)` preserves all source fields before aliased output writes; `Plane.Transform` relies on this internally. | `0b03b7b21`; `../cna-demos/docs/repair-evidence/matrix-residual/` |
+| 140, planes/shadows | `Plane.Normalize` IL keeps a strict near-unit shortcut and explicitly narrows Math.Sqrt to Single, but not its reciprocal. `Matrix.CreateShadow` normalizes its plane; Reflection uses the same public semantics. | `e4ddea6e0`; `../cna-demos/docs/repair-evidence/matrix-residual/`; external closure pending |
+| 123, vector products | `Vector2/3/4.Dot` retains wide cancellation; `Vector3.Cross` Y is the original subtraction, not a negated reverse subtraction that changes zero signs. | `0e7be08e0`; `../cna-demos/docs/repair-evidence/issue-123/`; external closure pending |
+| 118, magnitudes | `Vector2/3/4` and `Quaternion.Length/Normalize`, plus vector Distance, match genuine method-entry precision: wide squared sums, float square root for normalization, wide reciprocal. Caller-dependent JIT probes are retained separately, not presented as universal behavior. | `bd46b6ffe`; `../cna-demos/docs/repair-evidence/issue-118/`; external closure pending |
+
+The versioned avatar asset recipe is not an XNA math API. Companions `32e470ed4`
+and `785bf2d2a` preserve its authored binary32 arithmetic without reverting public
+compatibility repairs or changing catalog golden digests. Complete raw field
+comparisons and the original failed runs are retained with the 123/118 evidence.
+
+---
+
 ## XNAPACK-001 — every float channel XNA packs is rounded, ties to even, and CNA truncated
 
 **Fixed 2026-09-05** in `modules/math/src/Color.cpp`, the fourteen headers under
