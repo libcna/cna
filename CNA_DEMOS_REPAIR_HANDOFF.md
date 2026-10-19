@@ -92,21 +92,50 @@ pairs removed only after focused passes. Both95 math sweeps81 pass/14 expectedfa
 exactly36 cumulative intended changes,differences[].
 C17/Werror magnitude stages in VectorSmoke/QuaternionSmoke fail on old ABI as
 expected; VectorSmoke also retains pending123 product failure. Logs repair-118-c-before-*.
-ACTIVE: full demoCTest TWO jobs,repair-magnitude-products-demo-ctest.log; regression
-driver ONE job,repair-magnitude-products-regression-driver.log, metadata/tools/visual
-then complete SOFTWARE and OPENGLES3 with exact comparisons. Three-job limit occupied.
+First full demoCTest finished408.90s:731 accepted/one failure, CLI list_ids still
+expected118's removed marker. Original report preserved. cmake/CnaDemosTests.cmake
+now checks the exact repaired row with '-' knownIssue; no runtime assertion changed.
+Configure-only refreshed CTest definitions without relinking frozen binaries.
+ACTIVE: corrected full demoCTest ONE job,repair-magnitude-products-demo-ctest-corrected.log;
+regression driver ONE job,repair-magnitude-products-regression-driver.log. Metadata719/0,
+tools7+4+5 and six exact visuals PASS; representative GLES texture inspected.
+Full SOFTWARE/OPENGLES3 still in progress. Third job is native geometry build below.
 FREEZE demo binaries785bf2d2a until all these finish. Native binaries have no running
 consumer now. Exact next: check full results, investigate every delta, close118/123/140
-only when validated. Next source-only audit: geometry127/128/129/130/133 and text
-024/126/135. Genuine frustum point threshold1e-5 and subtraction-from-zero plane
-construction matter; do not adopt historical issue suggestions blindly.
+only when validated. Next audit: geometry127/128/129/130/133 and text024/126/135.
+Genuine frustum point threshold1e-5 matters. The earlier deduction that decompiled
+subtraction-from-zero implies positive-zero plane bits was DISPROVED; see below.
 No118/123/140 closure yet.
 C API embeds static CNA: LD_LIBRARY_PATH replacement alone
 does NOT test repaired C ABI. Native CnaTests does dynamically import public math.
 
-UNCOMMITTED: this CNA status and subsequent matrix updates; demo nine marker removals
-and permanent118/123 evidence. No uncommitted production/native regression edits remain. No124/125/139
-closure work remains.
+CURRENT GEOMETRY VALUES024/126/128/130/135: genuine final oracle1338/1338.
+Initial positive-zero plane-bit hypothesis fails7; diagnostic and a subsequent
+C#-literal attempt also fail7 and are retained. Bit-constructed expected zeros
+prove genuineXNA has the SAME seven negative-zero plane fields as CNA, but prints0.
+Do NOT canonicalize stored/derived planes. Shared private MathDisplay helper changes
+only public text operands for seven float-valued types; Box/Ray literal braces fixed.
+128 empty-point exception already fixed pre-campaigncd211420e3; negative-radius
+constructor rejection pending here. C marshal must copy public fields instead of
+calling that constructor from noexcept; mutated negative-radius values remain valid
+fieldwise representations. Ray-box uses nonnegative interval and genuine strict1e-6
+parallel threshold; no owner-reserved ray/frustum code touched.
+Native exact pre:952 tests944pass/two unchanged skips/six failures. Initial nodiscard
+warning corrected explicitly; exact pre-build warning-free. C17 pre:three text
+stages/radius constructor/stationary-ray fail, independent mutated-radius and old
+plane/shadow stages pass. All logs repair-geometry-values-*.
+UNCOMMITTED production/tests for this geometry batch; post-build ONE job ACTIVE,
+repair-geometry-values-native-after-build.log then whole native math. No geometry
+external marker removed. Do not rebuild demos during the prior frozen checkpoint.
+Permanent new probes ../cna-demos/docs/repair-evidence/geometry/; README tracks failed
+hypotheses. Next after native: inspect failures, registered/consumer tests, strict
+actual ABI and focused demos after frozen checkpoint completes, then full regression.
+
+UNCOMMITTED: CNA geometry production/C marshal/tests plus this status/matrix; demo
+nine marker removals, CLI exact metadata expectation and permanent118/123/geometry
+evidence. No124/125/139 closure work remains. CNA latest documentation commit21c1df311
+records required XNA reference decisions in plans/plan_bindings_upstream.md; frozen
+external runtime remains785bf2d2a.
 Owner-reserved BoundingFrustum::Intersects(Ray) in handoff.md§6 must not be implemented
 without resolving that permission boundary; keep131 explicit,continue other work.
 Ordinary actionable work remains extensive; campaign NOT complete.

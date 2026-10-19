@@ -424,14 +424,16 @@
         "math.formatting.to_string"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "BoundingBox and Ray used composite-format doubled braces as literal stream text; exact native/C text oracles also pinned the port defect.",
       "related_issues": [
         "CNA-DEMOS-ISSUE-126"
       ],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+      ],
       "final_disposition": null
     },
     {
@@ -2304,14 +2306,16 @@
         "math.ray.value_identity"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "DUPLICATE_ROOT_CAUSE",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Duplicate of024: identical doubled-literal-brace root cause, discovered through additional witnesses.",
       "related_issues": [
         "CNA-DEMOS-ISSUE-024"
       ],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+      ],
       "final_disposition": null
     },
     {
@@ -2340,12 +2344,14 @@
         "math.bounding_sphere.create"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Empty CreateFromPoints exception already corrected before campaign bycd211420e3; constructor still accepts negative radius. C noexcept marshalling must remain fieldwise when constructor validation is added.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+      ],
       "final_disposition": null
     },
     {
@@ -2375,12 +2381,14 @@
         "math.ray.intersects"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Optional slab interval has no nonnegative initial bound, losing stationary/boundary hits; parallel comparison also differs from genuine strict abs(direction)<1e-6.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+      ],
       "final_disposition": null
     },
     {
@@ -2465,12 +2473,14 @@
         "math.bounding_frustum.culling"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Genuine frustum has the same seven negative-zero fields as CNA; .NET Framework hides their signs in text. Correct public float display operands, not stored planes. Other float-valued math ToString methods share this formatting defect.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+      ],
       "final_disposition": null
     },
     {
