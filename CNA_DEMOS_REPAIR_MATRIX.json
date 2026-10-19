@@ -2117,12 +2117,14 @@
         "math.vector4.magnitude_range"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Premature Single squared products/differences and reciprocal lose finite range and measured XNA normalization rounding. Keep squared APIs separate.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine method-entry reflection: Distance1176/1176; Length/Normalize1184/1184. Earlier conflicting caller probes preserved, with JIT spill/inlining cause explicitly an inference. Native pre-fix946 tests:933 passes/two unchanged skips/11 new failures. Local product repair and post-fix build running; no external marker change."
+      ],
       "final_disposition": null
     },
     {
@@ -2239,9 +2241,10 @@
       "status": "CONFIRMED_OPEN",
       "root_cause": "Vector2/3/4 Dot and Vector3 Cross narrow float products before cancellation. Cross Y also negates the reverse subtraction, changing signed-zero results from XNA.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "0e7be08e0",
       "validation": [
-        "Permanent genuine ProductOracle.cs passes 8748 exact bit/NaN-classification checks across 18x18 sample pairs and value/out/component/output aliases. Native regressions prepared; pre-fix build running. No production vector edit or external marker change yet. Reports repair-123-xna*."
+        "Permanent genuine ProductOracle.cs passes 8748 exact bit/NaN-classification checks across 18x18 sample pairs and value/out/component/output aliases. Native regressions prepared; pre-fix build running. No production vector edit or external marker change yet. Reports repair-123-xna*.",
+        "Native before929 pass/two skips/four failures; after933/two skips; registered566/566. C wide-product stage reproduces against pre-fix ABI. First consumer run exposes existing catalog recipe precision regression, repaired separately by32e470ed4 without fingerprint/tolerance changes. All550524 captured avatar fields exactly match frozen baseline. Fresh frozen consumer1090 tests:1086 pass/four unchanged skips (182.763s). Intermediate run invalidated by relinking its live self-spawning executable; failure log preserved. External markers/closure pending."
       ],
       "final_disposition": null
     },
@@ -2256,15 +2259,16 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Point and Rectangle inherit XOR field hashing instead of genuine XNA unchecked 32-bit addition. Existing native and C demo exact XOR oracles require evidence-backed correction.",
       "related_issues": [],
       "cna_fix_commit": "5a44d2c50",
       "validation": [
         "Current value-semantics checkpoint still reproduces the original failure under both labels: Point10/Rectangle identity13/Union10 checks, each with its documented failed assertion. Local genuine decompilation and FNA reviewed. Extended genuine oracle and four native regressions prepared but not built/run while full checkpoint occupies three jobs. No production edit yet.",
-        "Native post-fix922 pass/two unchanged skips; Point/Rectangle registered57/57. Rebuilt demo runtime5a44d2c50: original three C++ scenarios retain10/13/10 checks and pass both labels; strengthened C Point/Rectangle demos and strict C17/Werror MathValuesSmoke pass. External regression checkpoint still pending."
+        "Native post-fix922 pass/two unchanged skips; Point/Rectangle registered57/57. Rebuilt demo runtime5a44d2c50: original three C++ scenarios retain10/13/10 checks and pass both labels; strengthened C Point/Rectangle demos and strict C17/Werror MathValuesSmoke pass. External regression checkpoint still pending.",
+        "Complete frozen0b03b7b21 checkpoint: all732 enabled CTests accepted, zero failures,48 skips/three disabled unchanged (486.96s); metadata719/0; tools7+4+5; six visual references exact. Both95 math sweeps72 pass/23 expected failures. Full719 SOFTWARE584/84/48/3 and OPENGLES3 623/86/7/3, both exact comparisons accept27 cumulative intended changes only, differences[]. Original focused assertions retained; four markers removed only after passes. Permanent shared report ../cna-demos/docs/repair-evidence/integer-values/REGRESSION_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-125",
@@ -2276,15 +2280,16 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Rectangle Union output writes X/Y before reading Right/Bottom from aliased inputs, changing the far-edge calculations. Value Union and Intersect preserve the needed inputs.",
       "related_issues": [],
       "cna_fix_commit": "5a44d2c50",
       "validation": [
         "Current value-semantics checkpoint still reproduces the original failure under both labels: Point10/Rectangle identity13/Union10 checks, each with its documented failed assertion. Local genuine decompilation and FNA reviewed. Extended genuine oracle and four native regressions prepared but not built/run while full checkpoint occupies three jobs. No production edit yet.",
-        "Native post-fix922 pass/two unchanged skips; Point/Rectangle registered57/57. Rebuilt demo runtime5a44d2c50: original three C++ scenarios retain10/13/10 checks and pass both labels; strengthened C Point/Rectangle demos and strict C17/Werror MathValuesSmoke pass. External regression checkpoint still pending."
+        "Native post-fix922 pass/two unchanged skips; Point/Rectangle registered57/57. Rebuilt demo runtime5a44d2c50: original three C++ scenarios retain10/13/10 checks and pass both labels; strengthened C Point/Rectangle demos and strict C17/Werror MathValuesSmoke pass. External regression checkpoint still pending.",
+        "Complete frozen0b03b7b21 checkpoint: all732 enabled CTests accepted, zero failures,48 skips/three disabled unchanged (486.96s); metadata719/0; tools7+4+5; six visual references exact. Both95 math sweeps72 pass/23 expected failures. Full719 SOFTWARE584/84/48/3 and OPENGLES3 623/86/7/3, both exact comparisons accept27 cumulative intended changes only, differences[]. Original focused assertions retained; four markers removed only after passes. Permanent shared report ../cna-demos/docs/repair-evidence/integer-values/REGRESSION_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-126",
@@ -2537,15 +2542,16 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Output Transpose overwrites aliased source off-diagonal fields; Plane.Transform itself calls that in-place transpose, corrupting nonzero-offset translated planes.",
       "related_issues": [],
       "cna_fix_commit": "0b03b7b21",
       "validation": [
         "New native pre-fix tests:923 pass/two fixture skips/two failures, proving alias corruption and downstream translated nonzero-offset Plane.Transform error. Original CGeometrySmoke passes; new translated-plane C stage fails. Local alias-safe temporary repair:925 native passes/two unchanged skips. Registered/consumer/external validation pending.",
-        "Genuine matrix residual192/192. Native math925 passes/two unchanged skips; Matrix/Plane registered141/141. Matrix/Plane/glTF/avatar consumers1082 passes/four baseline-identical skips. Strict rebuilt C GeometrySmoke and original four-check transpose scenario pass both labels; C Plane demo extended from9 to11 checks. Integer/transpose combined full CTest732 accepted/zero failures/48 skips/three disabled (486.96s), both95 math sweeps72 pass/23 expected failures, exactly27 cumulative changes and no differences. Six visual references exact. Complete719 renderer smoke running at frozen0b03b7b21; final closure pending."
+        "Genuine matrix residual192/192. Native math925 passes/two unchanged skips; Matrix/Plane registered141/141. Matrix/Plane/glTF/avatar consumers1082 passes/four baseline-identical skips. Strict rebuilt C GeometrySmoke and original four-check transpose scenario pass both labels; C Plane demo extended from9 to11 checks. Integer/transpose combined full CTest732 accepted/zero failures/48 skips/three disabled (486.96s), both95 math sweeps72 pass/23 expected failures, exactly27 cumulative changes and no differences. Six visual references exact. Complete719 renderer smoke running at frozen0b03b7b21; final closure pending.",
+        "Complete frozen0b03b7b21 checkpoint: all732 enabled CTests accepted, zero failures,48 skips/three disabled unchanged (486.96s); metadata719/0; tools7+4+5; six visual references exact. Both95 math sweeps72 pass/23 expected failures. Full719 SOFTWARE584/84/48/3 and OPENGLES3 623/86/7/3, both exact comparisons accept27 cumulative intended changes only, differences[]. Original focused assertions retained; four markers removed only after passes. Permanent shared report ../cna-demos/docs/repair-evidence/integer-values/REGRESSION_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-140",
@@ -2562,7 +2568,8 @@
       "related_issues": [],
       "cna_fix_commit": "e4ddea6e0",
       "validation": [
-        "Genuine matrix residual192 checks and final PlaneNormalizeOracle3405/3405. Initial all-double hypothesis fails324 cases and is preserved; among seven rounding models only wide squared sum, Single-rounded sqrt, wide reciprocal matches. Pre-fix native925 pass/two skips/four failures and both new C smoke stages fail. After native929 pass/two unchanged skips; registered Matrix/Plane/bounding294/294(58.46s). External binaries remain frozen for preceding checkpoint; no marker removal or final closure."
+        "Genuine matrix residual192 checks and final PlaneNormalizeOracle3405/3405. Initial all-double hypothesis fails324 cases and is preserved; among seven rounding models only wide squared sum, Single-rounded sqrt, wide reciprocal matches. Pre-fix native925 pass/two skips/four failures and both new C smoke stages fail. After native929 pass/two unchanged skips; registered Matrix/Plane/bounding294/294(58.46s). External binaries remain frozen for preceding checkpoint; no marker removal or final closure.",
+        "Combined140/123 consumer validation after catalog companion32e470ed4:1086 pass/four unchanged skips (1090 total,182.763s). External marker/closure still pending."
       ],
       "final_disposition": null
     },
