@@ -29,7 +29,9 @@ namespace Microsoft::Xna::Framework
 
         float ClampScalar(float value, float minValue, float maxValue)
         {
-            return std::min(std::max(value, minValue), maxValue);
+            // XNA caps first, then floors: reversed bounds resolve to the minimum.
+            value = value > maxValue ? maxValue : value;
+            return value < minValue ? minValue : value;
         }
 
         float LerpScalar(float value1, float value2, float amount)
@@ -308,16 +310,21 @@ namespace Microsoft::Xna::Framework
 
     Vector4 Vector4::Max(Vector4 value1, Vector4 value2)
     {
-        return Vector4(std::max(value1.X, value2.X), std::max(value1.Y, value2.Y), std::max(value1.Z, value2.Z),
-                       std::max(value1.W, value2.W));
+        // Vector comparisons select operand two on ties/NaNs, unlike MathHelper.
+        return Vector4(value1.X > value2.X ? value1.X : value2.X,
+                       value1.Y > value2.Y ? value1.Y : value2.Y,
+                       value1.Z > value2.Z ? value1.Z : value2.Z,
+                       value1.W > value2.W ? value1.W : value2.W);
     }
 
     void Vector4::Max(const Vector4& value1, const Vector4& value2, Vector4& result) { result = Max(value1, value2); }
 
     Vector4 Vector4::Min(Vector4 value1, Vector4 value2)
     {
-        return Vector4(std::min(value1.X, value2.X), std::min(value1.Y, value2.Y), std::min(value1.Z, value2.Z),
-                       std::min(value1.W, value2.W));
+        return Vector4(value1.X < value2.X ? value1.X : value2.X,
+                       value1.Y < value2.Y ? value1.Y : value2.Y,
+                       value1.Z < value2.Z ? value1.Z : value2.Z,
+                       value1.W < value2.W ? value1.W : value2.W);
     }
 
     void Vector4::Min(const Vector4& value1, const Vector4& value2, Vector4& result) { result = Min(value1, value2); }

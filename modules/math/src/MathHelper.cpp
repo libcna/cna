@@ -105,12 +105,14 @@ namespace Microsoft::Xna::Framework
 
     float MathHelper::Max(float value1, float value2)
     {
-        return value1 > value2 ? value1 : value2;
+        // XNA's scalar helper propagates a first-operand NaN, unlike vector Max.
+        return std::isnan(value1) || value1 > value2 ? value1 : value2;
     }
 
     float MathHelper::Min(float value1, float value2)
     {
-        return value1 < value2 ? value1 : value2;
+        // XNA's scalar helper propagates a first-operand NaN, unlike vector Min.
+        return std::isnan(value1) || value1 < value2 ? value1 : value2;
     }
 
     float MathHelper::SmoothStep(float value1, float value2, float amount)

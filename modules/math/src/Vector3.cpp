@@ -30,7 +30,9 @@ namespace Microsoft::Xna::Framework
 
         float ClampScalar(float value, float minValue, float maxValue)
         {
-            return std::min(std::max(value, minValue), maxValue);
+            // XNA caps first, then floors: reversed bounds resolve to the minimum.
+            value = value > maxValue ? maxValue : value;
+            return value < minValue ? minValue : value;
         }
 
         float LerpScalar(float value1, float value2, float amount)
@@ -351,14 +353,19 @@ namespace Microsoft::Xna::Framework
 
     Vector3 Vector3::Max(Vector3 value1, Vector3 value2)
     {
-        return Vector3(std::max(value1.X, value2.X), std::max(value1.Y, value2.Y), std::max(value1.Z, value2.Z));
+        // Vector comparisons select operand two on ties/NaNs, unlike MathHelper.
+        return Vector3(value1.X > value2.X ? value1.X : value2.X,
+                       value1.Y > value2.Y ? value1.Y : value2.Y,
+                       value1.Z > value2.Z ? value1.Z : value2.Z);
     }
 
     void Vector3::Max(const Vector3& value1, const Vector3& value2, Vector3& result) { result = Max(value1, value2); }
 
     Vector3 Vector3::Min(Vector3 value1, Vector3 value2)
     {
-        return Vector3(std::min(value1.X, value2.X), std::min(value1.Y, value2.Y), std::min(value1.Z, value2.Z));
+        return Vector3(value1.X < value2.X ? value1.X : value2.X,
+                       value1.Y < value2.Y ? value1.Y : value2.Y,
+                       value1.Z < value2.Z ? value1.Z : value2.Z);
     }
 
     void Vector3::Min(const Vector3& value1, const Vector3& value2, Vector3& result) { result = Min(value1, value2); }

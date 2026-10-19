@@ -744,6 +744,35 @@ static int validate_vector3_compound_assignment(void)
     return !vector3_near(aliased, left.x, left.y, left.z);
 }
 
+static int validate_component_bounds(void)
+{
+    CNA_Vector2 v2;
+    CNA_Vector3 v3;
+    CNA_Vector4 v4;
+    if (cna_vector2_clamp((CNA_Vector2){5, -5}, (CNA_Vector2){10, 10},
+            (CNA_Vector2){0, 0}, &v2) != CNA_RESULT_SUCCESS || v2.x != 10 || v2.y != 10 ||
+        cna_vector3_clamp((CNA_Vector3){5, -5, 20}, (CNA_Vector3){10, 10, 10},
+            (CNA_Vector3){0, 0, 0}, &v3) != CNA_RESULT_SUCCESS ||
+            v3.x != 10 || v3.y != 10 || v3.z != 10 ||
+        cna_vector4_clamp((CNA_Vector4){2, 5, 7, -6}, (CNA_Vector4){-2, 3, 8, -9},
+            (CNA_Vector4){1, 7, 6, -4}, &v4) != CNA_RESULT_SUCCESS ||
+            v4.x != 1 || v4.y != 5 || v4.z != 8 || v4.w != -6) return 0;
+
+    /* Vector Min/Max select the second operand on ties and unordered comparisons. */
+    const CNA_Vector2 a2 = {0.0F, NAN}, b2 = {-0.0F, 3};
+    const CNA_Vector3 a3 = {0.0F, NAN, 3}, b3 = {-0.0F, 3, NAN};
+    const CNA_Vector4 a4 = {0.0F, NAN, 3, -0.0F}, b4 = {-0.0F, 3, NAN, 0.0F};
+    if (cna_vector2_min(a2, b2, &v2) != CNA_RESULT_SUCCESS || !signbit(v2.x) || v2.y != 3 ||
+        cna_vector2_max(a2, b2, &v2) != CNA_RESULT_SUCCESS || !signbit(v2.x) || v2.y != 3 ||
+        cna_vector3_min(a3, b3, &v3) != CNA_RESULT_SUCCESS || !signbit(v3.x) || v3.y != 3 || !isnan(v3.z) ||
+        cna_vector3_max(a3, b3, &v3) != CNA_RESULT_SUCCESS || !signbit(v3.x) || v3.y != 3 || !isnan(v3.z) ||
+        cna_vector4_min(a4, b4, &v4) != CNA_RESULT_SUCCESS || !signbit(v4.x) || v4.y != 3 ||
+            !isnan(v4.z) || signbit(v4.w) ||
+        cna_vector4_max(a4, b4, &v4) != CNA_RESULT_SUCCESS || !signbit(v4.x) || v4.y != 3 ||
+            !isnan(v4.z) || signbit(v4.w)) return 0;
+    return 1;
+}
+
 int main(void)
 {
     return CNA_TEST_STAGE(validate_construction_and_members()) &&
@@ -752,5 +781,6 @@ int main(void)
         CNA_TEST_STAGE(validate_vector3_arithmetic()) && CNA_TEST_STAGE(validate_vector3_transforms()) &&
         CNA_TEST_STAGE(validate_vector3_compound_assignment()) &&
         CNA_TEST_STAGE(validate_vector4_construction_and_members()) &&
-        CNA_TEST_STAGE(validate_vector4_arithmetic()) && CNA_TEST_STAGE(validate_vector4_transforms()) ? 0 : 1;
+        CNA_TEST_STAGE(validate_vector4_arithmetic()) && CNA_TEST_STAGE(validate_vector4_transforms()) &&
+        CNA_TEST_STAGE(validate_component_bounds()) ? 0 : 1;
 }

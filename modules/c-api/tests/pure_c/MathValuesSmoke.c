@@ -77,6 +77,35 @@ static int validate_math_helper(void)
     return 1;
 }
 
+static uint32_t float_bits(float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+static int validate_math_bounds_bits(void)
+{
+    const uint32_t samples[] = {UINT32_C(0xff800000), UINT32_C(0xbf800000),
+        UINT32_C(0x80000000), 0, UINT32_C(0x3f800000), UINT32_C(0x7f800000),
+        UINT32_C(0x7fc00001), UINT32_C(0xffc12345)};
+    for (unsigned i = 0; i < sizeof(samples) / sizeof(samples[0]); ++i) {
+        for (unsigned j = 0; j < sizeof(samples) / sizeof(samples[0]); ++j) {
+            float a, b, result;
+            memcpy(&a, &samples[i], sizeof(a));
+            memcpy(&b, &samples[j], sizeof(b));
+            const float minimum = isnan(a) || a < b ? a : b;
+            const float maximum = isnan(a) || a > b ? a : b;
+            if (cna_math_min(a, b, &result) != CNA_RESULT_SUCCESS ||
+                float_bits(result) != float_bits(minimum) ||
+                cna_math_max(a, b, &result) != CNA_RESULT_SUCCESS ||
+                float_bits(result) != float_bits(maximum)) return 0;
+        }
+    }
+    float result;
+    return cna_math_clamp_float(5, 10, 0, &result) == CNA_RESULT_SUCCESS && result == 10;
+}
+
 static int point_equals(CNA_Point left, CNA_Point right)
 {
     return left.x == right.x && left.y == right.y;
@@ -256,5 +285,6 @@ static int validate_rectangle(void)
 
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_math_helper()) && CNA_TEST_STAGE(validate_point()) && CNA_TEST_STAGE(validate_rectangle()) ? 0 : 1;
+    return CNA_TEST_STAGE(validate_math_helper()) && CNA_TEST_STAGE(validate_point()) &&
+        CNA_TEST_STAGE(validate_rectangle()) && CNA_TEST_STAGE(validate_math_bounds_bits()) ? 0 : 1;
 }
