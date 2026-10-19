@@ -47,9 +47,21 @@ used wrong cwd and could not load8 checked-in fixtures; original retained, rerun
 from CNA root passes all966/two skips. RegisteredColor/packing70 tests running
 session46419 COMPLETE70/70pass11.07s. Additional packed/color/vertex/avatar CPU-oriented
 consumer selection156PASS/one unavailable effect-fixture skip(157total,7.739s);
-not a full renderer suite. No Color external rebuild/closure yet. No native jobs running.
-UNCOMMITTED: handoff/matrix only. Prepared lifecycle source/probes (genuine29+8passes),
-no lifecycle production edits. Linux x86_64,private display,Radeon780M/Mesa only;
+not a full renderer suite. No Color external rebuild/closure yet. Exact1412-test native
+consumer inventory NOW RUNNING session61789 (repair-color-native-consumers.log),
+private display/separate XDG. DO NOT RELINK native CnaTests/libcna.so until it exits:
+the catalog process tests self-spawn /proc/self/exe. Runtime additions below were
+compiled standalone and did not relink that frozen native executable.
+UNCOMMITTED: lifecycle native test additions in LaunchParametersTests.cpp,
+GameComponentCollectionTests.cpp and new ComponentLifecycleCompatibilityTests.cpp;
+handoff and matching demo evidence. No lifecycle production edits. Native standalone
+values44total39PASS/five intendedFAIL; real-Game lifecycle6/6 intendedFAIL,zero skips,
+private display1.014s. Genuine29+8passes. Standalone Game strict build uses Wall/Wextra/
+Werror (not extra Wpedantic, which rejects Decimal's supported __int128); original
+build and missing-executable launch failures retained. Native CnaTests remains
+built only through Color1ad0a3916; runtime tests compiled into separate build-probe
+executables. Keep external Color build free of lifecycle production changes until
+it is frozen for its own checkpoint. Linux x86_64,private display,Radeon780M/Mesa only;
 no all-platform claim. No push/merge. Continue automatically after each batch.
 
 Prepared validation drivers (ignored build-probe): repair-containment-{focused,
@@ -63,10 +75,19 @@ FileShare and missing lower-layer constructor,056 EOF/fail state reaches tellg.
 Sharp Runtime current AGENTS/CLAUDE rules inspected (excluding historical count
 ledger): consumer-requested dependency fixes authorized, zero-warning gate and
 at most TWO build/compiler/test jobs there, fixed reusable build directories;
-read docs/StandingApprovals.md before any layout/API decision. Its automatic-push
+docs/StandingApprovals.md now read completely (661lines), including SA-3/SA-15.3
+layout/base-class gates and SA-5 evidence/migration/full-gate requirements. Its automatic-push
 rule is overridden by this campaign's explicit no-push instruction. No Sharp
 Runtime modification, build or closure claimed. Local .NET reference is a .NET11
 preview snapshot, not XNA/.NET Framework behavior by default.
+Fresh genuine .NET Framework4 EOF probe13/13PASS versus direct current native7/13
+failures: EOF state also loses a following write, not just position. Fresh genuine
+Storage probe172/172PASS (isolated private-root injection, NOT construction/device
+validation) proves disposed guards,144 share combinations, and correct shorter
+defaults. Historical152 suggestion to retain ReadWrite default is wrong: genuine
+Storage OpenFile2/3args is exclusive; 2argAppend choosesWrite; FileStream3args itself
+defaultsRead sharing. Future repair must distinguish those contracts. Permanent
+../cna-demos/docs/repair-evidence/storage/. All probes remove only their new fixtures.
 
 ## Superseded chronological checkpoint notes
 
