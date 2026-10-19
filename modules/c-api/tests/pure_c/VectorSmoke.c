@@ -773,6 +773,26 @@ static int validate_component_bounds(void)
     return 1;
 }
 
+static int validate_wide_products(void)
+{
+    float value;
+    CNA_Vector3 cross = {1e20F, 1e20F, 1e20F};
+    if (cna_vector2_dot((CNA_Vector2){1e20F, 1e20F}, (CNA_Vector2){1e20F, -1e20F}, &value) !=
+            CNA_RESULT_SUCCESS || value != 0.0F || signbit(value) ||
+        cna_vector3_dot((CNA_Vector3){1e20F, 1e20F, 1.0F}, (CNA_Vector3){1e20F, -1e20F, 1.0F}, &value) !=
+            CNA_RESULT_SUCCESS || value != 1.0F ||
+        cna_vector4_dot((CNA_Vector4){1e20F, 1e20F, 1.0F, 2.0F},
+            (CNA_Vector4){1e20F, -1e20F, 1.0F, 3.0F}, &value) != CNA_RESULT_SUCCESS || value != 7.0F)
+        return 0;
+    if (cna_vector3_cross(cross, cross, &cross) != CNA_RESULT_SUCCESS ||
+        cross.x != 0.0F || cross.y != 0.0F || cross.z != 0.0F ||
+        signbit(cross.x) || signbit(cross.y) || signbit(cross.z))
+        return 0;
+    return cna_vector3_cross((CNA_Vector3){1e20F, 1e20F, 1.0F},
+            (CNA_Vector3){1e20F, 1e20F, 2.0F}, &cross) == CNA_RESULT_SUCCESS &&
+        cross.x == 1e20F && cross.y == -1e20F && cross.z == 0.0F && !signbit(cross.z);
+}
+
 int main(void)
 {
     return CNA_TEST_STAGE(validate_construction_and_members()) &&
@@ -782,5 +802,5 @@ int main(void)
         CNA_TEST_STAGE(validate_vector3_compound_assignment()) &&
         CNA_TEST_STAGE(validate_vector4_construction_and_members()) &&
         CNA_TEST_STAGE(validate_vector4_arithmetic()) && CNA_TEST_STAGE(validate_vector4_transforms()) &&
-        CNA_TEST_STAGE(validate_component_bounds()) ? 0 : 1;
+        CNA_TEST_STAGE(validate_component_bounds()) && CNA_TEST_STAGE(validate_wide_products()) ? 0 : 1;
 }

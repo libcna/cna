@@ -268,9 +268,14 @@ namespace Microsoft::Xna::Framework
 
     void Vector3::Cross(const Vector3& vector1, const Vector3& vector2, Vector3& result)
     {
-        const float x = (vector1.Y * vector2.Z) - (vector2.Y * vector1.Z);
-        const float y = -((vector1.X * vector2.Z) - (vector2.X * vector1.Z));
-        const float z = (vector1.X * vector2.Y) - (vector2.X * vector1.Y);
+        // Preserve XNA's wide cancellation and subtraction order (including zero signs).
+        // Cache all components before writing an output that may alias either input.
+        const float x = static_cast<float>(static_cast<double>(vector1.Y) * vector2.Z -
+                                           static_cast<double>(vector1.Z) * vector2.Y);
+        const float y = static_cast<float>(static_cast<double>(vector1.Z) * vector2.X -
+                                           static_cast<double>(vector1.X) * vector2.Z);
+        const float z = static_cast<float>(static_cast<double>(vector1.X) * vector2.Y -
+                                           static_cast<double>(vector1.Y) * vector2.X);
         result.X = x;
         result.Y = y;
         result.Z = z;
@@ -326,7 +331,9 @@ namespace Microsoft::Xna::Framework
 
     float Vector3::Dot(Vector3 value1, Vector3 value2)
     {
-        return (value1.X * value2.X) + (value1.Y * value2.Y) + (value1.Z * value2.Z);
+        return static_cast<float>(static_cast<double>(value1.X) * value2.X +
+                                  static_cast<double>(value1.Y) * value2.Y +
+                                  static_cast<double>(value1.Z) * value2.Z);
     }
 
     void Vector3::Dot(const Vector3& value1, const Vector3& value2, float& result) { result = Dot(value1, value2); }

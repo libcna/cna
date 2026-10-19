@@ -246,7 +246,12 @@ namespace Microsoft::Xna::Framework
         result.Y = value1.Y / divider;
     }
 
-    float Vector2::Dot(Vector2 value1, Vector2 value2) { return (value1.X * value2.X) + (value1.Y * value2.Y); }
+    float Vector2::Dot(Vector2 value1, Vector2 value2)
+    {
+        // Keep products wide until cancellation and the final Single result, as XNA does.
+        return static_cast<float>(static_cast<double>(value1.X) * value2.X +
+                                  static_cast<double>(value1.Y) * value2.Y);
+    }
     void Vector2::Dot(const Vector2& value1, const Vector2& value2, float& result) { result = Dot(value1, value2); }
 
     Vector2 Vector2::Hermite(Vector2 value1, Vector2 tangent1, Vector2 value2, Vector2 tangent2, float amount)

@@ -282,7 +282,10 @@ namespace Microsoft::Xna::Framework
 
     float Vector4::Dot(Vector4 value1, Vector4 value2)
     {
-        return (value1.X * value2.X) + (value1.Y * value2.Y) + (value1.Z * value2.Z) + (value1.W * value2.W);
+        return static_cast<float>(static_cast<double>(value1.X) * value2.X +
+                                  static_cast<double>(value1.Y) * value2.Y +
+                                  static_cast<double>(value1.Z) * value2.Z +
+                                  static_cast<double>(value1.W) * value2.W);
     }
 
     void Vector4::Dot(const Vector4& value1, const Vector4& value2, float& result) { result = Dot(value1, value2); }
