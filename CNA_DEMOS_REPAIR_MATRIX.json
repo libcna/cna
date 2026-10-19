@@ -534,7 +534,9 @@
       "root_cause": null,
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Value-batch full GLES outage assertion vacuously passes at0/24 unreliable vs baseline1/24; preceding checkpoint and unchanged follow-up both4/24. All reliable24/24 remain delivered. No network production changes. Existing native simulator7/7 and sender/receiver ENet integration4/4 pass. Demo incorrectly configures receiver and assumes minimum latency, while pre-campaign01534c2e7 and genuine XNA use sender-only Gaussian latency. Keep pending until corrected standalone oracle is validated; do not hide exact comparison exit1."
+      ],
       "final_disposition": null
     },
     {
@@ -2159,15 +2161,17 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Six scalar FloatHash helpers preserve the zero sign bit even though equality equates both zeros. Canonicalize zero only; genuine .NET 4 preserves NaN payloads unlike modern System.Single hash. CurveKey additionally XORs field hashes instead of adding with unsigned 32-bit wrap.",
       "related_issues": [],
       "cna_fix_commit": "bf209dcbe",
       "validation": [
         "Fresh genuine XNA signed-zero oracle passes 206 checks; all six original demos remain expected failures in current full math sweeps. Seven native regressions plus a registered C17 smoke are written but await pre-fix build/run while 115 regression checkpoint occupies three jobs. Permanent probe docs/repair-evidence/issue-120/, logs repair-120-xna*. No production edit yet.",
-        "Runtime/native commit bf209dcbe. Pre-fix six native failures and C smoke zero-stage failure; zero-only partial repair exposes the separate CurveKey combination error (904 pass/two skips/one failure), retained in repair-120-all-math-after.log. Complete native repair: 906 passes/two unchanged fixture skips; registered hash tests 8/8, genuine extended oracle 212/212. External demos and C ABI final verification await frozen 115 checkpoint completion. No marker removed or closure claimed."
+        "Runtime/native commit bf209dcbe. Pre-fix six native failures and C smoke zero-stage failure; zero-only partial repair exposes the separate CurveKey combination error (904 pass/two skips/one failure), retained in repair-120-all-math-after.log. Complete native repair: 906 passes/two unchanged fixture skips; registered hash tests 8/8, genuine extended oracle 212/212. External demos and C ABI final verification await frozen 115 checkpoint completion. No marker removed or closure claimed.",
+        "External focused checkpoint passes all 13 original C++ demos under both labels, extended C CurveKey ten controls and five native C17/Werror smoke binaries against rebuilt C ABI. Thirteen markers removed only after passes. Both 95-demo math sweeps: 68 pass/27 remaining expected failures, exactly 23 cumulative expected changes and no unrelated assertion/check/outcome delta. Metadata719/0, tool self-tests7+4+5, six exact visual references pass. Full CTest and full renderer sweeps running; no final closure yet. Reports repair-values-*.",
+        "Final runtime9786d4c93: all13 original C++ scenarios pass both labels; strict C17/Werror rebuilt C ABI smokes pass. Both95-demo math sweeps:68 pass/27 expected failures; exactly23 cumulative expected changes, no unrelated math deltas. All732 enabled CTests accepted, zero failures,48 skips/three disabled unchanged(542.11s); six visual references exact. Full719 SOFTWARE580/88/48/3 and OPENGLES3619/90/7/3. One pre-existing030 assertion delta in GLES is retained and investigated, not whitelisted: receiver-side simulation is a wrong demo oracle and ordinary unreliable delivery varies. Seven deterministic simulator and four ENet integration tests pass. Permanent evidence: ../cna-demos/docs/repair-evidence/bounds/REGRESSION_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-121",
@@ -2182,15 +2186,17 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Duplicated CheckArrayRange rejects negative length/indices before XNA signed-64-bit endpoint checks; positive negative-index access requires IndexOutOfRangeException, not ArgumentOutOfRangeException. Existing signed-int endpoint addition risks overflow.",
       "related_issues": [],
       "cna_fix_commit": "9786d4c93",
       "validation": [
         "Fresh genuine XNA oracle passes 200 exact exception/output cases across all eight range overloads. Native pre-fix tests written; build in progress. No production edit yet. Permanent oracle docs/repair-evidence/issue-121/, logs repair-121-xna*.",
-        "Runtime/native commit 9786d4c93. Pre-fix native 915 passes/two skips/three failures; targeted production Vector2 TU UBSan proves signed INT_MAX+1 overflow. After repair native 918 passes/two unchanged skips, registered vector tests 247/247 (63.76s), UBSan instrumenting all three production vector TUs passes. External demo verification pending in next coherent value-semantics checkpoint. C ABI arrays have unsigned indices/length and separate validated loops; preserve existing contract."
+        "Runtime/native commit 9786d4c93. Pre-fix native 915 passes/two skips/three failures; targeted production Vector2 TU UBSan proves signed INT_MAX+1 overflow. After repair native 918 passes/two unchanged skips, registered vector tests 247/247 (63.76s), UBSan instrumenting all three production vector TUs passes. External demo verification pending in next coherent value-semantics checkpoint. C ABI arrays have unsigned indices/length and separate validated loops; preserve existing contract.",
+        "External focused checkpoint passes all 13 original C++ demos under both labels, extended C CurveKey ten controls and five native C17/Werror smoke binaries against rebuilt C ABI. Thirteen markers removed only after passes. Both 95-demo math sweeps: 68 pass/27 remaining expected failures, exactly 23 cumulative expected changes and no unrelated assertion/check/outcome delta. Metadata719/0, tool self-tests7+4+5, six exact visual references pass. Full CTest and full renderer sweeps running; no final closure yet. Reports repair-values-*.",
+        "Final runtime9786d4c93: all13 original C++ scenarios pass both labels; strict C17/Werror rebuilt C ABI smokes pass. Both95-demo math sweeps:68 pass/27 expected failures; exactly23 cumulative expected changes, no unrelated math deltas. All732 enabled CTests accepted, zero failures,48 skips/three disabled unchanged(542.11s); six visual references exact. Full719 SOFTWARE580/88/48/3 and OPENGLES3619/90/7/3. One pre-existing030 assertion delta in GLES is retained and investigated, not whitelisted: receiver-side simulation is a wrong demo oracle and ordinary unreliable delivery varies. Seven deterministic simulator and four ENet integration tests pass. Permanent evidence: ../cna-demos/docs/repair-evidence/bounds/REGRESSION_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-122",
@@ -2206,15 +2212,17 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Vector Clamp floors against minimum before capping maximum, reversing the XNA order; std::min/max select the first operand on ties/unordered comparisons whereas XNA vectors select the second.",
       "related_issues": [],
       "cna_fix_commit": "eef23e6f8",
       "validation": [
         "Genuine bounds oracle passes 6401 bit-level pair/triple/value/out/alias controls, including a Vector4 demo oracle correction: mixed reversed Z interval returns 8, not 6. Native regression tests prepared; pre-fix build running. No production repair or closure yet. Evidence docs/repair-evidence/bounds/ and repair-bounds-xna*.",
-        "Native runtime/regression commit eef23e6f8: before 907 passes/two unchanged skips/eight failures; after 915 passes/two unchanged skips, registered vector/scalar/bounds/hash tests 316/316 (64.99s). Both strict C17 smoke regressions fail their new pre-fix stage against frozen demo ABI; post-fix external validation awaits 115 checkpoint. Vector4 mixed-interval demo oracle corrected from Z=6 to genuine XNA Z=8, all eight assertions retained. No marker removed or closure yet."
+        "Native runtime/regression commit eef23e6f8: before 907 passes/two unchanged skips/eight failures; after 915 passes/two unchanged skips, registered vector/scalar/bounds/hash tests 316/316 (64.99s). Both strict C17 smoke regressions fail their new pre-fix stage against frozen demo ABI; post-fix external validation awaits 115 checkpoint. Vector4 mixed-interval demo oracle corrected from Z=6 to genuine XNA Z=8, all eight assertions retained. No marker removed or closure yet.",
+        "External focused checkpoint passes all 13 original C++ demos under both labels, extended C CurveKey ten controls and five native C17/Werror smoke binaries against rebuilt C ABI. Thirteen markers removed only after passes. Both 95-demo math sweeps: 68 pass/27 remaining expected failures, exactly 23 cumulative expected changes and no unrelated assertion/check/outcome delta. Metadata719/0, tool self-tests7+4+5, six exact visual references pass. Full CTest and full renderer sweeps running; no final closure yet. Reports repair-values-*.",
+        "Final runtime9786d4c93: all13 original C++ scenarios pass both labels; strict C17/Werror rebuilt C ABI smokes pass. Both95-demo math sweeps:68 pass/27 expected failures; exactly23 cumulative expected changes, no unrelated math deltas. All732 enabled CTests accepted, zero failures,48 skips/three disabled unchanged(542.11s); six visual references exact. Full719 SOFTWARE580/88/48/3 and OPENGLES3619/90/7/3. One pre-existing030 assertion delta in GLES is retained and investigated, not whitelisted: receiver-side simulation is a wrong demo oracle and ordinary unreliable delivery varies. Seven deterministic simulator and four ENet integration tests pass. Permanent evidence: ../cna-demos/docs/repair-evidence/bounds/REGRESSION_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-123",
@@ -2245,12 +2253,15 @@
         "math.rectangle.edges_and_center"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Point and Rectangle inherit XOR field hashing instead of genuine XNA unchecked 32-bit addition. Existing native and C demo exact XOR oracles require evidence-backed correction.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "5a44d2c50",
+      "validation": [
+        "Current value-semantics checkpoint still reproduces the original failure under both labels: Point10/Rectangle identity13/Union10 checks, each with its documented failed assertion. Local genuine decompilation and FNA reviewed. Extended genuine oracle and four native regressions prepared but not built/run while full checkpoint occupies three jobs. No production edit yet.",
+        "Native post-fix922 pass/two unchanged skips; Point/Rectangle registered57/57. Rebuilt demo runtime5a44d2c50: original three C++ scenarios retain10/13/10 checks and pass both labels; strengthened C Point/Rectangle demos and strict C17/Werror MathValuesSmoke pass. External regression checkpoint still pending."
+      ],
       "final_disposition": null
     },
     {
@@ -2262,12 +2273,15 @@
         "math.rectangle.intersect_and_union"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Rectangle Union output writes X/Y before reading Right/Bottom from aliased inputs, changing the far-edge calculations. Value Union and Intersect preserve the needed inputs.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "5a44d2c50",
+      "validation": [
+        "Current value-semantics checkpoint still reproduces the original failure under both labels: Point10/Rectangle identity13/Union10 checks, each with its documented failed assertion. Local genuine decompilation and FNA reviewed. Extended genuine oracle and four native regressions prepared but not built/run while full checkpoint occupies three jobs. No production edit yet.",
+        "Native post-fix922 pass/two unchanged skips; Point/Rectangle registered57/57. Rebuilt demo runtime5a44d2c50: original three C++ scenarios retain10/13/10 checks and pass both labels; strengthened C Point/Rectangle demos and strict C17/Werror MathValuesSmoke pass. External regression checkpoint still pending."
+      ],
       "final_disposition": null
     },
     {
@@ -2459,15 +2473,17 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "MathHelper uses only an ordered comparison and loses a NaN first operand; genuine XNA preserves that NaN including payload, unlike vector Min/Max.",
       "related_issues": [],
       "cna_fix_commit": "eef23e6f8",
       "validation": [
         "Genuine bounds oracle passes 6401 bit-level pair/triple/value/out/alias controls, including a Vector4 demo oracle correction: mixed reversed Z interval returns 8, not 6. Native regression tests prepared; pre-fix build running. No production repair or closure yet. Evidence docs/repair-evidence/bounds/ and repair-bounds-xna*.",
-        "Native runtime/regression commit eef23e6f8: before 907 passes/two unchanged skips/eight failures; after 915 passes/two unchanged skips, registered vector/scalar/bounds/hash tests 316/316 (64.99s). Both strict C17 smoke regressions fail their new pre-fix stage against frozen demo ABI; post-fix external validation awaits 115 checkpoint. Vector4 mixed-interval demo oracle corrected from Z=6 to genuine XNA Z=8, all eight assertions retained. No marker removed or closure yet."
+        "Native runtime/regression commit eef23e6f8: before 907 passes/two unchanged skips/eight failures; after 915 passes/two unchanged skips, registered vector/scalar/bounds/hash tests 316/316 (64.99s). Both strict C17 smoke regressions fail their new pre-fix stage against frozen demo ABI; post-fix external validation awaits 115 checkpoint. Vector4 mixed-interval demo oracle corrected from Z=6 to genuine XNA Z=8, all eight assertions retained. No marker removed or closure yet.",
+        "External focused checkpoint passes all 13 original C++ demos under both labels, extended C CurveKey ten controls and five native C17/Werror smoke binaries against rebuilt C ABI. Thirteen markers removed only after passes. Both 95-demo math sweeps: 68 pass/27 remaining expected failures, exactly 23 cumulative expected changes and no unrelated assertion/check/outcome delta. Metadata719/0, tool self-tests7+4+5, six exact visual references pass. Full CTest and full renderer sweeps running; no final closure yet. Reports repair-values-*.",
+        "Final runtime9786d4c93: all13 original C++ scenarios pass both labels; strict C17/Werror rebuilt C ABI smokes pass. Both95-demo math sweeps:68 pass/27 expected failures; exactly23 cumulative expected changes, no unrelated math deltas. All732 enabled CTests accepted, zero failures,48 skips/three disabled unchanged(542.11s); six visual references exact. Full719 SOFTWARE580/88/48/3 and OPENGLES3619/90/7/3. One pre-existing030 assertion delta in GLES is retained and investigated, not whitelisted: receiver-side simulation is a wrong demo oracle and ordinary unreliable delivery varies. Seven deterministic simulator and four ENet integration tests pass. Permanent evidence: ../cna-demos/docs/repair-evidence/bounds/REGRESSION_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-137",
@@ -2523,7 +2539,9 @@
       "root_cause": null,
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "New native pre-fix tests:923 pass/two fixture skips/two failures, proving alias corruption and downstream translated nonzero-offset Plane.Transform error. Original CGeometrySmoke passes; new translated-plane C stage fails. Local alias-safe temporary repair:925 native passes/two unchanged skips. Registered/consumer/external validation pending."
+      ],
       "final_disposition": null
     },
     {

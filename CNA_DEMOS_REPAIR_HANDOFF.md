@@ -9,11 +9,11 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
-Phase C. CNA runtime HEAD is `9786d4c93`; latest demo closure is `1a8d88c`.
-All 155 historical IDs are retained in the matrix: 39 final dispositions and 116
-pending (eight runtime findings, 23 documentation corrections, seven already fixed,
-one proven demo expectation error). Confirmed pending batches include build 001,
-hashes 120, array ranges 121 and bounds 122/136; see the matrix for every ID.
+Phase C. CNA committed runtime is `5a44d2c50`; latest demo closure is `62a496e`.
+All 155 historical IDs are retained in the matrix: 43 final dispositions and 112
+pending (12 runtime findings, 23 documentation corrections, seven already fixed,
+one proven demo expectation error). Values 120/121/122/136 are now closed with the
+explicitly investigated 030 regression delta below; see the matrix for every ID.
 No push or merge. Linux x86_64; Radeon 780M/Mesa; private displays and dummy audio.
 Native graphics profile is OPENGLES3 only; demo profile additionally offers SOFTWARE,
 OPENGL33, SDL_GPU, HEADLESS and STUB. No all-platform/hardware/service claim.
@@ -47,22 +47,76 @@ CURRENT NEXT BATCH: value semantics 120/121/122/136, committed separately:
   skips/three failures, after 918/two skips; registered vectors 247/247. UBSan actual
   Vector2 TU proves pre-fix INT_MAX+1 overflow; all three repaired production TUs pass
   UBSan. C ABI unsigned range contracts remain unchanged and keep their native smoke.
-All native builds passed. No external closure or knownIssue removal yet for these
-four IDs. Reports repair-120-*, repair-bounds-*, repair-121-* hold the evidence.
+All native builds passed. External closure and marker removal are now validated
+for these four IDs. Reports repair-120-*, repair-bounds-*, repair-121-* hold evidence.
 
-RUNNING: complete incremental demo rebuild against 9786d4c93, at three jobs,
-log repair-values-demo-build.log. Do not start more compiler/test jobs until a slot
-is free. Exact next task after build: run all 13 focused original C++ demos under
-both renderer labels, C17 MathValueHashSmoke/VectorSmoke/MathValuesSmoke and extended
-C curve-key demo; remove corresponding markers ONLY after real passes. Rebuild those
-metadata changes, compare both complete 95-demo math sweeps (23 cumulative expected
-status changes, CurveKey gains one additional assertion), run six exact visuals,
-full enabled CTest and full renderer regression. Preserve every unexpected delta.
-Then close each ID with its own runtime commit and continue remaining Math/Core.
+CURRENT BATCH VALIDATION: demo builds pass warning-free. All 13 focused original
+C++ scenarios pass both labels; strict C17/Werror MathValueHashSmoke, VectorSmoke,
+MathValuesSmoke, MatrixSmoke and QuaternionSmoke pass against the rebuilt C API.
+Extended C CurveKey demo passes ten checks. Thirteen knownIssue/restriction pairs
+removed only after those passes. Both complete math sweeps: 68 pass/27 expected
+fail, EXACTLY 23 cumulative status changes and zero unrelated check/assertion deltas.
+CurveKey retains six original checks plus one exact wrapped-sum check. Metadata719/0;
+tool self-tests 7+4+5 pass; six visual references exact (zero differing pixels/channels),
+representative GLES texture capture inspected. Reports repair-values-*.
+
+Full demo CTest now PASSES: all 732 enabled accepted, zero failures, 48 skips/three
+disabled unchanged (542.11s), log repair-values-demo-ctest.log.
+Both complete smoke runs finished at runtime 9786d4c93: SOFTWARE 580 pass/88
+expected fail/48 skip/three manual; OPENGLES3 619/90/seven/three. SOFTWARE exact
+comparison accepts 23 expected changes only. OPENGLES3 comparison exits 1 and is
+PRESERVED: the existing 030 network scenario still fails its incorrect minimum-delay
+assertion, but its receiver-side outage check passes this time (zero unreliable
+packets vs one at baseline). Do not claim zero unrelated assertion differences.
+Source audit confirms simulation acts on the sender; this demo sets the receiver.
+The historical reliable-loss runtime defect was fixed before the campaign in
+01534c2e7. Native/genuine deterministic evidence and the incorrect demo require
+separate investigation before final closure. No networking production/test code
+has changed in the relevant simulator/ENet tests since the campaign baseline;
+an unrelated PacketReaderWriter test comment was corrected in the documentation batch.
+Delta investigation completed: native simulator7/7 and ENet integration4/4 pass;
+unchanged focused follow-up again receives4/24 unreliable packets with both old
+failures. The zero count was a vacuous pass of a wrong receiver-side outage oracle.
+Permanent explanation: ../cna-demos/docs/repair-evidence/bounds/REGRESSION_CHECKPOINT.md.
+Keep030 pending until its standalone contract is corrected in its own batch.
+The next integer demo build was inadvertently started after the nonzero comparison
+without gating; it has now completed at runtime 5a44d2c50. Original full reports
+remain immutable. Do not describe new focused runs as using frozen 9786d4c93 binaries.
+Next: finish integer/transpose validation. The four-value closure is committed as
+demo62a496e, with all155 historical IDs retained (43 final/112 pending).
+Next batch: Point/Rectangle hashes 124 and Rectangle Union aliasing 125. Genuine
+oracle passes 4510/4510. Native pre-fix: 919 passes/two skips/three failures (924
+tests); Intersect alias control passes. C17 smoke confirms both corrected hash
+oracles and extended hash stage fail, while C Union aliases already pass.
+Runtime/native commit `5a44d2c50` uses unsigned 32-bit sums plus bit-preserving
+conversion and assigns the completed Union value result before any output write.
+Native build passed; whole math passes 922/two unchanged fixture skips, registered
+Point/Rectangle tests 57/57 (11.44s).
+Permanent evidence is in demo docs/repair-evidence/integer-values/. Native C smoke
+and two C demos correct inherited XOR oracles using genuine evidence, retaining
+assertions and adding wrap/alias controls. No 124/125 marker removed or closure yet.
+The integer demo build passed; all three original C++ scenarios retain10/13/10
+checks and pass both labels. Strengthened C Point/Rectangle demos and strict C17
+MathValuesSmoke pass. Full regression checkpoint remains pending.
 
 UNCOMMITTED: CNA handoff/matrix updates; demo CurveKey extra C++/C exact hash controls,
 Vector4 evidence-backed oracle correction and permanent 120/121/bounds evidence.
-No uncommitted production/native test changes. Older notes below are historical
+No uncommitted production/native test work remains for the integer batch. The two
+C demo oracle changes and permanent evidence are uncommitted until external validation.
+Queued Matrix audit: genuine residual probe passes 192 checks (transpose raw bits,
+Plane transformation consumer, scaled shadows and near-unit Plane normalization).
+Current Plane normalization misses XNA's near-unit shortcut and finite extreme range;
+do not blindly duplicate that deficient normalization inside CreateShadow. Coordinate
+140's correct-layer normalization repair with the pending 118 range audit. No Matrix
+or Plane production edits yet. Logs repair-matrix-residual-xna{,-extended}*.
+Uncommitted 139 regression tests now reproduce two native failures (out-transpose
+alias and Plane.Transform consumer); the value transpose control passes. Extended
+GeometrySmoke fails its new nonzero-offset translated-plane check, while the original
+C smoke passes. Local Matrix out-transpose now reads all16 elements into a temporary
+before assignment. Native math925 passes/two unchanged skips (927 tests); registered
+Matrix/Plane141/141 pass (10.20s). Consumer and external checks pending.
+Preserve repair-139-*-before* evidence.
+Older notes below are historical
 snapshots, superseded by this checkpoint; original baseline evidence remains intact.
 
 Latest completed repair: Quaternion 119 (`df9234202`), demo `105fc63`. Genuine XNA
