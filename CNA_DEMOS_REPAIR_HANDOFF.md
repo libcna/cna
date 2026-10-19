@@ -9,7 +9,75 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
+**Latest validated batch:** Curve 002/036/097/137/138 is closed FIXED_VALIDATED by
+CNA `d753d0997`. All 155 historical IDs are retained: five fixed runtime findings,
+23 documentation corrections, seven already-fixed findings, one demonstrated demo
+expectation error, 119 pending final disposition. Demo closure is about to be committed
+after demo HEAD `81bc0e2`; this status supersedes all earlier pending-Curve notes below.
+All 732 enabled demo CTests pass (412.58s, 48 skipped/three disabled unchanged).
+SOFTWARE and private-display OPENGLES3 math sweeps each have 95 demos, 51 passes and
+44 unrelated expected failures. Exact comparisons show only five Curve repairs plus
+earlier 116 oracle correction; every unrelated failed assertion/check count is unchanged.
+Native math 886 passed/two existing fixture skips; aggregate Curve/readers 92/92,
+registered Curve CTests 74/74; native C17/Werror ABI smoke and extended 17-check C demo
+pass. Targeted collection production-TU ASan/UBSan alias probe passes with leak checking.
+Five knownIssue markers removed only after actual passes; all assertions preserved.
+
+Phase C next batch: ISSUE-117 perspective. Matrix production is still unchanged.
+Three new native MatrixPerspectiveCompatibilityTests and the native C API MatrixSmoke
+Pi boundary regression are uncommitted. Their two-job native rebuild is running in
+`repair-117-native-before-build.log`; capture expected pre-fix failures next. Genuine
+XNA PerspectiveOracle is running (`repair-117-xna{,-build,.stderr}.log`) using the
+existing private Wine environment. Do not confuse these new tests with the completed
+Curve checkpoint. No other production change, no push/merge. Current dirty work is
+these next-batch tests/probe plus closure evidence/status pending their coherent commits.
+Last complete renderer smoke and six exact visuals remain the original baseline;
+this math batch adds both full math sweeps and the full SOFTWARE CTest checkpoint.
+
+## Earlier Phase C progress (superseded by the checkpoint above)
+
 **Authoritative latest state:** Phase B is complete; Phase C Curve repair is in progress.
+Latest continuation overrides the pending-build statements below: Curve runtime/tests
+are committed as `d753d0997`; documentation status commit is `8991423cd`, matching demo
+closure `81bc0e2`. Demo rebuild and marker-only rebuild passed (232 and 13 scheduled
+steps, no warnings). All five original Curve reproductions pass with their full
+6/17/20/4/7 checks under both renderer labels; external C API workflow passes all 17
+raw checks, and the native C17/Werror CurveSmoke passes against that exact rebuilt
+demo library. The five knownIssue markers are now removed, assertions retained.
+The complete 95-demo math category on SOFTWARE has 51 passes / 44 expected failures.
+An OPENGLES3 category attempt without a display exposed that math.color.named_colors
+is a Game demo: its missing-video-device failure is preserved in
+`repair-curve-math-OPENGLES3-no-display.*`, NOT accepted as a regression pass. Rerun
+the category with the private display. Full demo CTest is running with three jobs:
+`repair-curve-demo-ctest.log`. Do not exceed the three-job campaign cap by starting
+another test/compiler until it finishes. Then run private OPENGLES3 math, compare
+all math assertions to the baseline, close the five Curve IDs with d753d0997 and
+commit the demo evidence/markers. Documentation checkpoint skip count is unchanged:
+48 skipped / three disabled. Curve primary inventory/matrix closure is still pending.
+All 95 SOFTWARE math results and exact failed-assertion multiplicities now compare
+successfully: only the five Curve fixes and earlier Matrix oracle 116 change status;
+097 restores 6 -> 20 executed controls. Report `repair-curve-math-SOFTWARE-comparison.json`.
+Ignored comparison helper: demo `build-probe/repair-curve-compare.mjs` (run for GLES
+after its private-display rerun). Next-batch preparation only: untracked demo
+`docs/repair-evidence/issue-117/PerspectiveOracle.cs` has NOT been compiled/run yet.
+It checks exact XNA exception type/ParamName, refusal order, unchanged out matrices,
+Pi boundary and intentional IEEE dimension/aspect behavior. Do not include this
+unvalidated probe in the Curve evidence commit. Matrix production is unchanged. Three
+new native tests in MatrixPerspectiveCompatibilityTests.cpp and a native C API
+MatrixSmoke Pi/output-preservation check are now applied but NOT built/run. Build
+these against the unchanged Matrix implementation first and preserve the failures.
+Then run the genuine XNA probe, correct the stale std exception catches in the demo,
+and repair only the proven boundary/exception contracts. Keep this next-batch work
+out of the Curve closure commit.
+
+Later 118/119 triage caveat: genuine XNA decompiled methods declare float squared
+intermediates, yet historical x86 runtime probes report wider finite ranges. Do not
+infer their actual JIT rounding/range solely from that C# spelling. The official C#
+specification permits wider intermediate floating-point precision/range:
+https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/types#837-floating-point-types
+Confirm fresh genuine runtime results (and ordinary/zero/NaN/Infinity controls) before
+choosing a local numerical repair. No 118/119 production change is made.
+
 CNA HEAD `60b6b747f`; documentation fixes are `66918da04` (nine C++ findings) and
 `60b6b747f` (fourteen C API findings). Demo HEAD before closure commit: `997f2d8`.
 The permanent inventory and matrix now retain all 155 IDs: 23 DOCUMENTATION_CORRECTED,

@@ -35,14 +35,15 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Step compared the absolute position with one instead of the normalized segment fraction.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "d753d0997",
       "validation": [
-        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions."
+        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions.",
+        "Genuine XNA 28/28; native math 886 passed/two unchanged missing-fixture skips; aggregate Curve/readers 92/92; registered Curve CTests 74/74; exact native C17/Werror ABI smoke and extended external C demo (17 checks) pass. Targeted collection production-TU ASan/UBSan with leak detection passes after its pre-fix invalid-vptr failure. Both 95-demo math renderer sweeps preserve all unrelated statuses/check counts/failed assertions; only five Curve fixes and prior 116 correction change status. All 732 enabled demo CTests pass. Five knownIssue markers removed with original assertions retained. Evidence: ../cna-demos/build/linux-full/reports/repair-curve-*; permanent genuine oracle docs/repair-evidence/curve/."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-003",
@@ -632,14 +633,15 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Linear post-loop extrapolation used the first outgoing tangent instead of the last.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "d753d0997",
       "validation": [
-        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions."
+        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions.",
+        "Genuine XNA 28/28; native math 886 passed/two unchanged missing-fixture skips; aggregate Curve/readers 92/92; registered Curve CTests 74/74; exact native C17/Werror ABI smoke and extended external C demo (17 checks) pass. Targeted collection production-TU ASan/UBSan with leak detection passes after its pre-fix invalid-vptr failure. Both 95-demo math renderer sweeps preserve all unrelated statuses/check counts/failed assertions; only five Curve fixes and prior 116 correction change status. All 732 enabled demo CTests pass. Five knownIssue markers removed with original assertions retained. Evidence: ../cna-demos/build/linux-full/reports/repair-curve-*; permanent genuine oracle docs/repair-evidence/curve/."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-037",
@@ -1735,14 +1737,15 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Approximate position equality skipped required reinsertion. Separately, erasing before copying an aliased replacement read a shifted or destroyed CurveKey.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "d753d0997",
       "validation": [
-        "Source-confirmed: WithinEpsilon incorrectly treats nearby distinct positions as equal; genuine XNA compares exact positions. Current demo stops after 6/20 checks on stale std exception catches; restore exact System exception expectations before validating this witness."
+        "Source-confirmed: WithinEpsilon incorrectly treats nearby distinct positions as equal; genuine XNA compares exact positions. Current demo stops after 6/20 checks on stale std exception catches; restore exact System exception expectations before validating this witness.",
+        "Genuine XNA 28/28; native math 886 passed/two unchanged missing-fixture skips; aggregate Curve/readers 92/92; registered Curve CTests 74/74; exact native C17/Werror ABI smoke and extended external C demo (17 checks) pass. Targeted collection production-TU ASan/UBSan with leak detection passes after its pre-fix invalid-vptr failure. Both 95-demo math renderer sweeps preserve all unrelated statuses/check counts/failed assertions; only five Curve fixes and prior 116 correction change status. All 732 enabled demo CTests pass. Five knownIssue markers removed with original assertions retained. Evidence: ../cna-demos/build/linux-full/reports/repair-curve-*; permanent genuine oracle docs/repair-evidence/curve/."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-098",
@@ -2454,14 +2457,15 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Unordered NaN comparisons incorrectly returned equality; genuine XNA direct comparisons return positive one.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "d753d0997",
       "validation": [
-        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions."
+        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions.",
+        "Genuine XNA 28/28; native math 886 passed/two unchanged missing-fixture skips; aggregate Curve/readers 92/92; registered Curve CTests 74/74; exact native C17/Werror ABI smoke and extended external C demo (17 checks) pass. Targeted collection production-TU ASan/UBSan with leak detection passes after its pre-fix invalid-vptr failure. Both 95-demo math renderer sweeps preserve all unrelated statuses/check counts/failed assertions; only five Curve fixes and prior 116 correction change status. All 732 enabled demo CTests pass. Five knownIssue markers removed with original assertions retained. Evidence: ../cna-demos/build/linux-full/reports/repair-curve-*; permanent genuine oracle docs/repair-evidence/curve/."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-138",
@@ -2473,14 +2477,15 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Segment evaluation divided by duplicate/tiny spans and returned zero on the NaN scan fallthrough instead of the XNA segment/Hermite behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "d753d0997",
       "validation": [
-        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions."
+        "Current source and genuine local XNA 4.0 decompilation reviewed; matching demo still fails in both complete baseline renderer sweeps. Preserve assertions and add native boundary regressions.",
+        "Genuine XNA 28/28; native math 886 passed/two unchanged missing-fixture skips; aggregate Curve/readers 92/92; registered Curve CTests 74/74; exact native C17/Werror ABI smoke and extended external C demo (17 checks) pass. Targeted collection production-TU ASan/UBSan with leak detection passes after its pre-fix invalid-vptr failure. Both 95-demo math renderer sweeps preserve all unrelated statuses/check counts/failed assertions; only five Curve fixes and prior 116 correction change status. All 732 enabled demo CTests pass. Five knownIssue markers removed with original assertions retained. Evidence: ../cna-demos/build/linux-full/reports/repair-curve-*; permanent genuine oracle docs/repair-evidence/curve/."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-139",
