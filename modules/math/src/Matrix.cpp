@@ -11,9 +11,10 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
-#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotFiniteNumberException.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -632,9 +633,9 @@ namespace Microsoft::Xna::Framework
     void Matrix::CreatePerspective(float width, float height, float nearPlaneDistance, float farPlaneDistance,
                                    Matrix& result)
     {
-        if (nearPlaneDistance <= 0.0f) throw System::ArgumentException("nearPlaneDistance <= 0");
-        if (farPlaneDistance <= 0.0f) throw System::ArgumentException("farPlaneDistance <= 0");
-        if (nearPlaneDistance >= farPlaneDistance) throw System::ArgumentException("nearPlaneDistance >= farPlaneDistance");
+        if (nearPlaneDistance <= 0.0f) throw System::ArgumentOutOfRangeException("nearPlaneDistance", "nearPlaneDistance <= 0");
+        if (farPlaneDistance <= 0.0f) throw System::ArgumentOutOfRangeException("farPlaneDistance", "farPlaneDistance <= 0");
+        if (nearPlaneDistance >= farPlaneDistance) throw System::ArgumentOutOfRangeException("nearPlaneDistance", "nearPlaneDistance >= farPlaneDistance");
 
         result.M11 = (2.0f * nearPlaneDistance) / width;
         result.M12 = result.M13 = result.M14 = 0.0f;
@@ -658,10 +659,10 @@ namespace Microsoft::Xna::Framework
     void Matrix::CreatePerspectiveFieldOfView(float fieldOfView, float aspectRatio, float nearPlaneDistance,
                                               float farPlaneDistance, Matrix& result)
     {
-        if (fieldOfView <= 0.0f || fieldOfView >= 3.141593f) throw System::ArgumentException("fieldOfView <= 0 or >= PI");
-        if (nearPlaneDistance <= 0.0f) throw System::ArgumentException("nearPlaneDistance <= 0");
-        if (farPlaneDistance <= 0.0f) throw System::ArgumentException("farPlaneDistance <= 0");
-        if (nearPlaneDistance >= farPlaneDistance) throw System::ArgumentException("nearPlaneDistance >= farPlaneDistance");
+        if (fieldOfView <= 0.0f || fieldOfView >= MathHelper::Pi) throw System::ArgumentOutOfRangeException("fieldOfView", "fieldOfView <= 0 or >= PI");
+        if (nearPlaneDistance <= 0.0f) throw System::ArgumentOutOfRangeException("nearPlaneDistance", "nearPlaneDistance <= 0");
+        if (farPlaneDistance <= 0.0f) throw System::ArgumentOutOfRangeException("farPlaneDistance", "farPlaneDistance <= 0");
+        if (nearPlaneDistance >= farPlaneDistance) throw System::ArgumentOutOfRangeException("nearPlaneDistance", "nearPlaneDistance >= farPlaneDistance");
 
         const float num = 1.0f / std::tan(fieldOfView * 0.5f);
         const float num9 = num / aspectRatio;
@@ -688,9 +689,9 @@ namespace Microsoft::Xna::Framework
     void Matrix::CreatePerspectiveOffCenter(float left, float right, float bottom, float top, float nearPlaneDistance,
                                             float farPlaneDistance, Matrix& result)
     {
-        if (nearPlaneDistance <= 0.0f) throw System::ArgumentException("nearPlaneDistance <= 0");
-        if (farPlaneDistance <= 0.0f) throw System::ArgumentException("farPlaneDistance <= 0");
-        if (nearPlaneDistance >= farPlaneDistance) throw System::ArgumentException("nearPlaneDistance >= farPlaneDistance");
+        if (nearPlaneDistance <= 0.0f) throw System::ArgumentOutOfRangeException("nearPlaneDistance", "nearPlaneDistance <= 0");
+        if (farPlaneDistance <= 0.0f) throw System::ArgumentOutOfRangeException("farPlaneDistance", "farPlaneDistance <= 0");
+        if (nearPlaneDistance >= farPlaneDistance) throw System::ArgumentOutOfRangeException("nearPlaneDistance", "nearPlaneDistance >= farPlaneDistance");
 
         result.M11 = (2.0f * nearPlaneDistance) / (right - left);
         result.M12 = result.M13 = result.M14 = 0.0f;

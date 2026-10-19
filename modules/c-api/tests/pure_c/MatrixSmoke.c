@@ -261,6 +261,16 @@ static int validate_factories(void)
         return 0;
     }
 
+    /* CNA-DEMOS-ISSUE-117: the public float Pi is already outside the open FOV range. */
+    if (cna_matrix_create_perspective_field_of_view(
+            CNA_MATH_PI, 1.0F, 1.0F, 10.0F, &result) != CNA_RESULT_INVALID_ARGUMENT ||
+        memcmp(&result, &identity, sizeof(result)) != 0 ||
+        cna_matrix_create_perspective_field_of_view(
+            nextafterf(CNA_MATH_PI, 0.0F), 1.0F, 1.0F, 10.0F, &result) != CNA_RESULT_SUCCESS ||
+        !(result.m22 > 0.0F)) {
+        return 0;
+    }
+
     if (cna_matrix_create_scale_scalar(2.0F, &result) != CNA_RESULT_SUCCESS ||
         !near_float(result.m11, 2.0F) || !near_float(result.m22, 2.0F) ||
         !near_float(result.m33, 2.0F) ||
