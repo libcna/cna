@@ -12,7 +12,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 Phase C. Latest closed runtime785bf2d2a:118/123/140 FIXED_VALIDATED. All155 IDs
 retained,49 final/106 pending:18 runtime findings,23 documentation corrections,
 seven already fixed,one demonstrated demo expectation defect. Demo closure commit
-is being prepared; prior committed closurea30f4e1. CNA status prior256100755.
+6797295; prior committed closurea30f4e1. CNA closure status73dc23836.
 No push/merge. Linux x86_64/Radeon780M/Mesa; no all-platform claim.
 
 LAST COMPLETE REGRESSION: magnitude/products/planes, frozen785bf2d2a. Native math
@@ -33,18 +33,33 @@ rejects negative radius; C marshal copies mutable fields without constructor.
 Ray-box interval/threshold repaired; owner-reserved131 untouched. Genuine additional
 six converter/standard-vertex text checks pass; allfour pre-fix vertex probes fail.
 Standard vertex companion/source/native/C oracles now locally corrected; three
-CNA-only extended vertex formats unchanged. Native build running TWO jobs:
-repair-geometry-vertex-native-build.log, followed by whole math and vertex probe.
+CNA-only extended vertex formats unchanged. Native whole math950pass/two skips;
+registered geometry/converter/vertex341/341 pass69.51s. Exact vertex probe4/4 pass.
+The first local edit missed separate-line closing braces; exact probe failed4/4,
+preserved repair-vertex-text-after.log; corrected output passes. Broad native build
+53 warnings all exactly present in original152-warning baseline,none new; subsequent
+four-source correction build warning-free. Consumer run COMPLETE:1393pass/four
+unchanged skips(1397 total,223.580s),repair-geometry-native-consumers.log. Runtime
+commits e1377c437 (geometry/math/C marshal),a8a60bf03 (stock vertex text companion).
+External demo/C API rebuild ACTIVE (THREE jobs),repair-geometry-demo-build-resumed.log.
+Initial one-job build was deliberately interrupted with SIGINT after native suites
+finished to use the released capacity; original log retained,not a compile failure.
+1165 initial steps due shared header/marshaller dependencies; no native jobs remain.
 Do not edit native sources or relink a live consumer while validation runs.
 
-UNCOMMITTED: geometry math/C marshal/tests, four standard vertex implementations/
-native/C tests/public comment; separate demo geometry evidence. Demo118/123/140
-closure/status being committed separately. No geometry markers removed yet.
-EXACT NEXT: commit validated118/123/140 evidence/status; finish native geometry/
-vertex build, registered and frozen consumer validation; correct only genuine-
-disproved exact demo text expectations, rebuild external actual ABI, focused
+UNCOMMITTED: status/matrix, six exact demo text corrections and separate demo
+geometry evidence. Product/test repairs committed e1377c437/a8a60bf03. Demo118/123/140
+closure/status committed separately as6797295/73dc23836. Six genuine-disproved
+exact demo text expectations corrected,all assertion counts retained. No geometry
+markers removed yet. EXACT NEXT: finish external build;
+validate actual C ABI with GeometrySmoke and VertexValueSmoke, focused
 SOFTWARE/GLES, then marker changes/full regression. Max three compiler/test jobs.
 Continue127/129/133 containment next;131 reserved in handoff.md section6.
+Next-batch genuine containment oracle509/509 confirms point-surface exclusion is
+different from including whole-volume boundary corners; Contains(sphere) plane
+classification is conservative while Intersects(sphere) truly separates corner
+misses. Creation demo must test geometric enclosure,not point Contains,when129
+lands. No containment production code changed; see geometry/README.md.
 Ordinary actionable defects remain; campaign NOT complete.
 
 ## Historical checkpoint (2026-10-19; superseded above)

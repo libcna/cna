@@ -421,18 +421,21 @@
       "historical_status": "Open",
       "demos": [
         "design.type_converter.string_round_trip",
-        "math.formatting.to_string"
+        "math.formatting.to_string",
+        "graphics.vertex_declaration.stock_vertex_types",
+        "c_api.graphics.vertex_values"
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
       "status": "CONFIRMED_OPEN",
-      "root_cause": "BoundingBox and Ray used composite-format doubled braces as literal stream text; exact native/C text oracles also pinned the port defect.",
+      "root_cause": "BoundingBox and Ray used composite-format doubled braces as literal stream text; exact native/C text oracles also pinned the port defect. Four standard XNA vertex types share the same literal-brace defect; genuine six converter/vertex checks prove it. Companion a8a60bf03 repairs stock vertices; CNA-only extension formats unchanged.",
       "related_issues": [
         "CNA-DEMOS-ISSUE-126"
       ],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "e1377c437",
       "validation": [
-        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
       ],
       "final_disposition": null
     },
@@ -2314,9 +2317,10 @@
       "related_issues": [
         "CNA-DEMOS-ISSUE-024"
       ],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "e1377c437",
       "validation": [
-        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
       ],
       "final_disposition": null
     },
@@ -2350,9 +2354,10 @@
       "status": "CONFIRMED_OPEN",
       "root_cause": "Empty CreateFromPoints exception already corrected before campaign bycd211420e3; constructor still accepts negative radius. C noexcept marshalling must remain fieldwise when constructor validation is added.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "e1377c437",
       "validation": [
-        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
       ],
       "final_disposition": null
     },
@@ -2387,9 +2392,10 @@
       "status": "CONFIRMED_OPEN",
       "root_cause": "Optional slab interval has no nonnegative initial bound, losing stationary/boundary hits; parallel comparison also differs from genuine strict abs(direction)<1e-6.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "e1377c437",
       "validation": [
-        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
       ],
       "final_disposition": null
     },
@@ -2479,9 +2485,10 @@
       "status": "CONFIRMED_OPEN",
       "root_cause": "Genuine frustum has the same seven negative-zero fields as CNA; .NET Framework hides their signs in text. Correct public float display operands, not stored planes. Other float-valued math ToString methods share this formatting defect.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "e1377c437",
       "validation": [
-        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/."
+        "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
       ],
       "final_disposition": null
     },
