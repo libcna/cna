@@ -9,7 +9,9 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-Phase C. Current CNA product5ab1c7729; demo closure2cea947, latest evidence28a63e4.
+Phase C. Current CNA product1ad0a3916 (Color132); external frozen containment5ab1c7729
+plus C regression companion99d790167. Demo evidencea0b2fb6, containment74622b4,
+latest final closure2cea947.
 All155 historical IDs retained:54 final/101 pending (22 runtime,
 one verified duplicate,23 documentation,seven already fixed,one demo expectation).
 Latest final closure024/128/130/135 plus126 duplicate024, runtimee1377c437/a8a60bf03.
@@ -24,21 +26,47 @@ frozen SHA256 values verified unchanged. External freeze now released.
 ACTIVE NEXT: containment127/129/133 FIXED_PENDING_REGRESSION in commit5ab1c7729.
 Native math963PASS/two skips;registered247/247;consumers1408/four skips;four-TU
 ASan/UBSan/float-cast-overflow/leak13/13. Final formatted build warning-free and
-math963/two skips again. Actual external C ABI/demos not rebuilt yet; no closure.
+math963/two skips again. Actual external C ABI/demos now rebuilt; no closure yet.
 Owner-reserved131 ray body/exception untouched; point containment naturally fixes
 its boundary branch, but outside-origin entry remains unimplemented.
-NEXT TASK: external rebuild NOW RUNNING against5ab1c7729 (three jobs,session21361,
-repair-containment-demo-build.log). Two genuine-disproved demo expectations are
-corrected (sphere construction geometric enclosure; C boundary ray SUCCESS0),
-with original check counts retained. Then focused/C ABI/math/full validation. Preserve
-all original assertions/counts. Do not edit Color production until that external
-build finishes and is frozen. No other compiler/test jobs while this three-job build runs.
-UNCOMMITTED: campaign handoff/matrix and two next-batch demo oracle corrections; new native
-ColorFixedPointCompatibilityTests.cpp deliberately fails three tests against old
-Color (968total,963pass/two skips/three failures). Genuine1782/1782,standalone
-native162/1782 mismatches. Prepared lifecycle source/probes (genuine29+8passes),
+NEXT TASK: containment full metadata/tools/visual/SW/GLES driver RUNNING session71300,
+repair-containment-regression.log. Run full CTest ONLY AFTER both full smokes finish;
+do not overlap SystemLink/discovery suites. External binaries frozen with recorded
+SHA256/ldd (repair-containment-frozen*); DO NOT rebuild external until checkpoint done.
+Strict C17/Werror GeometrySmoke/VertexValueSmoke pass actual rebuilt ABI; focused17
+per renderer have15PASS/two unchanged expected131 failures. Three additional old C
+boundary oracles contradicted genuine XNA and were corrected, all counts retained;
+original failures preserved. Four repaired markers removed only after focusedpass.
+Both95 math91PASS/four expectedFAIL,exact46 cumulative changes,differences[].
+Six exact visuals pass; representative GLES image inspected. Full sweeps pending.
+Color132 committed1ad0a3916, FIXED_PENDING_REGRESSION. New native tests first fail
+three (968total,963pass/two skips/three failures); pre C smoke fails two new stages.
+Color fixed-point repair now passes native966/two skips, standalone1782/1782,
+actual Color.cpp ASan/UBSan/float-cast-overflow/leak64/64. One first post-native run
+used wrong cwd and could not load8 checked-in fixtures; original retained, rerun
+from CNA root passes all966/two skips. RegisteredColor/packing70 tests running
+session46419 COMPLETE70/70pass11.07s. Additional packed/color/vertex/avatar CPU-oriented
+consumer selection156PASS/one unavailable effect-fixture skip(157total,7.739s);
+not a full renderer suite. No Color external rebuild/closure yet. No native jobs running.
+UNCOMMITTED: handoff/matrix only. Prepared lifecycle source/probes (genuine29+8passes),
 no lifecycle production edits. Linux x86_64,private display,Radeon780M/Mesa only;
 no all-platform claim. No push/merge. Continue automatically after each batch.
+
+Prepared validation drivers (ignored build-probe): repair-containment-{focused,
+c-smokes,math,regression}.mjs; comparison phase containment admits exactly four
+additional repaired demo statuses (46 cumulative). Focused driver includes17
+scenarios per renderer, retaining the two131 expected failures. Full smoke and
+full CTest must run sequentially to isolate SystemLink discovery. No blanket
+network exception has been added to either exact comparator.
+Read-only future storage audit confirms151 missing disposed guards,152 discarded
+FileShare and missing lower-layer constructor,056 EOF/fail state reaches tellg.
+Sharp Runtime current AGENTS/CLAUDE rules inspected (excluding historical count
+ledger): consumer-requested dependency fixes authorized, zero-warning gate and
+at most TWO build/compiler/test jobs there, fixed reusable build directories;
+read docs/StandingApprovals.md before any layout/API decision. Its automatic-push
+rule is overridden by this campaign's explicit no-push instruction. No Sharp
+Runtime modification, build or closure claimed. Local .NET reference is a .NET11
+preview snapshot, not XNA/.NET Framework behavior by default.
 
 ## Superseded chronological checkpoint notes
 
