@@ -116,7 +116,11 @@ static int validate_value_operations(void)
     CNA_CurveKey nan_key = value;
     nan_key.position = NAN;
     if (cna_curve_key_compare_to(nan_key, value, &comparison) != CNA_RESULT_SUCCESS ||
-        comparison != 0) {
+        comparison != 1 ||
+        cna_curve_key_compare_to(value, nan_key, &comparison) != CNA_RESULT_SUCCESS ||
+        comparison != 1 ||
+        cna_curve_key_compare_to(nan_key, nan_key, &comparison) != CNA_RESULT_SUCCESS ||
+        comparison != 1) {
         return 0;
     }
 
@@ -446,6 +450,28 @@ static int validate_curve(void)
     return 1;
 }
 
+static int validate_xna_curve_boundaries(void)
+{
+    CNA_CurveHandle curve = CNA_INVALID_HANDLE;
+    CNA_CurveKeyCollectionHandle keys = CNA_INVALID_HANDLE;
+    const CNA_CurveKey first = {10.0F, 7.0F, 0.0F, 2.0F, CNA_CURVE_CONTINUITY_STEP};
+    const CNA_CurveKey last = {14.0F, 9.0F, 0.0F, 3.0F, CNA_CURVE_CONTINUITY_SMOOTH};
+    float value = 0.0F;
+    if (cna_curve_create(&curve) != CNA_RESULT_SUCCESS ||
+        cna_curve_get_keys(curve, &keys) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_add(keys, first) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_add(keys, last) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, 12.0F, &value) != CNA_RESULT_SUCCESS || value != 7.0F ||
+        cna_curve_evaluate(curve, 14.0F, &value) != CNA_RESULT_SUCCESS || value != 9.0F ||
+        cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_LINEAR) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, 15.0F, &value) != CNA_RESULT_SUCCESS || value != 12.0F ||
+        cna_curve_evaluate(curve, NAN, &value) != CNA_RESULT_SUCCESS || !isnan(value)) {
+        return 0;
+    }
+    return cna_curve_key_collection_destroy(keys) == CNA_RESULT_SUCCESS &&
+           cna_curve_destroy(curve) == CNA_RESULT_SUCCESS;
+}
+
 int main(void)
 {
     if (!validate_construction_and_properties()) {
@@ -457,5 +483,8 @@ int main(void)
     if (!validate_collection()) {
         return CNA_TEST_FAIL(3);
     }
-    return validate_curve() ? 0 : 4;
+    if (!validate_curve()) {
+        return CNA_TEST_FAIL(4);
+    }
+    return validate_xna_curve_boundaries() ? 0 : CNA_TEST_FAIL(5);
 }

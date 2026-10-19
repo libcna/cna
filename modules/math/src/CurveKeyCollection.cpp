@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -49,14 +48,17 @@ namespace Microsoft::Xna::Framework
         }
 
         auto position = innerlist[static_cast<std::size_t>(index)].getPositionProperty();
-        if (MathHelper::WithinEpsilon(position, value.getPositionProperty()))
+        if (position == value.getPositionProperty())
         {
             innerlist[static_cast<std::size_t>(index)] = value;
         }
         else
         {
+            // A C++ caller may pass a reference to another element of this collection.
+            // Keep the replacement alive before erase shifts or invalidates that reference.
+            const CurveKey replacement = value;
             innerlist.erase(innerlist.begin() + index);
-            Add(value);
+            Add(replacement);
         }
     }
 
@@ -117,8 +119,7 @@ namespace Microsoft::Xna::Framework
 
     void CurveKeyCollection::CopyTo(std::vector<CurveKey>& array, int arrayIndex) const
     {
-        // FNA throws ArgumentOutOfRangeException / ArgumentException via List<T>.CopyTo;
-        // C++ uses std::out_of_range for both cases.
+        // Match the framework collection exception types without modifying a refused destination.
         if (arrayIndex < 0)
         {
             throw System::ArgumentOutOfRangeException("arrayIndex", "arrayIndex is out of range");

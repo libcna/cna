@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <limits>
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "Microsoft/Xna/Framework/CurveContinuity.hpp"
 
@@ -95,6 +96,16 @@ TEST(CurveKeyTest, CompareTo)
     EXPECT_LT(a.CompareTo(b), 0);
     EXPECT_GT(b.CompareTo(a), 0);
     EXPECT_EQ(a.CompareTo(a), 0);
+}
+
+TEST(CurveKeyTest, CompareToPreservesXnaUnorderedNaNResult)
+{
+    const CurveKey nan(std::numeric_limits<float>::quiet_NaN(), 0.0f);
+    const CurveKey real(1.0f, 0.0f);
+    EXPECT_EQ(nan.CompareTo(real), 1);
+    EXPECT_EQ(real.CompareTo(nan), 1);
+    EXPECT_EQ(nan.CompareTo(nan), 1);
+    EXPECT_EQ(CurveKey(-0.0f, 0.0f).CompareTo(CurveKey(0.0f, 1.0f)), 0);
 }
 
 // --- Equals ---

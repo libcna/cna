@@ -89,17 +89,12 @@ namespace Microsoft::Xna::Framework
 
     int CurveKey::CompareTo(const CurveKey& other) const
     {
-        // FNA delegates to float.CompareTo which treats NaN as less than any real value.
-        // C++ IEEE 754 comparisons treat NaN as unordered, so NaN positions compare as equal (0).
-        if (position < other.position)
+        // XNA compares positions directly, not via Single.CompareTo: unordered NaNs return 1.
+        if (position == other.position)
         {
-            return -1;
+            return 0;
         }
-        if (position > other.position)
-        {
-            return 1;
-        }
-        return 0;
+        return position < other.position ? -1 : 1;
     }
 
     bool CurveKey::Equals(const std::any& obj) const

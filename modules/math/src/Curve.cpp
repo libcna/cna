@@ -130,7 +130,7 @@ namespace Microsoft::Xna::Framework
                 return last.getValueProperty();
 
             case CurveLoopType::Linear:
-                return last.getValueProperty() + first.getTangentOutProperty() * (position - last.
+                return last.getValueProperty() + last.getTangentOutProperty() * (position - last.
                     getPositionProperty());
 
             case CurveLoopType::Cycle:
@@ -280,33 +280,34 @@ namespace Microsoft::Xna::Framework
 
     float Curve::GetCurvePosition(float position) const
     {
-        CurveKey prev = keys.getItemProperty(0);
+        const CurveKey* prev = &keys.getItemProperty(0);
+        const CurveKey* next = prev;
+        float t = position;
         for (int i = 1; i < keys.getCountProperty(); i += 1)
         {
-            CurveKey next = keys.getItemProperty(i);
-            if (next.getPositionProperty() >= position)
+            next = &keys.getItemProperty(i);
+            if (next->getPositionProperty() >= position)
             {
-                if (prev.getContinuityProperty() == CurveContinuity::Step)
-                {
-                    if (position >= 1.0f)
-                    {
-                        return next.getValueProperty();
-                    }
-                    return prev.getValueProperty();
-                }
-
-                const float t = (position - prev.getPositionProperty()) / (next.getPositionProperty() - prev.
-                    getPositionProperty());
-                const float ts = t * t;
-                const float tss = ts * t;
-
-                return (2.0f * tss - 3.0f * ts + 1.0f) * prev.getValueProperty() +
-                    (tss - 2.0f * ts + t) * prev.getTangentOutProperty() +
-                    (3.0f * ts - 2.0f * tss) * next.getValueProperty() +
-                    (tss - ts) * next.getTangentInProperty();
+                // XNA normalizes in double and selects the first key for a degenerate span.
+                const double start = prev->getPositionProperty();
+                const double span = static_cast<double>(next->getPositionProperty()) - start;
+                t = span > 1e-10 ? static_cast<float>((static_cast<double>(position) - start) / span) : 0.0f;
+                break;
             }
             prev = next;
         }
-        return 0.0f;
+
+        // With a NaN position the scan reaches the last key and leaves t as NaN, just as
+        // XNA does. Smooth evaluation propagates it; Step selects the last key's value.
+        if (prev->getContinuityProperty() == CurveContinuity::Step)
+        {
+            return t < 1.0f ? prev->getValueProperty() : next->getValueProperty();
+        }
+        const float ts = t * t;
+        const float tss = ts * t;
+        return (2.0f * tss - 3.0f * ts + 1.0f) * prev->getValueProperty() +
+            (tss - 2.0f * ts + t) * prev->getTangentOutProperty() +
+            (3.0f * ts - 2.0f * tss) * next->getValueProperty() +
+            (tss - ts) * next->getTangentInProperty();
     }
 }

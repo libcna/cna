@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <cmath>
+#include <limits>
+#include <utility>
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "Microsoft/Xna/Framework/CurveLoopType.hpp"
@@ -225,10 +228,11 @@ TEST(CurveTest, EvaluatePostLoopLinear)
 {
     Curve c;
     c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 2.0f));
-    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 3.0f));
     c.setPostLoopProperty(CurveLoopType::Linear);
-    // last.Value + first.TangentOut * (position - last.Position) = 1 + 2*(2-1) = 3
-    EXPECT_NEAR(c.Evaluate(2.0f), 3.0f, kEps);
+    // Genuine XNA uses the last outgoing tangent, not the first (CNA-DEMOS-ISSUE-036).
+    EXPECT_EQ(c.Evaluate(2.0f), 4.0f);
+    EXPECT_EQ(c.Evaluate(1.25f), 1.75f);
 }
 
 TEST(CurveTest, EvaluatePreLoopCycleRepeats)
@@ -292,6 +296,59 @@ TEST(CurveTest, EvaluatePreLoopOscillateReversesOnOddCycle)
 // -----------------------------------------------------------------------
 // Curve — Step continuity
 // -----------------------------------------------------------------------
+
+TEST(CurveTest, StepUsesNormalizedSegmentPosition)
+{
+    // CNA-DEMOS-ISSUE-002: neither a shifted origin nor a non-unit span changes Step.
+    for (const auto bounds : {std::pair{-4.0f, -2.0f}, std::pair{10.0f, 14.0f},
+                              std::pair{0.0f, 0.25f}})
+    {
+        Curve c;
+        c.getKeysProperty().Add(CurveKey(bounds.first, 7.0f, 0.0f, 0.0f, CurveContinuity::Step));
+        c.getKeysProperty().Add(CurveKey(bounds.second, 9.0f));
+        EXPECT_EQ(c.Evaluate(bounds.first), 7.0f);
+        EXPECT_EQ(c.Evaluate((bounds.first + bounds.second) * 0.5f), 7.0f);
+        EXPECT_EQ(c.Evaluate(std::nextafter(bounds.second, bounds.first)), 7.0f);
+        EXPECT_EQ(c.Evaluate(bounds.second), 9.0f);
+    }
+}
+
+TEST(CurveTest, DuplicateAndTinySegmentsMatchXnaSelection)
+{
+    // CNA-DEMOS-ISSUE-138: exact duplicates and XNA's <=1e-10 spans select t=0.
+    Curve duplicate;
+    duplicate.getKeysProperty().Add(CurveKey(0.0f, 0.0f));
+    duplicate.getKeysProperty().Add(CurveKey(0.0f, 10.0f));
+    duplicate.getKeysProperty().Add(CurveKey(1.0f, 20.0f));
+    duplicate.ComputeTangents(CurveTangent::Linear);
+    EXPECT_EQ(duplicate.Evaluate(0.0f), 0.0f);
+    EXPECT_EQ(duplicate.Evaluate(std::numeric_limits<float>::denorm_min()), 10.0f);
+    for (const auto continuity : {CurveContinuity::Smooth, CurveContinuity::Step})
+    {
+        Curve tiny;
+        tiny.getKeysProperty().Add(CurveKey(0.0f, 7.0f, 0.0f, 0.0f, continuity));
+        tiny.getKeysProperty().Add(CurveKey(1e-11f, 9.0f));
+        EXPECT_EQ(tiny.Evaluate(5e-12f), 7.0f);
+        EXPECT_EQ(tiny.Evaluate(1e-11f), 7.0f);
+    }
+    Curve ordinary;
+    ordinary.getKeysProperty().Add(CurveKey(0.0f, 7.0f));
+    ordinary.getKeysProperty().Add(CurveKey(1e-9f, 9.0f));
+    EXPECT_EQ(ordinary.Evaluate(5e-10f), 8.0f);
+}
+
+TEST(CurveTest, NaNPositionMatchesXnaForEmptySingleSmoothAndStep)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    Curve c;
+    EXPECT_EQ(c.Evaluate(nan), 0.0f);
+    c.getKeysProperty().Add(CurveKey(0.0f, 7.0f));
+    EXPECT_EQ(c.Evaluate(nan), 7.0f);
+    c.getKeysProperty().Add(CurveKey(1.0f, 9.0f));
+    EXPECT_TRUE(std::isnan(c.Evaluate(nan)));
+    c.getKeysProperty()[1].setContinuityProperty(CurveContinuity::Step);
+    EXPECT_EQ(c.Evaluate(nan), 9.0f);
+}
 
 TEST(CurveTest, StepContinuityReturnsCurrentSegmentValue)
 {

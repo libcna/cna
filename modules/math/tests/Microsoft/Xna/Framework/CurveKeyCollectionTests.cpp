@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/CurveKeyCollection.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/ArgumentException.hpp"
@@ -130,6 +131,60 @@ TEST(CurveKeyCollectionTest, SetItemPropertyDifferentPositionReinserts)
     col.setItemProperty(0, CurveKey(2.0f, 99.0f));
     EXPECT_EQ(col.getCountProperty(), 2);
     EXPECT_FLOAT_EQ(col[0].getPositionProperty(), 2.0f);
+}
+
+TEST(CurveKeyCollectionTest, NearbyReplacementReinsertsInExactPositionOrder)
+{
+    // CNA-DEMOS-ISSUE-097: epsilon equality must not bypass sorted insertion.
+    const float epsilon = MathHelper::MachineEpsilonFloat;
+    CurveKeyCollection col;
+    col.Add(CurveKey(0.0f, 0.0f));
+    col.Add(CurveKey(epsilon * 0.5f, 1.0f));
+    col.setItemProperty(0, CurveKey(epsilon * 0.75f, 2.0f));
+    ASSERT_EQ(col.getCountProperty(), 2);
+    EXPECT_EQ(col[0].getPositionProperty(), epsilon * 0.5f);
+    EXPECT_EQ(col[1].getPositionProperty(), epsilon * 0.75f);
+    EXPECT_EQ(col[0].getValueProperty(), 1.0f);
+    EXPECT_EQ(col[1].getValueProperty(), 2.0f);
+}
+
+TEST(CurveKeyCollectionTest, ReplacementMayAliasAnotherElement)
+{
+    CurveKeyCollection col;
+    col.Add(CurveKey(0.0f, 0.0f));
+    col.Add(CurveKey(1.0f, 10.0f));
+    col.Add(CurveKey(2.0f, 20.0f));
+    col.setItemProperty(0, col[1]);
+    ASSERT_EQ(col.getCountProperty(), 3);
+    EXPECT_EQ(col[0], CurveKey(1.0f, 10.0f));
+    EXPECT_EQ(col[1], CurveKey(1.0f, 10.0f));
+    EXPECT_EQ(col[2], CurveKey(2.0f, 20.0f));
+}
+
+TEST(CurveKeyCollectionTest, ReplacementMayAliasTheLastElement)
+{
+    // Erase destroys the old last object; an ASan/UBSan build must not observe a stale vptr.
+    CurveKeyCollection col;
+    col.Add(CurveKey(0.0f, 0.0f));
+    col.Add(CurveKey(1.0f, 10.0f));
+    col.Add(CurveKey(2.0f, 20.0f));
+    col.setItemProperty(0, col[2]);
+    ASSERT_EQ(col.getCountProperty(), 3);
+    EXPECT_EQ(col[0], CurveKey(1.0f, 10.0f));
+    EXPECT_EQ(col[1], CurveKey(2.0f, 20.0f));
+    EXPECT_EQ(col[2], CurveKey(2.0f, 20.0f));
+}
+
+TEST(CurveKeyCollectionTest, ExactReplacementPreservesDuplicateOrder)
+{
+    CurveKeyCollection col;
+    col.Add(CurveKey(1.0f, 10.0f));
+    col.Add(CurveKey(1.0f, 11.0f));
+    col.Add(CurveKey(1.0f, 12.0f));
+    col.setItemProperty(1, CurveKey(1.0f, 99.0f));
+    EXPECT_EQ(col[0].getValueProperty(), 10.0f);
+    EXPECT_EQ(col[1].getValueProperty(), 99.0f);
+    EXPECT_EQ(col[2].getValueProperty(), 12.0f);
 }
 
 TEST(CurveKeyCollectionTest, SetItemPropertyOutOfRangeThrows)
