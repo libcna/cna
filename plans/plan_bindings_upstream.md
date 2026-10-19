@@ -115,6 +115,11 @@ All probes use the genuine installed Windows XNA 4.0 assembly, not a replacement
 | 123, vector products | `Vector2/3/4.Dot` retains wide cancellation; `Vector3.Cross` Y is the original subtraction, not a negated reverse subtraction that changes zero signs. | `0e7be08e0`; `../cna-demos/docs/repair-evidence/issue-123/`; external closure pending |
 | 118, magnitudes | `Vector2/3/4` and `Quaternion.Length/Normalize`, plus vector Distance, match genuine method-entry precision: wide squared sums, float square root for normalization, wide reciprocal. Caller-dependent JIT probes are retained separately, not presented as universal behavior. | `bd46b6ffe`; `../cna-demos/docs/repair-evidence/issue-118/`; external closure pending |
 
+The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
+both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
+the recorded rows above are superseded by this checkpoint; permanent evidence is
+`../cna-demos/docs/repair-evidence/issue-118/REGRESSION_CHECKPOINT.md`.
+
 The versioned avatar asset recipe is not an XNA math API. Companions `32e470ed4`
 and `785bf2d2a` preserve its authored binary32 arithmetic without reverting public
 compatibility repairs or changing catalog golden digests. Complete raw field

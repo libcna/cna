@@ -7,7 +7,47 @@ Preserve historical IDs and assertions; verify current behavior and XNA evidence
 before changing production code. Work in coherent subsystem/root-cause commits.
 Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
-## Current checkpoint (2026-10-19)
+## Current checkpoint (2026-10-20)
+
+Phase C. Latest closed runtime785bf2d2a:118/123/140 FIXED_VALIDATED. All155 IDs
+retained,49 final/106 pending:18 runtime findings,23 documentation corrections,
+seven already fixed,one demonstrated demo expectation defect. Demo closure commit
+is being prepared; prior committed closurea30f4e1. CNA status prior256100755.
+No push/merge. Linux x86_64/Radeon780M/Mesa; no all-platform claim.
+
+LAST COMPLETE REGRESSION: magnitude/products/planes, frozen785bf2d2a. Native math
+944pass/two unchanged skips; consumer1086pass/four unchanged skips; C17/Werror
+VectorSmoke/QuaternionSmoke/GeometrySmoke pass actual rebuilt C ABI. All732 enabled
+CTest accepted,zero failures,48skip/three disabled,1114.49s. First CLI metadata
+expectation failure remains retained; exact expected repaired row corrected and
+entire suite rerun. Both95 math81pass/14expectedfail. Full719SW593/75/48/3 and
+GLES632/77/7/3; both exact comparisons accept36 cumulative changes,differences[].
+Metadata719/0,tools7+4+5,six exact visuals,representative capture inspected.
+Permanent ../cna-demos/docs/repair-evidence/issue-118/REGRESSION_CHECKPOINT.md.
+No previous checkpoint jobs remain; external binary freeze released.
+
+ACTIVE GEOMETRY024/126/128/130/135: genuine1338/1338; native first post repair
+950pass/two unchanged skips, replacing six exact pre-fix failures. Seven negative
+zero frustum plane fields are correct XNA data; only text changes. Constructor
+rejects negative radius; C marshal copies mutable fields without constructor.
+Ray-box interval/threshold repaired; owner-reserved131 untouched. Genuine additional
+six converter/standard-vertex text checks pass; allfour pre-fix vertex probes fail.
+Standard vertex companion/source/native/C oracles now locally corrected; three
+CNA-only extended vertex formats unchanged. Native build running TWO jobs:
+repair-geometry-vertex-native-build.log, followed by whole math and vertex probe.
+Do not edit native sources or relink a live consumer while validation runs.
+
+UNCOMMITTED: geometry math/C marshal/tests, four standard vertex implementations/
+native/C tests/public comment; separate demo geometry evidence. Demo118/123/140
+closure/status being committed separately. No geometry markers removed yet.
+EXACT NEXT: commit validated118/123/140 evidence/status; finish native geometry/
+vertex build, registered and frozen consumer validation; correct only genuine-
+disproved exact demo text expectations, rebuild external actual ABI, focused
+SOFTWARE/GLES, then marker changes/full regression. Max three compiler/test jobs.
+Continue127/129/133 containment next;131 reserved in handoff.md section6.
+Ordinary actionable defects remain; campaign NOT complete.
+
+## Historical checkpoint (2026-10-19; superseded above)
 
 Phase C. CNA committed runtime `785bf2d2a`; latest demo closure `a30f4e1`.
 All155 historical IDs retained:46 final/109 pending (15 runtime findings,23
