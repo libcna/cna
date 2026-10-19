@@ -962,6 +962,16 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_vector_smoke)
     add_test(NAME CApi_VectorSmoke COMMAND cna_c_api_vector_smoke)
 
+    add_executable(cna_c_api_math_value_hash_smoke tests/pure_c/MathValueHashSmoke.c)
+    set_target_properties(cna_c_api_math_value_hash_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_math_value_hash_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_math_value_hash_smoke)
+    add_test(NAME CApi_MathValueHashSmoke COMMAND cna_c_api_math_value_hash_smoke)
+
     add_executable(cna_c_api_quaternion_smoke
         tests/pure_c/QuaternionSmoke.c
     )

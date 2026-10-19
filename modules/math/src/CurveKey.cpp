@@ -9,12 +9,13 @@ namespace Microsoft::Xna::Framework
 {
     namespace
     {
-        std::size_t FloatHash(float value)
+        std::uint32_t FloatHash(float value)
         {
+            if (value == 0.0f) return 0; // XNA/.NET 4 equates both zero signs; retain all other bits.
             std::uint32_t bits = 0;
             static_assert(sizeof(bits) == sizeof(value));
             std::memcpy(&bits, &value, sizeof(value));
-            return static_cast<std::size_t>(bits);
+            return bits;
         }
     }
 
@@ -110,11 +111,13 @@ namespace Microsoft::Xna::Framework
 
     std::size_t CurveKey::GetHashCode() const
     {
-        return FloatHash(position) ^
-            FloatHash(value) ^
-            FloatHash(tangentIn) ^
-            FloatHash(tangentOut) ^
-            static_cast<std::size_t>(continuity);
+        // XNA sums the five hashes with 32-bit wrap, rather than XORing them.
+        // Use unsigned arithmetic so overflow is defined before widening to size_t.
+        return FloatHash(position) +
+            FloatHash(value) +
+            FloatHash(tangentIn) +
+            FloatHash(tangentOut) +
+            static_cast<std::uint32_t>(continuity);
     }
 
     bool operator==(const CurveKey& a, const CurveKey& b)

@@ -20,6 +20,7 @@ namespace Microsoft::Xna::Framework
     {
         int FloatHash(float value)
         {
+            if (value == 0.0f) return 0; // XNA/.NET 4 equates both zero signs; retain all other bits.
             std::uint32_t bits = 0;
             static_assert(sizeof(bits) == sizeof(value));
             std::memcpy(&bits, &value, sizeof(value));
