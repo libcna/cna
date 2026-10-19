@@ -1199,8 +1199,8 @@ CNA_C_API CNA_Result cna_gamer_signed_in_contains(
  *
  * @param player_index One of the `CNA_PLAYER_INDEX_*` identities.
  * @param out_has_gamer Receives non-zero when a gamer is signed in at that index.
- * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
- *        exactly as the caller set it otherwise.
+ * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero,
+ *        or `CNA_INVALID_HANDLE` otherwise. A previous handle value is not released by this call.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
  *
  * Availability is separate from the answer: no gamer at that index is an ordinary success with the
@@ -3802,8 +3802,8 @@ CNA_C_API CNA_Result cna_leaderboard_entry_set_rating(
  *
  * @param entry Owned entry handle.
  * @param out_has_gamer Receives non-zero when the entry names a gamer.
- * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
- *        exactly as the caller set it otherwise.
+ * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero,
+ *        or `CNA_INVALID_HANDLE` otherwise. A previous handle value is not released by this call.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * Availability is separate from the answer: an entry with no gamer is an ordinary success with the
@@ -3937,8 +3937,9 @@ typedef struct CNA_AvatarDescriptionInfo {
 /**
  * @brief What an avatar animation reports.
  *
- * **A built-in preset carries the whole skeleton but no timeline**: its length is zero until a real
- * clip is loaded, so advancing it moves nothing. The bone transforms are still the full skeleton.
+ * Built-in presets contain CNA-authored animation clips with nonzero timelines, bone transforms
+ * for the full 71-bone skeleton and expression samples. Advancing time evaluates those clips;
+ * these are not Microsoft's original animation assets.
  */
 typedef struct CNA_AvatarAnimationInfo {
     /** @brief Size of this caller-provided structure in bytes. */

@@ -1051,7 +1051,7 @@ CNA_C_API CNA_Result cna_camera_create(CNA_Handle game, CNA_CameraHandle* out_ca
  *
  * The canonical class takes its backend as a constructor argument rather than through a switch, so
  * this ABI mirrors that with a second creation route, exactly as the system tray does. The camera
- * starts closed with no frame; `cna_camera_set_test_frame_ext` gives it one.
+ * starts in `CNA_CAMERA_STATE_OPENING` with no frame; `cna_camera_set_test_frame_ext` gives it one.
  */
 CNA_C_API CNA_Result cna_camera_create_with_test_backend_ext(
     CNA_Handle game,
@@ -1109,13 +1109,13 @@ CNA_C_API CNA_Result cna_camera_try_acquire_frame_ext(
  * @brief Sets the state this ABI's own camera backend reports.
  *
  * @param camera Owned camera handle created with the test backend.
- * @param state One `CNA_CAMERA_STATE_*` identity.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity,
+ * @param state Opening, Ready, PermissionDenied or Lost. Closed and NotSupported are refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined or refused identity,
  *         `CNA_RESULT_INVALID_STATE` when the camera does not use the test backend, or a documented
  *         handle/thread failure.
  *
- * No verification machine has a camera, so the refused, denied and lost states are only reachable
- * this way.
+ * This deterministic backend exercises camera state handling without opening physical hardware.
+ * It does not establish that any physical camera or permission service has been validated.
  */
 CNA_C_API CNA_Result cna_camera_set_test_state_ext(
     CNA_CameraHandle camera,
@@ -1128,7 +1128,7 @@ CNA_C_API CNA_Result cna_camera_set_test_state_ext(
  * @param width Frame width in pixels.
  * @param height Frame height in pixels.
  * @param pixels RGBA8 pixels, exactly @p width multiplied by @p height of them; null clears the
- *        frame and closes the camera.
+ *        frame, resets its dimensions to zero and returns the camera to Opening.
  * @param pixel_count Number of pixels in @p pixels.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a mismatched count or a negative
  *         dimension, `CNA_RESULT_INVALID_STATE` when the camera does not use the test backend, or a

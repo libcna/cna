@@ -799,9 +799,9 @@ CNA_C_API CNA_Result cna_effect_parameter_collection_find_name(
     CNA_EffectParameterHandle* out_parameter);
 
 /**
- * @brief Finds the first parameter with an exact UTF-8 semantic.
+ * @brief Finds the first parameter with an ordinal case-insensitive UTF-8 semantic match.
  * @param collection Collection handle.
- * @param semantic Exact UTF-8 semantic.
+ * @param semantic UTF-8 semantic, compared using the canonical OrdinalIgnoreCase rule.
  * @param out_found Receives true when a match exists.
  * @param out_parameter Receives an owned element view, or invalid handle when absent.
  * @return A CNA result code; absence is a successful false result.
@@ -1382,7 +1382,9 @@ CNA_C_API CNA_Result cna_effect_destroy(CNA_EffectHandle effect);
 /**
  * @brief Creates an independent native clone of an effect.
  * @param effect Source effect.
- * @param out_clone Receives an owned clone of the same concrete native type.
+ * @param out_clone Receives an owned clone with the type chosen by the native Clone contract.
+ *        In particular, EffectMaterial inherits the base Effect clone and does not preserve
+ *        the EffectMaterial wrapper type.
  * @return A CNA result code.
  */
 CNA_C_API CNA_Result cna_effect_clone(
@@ -2400,7 +2402,7 @@ CNA_C_API CNA_Result cna_pbr_effect_set_alpha(
 /**
  * @brief Gets one retained PBR Texture2D handle.
  * @param effect PbrEffect or SkinnedPbrEffect handle.
- * @param slot One of the five `CNA_PBR_TEXTURE_*` identities.
+ * @param slot One of the seven `CNA_PBR_TEXTURE_*` identities, including both specular extensions.
  * @param out_has_texture Receives whether the slot has a texture.
  * @param out_texture Receives the assigned handle, or the invalid handle.
  * @return A CNA result code.
@@ -2414,7 +2416,7 @@ CNA_C_API CNA_Result cna_pbr_effect_get_texture(
 /**
  * @brief Assigns and retains one same-device PBR Texture2D, or clears it.
  * @param effect PbrEffect or SkinnedPbrEffect handle.
- * @param slot One of the five `CNA_PBR_TEXTURE_*` identities.
+ * @param slot One of the seven `CNA_PBR_TEXTURE_*` identities, including both specular extensions.
  * @param texture Texture2D/RenderTarget2D handle or `CNA_INVALID_HANDLE`.
  * @return A CNA result code.
  */

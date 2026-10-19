@@ -400,7 +400,9 @@ CNA_C_API CNA_Result cna_media_queue_set_active_song_index(
  * @brief Returns a copy of the active song.
  *
  * @param queue Borrowed queue handle.
- * @param out_song Receives an owned song handle when a song is active; untouched otherwise.
+ * @param out_song Receives an owned song handle when a song is active, or
+ *        `CNA_INVALID_HANDLE` when none is active. An existing handle stored in this output
+ *        variable is not released by the call.
  * @param out_available Receives `CNA_TRUE` when the queue has an active song.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *

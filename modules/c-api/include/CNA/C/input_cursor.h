@@ -41,13 +41,13 @@ typedef uint32_t CNA_MouseCursorStock;
 #define CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW UINT32_C(11)
 
 /**
- * @brief Creates an empty mouse cursor.
+ * @brief Creates an owned default Arrow cursor.
  *
- * @param out_cursor Receives an owned cursor handle that wraps no native cursor.
+ * @param out_cursor Receives an owned default Arrow cursor handle.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  *
- * This reproduces the canonical default constructor, which produces a cursor with nothing behind
- * it. Setting it is accepted and changes nothing.
+ * This reproduces the canonical default constructor. Setting it requests the Arrow shape;
+ * whether a native cursor is displayed depends on the active platform backend.
  */
 CNA_C_API CNA_Result cna_mouse_cursor_create_ext(CNA_MouseCursorHandle* out_cursor);
 

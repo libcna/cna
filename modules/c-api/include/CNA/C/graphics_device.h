@@ -79,8 +79,7 @@ typedef struct CNA_Viewport {
 /**
  * @brief Initializes a viewport exactly as the canonical default constructor does.
  *
- * @param out_value Receives a viewport with zero position and size, `min_depth` 0 and
- * `max_depth` 1.
+ * @param out_value Receives a viewport with all fields zero, including both depth limits.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
 CNA_C_API CNA_Result cna_viewport_init(CNA_Viewport* out_value);
@@ -761,15 +760,6 @@ CNA_C_API CNA_Result cna_graphics_device_clear_options(
 CNA_C_API CNA_Result cna_graphics_device_present(CNA_Handle graphics_device);
 
 /**
- * @brief Resets the device using its current presentation parameters.
- *
- * @param graphics_device Callback-scoped borrowed graphics-device handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend refuses the reset, or a
- * documented handle/thread/native failure.
- *
- * A successful reset raises the device's resetting and reset events in that order.
- */
-/**
  * @brief Creates a GraphicsDevice this caller owns, outside any Game.
  *
  * Every other route in this ABI hands out the Game's own device, borrowed for the duration of a
@@ -813,6 +803,15 @@ CNA_C_API CNA_Result cna_graphics_device_create(
  */
 CNA_C_API CNA_Result cna_graphics_device_destroy(CNA_Handle graphics_device);
 
+/**
+ * @brief Resets the device using its current presentation parameters.
+ *
+ * @param graphics_device Owned or callback-scoped borrowed graphics-device handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend refuses the reset, or a
+ * documented handle/thread/native failure.
+ *
+ * A successful reset raises the device's resetting and reset events in that order.
+ */
 CNA_C_API CNA_Result cna_graphics_device_reset(CNA_Handle graphics_device);
 
 /**

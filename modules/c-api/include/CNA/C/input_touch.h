@@ -781,9 +781,9 @@ CNA_C_API CNA_Result cna_touch_panel_enqueue_gesture_ext(
  * The coordinates are normalized and are forwarded verbatim; the canonical dispatch does not range
  * check them and neither does C.
  *
- * This feeds **gesture detection and the event-driven touch map, not the slot array**
- * `cna_touch_get_state` reports — the two are separate sources, and a raised event never appears
- * in that snapshot. Use `cna_touch_panel_set_finger_ext` to populate the snapshot.
+ * This feeds **gesture detection only**. It does not update the event-driven touch map or
+ * the slot array that `cna_touch_get_state` reports. Use `cna_touch_panel_set_finger_ext`
+ * to populate that snapshot, then advance it with `cna_touch_panel_update_ext`.
  *
  * While no display size is published the event is **dropped**: the canonical dispatch scales the
  * normalized coordinates by the display size and refuses to collapse every touch onto the origin.

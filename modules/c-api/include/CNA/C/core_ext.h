@@ -796,7 +796,8 @@ CNA_C_API CNA_Result cna_graphics_renderer_copy_current_name(
  * The title is process-wide and unvalidated -- an empty title is a title.
  *
  * @param title The product title.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a malformed string view.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_ENCODING` for invalid UTF-8 or an embedded NUL,
+ *         or `CNA_RESULT_INVALID_ARGUMENT` for an invalid string-view pointer/count combination.
  */
 CNA_C_API CNA_Result cna_assembly_set_title_ext(CNA_StringView title);
 

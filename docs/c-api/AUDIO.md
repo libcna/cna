@@ -19,7 +19,7 @@ An instance supports play, pause, resume, immediate stop, release-tail stop, vol
 full-effect looping. `CNA_SoundEffectInstanceInfo` snapshots the current state and properties:
 
 - volume follows CNA/FNA pass-through behavior and is not clamped by the adapter;
-- pitch follows CNA's clamp to `[-1, 1]`;
+- instance pitch is range-checked against `[-1, 1]`, with out-of-range assignments refused;
 - pan is validated in `[-1, 1]`;
 - looping may be changed only before playback has begun;
 - `Play` while already playing is CNA's no-op, and `Resume` starts an unplayed instance.

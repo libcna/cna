@@ -83,7 +83,7 @@ typedef struct CNA_SoundEffectInstanceInfo {
     /** @brief Current per-instance volume, passed through by CNA without clamping. */
     float volume;
 
-    /** @brief Current pitch adjustment after CNA clamping to `[-1, 1]`. */
+    /** @brief Current pitch adjustment in `[-1, 1]`; out-of-range assignments are refused. */
     float pitch;
 
     /** @brief Current stereo pan in `[-1, 1]`. */
@@ -222,11 +222,12 @@ CNA_C_API CNA_Result cna_sound_effect_instance_set_volume(
     float volume);
 
 /**
- * @brief Sets per-instance pitch using CNA's `[-1, 1]` clamping behavior.
+ * @brief Sets per-instance pitch in the closed interval `[-1, 1]`.
  *
  * @param instance Owned sound-effect-instance handle.
- * @param pitch Finite pitch adjustment.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ * @param pitch Finite pitch adjustment in `[-1, 1]`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a nonfinite or out-of-range
+ *         pitch, or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_sound_effect_instance_set_pitch(
     CNA_Handle instance,

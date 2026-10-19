@@ -26,7 +26,7 @@ stock-sprite effects with cloning, current collections, exact source/type string
 textures and world/view/projection matrices, complete BasicEffect material/fog/lighting/texture
 state and stable standalone/nested directional lights, complete AlphaTestEffect,
 DualTextureEffect, EnvironmentMapEffect and 72-bone SkinnedEffect state, plus ColorMatrixEffect and
-both PBR extensions with five retained texture slots and bounded skinning palettes, stable model
+both PBR extensions with seven retained texture slots and bounded skinning palettes, stable model
 bones/hierarchies, model mesh parts and game-child meshes with retained resource associations,
 live effect/part views, mesh snapshots and top-level models with copied bone transforms, complete
 morph-target descriptors/data, blending, track evaluation and retained mesh-part upload, plus

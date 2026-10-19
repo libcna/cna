@@ -261,7 +261,7 @@ C17/C++23 assertions freeze the maximum.
 
 `PbrEffectSmoke.c` covers ColorMatrixEffect identity, finite validation, grayscale, reset and
 clone behavior; exact PbrEffect and SkinnedPbrEffect defaults; all shared matrix/fog/light/material
-operations; all five texture slots and clone-aware retention; all 72 identity bones, bounded
+operations; all seven texture slots and clone-aware retention; all 72 identity bones, bounded
 palette transfer and weights; Apply, nested-light lifetime and invalid/stale/wrong-kind/
 wrong-thread paths. It runs unchanged under HEADLESS plus focused ASan+UBSan;
 C17/C++23 assertions freeze the color-matrix layout, slot identities and SkinnedPbr maximum.
