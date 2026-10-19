@@ -6,8 +6,8 @@
 // Moved from the retired VULKAN suite (VULKAN-216). XNA's RenderTarget2D takes
 // preferredMultiSampleCount per instance and reports, through MultiSampleCount, the count it
 // actually applied (never more than was asked for). A count alone cannot tell "4x engaged" from
-// "4 reported while one sample is rasterized", so every leg also draws a triangle whose diagonal
-// edge crosses the target's centre row and reads that row back from the target itself: a
+// "4 reported while one sample is rasterized", so every leg also draws a triangle whose vertical
+// edge bisects a texel on the target's centre row and reads that row back from the target itself: a
 // multisample resolve leaves partially covered texels on the edge, a single-sampled rasterizer
 // leaves none. The assertion is the invariant, not a number -- the edge is anti-aliased exactly
 // when the applied count exceeds one -- because which counts a device offers is its own business.
@@ -78,7 +78,7 @@ class RenderTargetOwnMsaaTest final : public CNA::Examples::PixelTestGame
                                                 requestedCount, RenderTargetUsage::DiscardContents);
     }
 
-    // Draws the diagonal-edged triangle into `rt` and returns its centre row, read from the target.
+    // Draws a half-texel vertical edge into `rt` and returns its centre row from the target.
     std::vector<Color> RenderAndReadRow(RenderTarget2D& rt)
     {
         auto& device = getGraphicsDeviceProperty();
@@ -94,10 +94,15 @@ class RenderTargetOwnMsaaTest final : public CNA::Examples::PixelTestGame
         fx.Apply();
 
         const Color white(255, 255, 255, 255);
+        // An exact y=x diagonal cannot distinguish the valid 2x sample pattern
+        // (0.25,0.25)/(0.75,0.75): both samples lie on the edge and resolve identically.
+        // NDC x=1/kSize maps to the middle of texel kSize/2, separating those samples
+        // without changing the coverage thresholds or the single-sample control.
+        constexpr float edgeX = 1.0f / kSize;
         const VertexPositionColor triangle[3] = {
             { Vector3(-1.0f,  1.0f, 0.0f), white },
-            { Vector3( 1.0f,  1.0f, 0.0f), white },
-            { Vector3(-1.0f, -1.0f, 0.0f), white },
+            { Vector3(edgeX,  1.0f, 0.0f), white },
+            { Vector3(edgeX, -1.0f, 0.0f), white },
         };
         device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle, 0, 1);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));

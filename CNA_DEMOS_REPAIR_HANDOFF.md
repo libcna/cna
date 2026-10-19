@@ -7,6 +7,40 @@ Preserve historical IDs and assertions; verify current behavior and XNA evidence
 before changing production code. Work in coherent subsystem/root-cause commits.
 Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
+## Current checkpoint (2026-10-19)
+
+Baseline capture is complete. CNA source baseline is `688f3f23e`; campaign status
+commit before repairs is `56aaa6cff`, demo evidence commit is `2552912a5`.
+All six separate Wine/reference tests passed (667.70 seconds), including genuine
+XNA compiler acceptance and runtime interoperability. Log:
+`../cna-demos/build/linux-full/reports/repair-baseline-native-xna.log`.
+
+NATIVE-BASELINE-MSAA-2X is a demonstrated native test-oracle defect, not missing
+multisampling. A direct GL query on the same Radeon 780M/Mesa driver reports actual
+2x samples at (0.25,0.25)/(0.75,0.75), both on the fixture's exact y=x edge. The 4x
+pattern straddles it. Evidence: `repair-baseline-msaa-sample-positions.log`; probe
+source and diagnosis are in `../cna-demos/build-probe/shared-runtime-source/`.
+The fixture now bisects a texel with a vertical edge; every coverage threshold,
+single-sample control and interleaved-target check is unchanged. The formerly
+failing isolated native test passes on private OPENGLES3. No renderer code changed.
+
+ISSUE-116's corrected demo passes all seven checks under SOFTWARE and OPENGLES3
+labels, empty stderr, no GPU use. Its invalid knownIssue marker is removed.
+All 19 selected demo Matrix/catalog/validation CTests pass. Native value/out/alias
+infinity/NaN coverage is added and all 91 selected Matrix tests pass, together
+with MSAA: 92/92, 4.98 seconds (`repair-oracles-native-ctest.log`). The focused
+native build passes with one existing unrelated nodiscard warning, no new warning.
+Demo evidence: `repair-116-closed-*`, `repair-116-ctest.log`.
+
+Next: commit the two independent oracle corrections separately, close 116 as
+DEMO_EXPECTATION_BUG retaining its history, then apply/validate the prepared
+nine C++ documentation corrections and fourteen C API documentation corrections.
+Proceed immediately to the Curve root-cause batch (002/036/097/137/138).
+Current uncommitted changes: native MSAA fixture, native Matrix regression,
+this handoff; demo invert assertion/metadata and demo HANDOFF. No production
+runtime behavior changed. No push or merge. Historical sections below preserve
+baseline progress; this checkpoint supersedes their pending-run statements.
+
 ## Starting state (2026-10-19)
 
 - Phase A: repository inspection and baseline; no repairs made yet.
