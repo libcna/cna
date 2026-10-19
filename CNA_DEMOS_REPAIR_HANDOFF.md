@@ -9,6 +9,80 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
+**Authoritative latest state:** Phase B is complete; Phase C Curve repair is in progress.
+CNA HEAD `60b6b747f`; documentation fixes are `66918da04` (nine C++ findings) and
+`60b6b747f` (fourteen C API findings). Demo HEAD before closure commit: `997f2d8`.
+The permanent inventory and matrix now retain all 155 IDs: 23 DOCUMENTATION_CORRECTED,
+seven ALREADY_FIXED, one DEMO_EXPECTATION_BUG (116), 124 awaiting final disposition.
+The 23 resolved documentation IDs are 037/040/042/049/059/060/061/063/064/065/068/069/
+071/072/074/076/079/080/084/107/153/154/155. No runtime failure marker was suppressed.
+
+Last full demo regression checkpoint: all 732 enabled CTests passed, three disabled,
+391.13 seconds (`repair-docs-ctest.log`). Metadata 719/0, warning-free full demo build;
+both focused SOFTWARE/OPENGLES3 runs exactly matched all 28 baseline results, including
+check counts and failed-assertion multiplicities. Native documentation checks: 266/266;
+packet example 9/9. Hardware/service/DirectX9/WebGPU claims remain source-only where unavailable.
+The last complete two-renderer smoke and six exact visuals remain the initial baseline;
+the documentation checkpoint is not a new full smoke/visual claim.
+
+Uncommitted runtime work: Curve.cpp, CurveKey.cpp, CurveKeyCollection.cpp and matching
+native math/C API regressions. Confirmed-open Curve IDs 002/036/097/137/138 are repaired
+locally but not closed. Native build passes; math 886 passed/two unchanged fixture skips;
+aggregate Curve* 92/92; registered Curve CTests 74/74 (14.20s); targeted production-TU
+ASan/UBSan aliasing probe passes, replacing its pre-fix invalid-vptr failure.
+The separate full demo rebuild with Curve is now running with three jobs, log
+`repair-curve-demo-build.log`. C API demo gains real Step/post-loop controls, all original
+checks retained. Its two assertions and native C API oracle still require this rebuilt
+demo library validation. Five C++ knownIssue markers remain until actual passes.
+
+Exact next task: finish Curve demo build; run all five focused C++ witnesses under both
+renderer labels and native/external C API Curve tests; then remove only the five proven
+markers, run full math demos and regression checkpoint, commit Curve with tests, close
+IDs with commit evidence and immediately continue Math/Core. ISSUE-001 remains confirmed
+open with an unapplied build-support candidate. No push/merge. Remaining dirty state:
+campaign handoff/matrix, Curve sources/tests, demo exception catches/C API controls,
+genuine-XNA evidence and documentation closure records. Earlier notes below are historical.
+
+## Earlier checkpoint details (superseded where noted above)
+
+Latest continuation: full demo rebuild passed (1,409 scheduled steps), log
+`repair-docs-demo-build.log`. Documentation-focused SOFTWARE rerun: all 28 demos
+match baseline status, knownIssue, check count and exact failed-assertion multiplicities;
+`repair-docs-focused-SOFTWARE/comparison.json` has no differences. OPENGLES3 equivalent
+and full demo CTest suite are running (`repair-docs-focused-OPENGLES3-driver.log`,
+`repair-docs-ctest.log`). No production Curve patch is applied yet. Current CNA HEAD
+is `82b1bf60c`, demo HEAD `997f2d8`; dirty work below remains intentionally uncommitted
+until this checkpoint finishes. Historical running statements below are superseded
+by later evidence in this document.
+
+Subsequent checkpoint: both focused renderer runs completed with 28/28 exact baseline
+matches. C++ documentation commit `66918da04` covers 037/040/042/049/084/107/153/154/155;
+C API documentation commit `60b6b747f` covers 059/060/061/063/064/065/068/069/071/072/074/076/079/080.
+All 266 native contract tests and the 9-row packet example passed before these commits.
+Full demo CTest is still running against the completed documentation-only demo build;
+no documentation ID is closed in the inventory until that run is audited.
+The repaired exception catches restore all 20 key-collection demo checks under both
+renderer labels and reveal exactly the known nearby-position ordering failure (097).
+Evidence: `repair-curve-key-collection-before-{SOFTWARE,OPENGLES3}.{json,log,stderr.log}`.
+
+Production Curve patch is NOW APPLIED in three math implementation files, with the
+previously proven native regressions. Native-only rebuild is running with one job:
+`repair-curve-native-after-build.log`, targets CnaTests/CnaMathTests/cna_shared in
+cmake-build-debug. This does not rebuild or replace the separate demo build's libraries;
+the concurrent documentation CTest retains its original runtime provenance. Wait for
+that CTest before rebuilding demos with Curve. Next: native math/Curve, C API and
+targeted sanitizer verification, then focused demos, remove only proven knownIssue
+markers and commit the root-cause batch. No Curve issue is closed or repair committed yet.
+
+Native Curve after-repair results: build passed (17 scheduled steps, no warnings),
+all 888 native math cases ran: 886 passed, the same two missing ShipGame fixture skips,
+zero failures (`repair-curve-all-math-after.log`). Direct aggregate CnaTests Curve*
+selection also passed all 92 cases, including content-reader suites
+(`repair-curve-aggregate-after.log`). Targeted production-TU ASan/UBSan rebuild and
+unchanged aliasing probe passed with leak detection enabled and no diagnostic;
+`repair-curve-sanitizer-after{,-build}.log`. This replaces the pre-fix invalid-vptr
+failure, not a whole-runtime sanitizer claim. Demo/C API validation remains pending.
+
 Baseline capture is complete. CNA source baseline is `688f3f23e`; campaign status
 commit before repairs is `56aaa6cff`, demo evidence commit is `2552912a5`.
 All six separate Wine/reference tests passed (667.70 seconds), including genuine
@@ -39,14 +113,99 @@ already fixed; one demo expectation is corrected; zero CNA runtime repairs yet.
 
 Phase B: nine C++ documentation corrections and fourteen C API documentation
 corrections are applied but not yet committed/closed. Public API shape and runtime
-behavior are unchanged. Native full rebuild is running in cmake-build-debug,
-log `repair-docs-native-build.log`; C API route generation check passes unchanged.
+behavior are unchanged. The all-target incremental rebuild was deliberately interrupted
+(exit 130, `repair-docs-native-build.log`) after compiling production/test objects, to
+avoid rebuilding unrelated examples for this documentation batch. It is not a passed full
+build. Targeted rebuild is running in cmake-build-debug: cna_shared, CnaTests and affected
+Audio/Content/Design/Devices/Graphics/Media/Net test executables plus the changed packet
+example; log `repair-docs-native-target-build.log`. C API route generation check passes unchanged.
 Pending: build demos, run focused native/demo contract checks, update coverage
 inventory if required, resolve the documentation IDs with actual evidence, commit
 the coherent batches separately. Then Curve root causes (002/036/097/137/138).
 Uncommitted CNA work: documentation headers/comments, digest regression, PacketReader
 example assertions, matrix/handoff. No push or merge. Historical sections below preserve
 baseline progress; this checkpoint supersedes their pending-run statements.
+
+Continuation details while the documentation rebuild runs:
+- Native test-routing correction: CTest invokes aggregate `CnaTests`, not `CnaMathTests`.
+  Building only the module executable did not update CTest's discovered list. The first
+  Curve CTest control therefore ran 66 old tests (all passed); archived as
+  `repair-curve-native-before-stale-registration.log`, NOT accepted as new regression coverage.
+  Direct current module execution then runs 73 Curve tests and fails six as expected; the
+  nearby-key case initially used std epsilon instead of CNA's half-ULP epsilon, so that test
+  is corrected to the exact original witness and aggregate relink/CTest rerun is active.
+  Logs: `repair-curve-native-before.log`, `repair-curve-native-before-exact.log`.
+  Matrix closure received the same audit: the original 91 CTests covered old cases only.
+  Fresh `CnaMathTests` direct run from CNA root passes ALL 92 Matrix tests, explicitly including
+  the new singular-affine case (`repair-116-native-direct.log`). The preceding wrong-cwd run
+  missed the existing oracle corpus, failed two corpus guards, and remains preserved as
+  `repair-116-native-direct-wrong-cwd.log`; it is not accepted as a code regression or pass.
+  Rebuild CnaTests when adding tests before relying on CTest registration.
+- Exact pre-fix results are now captured: 73 native Curve CTests, 66 passed / seven failed
+  (exit 8, 12.03 seconds). Failures are nearby replacement, aliasing replacement, NaN CompareTo,
+  post-loop tangent, shifted/non-unit Step, duplicate/tiny spans and NaN evaluation. The corrected
+  native C API CurveSmoke fails stage 2 (exit 2) on its new NaN comparison expectation. This
+  contrasts with the original C API test's pass and proves the old native oracle was wrong.
+  Genuine XNA exact witness rerun passes all 28 checks. Permanent source/evidence are now
+  pending in demo `docs/repair-evidence/curve/`; no Curve production fix is applied yet.
+- Targeted ASan/UBSan instrumentation of actual `CurveKeyCollection.cpp` confirms a related
+  setter lifetime defect: replacing from the last element reads a destroyed CurveKey after
+  erase (invalid vptr at Add line 88, setter line 59). Exit 1, logs
+  `repair-curve-sanitizer-before{,-build}.log`. Other runtime units are not instrumented; do not
+  call this whole-engine sanitizer coverage. Probe/build driver are in demo build-probe:
+  `repair-curve-collection-asan.cpp`, `repair-curve-sanitizer-build.mjs`. Rerun unchanged after
+  applying the prepared runtime patch, which copies the replacement before erase. A matching
+  native last-element regression is now added (74 Curve cases after the next rebuild).
+- C API route generation, refreshed coverage check, public-header audit and release-gate
+  consistency check all pass (`repair-docs-c-api-*`, `repair-docs-coverage-current.log`).
+  Release remains intentionally not-ready under its existing owner decisions; no decision,
+  approval pin or release policy was changed by this campaign.
+- Complete native math pre-fix sweep: 888 tests, 879 passed / two pre-existing missing ShipGame
+  fixture skips / exactly the seven new Curve failures, exit 1. No unrelated math failure.
+  Logs `repair-curve-all-math-before{,-build}.log`. This includes the last-element alias test.
+  Prepared external C API demo extension `build-probe/repair-curve-c-api-demo.patch` is UNAPPLIED;
+  apply only after the shared runtime fix passes, as it adds real Step/distinct-tangent checks
+  and describes the issues as resolved. Existing checks remain intact. After fixing, require
+  all 886 runnable math tests, both C/C++ focused demo paths and the targeted sanitizer to pass.
+- A candidate build-support policy patch for 001 is also prepared, UNAPPLIED, in demo
+  `build-probe/repair-001-support.patch`. It raises only the shared-runtime floor to CMake 3.30
+  (static older toolchains stay supported) and adds a small policy regression. Review before
+  applying; actual 3.28/3.29/3.30 fixture evidence remains the deciding contract evidence.
+- Targeted native documentation build passed (28 scheduled steps, no warnings); all 266
+  selected native contract CTests passed in 47.64 seconds, no skips. Packet example passes
+  9/9 rows, including its now-real ReadColor assertion. Logs: `repair-docs-native-target-build.log`,
+  `repair-docs-native-ctest.log`, `repair-docs-packet-example.log`. Full demo build is running
+  with two jobs, log `repair-docs-demo-build.log`; no documentation issue is closed yet.
+- Genuine XNA Curve probe now passes all 28 checks, including tiny spans, NaN/Step behavior,
+  comparison and nearby replacement. Logs: `repair-curve-xna{,-build,.stderr}.log` (actual stderr
+  filename is `repair-curve-xna.stderr.log`); stderr contains private display startup/shutdown
+  messages, not a claimed empty stream. Native original C17/Werror CurveSmoke compiled and
+  passed with empty stdout/stderr against the demo C API library: `repair-curve-c-api-before*`.
+  New native C++ and C API regression patches are NOW APPLIED, production Curve code remains
+  UNCHANGED. One-job native C++ build and failing-witness run are active, logs
+  `repair-curve-native-tests-build.log` and `repair-curve-native-before.log`. Do not mistake
+  intentional pre-fix regression failures for regressions caused by the documentation batch.
+- `generate_coverage_inventory.py --check` correctly detected moved declaration locations.
+  Normal `--write` (not approval regeneration) changes only the inventory SHA-256; all 467
+  headers/8,109 symbols and status counts are unchanged. First sandboxed write was refused;
+  authorized rerun succeeds. Logs: `repair-docs-coverage-{check,write}.log`.
+- Prepared next-batch patches live in demo `build-probe/repair-curve-{runtime,tests,
+  c-api-tests}.patch`; only runtime remains UNAPPLIED. Read files, not stale in-memory drafts.
+  Native Curve post-loop and
+  C API CurveSmoke NaN expectations themselves incorrectly preserve old CNA behavior; the
+  patches correct those from genuine XNA source and add regressions. The tests are running
+  against the old implementation first; apply runtime repair only after the witnesses fail.
+  `repair-curve-oracle.cs` is the genuine-XNA probe that passed all 28 checks above.
+- Native debug and multi profiles both have C API tests OFF. Do not claim native C API runtime
+  coverage from either. The pure C CurveSmoke has no external fixtures and can be compiled with
+  its exact C17/Wall/Wextra/Wpedantic/Werror/Threads policy against the demo's actual
+  `build/linux-full/CNA/modules/c-api/libcna_c_api.so` in the existing demo build-probe directory.
+  Preserve a pre-repair pass and the evidence-backed changed expectation before the Curve fix.
+- Demo `math.curve.key_collection` now has an uncommitted expectation correction for the
+  pre-campaign System exception migration: ArgumentOutOfRangeException for indices,
+  ArgumentException for insufficient CopyTo destination. Its 20 assertions and ISSUE-097 marker
+  remain unchanged. Build/focused-run pending; require the actual ordering witness to fail
+  before applying its production repair. Demo HANDOFF records this overlapping preparation.
 
 ## Starting state (2026-10-19)
 

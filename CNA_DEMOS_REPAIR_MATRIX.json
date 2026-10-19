@@ -5,7 +5,7 @@
     "demos_revision": "a50a1f426be7e16e565fc481ff677dbb556c4037",
     "date": "2026-10-19"
   },
-  "policy": "PENDING_VERIFICATION is not a final disposition. Classification is provisional until source, contract and current reproduction are reviewed. Preserve every historical ID. Never infer closure from a whole-demo expected failure.",
+  "policy": "PENDING_VERIFICATION is not a final disposition. Classification is provisional until source, contract and current reproduction are reviewed. Preserve every historical ID. Never infer closure from a whole-demo expected failure. The line and historical_status fields capture the initial inventory; locate current entries by permanent ID, not by those historical line numbers.",
   "issues": [
     {
       "id": "CNA-DEMOS-ISSUE-001",
@@ -651,14 +651,15 @@
       ],
       "subsystem": "audio/media",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment."
+        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-038",
@@ -705,14 +706,15 @@
       ],
       "subsystem": "audio/media",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment."
+        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-041",
@@ -744,14 +746,15 @@
       ],
       "subsystem": "model/gltf",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment."
+        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-043",
@@ -865,14 +868,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment."
+        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-050",
@@ -1030,15 +1034,20 @@
       "title": "Empty MediaQueue active-Song output contradicts its C documentation",
       "line": 2488,
       "historical_status": "Open",
-      "demos": [],
+      "demos": [
+        "c_api.media.media_player"
+      ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-060",
@@ -1050,12 +1059,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-061",
@@ -1067,12 +1079,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-062",
@@ -1101,12 +1116,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-064",
@@ -1118,12 +1136,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-065",
@@ -1135,12 +1156,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-066",
@@ -1186,12 +1210,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-069",
@@ -1203,12 +1230,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-070",
@@ -1237,12 +1267,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-072",
@@ -1255,12 +1288,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-073",
@@ -1289,12 +1325,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-075",
@@ -1318,15 +1357,20 @@
       "title": "Absent signed-in player lookup contradicts its output contract",
       "line": 2102,
       "historical_status": "Open",
-      "demos": [],
+      "demos": [
+        "c_api.gamer.signed_in_state"
+      ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-077",
@@ -1372,12 +1416,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-080",
@@ -1389,12 +1436,15 @@
       ],
       "subsystem": "c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "60b6b747f",
+      "validation": [
+        "Public header, generated route and canonical implementation reviewed. Documentation-only correction applied in Phase B; build/focused validation and commit are pending. No runtime behavior or generated route changes.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
+      ],
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-081",
@@ -1461,14 +1511,15 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment."
+        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-085",
@@ -1856,14 +1907,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment."
+        "Current public comments reviewed against implementation, native tests and the completed demo baseline. Documentation-only contradiction persists; runtime behavior is not to be changed to match the stale comment.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-108",
@@ -2018,7 +2070,8 @@
       "validation": [
         "repair-baseline-xna-matrix-bits.log: genuine Windows XNA 4.0 under Wine; M22=0x7F800000, M42=0xFF800000, explicit IsInfinity true and equality with 8/-8 false; other 14 components NaN. Exit 0, stderr empty. Demo correction and regression protection pending.",
         "Permanent probe and bit-level evidence committed in cna-demos 2552912a5adcdbe5129f2ab1649a28062036a349: docs/repair-evidence/issue-116/. Demo expectation correction and native regression remain pending.",
-        "Corrected demo retains seven controls and passes under both SOFTWARE/OPENGLES3 labels with empty stderr; invalid knownIssue removed. All 19 Matrix/catalog/validation demo CTests and 91 selected native Matrix tests pass. Native regression covers value/out/alias infinity signs and fourteen NaNs; CNA runtime unchanged. Evidence repair-116-closed-*, repair-116-ctest.log, repair-oracles-native-ctest.log."
+        "Corrected demo retains seven controls and passes under both SOFTWARE/OPENGLES3 labels with empty stderr; invalid knownIssue removed. All 19 Matrix/catalog/validation demo CTests and 91 selected native Matrix tests pass. Native regression covers value/out/alias infinity signs and fourteen NaNs; CNA runtime unchanged. Evidence repair-116-closed-*, repair-116-ctest.log, repair-oracles-native-ctest.log.",
+        "Validation-routing audit: initial CTest selection used the old aggregate binary and ran 91 existing Matrix cases only. Direct execution of freshly linked CnaMathTests from CNA source root explicitly passes all 92 Matrix cases INCLUDING the new regression; repair-116-native-direct.log. Wrong-cwd corpus guard failures are preserved separately and not accepted as coverage."
       ],
       "final_disposition": "DEMO_EXPECTATION_BUG"
     },
@@ -2677,14 +2730,15 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required."
+        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-154",
@@ -2696,14 +2750,15 @@
       ],
       "subsystem": "input/devices/platform",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required."
+        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-155",
@@ -2718,14 +2773,15 @@
       ],
       "subsystem": "design",
       "classification": "DOCUMENTATION_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Stale or misplaced public documentation contradicted the verified intended implementation; corrected without changing runtime behavior.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "66918da04",
       "validation": [
-        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required."
+        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required.",
+        "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
-      "final_disposition": null
+      "final_disposition": "DOCUMENTATION_CORRECTED"
     }
   ]
 }
