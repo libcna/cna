@@ -68,10 +68,30 @@ test (82 ms), proving the setup cause. Source review also found native dummy,
 X11 and Wayland test selections, so the initial run is not accepted as coverage.
 Preserved evidence: `repair-baseline-native-ctest-env-conflict.log` and
 `repair-baseline-native-audio-env-control.log`. No test/source was changed.
-Restart the complete native run with modern audio/video overrides unset, no
-global SDL_VIDEODRIVER pin, and legacy SDL_AUDIODRIVER=dummy (which the fixture
-can override), through the same private runner. The definitive log is
-`repair-baseline-native-ctest.log`. Do not run another suite concurrently.
+The complete restarted native run finished in 1,294.71 seconds: 11,054 passed,
+106 skipped, one failed, out of 11,161 selected tests (CTest exit 8). Modern
+audio/video overrides were unset, with no global SDL_VIDEODRIVER pin and legacy
+SDL_AUDIODRIVER=dummy so fixtures could override it. The checkout guard remained
+clean. Logs: `repair-baseline-native-ctest.log` and the preserved full
+`repair-baseline-native-LastTest.log`.
+
+The one pre-repair failure is `EasyGL_Conformance_render_target_own_msaa`, leg D:
+requested/applied 2x but zero partially covered centre-row texels; its 4x and
+single-sample controls pass. An isolated run reproduces exactly the same failure
+(`repair-baseline-native-msaa-control.log`, exit 8, 0.69 seconds). Keep this visible
+as NATIVE-BASELINE-MSAA-2X until investigated, not as a campaign regression. The
+test uses one exact diagonal; a valid 2-sample layout may put both samples on
+that diagonal. This is only a test-oracle hypothesis, not a disposition or fix.
+Inspect sample positions and rasterization before changing either renderer or test.
+
+The six excluded reference tests remain to run separately and serially. Actual
+current `run_gpu_tests_private.sh` and `tests/interop/xna40/run-interop-harness.sh`
+explicitly support private Xwayland, Wine null ALSA audio and disabled modal
+winedbg. The older main `handoff.md` advice to use external Xvfb :99 is stale;
+do not follow it onto another display. XnaDifferentialBuildTest's compiler-backed
+case is documented as taking about 12 minutes. Prerequisite DLLs/fxc and the
+existing Wine prefix are present; the scratch paths contain only generated XNB
+artifacts or do not yet exist. Do not run another suite concurrently.
 SOFTWARE category-partitioned smoke completed with explicit SDL X11 on the
 private runner: 719 IDs, 557 pass / 111 expected fail / 48 skip / 3 manual,
 199 failed assertions. OPENGLES3 also completed: 719 IDs, 596 pass / 113 expected
@@ -153,11 +173,31 @@ disposition. Do **not** change CNA to synthesize finite 8/-8 values.
 
 No CNA runtime issues repaired by this campaign; seven verified pre-existing fixes
 are recorded, and one proven demo-expectation correction (116) is pending implementation.
-No source repair has begun. Complete the
-all-ID repair matrix, inspect the remaining issue evidence, finish current CNA
-and demo builds, run native tests and all demo CTests plus partitioned SOFTWARE
-and OPENGLES3 smoke, and compare statuses and individual failed assertions with
-Complete1128. Record setup failures separately from behavioral failures.
+No production source repair has begun. Both builds, all enabled demo CTests, full
+SOFTWARE/OPENGLES3 smoke, exact visuals and the main native suite are now captured.
+The all-ID matrix exists; individual investigation continues, with all pending
+dispositions explicit. Run the six separate Wine/reference CTests on the private
+runner, then begin the prepared documentation batch. Preserve the native MSAA
+baseline failure and investigate it in the graphics/test-oracle batch.
+
+ISSUE-001 is now minimized and confirmed on actual CMake 3.28.6 and 3.29.9; the same
+cyclic two-library fixture passes with 3.30.9 and 3.31.6. The current CNA helper is
+used unchanged. The old claim that 3.29 is sufficient is disproved: WHOLE_ARCHIVE
+feature deduplication added in 3.30 is decisive, even with CMP0156 OLD. Official
+download checksums were verified; isolated tools and fixture are in the existing
+ignored `../cna-demos/build-probe`, not installed globally. Logs use
+`repair-baseline-shared-runtime-*`. Repair either the admitted shared-library
+version range or archive construction with this regression; do not arbitrarily
+change the default on the already-working current toolchain.
+
+Prepared but UNAPPLIED Phase B patches are in
+`../cna-demos/build-probe/repair-docs-{comments,tests,example}.patch`:
+037/040/042/049/084/107/153/154/155 public comment corrections, a digest-example
+test, and a PacketReader example that actually asserts ReadColor round-trip
+instead of counting every outcome as a passing historical quirk. Review/apply,
+build and focused-validate before recording closure. Existing runtime behavior is
+unchanged. Then correct 116's demo and add native value/out/alias classification
+coverage, followed by the coherent Curve batch (002/036/097/137/138).
 
 Then start documentation-only contradictions before coherent math/core batches.
 Retain the demo oracle. Record fix commits and native/focused/regression results
@@ -166,10 +206,12 @@ for each batch, update this file and the matrix, commit, and immediately continu
 Campaign files: this handoff and `CNA_DEMOS_REPAIR_MATRIX.json`; baseline evidence
 is ignored build output. No production or demo assertions have been changed.
 Initial inventory/handoff commit: `13275d0df`. Current demo documentation revision:
-`53288781957556f29e6cc987b7566faed45adaca` (021/041 status reconciliation only;
-runtime source/binaries remain those of the starting baseline). CLI metadata and
-catalog/inventory CTests both pass after this documentation update (719 IDs).
+`2552912a5adcdbe5129f2ab1649a28062036a349` (baseline/handoff and permanent 116
+oracle evidence; the previous 5328878 moved 021/041 to Resolved). Demo runtime
+source/binaries remain those of the starting baseline. CLI validation is 719/0
+and all 155 unique issue headings remain. Catalog/inventory CTests passed after
+the previous status reconciliation.
 This handoff and matrix update are committed together as a status checkpoint;
-no other uncommitted work is intended. Native baseline tests remain in progress;
-the complete build and both demo renderer baselines are finished.
+no other uncommitted work is intended. Main native baseline is finished with the
+one documented MSAA failure; the separate Wine/reference subset remains pending.
 No push or merge.
