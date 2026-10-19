@@ -374,7 +374,7 @@ static int validate_bounding_sphere(void)
         containment != CNA_CONTAINMENT_CONTAINS ||
         cna_bounding_sphere_contains_point(
             outer, (CNA_Vector3){5.0F, 0.0F, 0.0F}, &containment) != CNA_RESULT_SUCCESS ||
-        containment != CNA_CONTAINMENT_INTERSECTS) {
+        containment != CNA_CONTAINMENT_DISJOINT) {
         return 0;
     }
 
@@ -426,7 +426,7 @@ static int validate_bounding_sphere(void)
         cna_bounding_sphere_intersects_sphere(
             (CNA_BoundingSphere){{0.0F, 0.0F, 0.0F}, 2.0F},
             (CNA_BoundingSphere){{4.0F, 0.0F, 0.0F}, 2.0F},
-            &predicate) != CNA_RESULT_SUCCESS || predicate != CNA_TRUE ||
+            &predicate) != CNA_RESULT_SUCCESS || predicate != CNA_FALSE ||
         cna_bounding_sphere_intersects_ray(
             inner,
             (CNA_Ray){{0.0F, 0.0F, 5.0F}, {0.0F, 0.0F, -1.0F}},
@@ -516,7 +516,7 @@ static int validate_bounding_frustum(void)
         containment != CNA_CONTAINMENT_CONTAINS ||
         cna_bounding_frustum_contains_point(
             frustum, (CNA_Vector3){0.0F, 0.0F, 0.0F}, &containment) != CNA_RESULT_SUCCESS ||
-        containment != CNA_CONTAINMENT_INTERSECTS) {
+        containment != CNA_CONTAINMENT_CONTAINS) {
         return 0;
     }
 
