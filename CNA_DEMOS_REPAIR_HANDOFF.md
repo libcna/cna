@@ -50,12 +50,28 @@ Display: private Weston/Xwayland via CNA's runner; isolated XDG data, dummy audi
 Log: `../cna-demos/build/linux-full/reports/repair-baseline-ctest.log`.
 Validator/comparator/visual-tool self-tests passed 7 + 4 + 5 tests.
 
-Full native build is running in `cmake-build-debug` (2,829 scheduled steps,
+Full native build passed in `cmake-build-debug` (2,829 scheduled steps,
 OPENGLES3, tests enabled); log is `repair-baseline-native-build.log` in that
-same demo reports directory. No native-test result is yet claimed.
+same demo reports directory. This native profile has CNA_BUILD_C_API,
+CNA_CNAEXT and CNA_DEVICES OFF; the full demo configuration separately enables
+those surfaces. Native C API validation is still required for later C API batches.
 Its existing Draco dependency emits CMake CMP0148 and deprecated implicit-`this`
 capture warnings; native tests also emit existing ignored-nodiscard warnings.
 These are retained, not suppressed or counted as repair regressions.
+The native CTest baseline has 11,161 selected tests, excluding the separately
+hosted Wine XNA tests. The first attempt was intentionally interrupted (exit 130)
+after identifying an environment conflict: global SDL_AUDIO_DRIVER=dummy and
+SDL_VIDEO_DRIVER=x11 override the older per-test SDL_AUDIODRIVER/SDL_VIDEODRIVER
+settings. The no-physical-hardware audio test failed because the dummy device
+still opened; one diagnostic run unsetting SDL_AUDIO_DRIVER passes that exact
+test (82 ms), proving the setup cause. Source review also found native dummy,
+X11 and Wayland test selections, so the initial run is not accepted as coverage.
+Preserved evidence: `repair-baseline-native-ctest-env-conflict.log` and
+`repair-baseline-native-audio-env-control.log`. No test/source was changed.
+Restart the complete native run with modern audio/video overrides unset, no
+global SDL_VIDEODRIVER pin, and legacy SDL_AUDIODRIVER=dummy (which the fixture
+can override), through the same private runner. The definitive log is
+`repair-baseline-native-ctest.log`. Do not run another suite concurrently.
 SOFTWARE category-partitioned smoke completed with explicit SDL X11 on the
 private runner: 719 IDs, 557 pass / 111 expected fail / 48 skip / 3 manual,
 199 failed assertions. OPENGLES3 also completed: 719 IDs, 596 pass / 113 expected
@@ -154,5 +170,6 @@ Initial inventory/handoff commit: `13275d0df`. Current demo documentation revisi
 runtime source/binaries remain those of the starting baseline). CLI metadata and
 catalog/inventory CTests both pass after this documentation update (719 IDs).
 This handoff and matrix update are committed together as a status checkpoint;
-no other uncommitted work is intended. Native baseline build remains running.
+no other uncommitted work is intended. Native baseline tests remain in progress;
+the complete build and both demo renderer baselines are finished.
 No push or merge.
