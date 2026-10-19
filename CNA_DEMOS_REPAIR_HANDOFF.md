@@ -9,7 +9,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
-Phase C. CNA committed runtime is `5a44d2c50`; latest demo closure is `62a496e`.
+Phase C. CNA committed runtime is `e4ddea6e0`; latest demo closure is `62a496e`.
 All 155 historical IDs are retained in the matrix: 43 final dispositions and 112
 pending (12 runtime findings, 23 documentation corrections, seven already fixed,
 one proven demo expectation error). Values 120/121/122/136 are now closed with the
@@ -83,7 +83,7 @@ The next integer demo build was inadvertently started after the nonzero comparis
 without gating; it has now completed at runtime 5a44d2c50. Original full reports
 remain immutable. Do not describe new focused runs as using frozen 9786d4c93 binaries.
 Next: finish integer/transpose validation. The four-value closure is committed as
-demo62a496e, with all155 historical IDs retained (43 final/112 pending).
+demo62a496e and CNA status57250017a, with all155 IDs retained (43 final/112 pending).
 Next batch: Point/Rectangle hashes 124 and Rectangle Union aliasing 125. Genuine
 oracle passes 4510/4510. Native pre-fix: 919 passes/two skips/three failures (924
 tests); Intersect alias control passes. C17 smoke confirms both corrected hash
@@ -115,7 +115,35 @@ GeometrySmoke fails its new nonzero-offset translated-plane check, while the ori
 C smoke passes. Local Matrix out-transpose now reads all16 elements into a temporary
 before assignment. Native math925 passes/two unchanged skips (927 tests); registered
 Matrix/Plane141/141 pass (10.20s). Consumer and external checks pending.
-Preserve repair-139-*-before* evidence.
+Runtime/native commit0b03b7b21. Rebuilt strict C17 GeometrySmoke passes; original
+transpose four checks and strengthened C Plane11 checks pass both labels. Four
+integer/transpose markers removed only after focused passes. Both95-demo math
+sweeps now72 pass/23 expected fail: exactly27 cumulative changes, differences[].
+Matrix/Plane/glTF/avatar consumers1082 pass/four prior identical skips (155.12s).
+Full demo CTest PASSES: all732 enabled outcomes accepted, zero failures,48 skips/
+three disabled unchanged (486.96s). Metadata719/0; tools7+4+5; six exact visual
+references (zero differing pixels/channels), representative GLES texture inspected.
+Complete SOFTWARE then OPENGLES3 smoke RUNNING at ONE job:
+repair-integer-transpose-full-*-driver.log, parent repair-integer-transpose-regression-driver.log.
+Freeze demo binaries at0b03b7b21 until both full smoke runs complete and compare.
+Two initial multi-ID CLI requests were rejected before tests ran; their logs are
+retained separately from the correctly invoked focused checks. Preserve all
+repair-139-*-before* evidence. Permanent probe docs/repair-evidence/matrix-residual/.
+
+NEXT NATIVE BATCH140 is committed as e4ddea6e0: correct public Plane.Normalize
+near-unit shortcut and precision, reuse it in Shadow/Reflection, remove inconsistent
+private duplicate. Genuine normalization3405/3405; initial all-double hypothesis
+fails324 cases and remains preserved. Only one of seven rounding models matches:
+wide squared sum, Single-rounded sqrt, wide reciprocal. Native before925 passes/
+two fixture skips/four failures; after929/two skips. Registered Matrix/Plane/bounding
+294/294 pass (58.46s). Strict C smoke confirms both new stages fail against frozen
+pre140 ABI. No external140 marker change/closure yet. Permanent probes/readme in
+demo docs/repair-evidence/matrix-residual/, reports repair-140-* and repair-plane-*.
+Queued123 product audit: genuine8748 checks pass; Vector2/3/4 Dot and Vector3 Cross
+need wide products, and Cross Y must preserve XNA subtraction order for zero signs.
+New native tests are UNCOMMITTED; pre-fix build running at TWO jobs alongside the
+ONE full demo smoke job. No123 production changes. Next: capture native failures,
+repair locally and validate native; do not rebuild frozen external binaries yet.
 Older notes below are historical
 snapshots, superseded by this checkpoint; original baseline evidence remains intact.
 

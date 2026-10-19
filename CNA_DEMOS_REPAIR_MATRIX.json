@@ -2235,12 +2235,14 @@
         "math.vector4.dot"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Vector2/3/4 Dot and Vector3 Cross narrow float products before cancellation. Cross Y also negates the reverse subtraction, changing signed-zero results from XNA.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Permanent genuine ProductOracle.cs passes 8748 exact bit/NaN-classification checks across 18x18 sample pairs and value/out/component/output aliases. Native regressions prepared; pre-fix build running. No production vector edit or external marker change yet. Reports repair-123-xna*."
+      ],
       "final_disposition": null
     },
     {
@@ -2534,13 +2536,14 @@
         "math.matrix.transpose"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Output Transpose overwrites aliased source off-diagonal fields; Plane.Transform itself calls that in-place transpose, corrupting nonzero-offset translated planes.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "0b03b7b21",
       "validation": [
-        "New native pre-fix tests:923 pass/two fixture skips/two failures, proving alias corruption and downstream translated nonzero-offset Plane.Transform error. Original CGeometrySmoke passes; new translated-plane C stage fails. Local alias-safe temporary repair:925 native passes/two unchanged skips. Registered/consumer/external validation pending."
+        "New native pre-fix tests:923 pass/two fixture skips/two failures, proving alias corruption and downstream translated nonzero-offset Plane.Transform error. Original CGeometrySmoke passes; new translated-plane C stage fails. Local alias-safe temporary repair:925 native passes/two unchanged skips. Registered/consumer/external validation pending.",
+        "Genuine matrix residual192/192. Native math925 passes/two unchanged skips; Matrix/Plane registered141/141. Matrix/Plane/glTF/avatar consumers1082 passes/four baseline-identical skips. Strict rebuilt C GeometrySmoke and original four-check transpose scenario pass both labels; C Plane demo extended from9 to11 checks. Integer/transpose combined full CTest732 accepted/zero failures/48 skips/three disabled (486.96s), both95 math sweeps72 pass/23 expected failures, exactly27 cumulative changes and no differences. Six visual references exact. Complete719 renderer smoke running at frozen0b03b7b21; final closure pending."
       ],
       "final_disposition": null
     },
@@ -2553,12 +2556,14 @@
         "math.matrix.reflection_and_shadow"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "CreateShadow omits Plane normalization; the private Reflection helper and public Plane.Normalize also miss XNA near-unit shortcut and measured rounding boundaries. Route both factories through corrected Plane.Normalize.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "e4ddea6e0",
+      "validation": [
+        "Genuine matrix residual192 checks and final PlaneNormalizeOracle3405/3405. Initial all-double hypothesis fails324 cases and is preserved; among seven rounding models only wide squared sum, Single-rounded sqrt, wide reciprocal matches. Pre-fix native925 pass/two skips/four failures and both new C smoke stages fail. After native929 pass/two unchanged skips; registered Matrix/Plane/bounding294/294(58.46s). External binaries remain frozen for preceding checkpoint; no marker removal or final closure."
+      ],
       "final_disposition": null
     },
     {
