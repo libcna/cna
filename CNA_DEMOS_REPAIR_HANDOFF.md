@@ -32,13 +32,20 @@ with MSAA: 92/92, 4.98 seconds (`repair-oracles-native-ctest.log`). The focused
 native build passes with one existing unrelated nodiscard warning, no new warning.
 Demo evidence: `repair-116-closed-*`, `repair-116-ctest.log`.
 
-Next: commit the two independent oracle corrections separately, close 116 as
-DEMO_EXPECTATION_BUG retaining its history, then apply/validate the prepared
-nine C++ documentation corrections and fourteen C API documentation corrections.
-Proceed immediately to the Curve root-cause batch (002/036/097/137/138).
-Current uncommitted changes: native MSAA fixture, native Matrix regression,
-this handoff; demo invert assertion/metadata and demo HANDOFF. No production
-runtime behavior changed. No push or merge. Historical sections below preserve
+Committed native oracle corrections: `461064b90` (MSAA), `62e3f9c56` (Matrix).
+Demo `997f2d8` closes 116 as DEMO_EXPECTATION_BUG, retaining historical evidence;
+the matrix records its final disposition. Demo worktree is clean. Seven IDs were
+already fixed; one demo expectation is corrected; zero CNA runtime repairs yet.
+
+Phase B: nine C++ documentation corrections and fourteen C API documentation
+corrections are applied but not yet committed/closed. Public API shape and runtime
+behavior are unchanged. Native full rebuild is running in cmake-build-debug,
+log `repair-docs-native-build.log`; C API route generation check passes unchanged.
+Pending: build demos, run focused native/demo contract checks, update coverage
+inventory if required, resolve the documentation IDs with actual evidence, commit
+the coherent batches separately. Then Curve root causes (002/036/097/137/138).
+Uncommitted CNA work: documentation headers/comments, digest regression, PacketReader
+example assertions, matrix/handoff. No push or merge. Historical sections below preserve
 baseline progress; this checkpoint supersedes their pending-run statements.
 
 ## Starting state (2026-10-19)

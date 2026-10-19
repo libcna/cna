@@ -2014,12 +2014,13 @@
       "status": "DEMO_EXPECTATION_BUG",
       "root_cause": "The genuine-XNA probe used culture-dependent R formatting with console CP1252: infinity symbol U+221E best-fit encoded as ASCII 8. Both XNA Invert overloads actually return signed infinities, matching CNA.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "62e3f9c56",
       "validation": [
         "repair-baseline-xna-matrix-bits.log: genuine Windows XNA 4.0 under Wine; M22=0x7F800000, M42=0xFF800000, explicit IsInfinity true and equality with 8/-8 false; other 14 components NaN. Exit 0, stderr empty. Demo correction and regression protection pending.",
-        "Permanent probe and bit-level evidence committed in cna-demos 2552912a5adcdbe5129f2ab1649a28062036a349: docs/repair-evidence/issue-116/. Demo expectation correction and native regression remain pending."
+        "Permanent probe and bit-level evidence committed in cna-demos 2552912a5adcdbe5129f2ab1649a28062036a349: docs/repair-evidence/issue-116/. Demo expectation correction and native regression remain pending.",
+        "Corrected demo retains seven controls and passes under both SOFTWARE/OPENGLES3 labels with empty stderr; invalid knownIssue removed. All 19 Matrix/catalog/validation demo CTests and 91 selected native Matrix tests pass. Native regression covers value/out/alias infinity signs and fourteen NaNs; CNA runtime unchanged. Evidence repair-116-closed-*, repair-116-ctest.log, repair-oracles-native-ctest.log."
       ],
-      "final_disposition": null
+      "final_disposition": "DEMO_EXPECTATION_BUG"
     },
     {
       "id": "CNA-DEMOS-ISSUE-117",
