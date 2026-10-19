@@ -52,6 +52,11 @@ namespace Pipeline = CNA::Content::Pipeline;
 namespace Cnb = CNA::Content::Cnb;
 namespace Xnb = CNA::Internal::Xnb;
 
+TEST(XnbOutputOptionsDigestTest, DefaultOptionsMatchThePublicExample)
+{
+    EXPECT_EQ(Pipeline::XnbOutputOptionsDigest(Xnb::XnbFileOptions{}), "w5run");
+}
+
 TEST(XnbOutputAssetTypeNameTest, ReturnsFixedAndDynamicRuntimeNames)
 {
     EXPECT_EQ(Pipeline::XnbOutputAssetTypeName(Pipeline::XnbOutputAssetId::Texture2D),

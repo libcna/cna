@@ -64,12 +64,12 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @note CNAEXT — plans/plan_gltf.md GLTF-245/GLTF-247 (Phase 5). A skeleton imported from glTF
          * hangs somewhere in a larger scene: its root joints may have scene ancestors that are not
-         * themselves joints, and the skinned mesh's own node transform has to be cancelled rather
-         * than applied. Both are properties of the space *above* the skeleton, so they cannot be
-         * expressed as a bone-local transform — and folding them into @ref BindPose would be undone
-         * the instant a clip replaced that root bone's local transform. Kept separately, an
-         * animated root joint substitutes only its own local transform, exactly like any other
-         * bone. May be left empty, which is read as all-identity.
+         * themselves joints. The loose glTF loader stores that non-joint ancestry here and parents
+         * skinned meshes to the identity model root. The authored mesh node remains in Model::Bones,
+         * but its placement is not applied to the skinned draw: no inverse mesh-node transform is
+         * stored in this prefix. Keeping ancestry separate from @ref BindPose lets an animated root
+         * joint replace only its own local transform. Legacy/custom SkinningData carriers may
+         * supply different root context. May be left empty, which is read as all-identity.
          */
         std::vector<Matrix> SkeletonRootPrefix;
         /**
@@ -233,8 +233,9 @@ namespace Microsoft::Xna::Framework::Graphics
      * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-262`). A skinned effect's
      * bone palette defaults to `MaxBones` identity matrices, which is not a neutral value: it
      * means "every joint matrix is the identity", so a mesh drawn that way is rendered in joint
-     * space rather than in its bind pose, and glTF's own `inverse(globalTransform(meshNode))`
-     * cancellation term (§3.7.3) never applies. A skinned model that is loaded and drawn without
+     * space rather than in its bind pose. The loose glTF loader uses identity mesh parents and
+     * ancestor-only root prefixes; it does not store an inverse mesh-node cancellation term.
+     * A skinned model that is loaded and drawn without
      * game code first calling `AnimationPlayer::Update` and `SetBoneTransforms` therefore renders
      * visibly wrong rather than merely unanimated.
      *

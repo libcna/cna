@@ -4353,7 +4353,8 @@ namespace Microsoft::Xna::Framework::Graphics
         args.isFullScreen = presentationParameters_.getIsFullScreenProperty();
         args.graphicsProfile = static_cast<int>(graphicsProfile_);
         // plans/plan_dx9.md D9-34: forward a REAL, renderer-detected device-lost/reset event to this
-        // GraphicsDevice's own public XNA events. Nine of the ten renderers never call this.
+        // GraphicsDevice's own public XNA events. DirectX9 and WebGPU implement this path;
+        // support depends on the selected renderer rather than desktop versus mobile.
         args.deviceEventCallback = [this](CNA::Internal::Renderers::RendererDeviceEvent event)
         {
             switch (event)

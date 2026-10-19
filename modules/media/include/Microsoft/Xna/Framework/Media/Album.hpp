@@ -86,8 +86,9 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Returns a stream over a thumbnail image for this album.
          *
-         * No separate thumbnail is generated -- returns the same image as GetAlbumArt(), matching
-         * this being a from-scratch feature with no FNA behavior to differ against.
+         * File-based art is resized to a PNG thumbnail when possible, with an original-image
+         * fallback. Embedded art currently returns GetAlbumArt() without resizing.
+         * Thumbnail dimensions are implementation dependent, not a fixed XNA size guarantee.
          *
          * @throws System::InvalidOperationException If HasArt is false.
          * @return Pointer to a Stream over the thumbnail image data. Caller owns the Stream.

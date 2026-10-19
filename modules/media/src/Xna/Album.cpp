@@ -101,8 +101,7 @@ namespace Microsoft::Xna::Framework::Media
             throw System::InvalidOperationException("This album has no album art.");
         }
 
-        // Embedded art has no file path to thumbnail from, so route it through GetAlbumArt() and
-        // downscale the decoded bytes instead.
+        // Embedded art has no file path for the thumbnail generator; return its original bytes.
         if (artPath_.empty())
         {
             return GetAlbumArt();

@@ -74,7 +74,8 @@ namespace CNA::Content::Pipeline
      * an artifact built under other options without needing a new fingerprint domain.
      *
      * @param options The container options.
-     * @return A short, deterministic, human-readable digest such as `"w5rn-x"`.
+     * @return A short, deterministic, human-readable digest such as `"w5run"`
+     * (Windows, version 5, Reach, uncompressed, XNA 4.0 reader names).
      */
     [[nodiscard]] std::string XnbOutputOptionsDigest(
         const CNA::Internal::Xnb::XnbFileOptions& options);

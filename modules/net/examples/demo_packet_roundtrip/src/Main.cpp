@@ -147,8 +147,8 @@ int main()
         Report("Matrix", back == value, "wrote " + value.ToString() + ", read " + back.ToString());
     }
 
-    // Color, matched pairing: PacketWriter::Write(Color) writes 4 raw bytes (R,G,B,A) - the
-    // matching reader-side read is 4 raw ReadByte() calls, not ReadColor() (see the note below).
+    // Color's wire representation is four raw bytes (R,G,B,A). First inspect that layout
+    // explicitly; the next row checks the public ReadColor() inverse.
     {
         PacketWriter writer;
         const Color value(byteDist(rng), byteDist(rng), byteDist(rng), byteDist(rng));
@@ -164,44 +164,30 @@ int main()
         const SharpRuntime::bytecs a = reader.ReadByte();
         const Color back(r, g, b, a);
         Report("Color", back == value, "wrote " + value.ToString() + ", read " + back.ToString() +
-                                            " (matched via 4x ReadByte(), not ReadColor())");
+                                            " (wire layout via 4x ReadByte())");
     }
 
-    // Color / ReadColor(), a deliberately *mismatched* pairing: FNA's own PacketWriter::Write
-    // (Color) writes 4 bytes while PacketReader::ReadColor() reads 4 floats - a real, documented
-    // upstream FNA quirk (FNA.NetStub/src/Net/PacketReader.cs even carries the maintainer's own
-    // "// FIXME: Only using floats because of the overloads...? -flibit" comment), not a CNA
-    // porting bug, and intentionally not "fixed" here since that would diverge from FNA fidelity.
-    // Since Write(Color) emits only 4 bytes while ReadColor() always consumes 16 (4 floats), this
-    // pairing doesn't just read back garbage - it throws for running past the end of the buffer.
+    // The public Color pair must round-trip exactly and consume only four bytes.
     {
         PacketWriter writer;
         const Color value(byteDist(rng), byteDist(rng), byteDist(rng), byteDist(rng));
         writer.Write(value);
         PacketReader reader;
         LoadIntoReader(reader, DrainToBytes(writer));
-        ++gTotal;
         try
         {
             const Color back = reader.ReadColor();
-            // Counted as a pass only if it also happens to equal the original value - either
-            // outcome documents the real upstream quirk, so both are reported as QUIRK, not FAIL.
-            ++gPass;
-            std::printf("%-10s | %-4s | wrote %s, ReadColor() unexpectedly read %s without "
-                        "throwing\n",
-                        "Color*", "QUIRK", value.ToString().c_str(), back.ToString().c_str());
+            Report("ReadColor", back == value && reader.getPositionProperty() == 4,
+                   "wrote " + value.ToString() + ", read " + back.ToString());
         }
         catch (const std::exception& ex)
         {
-            ++gPass; // Counted as a pass: correctly reproducing the documented upstream asymmetry.
-            std::printf("%-10s | %-4s | wrote %s, ReadColor() threw \"%s\" (expected: Write(Color) "
-                        "emits 4 bytes but ReadColor() always consumes 16)\n",
-                        "Color*", "QUIRK", value.ToString().c_str(), ex.what());
+            Report("ReadColor", false, "unexpected exception: " + std::string(ex.what()));
         }
     }
 
     std::printf("------------------------------------------------------------------\n");
-    std::printf("%d/%d rows behaved as expected (including 1 documented upstream quirk row).\n",
+    std::printf("%d/%d rows round-tripped as expected.\n",
                 gPass, gTotal);
     return gPass == gTotal ? 0 : 1;
 }

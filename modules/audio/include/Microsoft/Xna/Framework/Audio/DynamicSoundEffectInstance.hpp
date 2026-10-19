@@ -56,13 +56,20 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] bool getIsLoopedProperty() const override;
 
         /**
-         * @brief Attempting to set IsLooped on a dynamic instance has no effect.
+         * @brief Accepts false; dynamic instances do not support looping.
          *
-         * @param looped Ignored.
+         * @param looped Must be false.
+         * @throws System::InvalidOperationException If looped is true.
+         * @throws System::ObjectDisposedException If the instance has been disposed.
          */
         void setIsLoopedProperty(const bool& looped) override;
 
-        /** @brief Attempting to set IsLooped on a dynamic instance has no effect (move overload). */
+        /**
+         * @brief Accepts false; dynamic instances do not support looping (move overload).
+         * @param looped Must be false.
+         * @throws System::InvalidOperationException If looped is true.
+         * @throws System::ObjectDisposedException If the instance has been disposed.
+         */
         CNAEXT void setIsLoopedProperty(bool&& looped) override;
 
         /// Declaring the protected hook below would otherwise hide the public Dispose() every

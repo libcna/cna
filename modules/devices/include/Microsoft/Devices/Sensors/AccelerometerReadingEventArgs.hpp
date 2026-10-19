@@ -16,8 +16,8 @@ namespace Microsoft::Devices::Sensors
      *
      * Superseded by the WP7 7.1 SensorBase pattern
      * (CurrentValueChanged / SensorReadingEventArgs<AccelerometerReading>) used by
-     * the current CNA Accelerometer implementation. This class exists for API
-     * completeness and is not raised by that implementation.
+     * the current CNA Accelerometer implementation. CNA also raises the legacy
+     * ReadingChanged event with this payload after CurrentValueChanged for a valid reading.
      */
     class AccelerometerReadingEventArgs : public System::EventArgs
     {

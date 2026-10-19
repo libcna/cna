@@ -77,8 +77,9 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Returns a stream over a thumbnail of this picture.
          *
-         * No separate thumbnail is generated -- returns the same image as GetImage(), matching
-         * this being a from-scratch feature with no FNA behavior to differ against.
+         * Returns generated PNG thumbnail data when the source can be resized; otherwise
+         * falls back to the original image stream. Thumbnail dimensions are implementation
+         * dependent, not a fixed XNA size guarantee.
          *
          * @return Pointer to a Stream over the thumbnail image data. Caller owns the Stream.
          */

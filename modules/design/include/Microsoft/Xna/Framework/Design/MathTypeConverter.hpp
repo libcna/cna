@@ -48,7 +48,9 @@ public:
      *
      * @param context The optional conversion context.
      * @param destinationType The destination type.
-     * @return @c true for InstanceDescriptor and base-supported destinations.
+     * @return @c true for enabled string conversion and base-supported destinations.
+     * The base MathTypeConverter does not support InstanceDescriptor; concrete converters
+     * add that support in their own overrides.
      */
     [[nodiscard]] bool CanConvertTo(System::ComponentModel::ITypeDescriptorContext* context,
                                     const System::Type& destinationType) const override;
@@ -96,9 +98,10 @@ protected:
     /**
      * @brief Whether this converter converts to and from a string form.
      *
-     * Documented XNA protected field. BoundingBox, BoundingSphere and Ray clear it, because those
-     * three have no string form; the vector, matrix, colour, point and rectangle converters leave
-     * it set.
+     * Documented XNA protected field. Point, Vector2/3/4, Quaternion and Color leave it set
+     * for component-list string conversion. Rectangle, Matrix, Plane, BoundingBox,
+     * BoundingSphere and Ray clear it: they do not parse strings, but can still produce
+     * structural display text through the base converter.
      */
     bool supportStringConvert = true;
 

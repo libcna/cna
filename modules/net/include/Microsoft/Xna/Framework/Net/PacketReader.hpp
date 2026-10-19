@@ -82,11 +82,9 @@ namespace Microsoft::Xna::Framework::Net
         void setPositionProperty(int value);
 
         /**
-         * @brief Reads a Color value as four 32-bit floats (R, G, B, A).
+         * @brief Reads a Color value as four bytes (R, G, B, A).
          *
-         * Not the inverse of PacketWriter::Write(Color), which writes four bytes: the
-         * upstream implementation reads floats here and writes bytes there. Preserved
-         * as-is for behavioral fidelity rather than symmetrized.
+         * This is the inverse of PacketWriter::Write(Color).
          *
          * @return The Color read from the buffer.
          */

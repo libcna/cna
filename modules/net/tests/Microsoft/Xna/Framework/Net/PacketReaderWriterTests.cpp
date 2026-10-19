@@ -141,9 +141,7 @@ namespace {
     }
 }
 
-// PacketWriter::Write(Color) writes 4 bytes; PacketReader::ReadColor() reads 4 floats
-// (16 bytes). This asymmetry exists upstream and is preserved rather than symmetrized,
-// so Color is not round-trippable through these two methods alone.
+// PacketWriter::Write(Color) and PacketReader::ReadColor() share the four-byte RGBA layout.
 
 TEST(PacketWriterTest, WriteColorWritesFourBytes) {
     PacketWriter w;

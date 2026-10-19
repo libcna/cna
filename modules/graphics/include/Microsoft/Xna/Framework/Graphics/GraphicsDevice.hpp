@@ -111,7 +111,13 @@ namespace Microsoft::Xna::Framework::Graphics
         // --- Events ---
         /** @brief Raised when this device is disposed. */
         System::EventHandler<System::EventArgs> Disposing;
-        /** @brief Raised when the device is lost (XNA compliance; never raised on desktop). */
+        /**
+         * @brief Raised when the renderer reports device loss.
+         *
+         * Availability is renderer/platform dependent. DirectX9 and WebGPU can report loss;
+         * desktop platforms are not universally exempt. A caller-initiated Reset alone does
+         * not imply that the device was lost.
+         */
         System::EventHandler<System::EventArgs> DeviceLost;
         /** @brief Raised after the device has been reset. */
         System::EventHandler<System::EventArgs> DeviceReset;
@@ -1855,8 +1861,8 @@ namespace Microsoft::Xna::Framework::Graphics
         bool isDisposed_;
         /// plans/plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a renderer via
         /// GraphicsRendererCreateArgs::deviceEventCallback (RendererDeviceEvent::Lost -> Lost,
-        /// Resetting -> NotReset, Reset -> Normal). Every renderer except D3D9 never calls that
-        /// callback, so this stays Normal there, matching the pre-existing hardcoded behavior.
+        /// Resetting -> NotReset, Reset -> Normal). DirectX9 and WebGPU report these transitions;
+        /// renderers without a lifecycle callback leave this status Normal.
         GraphicsDeviceStatus deviceStatus_ = GraphicsDeviceStatus::Normal;
 
         // State/sampler collection construction binds public resource identities to this device.

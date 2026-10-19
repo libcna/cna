@@ -166,15 +166,6 @@ namespace CNA::Content::Pipeline
     [[nodiscard]] const char* ContentTargetPlatformName(ContentTargetPlatform platform) noexcept;
 
     /**
-     * @brief Host-level facts about a build that any component may consult
-     *        (plans/plan_xnapipeline_parity.md `XNAPP-040`).
-     *
-     * These are the values XNA exposes on its processor context. None of them changes what a
-     * built-in CNA component does today; they exist so a component written against the XNA shape
-     * can ask the questions XNA lets it ask. Every field has the default XNA's own tooling uses
-     * for a Windows build.
-     */
-    /**
      * @brief How strictly a build refuses what XNA would only warn about.
      *
      * `cna-content`'s own default is Strict, and deliberately: a parameter naming a property the
@@ -201,6 +192,14 @@ namespace CNA::Content::Pipeline
         XnaCompatible,
     };
 
+    /**
+     * @brief Host-level build facts available to built-in and custom components.
+     *
+     * These are values XNA exposes on its processor context. Components may use them to select
+     * processing policy: for example, TextureProcessor consults targetProfile for XNB mipmapped
+     * texture restrictions, while CNB processing does not apply that XNB profile gate.
+     * Not every field affects every route. Defaults describe an XNA-style Windows build.
+     */
     struct ContentBuildEnvironment
     {
         /** @brief Platform the content is built for. */
