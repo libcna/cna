@@ -41,25 +41,100 @@ preserved repair-vertex-text-after.log; corrected output passes. Broad native bu
 four-source correction build warning-free. Consumer run COMPLETE:1393pass/four
 unchanged skips(1397 total,223.580s),repair-geometry-native-consumers.log. Runtime
 commits e1377c437 (geometry/math/C marshal),a8a60bf03 (stock vertex text companion).
-External demo/C API rebuild ACTIVE (THREE jobs),repair-geometry-demo-build-resumed.log.
+External demo/C API and marker builds COMPLETE without new warnings.
 Initial one-job build was deliberately interrupted with SIGINT after native suites
 finished to use the released capacity; original log retained,not a compile failure.
-1165 initial steps due shared header/marshaller dependencies; no native jobs remain.
+1165 initial steps due shared header/marshaller dependencies. Strict actual C ABI
+GeometrySmoke/VertexValueSmoke PASS; all13 focused demos PASS both labels. Six math
+witnesses retain13/5/12/16/15/10 checks; converter9/stock vertices8; C vertex7
+internal checks. Six knownIssue markers removed only afterward. Both95 math sweeps
+87PASS/8expectedFAIL; exact42 cumulative intended changes,differences[].
+Both full renderer sweeps COMPLETE: SOFTWARE719 is599PASS/69expectedFAIL/48SKIP/
+3manual; OPENGLES3719 is638PASS/71expectedFAIL/7SKIP/3manual. Each accepts exact42
+cumulative changes with differences[]. Six exact visual references remain unchanged.
+First full CTest completed1200.53s with731accepted/one failure (48 skips,three
+disabled). Failed698 net.network_session.find_and_join selected a listing with
+two gamers/two public slots instead of this test's one gamer/one public slot;
+source selects by shared HostGamertag alone. Concurrent smoke uses the same
+network despite isolated XDG profiles; cross-suite discovery is the leading
+evidence-backed cause, not yet an isolated validation result. Preserve original
+repair-geometry-demo-ctest.log; run the full CTest serially AFTER smoke completes.
+Do not suppress assertions or accept this failed run as a checkpoint. Full CTest
+isolated rerun NOW RUNNING alone on network,repair-geometry-demo-ctest-isolated.log;
+no other network suites until it completes. Native build remains independent.
+FREEZE EXTERNAL BINARIES at productiona8a60bf03 while full regression runs:
+repair-geometry-regression-driver.log (ONE job,metadata/tools/visual/fullSW/fullGLES)
+and repair-geometry-demo-ctest.log (ONE job). No external rebuild or demo edits until
+both finish. Native next-batch tests may proceed independently with ONE spare job.
 Do not edit native sources or relink a live consumer while validation runs.
 
-UNCOMMITTED: status/matrix, six exact demo text corrections and separate demo
-geometry evidence. Product/test repairs committed e1377c437/a8a60bf03. Demo118/123/140
+UNCOMMITTED: six exact demo text corrections and separate demo geometry evidence;
+new native GeometryContainmentCompatibilityTests.cpp (NEXT batch): before959total,
+951pass/two unchanged skips/six failures. FrustumSeparationOracle.cs captured12
+compact genuine grids;27216 overload parity checks pass. Separate issue-132 Color
+fixed-point oracle1782/1782 PASS. Expanded native separation fixture12 rows/14328
+cases plus three tests reproduce three more failures: before962total,951pass/two
+skips/nine failures. Native containment production NOW UNCOMMITTED: private local
+Gjk.hpp and BoundingBox/BoundingSphere/BoundingFrustum repairs. No public API or
+ray/frustum method/exception change. First post math962:957pass/two skips/three
+failures. All original six new failures and full box/frustum-pair grids now pass.
+First-run remaining: two historical native oracles pin FNA instead of XNA; sphere grid has
+18 differing Contains(sphere) cases (both overloads), while ALL actual GJK
+intersection and reverse-containment fields match genuine. Suspect premature
+public Dot rounding in inline frustum plane classification; targeted genuine
+FrustumSpherePlaneOracle proves1944/1944 wide inline plane classifications,18
+rounded intermediary mismatches. Corrected inline Contains(sphere) and two exact
+native oracles now pass FULL native math960/two unchanged skips(962 total).
+One old nodiscard warning in the touched Sphere test is now explicitly discarded,
+without changing its exception assertion. ASan/UBSan actual three production TUs
+plus both new regression test files PASS all10 tests with leak detection,
+repair-containment-sanitizer{,-build}.log. Registered159/159 PASS50.50s. Formatting
+only new files/changed hunks, then native rebuild warning-free and full960pass/two
+skips again. No external containment changes yet. Additional genuine sphere
+overflow/mutable-radius probe: initial direct Distance caller repeated118's known
+spill-dependent range difference and failed; original report preserved. Corrected
+model uses actual reflected Distance/DistanceSquared method-entry outputs:
+12800 checks PASS,18 differences if radius sums/differences narrow first.
+New native test reproduces one failure (963total,960pass/two skips/one failure),
+repair-sphere-radius-native-before*. Local Contains(sphere) now keeps double
+radius comparisons; Gjk max uses the reference MathHelper NaN contract.
+Full native math961PASS/two unchanged skips(963 total); latest ASan/UBSan/leak
+run11/11PASS592ms, both builds warning-free,repair-sphere-radius-native-after*
+and repair-containment-sanitizer-final*. Final registered160/160PASS31.08s,
+repair-containment-native-final-registered.log. Owner-reserved ray method body verified
+textually identical to HEAD; point containment naturally changes its boundary
+branch, so the old C boundary-refusal oracle/docs need a genuine-backed update
+in the NEXT external containment batch,not the frozen geometry checkpoint.
+Native consumer still pending while external renderer regression runs.
+Final native rebuild after comment-only public-header and Gjk formatting edits
+is running with two compiler jobs:repair-containment-final-native-build.log.
+Together with the single external smoke job this exhausts the three-job limit.
+Genuine FrustumBoundaryRayOracle96/96PASS; corrected native C boundary oracle and
+public comment,plus new sphere/separation stages. Strict C17/Werror against frozen
+pre-containment actual C ABI fails exactly three stages,repair-containment-c-before.log.
+No next-batch C ABI rebuild/external demo edit yet. ColorFixedPointProbe.cpp is only
+prepared evidence; no Color production/native-test change or compilation yet.
+Focused geometry demos and permanent genuine oracles are committed separately
+as cna-demos c3f3bbd; final five-ID closure still pending isolated full CTest.
+Read-only lifecycle141–144 source audit and a fresh oracle source are prepared
+under docs/repair-evidence/lifecycle,not executed or repaired. Dispose ownership
+and Game's forward teardown loop need care before adding genuine self-removal.
+Logs repair-containment-native-after* preserve the original three failures.
+Product/test repairs committed e1377c437/a8a60bf03. Demo118/123/140
 closure/status committed separately as6797295/73dc23836. Six genuine-disproved
-exact demo text expectations corrected,all assertion counts retained. No geometry
-markers removed yet. EXACT NEXT: finish external build;
-validate actual C ABI with GeometrySmoke and VertexValueSmoke, focused
-SOFTWARE/GLES, then marker changes/full regression. Max three compiler/test jobs.
+exact demo text expectations corrected,all assertion counts retained. Geometry
+markers now removed after passes,final issue closure still PENDING complete sweeps.
+EXACT NEXT: audit external full results and close024/126/128/130/135 only if clean;
+prepare native127/129/133 convex-separation oracle regression and root repair.
+Max three compiler/test jobs,currently two external jobs plus one native spare.
 Continue127/129/133 containment next;131 reserved in handoff.md section6.
 Next-batch genuine containment oracle509/509 confirms point-surface exclusion is
 different from including whole-volume boundary corners; Contains(sphere) plane
 classification is conservative while Intersects(sphere) truly separates corner
 misses. Creation demo must test geometric enclosure,not point Contains,when129
-lands. No containment production code changed; see geometry/README.md.
+lands. No external containment demo change while prior geometry is frozen.
+See geometry/README.md; next fix measured precision cause and exact native oracles,
+run full native math/registered/consumers and preserve external geometry checkpoint.
 Ordinary actionable defects remain; campaign NOT complete.
 
 ## Historical checkpoint (2026-10-19; superseded above)

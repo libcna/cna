@@ -124,6 +124,27 @@ Additional measured geometry decisions (2026-10-20; repairs pending external clo
 | 130, ray/box | BoundingBox.Intersects(Ray) IL starts the clipped interval at zero and uses the strict parallel threshold abs(direction) < 1e-6. Preserve all four public call forms, boundary starts and nonunit directions. | Same oracle: stationary grid, boundaries and threshold controls |
 | 135, negative-zero text | Genuine frustum planes retain seven negative-zero fields for Identity, but .NET Framework Single text prints either zero sign as 0. Do not alter derived plane bits; canonicalize display operands only. | Same oracle: all24 plane bits and seven math text types; disproved positive-zero hypotheses retained |
 
+Containment batch127/129/133 (2026-10-20, external closure pending): genuine
+`BoundingBox.Contains(BoundingFrustum)` and sphere/frustum containment first use
+actual convex separation, not just a plane-rejection classifier or constant-zero
+placeholder. A sphere missing a frustum corner proves why a private GJK simplex
+helper is necessary; its scope is the three existing volume Intersects paths,
+without a public API/cache or changing the owner-reserved ray method. The fixture
+`tests/reference/xna40/framework/frustum-separation-oracle.txt` records14328 genuine
+shape pairs. Point containment checks all planes with XNA's1e-5 threshold; equal
+frusta are geometrically contained. Sphere point surfaces are Disjoint, while
+contained volume corners are inclusive; sphere containment uses signed radius
+differences and intersection excludes external tangency. The inline frustum/sphere
+plane arithmetic must not be replaced by a rounded public Dot intermediary:
+genuine1944-case model comparison gives zero wide-model mismatches and18 rounded
+mismatches. Genuine12800 radius-arithmetic checks additionally prove18 cases
+requiring wide radius sum/difference comparisons. Native math961 passes/two
+unchanged skips,registered160/160,actual production-TU ASan/UBSan/leak11/11 pass;
+broad consumer and external validation remain pending. Genuine96 boundary-ray
+consumer checks confirm zero hits after point containment repair; the reserved
+ray implementation/exception remains unchanged. Source/oracles and retained failures:
+`../cna-demos/docs/repair-evidence/geometry/`.
+
 The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
 both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
 the recorded rows above are superseded by this checkpoint; permanent evidence is

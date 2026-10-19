@@ -2333,12 +2333,15 @@
         "math.bounding_box.contains"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Corner-only box/frustum containment omits real separation; shared convex intersection must distinguish edge/corner misses before containment checks.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine minimized509/509; full separation fixture14328 sphere/box/frustum pairs and27216 value/output parity checks. Before native962 tests951pass/two unchanged skips/nine failures. Local uncommitted GJK/containment repair first after957pass/two skips/three failures; sphere residual is18 inline plane rounding cases, not GJK. Genuine1944-case precision probe proves zero wide-model mismatches versus18 rounded. Exact two old native FNA oracles corrected; final native960pass/two skips. Actual three production TUs plus10 new regression tests pass ASan/UBSan with leak detection. Registered/consumer/external closure still pending; preceding external geometry runtimea8a60bf03 remains frozen. Permanent evidence ../cna-demos/docs/repair-evidence/geometry/.",
+        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending."
+      ],
       "final_disposition": null
     },
     {
@@ -2371,12 +2374,15 @@
         "math.bounding_sphere.intersects"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Sphere point boundary/NaN, signed radius-difference containment and strict external tangency differ from genuine XNA; frustum containment uses a constant-zero placeholder instead of convex separation. Keep whole-volume boundary corners inclusive.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine minimized509/509; full separation fixture14328 sphere/box/frustum pairs and27216 value/output parity checks. Before native962 tests951pass/two unchanged skips/nine failures. Local uncommitted GJK/containment repair first after957pass/two skips/three failures; sphere residual is18 inline plane rounding cases, not GJK. Genuine1944-case precision probe proves zero wide-model mismatches versus18 rounded. Exact two old native FNA oracles corrected; final native960pass/two skips. Actual three production TUs plus10 new regression tests pass ASan/UBSan with leak detection. Registered/consumer/external closure still pending; preceding external geometry runtimea8a60bf03 remains frozen. Permanent evidence ../cna-demos/docs/repair-evidence/geometry/.",
+        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending."
+      ],
       "final_disposition": null
     },
     {
@@ -2444,12 +2450,15 @@
         "math.bounding_frustum.containment"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Frustum point classification stops on an exact plane and omits genuine1e-5 tolerance; equal geometry is confused with pointer identity. Related volume intersections require GJK, while inline sphere-plane containment must retain wide intermediates.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine minimized509/509; full separation fixture14328 sphere/box/frustum pairs and27216 value/output parity checks. Before native962 tests951pass/two unchanged skips/nine failures. Local uncommitted GJK/containment repair first after957pass/two skips/three failures; sphere residual is18 inline plane rounding cases, not GJK. Genuine1944-case precision probe proves zero wide-model mismatches versus18 rounded. Exact two old native FNA oracles corrected; final native960pass/two skips. Actual three production TUs plus10 new regression tests pass ASan/UBSan with leak detection. Registered/consumer/external closure still pending; preceding external geometry runtimea8a60bf03 remains frozen. Permanent evidence ../cna-demos/docs/repair-evidence/geometry/.",
+        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending."
+      ],
       "final_disposition": null
     },
     {
