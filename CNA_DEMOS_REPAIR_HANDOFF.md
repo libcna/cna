@@ -9,10 +9,61 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
-Phase C. CNA runtime HEAD is `df9234202`; demo closure HEAD is `105fc63`.
-All 155 IDs remain inventoried: 38 final dispositions, comprising
-seven runtime findings, 23 documentation corrections, seven already fixed, and one
-proven demo expectation error; 117 remain pending. No push or merge.
+Phase C. CNA runtime HEAD is `9786d4c93`; latest demo closure is `1a8d88c`.
+All 155 historical IDs are retained in the matrix: 39 final dispositions and 116
+pending (eight runtime findings, 23 documentation corrections, seven already fixed,
+one proven demo expectation error). Confirmed pending batches include build 001,
+hashes 120, array ranges 121 and bounds 122/136; see the matrix for every ID.
+No push or merge. Linux x86_64; Radeon 780M/Mesa; private displays and dummy audio.
+Native graphics profile is OPENGLES3 only; demo profile additionally offers SOFTWARE,
+OPENGL33, SDL_GPU, HEADLESS and STUB. No all-platform/hardware/service claim.
+
+LATEST COMPLETE REGRESSION: Matrix 115, runtime `705ea2324`, demo `1a8d88c`.
+Genuine XNA 92/92; native math 898 passes/two unchanged fixture skips; Matrix CTest
+106/106; Matrix/glTF/avatar consumers 1022 passes/four baseline-identical skips.
+Original demo nine checks, C17 MatrixSmoke, C factory 17 controls and corrected
+C matrix_values 18 controls all pass. Six visual references are exact. Corrected
+full CTest: all 732 enabled accepted, zero failures, 48 skips/three disabled unchanged
+(1174.76s). Full 719-ID SOFTWARE: 567 pass/101 expected fail/48 skip/three manual;
+OPENGLES3: 606/103/seven/three. Both exact comparisons show ten cumulative expected
+changes only, no unrelated status/check/failed-assertion differences. Logs are
+repair-115-full-corrected-* and repair-115-demo-ctest-corrected.log.
+The first failed CTest and monolithic SOFTWARE run remain preserved: both exposed
+an incorrect C zero-matrix oracle, corrected against genuine XNA, not suppressed.
+115 is closed in the permanent inventory and matrix. No checkpoint jobs remain.
+
+CURRENT NEXT BATCH: value semantics 120/121/122/136, committed separately:
+- 120 `bf209dcbe`: zero canonicalization in six hash helpers plus CurveKey wrapped
+  32-bit field-hash sum. Genuine 212/212; native math 906/two fixture skips; registered
+  hash tests 8/8. Preserve the zero-only partial-fix failure log proving the additional
+  XOR defect. Nonzero .NET 4 NaN hash bits remain unchanged.
+- 122/136 `eef23e6f8`: ordered vector bounds and scalar first-NaN propagation.
+  Genuine 6401/6401; native before 907/two skips/eight failures, after 915/two skips;
+  registered scalar/vector/bounds/hash tests 316/316. Strict C17 smoke pre-fix failures
+  are captured. The Vector4 demo mixed reversed-Z control is corrected from 6 to 8
+  with genuine evidence and all eight assertions retained.
+- 121 `9786d4c93`: signed-64-bit endpoint validation, nonpositive no-op windows and
+  exact positive negative-index exception. Genuine 200/200; native before 915/two
+  skips/three failures, after 918/two skips; registered vectors 247/247. UBSan actual
+  Vector2 TU proves pre-fix INT_MAX+1 overflow; all three repaired production TUs pass
+  UBSan. C ABI unsigned range contracts remain unchanged and keep their native smoke.
+All native builds passed. No external closure or knownIssue removal yet for these
+four IDs. Reports repair-120-*, repair-bounds-*, repair-121-* hold the evidence.
+
+RUNNING: complete incremental demo rebuild against 9786d4c93, at three jobs,
+log repair-values-demo-build.log. Do not start more compiler/test jobs until a slot
+is free. Exact next task after build: run all 13 focused original C++ demos under
+both renderer labels, C17 MathValueHashSmoke/VectorSmoke/MathValuesSmoke and extended
+C curve-key demo; remove corresponding markers ONLY after real passes. Rebuild those
+metadata changes, compare both complete 95-demo math sweeps (23 cumulative expected
+status changes, CurveKey gains one additional assertion), run six exact visuals,
+full enabled CTest and full renderer regression. Preserve every unexpected delta.
+Then close each ID with its own runtime commit and continue remaining Math/Core.
+
+UNCOMMITTED: CNA handoff/matrix updates; demo CurveKey extra C++/C exact hash controls,
+Vector4 evidence-backed oracle correction and permanent 120/121/bounds evidence.
+No uncommitted production/native test changes. Older notes below are historical
+snapshots, superseded by this checkpoint; original baseline evidence remains intact.
 
 Latest completed repair: Quaternion 119 (`df9234202`), demo `105fc63`. Genuine XNA
 41/41; native math 893 passes/two unchanged fixture skips; aggregate and registered
@@ -62,9 +113,11 @@ Both math sweeps pass with exactly nine cumulative expected changes and no other
 status/check/failed-assertion delta (54 passes/41 unrelated expected failures).
 Extended C demo passes 17 checks under both labels; all six exact visual references
 pass with zero differing pixels/channels. Full 732-test checkpoint now passes and
-119 is closed. Matrix 115 demo rebuild runs at two jobs, while its native consumer
-test process uses the third. Exact next task: validate 115 focused demo/C ABI, then
-both math sweeps and full checkpoint; do not start another build until a slot is free.
+119 is closed. Matrix 115 runtime/tests are committed as `705ea2324`, with full demo
+CTest at two jobs and sequential SOFTWARE/OPENGLES3 complete smoke at one job.
+Exact next task: compare all 719 outcomes/assertions using
+`build-probe/repair-full-compare.mjs RENDERER 115`, confirm CTest, then close 115.
+Do not rebuild demos or start another compiler/test while all three slots are busy.
 Genuine dedicated
 XNA oracle `build-probe/repair-119-oracle.cs` passes 41/41, including value/out/input
 aliases, five extreme magnitudes, self division and a mixed numerator/divisor where
@@ -86,7 +139,9 @@ behavior. No 118 production change or final disposition; this does not block 119
 
 Perspective demo closure is committed as `dac8228`, CNA status `5524a76df`.
 119 runtime/native tests are committed as df9234202, demo evidence/closure as 105fc63.
-Current uncommitted work belongs only to 115 plus the matching matrix/handoff status.
+Current uncommitted work: 115 demo marker/C factory controls/oracle; 120 native
+MathValueHashTests.cpp, C MathValueHashSmoke.c and its CMake registration, permanent
+120 oracle/readme; CNA matrix/handoff. No 120 production edits or marker changes.
 
 Current 115 oracle: permanent `docs/repair-evidence/issue-115/DecomposeOracle.cs`
 passes 90 checks against genuine XNA (logs repair-115-xna-extended*), extending the
@@ -95,19 +150,46 @@ printing 28 case classifications. Largest-axis reflection with X/Y/Z tie precede
 is confirmed; all seven zero-axis combinations return true plus NaN quaternion.
 Tiny 1e-5 axis returns false/Identity; exact 1e-4 succeeds. Shear 0.1 is accepted,
 0.2 is refused; nonaffine fourth column is ignored; NaN/Inf produce true/NaN. Current
-CNA's native reflection test incorrectly calls the inherited FNA heuristic XNA's.
+CNA's former native reflection test incorrectly called the inherited FNA heuristic XNA's.
 Read genuine decompiled Matrix.Decompose and local FNA. Five new native cases plus
 the corrected existing reflection oracle yield five pre-fix failures, 893 passes,
 two unchanged skips (900 total). Native C MatrixSmoke's corrected true/NaN zero-matrix
 expectation fails against the unchanged demo library. Minimal local Decompose repair
 is now applied: rank/normalize basis rows, preserve XNA degenerate-row path, flip
 largest axis for a reflection, apply normalized-determinant refusal, retain output
-order. Native after-build passes without warnings; all 898 math tests pass with
-two unchanged fixture skips. Native Matrix/glTF/avatar consumers are running in
-one private-display test process (repair-115-native-consumers.log). The 115 demo
-rebuild now runs at two jobs (repair-115-demo-after-build.log). Uncommitted CNA files: Matrix.cpp, MatrixTests.cpp, new
-MatrixDecomposeCompatibilityTests.cpp, native C MatrixSmoke.c. Demo evidence 115 is
-also uncommitted but separate from 119 closure. No 115 marker change or closure yet.
+order. Native/demo builds pass without warnings; all 898 math tests pass with two
+unchanged fixture skips. Native Matrix/glTF/avatar consumers: 1022 passes/four skips
+(153.68s). All four skips match original baseline: ChronographWatch, two optional
+large glTF fixtures, and a GPU-failure path requiring a non-3D renderer.
+An additional attempt to exercise that upload-failure test with STUB was a setup
+failure: this native build contains only OPENGLES3, unlike the multi-renderer demo
+build. `repair-115-native-avatar-stub.log` is retained, NOT counted as a runtime pass
+or a decomposition regression. No backend/configuration was changed for that probe.
+Registered Matrix tests 106/106 (16.68s). Native C17 MatrixSmoke passes. Original demo passes
+all nine controls under both labels; marker removed only afterward. Extended C
+factory demo passes 17 checks. Both math sweeps: 55 passes/40 unrelated expected
+failures, exactly ten cumulative expected deltas and no unexplained changes. Six
+visual references remain exact. Runtime/native tests committed as 705ea2324; 115
+closure awaits full CTest and both full smoke comparisons (repair-115-full-*).
+
+Next 120: genuine signed-zero hash oracle passes 206 checks, including every Matrix
+field and all zero-sign combinations, exact unit/ordinary controls and NaN payloads.
+.NET 4 preserves nonzero NaN hash bits, unlike modern Sharp Runtime Single hash;
+canonicalize only zero in the six existing helpers, not NaNs or unrelated hashing.
+Permanent oracle docs/repair-evidence/issue-120/. Seven new native tests and one
+registered C17 smoke are written. The pre-fix native build passes; whole native math
+now has 899 passes/two unchanged skips/six new hash failures (907 total). Exact
+C17/Werror smoke fails only its signed-zero group; nonzero controls pass. Production
+remains unchanged: delay helper edits until the corrected 115 demo rebuild finishes.
+
+Further queued bounds batch 122/136: source/demos reviewed, no production edits.
+Ignored `build-probe/repair-bounds-oracle.cs` passes 6401 genuine XNA bit-level
+Clamp/Min/Max value/out/alias checks and scalar NaN precedence checks (repair-bounds-xna*).
+It CONFIRMS the Vector4 purported ordinary control's oracle error: Z bounds min=8,
+max=6 must produce 8, not its current 6. The mixed-case genuine result is (1,5,8,-6).
+Correct that expectation with permanent evidence in the bounds batch, not beforehand.
+Keep scalar MathHelper's first-NaN propagation distinct from vector Min/Max's
+second-operand fallthrough. No 122/136 native tests or source changes yet.
 
 ## Earlier Phase C progress (superseded by the checkpoint above)
 

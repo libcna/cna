@@ -2049,14 +2049,16 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Inherited FNA row-product sign and zero-scale refusal differ from genuine XNA ranked-basis decomposition, reflection sign selection, degenerate-row behavior and normalized-determinant refusal. Existing native mirrored/zero-matrix oracles pin FNA rather than XNA.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "705ea2324",
       "validation": [
-        "Genuine XNA extended decomposition oracle passes 90 checks. New/corrected native regressions produce five pre-fix failures; whole math 893 pass/two unchanged fixture skips/five failures. Corrected native C17 MatrixSmoke zero-matrix stage fails before repair. Local decomposition patch now passes 898 native math tests/two unchanged skips; downstream glTF/avatar native tests running, demo rebuild must await independent 119 checkpoint. Evidence repair-115-*; permanent oracle docs/repair-evidence/issue-115/."
+        "Genuine XNA extended decomposition oracle passes 90 checks. New/corrected native regressions produce five pre-fix failures; whole math 893 pass/two unchanged fixture skips/five failures. Corrected native C17 MatrixSmoke zero-matrix stage fails before repair. Local decomposition patch now passes 898 native math tests/two unchanged skips; downstream glTF/avatar native tests running, demo rebuild must await independent 119 checkpoint. Evidence repair-115-*; permanent oracle docs/repair-evidence/issue-115/.",
+        "Runtime/native fix committed 705ea2324. Native math 898 passed/two unchanged fixture skips; Matrix CTests 106/106; Matrix/glTF/avatar consumers 1022 passed/four baseline-identical skips. Native C17 smoke and original nine-check demo pass both labels; extended C factory demo 17 checks passes. Both math sweeps 55 passes/40 remaining expected failures with ten cumulative expected deltas only; six exact visuals pass. Full CTest and both complete renderer sweeps running; no final closure yet.",
+        "Final genuine oracle 92/92. Initial full CTest and monolithic SOFTWARE expose only a wrong C matrix_values zero-matrix oracle; genuine XNA proves true/NaN, corrected and strengthened while retaining all 18 checks. Original failed logs preserved. Corrected full CTest: all 732 enabled accepted, zero failures, 48 skips/three disabled unchanged, 1174.76s. Both complete 719-ID renderer sweeps have exactly ten cumulative expected changes and zero unrelated status/check/failed-assertion deltas: SOFTWARE 567 pass/101 expected fail/48 skip/three manual; OPENGLES3 606/103/seven/three. Six visual references exact. Demo closure commit 1a8d88c; original nine checks retained, marker removed only after focused passes."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-116",
@@ -2156,12 +2158,15 @@
         "math.vector4.value_identity"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Six scalar FloatHash helpers preserve the zero sign bit even though equality equates both zeros. Canonicalize zero only; genuine .NET 4 preserves NaN payloads unlike modern System.Single hash. CurveKey additionally XORs field hashes instead of adding with unsigned 32-bit wrap.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "bf209dcbe",
+      "validation": [
+        "Fresh genuine XNA signed-zero oracle passes 206 checks; all six original demos remain expected failures in current full math sweeps. Seven native regressions plus a registered C17 smoke are written but await pre-fix build/run while 115 regression checkpoint occupies three jobs. Permanent probe docs/repair-evidence/issue-120/, logs repair-120-xna*. No production edit yet.",
+        "Runtime/native commit bf209dcbe. Pre-fix six native failures and C smoke zero-stage failure; zero-only partial repair exposes the separate CurveKey combination error (904 pass/two skips/one failure), retained in repair-120-all-math-after.log. Complete native repair: 906 passes/two unchanged fixture skips; registered hash tests 8/8, genuine extended oracle 212/212. External demos and C ABI final verification await frozen 115 checkpoint completion. No marker removed or closure claimed."
+      ],
       "final_disposition": null
     },
     {
@@ -2176,12 +2181,15 @@
         "math.vector4.transform"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Duplicated CheckArrayRange rejects negative length/indices before XNA signed-64-bit endpoint checks; positive negative-index access requires IndexOutOfRangeException, not ArgumentOutOfRangeException. Existing signed-int endpoint addition risks overflow.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "9786d4c93",
+      "validation": [
+        "Fresh genuine XNA oracle passes 200 exact exception/output cases across all eight range overloads. Native pre-fix tests written; build in progress. No production edit yet. Permanent oracle docs/repair-evidence/issue-121/, logs repair-121-xna*.",
+        "Runtime/native commit 9786d4c93. Pre-fix native 915 passes/two skips/three failures; targeted production Vector2 TU UBSan proves signed INT_MAX+1 overflow. After repair native 918 passes/two unchanged skips, registered vector tests 247/247 (63.76s), UBSan instrumenting all three production vector TUs passes. External demo verification pending in next coherent value-semantics checkpoint. C ABI arrays have unsigned indices/length and separate validated loops; preserve existing contract."
+      ],
       "final_disposition": null
     },
     {
@@ -2197,12 +2205,15 @@
         "math.vector4.component_bounds"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Vector Clamp floors against minimum before capping maximum, reversing the XNA order; std::min/max select the first operand on ties/unordered comparisons whereas XNA vectors select the second.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "eef23e6f8",
+      "validation": [
+        "Genuine bounds oracle passes 6401 bit-level pair/triple/value/out/alias controls, including a Vector4 demo oracle correction: mixed reversed Z interval returns 8, not 6. Native regression tests prepared; pre-fix build running. No production repair or closure yet. Evidence docs/repair-evidence/bounds/ and repair-bounds-xna*.",
+        "Native runtime/regression commit eef23e6f8: before 907 passes/two unchanged skips/eight failures; after 915 passes/two unchanged skips, registered vector/scalar/bounds/hash tests 316/316 (64.99s). Both strict C17 smoke regressions fail their new pre-fix stage against frozen demo ABI; post-fix external validation awaits 115 checkpoint. Vector4 mixed-interval demo oracle corrected from Z=6 to genuine XNA Z=8, all eight assertions retained. No marker removed or closure yet."
+      ],
       "final_disposition": null
     },
     {
@@ -2447,12 +2458,15 @@
         "math.math_helper.scalar_functions"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "MathHelper uses only an ordered comparison and loses a NaN first operand; genuine XNA preserves that NaN including payload, unlike vector Min/Max.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "eef23e6f8",
+      "validation": [
+        "Genuine bounds oracle passes 6401 bit-level pair/triple/value/out/alias controls, including a Vector4 demo oracle correction: mixed reversed Z interval returns 8, not 6. Native regression tests prepared; pre-fix build running. No production repair or closure yet. Evidence docs/repair-evidence/bounds/ and repair-bounds-xna*.",
+        "Native runtime/regression commit eef23e6f8: before 907 passes/two unchanged skips/eight failures; after 915 passes/two unchanged skips, registered vector/scalar/bounds/hash tests 316/316 (64.99s). Both strict C17 smoke regressions fail their new pre-fix stage against frozen demo ABI; post-fix external validation awaits 115 checkpoint. Vector4 mixed-interval demo oracle corrected from Z=6 to genuine XNA Z=8, all eight assertions retained. No marker removed or closure yet."
+      ],
       "final_disposition": null
     },
     {
