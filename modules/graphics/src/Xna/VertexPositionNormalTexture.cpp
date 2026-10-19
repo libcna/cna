@@ -41,9 +41,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::string VertexPositionNormalTexture::ToString() const
     {
-        return "{{Position:" + Position.ToString()
+        return "{Position:" + Position.ToString()
              + " Normal:" + Normal.ToString()
              + " TextureCoordinate:" + TextureCoordinate.ToString()
-             + "}}";
+             + "}";
     }
 }

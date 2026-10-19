@@ -38,8 +38,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::string VertexPositionColor::ToString() const
     {
-        return "{{Position:" + Position.ToString()
+        return "{Position:" + Position.ToString()
              + " Color:" + Color.ToString()
-             + "}}";
+             + "}";
     }
 }

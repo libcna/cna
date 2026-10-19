@@ -124,10 +124,12 @@ TEST(VertexPositionTextureTest, ToStringContainsTextureCoordinate)
     EXPECT_NE(v.ToString().find("TextureCoordinate:"), std::string::npos);
 }
 
-TEST(VertexPositionTextureTest, ToStringDoubleBraces)
+TEST(VertexPositionTextureTest, ToStringSingleOuterBraces)
 {
     VertexPositionTexture v(Vector3(0, 0, 0), Vector2(0, 0));
     const std::string s = v.ToString();
-    EXPECT_EQ(s.substr(0, 2), "{{");
+    // Genuine XNA format-string braces represent one literal outer pair.
+    EXPECT_EQ(s.substr(0, 2), "{P");
     EXPECT_EQ(s.substr(s.size() - 2), "}}");
+    EXPECT_EQ(s, "{Position:{X:0 Y:0 Z:0} TextureCoordinate:{X:0 Y:0}}");
 }

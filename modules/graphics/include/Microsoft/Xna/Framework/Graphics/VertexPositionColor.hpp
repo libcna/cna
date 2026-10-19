@@ -114,7 +114,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Returns a human-readable description of this vertex.
-         * @return String of the form "{{Position:... Color:...}}".
+         * @return String of the form "{Position:... Color:...}".
          */
         [[nodiscard]] std::string ToString() const;
     };

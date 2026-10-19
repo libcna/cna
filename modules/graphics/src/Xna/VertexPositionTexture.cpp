@@ -36,8 +36,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::string VertexPositionTexture::ToString() const
     {
-        return "{{Position:" + Position.ToString()
+        return "{Position:" + Position.ToString()
              + " TextureCoordinate:" + TextureCoordinate.ToString()
-             + "}}";
+             + "}";
     }
 }
