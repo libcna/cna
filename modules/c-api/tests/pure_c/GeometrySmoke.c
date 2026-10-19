@@ -613,8 +613,21 @@ static int validate_bounding_frustum(void)
     return 1;
 }
 
+static int validate_translated_plane_offset(void)
+{
+    const CNA_Plane source = {{0.0F, 1.0F, 0.0F}, -2.0F};
+    CNA_Plane result, aliased = source;
+    CNA_Matrix translation;
+    return cna_matrix_create_translation_xyz(0.0F, 5.0F, 0.0F, &translation) == CNA_RESULT_SUCCESS &&
+        cna_plane_transform_matrix(source, translation, &result) == CNA_RESULT_SUCCESS &&
+        result.normal.x == 0.0F && result.normal.y == 1.0F && result.normal.z == 0.0F && result.d == -7.0F &&
+        cna_plane_transform_matrix(aliased, translation, &aliased) == CNA_RESULT_SUCCESS &&
+        aliased.normal.x == 0.0F && aliased.normal.y == 1.0F && aliased.normal.z == 0.0F && aliased.d == -7.0F;
+}
+
 int main(void)
 {
     return CNA_TEST_STAGE(validate_plane()) && CNA_TEST_STAGE(validate_ray()) && CNA_TEST_STAGE(validate_bounding_box()) &&
-            CNA_TEST_STAGE(validate_bounding_sphere()) && CNA_TEST_STAGE(validate_bounding_frustum()) ? 0 : 1;
+            CNA_TEST_STAGE(validate_bounding_sphere()) && CNA_TEST_STAGE(validate_bounding_frustum()) &&
+            CNA_TEST_STAGE(validate_translated_plane_offset()) ? 0 : 1;
 }

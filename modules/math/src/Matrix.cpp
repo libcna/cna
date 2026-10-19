@@ -1241,22 +1241,11 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Transpose(const Matrix& matrix, Matrix& result)
     {
-        result.M11 = matrix.M11;
-        result.M12 = matrix.M21;
-        result.M13 = matrix.M31;
-        result.M14 = matrix.M41;
-        result.M21 = matrix.M12;
-        result.M22 = matrix.M22;
-        result.M23 = matrix.M32;
-        result.M24 = matrix.M42;
-        result.M31 = matrix.M13;
-        result.M32 = matrix.M23;
-        result.M33 = matrix.M33;
-        result.M34 = matrix.M43;
-        result.M41 = matrix.M14;
-        result.M42 = matrix.M24;
-        result.M43 = matrix.M34;
-        result.M44 = matrix.M44;
+        // Read every element before writing result, which may be matrix itself.
+        result = Matrix(matrix.M11, matrix.M21, matrix.M31, matrix.M41,
+                        matrix.M12, matrix.M22, matrix.M32, matrix.M42,
+                        matrix.M13, matrix.M23, matrix.M33, matrix.M43,
+                        matrix.M14, matrix.M24, matrix.M34, matrix.M44);
     }
 
     Matrix Matrix::Transform(Matrix value, Quaternion rotation)
