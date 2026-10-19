@@ -3,6 +3,8 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <sstream>
 
 namespace Microsoft::Xna::Framework
@@ -142,7 +144,9 @@ namespace Microsoft::Xna::Framework
 
     intcs Rectangle::GetHashCode() const
     {
-        return X ^ Y ^ Width ^ Height;
+        // XNA uses unchecked 32-bit addition; unsigned arithmetic defines the wrap.
+        return std::bit_cast<intcs>(static_cast<std::uint32_t>(X) + static_cast<std::uint32_t>(Y) +
+            static_cast<std::uint32_t>(Width) + static_cast<std::uint32_t>(Height));
     }
 
     bool Rectangle::Intersects(Rectangle value) const
@@ -202,10 +206,8 @@ namespace Microsoft::Xna::Framework
 
     void Rectangle::Union(const Rectangle& value1, const Rectangle& value2, Rectangle& result)
     {
-        result.X = std::min(value1.X, value2.X);
-        result.Y = std::min(value1.Y, value2.Y);
-        result.Width = std::max(value1.getRightProperty(), value2.getRightProperty()) - result.X;
-        result.Height = std::max(value1.getBottomProperty(), value2.getBottomProperty()) - result.Y;
+        // Compute before assigning: either input may also be the output.
+        result = Union(value1, value2);
     }
 
     std::string Rectangle::getDebugDisplayStringProperty() const

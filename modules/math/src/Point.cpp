@@ -2,6 +2,8 @@
 
 #include "Microsoft/Xna/Framework/Point.hpp"
 
+#include <bit>
+#include <cstdint>
 #include <sstream>
 
 namespace Microsoft::Xna::Framework
@@ -38,7 +40,8 @@ namespace Microsoft::Xna::Framework
 
     intcs Point::GetHashCode() const
     {
-        return X ^ Y;
+        // XNA uses unchecked 32-bit addition; unsigned arithmetic defines the wrap.
+        return std::bit_cast<intcs>(static_cast<std::uint32_t>(X) + static_cast<std::uint32_t>(Y));
     }
 
     std::string Point::ToString() const

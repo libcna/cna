@@ -128,7 +128,7 @@ TEST(PointTest, GetHashCodeEqualPointsGiveEqualHash)
 
 TEST(PointTest, GetHashCodeDifferentPointsTypicallyDiffer)
 {
-    // Uses X ^ Y; choose values where XORs differ
+    // Distinct coordinate sums have distinct hashes for these samples.
     Point a(1, 2);
     Point b(3, 4);
     EXPECT_NE(a.GetHashCode(), b.GetHashCode());

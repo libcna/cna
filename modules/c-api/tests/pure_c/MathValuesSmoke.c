@@ -134,7 +134,7 @@ static int validate_point(void)
         cna_point_not_equals(point, zero, &predicate) != CNA_RESULT_SUCCESS ||
         predicate != CNA_TRUE ||
         cna_point_equals(point, zero, 0) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_point_get_hash_code(point, &hash) != CNA_RESULT_SUCCESS || hash != (3 ^ -2)) {
+        cna_point_get_hash_code(point, &hash) != CNA_RESULT_SUCCESS || hash != 1) {
         return 0;
     }
 
@@ -246,7 +246,7 @@ static int validate_rectangle(void)
         cna_rectangle_not_equals(rectangle, result, &predicate) != CNA_RESULT_SUCCESS ||
         predicate != CNA_TRUE ||
         cna_rectangle_get_hash_code(rectangle, &hash) != CNA_RESULT_SUCCESS ||
-        hash != (1 ^ 2 ^ 10 ^ 8)) {
+        hash != 21) {
         return 0;
     }
 
@@ -283,8 +283,49 @@ static int validate_rectangle(void)
     return 1;
 }
 
+static int validate_integer_hashes(void)
+{
+    const int32_t samples[] = {INT32_MIN, INT32_MAX, -2, -1, 0, 1, 3, 7};
+    for (unsigned i = 0; i < sizeof(samples) / sizeof(samples[0]); ++i) {
+        for (unsigned j = 0; j < sizeof(samples) / sizeof(samples[0]); ++j) {
+            const int32_t x = samples[i], y = samples[j];
+            const uint32_t point_sum = (uint32_t)x + (uint32_t)y;
+            int32_t hash;
+            if (cna_point_get_hash_code((CNA_Point){x, y}, &hash) != CNA_RESULT_SUCCESS ||
+                (uint32_t)hash != point_sum) return 0;
+            for (unsigned k = 0; k < sizeof(samples) / sizeof(samples[0]); ++k) {
+                for (unsigned l = 0; l < sizeof(samples) / sizeof(samples[0]); ++l) {
+                    const int32_t width = samples[k], height = samples[l];
+                    const uint32_t rectangle_sum = point_sum + (uint32_t)width + (uint32_t)height;
+                    if (cna_rectangle_get_hash_code((CNA_Rectangle){x, y, width, height}, &hash) !=
+                        CNA_RESULT_SUCCESS || (uint32_t)hash != rectangle_sum) return 0;
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+static int validate_rectangle_union_aliases(void)
+{
+    const CNA_Rectangle origin = {0, 0, 12, 12};
+    CNA_Rectangle left = {10, 10, 5, 5}, right = left, all = left;
+    return cna_rectangle_union(left, origin, &left) == CNA_RESULT_SUCCESS &&
+        rectangle_equals(left, (CNA_Rectangle){0, 0, 15, 15}) &&
+        cna_rectangle_union(origin, right, &right) == CNA_RESULT_SUCCESS &&
+        rectangle_equals(right, (CNA_Rectangle){0, 0, 15, 15}) &&
+        cna_rectangle_union(all, all, &all) == CNA_RESULT_SUCCESS &&
+        rectangle_equals(all, (CNA_Rectangle){10, 10, 5, 5});
+}
+
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_math_helper()) && CNA_TEST_STAGE(validate_point()) &&
-        CNA_TEST_STAGE(validate_rectangle()) && CNA_TEST_STAGE(validate_math_bounds_bits()) ? 0 : 1;
+    /* Keep every adjacent control visible when one compatibility group fails. */
+    const int math = CNA_TEST_STAGE(validate_math_helper());
+    const int point = CNA_TEST_STAGE(validate_point());
+    const int rectangle = CNA_TEST_STAGE(validate_rectangle());
+    const int bounds = CNA_TEST_STAGE(validate_math_bounds_bits());
+    const int hashes = CNA_TEST_STAGE(validate_integer_hashes());
+    const int aliases = CNA_TEST_STAGE(validate_rectangle_union_aliases());
+    return math && point && rectangle && bounds && hashes && aliases ? 0 : 1;
 }
