@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -176,6 +177,33 @@ TEST(MatrixTest, InvertOfIdentityIsIdentity)
 // rounding in the cofactor expansion: with single-precision intermediates the inverse is off by
 // ~2.6e-3 relative, with the double-precision intermediates XNA/FNA use by ~6e-5. The expected
 // values are the float64 inverse; the tolerance sits between the two outcomes.
+TEST(MatrixTest, SingularAffineInverseMatchesXnaInfinityAndNaNClassifications)
+{
+    // CNA-DEMOS-ISSUE-116: CP1252 best-fit encoded XNA's infinity symbol as '8'.
+    // Genuine XNA's bit-level oracle yields +infinity, -infinity and fourteen NaNs,
+    // not finite 8/-8. Test classifications rather than formatting or NaN payloads.
+    const Matrix flat = Matrix::CreateScale(1.0f, 0.0f, 1.0f) *
+                        Matrix::CreateTranslation(7.0f, 8.0f, 9.0f);
+    Matrix byReference;
+    Matrix::Invert(flat, byReference);
+    Matrix aliased = flat;
+    Matrix::Invert(aliased, aliased);
+    for (const Matrix& inverse : std::array{Matrix::Invert(flat), byReference, aliased})
+    {
+        EXPECT_TRUE(std::isinf(inverse.M22));
+        EXPECT_GT(inverse.M22, 0.0f);
+        EXPECT_TRUE(std::isinf(inverse.M42));
+        EXPECT_LT(inverse.M42, 0.0f);
+        const std::array otherComponents{
+            inverse.M11, inverse.M12, inverse.M13, inverse.M14,
+            inverse.M21, inverse.M23, inverse.M24,
+            inverse.M31, inverse.M32, inverse.M33, inverse.M34,
+            inverse.M41, inverse.M43, inverse.M44};
+        for (const float component : otherComponents)
+            EXPECT_TRUE(std::isnan(component));
+    }
+}
+
 TEST(MatrixTest, InvertOfANearlySingularMatrixKeepsDoublePrecisionIntermediates)
 {
     Matrix m(0.933174968f, -0.801841378f, 1.927790165f, -0.830146313f,
