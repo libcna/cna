@@ -427,17 +427,18 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "BoundingBox and Ray used composite-format doubled braces as literal stream text; exact native/C text oracles also pinned the port defect. Four standard XNA vertex types share the same literal-brace defect; genuine six converter/vertex checks prove it. Companion a8a60bf03 repairs stock vertices; CNA-only extension formats unchanged.",
+      "status": "RESOLVED",
+      "root_cause": "Literal doubled composite-format escapes were emitted directly for BoundingBox, Ray and the four standard XNA vertex strings.",
       "related_issues": [
         "CNA-DEMOS-ISSUE-126"
       ],
       "cna_fix_commit": "e1377c437",
       "validation": [
         "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
-        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet.",
+        "Frozen geometry runtimea8a60bf03 with primarye1377c437: genuine1338 plus6 text-consumer checks; native math950pass/two skips,registered341/341,consumers1393pass/four skips. Strict actual rebuilt C ABI GeometrySmoke/VertexValueSmoke and13 focused demos pass both labels. Six markers removed only afterward. Both95 math87PASS/8expectedFAIL; full719SW599/69/48/3,GLES638/71/7/3; exactly42 cumulative intended changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals. First CTest retained one concurrent same-gamertag discovery failure; unchanged complete isolated rerun accepts all732 enabled tests,48skip/three disabled. Evidence docs/repair-evidence/geometry/REGRESSION_CHECKPOINT.md. Next containment127/129/133 remains separate and pending."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-025",
@@ -2312,17 +2313,18 @@
       ],
       "subsystem": "math",
       "classification": "DUPLICATE_ROOT_CAUSE",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "Duplicate of024: identical doubled-literal-brace root cause, discovered through additional witnesses.",
+      "status": "RESOLVED",
+      "root_cause": "Duplicate of024: the same BoundingBox/Ray doubled-literal-brace root cause, verified through distinct construction/identity scenarios.",
       "related_issues": [
         "CNA-DEMOS-ISSUE-024"
       ],
       "cna_fix_commit": "e1377c437",
       "validation": [
         "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
-        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet.",
+        "Frozen geometry runtimea8a60bf03 with primarye1377c437: genuine1338 plus6 text-consumer checks; native math950pass/two skips,registered341/341,consumers1393pass/four skips. Strict actual rebuilt C ABI GeometrySmoke/VertexValueSmoke and13 focused demos pass both labels. Six markers removed only afterward. Both95 math87PASS/8expectedFAIL; full719SW599/69/48/3,GLES638/71/7/3; exactly42 cumulative intended changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals. First CTest retained one concurrent same-gamertag discovery failure; unchanged complete isolated rerun accepts all732 enabled tests,48skip/three disabled. Evidence docs/repair-evidence/geometry/REGRESSION_CHECKPOINT.md. Next containment127/129/133 remains separate and pending."
       ],
-      "final_disposition": null
+      "final_disposition": "DUPLICATE_ROOT_CAUSE"
     },
     {
       "id": "CNA-DEMOS-ISSUE-127",
@@ -2334,13 +2336,14 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Corner-only box/frustum containment omits real separation; shared convex intersection must distinguish edge/corner misses before containment checks.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "5ab1c7729",
       "validation": [
         "Genuine minimized509/509; full separation fixture14328 sphere/box/frustum pairs and27216 value/output parity checks. Before native962 tests951pass/two unchanged skips/nine failures. Local uncommitted GJK/containment repair first after957pass/two skips/three failures; sphere residual is18 inline plane rounding cases, not GJK. Genuine1944-case precision probe proves zero wide-model mismatches versus18 rounded. Exact two old native FNA oracles corrected; final native960pass/two skips. Actual three production TUs plus10 new regression tests pass ASan/UBSan with leak detection. Registered/consumer/external closure still pending; preceding external geometry runtimea8a60bf03 remains frozen. Permanent evidence ../cna-demos/docs/repair-evidence/geometry/.",
-        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending."
+        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending.",
+        "Committed native repair5ab1c7729: genuine additional19200 squared-arithmetic checks; initial2048-case point overload-parity hypothesis disproved1012 times and preserved. Private shared Vector3 helper retains wide accumulation, public Single outputs and distinct sphere value/output storage boundaries. New two native tests fail before repair; final math963pass/two unchanged skips. Registered247/247pass63.64s; four-production-TU ASan/UBSan/float-cast-overflow/leak13/13pass696ms; frozen consumers1408pass/four unchanged skips(1412total,272.475s). Formatting-only final rebuild warning-free and math963/two skips again. Strict pre-fix actual C ABI fails four exact stages. Post-fix external C ABI, demos and full regression remain pending; do not mark final."
       ],
       "final_disposition": null
     },
@@ -2354,15 +2357,16 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "Empty CreateFromPoints exception already corrected before campaign bycd211420e3; constructor still accepts negative radius. C noexcept marshalling must remain fieldwise when constructor validation is added.",
+      "status": "RESOLVED",
+      "root_cause": "The sphere constructor omitted negative-radius validation. Empty point-set exception was already fixed bycd211420e3; C field marshalling must not invoke a validating constructor.",
       "related_issues": [],
       "cna_fix_commit": "e1377c437",
       "validation": [
         "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
-        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet.",
+        "Frozen geometry runtimea8a60bf03 with primarye1377c437: genuine1338 plus6 text-consumer checks; native math950pass/two skips,registered341/341,consumers1393pass/four skips. Strict actual rebuilt C ABI GeometrySmoke/VertexValueSmoke and13 focused demos pass both labels. Six markers removed only afterward. Both95 math87PASS/8expectedFAIL; full719SW599/69/48/3,GLES638/71/7/3; exactly42 cumulative intended changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals. First CTest retained one concurrent same-gamertag discovery failure; unchanged complete isolated rerun accepts all732 enabled tests,48skip/three disabled. Evidence docs/repair-evidence/geometry/REGRESSION_CHECKPOINT.md. Next containment127/129/133 remains separate and pending."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-129",
@@ -2375,13 +2379,14 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Sphere point boundary/NaN, signed radius-difference containment and strict external tangency differ from genuine XNA; frustum containment uses a constant-zero placeholder instead of convex separation. Keep whole-volume boundary corners inclusive.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "5ab1c7729",
       "validation": [
         "Genuine minimized509/509; full separation fixture14328 sphere/box/frustum pairs and27216 value/output parity checks. Before native962 tests951pass/two unchanged skips/nine failures. Local uncommitted GJK/containment repair first after957pass/two skips/three failures; sphere residual is18 inline plane rounding cases, not GJK. Genuine1944-case precision probe proves zero wide-model mismatches versus18 rounded. Exact two old native FNA oracles corrected; final native960pass/two skips. Actual three production TUs plus10 new regression tests pass ASan/UBSan with leak detection. Registered/consumer/external closure still pending; preceding external geometry runtimea8a60bf03 remains frozen. Permanent evidence ../cna-demos/docs/repair-evidence/geometry/.",
-        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending."
+        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending.",
+        "Committed native repair5ab1c7729: genuine additional19200 squared-arithmetic checks; initial2048-case point overload-parity hypothesis disproved1012 times and preserved. Private shared Vector3 helper retains wide accumulation, public Single outputs and distinct sphere value/output storage boundaries. New two native tests fail before repair; final math963pass/two unchanged skips. Registered247/247pass63.64s; four-production-TU ASan/UBSan/float-cast-overflow/leak13/13pass696ms; frozen consumers1408pass/four unchanged skips(1412total,272.475s). Formatting-only final rebuild warning-free and math963/two skips again. Strict pre-fix actual C ABI fails four exact stages. Post-fix external C ABI, demos and full regression remain pending; do not mark final."
       ],
       "final_disposition": null
     },
@@ -2395,15 +2400,16 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "Optional slab interval has no nonnegative initial bound, losing stationary/boundary hits; parallel comparison also differs from genuine strict abs(direction)<1e-6.",
+      "status": "RESOLVED",
+      "root_cause": "Ray-box intersection initialized an optional interval rather than the nonnegative XNA interval and used the wrong parallel threshold.",
       "related_issues": [],
       "cna_fix_commit": "e1377c437",
       "validation": [
         "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
-        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet.",
+        "Frozen geometry runtimea8a60bf03 with primarye1377c437: genuine1338 plus6 text-consumer checks; native math950pass/two skips,registered341/341,consumers1393pass/four skips. Strict actual rebuilt C ABI GeometrySmoke/VertexValueSmoke and13 focused demos pass both labels. Six markers removed only afterward. Both95 math87PASS/8expectedFAIL; full719SW599/69/48/3,GLES638/71/7/3; exactly42 cumulative intended changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals. First CTest retained one concurrent same-gamertag discovery failure; unchanged complete isolated rerun accepts all732 enabled tests,48skip/three disabled. Evidence docs/repair-evidence/geometry/REGRESSION_CHECKPOINT.md. Next containment127/129/133 remains separate and pending."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-131",
@@ -2451,13 +2457,14 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Frustum point classification stops on an exact plane and omits genuine1e-5 tolerance; equal geometry is confused with pointer identity. Related volume intersections require GJK, while inline sphere-plane containment must retain wide intermediates.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "5ab1c7729",
       "validation": [
         "Genuine minimized509/509; full separation fixture14328 sphere/box/frustum pairs and27216 value/output parity checks. Before native962 tests951pass/two unchanged skips/nine failures. Local uncommitted GJK/containment repair first after957pass/two skips/three failures; sphere residual is18 inline plane rounding cases, not GJK. Genuine1944-case precision probe proves zero wide-model mismatches versus18 rounded. Exact two old native FNA oracles corrected; final native960pass/two skips. Actual three production TUs plus10 new regression tests pass ASan/UBSan with leak detection. Registered/consumer/external closure still pending; preceding external geometry runtimea8a60bf03 remains frozen. Permanent evidence ../cna-demos/docs/repair-evidence/geometry/.",
-        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending."
+        "Additional genuine radius arithmetic12800 checks proves18 narrowed-sum/difference errors. New native regression fails before wide comparison repair, then full961pass/two unchanged skips; final registered160/160pass31.08s; ASan/UBSan/float-cast-overflow/leak11/11pass. Genuine boundary ray96/96 confirms existing ray consumer returns zero once point containment is repaired; ray method body unchanged,131 reserved. New strict C17/Werror smoke fails three exact stages against frozen pre-containment C ABI. Broad native consumer and repaired actual C ABI/external demo validation remain pending.",
+        "Committed native repair5ab1c7729: genuine additional19200 squared-arithmetic checks; initial2048-case point overload-parity hypothesis disproved1012 times and preserved. Private shared Vector3 helper retains wide accumulation, public Single outputs and distinct sphere value/output storage boundaries. New two native tests fail before repair; final math963pass/two unchanged skips. Registered247/247pass63.64s; four-production-TU ASan/UBSan/float-cast-overflow/leak13/13pass696ms; frozen consumers1408pass/four unchanged skips(1412total,272.475s). Formatting-only final rebuild warning-free and math963/two skips again. Strict pre-fix actual C ABI fails four exact stages. Post-fix external C ABI, demos and full regression remain pending; do not mark final."
       ],
       "final_disposition": null
     },
@@ -2491,15 +2498,16 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "Genuine frustum has the same seven negative-zero fields as CNA; .NET Framework hides their signs in text. Correct public float display operands, not stored planes. Other float-valued math ToString methods share this formatting defect.",
+      "status": "RESOLVED",
+      "root_cause": "Derived negative-zero frustum plane bits are correct; public math text must hide the zero sign like .NET Framework without changing stored values.",
       "related_issues": [],
       "cna_fix_commit": "e1377c437",
       "validation": [
         "Genuine GeometryValuesOracle1338/1338 with exact bit-constructed negative zeros; initial positive-bit hypothesis and folded-C#-literal attempts fail7 and remain preserved. Exact native pre952 tests944pass/two existing skips/six failures. C17 pre fails three corrected text stages/radius constructor/stationary-ray, while independent mutated-radius and prior plane/shadow stages pass. Local product/C marshal fixes and native post-build running; external binaries frozen785bf2d2a for preceding checkpoint. No marker removal/closure yet. Permanent ../cna-demos/docs/repair-evidence/geometry/.",
-        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet."
+        "Native validated2026-10-20: math950 passes/two unchanged skips; registered341/341 in69.51s; frozen broad consumers1393 passes/four unchanged skips(1397 total,223.580s). Exact standard vertex probe4/4 after correcting a first incomplete literal edit whose four failures remain preserved. Native broad rebuild53 warnings all already present in baseline; incremental corrected build warning-free. External actual C ABI/demo rebuild ongoing; six evidence-backed exact text oracles corrected without assertion/count relaxation. No geometry marker removal or final closure yet.",
+        "Frozen geometry runtimea8a60bf03 with primarye1377c437: genuine1338 plus6 text-consumer checks; native math950pass/two skips,registered341/341,consumers1393pass/four skips. Strict actual rebuilt C ABI GeometrySmoke/VertexValueSmoke and13 focused demos pass both labels. Six markers removed only afterward. Both95 math87PASS/8expectedFAIL; full719SW599/69/48/3,GLES638/71/7/3; exactly42 cumulative intended changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals. First CTest retained one concurrent same-gamertag discovery failure; unchanged complete isolated rerun accepts all732 enabled tests,48skip/three disabled. Evidence docs/repair-evidence/geometry/REGRESSION_CHECKPOINT.md. Next containment127/129/133 remains separate and pending."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-136",

@@ -9,6 +9,39 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Phase C. Current CNA product5ab1c7729; demo closure2cea947, latest evidence28a63e4.
+All155 historical IDs retained:54 final/101 pending (22 runtime,
+one verified duplicate,23 documentation,seven already fixed,one demo expectation).
+Latest final closure024/128/130/135 plus126 duplicate024, runtimee1377c437/a8a60bf03.
+LAST COMPLETE REGRESSION: geometry values/text frozena8a60bf03; native950/two skips,
+consumers1393/four skips,registered341/341,strict actual C ABI passes. Both719-ID
+sweeps exact42 cumulative changes:SW599/69/48/3,GLES638/71/7/3. Six exact visuals.
+Full isolated CTest732accepted/zero failures/48skips/three disabled1248.07s. Original
+first-run same-gamertag network-discovery failure remains retained; no code/assertion
+change before rerun. Do not overlap SystemLink/discovery suites. All external
+frozen SHA256 values verified unchanged. External freeze now released.
+
+ACTIVE NEXT: containment127/129/133 FIXED_PENDING_REGRESSION in commit5ab1c7729.
+Native math963PASS/two skips;registered247/247;consumers1408/four skips;four-TU
+ASan/UBSan/float-cast-overflow/leak13/13. Final formatted build warning-free and
+math963/two skips again. Actual external C ABI/demos not rebuilt yet; no closure.
+Owner-reserved131 ray body/exception untouched; point containment naturally fixes
+its boundary branch, but outside-origin entry remains unimplemented.
+NEXT TASK: external rebuild NOW RUNNING against5ab1c7729 (three jobs,session21361,
+repair-containment-demo-build.log). Two genuine-disproved demo expectations are
+corrected (sphere construction geometric enclosure; C boundary ray SUCCESS0),
+with original check counts retained. Then focused/C ABI/math/full validation. Preserve
+all original assertions/counts. Do not edit Color production until that external
+build finishes and is frozen. No other compiler/test jobs while this three-job build runs.
+UNCOMMITTED: campaign handoff/matrix and two next-batch demo oracle corrections; new native
+ColorFixedPointCompatibilityTests.cpp deliberately fails three tests against old
+Color (968total,963pass/two skips/three failures). Genuine1782/1782,standalone
+native162/1782 mismatches. Prepared lifecycle source/probes (genuine29+8passes),
+no lifecycle production edits. Linux x86_64,private display,Radeon780M/Mesa only;
+no all-platform claim. No push/merge. Continue automatically after each batch.
+
+## Superseded chronological checkpoint notes
+
 Phase C. Latest closed runtime785bf2d2a:118/123/140 FIXED_VALIDATED. All155 IDs
 retained,49 final/106 pending:18 runtime findings,23 documentation corrections,
 seven already fixed,one demonstrated demo expectation defect. Demo closure commit
@@ -119,6 +152,52 @@ as cna-demos c3f3bbd; final five-ID closure still pending isolated full CTest.
 Read-only lifecycle141–144 source audit and a fresh oracle source are prepared
 under docs/repair-evidence/lifecycle,not executed or repaired. Dispose ownership
 and Game's forward teardown loop need care before adding genuine self-removal.
+LATEST: final native rebuild completed161 steps; one unchanged baseline
+BoundingBoxTests nodiscard warning. Rebuilt math961PASS/two unchanged skips.
+Consumer deliberately still pending: additional point-radius parity hypothesis
+FAILED on genuine XNA (1012 of2048 value/output differences), original source/log
+retained as SpherePointRadiusParityHypothesis.cs and repair-sphere-point-radius-precision-xna.log.
+Diagnostic forces a real float serialization boundary: value form keeps wide
+distance and radius products; output form stores squared distance as Single before
+wide radius comparison. SphereSquaredArithmeticOracle.cs confirms19200/19200
+over varied3D coordinates and scales, also proving Vector3 DistanceSquared and
+LengthSquared need wide accumulation before their public Single return/output.
+Two new native tests are capturing pre-fix failures,repair-sphere-squared-native-before*.
+Do not close129 or start a frozen consumer before this measured cause is repaired.
+Independent next-batch lifecycle genuine29/29PASS; Color native witness fails162
+of1782 checks with warning-free build, while genuine1782/1782passes. No Color or
+lifecycle production change. Full external isolated CTest remains running alone
+on network; frozen binaries SHA256 all verified unchanged.
+Squared arithmetic pre-test965total:961PASS/two skips/two failures. Local shared
+private Vector3Arithmetic.hpp now backs LengthSquared/DistanceSquared and existing
+Length/Distance; public outputs remain Single. Sphere point value keeps wide
+distance/radius products; output explicitly stores squared distance. Full post
+math963PASS/two unchanged skips. Native consumers NOW RUNNING,repair-containment-native-consumers.log;
+FREEZE native CnaTests/libcna.so until complete (no relink). Updated four-TU
+sanitizers ONE job,repair-containment-squared-sanitizer{,-build}.log. Together with
+external isolated CTest these occupy all three campaign jobs. Consumer subset
+has no SystemLink/discovery scenarios (avatar service fixtures use their own local
+endpoints); no simultaneous full GPU renderer sweep is running.
+New C squared-arithmetic stage still awaits pre/post actual C ABI verification.
+Latest four-TU sanitizer13/13PASS696ms,no diagnostics/warnings; registered geometry
+and Vector3 tests247/247PASS63.64s. Strict pre-fix C ABI now fails the original
+three stages plus the new squared-vector stage,repair-containment-squared-c-before.log.
+Native consumer COMPLETE:1408PASS/four unchanged skips(1412total,272.475s),
+repair-containment-native-consumers.log. Native binary freeze released. New private
+helpers/test files only are being formatted before commit; warning-free final
+rebuild/math confirmation pending in repair-containment-commit-{build,math}.log.
+Live genuine Game disposal companion8/8PASS (self-removal, snapshot ordering,
+reentrant/throwing event controls); no lifecycle production/native test change.
+Containment product/native/C regressions and decisions committed5ab1c7729.
+Final formatting-only build warning-free; math963PASS/two unchanged skips again.
+Matrix127/129/133 now FIXED_PENDING_REGRESSION with this commit,not final.
+Native consumer/sanitizer/registered jobs all finished. Three separate Color132
+native tests are added (no Color production change): pre968total,963PASS/two
+unchanged skips/three failures,repair-color-native-before*. They remain uncommitted
+and deliberately failing until the Color batch; do not confuse them with a
+containment regression. External geometry CTest still frozen at a8a60bf03; its
+previously failing698 find_and_join now PASSES in the isolated run. Await final
+suite totals before five-ID closure, then rebuild external containment from5ab1c7729.
 Logs repair-containment-native-after* preserve the original three failures.
 Product/test repairs committed e1377c437/a8a60bf03. Demo118/123/140
 closure/status committed separately as6797295/73dc23836. Six genuine-disproved
