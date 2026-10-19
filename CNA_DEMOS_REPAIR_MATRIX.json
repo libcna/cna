@@ -1,0 +1,2684 @@
+{
+  "schema": "cna-demos-repair-matrix/1",
+  "baseline": {
+    "cna_revision": "688f3f23e79f1f8294f38985b1beda5ecc13862b",
+    "demos_revision": "a50a1f426be7e16e565fc481ff677dbb556c4037",
+    "date": "2026-10-19"
+  },
+  "policy": "PENDING_VERIFICATION is not a final disposition. Classification is provisional until source, contract and current reproduction are reviewed. Preserve every historical ID. Never infer closure from a whole-demo expected failure.",
+  "issues": [
+    {
+      "id": "CNA-DEMOS-ISSUE-001",
+      "title": "`libcna.so` fails to link with CMake 3.28 (duplicate symbols)",
+      "line": 2685,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "build/core",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-002",
+      "title": "`Curve::Evaluate` with Step keys compares the absolute position with 1.0",
+      "line": 2722,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.math.curve_evaluation",
+        "math.curve.step_continuity"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-003",
+      "title": "`SpriteBatch` does not leave its texture in `GraphicsDevice::Textures[0]`",
+      "line": 2753,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.texture2d.set_data",
+        "graphics.texture2d.set_data_rectangle"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-004",
+      "title": "Immediate `SpriteBatch` ignores sampler states set between `Draw` calls",
+      "line": 2783,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.sprite_batch.immediate_mode.blend_state",
+        "graphics.sprite_batch.immediate_mode.sampler_state"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-005",
+      "title": "`Color` is polymorphic, so XNA-style custom vertex structs silently break",
+      "line": 2810,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.vertex_declaration.custom_vertex"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-006",
+      "title": "No way to ask whether the renderer applies `MipMapLevelOfDetailBias`",
+      "line": 2843,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.pbr_effect.metallic_roughness",
+        "graphics.sampler_state.mip_level_control.lod_bias"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-007",
+      "title": "`ColorMatrixEffect` is silently ignored by GPU renderers",
+      "line": 2867,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.color_matrix_effect.sepia_and_invert"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-008",
+      "title": "Public headers leak unprefixed macros (`YES`, `NO`, `nothing`, ...)",
+      "line": 2890,
+      "historical_status": "Open",
+      "demos": [
+        "input.keyboard.state_values"
+      ],
+      "subsystem": "build/core",
+      "classification": "DEPENDENCY_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-009",
+      "title": "`HapticDevice`'s default constructor cannot be used outside CNA",
+      "line": 2917,
+      "historical_status": "Open",
+      "demos": [
+        "input.haptics.effects",
+        "input.haptics.rumble"
+      ],
+      "subsystem": "input/devices/platform",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-010",
+      "title": "Storage reports errors with C++ standard exceptions, not XNA's types",
+      "line": 2941,
+      "historical_status": "Open",
+      "demos": [
+        "content.content_manager.several_managers",
+        "storage.storage_container.directories",
+        "storage.storage_container.path_rules"
+      ],
+      "subsystem": "storage/runtime",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-011",
+      "title": "`ContentManager::Unload` does not dispose loaded assets",
+      "line": 2976,
+      "historical_status": "Open",
+      "demos": [
+        "content.content_manager.cache_and_unload",
+        "content.content_manager.read_asset_ownership",
+        "content.content_manager.unload_disposes"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-012",
+      "title": "`ContentManager::Load<T>` does not reliably load through an `OpenStream` override",
+      "line": 3026,
+      "historical_status": "Open",
+      "demos": [
+        "content.content_manager.open_stream_override",
+        "content.content_manager.resource_content_manager"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-013",
+      "title": "The content manifest lists the content pipeline's bookkeeping files",
+      "line": 3060,
+      "historical_status": "Open",
+      "demos": [
+        "content.content_manager.manifest"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-014",
+      "title": "Before the platform exists, the content root is the working directory",
+      "line": 3071,
+      "historical_status": "Open",
+      "demos": [
+        "content.content_manager.manifest"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-015",
+      "title": "`Song::FromUri` resolves a relative path against the working directory",
+      "line": 3095,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-016",
+      "title": "Linking `CNA_GamerServices` after another library duplicates CNA in the executable",
+      "line": 3113,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.xna_pipeline_components"
+      ],
+      "subsystem": "build/core",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-017",
+      "title": "`Achievement::EarnedOnline` is always true",
+      "line": 3152,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.gamer.signed_in_achievements",
+        "gamer_services.achievement.award"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-018",
+      "title": "System Link socket failures are `std::runtime_error`, not `NetworkNotAvailableException`",
+      "line": 3171,
+      "historical_status": "Open",
+      "demos": [
+        "net.packet.send_and_receive"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-019",
+      "title": "`Game::ResetElapsedTime` is ignored with a fixed time step",
+      "line": 3193,
+      "historical_status": "Open",
+      "demos": [
+        "game.time_step.reset_elapsed_time"
+      ],
+      "subsystem": "game/lifecycle",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-020",
+      "title": "A compiled Song/Video stream is looked up from the manager's root, not beside the asset",
+      "line": 3211,
+      "historical_status": "Open",
+      "demos": [
+        "media.song.compiled_song",
+        "media.video_player.play_video"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-021",
+      "title": "EasyGL sampled a rendered RenderTargetCube face upside down",
+      "line": 3231,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.render_target.render_target_cube"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-022",
+      "title": "A compiled glTF with an embedded texture refers to a file the build never writes",
+      "line": 3253,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.textured_gltf"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-023",
+      "title": "A compiled glTF model loses its cameras",
+      "line": 3271,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.gltf_cameras"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-024",
+      "title": "`BoundingBox::ToString` and `Ray::ToString` print doubled braces",
+      "line": 3287,
+      "historical_status": "Open",
+      "demos": [
+        "design.type_converter.string_round_trip",
+        "math.formatting.to_string"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [
+        "CNA-DEMOS-ISSUE-126"
+      ],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-025",
+      "title": "Offline, leaderboard columns written after the rating are lost",
+      "line": 3307,
+      "historical_status": "Open",
+      "demos": [
+        "gamer_services.leaderboard.paging"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-026",
+      "title": "On Linux, a process that searched before a host started does not find it",
+      "line": 3326,
+      "historical_status": "Open",
+      "demos": [
+        "net.network_session.find_and_join",
+        "net.network_session.host_leaves"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-027",
+      "title": "SOFTWARE does not clamp source values above 1 before blending into an 8-bit target",
+      "line": 3352,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.render_target.hdr_blendable"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-028",
+      "title": "A streaming WaveBank opens a relative path from the working directory",
+      "line": 3375,
+      "historical_status": "Open",
+      "demos": [
+        "audio.xact.streaming_wave_bank"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-029",
+      "title": "`SoundEffect::FromStream` takes a `std::istream`, not a `System::IO::Stream`",
+      "line": 3397,
+      "historical_status": "Open",
+      "demos": [
+        "audio.sound_effect.from_stream"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-030",
+      "title": "`SimulatedPacketLoss` drops reliable packets for good",
+      "line": 3416,
+      "historical_status": "Open",
+      "demos": [
+        "net.network_session.simulated_conditions"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-031",
+      "title": "glTF STEP and CUBICSPLINE animation samplers play as LINEAR",
+      "line": 3457,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.clip_interpolation"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-032",
+      "title": "a System Link join refused for a game in progress reads `SessionNotFound`",
+      "line": 3489,
+      "historical_status": "Open",
+      "demos": [
+        "net.network_session.join_refused"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-033",
+      "title": "a gamer who joins a System Link game in progress sees the session in Lobby",
+      "line": 3509,
+      "historical_status": "Open",
+      "demos": [
+        "net.network_session.join_refused"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-034",
+      "title": "Stock effect parameters accept a scalar getter on a Vector4",
+      "line": 3526,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.effect.parameter_values"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-035",
+      "title": "SkinnedEffect's Bones array has no reflected elements",
+      "line": 3547,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.effect.parameter_values"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-036",
+      "title": "Linear curve post-loop reads the first key's outgoing tangent",
+      "line": 3568,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.math.curve_evaluation",
+        "math.curve.loop_types"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-037",
+      "title": "DynamicSoundEffectInstance header incorrectly says IsLooped is ignored",
+      "line": 3592,
+      "historical_status": "Open",
+      "demos": [
+        "audio.dynamic_sound_effect_instance.streaming"
+      ],
+      "subsystem": "audio/media",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-038",
+      "title": "Dynamic audio getters ignore disposal",
+      "line": 3612,
+      "historical_status": "Open",
+      "demos": [
+        "audio.dynamic_sound_effect_instance.streaming"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-039",
+      "title": "ContentManager permits changing the root with loaded assets",
+      "line": 3641,
+      "historical_status": "Open",
+      "demos": [
+        "content.content_manager.cache_and_unload"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-040",
+      "title": "Picture and Album thumbnail comments contradict generation paths",
+      "line": 3665,
+      "historical_status": "Open",
+      "demos": [
+        "media.media_library.album_art",
+        "media.media_library.save_picture"
+      ],
+      "subsystem": "audio/media",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-041",
+      "title": "SavePicture ignores short reads and saves a zero-padded image",
+      "line": 3706,
+      "historical_status": "Open",
+      "demos": [
+        "media.media_library.save_picture"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-042",
+      "title": "Root-prefix comments describe an older mesh-cancellation representation",
+      "line": 3751,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.multiple_skins"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-043",
+      "title": "GetTypeReader confuses the target type name with the reader factory key",
+      "line": 3779,
+      "historical_status": "Open",
+      "demos": [
+        "content.xnb.existing_objects"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-044",
+      "title": "In-flight C API generation shadows a result-handle parameter",
+      "line": 4362,
+      "historical_status": "Resolved",
+      "demos": [],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "ALREADY_FIXED",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [
+        "Current linux-full build passed at CNA 688f3f23e (repair-baseline-build.log); all 732 enabled demo CTests passed (repair-baseline-ctest.log). Historical transient compile failure is absent."
+      ],
+      "final_disposition": "ALREADY_FIXED"
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-045",
+      "title": "Truncated XNB leaks EndOfStreamException through ContentManager::Load",
+      "line": 3829,
+      "historical_status": "Open",
+      "demos": [
+        "content.content_manager.asset_precedence"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-046",
+      "title": "Intermediate XML cannot read its own aliased external TargetType",
+      "line": 3865,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.intermediate_external_references"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-047",
+      "title": "AddOutputFile refuses a generated file in the configured output directory",
+      "line": 3906,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.xna_pipeline_components"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-048",
+      "title": "Lenient builds report dropped parameters as effective",
+      "line": 3951,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.xna_pipeline_components"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-049",
+      "title": "Build-environment overview incorrectly says built-ins ignore its fields",
+      "line": 3994,
+      "historical_status": "Open",
+      "demos": [
+        "content.texture_processor.resize_to_power_of_two"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-050",
+      "title": "Owner-only C game operations enter the foreign-thread queue",
+      "line": 4021,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.game.foreign_thread_dispatch"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-051",
+      "title": "Host-frame failure contract promises suppressed C exit hooks",
+      "line": 4082,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.game.host_failure"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-052",
+      "title": "In-flight cgltf implementation split breaks the importer build",
+      "line": 4329,
+      "historical_status": "Resolved",
+      "demos": [],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "ALREADY_FIXED",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": "bf9089edcabaf2fb11ae1fbc69eb13fbce1c7fca",
+      "validation": [
+        "Current linux-full build passed at CNA 688f3f23e (repair-baseline-build.log); all 732 enabled demo CTests passed (repair-baseline-ctest.log). Historical transient compile failure is absent."
+      ],
+      "final_disposition": "ALREADY_FIXED"
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-053",
+      "title": "In-flight framework update registration uses an out-of-scope array",
+      "line": 4296,
+      "historical_status": "Resolved",
+      "demos": [],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "ALREADY_FIXED",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": "7d8eba68773210c2bd07a79ce71df950e06a8183",
+      "validation": [
+        "Current linux-full build passed at CNA 688f3f23e (repair-baseline-build.log); all 732 enabled demo CTests passed (repair-baseline-ctest.log). Historical transient compile failure is absent."
+      ],
+      "final_disposition": "ALREADY_FIXED"
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-054",
+      "title": "Cube DDS loading ignores short reads and masks offset truncation",
+      "line": 4151,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.texture_cube.dds_streams"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-055",
+      "title": "ShaderEffect clone loses matrices and accepts a disposed original",
+      "line": 4195,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.shader_effect.clone_state"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-056",
+      "title": "File stream position becomes -1 after a short EOF read",
+      "line": 2649,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.storage.save_game"
+      ],
+      "subsystem": "storage/runtime",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-057",
+      "title": "Content staging scavenger warns during normal concurrent lifecycle",
+      "line": 2561,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.multi_artifact_publication"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-058",
+      "title": "Replaying the active MediaQueue Song uses it after freeing it",
+      "line": 2524,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-059",
+      "title": "Empty MediaQueue active-Song output contradicts its C documentation",
+      "line": 2488,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-060",
+      "title": "Raised C touch-event documentation contradicts its gesture-only implementation",
+      "line": 2461,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.input.gesture_queue"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-061",
+      "title": "C default mouse-cursor documentation contradicts the Arrow constructor",
+      "line": 2435,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.input.keyboard_mouse"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-062",
+      "title": "Disposed accelerometer and gyroscope retain readable CurrentValue",
+      "line": 2404,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.devices.sensor_lifecycle"
+      ],
+      "subsystem": "input/devices/platform",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-063",
+      "title": "C synthetic-camera comments promise an unreachable Closed state",
+      "line": 2379,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.devices.camera_frames"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-064",
+      "title": "C Viewport default comment promises the wrong maximum depth",
+      "line": 2358,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.viewport"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-065",
+      "title": "C GraphicsDevice reset declaration is separated from its documentation",
+      "line": 2338,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.owned_device"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-066",
+      "title": "SOFTWARE ignores GraphicsDevice's direct blend-enable toggle",
+      "line": 2318,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.draw_routes"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-067",
+      "title": "C display-color-space routes expose unnamed integer ordinals",
+      "line": 2296,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.device_capabilities"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-068",
+      "title": "C effect-parameter semantic lookup misstates case matching",
+      "line": 2277,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.effect_parameter_collections"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-069",
+      "title": "C Effect clone comment overpromises concrete-type preservation",
+      "line": 2256,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.effect_concrete_types"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-070",
+      "title": "PBR clones lose vertex-color and alpha-coverage state",
+      "line": 2232,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.pbr_effect_material_state"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-071",
+      "title": "C PBR texture getter documents five of its seven slots",
+      "line": 2213,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.pbr_texture_slots"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-072",
+      "title": "C SoundEffectInstance snapshot promises pitch clamping",
+      "line": 2191,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.audio.sound_effect",
+        "c_api.audio.sound_effect_instance_state"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-073",
+      "title": "Refused live-3D pan setter changes the public pan value",
+      "line": 2171,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.audio.spatial_state"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-074",
+      "title": "C assembly-title route misstates malformed-text result",
+      "line": 2149,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.platform.host_identity"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-075",
+      "title": "C offset packet receive overwrites bytes outside the requested range",
+      "line": 2123,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.net.local_gamer_packets"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-076",
+      "title": "Absent signed-in player lookup contradicts its output contract",
+      "line": 2102,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-077",
+      "title": "Mutable C achievement collection reports read-only",
+      "line": 2080,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.gamer.achievement_collection"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-078",
+      "title": "Missing C achievement key escapes as an internal failure",
+      "line": 2058,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.gamer.achievement_collection"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-079",
+      "title": "Anonymous leaderboard entry clears an output promised unchanged",
+      "line": 2036,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.gamer.leaderboard_entries"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-080",
+      "title": "C avatar animation info claims built-in clips have no timeline",
+      "line": 2016,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.gamer.avatar_animations"
+      ],
+      "subsystem": "c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-081",
+      "title": "ModelMesh construction omits pre-attached part effects",
+      "line": 1992,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.model_meshes"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-082",
+      "title": "Disposing an open SpriteBatch leaves its device batch active",
+      "line": 1959,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.sprite_batch.begin_end_rules",
+        "graphics.sprite_batch.cross_device_texture"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-083",
+      "title": "Adapter back-buffer query reports zero samples before a multisampled device is created",
+      "line": 4259,
+      "historical_status": "Resolved",
+      "demos": [
+        "game.graphics_device_manager.back_buffer_size"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-084",
+      "title": "PacketReader documentation and example still describe the fixed Color mismatch",
+      "line": 1938,
+      "historical_status": "Open",
+      "demos": [
+        "net.packet.send_and_receive"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-085",
+      "title": "Offline leaderboard writers cannot create or persist stream columns",
+      "line": 1912,
+      "historical_status": "Open",
+      "demos": [
+        "gamer_services.leaderboard.paging"
+      ],
+      "subsystem": "network/gamer-services",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-086",
+      "title": "Destroying a secondary EasyGL device blacks out the primary device",
+      "line": 1875,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.texture2d.copy_ownership",
+        "graphics.texture3d.volume_data",
+        "graphics.texture_cube.face_transfers"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-087",
+      "title": "Disposable XNB shared resources bypass the ReadAsset recorder",
+      "line": 1848,
+      "historical_status": "Open",
+      "demos": [
+        "content.xnb.shared_resources"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-088",
+      "title": "Conflicting intermediate XML shortcuts create a non-round-trippable serializer registration",
+      "line": 1823,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.intermediate_type_serializer"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-089",
+      "title": "Intermediate serializers never receive their Initialize callback",
+      "line": 1796,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-090",
+      "title": "ContentTypeWriter Initialize deadlocks when retrieving a nested writer",
+      "line": 1759,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.xml_xnb_pipeline"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-091",
+      "title": "C ImageBasedLight validity accepts live non-texture handles",
+      "line": 1734,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.graphics.image_based_light_values"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-092",
+      "title": "An empty selected glTF scene resurrects an unselected mesh",
+      "line": 1704,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.node_instances"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-093",
+      "title": "Unknown glTF animation interpolation silently becomes LINEAR",
+      "line": 1676,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.animation_validation"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-094",
+      "title": "Retained glTF morph animation is reported as unsupported and lost",
+      "line": 1646,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.morph_animation_import"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-095",
+      "title": "Multi-skin glTF channels retained by another palette are reported lost",
+      "line": 1615,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.multi_skin_animation_report"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-096",
+      "title": "Partial SkinningData root-prefix arrays are silently ignored",
+      "line": 1587,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.model.animation_player_validation"
+      ],
+      "subsystem": "model/gltf",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-097",
+      "title": "Nearby CurveKey replacement can violate collection ordering",
+      "line": 1558,
+      "historical_status": "Open",
+      "demos": [
+        "math.curve.key_collection"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-098",
+      "title": "Disposed media library types do not enforce their access guards",
+      "line": 1491,
+      "historical_status": "Open",
+      "demos": [
+        "media.media_library.music_index",
+        "media.media_library.save_picture",
+        "media.song.properties"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-099",
+      "title": "VideoPlayer validation and lifecycle contracts diverge from XNA",
+      "line": 1457,
+      "historical_status": "Open",
+      "demos": [
+        "media.video_player.pause_and_loop"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-100",
+      "title": "Detached Video track preferences are ignored by VideoPlayer::Play",
+      "line": 1430,
+      "historical_status": "Open",
+      "demos": [
+        "media.video_player.track_selection"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-101",
+      "title": "Video URI resolution and deferred file failures diverge from FNA",
+      "line": 1399,
+      "historical_status": "Open",
+      "demos": [
+        "media.video.uri_and_metadata"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-102",
+      "title": "Oversized shadow cascade count overruns fixed draw-parameter arrays",
+      "line": 1372,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-103",
+      "title": "C content loaders discard canonical `ContentLoadException` identity",
+      "line": 1335,
+      "historical_status": "Open",
+      "demos": [
+        "c_api.content.content_manager"
+      ],
+      "subsystem": "c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-104",
+      "title": "STUB does not provide the promised WarnAndStub Texture3D null object",
+      "line": 1299,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.device.supports_capability"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-105",
+      "title": "A sole named-only importer becomes the convention route",
+      "line": 1268,
+      "historical_status": "Open",
+      "demos": [
+        "content.sound_effect.pipeline_components"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-106",
+      "title": "Pre-built content compiler reports every service option as an FX option",
+      "line": 1238,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.incremental_compiler"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-107",
+      "title": "XNB output digest documentation gives an impossible example",
+      "line": 1215,
+      "historical_status": "Open",
+      "demos": [
+        "content.xnb.output_pipeline"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-108",
+      "title": "Character-region expansion silently ignores an inverted range",
+      "line": 1194,
+      "historical_status": "Open",
+      "demos": [
+        "content.sprite_font.pipeline_contract"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-109",
+      "title": "Model encoder emits values its paired decoder refuses",
+      "line": 1163,
+      "historical_status": "Open",
+      "demos": [
+        "content.model.pipeline_contract"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-110",
+      "title": "Direct uncompressed-chunk helper bypasses its size contract",
+      "line": 1140,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.cnb_read_limits"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-111",
+      "title": "Direct XNA XNB writer ignores its build environment platform and profile",
+      "line": 1103,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.xml_xnb_pipeline"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-112",
+      "title": "Secondary EasyGL SetRenderTarget runs without its device context",
+      "line": 1068,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.render_target.render_target2d"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-113",
+      "title": "A second OcclusionQuery Begin ignores the active-query contract",
+      "line": 1040,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.occlusion_query.visible_pixels"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-114",
+      "title": "Releasing a nonterminal SoundEffect loop drops its authored tail",
+      "line": 1007,
+      "historical_status": "Open",
+      "demos": [
+        "audio.sound_effect.loop_region"
+      ],
+      "subsystem": "audio/media",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-115",
+      "title": "Matrix decomposition loses XNA reflection and zero-scale results",
+      "line": 984,
+      "historical_status": "Open",
+      "demos": [
+        "math.matrix.decompose"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-116",
+      "title": "Singular affine Matrix inversion loses XNA's finite components",
+      "line": 963,
+      "historical_status": "Open",
+      "demos": [
+        "math.matrix.invert"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-117",
+      "title": "Perspective accepts Pi despite XNA's strict field-of-view bound",
+      "line": 942,
+      "historical_status": "Open",
+      "demos": [
+        "math.matrix.perspective"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-118",
+      "title": "Vector and Quaternion magnitude operations lose extreme finite ranges",
+      "line": 906,
+      "historical_status": "Open",
+      "demos": [
+        "math.quaternion.normalize",
+        "math.vector2.length",
+        "math.vector3.distance",
+        "math.vector3.normalize",
+        "math.vector4.magnitude_range"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-119",
+      "title": "Quaternion inverse and division lose extreme finite magnitudes",
+      "line": 879,
+      "historical_status": "Open",
+      "demos": [
+        "math.quaternion.double_cover",
+        "math.quaternion.inverse_and_conjugate"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-120",
+      "title": "Equal signed-zero math values have unequal hashes",
+      "line": 842,
+      "historical_status": "Open",
+      "demos": [
+        "math.curve.key_value_identity",
+        "math.matrix.identity",
+        "math.quaternion.value_identity",
+        "math.vector2.toolbox_2d",
+        "math.vector3.equality_and_string",
+        "math.vector4.value_identity"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-121",
+      "title": "Vector2/3/4 range transforms reject XNA's negative-length no-op",
+      "line": 812,
+      "historical_status": "Open",
+      "demos": [
+        "math.vector2.transform",
+        "math.vector3.transform",
+        "math.vector3.transform_array",
+        "math.vector4.transform"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-122",
+      "title": "Vector2/3/4 bounds differ at reversed ranges and signed-zero ties",
+      "line": 777,
+      "historical_status": "Open",
+      "demos": [
+        "math.vector2.component_bounds",
+        "math.vector3.arithmetic",
+        "math.vector3.clamp_min_max",
+        "math.vector3.reflect",
+        "math.vector4.component_bounds"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-123",
+      "title": "Vector Dot and Cross lose XNA's wide product cancellation",
+      "line": 747,
+      "historical_status": "Open",
+      "demos": [
+        "math.vector3.cross",
+        "math.vector3.dot",
+        "math.vector4.dot"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-124",
+      "title": "Point and Rectangle hashes use XOR instead of XNA's unchecked sums",
+      "line": 723,
+      "historical_status": "Open",
+      "demos": [
+        "math.point.basics",
+        "math.rectangle.edges_and_center"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-125",
+      "title": "Rectangle Union corrupts bounds when output aliases the offset input",
+      "line": 701,
+      "historical_status": "Open",
+      "demos": [
+        "math.rectangle.intersect_and_union"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-126",
+      "title": "BoundingBox and Ray ToString add an extra outer brace pair",
+      "line": 678,
+      "historical_status": "Open",
+      "demos": [
+        "math.bounding_box.create_from_points",
+        "math.ray.value_identity"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [
+        "CNA-DEMOS-ISSUE-024"
+      ],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-127",
+      "title": "BoundingBox Contains misclassifies a distant frustum as Intersects",
+      "line": 656,
+      "historical_status": "Open",
+      "demos": [
+        "math.bounding_box.contains"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-128",
+      "title": "BoundingSphere argument validation differs from XNA",
+      "line": 633,
+      "historical_status": "Open",
+      "demos": [
+        "math.bounding_sphere.create"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-129",
+      "title": "BoundingSphere boundary classifications differ from XNA",
+      "line": 607,
+      "historical_status": "Open",
+      "demos": [
+        "math.bounding_sphere.containment_boundaries",
+        "math.bounding_sphere.intersects"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-130",
+      "title": "zero-direction Ray inside a BoundingBox returns no hit",
+      "line": 585,
+      "historical_status": "Open",
+      "demos": [
+        "math.ray.intersects"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-131",
+      "title": "BoundingFrustum ray intersection omits outside entry and boundary start",
+      "line": 558,
+      "historical_status": "Open",
+      "demos": [
+        "math.bounding_frustum.intersections",
+        "math.ray.frustum_intersection"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-132",
+      "title": "Color nonfinite interpolation and multiplication differ from XNA",
+      "line": 533,
+      "historical_status": "Open",
+      "demos": [
+        "math.color.lerp_and_vectors",
+        "math.color.premultiplied_alpha"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-133",
+      "title": "BoundingFrustum boundary and equal-instance containment differ from XNA",
+      "line": 508,
+      "historical_status": "Open",
+      "demos": [
+        "math.bounding_frustum.containment"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-134",
+      "title": "BoundingFrustum short corner output throws the wrong exception family",
+      "line": 4236,
+      "historical_status": "Resolved",
+      "demos": [
+        "math.bounding_frustum.corners"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-135",
+      "title": "BoundingFrustum identity text preserves derived negative zeros",
+      "line": 485,
+      "historical_status": "Open",
+      "demos": [
+        "math.bounding_frustum.culling"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-136",
+      "title": "MathHelper Min and Max lose a NaN first operand",
+      "line": 464,
+      "historical_status": "Open",
+      "demos": [
+        "math.math_helper.scalar_functions"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-137",
+      "title": "CurveKey CompareTo treats NaN positions as equal",
+      "line": 446,
+      "historical_status": "Open",
+      "demos": [
+        "math.curve.key_ordering"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-138",
+      "title": "Curve evaluation loses NaN and exact duplicate-position behavior",
+      "line": 420,
+      "historical_status": "Open",
+      "demos": [
+        "math.curve.evaluate"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-139",
+      "title": "Aliased Matrix Transpose corrupts off-diagonal elements",
+      "line": 399,
+      "historical_status": "Open",
+      "demos": [
+        "math.matrix.transpose"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-140",
+      "title": "Matrix CreateShadow does not normalize its plane",
+      "line": 375,
+      "historical_status": "Open",
+      "demos": [
+        "math.matrix.reflection_and_shadow"
+      ],
+      "subsystem": "math",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-141",
+      "title": "repeated GameComponent Dispose suppresses XNA's repeated event",
+      "line": 357,
+      "historical_status": "Open",
+      "demos": [
+        "game.components.game_component"
+      ],
+      "subsystem": "game/lifecycle",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-142",
+      "title": "component change events bypass and precede their protected hooks",
+      "line": 336,
+      "historical_status": "Open",
+      "demos": [
+        "game.components.change_events"
+      ],
+      "subsystem": "game/lifecycle",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-143",
+      "title": "GameComponentCollection differs on Insert validation and null Clear events",
+      "line": 309,
+      "historical_status": "Open",
+      "demos": [
+        "game.components.collection_events"
+      ],
+      "subsystem": "game/lifecycle",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-144",
+      "title": "LaunchParameters drops empty values and silently ignores duplicate Add",
+      "line": 281,
+      "historical_status": "Open",
+      "demos": [
+        "game.launch_parameters.parse"
+      ],
+      "subsystem": "game/lifecycle",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-145",
+      "title": "TitleContainer accepts rooted names and reports non-XNA path exceptions",
+      "line": 256,
+      "historical_status": "Open",
+      "demos": [
+        "game.title_container.open_stream"
+      ],
+      "subsystem": "storage/runtime",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-146",
+      "title": "OpaqueDataDictionary reports the wrong null-value exception",
+      "line": 232,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.opaque_data_dictionary"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-147",
+      "title": "intermediate NUL character reports XmlException instead of ArgumentException",
+      "line": 209,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.intermediate_text_values"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-148",
+      "title": "intermediate XML substrate disagrees on envelope node forms",
+      "line": 184,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.intermediate_serializer"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-149",
+      "title": "intermediate null reads report broader exceptions than XNA",
+      "line": 161,
+      "historical_status": "Open",
+      "demos": [
+        "content.custom.intermediate_serializer"
+      ],
+      "subsystem": "content/serialization",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-150",
+      "title": "documented `CNA::Runtime` facade has no linkable implementation",
+      "line": 128,
+      "historical_status": "Open",
+      "demos": [
+        "game.graphics_device_manager.graphics_profile"
+      ],
+      "subsystem": "game/lifecycle",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-151",
+      "title": "disposed StorageContainer remains fully usable",
+      "line": 104,
+      "historical_status": "Open",
+      "demos": [
+        "storage.storage_container.lifetime"
+      ],
+      "subsystem": "storage/runtime",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-152",
+      "title": "StorageContainer ignores the requested FileShare policy",
+      "line": 78,
+      "historical_status": "Open",
+      "demos": [
+        "storage.storage_container.file_modes"
+      ],
+      "subsystem": "storage/runtime",
+      "classification": "CODE_DEFECT",
+      "status": "PENDING_VERIFICATION",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-153",
+      "title": "GraphicsDevice DeviceLost comment contradicts implemented desktop backends",
+      "line": 54,
+      "historical_status": "Open",
+      "demos": [
+        "graphics.device.owned_lifecycle"
+      ],
+      "subsystem": "graphics/c-api",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [
+        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required."
+      ],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-154",
+      "title": "AccelerometerReadingEventArgs says its event is never raised",
+      "line": 36,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "input/devices/platform",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [
+        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required."
+      ],
+      "final_disposition": null
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-155",
+      "title": "MathTypeConverter comments contradict its conversion policy",
+      "line": 18,
+      "historical_status": "Open",
+      "demos": [],
+      "subsystem": "design",
+      "classification": "DOCUMENTATION_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": null,
+      "related_issues": [],
+      "cna_fix_commit": null,
+      "validation": [
+        "Source reviewed at baseline CNA 688f3f23e: public comment contradicts implementation and existing tests; documentation-only correction required."
+      ],
+      "final_disposition": null
+    }
+  ]
+}
