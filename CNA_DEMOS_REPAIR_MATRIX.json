@@ -2121,9 +2121,11 @@
       "status": "CONFIRMED_OPEN",
       "root_cause": "Premature Single squared products/differences and reciprocal lose finite range and measured XNA normalization rounding. Keep squared APIs separate.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "bd46b6ffe",
       "validation": [
-        "Genuine method-entry reflection: Distance1176/1176; Length/Normalize1184/1184. Earlier conflicting caller probes preserved, with JIT spill/inlining cause explicitly an inference. Native pre-fix946 tests:933 passes/two unchanged skips/11 new failures. Local product repair and post-fix build running; no external marker change."
+        "Genuine method-entry reflection: Distance1176/1176; Length/Normalize1184/1184. Earlier conflicting caller probes preserved, with JIT spill/inlining cause explicitly an inference. Native pre-fix946 tests:933 passes/two unchanged skips/11 new failures. Local product repair and post-fix build running; no external marker change.",
+        "After944 native math passes/two unchanged skips; registered955 accepted/zero failures/two existing skips(67.83s). Catalog companion785bf2d2a preserves binary32 recipe: allfour original golden descriptions pass;550524 field records exactly match baseline after32556 raw differences/56 quantization crossings before companion. No digest or tolerance edits.",
+        "Combined frozen785bf2d2a validation: consumer1086 passes/four unchanged skips(1090 total,185.284s); warning-free demo/marker builds; original focused demos and neighboring C demos pass SOFTWARE/OPENGLES3. Strict C17/Werror VectorSmoke,QuaternionSmoke,GeometrySmoke pass actual rebuilt C API. Nine markers removed after passes. Both95 math sweeps81 pass/14 expected failures,exactly36 cumulative intended changes,differences[]. FullCTest/fullrenderer/visual running; final closure pending."
       ],
       "final_disposition": null
     },
@@ -2244,7 +2246,8 @@
       "cna_fix_commit": "0e7be08e0",
       "validation": [
         "Permanent genuine ProductOracle.cs passes 8748 exact bit/NaN-classification checks across 18x18 sample pairs and value/out/component/output aliases. Native regressions prepared; pre-fix build running. No production vector edit or external marker change yet. Reports repair-123-xna*.",
-        "Native before929 pass/two skips/four failures; after933/two skips; registered566/566. C wide-product stage reproduces against pre-fix ABI. First consumer run exposes existing catalog recipe precision regression, repaired separately by32e470ed4 without fingerprint/tolerance changes. All550524 captured avatar fields exactly match frozen baseline. Fresh frozen consumer1090 tests:1086 pass/four unchanged skips (182.763s). Intermediate run invalidated by relinking its live self-spawning executable; failure log preserved. External markers/closure pending."
+        "Native before929 pass/two skips/four failures; after933/two skips; registered566/566. C wide-product stage reproduces against pre-fix ABI. First consumer run exposes existing catalog recipe precision regression, repaired separately by32e470ed4 without fingerprint/tolerance changes. All550524 captured avatar fields exactly match frozen baseline. Fresh frozen consumer1090 tests:1086 pass/four unchanged skips (182.763s). Intermediate run invalidated by relinking its live self-spawning executable; failure log preserved. External markers/closure pending.",
+        "Combined frozen785bf2d2a validation: consumer1086 passes/four unchanged skips(1090 total,185.284s); warning-free demo/marker builds; original focused demos and neighboring C demos pass SOFTWARE/OPENGLES3. Strict C17/Werror VectorSmoke,QuaternionSmoke,GeometrySmoke pass actual rebuilt C API. Nine markers removed after passes. Both95 math sweeps81 pass/14 expected failures,exactly36 cumulative intended changes,differences[]. FullCTest/fullrenderer/visual running; final closure pending."
       ],
       "final_disposition": null
     },
@@ -2569,7 +2572,8 @@
       "cna_fix_commit": "e4ddea6e0",
       "validation": [
         "Genuine matrix residual192 checks and final PlaneNormalizeOracle3405/3405. Initial all-double hypothesis fails324 cases and is preserved; among seven rounding models only wide squared sum, Single-rounded sqrt, wide reciprocal matches. Pre-fix native925 pass/two skips/four failures and both new C smoke stages fail. After native929 pass/two unchanged skips; registered Matrix/Plane/bounding294/294(58.46s). External binaries remain frozen for preceding checkpoint; no marker removal or final closure.",
-        "Combined140/123 consumer validation after catalog companion32e470ed4:1086 pass/four unchanged skips (1090 total,182.763s). External marker/closure still pending."
+        "Combined140/123 consumer validation after catalog companion32e470ed4:1086 pass/four unchanged skips (1090 total,182.763s). External marker/closure still pending.",
+        "Combined frozen785bf2d2a validation: consumer1086 passes/four unchanged skips(1090 total,185.284s); warning-free demo/marker builds; original focused demos and neighboring C demos pass SOFTWARE/OPENGLES3. Strict C17/Werror VectorSmoke,QuaternionSmoke,GeometrySmoke pass actual rebuilt C API. Nine markers removed after passes. Both95 math sweeps81 pass/14 expected failures,exactly36 cumulative intended changes,differences[]. FullCTest/fullrenderer/visual running; final closure pending."
       ],
       "final_disposition": null
     },

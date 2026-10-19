@@ -9,7 +9,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-19)
 
-Phase C. CNA committed runtime `32e470ed4`; latest demo closure `a30f4e1`.
+Phase C. CNA committed runtime `785bf2d2a`; latest demo closure `a30f4e1`.
 All155 historical IDs retained:46 final/109 pending (15 runtime findings,23
 documentation corrections,seven already fixed,one proven demo expectation error).
 No push/merge. Linux x86_64,Radeon780M/Mesa; private displays/dummy audio.
@@ -76,21 +76,37 @@ CURRENT118: genuine reflection method-entry probes Distance1176/1176 and
 Length/Normalize1184/1184 pass. Earlier conflicting caller probes remain preserved;
 JIT spills/inlining explanation remains inference,not disassembly proof.
 Permanent probes ../cna-demos/docs/repair-evidence/issue-118/.
-Native pre-fix946tests:933pass/two unchanged skips/11 new failures. New typed native
-regressions and Vector2/3/4/Quaternion production repair UNCOMMITTED; after-build
-running at three jobs, then whole math and unchanged avatar golden test. Keep
-Squared API range unchanged; Normalize rounds sqrt but not reciprocal.
-Exact next task: inspect repair-118-native-after* and repair-118-avatar-golden.log.
-If avatar catalog precision regresses, minimize actual field delta and preserve
-versioned recipe locally; do not replace digests or relax tolerances. Then native
-registered/consumer checks, actual C ABI before/after stages, external rebuild of
-140/123/118 and original focused demos, markers only after passes, full regressions.
-Demo binaries currently still0b03b7b21, but preceding sweeps have finished so rebuild
-is permitted once ready. C API embeds static CNA: LD_LIBRARY_PATH replacement alone
+Native pre-fix946tests:933pass/two unchanged skips/11 new failures. Repairbd46b6ffe
+now passes944/two unchanged skips; registered955 accepted,zero failures/two existing
+skips(67.83s). Squared API range unchanged; Normalize rounds sqrt not reciprocal.
+Unchanged four-avatar golden test initially fails allfour; representative field
+audit32556 raw changes/56 quantization crossings among550524 records. Companion
+785bf2d2a preserves private catalog lengths/distances/normalization/imported normals.
+Allfour golden descriptions pass and all550524 fields match baseline exactly.
+Frozen native consumer COMPLETE:1086 passes/four unchanged skips(1090 total,185.284s),
+repair-118-native-consumers.log. External build and marker rebuild complete without
+new warnings at785bf2d2a. Allnine original focused demos pass both labels with
+5/6/8/5/11/18/14/8/14 assertions retained; adjacent C demos pass. Actual rebuilt
+C17/Werror VectorSmoke/QuaternionSmoke/GeometrySmoke ALL PASS. Nine marker/restriction
+pairs removed only after focused passes. Both95 math sweeps81 pass/14 expectedfail,
+exactly36 cumulative intended changes,differences[].
+C17/Werror magnitude stages in VectorSmoke/QuaternionSmoke fail on old ABI as
+expected; VectorSmoke also retains pending123 product failure. Logs repair-118-c-before-*.
+ACTIVE: full demoCTest TWO jobs,repair-magnitude-products-demo-ctest.log; regression
+driver ONE job,repair-magnitude-products-regression-driver.log, metadata/tools/visual
+then complete SOFTWARE and OPENGLES3 with exact comparisons. Three-job limit occupied.
+FREEZE demo binaries785bf2d2a until all these finish. Native binaries have no running
+consumer now. Exact next: check full results, investigate every delta, close118/123/140
+only when validated. Next source-only audit: geometry127/128/129/130/133 and text
+024/126/135. Genuine frustum point threshold1e-5 and subtraction-from-zero plane
+construction matter; do not adopt historical issue suggestions blindly.
+No118/123/140 closure yet.
+C API embeds static CNA: LD_LIBRARY_PATH replacement alone
 does NOT test repaired C ABI. Native CnaTests does dynamically import public math.
 
-UNCOMMITTED: CNA118 four production sources/new magnitude tests plus this status
-and matrix; demo permanent118/123 evidence. No124/125/139 closure work remains.
+UNCOMMITTED: this CNA status and subsequent matrix updates; demo nine marker removals
+and permanent118/123 evidence. No uncommitted production/native regression edits remain. No124/125/139
+closure work remains.
 Owner-reserved BoundingFrustum::Intersects(Ray) in handoff.md§6 must not be implemented
 without resolving that permission boundary; keep131 explicit,continue other work.
 Ordinary actionable work remains extensive; campaign NOT complete.
