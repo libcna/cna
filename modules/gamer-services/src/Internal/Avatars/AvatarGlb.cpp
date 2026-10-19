@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "AvatarCatalogArithmetic.hpp"
 #include "cgltf.h"
 #include <algorithm>
 #include <cmath>
@@ -114,7 +115,7 @@ void readPrimitive(const cgltf_primitive& primitive,const std::vector<int>& skin
         if(std::fabs(vertex.position.X)>MaximumCoordinate||std::fabs(vertex.position.Y)>MaximumCoordinate||
            std::fabs(vertex.position.Z)>MaximumCoordinate)malformed("vertex position");
         vertex.normal=Vector3(n[v*3],n[v*3+1],n[v*3+2]);
-        const float length=vertex.normal.Length();
+        const float length=catalogLength(vertex.normal);
         vertex.normal=length>1e-6f?vertex.normal/length:Vector3(0,1,0);
         vertex.uv=Vector2(t[v*2],t[v*2+1]);
         cgltf_uint raw[4];

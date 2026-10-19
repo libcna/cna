@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "AvatarCatalogArithmetic.hpp"
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include <algorithm>
@@ -31,19 +32,6 @@ AvatarImage decodeAvatarImage(std::span<const std::uint8_t> png)
 
 namespace {
 using Microsoft::Xna::Framework::Vector3;
-
-// Catalog deformation is part of the versioned asset recipe, not an XNA vector
-// operation. Preserve its authored binary32 rounding independently of public Dot's
-// wider intermediates. Otherwise unchanged descriptions can cross a vertex-quantization
-// boundary and change the catalog's model digest. Volatile stores make each rounding
-// boundary explicit, including on targets that retain wider register intermediates.
-float catalogDot(const Vector3& a,const Vector3& b)
-{
-    const volatile float x=a.X*b.X,y=a.Y*b.Y,z=a.Z*b.Z;
-    const volatile float xy=x+y;
-    const volatile float result=xy+z;
-    return result;
-}
 
 // Namespace scope (not function statics): they must outlive the loader thread at exit.
 std::mutex faceLock;
@@ -272,7 +260,7 @@ void flattenUnderHat(AvatarPrimitive& primitive,const HeadSurface& surface,const
     for(std::size_t index=0;index<primitive.vertices.size();++index) {
         auto& position=primitive.vertices[index].position;
         const Vector3 local=position-surface.centre;
-        const float r=local.Length();
+        const float r=catalogLength(local);
         if(r<1e-6f)continue;
         const Vector3 d=local/r;
         const float theta=std::acos(std::clamp(d.Y,-1.0f,1.0f)), phi=std::atan2(d.X,d.Z);
@@ -308,7 +296,7 @@ void applyBuild(std::vector<AvatarVertex>& vertices,const std::array<Vector3,Bon
         if(axis==std::end(BuildAxes))continue;
         const Vector3 origin=positions[axis->bone];
         Vector3 direction=positions[axis->toward]-origin;
-        direction.Normalize();
+        catalogNormalize(direction);
         const Vector3 offset=vertex.position-origin;
         const Vector3 along=direction*catalogDot(offset,direction);
         vertex.position=origin+along+(offset-along)*factor;
@@ -381,10 +369,10 @@ Proportions proportionsFor(const std::array<Vector3,BoneCount>& authored,const s
     // Geometry stretches with the segment it belongs to.
     for(const auto& [bone,toward]:BuildAxes) {
         Vector3 direction=authored[toward]-authored[bone];
-        direction.Normalize();
+        catalogNormalize(direction);
         out.axis[bone]=direction;
-        const float before=Vector3::Distance(authored[toward],authored[bone]);
-        out.stretch[bone]=before>1e-4f?Vector3::Distance(out.positions[toward],out.positions[bone])/before:1.0f;
+        const float before=catalogDistance(authored[toward],authored[bone]);
+        out.stretch[bone]=before>1e-4f?catalogDistance(out.positions[toward],out.positions[bone])/before:1.0f;
     }
     (void)neckBone;
     (void)head;
@@ -496,7 +484,7 @@ std::shared_ptr<const AvatarModel> buildAvatarModel(const AvatarDescriptor& desc
     std::vector<Piece> pieces{{bodyGlb,Scope::Face}};
     auto fitted=[&](const std::shared_ptr<const AvatarGlb>& glb) {
         for(int bone=0;bone<BoneCount;++bone)
-            if(Vector3::Distance(glb->bindTranslations[bone],bodyGlb->bindTranslations[bone])>1e-3f)
+            if(catalogDistance(glb->bindTranslations[bone],bodyGlb->bindTranslations[bone])>1e-3f)
                 throw std::runtime_error("avatar item is not fitted to this body");
         return glb;
     };
