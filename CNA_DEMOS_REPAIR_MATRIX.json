@@ -1006,11 +1006,13 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "fstream EOF/fail state survives short reads, invalidating tellg/relative seek and silently losing subsequent writes.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine .NET Framework4 EOF13/13 versus current Sharp Runtime native seven failures/13; exact data/guard/rewind controls pass. Source and strict-build witness docs/repair-evidence/storage/FileStreamEofProbe.cpp; lower-layer fix pending."
+      ],
       "final_disposition": null
     },
     {
@@ -2632,11 +2634,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Explicit GameComponent disposal is incorrectly guarded as one-shot, omits self-removal, and requires owning-call/snapshot lifetime protection when removal releases references. C callback forwarding duplicates the one-shot assumption.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine component29+8 checks pass. Six real-Game native lifecycle tests fail; C ABI independent11checks/seven passes/four failures confirms missing self-removal and repeated callback/event. Existing Game19 controls pass. See docs/repair-evidence/lifecycle/. No production change."
+      ],
       "final_disposition": null
     },
     {
@@ -2649,11 +2653,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Four setters raise events before virtual hooks while base hooks are empty, preventing override-controlled dispatch.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine29-contract probe and failing native all-four-hook ordering/suppression/sender test; equal-value controls retained. docs/repair-evidence/lifecycle/."
+      ],
       "final_disposition": null
     },
     {
@@ -2666,11 +2672,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Duplicate validation precedes index validation; Clear skips nulls and range-iterates a mutable vector. Owned insertion/removal dispatch mishandles callback removal, exceptions and re-registration lifetimes.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine contracts29 plus live-index mutation3/3; native collection seven new failing cases cover exact ordering/null events and five ownership/mutation companions. Existing39 launch/collection controls pass. docs/repair-evidence/lifecycle/."
+      ],
       "final_disposition": null
     },
     {
@@ -2683,11 +2691,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Parsing rejects colonless and empty-value entries; direct duplicate Add silently emplaces instead of throwing. Default argv handling must exclude only executable argv0.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine29-contract probe; three new native parsing/duplicate atomicity tests fail. Existing controls retained; incorrect old empty-value expectations must be corrected only with genuine evidence during repair. docs/repair-evidence/lifecycle/."
+      ],
       "final_disposition": null
     },
     {
@@ -2804,11 +2814,13 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "StorageContainer lacks disposed guards on properties and file/directory/list/open operations, permitting real filesystem mutations after disposal.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine storage172/172; native public acquisition path under isolated XDG root proves all18 disposed/precedence checks fail and files are mutated, while live/state/one-shot event controls pass. docs/repair-evidence/storage/StorageContractsProbe.cpp;170total29PASS/141FAIL includes sharing findings."
+      ],
       "final_disposition": null
     },
     {
@@ -2821,11 +2833,13 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "StorageContainer discards explicit FileShare; Sharp Runtime lacks the corresponding constructor. Shorter container overloads also use wrong defaults: genuine exclusive sharing and write-only Append differ from direct FileStream default read sharing.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine172/172 includes144 symmetric access/share pairs; native admits all119 incompatible pairs,25 compatible controls pass. Two shorter exclusive defaults fail and Append throws with ReadWrite. Strict build/native170total29PASS/141FAIL. Historical suggestion to retain ReadWrite default disproved, not silently adopted. docs/repair-evidence/storage/."
+      ],
       "final_disposition": null
     },
     {

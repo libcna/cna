@@ -64,7 +64,16 @@ Werror (not extra Wpedantic, which rejects Decimal's supported __int128); origin
 build and missing-executable launch failures retained. Native CnaTests now also
 integrates all eleven new runtime tests: warning-free13-step build, private-display
 50tests39PASS/eleven intendedFAIL/zero skips1.063s,repair-lifecycle-native-before*.
-Runtime production is still unchanged (Color1ad0a3916). Keep external Color build free of lifecycle production changes until
+Runtime production is still unchanged (Color1ad0a3916).
+Five further collection ownership/mutation tests now fail in the standalone values
+suite49total39PASS/ten intendedFAIL; they are NOT yet in the integrated native binary.
+Genuine Clear mutation oracle3/3 establishes live-index iteration, NOT snapshot or
+fail-fast behavior; no mutation-version field/ABI change needed. Game.Dispose still
+requires its distinct original owning snapshot. Existing GameTest controls19/19PASS.
+Reports repair-collection-ownership-before*,repair-collection-mutation-xna*,
+repair-lifecycle-game-controls-before.log. C forwarding disposal currently relies on
+incorrect canonical one-shot behavior; review adapter/comment/smoke with runtime fix.
+Keep external Color build free of lifecycle production changes until
 it is frozen for its own checkpoint. Linux x86_64,private display,Radeon780M/Mesa only;
 no all-platform claim. No push/merge. Continue automatically after each batch.
 
@@ -95,6 +104,18 @@ defaultsRead sharing. Future repair must distinguish those contracts. Permanent
 Passing-demo audit freshly CONFIRMS_OPEN009/020/029/150 via independent public-header,
 actual-link and compiled-song-root probes; no already-fixed inference from their
 associated passing demos. Permanent ../cna-demos/docs/repair-evidence/api-shape/.
+Matrix056/141/142/143/144/151/152 now explicitly CONFIRMED_OPEN after fresh genuine/
+native witnesses; final count unchanged54/101. C component disposal actual frozen ABI
+probe11checks/seven passes/four failures confirms self-removal and repeated dispatch;
+cleanup control independently passes. Native storage real acquisition/isolated XDG
+probe170checks29PASS/141FAIL:119 incompatible share pairs admitted,25 compatible pass,
+two shorter exclusive defaults fail,Append wrong-access exception,18 disposed/precedence
+failures and actual forbidden fixture mutations. First unhandled-Append probe failure
+and fixture retained; corrected probe records failure then completes independent checks.
+Reports repair-storage-contracts-native-corrected-before*,repair-component-c-disposal-corrected-before*.
+No Sharp/runtime production changes. Native runtime test additions remain uncommitted
+pending coherent repair. Prepared ignored Color exact-comparison drivers admit exactly
+48 cumulative demo changes; containment comparisons rechecked unchanged46/differences[].
 
 ## Superseded chronological checkpoint notes
 
