@@ -276,29 +276,32 @@ namespace Microsoft::Xna::Framework
 
     void Quaternion::Divide(const Quaternion& quaternion1, const Quaternion& quaternion2, Quaternion& result)
     {
-        const float x = quaternion1.X;
-        const float y = quaternion1.Y;
-        const float z = quaternion1.Z;
-        const float w = quaternion1.W;
+        const double x = quaternion1.X;
+        const double y = quaternion1.Y;
+        const double z = quaternion1.Z;
+        const double w = quaternion1.W;
 
-        const float num14 = (quaternion2.X * quaternion2.X) +
-            (quaternion2.Y * quaternion2.Y) +
-            (quaternion2.Z * quaternion2.Z) +
-            (quaternion2.W * quaternion2.W);
-        const float num5 = 1.0f / num14;
-        const float num4 = -quaternion2.X * num5;
-        const float num3 = -quaternion2.Y * num5;
-        const float num2 = -quaternion2.Z * num5;
-        const float num = quaternion2.W * num5;
-        const float num13 = (y * num2) - (z * num3);
-        const float num12 = (z * num4) - (x * num2);
-        const float num11 = (x * num3) - (y * num4);
-        const float num10 = ((x * num4) + (y * num3)) + (z * num2);
+        // XNA's x87 intermediates retain range until the final component store.
+        // Rounding even the inverse components to float here can lose a finite
+        // quotient contribution when it is multiplied by a large numerator.
+        const double num14 = (static_cast<double>(quaternion2.X) * quaternion2.X) +
+            (static_cast<double>(quaternion2.Y) * quaternion2.Y) +
+            (static_cast<double>(quaternion2.Z) * quaternion2.Z) +
+            (static_cast<double>(quaternion2.W) * quaternion2.W);
+        const double num5 = 1.0 / num14;
+        const double num4 = -quaternion2.X * num5;
+        const double num3 = -quaternion2.Y * num5;
+        const double num2 = -quaternion2.Z * num5;
+        const double num = quaternion2.W * num5;
+        const double num13 = (y * num2) - (z * num3);
+        const double num12 = (z * num4) - (x * num2);
+        const double num11 = (x * num3) - (y * num4);
+        const double num10 = ((x * num4) + (y * num3)) + (z * num2);
 
-        result.X = ((x * num) + (num4 * w)) + num13;
-        result.Y = ((y * num) + (num3 * w)) + num12;
-        result.Z = ((z * num) + (num2 * w)) + num11;
-        result.W = (w * num) - num10;
+        result.X = static_cast<float>(((x * num) + (num4 * w)) + num13);
+        result.Y = static_cast<float>(((y * num) + (num3 * w)) + num12);
+        result.Z = static_cast<float>(((z * num) + (num2 * w)) + num11);
+        result.W = static_cast<float>((w * num) - num10);
     }
 
     float Quaternion::Dot(Quaternion quaternion1, Quaternion quaternion2)
@@ -323,15 +326,17 @@ namespace Microsoft::Xna::Framework
 
     void Quaternion::Inverse(const Quaternion& quaternion, Quaternion& result)
     {
-        const float num2 = (quaternion.X * quaternion.X) +
-            (quaternion.Y * quaternion.Y) +
-            (quaternion.Z * quaternion.Z) +
-            (quaternion.W * quaternion.W);
-        const float num = 1.0f / num2;
-        result.X = -quaternion.X * num;
-        result.Y = -quaternion.Y * num;
-        result.Z = -quaternion.Z * num;
-        result.W = quaternion.W * num;
+        // Keep the squared norm and reciprocal wide, as in XNA's x87 evaluation.
+        // A representable inverse must not be lost to a float intermediate.
+        const double num2 = (static_cast<double>(quaternion.X) * quaternion.X) +
+            (static_cast<double>(quaternion.Y) * quaternion.Y) +
+            (static_cast<double>(quaternion.Z) * quaternion.Z) +
+            (static_cast<double>(quaternion.W) * quaternion.W);
+        const double num = 1.0 / num2;
+        result.X = static_cast<float>(-quaternion.X * num);
+        result.Y = static_cast<float>(-quaternion.Y * num);
+        result.Z = static_cast<float>(-quaternion.Z * num);
+        result.W = static_cast<float>(quaternion.W * num);
     }
 
     Quaternion Quaternion::Lerp(Quaternion quaternion1, Quaternion quaternion2, float amount)

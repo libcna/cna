@@ -180,8 +180,33 @@ static int validate_default_value(void)
     return identity.w != zeroed.w;
 }
 
+static int validate_extreme_inverse_and_division(void)
+{
+    const float magnitudes[] = {1e20F, 1e-30F, -1e20F, -1e-30F};
+    const CNA_Quaternion identity = {0.0F, 0.0F, 0.0F, 1.0F};
+    for (unsigned i = 0; i < sizeof(magnitudes) / sizeof(magnitudes[0]); ++i) {
+        const CNA_Quaternion q = {magnitudes[i], 0.0F, 0.0F, 0.0F};
+        const float expected = (float)(-1.0 / (double)magnitudes[i]);
+        CNA_Quaternion result = q;
+        if (cna_quaternion_inverse(result, &result) != CNA_RESULT_SUCCESS ||
+            result.x != expected || result.y != 0 || result.z != 0 || result.w != 0 ||
+            cna_quaternion_divide(identity, q, &result) != CNA_RESULT_SUCCESS ||
+            result.x != expected || result.y != 0 || result.z != 0 || result.w != 0 ||
+            cna_quaternion_divide(q, q, &result) != CNA_RESULT_SUCCESS ||
+            result.x != 0 || result.y != 0 || result.z != 0 || result.w != 1) {
+            return 0;
+        }
+    }
+    CNA_Quaternion result;
+    return cna_quaternion_divide((CNA_Quaternion){0, 1e20F, 0, 0},
+        (CNA_Quaternion){1e20F, 1e-20F, 0, 0}, &result) == CNA_RESULT_SUCCESS &&
+        result.x == 0 && result.y == 0 && result.z == 1 && result.w > 0 &&
+        isfinite(result.w);
+}
+
 int main(void)
 {
     return CNA_TEST_STAGE(validate_construction_and_members()) && CNA_TEST_STAGE(validate_operations()) &&
-        CNA_TEST_STAGE(validate_default_value()) ? 0 : 1;
+        CNA_TEST_STAGE(validate_default_value()) &&
+        CNA_TEST_STAGE(validate_extreme_inverse_and_division()) ? 0 : 1;
 }
