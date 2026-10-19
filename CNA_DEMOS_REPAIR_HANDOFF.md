@@ -29,8 +29,8 @@ ASan/UBSan/float-cast-overflow/leak13/13. Final formatted build warning-free and
 math963/two skips again. Actual external C ABI/demos now rebuilt; no closure yet.
 Owner-reserved131 ray body/exception untouched; point containment naturally fixes
 its boundary branch, but outside-origin entry remains unimplemented.
-NEXT TASK: containment full metadata/tools/visual/SW/GLES driver RUNNING session71300,
-repair-containment-regression.log. Run full CTest ONLY AFTER both full smokes finish;
+NEXT TASK: containment full CTest NOW RUNNING alone on network,ONE job,session9033,
+repair-containment-demo-ctest.log. Both full smokes already completed successfully;
 do not overlap SystemLink/discovery suites. External binaries frozen with recorded
 SHA256/ldd (repair-containment-frozen*); DO NOT rebuild external until checkpoint done.
 Strict C17/Werror GeometrySmoke/VertexValueSmoke pass actual rebuilt ABI; focused17
@@ -38,7 +38,10 @@ per renderer have15PASS/two unchanged expected131 failures. Three additional old
 boundary oracles contradicted genuine XNA and were corrected, all counts retained;
 original failures preserved. Four repaired markers removed only after focusedpass.
 Both95 math91PASS/four expectedFAIL,exact46 cumulative changes,differences[].
-Six exact visuals pass; representative GLES image inspected. Full sweeps pending.
+Six exact visuals pass; representative GLES image inspected. Full719 SOFTWARE
+COMPLETE603PASS/65expectedFAIL/48SKIP/3manual; exact46 changes,differences[].
+Full719 OPENGLES3 COMPLETE642PASS/67expectedFAIL/7SKIP/3manual; exact46changes,
+differences[]. SHA256 frozen executable and both DSOs verified unchanged after smoke.
 Color132 committed1ad0a3916, FIXED_PENDING_REGRESSION. New native tests first fail
 three (968total,963pass/two skips/three failures); pre C smoke fails two new stages.
 Color fixed-point repair now passes native966/two skips, standalone1782/1782,
@@ -48,19 +51,20 @@ from CNA root passes all966/two skips. RegisteredColor/packing70 tests running
 session46419 COMPLETE70/70pass11.07s. Additional packed/color/vertex/avatar CPU-oriented
 consumer selection156PASS/one unavailable effect-fixture skip(157total,7.739s);
 not a full renderer suite. No Color external rebuild/closure yet. Exact1412-test native
-consumer inventory NOW RUNNING session61789 (repair-color-native-consumers.log),
-private display/separate XDG. DO NOT RELINK native CnaTests/libcna.so until it exits:
-the catalog process tests self-spawn /proc/self/exe. Runtime additions below were
-compiled standalone and did not relink that frozen native executable.
+consumer inventory COMPLETE1408PASS/four same skips(1412total,282.277s),
+repair-color-native-consumers.log; private display/separate XDG. Native freeze now
+released. Runtime additions below were compiled standalone and did not relink
+that frozen native executable. External containment freeze still applies.
 UNCOMMITTED: lifecycle native test additions in LaunchParametersTests.cpp,
 GameComponentCollectionTests.cpp and new ComponentLifecycleCompatibilityTests.cpp;
 handoff and matching demo evidence. No lifecycle production edits. Native standalone
 values44total39PASS/five intendedFAIL; real-Game lifecycle6/6 intendedFAIL,zero skips,
 private display1.014s. Genuine29+8passes. Standalone Game strict build uses Wall/Wextra/
 Werror (not extra Wpedantic, which rejects Decimal's supported __int128); original
-build and missing-executable launch failures retained. Native CnaTests remains
-built only through Color1ad0a3916; runtime tests compiled into separate build-probe
-executables. Keep external Color build free of lifecycle production changes until
+build and missing-executable launch failures retained. Native CnaTests now also
+integrates all eleven new runtime tests: warning-free13-step build, private-display
+50tests39PASS/eleven intendedFAIL/zero skips1.063s,repair-lifecycle-native-before*.
+Runtime production is still unchanged (Color1ad0a3916). Keep external Color build free of lifecycle production changes until
 it is frozen for its own checkpoint. Linux x86_64,private display,Radeon780M/Mesa only;
 no all-platform claim. No push/merge. Continue automatically after each batch.
 
@@ -88,6 +92,9 @@ defaults. Historical152 suggestion to retain ReadWrite default is wrong: genuine
 Storage OpenFile2/3args is exclusive; 2argAppend choosesWrite; FileStream3args itself
 defaultsRead sharing. Future repair must distinguish those contracts. Permanent
 ../cna-demos/docs/repair-evidence/storage/. All probes remove only their new fixtures.
+Passing-demo audit freshly CONFIRMS_OPEN009/020/029/150 via independent public-header,
+actual-link and compiled-song-root probes; no already-fixed inference from their
+associated passing demos. Permanent ../cna-demos/docs/repair-evidence/api-shape/.
 
 ## Superseded chronological checkpoint notes
 

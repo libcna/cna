@@ -161,11 +161,13 @@
       ],
       "subsystem": "input/devices/platform",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "The public inline default constructor instantiates unique_ptr cleanup while IPlatformHapticDevice is still incomplete; the existing demos avoid this construction shape.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Fresh current1ad0a3916 public-header C++23/Wall/Wextra/Werror syntax probe fails at unique_ptr sizeof(incomplete IPlatformHapticDevice). No hardware required. Permanent ../cna-demos/docs/repair-evidence/api-shape/HapticDefaultConstructionProbe.cpp; repair-haptic-default-before-build.log. Associated demo PASS is not closure."
+      ],
       "final_disposition": null
     },
     {
@@ -353,11 +355,13 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Compiled media stream references are resolved from the ContentManager root, ignoring the compiled asset location; the passing demo chooses a narrower root that masks relocation failure.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Fresh strict native probe against current1ad0a3916 and existing rebuilt assets: narrow root assets/media loads music/theme with positive duration; parent root assets fails media/music/theme with missing music/theme.ogg diagnostic. Source ContentMediaLoaders.cpp still uses BuildAssetPath(reference). repair-compiled-song-root-before{,-build}.log; permanent ../cna-demos/docs/repair-evidence/api-shape/CompiledSongRootProbe.cpp. No asset mutation/playback, no repair or closure claimed."
+      ],
       "final_disposition": null
     },
     {
@@ -518,12 +522,14 @@
         "audio.sound_effect.from_stream"
       ],
       "subsystem": "audio/media",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "The only SoundEffect.FromStream entry accepts std::istream rather than the canonical System::IO::Stream returned by TitleContainer; the associated demo uses std::ifstream.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Fresh current1ad0a3916 canonical stream C++23/Wall/Wextra/Werror syntax probe fails to convert System::IO::Stream to std::istream&. Permanent ../cna-demos/docs/repair-evidence/api-shape/SoundEffectStreamProbe.cpp; repair-sound-effect-stream-before-build.log. No playback or repair claimed."
+      ],
       "final_disposition": null
     },
     {
@@ -2779,11 +2785,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "CNA/Misc.hpp publicly declares five Runtime methods but the runtime module supplies no definitions; the associated graphics-profile demo never uses this facade.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Existing tools/repro_runtime_facade.cpp freshly compiles with C++23/Wall/Wextra/Werror but fails its actual current1ad0a3916 libcna.so link with all five missing Runtime symbols. repair-runtime-facade-before-build.log; permanent ../cna-demos/docs/repair-evidence/api-shape/. No implementation or closure claimed."
+      ],
       "final_disposition": null
     },
     {
