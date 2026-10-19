@@ -54,10 +54,43 @@ Full native build is running in `cmake-build-debug` (2,829 scheduled steps,
 OPENGLES3, tests enabled); log is `repair-baseline-native-build.log` in that
 same demo reports directory. No native-test result is yet claimed.
 Its existing Draco dependency emits CMake CMP0148 and deprecated implicit-`this`
-capture warnings; these are retained, not suppressed or counted as repair regressions.
-SOFTWARE category-partitioned smoke is running with explicit SDL X11 on the
-private runner. `/tmp/cna-repair-smoke.mjs` validates each category and exact
-719-ID coverage before writing the merged report. Next run OPENGLES3 serially.
+capture warnings; native tests also emit existing ignored-nodiscard warnings.
+These are retained, not suppressed or counted as repair regressions.
+SOFTWARE category-partitioned smoke completed with explicit SDL X11 on the
+private runner: 719 IDs, 557 pass / 111 expected fail / 48 skip / 3 manual,
+199 failed assertions. OPENGLES3 also completed: 719 IDs, 596 pass / 113 expected
+fail / 7 skip / 3 manual, 204 failed assertions, with exactly the same reviewed
+deltas. All six approved visual references compare exactly (zero differing
+pixels); representative font/texture captures were also inspected. Logs/captures:
+`repair-baseline-visual.log` and `repair-baseline-visual/`. A focused OPENGL33
+cube-orientation run passes 13 controls (434 reflected pixels above, zero below).
+The private display is accelerated AMD Radeon 780M, Mesa 25.0.7, GLES 3.2 / GL 4.6,
+as recorded in `repair-baseline-gl-environment.log`; do not call it llvmpipe.
+The driver
+`/tmp/cna-repair-smoke.mjs` validates each category and exact 719-ID coverage.
+Complete results/raw logs: `repair-baseline-SOFTWARE.{json,log,stderr.log}`;
+comparison: `repair-baseline-compare-SOFTWARE.log`, all in the demo reports directory.
+Do not interpret the lower failure count as five repairs: the reviewed deltas are:
+
+- 083 and 134 now PASS with the same check counts (pre-campaign fixes).
+- 041's short-read and 145's missing-file checks now pass inside still-failing demos.
+- `math.curve.key_collection` falls from 20 to 6 checks and `math.matrix.perspective`
+  from 12 to 4: stale `std::out_of_range` (collection) and `std::invalid_argument`
+  (perspective) catches let the pre-campaign System exception migration abort
+  these demos before the original 097/117 witnesses. Correct expectations from
+  XNA evidence, not merely current behavior. In particular, all three genuine
+  XNA perspective constructors throw ArgumentOutOfRangeException with the named
+  invalid parameter, while current CNA throws the broader ArgumentException.
+  Repair that contract together with 117's Pi endpoint; update tests to the exact
+  framework type and preserve every control. Collection negative indices use
+  ArgumentOutOfRangeException, short CopyTo destinations use ArgumentException.
+- 030's reliable-loss failure disappears, but the latency-minimum and complete
+  unreliable-outage checks now fail. CNA commit `01534c2e7f33d67191efe26c4434c874a244bfa3`
+  moved simulation to the **sender**, matching genuine XNA NetworkSimulator,
+  exempts reliable packets and uses Gaussian latency (mean L, clamped 0..2L).
+  The demo still sets simulation on the receiver and assumes a fixed minimum L.
+  Review the local XNA Net decompilation and native deterministic simulator tests;
+  adapt the incorrect demo contract and revalidate before closing 030.
 
 The complete historical issue inventory has been read. The machine-readable
 matrix is `CNA_DEMOS_REPAIR_MATRIX.json`, containing exactly IDs 001–155, source
@@ -68,7 +101,10 @@ verify it and reconcile the section rather than treating the heading as truth.
 ISSUE-041 has a source-confirmed pre-campaign fix (`a83673fc5`), but its demo also
 contains ISSUE-098 failures; whole-demo WILL_FAIL cannot prove either independently.
 The transient compile failures 044, 052 and 053 are verified ALREADY_FIXED by
-the current successful build. The other classifications are provisional until
+the current successful build. Current runtime evidence additionally verifies
+021, 041, 083 and 134 (seven ALREADY_FIXED IDs total). The primary demo inventory
+now moves 021/041 to Resolved while retaining their history and distinct 098 failures.
+The other classifications are provisional until
 their own source/contract/reproduction review; they do not constitute closure.
 
 Read-only source review confirms documentation contradictions 153–155 persist.
@@ -82,9 +118,25 @@ outgoing tangent, so it needs an evidence-backed correction alongside new
 distinct-tangent, shifted-Step and duplicate/NaN regressions, not blind preservation
 of that incorrect native oracle. No test or runtime edit has yet been made.
 
+ISSUE-116 is a proven **DEMO_EXPECTATION_BUG**, not a CNA inversion defect. The old
+probe `/tmp/checkpoint-1028-matrix-invert-xna/xna_invert_probe.cs` printed `{R}`
+floats in the current culture. Fresh genuine XNA 4.0 under the existing Wine prefix
+reports culture en-US, console CP1252, and PositiveInfinitySymbol U+221E. That
+symbol is best-fit encoded as ASCII `8`, so the old `8`/`-8` transcript was infinity,
+not finite numbers. The new probe explicitly verifies both overloads:
+M22 bits `7F800000`, M42 `FF800000`, IsPositive/NegativeInfinity true, comparisons
+with 8/-8 false; the same original-format output still prints 8/-8. The remaining
+14 components are NaN (`FFC00000`). CNA already returns the correct classification.
+Source: `../cna-demos/build-probe/repair-matrix-oracle.cs`; genuine-runtime evidence:
+`repair-baseline-xna-matrix-bits.log`, empty corresponding stderr, exit 0. Preserve
+this evidence, correct the demo to signed infinities after baseline capture, remove
+only its now-invalid knownIssue marker, add native coverage and record the permanent
+disposition. Do **not** change CNA to synthesize finite 8/-8 values.
+
 ## Issue state and next task
 
-No issues repaired by this campaign; three verified pre-existing fixes are recorded.
+No CNA runtime issues repaired by this campaign; seven verified pre-existing fixes
+are recorded, and one proven demo-expectation correction (116) is pending implementation.
 No source repair has begun. Complete the
 all-ID repair matrix, inspect the remaining issue evidence, finish current CNA
 and demo builds, run native tests and all demo CTests plus partitioned SOFTWARE
@@ -97,3 +149,10 @@ for each batch, update this file and the matrix, commit, and immediately continu
 
 Campaign files: this handoff and `CNA_DEMOS_REPAIR_MATRIX.json`; baseline evidence
 is ignored build output. No production or demo assertions have been changed.
+Initial inventory/handoff commit: `13275d0df`. Current demo documentation revision:
+`53288781957556f29e6cc987b7566faed45adaca` (021/041 status reconciliation only;
+runtime source/binaries remain those of the starting baseline). CLI metadata and
+catalog/inventory CTests both pass after this documentation update (719 IDs).
+This handoff and matrix update are committed together as a status checkpoint;
+no other uncommitted work is intended. Native baseline build remains running.
+No push or merge.

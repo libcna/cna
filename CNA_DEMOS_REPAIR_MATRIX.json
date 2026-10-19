@@ -365,12 +365,15 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
+      "status": "ALREADY_FIXED",
       "root_cause": null,
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "a6e8104d287548c2d096798b3f4a8733265fdff8",
+      "validation": [
+        "Unchanged render_target_cube: 13 controls pass in complete SOFTWARE/OPENGLES3 baselines and focused OPENGL33; OPENGL33 reflected pixels 434 above/0 below. Primary inventory moved to Resolved; retained historical text.",
+        "Evidence: ../cna-demos/build/linux-full/reports/repair-baseline-* at CNA baseline 688f3f23e. All 732 enabled demo CTests passed; native full baseline still in progress."
+      ],
+      "final_disposition": "ALREADY_FIXED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-022",
@@ -711,12 +714,15 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
+      "status": "ALREADY_FIXED",
       "root_cause": null,
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "a83673fc53a2c4694e69eb95238a041960dfc560",
+      "validation": [
+        "Both baseline media logs: short-read SavePicture performs 129 reads, consumes 1666/1666 bytes and preserves exact encoded PNG/640x320 dimensions. Separate ISSUE-098 disposal failures remain. Primary inventory moved to Resolved.",
+        "Evidence: ../cna-demos/build/linux-full/reports/repair-baseline-* at CNA baseline 688f3f23e. All 732 enabled demo CTests passed; native full baseline still in progress."
+      ],
+      "final_disposition": "ALREADY_FIXED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-042",
@@ -1421,12 +1427,15 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
+      "status": "ALREADY_FIXED",
       "root_cause": null,
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "e7bd98e4604bb3ee620f4a049106093b62532f9a",
+      "validation": [
+        "back_buffer_size passes all 9 unchanged controls on SOFTWARE and OPENGLES3; also includes pre-campaign clamp repair 714bfd9bce1af8eb47228a2bbed5a413bbd85190. Marker already removed before campaign.",
+        "Evidence: ../cna-demos/build/linux-full/reports/repair-baseline-* at CNA baseline 688f3f23e. All 732 enabled demo CTests passed; native full baseline still in progress."
+      ],
+      "final_disposition": "ALREADY_FIXED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-084",
@@ -1981,12 +1990,14 @@
         "math.matrix.invert"
       ],
       "subsystem": "math",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "DEMO_EXPECTATION_BUG",
+      "status": "DEMO_EXPECTATION_BUG",
+      "root_cause": "The genuine-XNA probe used culture-dependent R formatting with console CP1252: infinity symbol U+221E best-fit encoded as ASCII 8. Both XNA Invert overloads actually return signed infinities, matching CNA.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "repair-baseline-xna-matrix-bits.log: genuine Windows XNA 4.0 under Wine; M22=0x7F800000, M42=0xFF800000, explicit IsInfinity true and equality with 8/-8 false; other 14 components NaN. Exit 0, stderr empty. Demo correction and regression protection pending."
+      ],
       "final_disposition": null
     },
     {
@@ -2314,12 +2325,15 @@
       ],
       "subsystem": "math",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
+      "status": "ALREADY_FIXED",
       "root_cause": null,
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "cd211420e3a70962776e9c42a403c97ca8895c93",
+      "validation": [
+        "bounding_frustum.corners passes all 4 unchanged controls in both SOFTWARE/OPENGLES3 baselines. Native source throws ArgumentOutOfRangeException before writing short output. Marker already removed before campaign.",
+        "Evidence: ../cna-demos/build/linux-full/reports/repair-baseline-* at CNA baseline 688f3f23e. All 732 enabled demo CTests passed; native full baseline still in progress."
+      ],
+      "final_disposition": "ALREADY_FIXED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-135",
