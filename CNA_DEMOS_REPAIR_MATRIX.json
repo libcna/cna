@@ -201,11 +201,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Unload only clears the cache; typed ContentReader recording has no manager fallback. Texture2D value copies additionally retain independent wrapper disposal, so disposing a recorded copy alone cannot repair the returned handle.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": ["Current exact renderer sweeps retain both011 failures. Genuine ContentOwnershipOracle35/35 confirms default inline/shared ownership, partial-load retention, per-materialization recording without identity deduplication, and finally cleanup after a disposal exception. FNA differs on deduplication/cleanup; measured XNA wins. Permanent content/RUNTIME_OWNERSHIP_TRIAGE.md. No runtime repair yet."],
       "final_disposition": null
     },
     {
@@ -219,11 +219,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Ordinary Load requires the CNA-only OpenStream-routing opt-in. Cold ResourceContentManager additionally reaches BuiltinContent registration whose RegisterDeclaredXnbReaders is a no-op without prior Game declaration; historical missing-ReadAsset-registration explanation is stale.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": ["Both current witnesses still fail in strict renderer sweeps. Genuine ContentOwnershipOracle35/35 confirms ordinary Load invokes the virtual stream seam and preserves cache identity. Source audit finds ReadAsset already registers its builtin family, but family-closure tests establish Game's declaration state and miss a cold standalone manager. Preserve per-family linkage and explicit reader withdrawal semantics. No runtime repair yet."],
       "final_disposition": null
     },
     {
@@ -706,11 +706,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Both RootDirectory setters assign without checking the loaded-asset cache.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": ["Current strict renderer sweeps preserve039 failure. Genuine ContentOwnershipOracle35/35 confirms different AND identical root assignments throw InvalidOperationException while an asset is cached; assignment succeeds after Unload, including its exceptional cleanup. Raw ReadAsset does not populate that cache. FNA's unrestricted auto-property differs; measured XNA wins. No repair yet."],
       "final_disposition": null
     },
     {
@@ -784,11 +784,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "CreateReaderForTargetTypeEXT passes a target identity to a factory table keyed by reader identity; no association connects distinct target and factory names.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": ["Current strict renderer sweeps retain both lookup assertions. Source and existing tests inspected: native passing control uses the same target/factory spelling. CNA explicitly documents fresh unique_ptr instances, unlike genuine XNA caching; preserve that C++ ownership contract while fixing name resolution, factory removal/clear and constructor lock order. No runtime repair yet."],
       "final_disposition": null
     },
     {
@@ -818,11 +818,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "LoadXnbAsset calls the low-level header parser outside a ContentLoadException wrapping boundary.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": ["Current strict renderer sweeps preserve the three-byte XNB failure. Genuine ContentOwnershipOracle35/35 confirms header and body I/O failures become ContentLoadException, streams close, and caller recorder InvalidOperationException remains unwrapped with caller ownership preserved. Do not indiscriminately wrap all callback failures. No repair yet."],
       "final_disposition": null
     },
     {
@@ -1596,11 +1596,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "ReadSharedResources uses InnerReadObjectAny, whose erased ReadUntyped result bypasses disposable recording.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": ["Current strict renderer sweeps retain087's exact shared-table callback failure. Genuine ContentOwnershipOracle35/35 verifies inline then two shared callbacks, shared aliases without extra callbacks, default disposal and retained records after a later shared read fails. Preserve runtime disposable capability before type erasure; do not guess std::any types or add demo-specific aliases. No runtime repair yet."],
       "final_disposition": null
     },
     {
