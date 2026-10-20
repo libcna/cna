@@ -2042,6 +2042,7 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "Schema-1 writer checks parent upper bounds but not negative sentinels, checks index byte counts but not decoded vertex references, and serializes material ordinals that its paired decoder rejects.",
+      "current_validation": "Uncommitted candidate passes35/35 normal and actual-TU ASan/UBSan/leak; before28oldPASS/sevennewFAIL. Native542-step and external229-step builds zero warnings; canonical native35 pass. Native full10798 gate95074 RUNNING on four frozen binaries/two sources. External146 focus exact69PASS/four unchangedFAIL per renderer, model29/29. Exact source transformation preservesall29 controls/five invalid inputs, now requiring encoder ContentLoadException. Obsolete109 restriction removed only after canonical passes; warning-free metadata rebuild. Post-metadata146 plus both719/math/visual/CTest gate8261 RUNNING. Earlier XML checkpoint does not validate this new candidate; no109 closure. See demos MODEL_ENCODER_VALIDATION.md.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [

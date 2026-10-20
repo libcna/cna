@@ -9,6 +9,24 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+109 demo/evidence committed86e7a89 after both initial and metadata146 controls
+pass exactly (69PASS/four sameFAIL per renderer,model29/29). Canonical metadata
+build is clean; full8261 has completed both95 math/six exact visual references
+and is running whole719 sweeps. Native95074 remains live in genuine XNA compile
+comparison. Both artifact/source freezes are active. Only two CNA109 runtime/test
+files remain uncommitted; no demo source edits pending.90FINAL/65PENDING unchanged.
+
+109 next-gate state:95074 full native RUNNING (canonical35 focus passed);8261
+post-metadata146 focus then full both719/math/visual/CTest RUNNING. Native542/
+external229 tasks and metadata rebuild pass without warnings. Initial146 exact
+69PASS/four knownFAIL per renderer; model29/29. Exact source mapping preserves
+all29 controls/five malformed inputs, changing only the one diagnostic oracle
+to exact encoder refusal.109 restriction sentence removed after canonical passes.
+Four native binaries/two source files frozen by95074; external full gate will
+freeze319 artifacts plus three sources. No further builds/code edits until gates
+finish. Only109 runtime/test and corresponding demo/evidence edits are pending;
+closure039/043/045/103/148 already committed CNAfe59ea861/demosd566696.90/65.
+
 XML/content final74592 COMPLETE0:CTest684PASS/48 unchangedSKIP/three disabled,
 887.44s;735 registered/732 enabled and319 frozen hashes exact. Both719 sweeps,
 both95 math,six zero-pixel references,native10791 and Sharp18158 gates complete.
