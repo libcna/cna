@@ -55,6 +55,7 @@
 #include "System/Decimal.hpp"
 #endif
 #include "System/FormatException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NullReferenceException.hpp"
 #include "System/OverflowException.hpp"
 #include "System/TimeSpan.hpp"
@@ -74,6 +75,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             std::unordered_map<System::Type, ContentTypeSerializerBase*> byType;
             std::unordered_map<std::type_index, ContentTypeSerializerBase*> byCarrier;
             std::unordered_map<std::string, ContentTypeSerializerBase*> byName;
+            std::unordered_map<std::string, ContentTypeSerializerBase*> byAlias;
             std::unordered_set<std::string> knownNames;
             bool builtInsRegistered = false;
         };
@@ -82,6 +84,22 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         {
             static Registry registry;
             return registry;
+        }
+
+        // Once an XML spelling has resolved to a canonical type identity, do not resolve
+        // that identity through an unrelated shortcut again. Array spellings can still be
+        // registered aliases, so retain that fallback when no full type name exists.
+        ContentTypeSerializerBase* FindCanonicalTypeSerializer(const std::string& typeName) noexcept
+        {
+            Registry& registry = TheRegistry();
+            std::lock_guard<std::mutex> lock(registry.mutex);
+            const std::string canonical = IntermediateSerializer::CanonicalTypeName(typeName);
+            if (const auto found = registry.byName.find(canonical); found != registry.byName.end())
+            {
+                return found->second;
+            }
+            const auto alias = registry.byAlias.find(canonical);
+            return alias == registry.byAlias.end() ? nullptr : alias->second;
         }
 
         constexpr std::string_view kWhitespace = " \t\n\r";
@@ -963,14 +981,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         {
             return byCarrier;
         }
-        return FindTypeSerializer(value.StableType());
+        return FindCanonicalTypeSerializer(value.StableType());
     }
 
     ContentTypeSerializerBase* IntermediateSerializer::FindTypeSerializer(const std::string& typeName) noexcept
     {
         Registry& registry = TheRegistry();
         std::lock_guard<std::mutex> lock(registry.mutex);
-        const auto found = registry.byName.find(CanonicalTypeName(typeName));
+        const std::string canonical = CanonicalTypeName(typeName);
+        if (const auto alias = registry.byAlias.find(canonical); alias != registry.byAlias.end())
+        {
+            return alias->second;
+        }
+        const auto found = registry.byName.find(canonical);
         return found == registry.byName.end() ? nullptr : found->second;
     }
 
@@ -985,22 +1008,51 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             return *existing->second;
         }
         ContentTypeSerializerBase* raw = serializer.get();
+        const std::string canonical = registerName ? CanonicalTypeName(raw->TargetTypeName()) : std::string{};
+        std::vector<std::string> aliases;
+        if (registerName && !raw->getXmlTypeNameProperty().empty())
+        {
+            aliases.push_back(raw->getXmlTypeNameProperty());
+        }
+        for (const std::string& name : additionalNames)
+        {
+            aliases.push_back(CanonicalTypeName(name));
+        }
+        const auto conflict = [&](const std::string& name, const char* kind,
+                                  const ContentTypeSerializerBase& existing) {
+            throw System::InvalidOperationException(
+                "Intermediate ContentTypeSerializer for '" + raw->TargetTypeName() +
+                "' conflicts with existing handler '" + existing.TargetTypeName() +
+                "' for " + kind + " '" + name + "'.");
+        };
+        // XNA gives explicit shortcuts priority over full names in either registration
+        // order. Reject an already-owned alias, not a valid alias/full-name overlap.
+        // Validate everything before publishing ownership or changing any lookup map.
+        if (registerName)
+        {
+            if (const auto found = registry.byName.find(canonical); found != registry.byName.end())
+            {
+                conflict(canonical, "type name", *found->second);
+            }
+        }
+        for (const std::string& name : aliases)
+        {
+            if (const auto found = registry.byAlias.find(name); found != registry.byAlias.end())
+            {
+                conflict(name, "XmlTypeName or alias", *found->second);
+            }
+        }
         registry.owned.push_back(std::move(serializer));
         registry.byType.emplace(type, raw);
         registry.byCarrier.emplace(raw->CarrierType(), raw);
         if (registerName)
         {
-            const std::string canonical = CanonicalTypeName(raw->TargetTypeName());
             registry.byName.emplace(canonical, raw);
             registry.knownNames.insert(canonical);
-            if (!raw->getXmlTypeNameProperty().empty())
-            {
-                registry.byName.emplace(raw->getXmlTypeNameProperty(), raw);
-            }
         }
-        for (const std::string& name : additionalNames)
+        for (const std::string& name : aliases)
         {
-            registry.byName.emplace(CanonicalTypeName(name), raw);
+            registry.byAlias.emplace(name, raw);
         }
         return *raw;
     }
@@ -1028,7 +1080,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         Registry& registry = TheRegistry();
         std::lock_guard<std::mutex> lock(registry.mutex);
         const std::string canonical = CanonicalTypeName(typeName);
-        return registry.knownNames.count(canonical) > 0 || registry.byName.count(canonical) > 0;
+        return registry.knownNames.count(canonical) > 0 || registry.byName.count(canonical) > 0 ||
+               registry.byAlias.count(canonical) > 0;
     }
 
     std::string IntermediateSerializer::CanonicalTypeName(std::string_view name)
@@ -1142,7 +1195,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
         std::string SpellBase(const std::string& base, std::vector<std::pair<std::string, std::string>>& aliases)
         {
-            if (ContentTypeSerializerBase* known = IntermediateSerializer::FindTypeSerializer(base))
+            if (ContentTypeSerializerBase* known = FindCanonicalTypeSerializer(base))
             {
                 if (!known->getXmlTypeNameProperty().empty())
                 {
@@ -1296,7 +1349,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
     {
         EnsureBuiltInTypeSerializers();
         const std::string canonical = ResolveSpelled(spelledName, scope);
-        if (ContentTypeSerializerBase* found = FindTypeSerializer(canonical))
+        if (ContentTypeSerializerBase* found = FindCanonicalTypeSerializer(canonical))
         {
             return *found;
         }

@@ -166,11 +166,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
          * @brief Registers a serializer under its target type, its .NET full name, its XML
          *        shortcut name and any additional names.
          *
+         * Explicit shortcuts/aliases take precedence over full type names. Reusing an
+         * alias already owned by another serializer is rejected before registry mutation.
+         * Registering an already-known target type returns its original serializer.
+         *
          * @param serializer The serializer; ownership passes to the registry.
          * @param additionalNames Further names that resolve to it.
          * @param registerName False to register by type only (a reference wrapper of a value type
          *        must not shadow the value type's name).
          * @return The registered instance.
+         * @throws System::InvalidOperationException when an alias or full type name conflicts
+         *         with another registration (an alias/full-name overlap is permitted).
          */
         CNAEXT static ContentTypeSerializerBase& RegisterTypeSerializer(std::unique_ptr<ContentTypeSerializerBase> serializer,
                                                                         std::vector<std::string> additionalNames = {},
@@ -326,7 +332,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             {
                 return Unbox<T>(value);
             }
-            if (ContentTypeSerializerBase* actual = IntermediateSerializer::FindTypeSerializer(value.StableType()))
+            if (ContentTypeSerializerBase* actual = IntermediateSerializer::FindTypeSerializer(value))
             {
                 if (auto typed = std::dynamic_pointer_cast<T>(actual->AsObject(value)))
                 {
