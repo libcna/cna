@@ -11,7 +11,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 Phase C completion / Phase D repair. CNA runtime031693a9f(components141–143),
 b086814f9(launch144); latest completed external checkpoint1ad0a3916(Color132),
-demo markers e7eafac; latest evidencecf5bef5. All155 IDs retained:58 FINAL/97 PENDING:
+demo markers e7eafac; latest evidencef3190f8. All155 IDs retained:58 FINAL/97 PENDING:
 26 runtime findings,one verified duplicate,23 documentation corrections,seven
 already fixed before campaign,one demonstrated demo-expectation defect.
 
@@ -27,10 +27,17 @@ Evidence ../cna-demos/docs/repair-evidence/issue-132/CHECKPOINT.md. Complete1128
 demo-status delta50,current-HEAD campaign delta48. External Color freeze RELEASED.
 Owner-reserved131 remains open; outside-entry ray method/exception untouched.
 
-ACTIVE NEXT: lifecycle141–144 external build against031693a9f/b086814f9. First
-correct three adjacent genuine-backed demo oracles, preserving all check calls.
-Then build external, actual C ABI smokes +20 focused scenarios per renderer; only
-remove four knownIssue markers after focusedPASS. Prepared lifecycle math/full
+ACTIVE NEXT: lifecycle141–144 external build89883 RUNNING,--parallel2, against
+031693a9f/b086814f9. Three adjacent genuine-backed demo oracles corrected; exact
+source assertion-call counts retained4/20/15. Four original knownIssue markers
+still present. Actual libraries linked at steps13/34 and separately SHA256-frozen;
+strict real C ABI RuntimeComponentsSmoke,RuntimeGameSmoke,ComponentCDisposalProbe
+allPASS (independent11/11,previousfour failures); both library hashes unchanged.
+Next finish remaining demo translation units, then20 focused scenarios per renderer; only
+remove four knownIssue markers after focusedPASS. Rebuild those marker changes
+BEFORE freezing all three lifecycle binaries and applying any storage/Sharp runtime
+fix; a marker rebuild after dependency edits would contaminate this checkpoint.
+Prepared lifecycle math/full
 comparators admit48 math changes +four game changes=52, no other differences.
 Do not apply storage/Sharp runtime fixes before lifecycle external build is frozen.
 
@@ -57,11 +64,12 @@ exact comparators admit only48 cumulative changes(two Color demos additional).
 
 COMMITTED CNA: component root-cause batch031693a9f and launch batchb086814f9,
 including matching regressions and C contracts/smokes. All four matrix rows now
-FIXED_PENDING_REGRESSION; no lifecycle external validation/closure yet.
+FIXED_PENDING_REGRESSION; actual C ABI smokes pass, full external closure pending.
 Status commitc01e04275; lifecycle evidence8b38d2a, storage sharing edges2129f3f.
 Latest triage commit25a1b8ad3, title evidencecf5bef5. UNCOMMITTED: new native151
-StorageContainerLifetimeTests.cpp plus storage evidence/handoff updates; no runtime
-production changes. Its standalone strict build passes, one live control passes,
+StorageContainerLifetimeTests.cpp, TitleContainerPathTests.cpp, Sharp FileStreamEofTests.cpp, three adjacent demo
+oracle corrections and lifecycle evidence/matrix/handoff updates; no storage runtime
+production changes. The storage standalone strict build passes, one live control passes,
 two disposed-path regressions fail as intended(5ms). Not rebuilt into CnaTests yet.
 Pre-fix standalone57total39PASS/18 intendedFAIL/zero skips907ms.
 First repaired native76/76 including19 Game controls; initial three warnings exactly
@@ -75,35 +83,36 @@ extra Wall/Wextra/Werror. Native broad consumer checkpoint COMPLETE:1412total,
 capability skips10.789s. Native binary/DSO hashes reverified, that freeze released.
 Actual process launch probe8checks: old verified external DSO five failures, repaired
 native8/8PASS. Changed actual C adapter and both strict C17 smokes compile separately
-without touching frozen external DSOs; C runtime still pending.
+without touching then-frozen external DSOs; actual C runtime now passes as above.
 NEW companion: owned property callback can remove the last reference before the
 derived hook returns. New all-four-properties test fails while prior57pass
 (repair-property-hook-ownership-before*,1.377s). Local private ownership helper now
 pins through all four setters and Dispose; no public layout/vtable change. Final
 77-test focus and58-test sanitizer pass; final broad consumers also pass as above.
-Genuine lifecycle34+8+3+6 checks pass; current actual C ABI disposal11checks/seven passes/
-four failures. Existing Game19/19 controls pass. Derived explicit disposal always
+Genuine lifecycle34+8+3+6 checks pass; pre-fix actual C ABI disposal11checks/seven passes/
+four failures now becomes11/11PASS. Existing Game19/19 controls pass. Derived explicit disposal always
 invokes UnloadContent before event, even without Initialize; false path silent.
 Collection Clear uses live-index iteration, not snapshot/fail-fast. Game.Dispose
 requires an owning original snapshot. Keep owned references alive across the entire
 virtual component Dispose, nested removal, exceptions and re-registration.
 See ../cna-demos/docs/repair-evidence/lifecycle/ and prepared sanitizer builder.
-Important adjacent demo-oracle correction pending for lifecycle: drawable_game_component
-currently expects one UnloadContent after two explicit Dispose calls. Genuine derived
-disposal and IL require two. Preserve check count, change exact oracle with evidence
-only when preparing that external batch; current frozen Color binary retains old
-runtime/oracle. Do not accidentally include lifecycle edits in a Color rebuild.
-Second adjacent demo-oracle correction pending: standalone/c_api.game.launch_parameters/main.c
-currently expects bare/equals-only flags dropped and duplicate Add SUCCESS. Genuine
-retains both as empty values and duplicate maps INVALID_ARGUMENT; sorted name/count
-expectations must expand from3 to5 initially (6 after Alpha), preserving checks and
-UTF8/guard/atomicity controls. Native RuntimeGameSmoke's corresponding old count/name
-expectations are now corrected too; latest strict compile passes, actual C runtime pending.
-Third adjacent correction: c_api.game.component_members expects one callback/event
-after two explicit disposals. Genuine requires two; preserve the existing assertion
-and single drawable-disposal check. No external demo-source changes yet.
+Three adjacent demo oracles are now corrected against genuine evidence, awaiting
+the focused/full external run. drawable_game_component requires two UnloadContent
+calls after two explicit Dispose calls (four assertions retained).
+standalone/c_api.game.launch_parameters/main.c retains bare/equals-only flags as
+empty values and requires duplicate Add INVALID_ARGUMENT; sorted names/counts
+expand from3 to5 initially (6 after Alpha). All15 assertions and UTF8/guard/atomicity
+controls remain. Native RuntimeGameSmoke now passes the actual C ABI too.
+c_api.game.component_members requires two callbacks/events after two disposals;
+all20 assertions and the single drawable-disposal check remain. No primary
+knownIssue marker has yet been removed.
 
 Next storage056/151/152 confirmed at correct lower layer, no production edits.
+Title145 additionally has four native regression tests, strict warning-free build:
+two controls pass/two exact argument/directory groups fail(217ms), production unchanged.
+Actual FileShare platform policy question sent asynchronously: Windows reference
+25 opens/119 refusals versus Unix81/63. No default or oracle relaxation applied;
+continue independent repairs while awaiting that compatibility decision.
 Genuine EOF13/13 versus seven native failures; genuine storage172/172 versus
 native170checks29PASS/141FAIL (two FileStream share checks cannot compile yet).
 Native disproves share enforcement and disposed guards, including real mutations
@@ -123,8 +132,15 @@ failures/zero skips. Original Yacht SOAP fixture on private loopback stopped and
 temporary executable/config removed. Sharp HEAD remainsf2aecfef. AFTER baseline,
 uncommitted native FileStreamEofTests.cpp added: warning-free IO-target build19156,
 all three expectedFAIL on unchanged production. No dependency runtime edits.
-Linux FileStream pre-layout576/8,Stream8/8,copy/move bothfalse; Win64 layout probe
-being compiled/run privately. Color CTest55689 remains frozen; no SystemLink overlap.
+Linux FileStream pre-layout576/8,Stream8/8,copy/move bothfalse; MinGW Win64 static
+layout536/8,Stream8/8,warning-free. Existing32-bit Wine prefix rejected Win64 EXE;
+failure retained, no Win64 runtime claim/new prefix. Isolated EOF candidate now
+passes3/3 new and723/723 total IO tests(2.233s); corrected static linkage uses the
+actual IO target dependencies. Initial missing File symbols/missing compile database
+harness failures retained. Candidate clears only benign EOF/fail state, preserving
+badbit/non-EOF failures. Isolated151 shared-guard candidate passes3/3 new and17/17
+all native storage controls(10ms), no API/layout change. Both production files
+remain unchanged until lifecycle external build is complete/frozen. Color complete.
 Never overlap the campaign's SystemLink suites. Sharp Runtime rules/StandingApprovals
 read; at most TWO Sharp jobs, layout/migration/full-gate requirements apply.
 145 newly CONFIRMED_OPEN: genuine title-path20/20; native6PASS/14FAIL. Historical
