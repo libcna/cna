@@ -9,6 +9,50 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST087 CANDIDATE (09:33 UTC): actual ContentReader TU plus28 native regression
+cases PASS28/28, normal and ASan/UBSan/leak instrumentation, exact audits errors[].
+Before10PASS/18FAIL; no prior passing control regressed. The full candidate unifies
+typed/raw invocation, exact existing-reference identity/value rejection, null and
+explicit-reader dispatch; preserves concrete disposable capability through erasure.
+Serialized reference metadata is shared with collection element dispatch, not
+Sharp's stub Type.IsValueType. Native copies of both probe files are installed.
+One old native value-struct expectation is corrected from success to exact
+InvalidOperation after payload consumption using measured genuine18 evidence.
+Existing C++ by-value reference wrapper semantics remain explicit in
+plans/plan_bindings_upstream.md;011 ownership is not claimed fixed.
+Canonical whole build77714 RUNNING(2), repair-content-dispatch-native-build.log.
+DO NOT edit compiled native source during this build. External CTest71529 RUNNING(1)
+on frozen043/103 binaries; no overlapping SystemLink suite. All runtime/tests remain
+uncommitted until canonical validation; demos evidence commit4ff4fd4 plus a small
+sanitizer/timestamp documentation follow-up. Next freeze native outputs after77714,
+run28 focus and the full module/consumer gates with the one explicit old-test-name
+mapping, and finish the independent external CTest/hash audit.74/81 unchanged.
+
+LATEST STATE (09:28 UTC): CNA572458ec6, demos1a139aa;74 FINAL/81 PENDING.
+Full043 external job8777 COMPLETE1: SOFTWARE620PASS/48FAIL/48SKIP/3manual;
+OPENGLES3659PASS/50FAIL/7SKIP/3manual. Exactly63 intended status improvements
+against campaign start, but both retain the C API RootDirectory assertion delta
+below. It is NOT waived. Both95 math, metadata/tools and six exact visuals passed.
+Serial external CTest71529 RUNNING(1), with319 frozen-artifact hashes before/after
+and an exact735-outcome audit against048. Last accepted full checkpoint stays048.
+External artifacts remain FROZEN; new087 source is not in these binaries.
+
+Independent087 work: new permanent ContentValueDispatchTests.cpp runs nine native
+value controls against the existing genuine18-check oracle:fivePASS/fourFAIL.
+Combined28 native controls give10PASS/18FAIL, all previous19 outcomes unchanged
+(repair-content-dispatch-values-audit.json errors[]). Three uncommitted production
+files now preserve shared-pointer IDisposable capability through type erasure;
+this is only a PARTIAL candidate, not a fix/closure of087. Manager fallback011,
+existing-instance identity and explicit/value dispatch are not repaired yet.
+Initial focused compilation applied test-only Wextra/Werror to the production TU
+and stopped on pre-existing unused renderer parameters. Failed log is retained.
+Corrected helper compiles production with its exact compile_commands policy and
+new regression TUs with Wall/Wextra/Werror; job72799 COMPLETE0, exact28-outcome
+comparison accepts ONLY the two erased/shared callback improvements. No canonical
+build or sanitizer result for087 yet. Next finish087 invocation semantics with
+genuine53+18 evidence, preserve C API ownership, and keep the running external
+checkpoint isolated from the new source. No pushes/merges.
+
 LATEST EXTERNAL STATE (09:08 UTC; supersedes prior build/focus jobs): full build
 54284 COMPLETE0,972 scheduled steps, warning-free. Focus99460 COMPLETE0:73 demos
 per renderer,63PASS/ten unchangedFAIL each; exact146 comparisons errors[]. Original
