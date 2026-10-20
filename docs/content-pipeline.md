@@ -927,6 +927,26 @@ indeterminate entries remain untouched. Non-quiet builds report removals and sor
 diagnostics. Normal success/handled failure still cleans its own tree immediately through RAII;
 after a crash, the released lease makes the tree eligible once the age threshold expires.
 
+Updated tools also share the empty `.cna-staging.lock` file in that parent. Its OS lock
+(`flock` on POSIX, synchronous `LockFileEx` on Windows) covers reservation initialization,
+scavenger inspection/removal and owner teardown, not the content build itself. This prevents
+other processes and threads from observing partially published or removed ownership metadata.
+The constructor invokes the already-locked scavenger directly; it never recursively waits on
+another independently opened parent lock. Per-run leases still protect genuinely active builds.
+
+The parent coordination file is intentionally persistent, singly linked and empty. Tools never
+delete or replace it: doing so could leave a waiting process locking a different file identity
+from new arrivals. A nonempty, linked, symlinked, non-regular or unopenable coordination file
+refuses reservation and produces a diagnostic instead of allowing a scavenger to proceed.
+On POSIX it must belong to the current user. An owner unable to acquire the parent lock during
+teardown leaves its intact tree for later conservative scavenging rather than removing metadata
+without synchronization. Normal cleanup therefore leaves this one housekeeping file in the
+staging parent, but no per-run tree. Remove a private staging parent only when all its users are
+known to have exited; deleting the coordination file while tools may be running is unsafe.
+Older tool binaries do not participate in this new coordination protocol; rebuild all cooperating
+tools to obtain the concurrency guarantee. No diagnostic for persistently malformed candidate
+metadata is suppressed by this protocol.
+
 Workers read the frozen graph and dependency fingerprint snapshot and return node-local outcomes.
 Only the coordinator owns output reservations, graph state, effective fingerprint integration,
 manifest mutation, counters, and stdout/stderr. Ready lists and result integration use stable

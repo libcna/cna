@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -9,6 +10,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -395,6 +397,127 @@ TEST(ContentPipelineCliTest, StagingScavengingIsBoundedAndNormalLifetimeCleansUp
             normalPath / CNA::Tools::ContentStagingLeaseFile));
     }
     EXPECT_FALSE(std::filesystem::exists(normalPath));
+}
+
+TEST(ContentPipelineCliTest, ConcurrentStagingLifecyclesPreserveMetadataAndExactCleanup)
+{
+    ScratchDirectory scratch("staging_concurrent_lifecycle");
+    std::atomic<bool> ready{false};
+    std::atomic<unsigned> owners{0u}, finished{0u}, errors{0u}, diagnostics{0u}, removals{0u};
+    const auto observe = [&](const CNA::Tools::ContentStagingScavengeResult& result)
+    {
+        diagnostics += static_cast<unsigned>(result.diagnostics.size());
+        removals += static_cast<unsigned>(result.removedDirectories);
+    };
+    const auto work = [&](const std::filesystem::path& parent)
+    {
+        while (!ready.load()) { std::this_thread::yield(); }
+        for (unsigned index = 0; index < 500u; ++index)
+        {
+            try
+            {
+                CNA::Tools::ContentBuildStagingDirectory staging(parent);
+                observe(staging.ScavengeResult());
+                if (!std::filesystem::is_regular_file(
+                        staging.Path() / CNA::Tools::ContentStagingMetadataFile) ||
+                    !std::filesystem::is_regular_file(
+                        staging.Path() / CNA::Tools::ContentStagingLeaseFile))
+                {
+                    ++errors;
+                }
+                ++owners;
+            }
+            catch (...) { ++errors; }
+        }
+        ++finished;
+    };
+    std::thread first(work, scratch.Path());
+    std::thread second(work, scratch.Path() / ".");
+    ready = true;
+    unsigned scans = 0u;
+    do
+    {
+        observe(CNA::Tools::ScavengeContentStagingDirectories(scratch.Path()));
+        ++scans;
+    } while (finished.load() != 2u);
+    first.join();
+    second.join();
+    EXPECT_EQ(owners.load(), 1000u);
+    EXPECT_EQ(errors.load(), 0u);
+    EXPECT_EQ(diagnostics.load(), 0u);
+    EXPECT_EQ(removals.load(), 0u);
+    EXPECT_GT(scans, 0u);
+    std::vector<std::string> entries;
+    for (const auto& entry : std::filesystem::directory_iterator(scratch.Path()))
+    {
+        entries.push_back(entry.path().filename().string());
+    }
+    EXPECT_EQ(entries, (std::vector<std::string>{CNA::Tools::ContentStagingParentLeaseFile}));
+    const auto marker = scratch.Path() / CNA::Tools::ContentStagingParentLeaseFile;
+    EXPECT_TRUE(std::filesystem::is_regular_file(std::filesystem::symlink_status(marker)));
+    EXPECT_EQ(std::filesystem::file_size(marker), 0u);
+    EXPECT_EQ(std::filesystem::hard_link_count(marker), 1u);
+}
+
+TEST(ContentPipelineCliTest, StagingParentLeaseRefusesUnsafeObjectsWithoutScanning)
+{
+    ScratchDirectory scratch("staging_unsafe_parent_lease");
+    const auto parent = scratch.Path() / "parent";
+    std::filesystem::create_directory(parent);
+    const auto marker = parent / CNA::Tools::ContentStagingParentLeaseFile;
+    const auto outside = scratch.Path() / "keep";
+    WriteText(outside, "authored");
+    const auto refuses = [&]
+    {
+        const auto result = CNA::Tools::ScavengeContentStagingDirectories(parent);
+        EXPECT_EQ(result.scannedEntries, 0u);
+        EXPECT_EQ(result.removedDirectories, 0u);
+        EXPECT_FALSE(result.diagnostics.empty());
+        EXPECT_THROW((void)CNA::Tools::ContentBuildStagingDirectory(parent), std::runtime_error);
+    };
+    WriteText(marker, "not an empty coordination file");
+    refuses();
+    EXPECT_FALSE(ReadBytes(marker).empty());
+    std::filesystem::remove(marker);
+    std::filesystem::create_directory(marker);
+    refuses();
+    EXPECT_TRUE(std::filesystem::is_directory(marker));
+    std::filesystem::remove(marker);
+    std::filesystem::create_symlink(outside, marker);
+    refuses();
+    EXPECT_TRUE(std::filesystem::is_symlink(marker));
+    EXPECT_EQ(ReadBytes(outside), (std::vector<std::uint8_t>{'a','u','t','h','o','r','e','d'}));
+    std::filesystem::remove(marker);
+    WriteText(outside, "");
+    std::filesystem::create_hard_link(outside, marker);
+    refuses();
+    EXPECT_EQ(std::filesystem::hard_link_count(outside), 2u);
+}
+
+TEST(ContentPipelineCliTest, FailedLifecycleLockPreservesAnIntactAbandonedStagingTree)
+{
+    ScratchDirectory scratch("staging_failed_destructor_lock");
+    const std::int64_t now = 4'000'000;
+    std::filesystem::path owned;
+    std::vector<std::uint8_t> metadata;
+    const auto marker = scratch.Path() / CNA::Tools::ContentStagingParentLeaseFile;
+    {
+        CNA::Tools::ContentBuildStagingDirectory staging(
+            scratch.Path(), now - CNA::Tools::ContentStagingMinimumAgeSeconds - 1);
+        owned = staging.Path();
+        metadata = ReadBytes(owned / CNA::Tools::ContentStagingMetadataFile);
+        WriteText(marker, "unsafe");
+    }
+    EXPECT_TRUE(std::filesystem::is_directory(owned));
+    EXPECT_EQ(ReadBytes(owned / CNA::Tools::ContentStagingMetadataFile), metadata);
+    EXPECT_TRUE(std::filesystem::is_regular_file(owned / CNA::Tools::ContentStagingLeaseFile));
+    EXPECT_EQ(CNA::Tools::ScavengeContentStagingDirectories(scratch.Path(), now).removedDirectories, 0u);
+    WriteText(marker, "");
+    const auto repaired = CNA::Tools::ScavengeContentStagingDirectories(scratch.Path(), now);
+    EXPECT_TRUE(repaired.diagnostics.empty());
+    EXPECT_EQ(repaired.removedDirectories, 1u);
+    EXPECT_FALSE(std::filesystem::exists(owned));
+    EXPECT_TRUE(std::filesystem::is_regular_file(marker));
 }
 
 TEST(ContentPipelineCliTest, SingleAssetBuildPublishesThePipelineBytesAtomically)

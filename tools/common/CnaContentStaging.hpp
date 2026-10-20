@@ -33,6 +33,8 @@ namespace CNA::Tools
         "cna_content_stage_v1_";
     inline constexpr const char* ContentStagingMetadataFile = "owner.cna-stage";
     inline constexpr const char* ContentStagingLeaseFile = "lease.cna-stage";
+    /** @brief Persistent empty parent lock; never unlink it while staging users may exist. */
+    inline constexpr const char* ContentStagingParentLeaseFile = ".cna-staging.lock";
     /** @brief Persistent per-output-root lease file shared by build and clean operations. */
     inline constexpr const char* ContentOutputLeaseFile = ".cna-content.lock";
     inline constexpr std::int64_t ContentStagingMinimumAgeSeconds = 24 * 60 * 60;
@@ -191,6 +193,111 @@ namespace CNA::Tools
 #endif
         }
 
+        class ParentLifecycleLock final
+        {
+        public:
+            /** @brief Creates an initially unheld parent lifecycle lock. */
+            ParentLifecycleLock() = default;
+            /** @brief Releases the OS lock without deleting its shared identity. */
+            ~ParentLifecycleLock() { Close(); }
+            ParentLifecycleLock(const ParentLifecycleLock&) = delete;
+            ParentLifecycleLock& operator=(const ParentLifecycleLock&) = delete;
+
+            /**
+             * @brief Waits for exclusive access to staging lifecycle transitions.
+             * @param parent Existing staging parent, shared by owners and scavengers.
+             * @param reason Receives a diagnostic when the lock cannot be acquired safely.
+             * @return True while this object holds the parent lock.
+             */
+            bool Acquire(const std::filesystem::path& parent, std::string& reason)
+            {
+                Close();
+                const auto path = parent / ContentStagingParentLeaseFile;
+                std::error_code error;
+                const auto status = std::filesystem::symlink_status(path, error);
+                if ((error && error != std::errc::no_such_file_or_directory) ||
+                    (!error && status.type() != std::filesystem::file_type::not_found &&
+                     (!std::filesystem::is_regular_file(status) || !OwnedByCurrentUser(path))))
+                {
+                    reason = "staging parent lease is not a safe current-user regular file";
+                    return false;
+                }
+#if defined(_WIN32)
+                handle_ = ::CreateFileW(
+                    path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+                    FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+                BY_HANDLE_FILE_INFORMATION info{};
+                if (handle_ == INVALID_HANDLE_VALUE || ::GetFileType(handle_) != FILE_TYPE_DISK ||
+                    !::GetFileInformationByHandle(handle_, &info) ||
+                    (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+                    info.nNumberOfLinks != 1u || info.nFileSizeHigh != 0u || info.nFileSizeLow != 0u)
+                {
+                    reason = "staging parent lease cannot be opened as a single empty regular file";
+                    Close();
+                    return false;
+                }
+                OVERLAPPED position{};
+                if (!::LockFileEx(handle_, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &position))
+                {
+                    reason = "cannot lock the staging parent lease";
+                    Close();
+                    return false;
+                }
+#else
+                int flags = O_RDWR | O_CREAT | O_NONBLOCK;
+#ifdef O_NOFOLLOW
+                flags |= O_NOFOLLOW;
+#endif
+#ifdef O_CLOEXEC
+                flags |= O_CLOEXEC;
+#endif
+                handle_ = ::open(path.c_str(), flags, 0600);
+                struct stat info{};
+                if (handle_ < 0 || ::fstat(handle_, &info) != 0 || !S_ISREG(info.st_mode) ||
+                    info.st_uid != ::geteuid() || info.st_nlink != 1 || info.st_size != 0)
+                {
+                    reason = "staging parent lease cannot be opened as a single empty current-user regular file";
+                    Close();
+                    return false;
+                }
+                int locked;
+                do { locked = ::flock(handle_, LOCK_EX); }
+                while (locked != 0 && errno == EINTR);
+                if (locked != 0 || ::fstat(handle_, &info) != 0 || info.st_nlink != 1)
+                {
+                    reason = "cannot lock the staging parent lease";
+                    Close();
+                    return false;
+                }
+#endif
+                return true;
+            }
+
+        private:
+            void Close() noexcept
+            {
+#if defined(_WIN32)
+                if (handle_ != INVALID_HANDLE_VALUE)
+                {
+                    ::CloseHandle(handle_);
+                    handle_ = INVALID_HANDLE_VALUE;
+                }
+#else
+                if (handle_ >= 0)
+                {
+                    ::close(handle_);
+                    handle_ = -1;
+                }
+#endif
+            }
+#if defined(_WIN32)
+            HANDLE handle_ = INVALID_HANDLE_VALUE;
+#else
+            int handle_ = -1;
+#endif
+        };
+
         class LeaseHandle
         {
         public:
@@ -312,6 +419,140 @@ namespace CNA::Tools
         };
     }
 
+    namespace ContentStagingDetail
+    {
+        inline ContentStagingScavengeResult ScavengeLocked(
+            const std::filesystem::path& parent,
+            const std::int64_t nowUnixSeconds = ContentStagingDetail::CurrentUnixSeconds(),
+            const std::int64_t minimumAgeSeconds = ContentStagingMinimumAgeSeconds,
+            const std::size_t maximumScannedEntries = ContentStagingMaximumScannedEntries,
+            const std::size_t maximumCandidates = ContentStagingMaximumCandidates)
+        {
+            ContentStagingScavengeResult result;
+            std::error_code error;
+            std::vector<std::filesystem::path> candidates;
+            std::filesystem::directory_iterator iterator(parent, error);
+            if (error)
+            {
+                result.diagnostics.push_back(
+                    "cannot inspect the staging parent: " + error.message());
+                return result;
+            }
+            const std::filesystem::directory_iterator end;
+            while (iterator != end)
+            {
+                if (result.scannedEntries == maximumScannedEntries)
+                {
+                    result.scanLimitReached = true;
+                    break;
+                }
+                const std::filesystem::directory_entry entry = *iterator;
+                iterator.increment(error);
+                if (error)
+                {
+                    result.diagnostics.push_back(
+                        "staging parent scan stopped safely: " + error.message());
+                    result.scanLimitReached = true;
+                    break;
+                }
+                ++result.scannedEntries;
+                if (!entry.path().filename().string().starts_with(ContentStagingDirectoryPrefix))
+                {
+                    continue;
+                }
+                if (candidates.size() == maximumCandidates)
+                {
+                    result.scanLimitReached = true;
+                    continue;
+                }
+                candidates.push_back(entry.path());
+            }
+            std::sort(candidates.begin(), candidates.end());
+
+            for (const std::filesystem::path& candidate : candidates)
+            {
+                ++result.matchingCandidates;
+                const std::string name = candidate.filename().string();
+                ContentStagingDetail::CandidateIdentity identity;
+                std::error_code statusError;
+                const std::filesystem::file_status status =
+                    std::filesystem::symlink_status(candidate, statusError);
+                if (statusError || !std::filesystem::is_directory(status) ||
+                    std::filesystem::is_symlink(status) ||
+                    !ContentStagingDetail::ParseCandidateName(name, identity) ||
+                    !ContentStagingDetail::OwnedByCurrentUser(candidate))
+                {
+                    ++result.conservativeSkips;
+                    result.diagnostics.push_back(
+                        name + ": not a validated current-user staging directory");
+                    continue;
+                }
+
+                std::int64_t createdUnixSeconds = 0;
+                std::string reason;
+                if (!ContentStagingDetail::ReadMetadata(
+                        candidate, name, identity, createdUnixSeconds, reason))
+                {
+                    ++result.conservativeSkips;
+                    result.diagnostics.push_back(name + ": " + reason);
+                    continue;
+                }
+                if (createdUnixSeconds > nowUnixSeconds ||
+                    nowUnixSeconds - createdUnixSeconds < minimumAgeSeconds)
+                {
+                    ++result.recentDirectories;
+                    continue;
+                }
+
+                ContentStagingDetail::LeaseHandle claim;
+                const auto claimResult = claim.ClaimExisting(
+                    candidate / ContentStagingLeaseFile, reason);
+                if (claimResult == ContentStagingDetail::LeaseHandle::ClaimResult::Active)
+                {
+                    ++result.activeDirectories;
+                    continue;
+                }
+                if (claimResult == ContentStagingDetail::LeaseHandle::ClaimResult::Invalid)
+                {
+                    ++result.conservativeSkips;
+                    result.diagnostics.push_back(name + ": " + reason);
+                    continue;
+                }
+    #if defined(_WIN32)
+                // Windows refuses to remove the lease while our exclusive handle is open. No build
+                // can adopt this old unique session directory, so closing after the exclusive claim
+                // does not create an active-owner ambiguity.
+                claim.Close();
+    #endif
+                std::filesystem::remove_all(candidate, error);
+                if (error)
+                {
+                    ++result.conservativeSkips;
+                    result.diagnostics.push_back(
+                        name + ": removal failed: " + error.message());
+                    error.clear();
+                    continue;
+                }
+                ++result.removedDirectories;
+            }
+            if (result.scanLimitReached)
+            {
+                result.diagnostics.push_back("staging scan limit reached; remaining entries were left untouched");
+            }
+            std::sort(result.diagnostics.begin(), result.diagnostics.end());
+            return result;
+        }
+    }
+
+    /**
+     * @brief Scans staging trees while excluding concurrent lifecycle transitions.
+     * @param parent Existing staging parent shared with build owners.
+     * @param nowUnixSeconds Current time used for age checks.
+     * @param minimumAgeSeconds Minimum age of an abandoned removable tree.
+     * @param maximumScannedEntries Maximum number of directory entries inspected.
+     * @param maximumCandidates Maximum number of staging candidates inspected.
+     * @return Removal counts and conservative diagnostics; unsafe locks prevent scanning.
+     */
     inline ContentStagingScavengeResult ScavengeContentStagingDirectories(
         const std::filesystem::path& parent,
         const std::int64_t nowUnixSeconds = ContentStagingDetail::CurrentUnixSeconds(),
@@ -319,119 +560,16 @@ namespace CNA::Tools
         const std::size_t maximumScannedEntries = ContentStagingMaximumScannedEntries,
         const std::size_t maximumCandidates = ContentStagingMaximumCandidates)
     {
-        ContentStagingScavengeResult result;
-        std::error_code error;
-        std::vector<std::filesystem::path> candidates;
-        std::filesystem::directory_iterator iterator(parent, error);
-        if (error)
+        ContentStagingDetail::ParentLifecycleLock lifecycle;
+        std::string reason;
+        if (!lifecycle.Acquire(parent, reason))
         {
-            result.diagnostics.push_back(
-                "cannot inspect the staging parent: " + error.message());
+            ContentStagingScavengeResult result;
+            result.diagnostics.push_back(std::move(reason));
             return result;
         }
-        const std::filesystem::directory_iterator end;
-        while (iterator != end)
-        {
-            if (result.scannedEntries == maximumScannedEntries)
-            {
-                result.scanLimitReached = true;
-                break;
-            }
-            const std::filesystem::directory_entry entry = *iterator;
-            iterator.increment(error);
-            if (error)
-            {
-                result.diagnostics.push_back(
-                    "staging parent scan stopped safely: " + error.message());
-                result.scanLimitReached = true;
-                break;
-            }
-            ++result.scannedEntries;
-            if (!entry.path().filename().string().starts_with(ContentStagingDirectoryPrefix))
-            {
-                continue;
-            }
-            if (candidates.size() == maximumCandidates)
-            {
-                result.scanLimitReached = true;
-                continue;
-            }
-            candidates.push_back(entry.path());
-        }
-        std::sort(candidates.begin(), candidates.end());
-
-        for (const std::filesystem::path& candidate : candidates)
-        {
-            ++result.matchingCandidates;
-            const std::string name = candidate.filename().string();
-            ContentStagingDetail::CandidateIdentity identity;
-            std::error_code statusError;
-            const std::filesystem::file_status status =
-                std::filesystem::symlink_status(candidate, statusError);
-            if (statusError || !std::filesystem::is_directory(status) ||
-                std::filesystem::is_symlink(status) ||
-                !ContentStagingDetail::ParseCandidateName(name, identity) ||
-                !ContentStagingDetail::OwnedByCurrentUser(candidate))
-            {
-                ++result.conservativeSkips;
-                result.diagnostics.push_back(
-                    name + ": not a validated current-user staging directory");
-                continue;
-            }
-
-            std::int64_t createdUnixSeconds = 0;
-            std::string reason;
-            if (!ContentStagingDetail::ReadMetadata(
-                    candidate, name, identity, createdUnixSeconds, reason))
-            {
-                ++result.conservativeSkips;
-                result.diagnostics.push_back(name + ": " + reason);
-                continue;
-            }
-            if (createdUnixSeconds > nowUnixSeconds ||
-                nowUnixSeconds - createdUnixSeconds < minimumAgeSeconds)
-            {
-                ++result.recentDirectories;
-                continue;
-            }
-
-            ContentStagingDetail::LeaseHandle claim;
-            const auto claimResult = claim.ClaimExisting(
-                candidate / ContentStagingLeaseFile, reason);
-            if (claimResult == ContentStagingDetail::LeaseHandle::ClaimResult::Active)
-            {
-                ++result.activeDirectories;
-                continue;
-            }
-            if (claimResult == ContentStagingDetail::LeaseHandle::ClaimResult::Invalid)
-            {
-                ++result.conservativeSkips;
-                result.diagnostics.push_back(name + ": " + reason);
-                continue;
-            }
-#if defined(_WIN32)
-            // Windows refuses to remove the lease while our exclusive handle is open. No build
-            // can adopt this old unique session directory, so closing after the exclusive claim
-            // does not create an active-owner ambiguity.
-            claim.Close();
-#endif
-            std::filesystem::remove_all(candidate, error);
-            if (error)
-            {
-                ++result.conservativeSkips;
-                result.diagnostics.push_back(
-                    name + ": removal failed: " + error.message());
-                error.clear();
-                continue;
-            }
-            ++result.removedDirectories;
-        }
-        if (result.scanLimitReached)
-        {
-            result.diagnostics.push_back("staging scan limit reached; remaining entries were left untouched");
-        }
-        std::sort(result.diagnostics.begin(), result.diagnostics.end());
-        return result;
+        return ContentStagingDetail::ScavengeLocked(
+            parent, nowUnixSeconds, minimumAgeSeconds, maximumScannedEntries, maximumCandidates);
     }
 
     class ContentBuildStagingDirectory final
@@ -476,7 +614,13 @@ namespace CNA::Tools
                 throw std::runtime_error(
                     "no content staging directory is available: " + error.message() + ".");
             }
-            scavengeResult_ = ScavengeContentStagingDirectories(parent, createdUnixSeconds);
+            ContentStagingDetail::ParentLifecycleLock lifecycle;
+            std::string lockReason;
+            if (!lifecycle.Acquire(parent, lockReason))
+            {
+                throw std::runtime_error(lockReason + ".");
+            }
+            scavengeResult_ = ContentStagingDetail::ScavengeLocked(parent, createdUnixSeconds);
             const std::string token = ContentStagingDetail::MakeToken(this);
             for (std::size_t attempt = 0u; attempt < 1024u; ++attempt)
             {
@@ -536,9 +680,20 @@ namespace CNA::Tools
 
         ~ContentBuildStagingDirectory()
         {
-            lease_.Close();
-            std::error_code ignored;
-            std::filesystem::remove_all(path_, ignored);
+            try
+            {
+                ContentStagingDetail::ParentLifecycleLock lifecycle;
+                std::string reason;
+                if (!lifecycle.Acquire(path_.parent_path(), reason)) { return; }
+                lease_.Close();
+                std::error_code ignored;
+                std::filesystem::remove_all(path_, ignored);
+            }
+            catch (...)
+            {
+                // Without the parent lock, preserve the valid abandoned tree for later
+                // scavenging instead of exposing partially removed metadata to another owner.
+            }
         }
 
         ContentBuildStagingDirectory(const ContentBuildStagingDirectory&) = delete;
