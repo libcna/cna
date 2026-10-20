@@ -9,6 +9,19 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+External8261 COMPLETE0:18 stages,CTest684PASS/48sameSKIP/three disabled964.43s;
+735 outcomes exact against XML,319 frozen artifacts/three sources exact.
+Both719/math95/six zero-pixel visuals/146 focus complete; independent
+repair-model-encoder-external-checkpoint-audit.json errors[]. External freeze
+released. Native86497 still live,already known root-capability permission failure;
+do not start new heavy work until it ends. Next correct ONLY native cached ccache
+base/launchers to /rv (external cache already correct),rebuild one-worker,
+record resulting binary hashes,then full unprivileged usernet gate10798.
+Prepared usernet driver expects old binary hashes: adapt only after validated
+cache rebuild,keep exact source and outcome assertions. Three109 source/test
+edits still uncommitted;90/65,no closure. Post-resume memory~16GiB available,
+Codex~373MiB RSS at latest check;no process stopped/restarted.
+
 OOM recovery at19:59 local: kernel killed Codex PID12082 with8,349,408KiB anonymous
 RSS (global OOM; cna-street requested the allocation). This identifies the victim
 and triggering allocation, not the entire causal memory breakdown. Resumed Codex
