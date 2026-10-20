@@ -9,6 +9,58 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST LIVE UPDATE (supersedes older ACTIVE paragraphs below): external storage
+regression3249 still RUNNING, frozen binaries unchanged. SOFTWARE719 complete:
+612PASS/56FAIL/48SKIP/three manual; GLES follows. Audit the strict comparator and
+finish isolated serial full CTest before closing056/145/151. Still62 FINAL/93 PENDING.
+
+UPDATE: SOFTWARE strict comparison is exact55 improvements/differences[].
+Sharp full final gate91010 COMPLETE18146/18146 across41,zero failures/skips;
+af1b0bea commits XML/LINQ repair, e0601cd2 separately commits watcher TEST barrier.
+The earlier invocation59482 omitted XNA_SAMPLES_ROOT and ended with five fixture
+skips; retained *-components-missing-fixtures.log. Final invocation uses supported
+XNA_SAMPLES_ROOT=/rv/data/development/github.com/libcna/sharp-runtime/build-probe/cna-repair-xna-samples.
+Final full summary retained Sharp build-probe/cna-repair-xml-linq-components-final.log.
+Both genuineFramework4 and.NET8 LINQ probes74/74. Demo evidence commit859b878.
+Sharp worktree clean; two independent watcher stress findings remain unresolved.
+Native content build2419 still RUNNING; corpus NUL/null-write checks strengthened
+from ANY_THROW to their measured exception categories. All external binaries stay
+frozen at the earlier storage revision until final CTest/hash audit. No push/merge.
+
+Native complete content baseline66506 COMPLETE exit1:504 tests/117 suites,
+497PASS/one existing XACT fixture SKIP/exactly six expected newly added failures,
+1306.990s. Four146 dictionary tests and two149 direct-null tests fail; no other
+failure. Reports repair-content-native-before*. Native freeze RELEASED. Prepared
+146/149 runtime patches now APPLIED with native tests and public contract docs;
+the historical golden manifest is unchanged, but its round-trip test now distinguishes
+NullReferenceException(value member) from ArgumentNullException(null root WRITE).
+Initial combined146 patch failed context ordering without changing files; applying
+its reviewed independent hunks succeeded. Native build2419 RUNNING, parallel1,
+repair-content-native-after-build.log. Do not rebuild the external demo tree.
+
+Sharp147 writer focus49/49 passes. First full gate failed an unchanged watcher
+barrier assertion; its test-only awaitEvent correction passes20/20 repetitions.
+The COMPLETE34-test watcher stress still fails:678PASS/two FAIL of680, other tests
+TheDefaultFilterIsCompletelyUNAFFECTED and
+Decision5b_AppliesToDeletedAndToBothHalvesOfARename missed Renamed callbacks.
+These are uncorrected separate findings, not a green stress claim. Gate2 IO726/726
+passes but LINQ347/349 fails because two old NUL expectations pinned XmlException.
+Both failed gates and stress logs remain in Sharp build-probe/.
+
+Fresh genuine XLinqNulOracle74/74 establishes content-value ArgumentException;
+earlier71/75 disproved the proposed standalone-attribute namespace expectation
+(genuine omits URI, this port emits it; URI guard deliberately unchanged).
+Reference-backed pre-fix LINQ19 tests7PASS/twelve FAIL. Shared character-data
+guard and seven direct serializers now repaired; XML names/metadata keep separate
+guards. Post-fix20/20 PASS1ms, warning-free full Sharp build. Initial added namespace
+test used reversed XName constructor arguments and failed19/20; corrected to the
+documented XName::Get(local,namespace), retained both logs. Full Sharp gate59482
+RUNNING with original isolated Yacht fixture. .NET8 LINQ reference83258 RUNNING.
+Uncommitted Sharp changes: writer/helper/seven LINQ callers, tests/docs, plus
+separate watcher TEST-only synchronization change. Commit separately after gates.
+Next: audit Sharp full gate, native focused/content regression, then storage full
+GLES/CTest and hashes. No issue closure or inferred152 policy approval yet.
+
 Phase E external validation. CNA runtimecbb77e3c8(Title145),5865ae938(storage151), Sharp58c6cba1 (including
 EOF1c0fc9b5,directory551ced42,URI82b57541,NUL3304ecd6); completed external031693a9f/b086814f9(lifecycle141–144),
 demo markers61d344e, latest closure804caa1. All155 IDs retained:62 FINAL/93 PENDING:
@@ -110,10 +162,18 @@ repair APPLIED; no signature/layout change. Its XmlWriter.hpp edit documents the
 existing unconditional-NUL limitation and new exception only, no executable header
 change. Actual CNA native/external binaries still embed pre-147 Sharp code.
 Sharp full build/focused91375 COMPLETE0 warning-free:49/49 tests3ms (before46/49).
-Full Sharp component gate43386 RUNNING with build jobs1, unchanged original XNA
-fixtures and private Yacht SOAP service; reports cna-repair-xml-nul-components-driver.log
-and build/gs-007b-components-live.log. Other jobs: native baseline66506 and external
-regression3249 (three campaign workers total).
+Full Sharp component gate43386 FAILED in unchanged IO watcher test:725PASS/one FAIL
+of726. Original preserved cna-repair-xml-nul-components-first-failed.log. Fixed20-run
+diagnostic of unchanged single test gives18PASS/two FAIL, both immediate Deleted
+lookup after sentinel. Source proves pending rename Deleted is dispatched AFTER
+the batch, so sentinel is not a callback barrier. Test-only correction awaits the
+actual named Deleted/Created through existing condition variable/deadline, preserving
+all types/names/negative assertions, no sleeps/retries. Production watcher unchanged.
+Build/20 complete34-test suite repetitions66559 RUNNING, one worker; then rerun full
+normal gate after this real test repair, retaining first failure. New sibling files
+IONamespaceReviewTests.cpp and docs/Testing-WatcherRenameBarrier.md must be committed
+separately from147 after successful full gate. Other jobs native baseline66506 and
+external regression3249; three campaign workers total. XML repair not committed yet.
 Sharp files: XmlWriter.cpp, XmlWriter.hpp, XmlWriterValidationTests.cpp,
 docs/Migration-XmlWriter-NulException.md; all uncommitted until warning-free full gate.
 Opaque runtime patch still UNAPPLIED until native content baseline completes.
