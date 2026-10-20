@@ -16,17 +16,24 @@ three ISSUE-109 source hashes unchanged, audit errors empty. Final warning audit
 newer owned call sites; not a warning-free build. Reports use
 repair-model-encoder-native-cache and ...-warning-provenance-final prefixes.
 
-Current heavy job is5396, the final native usernet gate, RUNNING in
-cna-repair-model-usernet-validation.scope (MemoryHigh4GiB/Max6GiB/Swap0).
-It uses the private graphics runner, owner UID, zero capabilities and a dummy
-interface with an explicit limited-broadcast route. Focused54/54 PASS, audit
-errors empty; full10798 is RUNNING, not yet accepted. Expected full result is
-10697PASS/101unchangedSKIP, with every predecessor outcome compared individually.
-Do not start another heavy workload or change the frozen sources/binaries.
-Poll5396; on completion inspect both audits and memory counters. Only after a
-clean full gate may109 be committed/closed. External18-stage checkpoint remains
-complete. Current totals90FINAL/65PENDING; three109 source/test files uncommitted.
-Then execute the prepared047 real-host baseline before production repair.
+Final native gate5396 COMPLETE0: focused54/54; full10798 gives10697PASS and
+101unchangedSKIP, zero failures in1,148,296ms. Every10791 predecessor outcome is
+unchanged, plus seven new passes. Independent XML comparison agrees. The scope
+peaked at2,598,830,080 bytes, with zero high/max/OOM events. Private display,
+owner UID/zero capabilities and limited-broadcast route were actually verified.
+External18-stage checkpoint remains complete. Final independent closure audit
+58861 COMPLETE0 verifies330 current file hashes, including319 external artifacts,
+all four native binaries and the four instrumented sanitizer translation units.
+Actual encoder/decoder ASan/UBSan/leak coverage is61/61 PASS; dependencies were
+not fully instrumented. No earlier failed gate is deleted or reclassified.
+
+ISSUE-109 is fully validated; this checkpoint accompanies its localized encoder
+repair and native regressions. Next record this repair commit SHA in the matrix
+and move the permanent issue to Resolved without altering its historical body.
+Until that metadata update the matrix remains90FINAL/65PENDING. No workload is
+still live. Then run the prepared047 real-host baseline (six scenarios) in its
+own bounded scope before changing production code. Its two demo fixture files
+remain uncommitted. No push or merge.
 
 ### Earlier checkpoint (superseded for live jobs and next actions)
 

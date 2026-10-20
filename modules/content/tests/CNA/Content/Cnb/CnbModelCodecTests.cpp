@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -876,4 +877,105 @@ TEST(CnbModelCodecTest, DecoderRefusesAPartCountThatDisagreesWithTheGeometryChun
     PatchU32(header, 8u, 100000u); // partCount, with only one MVTX/MIDX chunk present
     const CnbDocument doc = Parse(editor.Rebuild(CnbModelChunk::Header, header));
     EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
+}
+
+TEST(CnbModelCodecTest, EncoderRejectsNegativeBoneParentsOtherThanRootSentinel)
+{
+    auto model = MakeSampleModel();
+    ASSERT_NO_THROW((void)DecodeModelFromCnb(Parse(EncodeModelToCnb(model))));
+    for (const auto parent : {-2, std::numeric_limits<std::int32_t>::min()})
+    {
+        model.bones[0].parent = parent;
+        EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
+        EXPECT_EQ(model.bones[0].parent, parent);
+    }
+}
+
+TEST(CnbModelCodecTest, EncoderRejectsNegativeMeshParentsOtherThanRootSentinel)
+{
+    auto model = MakeSmallModel();
+    ASSERT_EQ(DecodeModelFromCnb(Parse(EncodeModelToCnb(model))).meshes[0].parentBone, -1);
+    for (const auto parent : {-2, std::numeric_limits<std::int32_t>::min()})
+    {
+        model.meshes[0].parentBone = parent;
+        EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
+        EXPECT_EQ(model.meshes[0].parentBone, parent);
+    }
+}
+
+TEST(CnbModelCodecTest, EncoderRejectsOutOfRangeSixteenBitVertexIndices)
+{
+    auto model = MakeSmallModel();
+    model.parts[0].indexBytes = {0, 0, 1, 0, 2, 0};
+    EXPECT_EQ(DecodeModelFromCnb(Parse(EncodeModelToCnb(model))).parts[0].indexBytes,
+              model.parts[0].indexBytes);
+    for (const std::uint32_t index : {3u, 256u, 65535u})
+    {
+        model.parts[0].indexBytes[4] = static_cast<std::uint8_t>(index);
+        model.parts[0].indexBytes[5] = static_cast<std::uint8_t>(index >> 8u);
+        const auto before = model.parts[0].indexBytes;
+        EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
+        EXPECT_EQ(model.parts[0].indexBytes, before);
+    }
+}
+
+TEST(CnbModelCodecTest, EncoderRejectsOutOfRangeThirtyTwoBitVertexIndices)
+{
+    auto model = MakeSmallModel();
+    model.parts[0] = MakePart("Only", 16u, 3u, 3u, 4u);
+    EXPECT_EQ(DecodeModelFromCnb(Parse(EncodeModelToCnb(model))).parts[0].indexBytes,
+              model.parts[0].indexBytes);
+    for (const std::uint32_t index : {3u, 65536u, std::numeric_limits<std::uint32_t>::max()})
+    {
+        PatchU32(model.parts[0].indexBytes, 8u, index);
+        const auto before = model.parts[0].indexBytes;
+        EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
+        EXPECT_EQ(model.parts[0].indexBytes, before);
+    }
+}
+
+TEST(CnbModelCodecTest, EncoderRejectsUndefinedAlphaModesAndPreservesAllDefinedValues)
+{
+    auto model = MakeSmallModel();
+    for (const std::uint32_t mode : {0u, 1u, 2u})
+    {
+        model.parts[0].material.alphaMode = mode;
+        EXPECT_EQ(DecodeModelFromCnb(Parse(EncodeModelToCnb(model))).parts[0].material.alphaMode,
+                  mode);
+    }
+    for (const std::uint32_t mode : {3u, std::numeric_limits<std::uint32_t>::max()})
+    {
+        model.parts[0].material.alphaMode = mode;
+        EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
+        EXPECT_EQ(model.parts[0].material.alphaMode, mode);
+    }
+}
+
+TEST(CnbModelCodecTest, EncoderRejectsUndefinedTextureCoordinateSetsInEveryMaterialSlot)
+{
+    for (std::size_t slot = 0; slot < CNA::Content::Cnb::CnbTextureSlotCount; ++slot)
+    {
+        auto model = MakeSmallModel();
+        for (const std::uint8_t set : {0, 1})
+        {
+            model.parts[0].material.textureCoordinateSets[slot] = set;
+            EXPECT_EQ(DecodeModelFromCnb(Parse(EncodeModelToCnb(model)))
+                          .parts[0].material.textureCoordinateSets[slot], set);
+        }
+        for (const std::uint8_t set : {2, 255})
+        {
+            model.parts[0].material.textureCoordinateSets[slot] = set;
+            EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException) << "slot " << slot;
+            EXPECT_EQ(model.parts[0].material.textureCoordinateSets[slot], set);
+        }
+    }
+}
+
+TEST(CnbModelCodecTest, EncoderAcceptsNoVerticesOnlyWhenThereAreNoIndices)
+{
+    auto model = MakeSmallModel();
+    model.parts[0] = MakePart("Only", 16u, 0u, 0u, 2u);
+    EXPECT_NO_THROW((void)DecodeModelFromCnb(Parse(EncodeModelToCnb(model))));
+    model.parts[0] = MakePart("Only", 16u, 0u, 3u, 2u);
+    EXPECT_THROW((void)EncodeModelToCnb(model), ContentLoadException);
 }

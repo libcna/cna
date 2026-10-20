@@ -522,6 +522,35 @@ namespace
         model.meshes = {mesh};
         return model;
     }
+
+    // Corrupt the encoded payload, not the encoder's input: the encoder and
+    // decoder must independently refuse invalid vertex indices.
+    CnbDocument WithModelIndexData(const CnbDocument& source,
+                                   const std::vector<std::uint8_t>& indices)
+    {
+        (void)source.RequireSingle(CNA::Content::Cnb::CnbModelChunk::IndexData);
+        CnbWriter rebuilt(CnbAssetTypeId::Model, 1u);
+        rebuilt.SetMetadata(source.Metadata().assetTypeName, source.Metadata().contentName);
+        if (!source.ExternalReferences().empty())
+        {
+            rebuilt.SetExternalReferences(source.ExternalReferences());
+        }
+        for (std::size_t i = 0; i < source.ChunkCount(); ++i)
+        {
+            const auto& entry = source.ChunkAt(i);
+            if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata ||
+                entry.type == CNA::Content::Cnb::CnbContainerChunk::ExternalReferences)
+            {
+                continue;
+            }
+            const auto bytes = source.ChunkData(i);
+            rebuilt.AddChunk(
+                entry.type, entry.type == CNA::Content::Cnb::CnbModelChunk::IndexData
+                    ? indices : std::vector<std::uint8_t>(bytes.begin(), bytes.end()),
+                entry.flags, entry.alignment);
+        }
+        return CnbDocument::Parse(rebuilt.Build(), "wild-index.cnb");
+    }
 }
 
 TEST(CnbHardeningTest, ABoneTableThatIsNotParentBeforeChildIsRefused)
@@ -848,13 +877,13 @@ TEST(CnbHardeningTest, AnIndexAddressingAVertexThePartDoesNotHaveIsRefused)
     // Reaches the GPU as an out-of-range fetch, so it is refused at decode -- one pass over bytes
     // that are being copied anyway.
     CNA::Content::Cnb::CnbModelData model = MakeModelWithBones({{"Root", -1}});
+    const CnbDocument valid = CnbDocument::Parse(
+        CNA::Content::Cnb::EncodeModelToCnb(model), "narrow-ok.cnb");
+    ASSERT_NO_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(valid));
     // vertexCount is 3; point the last index at vertex 3.
     model.parts[0].indexBytes[4] = 0x03u;
-
-    // The encoder does not scan index values (it trusts the caller that built the arrays), so the
-    // file is produced -- and the DECODER, which is where untrusted bytes arrive, refuses it.
-    const std::vector<std::uint8_t> bytes = CNA::Content::Cnb::EncodeModelToCnb(model);
-    const CnbDocument document = CnbDocument::Parse(bytes, "wild-index.cnb");
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException);
+    const CnbDocument document = WithModelIndexData(valid, model.parts[0].indexBytes);
     try
     {
         (void)CNA::Content::Cnb::DecodeModelFromCnb(document);
@@ -875,13 +904,14 @@ TEST(CnbHardeningTest, ThirtyTwoBitIndicesAreRangeCheckedToo)
     model.parts[0].indexBytes.assign(4u * 3u, 0u);
     for (std::uint32_t i = 0; i < 3u; ++i) { model.parts[0].indexBytes[i * 4u] = static_cast<std::uint8_t>(i); }
 
-    EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(CnbDocument::Parse(
-        CNA::Content::Cnb::EncodeModelToCnb(model), "wide-ok.cnb")));
+    const CnbDocument valid = CnbDocument::Parse(
+        CNA::Content::Cnb::EncodeModelToCnb(model), "wide-ok.cnb");
+    ASSERT_NO_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(valid));
 
     // A value that only shows up above the low byte -- the check must read the whole element, not
     // just the first byte.
     model.parts[0].indexBytes[4u + 1u] = 0x01u;   // index 1 becomes 0x0100 = 256
-    EXPECT_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(CnbDocument::Parse(
-                     CNA::Content::Cnb::EncodeModelToCnb(model), "wide-bad.cnb")),
-                 ContentLoadException);
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException);
+    const CnbDocument corrupted = WithModelIndexData(valid, model.parts[0].indexBytes);
+    EXPECT_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(corrupted), ContentLoadException);
 }

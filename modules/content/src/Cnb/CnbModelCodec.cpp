@@ -125,6 +125,21 @@ namespace CNA::Content::Cnb
         void WriteMaterial(CnbByteWriter& writer, const CnbMaterial& material,
                            ExternalReferenceBuilder& references)
         {
+            if (material.alphaMode > 2u)
+            {
+                throw ContentLoadException(
+                    "CNB Model: material alphaMode " + std::to_string(material.alphaMode) +
+                    " is not an AlphaModeEXT value (0-2).");
+            }
+            for (const std::uint8_t set : material.textureCoordinateSets)
+            {
+                if (set > 1u)
+                {
+                    throw ContentLoadException(
+                        "CNB Model: material names texture-coordinate set " +
+                        std::to_string(set) + "; only 0 and 1 are supported.");
+                }
+            }
             const std::array<const std::string*, 8> textures{
                 &material.baseColorTexture, &material.texture2, &material.normalMap,
                 &material.metallicRoughnessMap, &material.emissiveMap, &material.occlusionMap,
@@ -248,7 +263,8 @@ namespace CNA::Content::Cnb
         for (std::size_t boneIndex = 0; boneIndex < model.bones.size(); ++boneIndex)
         {
             const CnbModelBone& bone = model.bones[boneIndex];
-            if (bone.parent >= 0 && static_cast<std::uint32_t>(bone.parent) >= boneCount)
+            if (bone.parent < -1 ||
+                (bone.parent >= 0 && static_cast<std::uint32_t>(bone.parent) >= boneCount))
             {
                 throw ContentLoadException(
                     "CNB Model: bone '" + bone.name + "' names an out-of-range parent index.");
@@ -321,6 +337,21 @@ namespace CNA::Content::Cnb
                     where + " supplies " + std::to_string(part.indexBytes.size()) +
                     " index byte(s) but declares " + std::to_string(part.indexCount) +
                     " indices of " + std::to_string(part.indexElementSize) + " bytes.");
+            }
+            // Validate the payload, not just its size: a well-formed container must
+            // not describe a GPU vertex fetch outside this part's vertex buffer.
+            CnbByteReader indices(part.indexBytes, where);
+            for (std::uint32_t i = 0; i < part.indexCount; ++i)
+            {
+                const std::uint32_t index = part.indexElementSize == 2u
+                    ? indices.ReadU16() : indices.ReadU32();
+                if (index >= part.vertexCount)
+                {
+                    throw ContentLoadException(
+                        where + " index " + std::to_string(i) + " addresses vertex " +
+                        std::to_string(index) + ", but the part has only " +
+                        std::to_string(part.vertexCount) + ".");
+                }
             }
             if (static_cast<std::uint32_t>(part.effectKind) > CnbMaxEffectKind)
             {
@@ -412,7 +443,8 @@ namespace CNA::Content::Cnb
         std::uint32_t slotCount = 0u;
         for (const CnbModelMesh& mesh : model.meshes)
         {
-            if (mesh.parentBone >= 0 && static_cast<std::uint32_t>(mesh.parentBone) >= boneCount)
+            if (mesh.parentBone < -1 ||
+                (mesh.parentBone >= 0 && static_cast<std::uint32_t>(mesh.parentBone) >= boneCount))
             {
                 throw ContentLoadException(
                     "CNB Model: mesh '" + mesh.name + "' names an out-of-range parentBone index.");
