@@ -563,6 +563,42 @@ TEST(EffectSourceCommandLineTest, APreBuiltRegistryRefusesTheOptionsItCannotAppl
         << captured.str();
 }
 
+TEST(EffectSourceCommandLineTest, APreBuiltRegistryExplainsEveryRegistryAffectingOption)
+{
+    ScratchDirectory scratch("prebuilt-all-options");
+    const std::pair<std::string, std::filesystem::path> options[] = {
+        {"--fx-compiler", "unused-fxc"},
+        {"--fx-compiler-launcher", "unused-fxc-launcher"},
+        {"--xma-encoder", "unused-xma"},
+        {"--xma-encoder-launcher", "unused-xma-launcher"},
+        {"--xma-encoder-arg", "{input}"},
+        {"--font-directory", scratch.Source()},
+        {"--build-configuration", "Debug"}
+    };
+    for (const auto& [option, value] : options)
+    {
+        SCOPED_TRACE(option);
+        const auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+        std::ostringstream captured;
+        int exitCode;
+        {
+            struct RestoreErrorStream
+            {
+                std::streambuf* previous;
+                ~RestoreErrorStream() { std::cerr.rdbuf(previous); }
+            } restore{std::cerr.rdbuf(captured.rdbuf())};
+            exitCode = Pipeline::RunContentCompiler(
+                {"build", scratch.Source(), "-o", scratch.Output(), "--format", "cnb",
+                 "--workers", "1", option, value}, registry);
+        }
+        EXPECT_EQ(exitCode, 2);
+        EXPECT_NE(captured.str().find(option), std::string::npos) << captured.str();
+        EXPECT_NE(captured.str().find("ContentPipelineRegistryFactory"), std::string::npos);
+        EXPECT_FALSE(registry->IsFrozen());
+        EXPECT_FALSE(std::filesystem::exists(scratch.Output()));
+    }
+}
+
 TEST(EffectSourceCommandLineTest, AnEmptyRegistryFactoryIsRejected)
 {
     EXPECT_THROW(static_cast<void>(

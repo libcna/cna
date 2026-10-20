@@ -104,12 +104,13 @@ namespace CNA::Content::Pipeline
         CNA::Internal::Xnb::XnbFileOptions xnbContainer{};
 
         /**
-         * @brief Compares the two build-time *services* a factory has to construct.
+         * @brief Compares the services and configuration applied while registering a pipeline.
          *
          * Deliberately not the container options: those are something the coordinator applies to
          * its own writers whatever the factory did, so a registry that was built before this
-         * command line existed is still usable with them. What such a registry cannot apply is an
-         * effect compiler or an XMA encoder, and that is what the inequality is asked about.
+         * command line existed is still usable with them. The comparison covers effect compiler
+         * and XMA encoder settings, font search directories and the build configuration; a
+         * pre-built registry cannot retroactively apply non-default selections in these fields.
          */
         bool operator==(const ContentCompilerOptions& other) const
         {
@@ -137,7 +138,7 @@ namespace CNA::Content::Pipeline
      * selects, so RunContentCompiler() adds them once it has parsed them.
      *
      * @param registry Mutable registry to configure before compilation begins.
-     * @param options Build-tool service selection; every field may be empty.
+     * @param options Build-tool service/configuration selection; omitted fields use their defaults.
      */
     void RegisterBuiltInContentPipeline(ContentPipelineRegistry& registry,
                                         const ContentCompilerOptions& options = {});
@@ -168,10 +169,10 @@ namespace CNA::Content::Pipeline
      * has the same experimental source/ABI status as the component API.
      *
      * A registry supplied this way was configured before the command line was read, so the
-     * build-tool options that select an external service -- `--fx-compiler` and
-     * `--fx-compiler-launcher` -- cannot reach it. Passing one of those together with a pre-built
-     * registry is refused with a message naming the factory overload, rather than accepted and
-     * silently ignored.
+     * registry-affecting options cannot reach it: `--fx-compiler`, `--fx-compiler-launcher`,
+     * `--xma-encoder`, `--xma-encoder-launcher`, `--xma-encoder-arg`, `--font-directory` and
+     * `--build-configuration`. Non-default selections are refused with a message naming the
+     * factory overload. Coordinator-owned container options remain supported.
      *
      * @param arguments Native command-line arguments excluding the executable name.
      * @param registry Non-null, fully configured registry retained for the complete invocation.
@@ -185,11 +186,10 @@ namespace CNA::Content::Pipeline
     /**
      * @brief Runs the coordinator, building the registry from the options the command line chose.
      *
-     * This is the overload `cna-content` itself uses, and the only one that can honour
-     * `--fx-compiler` and `--fx-compiler-launcher`: the factory runs after parsing, so a route
-     * whose backend the command line selects is registered with that selection rather than with a
-     * default discovered earlier. Nothing is cached between calls, so two invocations in one
-     * process with different compiler paths are independent.
+     * This is the overload `cna-content` itself uses. The factory runs after parsing, so external
+     * compiler/encoder settings, font directories and build configuration reach registration
+     * before a route is constructed. Nothing is cached between calls, so two invocations in one
+     * process with different settings are independent.
      *
      * @param arguments Native command-line arguments excluding the executable name.
      * @param createRegistry Called once after parsing; must return a non-null mutable registry.

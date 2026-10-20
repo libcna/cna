@@ -3366,11 +3366,12 @@ namespace CNA::Content::Pipeline
         {
             if (options != ContentCompilerOptions{})
             {
-                // Refusing beats ignoring: the registry was configured before this command line
-                // existed, so the compiler it holds is not the one being asked for.
+                // These services/configuration were fixed before the command line was parsed.
                 throw std::invalid_argument(
-                    "--fx-compiler and --fx-compiler-launcher select a build-time service, so "
-                    "they can only be applied while the pipeline is being registered. This "
+                    "Non-default registry-affecting options (--fx-compiler, --fx-compiler-launcher, "
+                    "--xma-encoder, --xma-encoder-launcher, --xma-encoder-arg, --font-directory "
+                    "and --build-configuration) can only be applied while the pipeline is "
+                    "being registered. This "
                     "compiler was handed an already-configured registry. Use the "
                     "RunContentCompiler() overload that takes a "
                     "ContentPipelineRegistryFactory, which is called with these options.");
