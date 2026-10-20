@@ -2637,12 +2637,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Explicit GameComponent disposal is incorrectly guarded as one-shot, omits self-removal, and requires owning-call/snapshot lifetime protection when removal releases references. C callback forwarding duplicates the one-shot assumption.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "031693a9f",
       "validation": [
-        "Genuine component29+8 checks pass. Six real-Game native lifecycle tests fail; C ABI independent11checks/seven passes/four failures confirms missing self-removal and repeated callback/event. Existing Game19 controls pass. See docs/repair-evidence/lifecycle/. No production change."
+        "Genuine component29+8 checks pass. Six real-Game native lifecycle tests fail; C ABI independent11checks/seven passes/four failures confirms missing self-removal and repeated callback/event. Existing Game19 controls pass. See docs/repair-evidence/lifecycle/. No production change.",
+        "Native-validated repair: genuine contracts34+liveGame8+collectionMutation3+drawable6 checks; final focused77/77, actual five-TU ASan/UBSan/leak58/58; exact1412 consumers1408PASS/four same skips256.700s, all33 runtime suites234total231PASS/three same capability skips15.440s. Native executable/DSO hashes reverified. Real argv probe8/8 after five original failures. Actual C adapter and both strict C17 smokes compile; actual C ABI/runtime and external demos remain pending, separately frozen on Color132. No marker removal or final closure yet. Three adjacent demo oracles require genuine-backed corrections with assertion counts preserved. Evidence docs/repair-evidence/lifecycle/."
       ],
       "final_disposition": null
     },
@@ -2656,12 +2657,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Four setters raise events before virtual hooks while base hooks are empty, preventing override-controlled dispatch.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "031693a9f",
       "validation": [
-        "Genuine29-contract probe and failing native all-four-hook ordering/suppression/sender test; equal-value controls retained. docs/repair-evidence/lifecycle/."
+        "Genuine29-contract probe and failing native all-four-hook ordering/suppression/sender test; equal-value controls retained. docs/repair-evidence/lifecycle/.",
+        "Native-validated repair: genuine contracts34+liveGame8+collectionMutation3+drawable6 checks; final focused77/77, actual five-TU ASan/UBSan/leak58/58; exact1412 consumers1408PASS/four same skips256.700s, all33 runtime suites234total231PASS/three same capability skips15.440s. Native executable/DSO hashes reverified. Real argv probe8/8 after five original failures. Actual C adapter and both strict C17 smokes compile; actual C ABI/runtime and external demos remain pending, separately frozen on Color132. No marker removal or final closure yet. Three adjacent demo oracles require genuine-backed corrections with assertion counts preserved. Evidence docs/repair-evidence/lifecycle/."
       ],
       "final_disposition": null
     },
@@ -2675,12 +2677,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Duplicate validation precedes index validation; Clear skips nulls and range-iterates a mutable vector. Owned insertion/removal dispatch mishandles callback removal, exceptions and re-registration lifetimes.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "031693a9f",
       "validation": [
-        "Genuine contracts29 plus live-index mutation3/3; native collection seven new failing cases cover exact ordering/null events and five ownership/mutation companions. Existing39 launch/collection controls pass. docs/repair-evidence/lifecycle/."
+        "Genuine contracts29 plus live-index mutation3/3; native collection seven new failing cases cover exact ordering/null events and five ownership/mutation companions. Existing39 launch/collection controls pass. docs/repair-evidence/lifecycle/.",
+        "Native-validated repair: genuine contracts34+liveGame8+collectionMutation3+drawable6 checks; final focused77/77, actual five-TU ASan/UBSan/leak58/58; exact1412 consumers1408PASS/four same skips256.700s, all33 runtime suites234total231PASS/three same capability skips15.440s. Native executable/DSO hashes reverified. Real argv probe8/8 after five original failures. Actual C adapter and both strict C17 smokes compile; actual C ABI/runtime and external demos remain pending, separately frozen on Color132. No marker removal or final closure yet. Three adjacent demo oracles require genuine-backed corrections with assertion counts preserved. Evidence docs/repair-evidence/lifecycle/."
       ],
       "final_disposition": null
     },
@@ -2694,12 +2697,13 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Parsing rejects colonless and empty-value entries; direct duplicate Add silently emplaces instead of throwing. Default argv handling must exclude only executable argv0.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "b086814f9",
       "validation": [
-        "Genuine29-contract probe; three new native parsing/duplicate atomicity tests fail. Existing controls retained; incorrect old empty-value expectations must be corrected only with genuine evidence during repair. docs/repair-evidence/lifecycle/."
+        "Genuine29-contract probe; three new native parsing/duplicate atomicity tests fail. Existing controls retained; incorrect old empty-value expectations must be corrected only with genuine evidence during repair. docs/repair-evidence/lifecycle/.",
+        "Native-validated repair: genuine contracts34+liveGame8+collectionMutation3+drawable6 checks; final focused77/77, actual five-TU ASan/UBSan/leak58/58; exact1412 consumers1408PASS/four same skips256.700s, all33 runtime suites234total231PASS/three same capability skips15.440s. Native executable/DSO hashes reverified. Real argv probe8/8 after five original failures. Actual C adapter and both strict C17 smokes compile; actual C ABI/runtime and external demos remain pending, separately frozen on Color132. No marker removal or final closure yet. Three adjacent demo oracles require genuine-backed corrections with assertion counts preserved. Evidence docs/repair-evidence/lifecycle/."
       ],
       "final_disposition": null
     },

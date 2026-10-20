@@ -9,10 +9,10 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-Phase C completion / Phase D preparation. CNA status revisiond77ee1df2;
-latest runtime1ad0a3916(Color132), latest completed runtime checkpoint5ab1c7729
-plus99d790167(containment). Demo evidence063840a; containment74622b4; new closure
-documentation currently uncommitted. All155 IDs retained:57 FINAL/98 PENDING:
+Phase C completion / Phase D repair. CNA runtime031693a9f(components141–143),
+b086814f9(launch144), external frozen1ad0a3916(Color132); last complete checkpoint5ab1c7729
+plus99d790167(containment). Demo HEADe7eafac(Color focused/markers); containment
+closure45549e0, marker74622b4. All155 IDs retained:57 FINAL/98 PENDING:
 25 runtime findings,one verified duplicate,23 documentation corrections,seven
 already fixed before campaign,one demonstrated demo-expectation defect.
 
@@ -28,28 +28,70 @@ executable and both DSOs SHA256 reverified after completion. Permanent evidence
 Complete1128 demo-status delta48; current-HEAD campaign delta46. External freeze
 released. Owner-reserved131 remains open; ray method/exception untouched.
 
-ACTIVE NEXT: Color132 FIXED_PENDING_REGRESSION, runtime1ad0a3916. External full
-build RUNNING session45310,three jobs,repair-color-demo-build.log. NO lifecycle
-production edits until this build, focused passes, marker-only rebuild and Color
-binary freeze are complete. Then launch Color full smoke followed by isolated
-full CTest (never overlap SystemLink suites) and implement lifecycle natively.
+ACTIVE NEXT: Color132 FIXED_PENDING_REGRESSION, runtime1ad0a3916. External build
+and marker rebuild COMPLETE warning-free; strict actual C ABI ColorSmoke and all6
+focused scenarios per renderer PASS. Two markers removed, original7/9 checks remain.
+Color executable/C++/C ABI frozen with SHA256/ldd repair-color-frozen*. DO NOT rebuild
+external until complete checkpoint. Full driver79621 COMPLETE: both math sweeps
+and both full719-ID sweeps exact48 changes/differences[]; SOFTWARE605/63/48/3,
+OPENGLES3 644/65/7/3; tools and six exact visuals pass. Frozen hashes reverified.
+Full isolated CTest session55689 RUNNING(one job), repair-color-demo-ctest.log;
+do not overlap SystemLink suites. Lifecycle production is native-validated
+separately in native tree. Final hook companion build96698 COMPLETE warning-free;
+77/77 focusedPASS(4.770s), actual five-TU ASan/UBSan/leak58/58PASS(1.771s).
+Repeated broad native consumer job76785 COMPLETE: exact1412consumers1408PASS/four
+unchanged skips256.700s; all33 runtime suites234total231PASS/three same skips15.440s.
+Native executable/DSO repair-lifecycle-hook-native-frozen.sha256 verified unchanged;
+native freeze released. External Color freeze remains in force.
 Color native already complete: genuine/native1782/1782; math966/two skips;
 registered70/70; actual Color.cpp ASan/UBSan/float-cast-overflow/leak64/64;
 exact1412 consumers1408PASS/four same skips(282.277s). No external pass/closure yet.
 Prepared drivers build-probe/repair-color-{c-smoke,focused,math,regression}.mjs;
 exact comparators admit only48 cumulative changes(two Color demos additional).
 
-UNCOMMITTED CNA: closure matrix/handoff plus lifecycle tests in LaunchParameters,
-GameComponentCollection,new ComponentLifecycleCompatibilityTests. Tests have no
-production companion yet: standalone57total39PASS/18 intendedFAIL/zero skips907ms.
-Integrated native binary still earlier50tests39PASS/11 intendedFAIL. Genuine
-lifecycle29+8+3+4 checks pass; current actual C ABI disposal11checks/seven passes/
+COMMITTED CNA: component root-cause batch031693a9f and launch batchb086814f9,
+including matching regressions and C contracts/smokes. All four matrix rows now
+FIXED_PENDING_REGRESSION; no lifecycle external validation/closure yet.
+UNCOMMITTED status: matrix/plans/handoff, and external lifecycle evidence updates.
+Pre-fix standalone57total39PASS/18 intendedFAIL/zero skips907ms.
+First repaired native76/76 including19 Game controls; initial three warnings exactly
+match baseline GameTests ignored Remove results, then strengthened assertions build
+warning-free. Actual five production-TU ASan/UBSan/leak57/57PASS(2.981s). First
+sanitizer harness added Wall/Wextra beyond Game.cpp native policy and failed on
+existing renderer unused parameters/reorder/sign comparisons; retained. Corrected
+Game.cpp policy is native flags plus Werror and instrumentation, other TUs keep
+extra Wall/Wextra/Werror. Native broad consumer checkpoint COMPLETE:1412total,
+1408PASS/four same skips284.362s; all33 runtime-source suites233total230PASS/three
+capability skips10.789s. Native binary/DSO hashes reverified, that freeze released.
+Actual process launch probe8checks: old verified external DSO five failures, repaired
+native8/8PASS. Changed actual C adapter and both strict C17 smokes compile separately
+without touching frozen external DSOs; C runtime still pending.
+NEW companion: owned property callback can remove the last reference before the
+derived hook returns. New all-four-properties test fails while prior57pass
+(repair-property-hook-ownership-before*,1.377s). Local private ownership helper now
+pins through all four setters and Dispose; no public layout/vtable change. Final
+77-test focus and58-test sanitizer pass; final broad consumers also pass as above.
+Genuine lifecycle34+8+3+6 checks pass; current actual C ABI disposal11checks/seven passes/
 four failures. Existing Game19/19 controls pass. Derived explicit disposal always
 invokes UnloadContent before event, even without Initialize; false path silent.
 Collection Clear uses live-index iteration, not snapshot/fail-fast. Game.Dispose
 requires an owning original snapshot. Keep owned references alive across the entire
 virtual component Dispose, nested removal, exceptions and re-registration.
 See ../cna-demos/docs/repair-evidence/lifecycle/ and prepared sanitizer builder.
+Important adjacent demo-oracle correction pending for lifecycle: drawable_game_component
+currently expects one UnloadContent after two explicit Dispose calls. Genuine derived
+disposal and IL require two. Preserve check count, change exact oracle with evidence
+only when preparing that external batch; current frozen Color binary retains old
+runtime/oracle. Do not accidentally include lifecycle edits in a Color rebuild.
+Second adjacent demo-oracle correction pending: standalone/c_api.game.launch_parameters/main.c
+currently expects bare/equals-only flags dropped and duplicate Add SUCCESS. Genuine
+retains both as empty values and duplicate maps INVALID_ARGUMENT; sorted name/count
+expectations must expand from3 to5 initially (6 after Alpha), preserving checks and
+UTF8/guard/atomicity controls. Native RuntimeGameSmoke's corresponding old count/name
+expectations are now corrected too; latest strict compile passes, actual C runtime pending.
+Third adjacent correction: c_api.game.component_members expects one callback/event
+after two explicit disposals. Genuine requires two; preserve the existing assertion
+and single drawable-disposal check. No external demo-source changes yet.
 
 Next storage056/151/152 confirmed at correct lower layer, no production edits.
 Genuine EOF13/13 versus seven native failures; genuine storage172/172 versus

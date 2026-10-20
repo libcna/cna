@@ -163,6 +163,21 @@ visual references. Frozen executable and both actual libraries reverified.
 The pending containment annotations above are superseded; permanent evidence:
 `../cna-demos/docs/repair-evidence/geometry/CONTAINMENT_CHECKPOINT.md`.
 
+Lifecycle141–144 repair decisions (2026-10-20, native-validated commits031693a9f
+andb086814f9; external validation pending): genuine
+GameComponent/DrawableGameComponent setters invoke virtual On* hooks; the base
+hook raises the public event with this sender. Explicit component Dispose repeats
+the managed override/event and removes membership before Disposed. Drawable
+Dispose(true) always invokes UnloadContent before the base, even before Initialize;
+false is silent. Collection Clear uses a live index loop including null slots,
+whereas Game.Dispose uses an original snapshot. C++ owning overloads must retain
+references through nested callback removal, exception unwinding, re-registration
+and the complete virtual disposal call. No public layout/vtable is changed.
+LaunchParameters retains empty values, skips only process argv0 (not the first
+explicit-vector entry), keeps the first parsed duplicate and throws ArgumentException
+for direct duplicate Add. Genuine oracles and failing pre-fix native/C witnesses:
+`../cna-demos/docs/repair-evidence/lifecycle/`. No external lifecycle closure yet.
+
 The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
 both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
 the recorded rows above are superseded by this checkpoint; permanent evidence is
@@ -435,6 +450,13 @@ also carries two related divergences `cna-ruby` measured and `cna-rust` restated
 a colon, where XNA keeps a colonless argument with an empty value; and
 `cna_game_launch_parameters_get_key_size` enumerates by name rather than in container order.
 Reported by `cna-rust` (`RUST-UPSTREAM-026`) and `cna-ruby`.
+
+2026-10-20 repair campaign ISSUE-144 resolves the canonical behavior in commit
+b086814f9, with genuine-XNA evidence and native tests. Duplicate Add throws
+System::ArgumentException, whose existing C barrier maps to INVALID_ARGUMENT (not
+the earlier proposed INVALID_STATE); original value is preserved. The canonical
+parse now retains empty/colonless values. The deliberately sorted C enumeration
+order is unchanged. External C regression and final closure are still pending.
 
 ---
 
