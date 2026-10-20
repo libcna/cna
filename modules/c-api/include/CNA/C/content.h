@@ -71,14 +71,17 @@ CNA_C_API CNA_Result cna_content_manager_copy_root_directory(
     uint64_t* out_bytes);
 
 /**
- * @brief Sets the UTF-8 root directory used for subsequent uncached asset loads.
+ * @brief Sets the UTF-8 root directory while the content manager has no cached assets.
  *
  * @param content_manager Owned content-manager handle.
  * @param root_directory UTF-8 root directory copied during this call; an empty root is valid.
- * @return `CNA_RESULT_SUCCESS` or a documented encoding/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when assets are cached, or a documented
+ * encoding/handle/thread/native failure.
  *
- * Existing cache entries are not unloaded. Call @ref cna_content_manager_unload explicitly when
- * changing roots must also invalidate the existing native asset cache.
+ * Matching XNA and the C++ property, any assignment (including the current value) is refused
+ * while assets are cached. Refusal preserves both the root and cache and records
+ * `System.InvalidOperationException`. Call @ref cna_content_manager_unload before assigning a
+ * root after loading assets. Independently owned C resource handles survive that unload.
  */
 CNA_C_API CNA_Result cna_content_manager_set_root_directory(
     CNA_Handle content_manager,

@@ -2320,6 +2320,45 @@ static int validate_cnj_loader(const CNA_Handle manager)
     return 1;
 }
 
+static int validate_loaded_root_refusal(const CNA_Handle manager)
+{
+    static const char expected_type[] = "System.InvalidOperationException";
+    static const char* const roots[] = {".", "missing", ""};
+    for (size_t i = 0U; i < sizeof(roots) / sizeof(roots[0]); ++i) {
+        CNA_ErrorInfo error = {0};
+        char type[128] = {0}, root[2] = {'#', '#'};
+        uint64_t bytes = UINT64_MAX, copied = UINT64_MAX;
+        error.struct_size = (uint32_t)sizeof(error);
+        error.struct_version = UINT32_C(1);
+        if (!CONTENT_CHECK(cna_content_manager_set_root_directory(manager, view(roots[i])) ==
+                CNA_RESULT_INVALID_STATE) ||
+            !CONTENT_CHECK(cna_error_get_last_info(&error) == CNA_RESULT_SUCCESS &&
+                error.result == CNA_RESULT_INVALID_STATE && error.category == CNA_ERROR_CATEGORY_STATE &&
+                error.message_byte_length > 0U) ||
+            !CONTENT_CHECK(cna_error_get_last_exception_type_size_ext(&bytes) == CNA_RESULT_SUCCESS &&
+                bytes == sizeof(expected_type) - 1U &&
+                cna_error_copy_last_exception_type_ext(type, sizeof(type), &copied) == CNA_RESULT_SUCCESS &&
+                copied == bytes && memcmp(type, expected_type, (size_t)bytes) == 0) ||
+            !CONTENT_CHECK(cna_content_manager_copy_root_directory(manager, root, sizeof(root), &copied) ==
+                CNA_RESULT_SUCCESS && copied == 1U && root[0] == '.' && root[1] == '#')) {
+            return 0;
+        }
+    }
+
+    /* Removing the source proves the refused assignments did not silently clear the cache. */
+    if (!CONTENT_CHECK(cna_test_remove(FixturePath) == 0)) {
+        return 0;
+    }
+    CNA_Handle cached = CNA_INVALID_HANDLE;
+    const CNA_Result loaded = cna_content_manager_load_texture2d(manager, view(FixturePath), &cached);
+    const int restored = write_fixture();
+    const int valid = loaded == CNA_RESULT_SUCCESS && cached != CNA_INVALID_HANDLE &&
+        pixel_is_fixture_color(cached);
+    const CNA_Result released = cached != CNA_INVALID_HANDLE
+        ? cna_texture2d_destroy(cached) : CNA_RESULT_INVALID_HANDLE;
+    return CONTENT_CHECK(restored && valid && released == CNA_RESULT_SUCCESS);
+}
+
 static CNA_Result on_load(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -2432,6 +2471,7 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
 
+    CONTENT_VALIDATE(validate_loaded_root_refusal(state->content_manager));
     CONTENT_VALIDATE(validate_paths_and_device(game, state->content_manager, graphics_device));
     CONTENT_VALIDATE(validate_resource_manager(graphics_device));
     CONTENT_VALIDATE(validate_font_load(state->content_manager));
@@ -2449,10 +2489,15 @@ static CNA_Result on_load(
     if (!create_root_fixture(&fixture)) {
         return CNA_RESULT_INVALID_STATE;
     }
+    /* XNA requires an empty cache before switching to the manifest fixture root. */
+    CONTENT_VALIDATE(cna_content_manager_unload(state->content_manager) == CNA_RESULT_SUCCESS &&
+        pixel_is_fixture_color(state->texture));
     const int manifest_ok = validate_manifest(state->content_manager, &fixture) &&
         validate_typed_loads(state->content_manager);
     const int cleaned = destroy_root_fixture(&fixture);
     if (!manifest_ok || !cleaned ||
+        cna_content_manager_unload(state->content_manager) != CNA_RESULT_SUCCESS ||
+        !pixel_is_fixture_color(state->texture) ||
         cna_content_manager_set_root_directory(state->content_manager, root) !=
             CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;

@@ -31,11 +31,19 @@ writes a partial string.
 
 The strict-C regression creates and loads an actual fixture whose filename contains valid UTF-8,
 in addition to rejecting malformed and embedded-NUL names. Missing assets deterministically map to
-`CNA_RESULT_IO` without returning a resource handle.
+`CNA_RESULT_IO` without returning a resource handle, preserving the canonical
+`Microsoft.Xna.Framework.Content.ContentLoadException` identity in error metadata.
 
-Changing the root directory matches the native property behavior: existing cache entries are not
-automatically removed. Call `cna_content_manager_unload` when a root change must also invalidate
-the native asset cache.
+Changing the root directory matches XNA and the native C++ property: any assignment is refused
+while assets are cached, even assigning the current root again. The call returns
+`CNA_RESULT_INVALID_STATE`, retains `System.InvalidOperationException` in error metadata, and
+leaves the root and cache unchanged. Call `cna_content_manager_unload` before assigning a root
+after loading assets. Independently owned C resource handles remain usable across that unload.
+With an empty cache, the root string is copied during the call and subsequent loads use it.
+
+The earlier C contract allowed changing roots while retaining old cache entries. The owner
+explicitly selected XNA/C++ compatibility for ISSUE-039/103 on 2026-10-20; this is a deliberate
+contract correction, not a promise to preserve that former behavior.
 
 ## Texture ownership and cache behavior
 
