@@ -9,6 +9,42 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+13:32 UTC: C adapter compatibility COMMITTED c57ecab8c after strict native CnbSmoke
+normal/sanitizer passes and the unchanged demo's exact25 labels pass in both modes.
+Native REQUIRE count203->207 (four additive assertions). All319 external hashes match;
+no C assertion relaxed. Original boundary full failure remains; no new closure.
+Root canonical12705 COMPLETE0:1141 printed steps,45 exact prior warnings/zero new,
+three source hashes exact. Four native artifacts frozen under repair-content-roots.
+21730 module1993 RUNNING(1), three focused regressions alreadyPASS;85718 pipeline562
+RUNNING(1);58114 consumers/runtime/XML RUNNING(1). No other SystemLink suite.
+New uncommitted demo manifest adds four checks13->17, preserves all originals and
+now asserts exact reserved-name exclusions plus legitimate hidden/prefix controls.
+Prepared external phase content-roots compares against last completed012, includes
+only105 status improvement and those four additive checks, and does NOT waive the
+original C-root residual or C-foundations regression. Native/source edits frozen.
+Next: finish native gates/link checks; once module/consumers pass, external rebuild
+may share two workers with the remaining pipeline gate. Include committed C adapter;
+run146 content focus, both177 C API categories, cold-root external witness, then
+full719/math/visual/CTest/hashes. Boundary close helper is superseded/unexecuted.
+
+13:25 UTC IMPORTANT: external boundary92630 COMPLETE1 with a NEW regression,
+not just the original C-root residual. SOFTWARE719=624PASS/44FAIL/48SKIP/3manual:
+105 improves but c_api.content.cnb_foundations regresses at its ORIGINAL None-size
+assertion. Full driver stops before GLES/CTest; predecessor audit consequently
+fails. Preserve all reports; no boundary closure, no successful final summary.
+The C docs/native CnbSmoke explicitly require None to ignore declared sizes. Unlike
+the C++ helper, this established C ABI is preserved: candidate adapter supplies
+storedByteCount as both helper sizes for None only. C header/docs clarify difference;
+original demo unchanged, two additive native C smoke input cases. Four C-only files
+uncommitted; native build excludes C API so its three-source freeze is unaffected.
+Before native CnbSmoke exits8 as expected; candidate normal67136 COMPLETE0,
+strict compilation/linked identity/319 external hashes exact. Sanitizer70975
+RUNNING(1). Root native12705 RUNNING(2),~416/1141. THREE workers total.
+See CNB_C_API_COMPATIBILITY.md. Next native root gates, C sanitizer, then canonical
+combined external rebuild/focus/full with original C ABI assertion preserved.
+77 FINAL/78 PENDING;048 remains last globally accepted checkpoint. Closure helper
+repair-content-boundaries-close.mjs is only PREPARED and must not run on failed data.
+
 13:16 UTC: boundary external243-step and marker11-step builds COMPLETE0/zero
 warnings; native/demo source hashes match. Initial146 and marker146 exact focus
 both68PASS/five unchangedFAIL per renderer;37/32/23 controls retained. Demo changes
