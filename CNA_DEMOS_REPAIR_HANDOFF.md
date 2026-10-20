@@ -51,9 +51,11 @@ RUNNING/FROZEN:
 1. Native552/123 suites51450 COMPLETE0:551PASS/one same XACT SKIP973.298s.
    Exact audit preserves all517 previous outcomes and adds35newPASS, differences[].
    Four hashes match after full run; original XML fixtures6/6PASS4ms. Broader
-   consumers85944 RUNNING (prior1412/runtime241/defaultXML); logs
-   repair-sections-consumers-driver.log. Four artifacts remain FROZEN in
-   repair-sections-native-frozen.sha256 until consumer comparison/final hash audit.
+   consumers85944 COMPLETE0:1412=1408PASS/four sameSKIP187.433s;
+   runtime241=238PASS/three sameSKIP;defaultXML4PASS/two fixtureSKIP.
+   Exact consumer comparison differences[] and final four hashes match.
+   Native freeze RELEASED only afterward; reports repair-sections-native-*
+   retain the oldf421948fe checkpoint. Do not confuse its binary with the next build.
 2. External rebuild43472 and marker build77496 COMPLETE0, warning-free. Strict56
    focused executions:25PASS/three remaining FAIL per renderer, all errors[].
    04620/20;148 exactly two remaining PI/BOM failures. Rebuilt aggregate030 gives
@@ -62,12 +64,18 @@ RUNNING/FROZEN:
    repair-sections-binaries.sha256. Full job35425 running, both math95 and six
    pixel-exact visuals already PASS; SOFTWARE sweep underway. Do NOT rebuild.
 3. Separate048 baseline test compilation against frozen native dependencies;
-   two tests added to ContentPipelineCoreTests.cpp, no production edits. First
+   two original regression tests added to ContentPipelineCoreTests.cpp. First
    extra-Wall/Wextra attempt fails on unchanged fixture aggregate/loop warnings;
    retained. Project warning policy plusWerror attempt33643 recorded
    in repair-effective-parameters-project-before-driver.log:onePASS/oneFAIL4ms,
    exactly wrong effective metadata in all-rejected and mixed parameter sets;
-   requested manifest/cache identity guard PASSES. No048 production fix yet.
+   requested manifest/cache identity guard PASSES. Candidate048 production repair
+   now UNCOMMITTED: carry stage.effectiveParameters into result.parameters;
+   append optional requestedParameters to preserve original manifest/cache identity
+   (unset manual results fall back to parameters). Manifest schema/fingerprint
+   algorithm unchanged. Two additional tests pin strict/default views and manual
+   result compatibility. Native whole build89679 parallel2 RUNNING; log
+   repair-effective-parameters-native-build.log. No after-pass or048 closure yet.
 MaximumTHREE workers. No concurrent SystemLink suites; private GPU wrapper only.
 
 EXACT NEXT: finish both complete external sections sweeps and strict comparisons,
@@ -77,8 +85,10 @@ Complete1128; expected SW617/51/48/3, GLES656/53/7/3, NOT yet observed.
 Finish native552/consumer audit in parallel. Close088/090/111/046/030 only when
 all gates genuinely pass (would73FINAL). Continue089 or047/048 afterward.
 131 OWNER-RESERVED;152 sharing policy and148 vendor policy unanswered.
-Uncommitted work: two048 regression tests in ContentPipelineCoreTests.cpp and this
-status update. Existing runtime repairs and external marker changes committed.
+Uncommitted work:048 ContentPipeline.hpp/.cpp, ContentBuildManifest.hpp/.cpp,
+four tests in ContentPipelineCoreTests.cpp and this status update. Existing XML
+runtime repairs and external marker changes committed. External freeze stays held;
+do NOT rebuild it for048 until current both-sweep/final-CTest/hash gates finish.
 
 ### Earlier same-day checkpoint (superseded by authoritative update above)
 
