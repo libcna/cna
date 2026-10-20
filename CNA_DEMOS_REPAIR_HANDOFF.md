@@ -48,11 +48,12 @@ all319 hashes verified before/after. Old freezes released after these gates and
 the staged network probe; the next corrected030 sweep must pass strict comparison.
 
 RUNNING/FROZEN:
-1. Native552/123 suites session51450; repair-sections-native-after*. Focus58/58
-   already passes; full suite currently in slow differential-build test.
-   Four artifacts FROZEN in repair-sections-native-frozen.sha256. DO NOT rebuild
-   native until full552, prior1412/runtime241 consumers, original XML fixtures
-   and final hash audit. Expected: all517 old outcomes unchanged+35newPASS.
+1. Native552/123 suites51450 COMPLETE0:551PASS/one same XACT SKIP973.298s.
+   Exact audit preserves all517 previous outcomes and adds35newPASS, differences[].
+   Four hashes match after full run; original XML fixtures6/6PASS4ms. Broader
+   consumers85944 RUNNING (prior1412/runtime241/defaultXML); logs
+   repair-sections-consumers-driver.log. Four artifacts remain FROZEN in
+   repair-sections-native-frozen.sha256 until consumer comparison/final hash audit.
 2. External rebuild43472 and marker build77496 COMPLETE0, warning-free. Strict56
    focused executions:25PASS/three remaining FAIL per renderer, all errors[].
    04620/20;148 exactly two remaining PI/BOM failures. Rebuilt aggregate030 gives
@@ -64,7 +65,9 @@ RUNNING/FROZEN:
    two tests added to ContentPipelineCoreTests.cpp, no production edits. First
    extra-Wall/Wextra attempt fails on unchanged fixture aggregate/loop warnings;
    retained. Project warning policy plusWerror attempt33643 recorded
-   in repair-effective-parameters-project-before-driver.log. No048 fix/pass yet.
+   in repair-effective-parameters-project-before-driver.log:onePASS/oneFAIL4ms,
+   exactly wrong effective metadata in all-rejected and mixed parameter sets;
+   requested manifest/cache identity guard PASSES. No048 production fix yet.
 MaximumTHREE workers. No concurrent SystemLink suites; private GPU wrapper only.
 
 EXACT NEXT: finish both complete external sections sweeps and strict comparisons,
