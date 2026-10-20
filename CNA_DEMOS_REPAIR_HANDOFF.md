@@ -34,14 +34,22 @@ work; see GENERATED_OUTPUT_TRIAGE.md. Do not conflate prepared assertions with
 the measured11-case context/manifest baseline. No047 CNA source changes.
 Prepared demos build-probe/repair-content-generated-output-host-before.mjs passes
 syntax check only; requires completed cache rebuild and hashes canonical artifacts.
-Ongoing61683 has18 warnings:16 in vendored Draco PLY reader/writer lambda captures
-and two old nodiscard calls in XnaMaterialContentTests.cpp (unchanged vs688f3f23e);
-preserve diagnostics in final audit, no vendor
+Ongoing61683 retains vendor/test diagnostics. Provenance snapshot86:70 owned-test
+call sites predating688f3f23e,16 vendor,zero errors/newer owned sites. See demos
+repair-model-encoder-native-cache-warning-provenance-interim.json. Re-run the
+read-only build-probe/repair-native-warning-provenance.mjs with a fresh final
+report prefix after build completion; this does not change flags/test policy.
+Preserve the exact final diagnostics in the audit; no vendor
 edit and no warning-free broad-build claim. Native model sources compiled.
 Prepared final-native/047-host drivers additionally inspect their actual cgroup
 memory.max<=6GiB and swap.max0 before any workload. Guard-only checks PASS2 bounded
 acceptances/2 unbounded refusals; no compiler or CNA suite launched. Use a new
 bounded systemd scope for the final private-display/unprivileged-broadcast gate.
+The final-native driver also explicitly exports shared ccache `/rv/cnaccache`,
+base `/rv`, and CMAKE_BUILD_PARALLEL_LEVEL/CTEST_PARALLEL_LEVEL=1 to test children.
+It stores complete error lists in audit JSON while bounding console output to
+counts/first ten errors plus the full audit path. Expected outcomes are unchanged;
+driver syntax passes, final native workload is still NOT RUN.
 
 External8261 COMPLETE0:18 stages,CTest684PASS/48sameSKIP/three disabled964.43s;
 735 outcomes exact against XML,319 frozen artifacts/three sources exact.
