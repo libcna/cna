@@ -10,42 +10,48 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 ## Current checkpoint (2026-10-20)
 
 Phase C completion / Phase D repair. CNA runtime031693a9f(components141–143),
-b086814f9(launch144), external frozen1ad0a3916(Color132); last complete checkpoint5ab1c7729
-plus99d790167(containment). Demo HEADe7eafac(Color focused/markers); containment
-closure45549e0, marker74622b4. All155 IDs retained:57 FINAL/98 PENDING:
-25 runtime findings,one verified duplicate,23 documentation corrections,seven
+b086814f9(launch144); latest completed external checkpoint1ad0a3916(Color132),
+demo markers e7eafac; latest evidencecf5bef5. All155 IDs retained:58 FINAL/97 PENDING:
+26 runtime findings,one verified duplicate,23 documentation corrections,seven
 already fixed before campaign,one demonstrated demo-expectation defect.
 
-LAST COMPLETE REGRESSION: containment127/129/133 now FIXED_VALIDATED. Native963PASS/
-two unchanged skips;registered247/247;consumers1408PASS/four unchanged skips;
-actual four-TU ASan/UBSan/float-cast-overflow/leak13/13. Strict actual C ABI Geometry/
-Vertex smokes pass; focused17 per renderer15PASS/two unchanged reserved131 failures.
-Both95math91PASS/four expectedFAIL. Full719SW603/65/48/3,GLES642/67/7/3,exact46
-cumulative expected changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals.
-Isolated full CTest732accepted/zero failures/48skips/three disabled,1233.07s;
-executable and both DSOs SHA256 reverified after completion. Permanent evidence
-../cna-demos/docs/repair-evidence/geometry/CONTAINMENT_CHECKPOINT.md.
-Complete1128 demo-status delta48; current-HEAD campaign delta46. External freeze
-released. Owner-reserved131 remains open; ray method/exception untouched.
+LAST COMPLETE REGRESSION: Color132 now FIXED_VALIDATED, runtime1ad0a3916.
+Native966PASS/two same skips;registered70/70;exact1412consumers1408PASS/four skips;
+actual Color.cpp ASan/UBSan/float-cast-overflow/leak64/64. Actual C ABI ColorSmoke6
+stages pass; all6 focused demos per rendererPASS, original7/9 checks retained.
+Both95math93PASS/two reserved131FAIL. Full719SW605/63/48/3,GLES644/65/7/3,exact48
+cumulative intended changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals;
+representative GLES capture inspected. Isolated full CTest732accepted/zero failures/
+48skips/three disabled983.90s; executable/both DSOs SHA256 reverified afterward.
+Evidence ../cna-demos/docs/repair-evidence/issue-132/CHECKPOINT.md. Complete1128
+demo-status delta50,current-HEAD campaign delta48. External Color freeze RELEASED.
+Owner-reserved131 remains open; outside-entry ray method/exception untouched.
 
-ACTIVE NEXT: Color132 FIXED_PENDING_REGRESSION, runtime1ad0a3916. External build
+ACTIVE NEXT: lifecycle141–144 external build against031693a9f/b086814f9. First
+correct three adjacent genuine-backed demo oracles, preserving all check calls.
+Then build external, actual C ABI smokes +20 focused scenarios per renderer; only
+remove four knownIssue markers after focusedPASS. Prepared lifecycle math/full
+comparators admit48 math changes +four game changes=52, no other differences.
+Do not apply storage/Sharp runtime fixes before lifecycle external build is frozen.
+
+Completed Color build details: runtime1ad0a3916. External build
 and marker rebuild COMPLETE warning-free; strict actual C ABI ColorSmoke and all6
 focused scenarios per renderer PASS. Two markers removed, original7/9 checks remain.
-Color executable/C++/C ABI frozen with SHA256/ldd repair-color-frozen*. DO NOT rebuild
-external until complete checkpoint. Full driver79621 COMPLETE: both math sweeps
+Color executable/C++/C ABI hashes recorded repair-color-frozen*, now freeze released.
+Full driver79621 COMPLETE: both math sweeps
 and both full719-ID sweeps exact48 changes/differences[]; SOFTWARE605/63/48/3,
 OPENGLES3 644/65/7/3; tools and six exact visuals pass. Frozen hashes reverified.
-Full isolated CTest session55689 RUNNING(one job), repair-color-demo-ctest.log;
-do not overlap SystemLink suites. Lifecycle production is native-validated
+Full isolated CTest55689 COMPLETE, repair-color-demo-ctest.log,983.90s.
+Do not overlap SystemLink suites. Lifecycle production is native-validated
 separately in native tree. Final hook companion build96698 COMPLETE warning-free;
 77/77 focusedPASS(4.770s), actual five-TU ASan/UBSan/leak58/58PASS(1.771s).
 Repeated broad native consumer job76785 COMPLETE: exact1412consumers1408PASS/four
 unchanged skips256.700s; all33 runtime suites234total231PASS/three same skips15.440s.
 Native executable/DSO repair-lifecycle-hook-native-frozen.sha256 verified unchanged;
-native freeze released. External Color freeze remains in force.
+native freeze released. External Color freeze also released after full checkpoint.
 Color native already complete: genuine/native1782/1782; math966/two skips;
 registered70/70; actual Color.cpp ASan/UBSan/float-cast-overflow/leak64/64;
-exact1412 consumers1408PASS/four same skips(282.277s). No external pass/closure yet.
+exact1412 consumers1408PASS/four same skips(282.277s). External closure now complete.
 Prepared drivers build-probe/repair-color-{c-smoke,focused,math,regression}.mjs;
 exact comparators admit only48 cumulative changes(two Color demos additional).
 
@@ -53,7 +59,10 @@ COMMITTED CNA: component root-cause batch031693a9f and launch batchb086814f9,
 including matching regressions and C contracts/smokes. All four matrix rows now
 FIXED_PENDING_REGRESSION; no lifecycle external validation/closure yet.
 Status commitc01e04275; lifecycle evidence8b38d2a, storage sharing edges2129f3f.
-UNCOMMITTED: latest145/152 evidence and matrix/handoff; no production changes.
+Latest triage commit25a1b8ad3, title evidencecf5bef5. UNCOMMITTED: new native151
+StorageContainerLifetimeTests.cpp plus storage evidence/handoff updates; no runtime
+production changes. Its standalone strict build passes, one live control passes,
+two disposed-path regressions fail as intended(5ms). Not rebuilt into CnaTests yet.
 Pre-fix standalone57total39PASS/18 intendedFAIL/zero skips907ms.
 First repaired native76/76 including19 Game controls; initial three warnings exactly
 match baseline GameTests ignored Remove results, then strengthened assertions build
@@ -103,10 +112,19 @@ direct FileStream defaults read sharing. New genuine sharing-edge15/15 checks pr
 denied Create/Truncate preserves bytes and exclusive locks reach a child process.
 Native direct write-only Open/OpenOrCreate loses existing data:4/4FAIL; preserve
 these controls in the same lower-layer open repair. Evidence2129f3f.
-Sharp baseline build session8883 RUNNING, existing build/Debug tree,--parallel2;
-at most three campaign jobs including Color CTest. No Sharp production edits.
-Next: verify warning-free build, then full component gate with original Yacht SOAP
-fixture /rv/tmp/samples/SAMPLE-071-Yacht_4_0/xna4-build/bin on private loopback port.
+Sharp baseline build8883 COMPLETE warning-free, existing build/Debug,--parallel2,
+11 reported links. Initial full gate46798 FAILED solely on five absent default-root
+XML serialization XNA sample fixtures; no test failures. Original samples exist.
+Initial log preserved build-probe/cna-repair-storage-baseline-components-missing-fixtures.log.
+Supported XNA_SAMPLES_ROOT now points at build-probe/cna-repair-xna-samples, containing
+only links to original ShipGame/Spacewar sources; no test/sample edits or skip allowance.
+Corrected full component gate82082 COMPLETE:18137/18137 across41 executables,zero
+failures/zero skips. Original Yacht SOAP fixture on private loopback stopped and
+temporary executable/config removed. Sharp HEAD remainsf2aecfef. AFTER baseline,
+uncommitted native FileStreamEofTests.cpp added: warning-free IO-target build19156,
+all three expectedFAIL on unchanged production. No dependency runtime edits.
+Linux FileStream pre-layout576/8,Stream8/8,copy/move bothfalse; Win64 layout probe
+being compiled/run privately. Color CTest55689 remains frozen; no SystemLink overlap.
 Never overlap the campaign's SystemLink suites. Sharp Runtime rules/StandingApprovals
 read; at most TWO Sharp jobs, layout/migration/full-gate requirements apply.
 145 newly CONFIRMED_OPEN: genuine title-path20/20; native6PASS/14FAIL. Historical

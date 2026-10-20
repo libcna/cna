@@ -2450,14 +2450,15 @@
       ],
       "subsystem": "math",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Color interpolated/multiplied floating channels directly instead of quantizing the factor first; this changes finite values as well as NaN and positive-infinite behavior.",
       "related_issues": [],
       "cna_fix_commit": "1ad0a3916",
       "validation": [
-        "Genuine XNA1782/1782; matching unchanged native probe162 mismatches. Three new native regressions fail before repair and two new actual pre-Color C ABI stages fail. After fixed-point repair native math966PASS/two unchanged skips; registeredColor/packing70/70; standalone1782/1782; actual Color.cpp sanitizer64/64 with ASan/UBSan/float-cast-overflow/leak. CPU-oriented consumer selection156PASS/one unavailable compiled-effect fixture skip. Wrong-cwd first native post-run failed8 fixture loads and remains retained; correct CNA cwd full run passes. External demos/C API remain frozen on containment5ab1c7729; no Color external pass, marker removal or final closure claimed. Permanent evidence ../cna-demos/docs/repair-evidence/issue-132/."
+        "Genuine XNA1782/1782; matching unchanged native probe162 mismatches. Three new native regressions fail before repair and two new actual pre-Color C ABI stages fail. After fixed-point repair native math966PASS/two unchanged skips; registeredColor/packing70/70; standalone1782/1782; actual Color.cpp sanitizer64/64 with ASan/UBSan/float-cast-overflow/leak. CPU-oriented consumer selection156PASS/one unavailable compiled-effect fixture skip. Wrong-cwd first native post-run failed8 fixture loads and remains retained; correct CNA cwd full run passes. External demos/C API remain frozen on containment5ab1c7729; no Color external pass, marker removal or final closure claimed. Permanent evidence ../cna-demos/docs/repair-evidence/issue-132/.",
+        "Frozen Color1ad0a3916/e7eafac complete: genuine/native1782/1782; native math966PASS/two same skips,registered70/70,exact1412 consumers1408PASS/four same skips; actual Color.cpp ASan/UBSan/float-cast-overflow/leak64/64. Actual C ABI ColorSmoke6 stages pass; six focused demos per renderer pass, original7/9 checks retained. Both95math93PASS/two reserved131FAIL; full719SW605/63/48/3,GLES644/65/7/3; exact48 cumulative changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals,representative GLES capture inspected. Full isolated CTest all732 accepted,zero failures,48skips/three disabled,983.90s; executable/C++/C ABI hashes reverified. Complete1128 demo-status delta50 includes two pre-campaign improvements. Lifecycle031693a9f/b086814f9 and storage tests are NOT in this frozen external checkpoint. Evidence docs/repair-evidence/issue-132/CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-133",
