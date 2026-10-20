@@ -53,21 +53,29 @@ RUNNING/FROZEN:
    Four artifacts FROZEN in repair-sections-native-frozen.sha256. DO NOT rebuild
    native until full552, prior1412/runtime241 consumers, original XML fixtures
    and final hash audit. Expected: all517 old outcomes unchanged+35newPASS.
-2. External existing build/linux-full rebuild session43472, parallel2;
-   repair-sections-external-build.log. No external tests during its mutation.
-   Native full uses one worker, leaving total at mostTHREE. No other campaign
-   compiler. No concurrent SystemLink suites; private GPU wrapper only.
+2. External rebuild43472 and marker build77496 COMPLETE0, warning-free. Strict56
+   focused executions:25PASS/three remaining FAIL per renderer, all errors[].
+   04620/20;148 exactly two remaining PI/BOM failures. Rebuilt aggregate030 gives
+   six host checks PASS on both renderers (13.319s/9.033s). Markers046/030 removed
+   only afterward, demos3d1f833. External319 artifacts NOW FROZEN in
+   repair-sections-binaries.sha256. Full job35425 running, both math95 and six
+   pixel-exact visuals already PASS; SOFTWARE sweep underway. Do NOT rebuild.
+3. Separate048 baseline test compilation against frozen native dependencies;
+   two tests added to ContentPipelineCoreTests.cpp, no production edits. First
+   extra-Wall/Wextra attempt fails on unchanged fixture aggregate/loop warnings;
+   retained. Project warning policy plusWerror attempt33643 recorded
+   in repair-effective-parameters-project-before-driver.log. No048 fix/pass yet.
+MaximumTHREE workers. No concurrent SystemLink suites; private GPU wrapper only.
 
-EXACT NEXT: finish external build, run repair-sections-focused.mjs (strict56
-custom-content executions, old markers). Only after the relevant passes remove
-046/030 knownIssue, keep148 and089, final rebuild and freeze319 artifacts.
-Run sections math/full regression/tools/six visuals, then isolated serial CTest
-and hash audit. Expected cumulative60 demo improvements vs initialHEAD/62 vs
+EXACT NEXT: finish both complete external sections sweeps and strict comparisons,
+then isolated serial CTest and319-hash audit. Keep148 and089 markers. Expected
+cumulative60 demo improvements vs initialHEAD/62 vs
 Complete1128; expected SW617/51/48/3, GLES656/53/7/3, NOT yet observed.
 Finish native552/consumer audit in parallel. Close088/090/111/046/030 only when
 all gates genuinely pass (would73FINAL). Continue089 or047/048 afterward.
 131 OWNER-RESERVED;152 sharing policy and148 vendor policy unanswered.
-Uncommitted work: this status/matrix update only; runtime and demo changes committed.
+Uncommitted work: two048 regression tests in ContentPipelineCoreTests.cpp and this
+status update. Existing runtime repairs and external marker changes committed.
 
 ### Earlier same-day checkpoint (superseded by authoritative update above)
 
