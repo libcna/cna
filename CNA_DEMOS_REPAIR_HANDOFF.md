@@ -9,6 +9,35 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+13:16 UTC: boundary external243-step and marker11-step builds COMPLETE0/zero
+warnings; native/demo source hashes match. Initial146 and marker146 exact focus
+both68PASS/five unchangedFAIL per renderer;37/32/23 controls retained. Demo changes
+committed34e530e. Final boundary92630 RUNNING(1),319 FROZEN external binaries:
+both95 math/six zero-pixel visuals pass, full719 sweeps underway. No boundary
+closure yet,77 FINAL/78 PENDING. Do not rebuild external tree during this gate.
+
+Next013/014 candidates UNCOMMITTED in three CNA files: ContentManager.cpp/.hpp
+and ContentManagerManifestTests.cpp. Exact bookkeeping exclusion/two native cases;
+lazy relative-root resolution/one fresh-process native case. See demos ROOT_REPAIRS.md.
+Actual TU normal/sanitizer:01316 public+8 native pass, including combined candidate;
+01412 public+1 fresh native pass; four native boundary hashes exact. No suppression.
+Final boundary-native hashes checked before release. Native build12705 RUNNING(2),
+1141 scheduled steps; three source hashes frozen. THREE workers total, no source
+edits. Prepared roots native helpers expect1993 module/562 pipeline unchanged;
+consumers wait for external SystemLink/CTest to finish. No013/014 demo changes.
+Next: finish/audit native build, run module/pipeline/link gates; preserve original
+C-root blocker throughout. Uncommitted handoff/evidence separate from candidates.
+
+13:06 UTC: closure/status committed CNA183328865/demos9b8bdf4. Four separately
+validated native fixes committed:1102386155f2,1051721b4182,1080d63ac853,
+1062ce326907 (current CNA HEAD). No boundary closure or marker removal yet.
+Final319 external012 hashes match; its freeze released. Three diagnostic demo
+assertions now require the repaired contracts, preserving37/23/32 controls and all
+positive witnesses. These three demo files are uncommitted during validation.
+External boundary build25644 RUNNING(3),243 scheduled steps/private GPU. No other
+jobs; freeze all compiled sources until complete. Next audit warning/task/source
+accounting, initial146 focus, then105 marker/106108 restrictions only on proof.
+
 13:03 UTC: ISSUE-012 RESOLVED/FIXED_VALIDATED; runtime d7ce398d8, demos marker
 dc9bfac. Current heads before closure commits CNA46c9d5654/demosdb663fa.
 77 FINAL/78 PENDING of155:44 fixed,23 documentation,8 already fixed,1 demo
