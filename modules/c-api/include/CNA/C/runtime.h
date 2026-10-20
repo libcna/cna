@@ -683,19 +683,16 @@ CNA_C_API CNA_Result cna_game_launch_parameters_copy_key(
     uint64_t* out_bytes);
 
 /**
- * @brief Adds one launch parameter, keeping any value the key already has.
+ * @brief Adds one launch parameter, rejecting a key that already exists.
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param key UTF-8 parameter name.
  * @param value UTF-8 parameter value.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * A key that is already present keeps its first value and the call still answers
- * `CNA_RESULT_SUCCESS`, so a caller cannot tell an add from a no-op by the result. That is
- * `LaunchParameters::Add`, which reaches `emplace`, and it is deliberately not what XNA does:
- * `Dictionary<string, string>.Add` throws on a duplicate key, and the canonical parse never
- * reaches the throw because it guards every add with `ContainsKey` first. Whether this boundary
- * should refuse a duplicate instead is recorded in `plans/plan_bindings_upstream.md`.
+ * A duplicate returns `CNA_RESULT_INVALID_ARGUMENT` and leaves the original value unchanged,
+ * mapping the canonical `System::ArgumentException`. Parsing remains first-value-wins because
+ * it checks for an existing key before adding. Empty direct keys and values are accepted.
  */
 CNA_C_API CNA_Result cna_game_launch_parameters_add(
     CNA_Handle game,
@@ -706,15 +703,15 @@ CNA_C_API CNA_Result cna_game_launch_parameters_add(
  * @brief Replaces the game's launch parameters by parsing an argument list.
  *
  * @param game Active owned or callback-borrowed game handle.
- * @param arguments Array of @p argument_count UTF-8 arguments, or null when the count is zero.
+ * @param arguments Array of @p argument_count UTF-8 arguments without an executable-name entry,
+ *        or null when the count is zero.
  * @param argument_count Number of arguments.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * This is the canonical argument-list constructor, and its parsing rules are the canonical ones
- * rather than the ones a reader might expect: leading flag markers are trimmed, the name and value
- * are split on the first **colon** — not an equals sign — an argument shorter than three characters
- * or without a colon is skipped silently, and the **first** occurrence of a name wins. An empty list
- * leaves the game with no parameters at all rather than re-reading the command line.
+ * Leading flag markers are trimmed and the name/value split uses the first colon, not an equals
+ * sign. A nonempty name without a colon or with a trailing colon keeps an empty value; empty
+ * names are ignored. The first parsed occurrence of a name wins. An empty list leaves the game
+ * with no parameters rather than re-reading the command line.
  */
 CNA_C_API CNA_Result cna_game_launch_parameters_parse_ext(
     CNA_Handle game,

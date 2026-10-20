@@ -240,11 +240,10 @@ static int validate_launch_parameters(const CNA_Handle game)
         cna_game_launch_parameters_get_count(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_game_launch_parameters_parse_ext(game, arguments, UINT64_C(3)) != CNA_RESULT_SUCCESS ||
         cna_game_launch_parameters_get_count(game, &count) != CNA_RESULT_SUCCESS ||
-        count != UINT64_C(2)) {
+        count != UINT64_C(3)) {
         return 0;
     }
-    /* The canonical parser splits on a colon and trims leading flag markers, so both spellings
-       above become names; the third argument has no colon and is skipped in silence. */
+    /* Genuine parsing retains a colonless argument with an empty value. */
     memset(text, 0, sizeof(text));
     if (cna_game_launch_parameters_contains_key(game, view("width"), &present) !=
             CNA_RESULT_SUCCESS ||
@@ -254,7 +253,9 @@ static int validate_launch_parameters(const CNA_Handle game)
         present != CNA_TRUE ||
         cna_game_launch_parameters_contains_key(game, view("nope"), &present) !=
             CNA_RESULT_SUCCESS ||
-        present != CNA_FALSE ||
+        present != CNA_TRUE ||
+        cna_game_launch_parameters_get_value_size(game, view("nope"), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(0) ||
         cna_game_launch_parameters_get_value_size(game, view("width"), &bytes) !=
             CNA_RESULT_SUCCESS ||
         bytes != UINT64_C(3) ||
@@ -274,7 +275,16 @@ static int validate_launch_parameters(const CNA_Handle game)
             CNA_RESULT_SUCCESS ||
         present != CNA_TRUE ||
         cna_game_launch_parameters_get_count(game, &count) != CNA_RESULT_SUCCESS ||
-        count != UINT64_C(3)) {
+        count != UINT64_C(4)) {
+        return 0;
+    }
+    /* Genuine Dictionary.Add rejects a duplicate atomically; parsing remains first-value-wins. */
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_add(game, view("depth"), view("16")) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_launch_parameters_copy_value(
+            game, view("depth"), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(2) || strcmp(text, "24") != 0 ||
+        cna_game_launch_parameters_get_count(game, &count) != CNA_RESULT_SUCCESS || count != UINT64_C(4)) {
         return 0;
     }
     /* CBIND-054: the keys are enumerable, which is what turns three keyed accessors into a map a
@@ -302,6 +312,12 @@ static int validate_launch_parameters(const CNA_Handle game)
     memset(text, 0, sizeof(text));
     if (cna_game_launch_parameters_copy_key(
             game, UINT64_C(2), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(text, "nope") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_game_launch_parameters_copy_key(
+            game, UINT64_C(3), text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
         strcmp(text, "width") != 0) {
         return 0;
     }
@@ -314,10 +330,10 @@ static int validate_launch_parameters(const CNA_Handle game)
     }
     /* An index at or above the count is refused, the two-call size/copy contract holds, and a
        null output is refused before anything is read. */
-    if (cna_game_launch_parameters_get_key_size(game, UINT64_C(3), &bytes) !=
+    if (cna_game_launch_parameters_get_key_size(game, UINT64_C(4), &bytes) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_game_launch_parameters_copy_key(
-            game, UINT64_C(3), text, (uint64_t)sizeof(text), &bytes) !=
+            game, UINT64_C(4), text, (uint64_t)sizeof(text), &bytes) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_game_launch_parameters_get_key_size(game, UINT64_C(0), 0) !=
             CNA_RESULT_INVALID_ARGUMENT ||

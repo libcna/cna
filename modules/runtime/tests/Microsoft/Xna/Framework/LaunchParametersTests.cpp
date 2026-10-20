@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/LaunchParameters.hpp"
+#include "System/ArgumentException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 
@@ -26,25 +27,28 @@ TEST(LaunchParametersTest, ParsesSlashArg)
     EXPECT_EQ(p.at("key"), "value");
 }
 
-TEST(LaunchParametersTest, SkipsArgTooShort)
+TEST(LaunchParametersTest, RetainsSingleCharacterKeyWithEmptyValue)
 {
-    // "-r:" trims to "r:" which is length 2 — below the minimum of 3
+    // Genuine XNA retains the empty value; there is no minimum three-byte length.
     LaunchParameters p(std::vector<std::string>{"-r:"});
-    EXPECT_FALSE(p.ContainsKey("r"));
+    ASSERT_TRUE(p.ContainsKey("r"));
+    EXPECT_TRUE(p.at("r").empty());
 }
 
-TEST(LaunchParametersTest, SkipsArgWithNoColon)
+TEST(LaunchParametersTest, RetainsArgWithNoColonAsEmptyValue)
 {
     LaunchParameters p(std::vector<std::string>{"-rFNA"});
-    EXPECT_FALSE(p.ContainsKey("rFNA"));
-    EXPECT_TRUE(p.empty());
+    ASSERT_TRUE(p.ContainsKey("rFNA"));
+    EXPECT_TRUE(p.at("rFNA").empty());
+    EXPECT_EQ(p.size(), 1U);
 }
 
-TEST(LaunchParametersTest, SkipsArgWhereColonIsLastChar)
+TEST(LaunchParametersTest, RetainsArgWhereColonIsLastChar)
 {
-    // "rv:" — colon at last position means no value, should be skipped
+    // Genuine XNA keeps a trailing-colon key with an empty string value.
     LaunchParameters p(std::vector<std::string>{"rv:"});
-    EXPECT_FALSE(p.ContainsKey("rv"));
+    ASSERT_TRUE(p.ContainsKey("rv"));
+    EXPECT_TRUE(p.at("rv").empty());
 }
 
 TEST(LaunchParametersTest, DuplicateKeyKeepsFirst)
@@ -90,4 +94,47 @@ TEST(LaunchParametersTest, MinimalValidArg)
     LaunchParameters p(std::vector<std::string>{"k:v"});
     ASSERT_TRUE(p.ContainsKey("k"));
     EXPECT_EQ(p.at("k"), "v");
+}
+
+// Genuine ComponentContractsOracle.cs: parsing preserves empty values and the
+// first duplicate, whereas direct Dictionary.Add must reject a duplicate.
+TEST(LaunchParametersTest, XnaEmptyValueArgumentsAreRetainedWithoutDroppingExistingControls)
+{
+    const LaunchParameters p(std::vector<std::string>{
+        "/level:3", "-difficulty:hard", "--windowed", "/level:9", "plain:value",
+        "/mixed:a:b", "-Case:Upper", "-case:lower", "/empty:"});
+    ASSERT_EQ(p.size(), 8U);
+    EXPECT_EQ(p.at("level"), "3");
+    EXPECT_EQ(p.at("difficulty"), "hard");
+    EXPECT_EQ(p.at("plain"), "value");
+    EXPECT_EQ(p.at("mixed"), "a:b");
+    EXPECT_EQ(p.at("Case"), "Upper");
+    EXPECT_EQ(p.at("case"), "lower");
+    EXPECT_TRUE(p.at("windowed").empty());
+    EXPECT_TRUE(p.at("empty").empty());
+}
+
+TEST(LaunchParametersTest, XnaParsingRejectsEmptyKeysButAcceptsSingleCharacterKeys)
+{
+    const LaunchParameters p(std::vector<std::string>{"", "---", "/", ":ignored", ":",
+                                                     "-x", "/y:", "-x:later"});
+    ASSERT_EQ(p.size(), 2U);
+    EXPECT_TRUE(p.at("x").empty());
+    EXPECT_TRUE(p.at("y").empty());
+    EXPECT_FALSE(p.ContainsKey(""));
+    EXPECT_FALSE(p.ContainsKey(":ignored"));
+}
+
+TEST(LaunchParametersTest, XnaDirectDuplicateAddThrowsAndPreservesEveryStoredValue)
+{
+    LaunchParameters p(std::vector<std::string>{});
+    p.Add("key", "first");
+    p.Add("", "empty key");
+    p.Add("blank", "");
+    EXPECT_THROW(p.Add("key", "replacement"), System::ArgumentException);
+    EXPECT_THROW(p.Add("", "replacement"), System::ArgumentException);
+    EXPECT_EQ(p.size(), 3U);
+    EXPECT_EQ(p.at("key"), "first");
+    EXPECT_EQ(p.at(""), "empty key");
+    EXPECT_TRUE(p.at("blank").empty());
 }

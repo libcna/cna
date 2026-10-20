@@ -6,6 +6,8 @@
 #include <fstream>
 #include <stdexcept>
 
+#include "System/ArgumentException.hpp"
+
 #if defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -18,7 +20,12 @@ namespace Microsoft::Xna::Framework
 {
     LaunchParameters::LaunchParameters()
     {
-        Parse(GetCommandLineArgs());
+        auto args = GetCommandLineArgs();
+        if (!args.empty())
+        {
+            args.erase(args.begin()); // The process executable is not a launch parameter.
+        }
+        Parse(args);
     }
 
     LaunchParameters::LaunchParameters(const std::vector<std::string>& args)
@@ -33,9 +40,10 @@ namespace Microsoft::Xna::Framework
 
     void LaunchParameters::Add(const std::string& key, const std::string& value)
     {
-        // FNA's Dictionary<string,string>.Add throws on duplicate key; emplace silently ignores it.
-        // Parse always guards with ContainsKey first, so this deviation is safe in practice.
-        emplace(key, value);
+        if (!emplace(key, value).second)
+        {
+            throw System::ArgumentException("An item with the same key has already been added.");
+        }
     }
 
     std::vector<std::string> LaunchParameters::GetCommandLineArgs()
@@ -107,24 +115,13 @@ namespace Microsoft::Xna::Framework
         {
             const std::string arg = TrimStartFlags(raw);
 
-            // One char for ':', one for key, one for value.
-            if (arg.size() < 3)
-            {
-                continue;
-            }
-
-            // FNA: IndexOf(":", 1, arg.Length - 2) — searches [1, arg.Length-2] inclusive.
-            // find(':', 1) + the > check below is equivalent: ':' at the last position has no value.
-            const std::size_t valueOffset = arg.find(':', 1);
-            if (valueOffset == std::string::npos || valueOffset > arg.size() - 2)
-            {
-                continue;
-            }
-
+            // XNA LaunchParameters constructor IL splits at the first colon and
+            // retains empty values, including a nonempty key without a colon.
+            const std::size_t valueOffset = arg.find(':');
             const std::string key = arg.substr(0, valueOffset);
-            if (!ContainsKey(key))
+            if (!key.empty() && !ContainsKey(key))
             {
-                Add(key, arg.substr(valueOffset + 1));
+                Add(key, valueOffset == std::string::npos ? std::string() : arg.substr(valueOffset + 1));
             }
         }
     }
