@@ -27,13 +27,23 @@ all four native binaries and the four instrumented sanitizer translation units.
 Actual encoder/decoder ASan/UBSan/leak coverage is61/61 PASS; dependencies were
 not fully instrumented. No earlier failed gate is deleted or reclassified.
 
-ISSUE-109 is fully validated; this checkpoint accompanies its localized encoder
-repair and native regressions. Next record this repair commit SHA in the matrix
-and move the permanent issue to Resolved without altering its historical body.
-Until that metadata update the matrix remains90FINAL/65PENDING. No workload is
-still live. Then run the prepared047 real-host baseline (six scenarios) in its
-own bounded scope before changing production code. Its two demo fixture files
-remain uncommitted. No push or merge.
+ISSUE-109 is RESOLVED by68e0acb67732efdb8a0b737ab6f43181444dee65; matrix and permanent
+issue now retain its history and record FIXED_VALIDATED. Totals91FINAL/64PENDING.
+No knownIssue/expected-failure count change: this was a passing diagnostic demo,
+whose assertions now require encoder rejection. Source/test repair is committed.
+Closure metadata is being finalized in both repositories; no push or merge.
+
+047 real-host baseline92605 COMPLETE0: strict warning-free fixture build, five
+expected root-authorization failures and one passing invalid-input control.
+The Python test exit remains1; the audit accepts only that exact reproduced
+baseline and verifies unchanged canonical binaries/109 sources. Initial51013
+audit failure retained: it mistook the deliberately retained empty shared staging
+root for a leaked reservation. Corrected auditor removes only the owned, empty,
+non-symlink root; all other leftover content still fails. No test/assertion change.
+Both private temporary parents are cleaned. No job remains live.
+Next commit the two validated047 fixtures and baseline evidence, then implement
+generated-output provenance/path preservation in registration and manifest flow.
+No047 production changes yet; use GENERATED_OUTPUT_TRIAGE.md for scope/controls.
 
 ### Earlier checkpoint (superseded for live jobs and next actions)
 
