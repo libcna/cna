@@ -9,6 +9,49 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST AUTHORITATIVE LIVE UPDATE (08:31 UTC; supersedes running-job text below):
+CNA HEAD ba30a215b, demos HEAD99f6b18. Still74 FINAL/81 PENDING; goal unchanged.
+039/045 full job19438 COMPLETE1: both719 sweeps retain the C root-contract conflict
+described below (SW619/49/48/3, GLES658/51/7/3). No final CTest/closure claimed.
+All319 external hashes match after the sweeps AND isolated before-fix103 probes.
+Failed external freeze is now RELEASED, without accepting that checkpoint.
+Owner root-contract question remains unanswered; no C API root behavior/docs/demo
+were changed. Last accepted complete checkpoint remains048.
+
+043 canonical whole build75383 COMPLETE0:51 warnings, all already present in the
+preceding52-warning baseline. New four artifacts are FROZEN in
+repair-reader-lookup-native-frozen.sha256. Module76364 COMPLETE0:1929 cases,
+1925PASS/four unchangedSKIP; all1918 previous outcomes plus11 new lookup passes
+match exactly, differences[]. All four hashes match afterward. Full552 pipeline
+11324 RUNNING(1), repair-reader-lookup-native-after.log; do not rebuild native.
+Actual-TU sanitizer11/11PASS remains separate from canonical module coverage.
+
+103 is independently reproduced without loaded assets/root changes: all eight
+load routes return IO, clear outputs, retain message/category, but lose canonical
+ContentLoadException identity. Four-byte XNB fixture; before36PASS/eightFAIL of44
+on BOTH SOFTWARE and OPENGLES3. CNA-native C17/Werror copy also reproduces44/eight.
+Permanent demo probe: docs/repair-evidence/content/ContentExceptionIdentityProbe.c.
+Local candidate lets the common exception barrier translate the existing native
+exception (eight catch arms in four C API files), preserving IO and metadata.
+Native regression added at modules/c-api/tests/pure_c/ContentExceptionSmoke.c,
+fixture tests/assets/content-exception/invalid.xnb, CMake test registration.
+External cna_c_api target build67664 RUNNING(2); reuses the existing tree/shared
+cache and also incorporates043 dependencies. Old external aggregate is no longer
+an immutable039/045 checkpoint. No after-fix103 result or commit yet.
+Initial missing-file probe separately found SoundEffect NotSupported instead of
+ContentLoadException; preserve its logs and investigate the native loose-audio
+boundary later, not by broadening103's expected canonical type.
+
+EXACT NEXT: finish native552, exact audit,1412/runtime241/XML and four hashes;
+finish cna_c_api build and run strict44-check103 probes on both renderers, plus
+existing C diagnostic regressions. C API tests are OFF in the native tree and CNA
+tests OFF in the external tree, so manual native-source runs are NOT a CTest claim.
+Commit043/103 separately with tests after their gates; update permanent evidence
+and matrix. Neither issue is closed. Keep root-contract conflict pending owner
+decision. Maximum THREE compiler/test workers; private GPU only; no concurrent
+SystemLink suites. Uncommitted source:043 registry/test/deviation,103 C API/test/
+fixture/CMake; documentation:handoff and runtime triage; demo103 probe untracked.
+
 AUTHORITATIVE UPDATE (supersedes all older checkpoint text below):
 Phase F. All155 historical IDs retained:74 FINAL/81 PENDING. Totals:41 fixed runtime
 findings,23 documentation corrections,eight pre-campaign fixes,one duplicate and
@@ -55,6 +98,28 @@ pipeline/consumers/sanitizer gates before a043 runtime commit. External043 must
 wait until039/045 external freeze is released.043 is NOT closed.
 Uncommitted CNA work:the043 runtime/header/native test/deviation record and this
 handoff; demos:three039/045 marker/oracle files plus primary/evidence documentation.
+
+NEW REGRESSION / OWNER CONTRACT QUESTION (2026-10-20): full SOFTWARE719 has the
+expected619PASS/49FAIL/48SKIP/three manual, BUT its strict comparison FAILS for
+c_api.content.content_manager. The C demo expects live root mutation to succeed;
+039 now refuses it. Its conditional branch skips later checks, including103's
+exception-type witness:103 is NOT fixed or verified by this run. Raw child checks
+fall from the original54 to43, although the parent remains an expected failure.
+Report repair-content-runtime-full-SOFTWARE-comparison.json preserves the delta.
+The C header content.h:73-81 and docs/c-api/CONTENT.md:36 explicitly promise cache-
+preserving root changes (original commit ef6a72525, CBIND-028); native ContentSmoke
+also relies on it. The C route directly forwards to the native setter. This is a
+public-contract conflict, NOT yet a demonstrated demo expectation bug. No C API
+demo/source/docs have been changed or assertions waived. An asynchronous owner
+question is pending: unify C API with measured XNA/C++ and explicitly correct its
+contract/tests (recommended), OR preserve the documented C-only behavior as an
+intentional extension. Do not infer an answer from the preselected option.
+19438 continues the independent GLES sweep; retain its result and verify frozen
+hashes before releasing a failed checkpoint. Do NOT run/claim a successful final
+039/045 checkpoint or close those IDs until this conflict is resolved. The
+independent043 native build75383 continues. Prepared/syntax-checked helper
+repair-reader-lookup-module.mjs pins173 files/1929 cases, all1918 prior outcomes
+unchanged plus11 new lookup passes. No canonical module result yet.
 
 LAST COMPLETE CLOSED CHECKPOINT:048, runtime3a1437725, unchanged demo behavior
 snapshot3d1f833 (later evidence commits only). Native251/552+1412/runtime241/XML
