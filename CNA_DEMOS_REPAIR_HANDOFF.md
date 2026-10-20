@@ -23,6 +23,13 @@ broadcast255.255.255.255 route. Driver now checks route and cache-rebuilt hashes
 Three109 source/test files remain uncommitted;90/65 unchanged. Scope limits apply
 to new workloads,not the Codex application. See MODEL_ENCODER_VALIDATION.md.
 
+047 next-host fixture preparation is uncommitted in demos:
+docs/repair-evidence/content/GeneratedOutputCompiler.cpp plus
+generated_output_cli_tests.py; five Python cases parse, C++/runtime NOT RUN.
+Use existing custom-compiler target flags/link libraries after current serial
+work; see GENERATED_OUTPUT_TRIAGE.md. Do not conflate prepared assertions with
+the measured11-case context/manifest baseline. No047 CNA source changes.
+
 External8261 COMPLETE0:18 stages,CTest684PASS/48sameSKIP/three disabled964.43s;
 735 outcomes exact against XML,319 frozen artifacts/three sources exact.
 Both719/math95/six zero-pixel visuals/146 focus complete; independent
