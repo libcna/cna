@@ -2729,13 +2729,14 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "OpenStream omits genuine cleaned-path validation and exception translation. Missing-file categories are already corrected in current CNA; empty/rooted names and directory/invalid-name categories remain wrong.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "cbb77e3c8",
       "validation": [
         "Genuine XNA20/20 path checks; unchanged native6PASS/14FAIL, warning-as-error build. Four title-relative/backslash/dot-parent/cwd/data controls and two missing-file categories pass. Existing ten-check demo now has two failures rather than historical three: absolute and empty names. Native absolute-acceptance oracle/header contradict genuine reference; preserve case-insensitive lookup and Android asset path. Evidence docs/repair-evidence/storage/TitlePathsOracle.cs,TitlePathsProbe.cpp,README.md; repair-title-paths-* reports. No product repair yet.",
-        "Four new native TitleContainerPathTests compile warning-free: two controls pass/two argument-and-directory regression groups fail against unchanged CNA (217ms). Fixtures restore cwd/TitleLocation and delete only their unique contents. C title-read adapter still catches every exception as I/O and documents absolute input; review its mapping with the underlying repair. Reports repair-title-native-tests-before*."
+        "Four new native TitleContainerPathTests compile warning-free: two controls pass/two argument-and-directory regression groups fail against unchanged CNA (217ms). Fixtures restore cwd/TitleLocation and delete only their unique contents. C title-read adapter still catches every exception as I/O and documents absolute input; review its mapping with the underlying repair. Reports repair-title-native-tests-before*.",
+        "Committed cbb77e3c8 after genuine30/30, native17/17 focus53ms, exact1412 consumers1408PASS/four same skips168.769s, all241 runtime238PASS/three same skips12.101s; hashes reverified. Actual TitleContainer.cpp+FileStream.cpp ASan/UBSan/leak13/13 (52ms). Android branch syntax-only passes, no runtime/cross-build claim. Seven native path regressions retain original controls and add UTF16 length/NUL cases. Correct actual GAC IL overrides a mismatching decompiled exception branch. Sharp prerequisites551ced42,82b57541,3304ecd6,58c6cba1 pass full18144/18144 across41 components; initial path-length/NUL failures and sanitizer link error retained. Framework4/current.NET long-path Append timing is explicitly versioned, both72-check references pass. C ABI argument mapping changed and smoke regression added; independent pre-fix C probe13checks/five failures. External C ABI/demos rebuild now pending, markers unchanged. Evidence docs/repair-evidence/storage/."
       ],
       "final_disposition": null
     },

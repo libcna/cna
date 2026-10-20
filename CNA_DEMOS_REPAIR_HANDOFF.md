@@ -9,7 +9,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-Phase E native repairs. CNA runtime5865ae938(storage151), Sharp58c6cba1 (including
+Phase E external validation. CNA runtimecbb77e3c8(Title145),5865ae938(storage151), Sharp58c6cba1 (including
 EOF1c0fc9b5,directory551ced42,URI82b57541,NUL3304ecd6); completed external031693a9f/b086814f9(lifecycle141–144),
 demo markers61d344e, latest evidence024afe6. All155 IDs retained:62 FINAL/93 PENDING:
 30 runtime findings,one verified duplicate,23 documentation corrections,seven
@@ -28,8 +28,15 @@ six exact visuals pass, representative GLES image inspected. Isolated full CTest
 911.46s. Three hashes reverified. External freeze RELEASED after closure commits.
 Complete1128 demo-status delta54, campaign HEAD delta52. No push/merge.
 
-ACTIVE native Title145: final repaired checkpoint COMPLETE, ready for coherent
-product commit. Sharp status repair58c6cba1 built warning-free and full gate95127
+ACTIVE: Title145 committedcbb77e3c8, matrixFIXED_PENDING_REGRESSION. Complete external
+storage/title build RUNNING, repair-storage-demo-build.log, --parallel2 in existing
+build/linux-full. It includes056/145/151 and all committed Sharp prerequisites.
+No content runtime changes until this build completes and its binaries are frozen.
+After build: actual C ABI RuntimeGameSmoke/StorageSmoke/TitleCValidationProbe and
+focused demo suites on both available renderers, preserve assertions, then remove
+only genuinely passing markers, rebuild/freeze, full comparison/visual/CTest gates.
+
+Native Title145 final repaired checkpoint COMPLETE. Sharp status repair58c6cba1 built warning-free and full gate95127
 passes18144/18144 across41 executables,zero failures/skips. Native build1322
 COMPLETE warning-free; focused17/17PASS53ms. Actual TitleContainer.cpp+FileStream.cpp
 and13 regression tests pass ASan/UBSan/leak52ms. Corrected sanitizer62682 links
