@@ -9,6 +9,67 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+12:45 UTC: all four boundary candidates pass focused normal/sanitized gates;
+10624736/49964 COMPLETE0:21 public+three selected native. Canonical83644 COMPLETE0,
+84 printed steps/zero warnings/nine source hashes exact, audit errors[]. Old native
+012 four hashes checked immediately before freeze release. New four artifacts
+FROZEN at repair-content-boundaries-native-frozen.sha256; nine compiled sources
+FROZEN at *-source.sha256. No source/test edits until native gates finish.
+62368 module RUNNING(1):five new focus then1990 exact cases.30922 pipeline RUNNING(1):
+three new focus then562 exact cases.78862 external012 RUNNING(1):SW719 complete
+624PASS/44FAIL/48SKIP/three manual; only retained original C root assertion delta,
+67 intended improvements. GLES underway; original global audit remains strict.
+THREE workers. Next free slot: six native link-footprint checks (no SystemLink).
+Consumers/runtime/XML must wait until external012 full/CTest finishes. Boundary
+runtime/tests/docs uncommitted; native build/gates use that frozen candidate. No
+boundary demo changes or closure. Exact next after gates: separate root-cause
+commits, external boundary build/focus after releasing012 external freeze, update
+only measured historical diagnostic expectations and105 marker, full comparison.
+
+12:41 UTC:012 marker96444 COMPLETE0 (same67PASS/six unchangedFAIL each renderer),
+marker/evidence commit demosdc9bfac. Full external78862 RUNNING(1), phase
+content-stream-routing,319 artifacts FROZEN; both95 math and six exact visuals
+PASS, SOFTWARE719 sweep currently in net. No external rebuild until all full/
+CTest/hash audits finish. Native012 artifacts remain unchanged for actual-TU probes.
+
+Next coherent content-boundary batch is UNCOMMITTED in CNA:110 source+three native
+regressions,105 shared resolver+two regressions,108 range guard+two regressions,
+106 diagnostic/public comments+one regression. Before witnesses preserved.110
+23256/60899 COMPLETE0:11 public+15 native normal/ASan/UBSan/leak.10541746/27986
+first exit1 at legacy native fixture's stronger-Werror compile, after public25 PASS;
+old missing-field/range-loop diagnostics retained. Canonical-policy fixture80998/
+49461 COMPLETE0:25 public+23 native both modes, no suppressions.10886920/43501
+COMPLETE0:12 public+8 native both modes. Four native012 hashes match every probe.
+10624736 normal/49964 sanitizer RUNNING(1 each), actual content.cpp +21 public/three
+selected native tests; old native fixture uses canonical flags, public staysWerror.
+THREE workers including78862. No four-boundary demo assertions/markers changed.
+See demos docs/repair-evidence/content/BOUNDARY_REPAIRS.md. Next after106 proof:
+release native012 freeze only after final hash check, build canonical native-j2
+(external78862 stays1), then1990 content +562 pipeline exact gates. Defer native
+SystemLink consumers until external full/CTest ends. Counts76/79;012 still pending.
+
+12:31 UTC:012 runtime COMMITTED d7ce398d8 after all native gates and initial146
+focus passed. External75857 COMPLETE0, resumed484+original566 printed steps,
+1040 unique body tasks/six repeated asset tasks, zero warnings/nine source hashes
+exact.86484 initial focus COMPLETE0:67PASS/six unchangedFAIL each renderer; only
+two012 improvements, resource checks2->4 existing success branch. Two012 markers
+removed afterward, no assertion/ownProcess changes.48811 marker build COMPLETE0,
+10 steps/zero warnings.96444 marker146 focus RUNNING(1); full gates next on319
+frozen artifacts. Counts76/79 unchanged until full closure; global C root residual
+still strict. Independent106 probe28937 COMPLETE0 audit21=16PASS/fiveFAIL, strict
+warning-free/four native hashes match; permanent source and triage doc updated.
+No106 runtime repair. Native012 artifacts remain frozen, no other active jobs.
+
+12:21 UTC scheduling: all native gates/probes finished, so external79065 was
+deliberately interrupted once with SIGINT to its verified Ninja2640985 (exit2,
+no compiler error). Original log retained:566 printed steps/563 body tasks,51%
+done. Nine source hashes still match. Resume75857 RUNNING(3),484 scheduled steps,
+report *-external-build-rescheduled.log. This is a parallelism change, not a
+failure retry. Auditor now reconciles both contiguous segments and exactly six
+repeated independent copy/content tasks; requires1040 unique original body tasks,
+zero warnings, completed final segment and unchanged nine sources. No other jobs,
+no compiled source/metadata changes. HEADs CNA48de2373a/demos6ce3745.
+
 12:18 UTC: native012 pipeline94252 COMPLETE0,559=558PASS/one unchangedSDK-fixture
 SKIP; exact predecessor audit errors[], four posthashes match. All prepared native
 012 gates now pass. External79065 is the only active worker (~514/1043); no source
