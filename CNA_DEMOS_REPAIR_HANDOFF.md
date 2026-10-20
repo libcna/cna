@@ -9,6 +9,27 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Cache-policy build61683 is COMPLETE0 (configure0/build0,6,024,361ms), shared
+ccache base `/rv`, one compiler worker, four resulting binary hashes recorded,
+three ISSUE-109 source hashes unchanged, audit errors empty. Final warning audit:
+138 diagnostics,122 pre-campaign owned-test call sites,16 vendor,zero errors or
+newer owned call sites; not a warning-free build. Reports use
+repair-model-encoder-native-cache and ...-warning-provenance-final prefixes.
+
+Current heavy job is5396, the final native usernet gate, RUNNING in
+cna-repair-model-usernet-validation.scope (MemoryHigh4GiB/Max6GiB/Swap0).
+It uses the private graphics runner, owner UID, zero capabilities and a dummy
+interface with an explicit limited-broadcast route. Focused54/54 PASS, audit
+errors empty; full10798 is RUNNING, not yet accepted. Expected full result is
+10697PASS/101unchangedSKIP, with every predecessor outcome compared individually.
+Do not start another heavy workload or change the frozen sources/binaries.
+Poll5396; on completion inspect both audits and memory counters. Only after a
+clean full gate may109 be committed/closed. External18-stage checkpoint remains
+complete. Current totals90FINAL/65PENDING; three109 source/test files uncommitted.
+Then execute the prepared047 real-host baseline before production repair.
+
+### Earlier checkpoint (superseded for live jobs and next actions)
+
 Native86497 COMPLETE1:10798=10688PASS/105SKIP/fiveFAIL. All outcomes retained.
 Root capabilities caused one permission failure/four extra skips; loopback-only
 private network lacked limited-broadcast routing, causing four two-process
