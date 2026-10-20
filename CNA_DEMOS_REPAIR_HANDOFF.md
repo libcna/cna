@@ -9,6 +9,35 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+109 extended sanitizer52903 COMPLETE0:61/61 PASS, actual encoder+decoder and both
+test TUs instrumented, zero warnings/findings; four frozen native artifacts/three
+source hashes verified. Full native86497/external8261 remain running. No109 closure.
+
+109 corrected native build61320 COMPLETE0,zero warnings. New gate86497 runs full
+10798 on private display AND private Linux network namespace after focused54/54
+passed; freeze four native binaries/three sources incl.CnbHardeningTests.cpp.
+Actual encoder+decoder/both test TU sanitizer52903 RUNNING(one compiler).
+External8261 both719 sweeps exact SW627/41/48/3,GLES666/43/7/3 with original/local
+audits errors[]; serial finalCTest RUNNING,319-artifact/three-source freeze intact.
+Do not rebuild either frozen tree. Initial failed95074/compile12167 logs retained;
+no109 runtime commit/closure yet.90/65. Native cache inspection found the existing
+CMake compiler launcher overrides exported CCACHE_BASEDIR with the repository
+parent; before NEXT build (after freezes), explicitly configure CNA_CCACHE_BASEDIR
+and both C/CXX compiler launchers to /rv. Shared CCACHE_DIR=/rv/cnaccache is used.
+Do not claim the old cached launcher used /rv merely from the shell environment.
+
+109 first native95074 COMPLETE1:10798=10690PASS/101sameSKIP/sevenFAIL;four native
+binary/two source hashes exact. One decoder fixture relied on encoder accepting
+invalid data; six61190 discovery failures overlap external net (wrong host port).
+Unchanged binary discovery13/13 passes in private network namespace74752.
+Both16/32-bit decoder fixtures now corrupt valid encoded chunks and separately
+check encoder refusal, preserving exact decoder diagnostics/high-byte coverage.
+Third uncommitted CNA source:CnbHardeningTests.cpp. Corrected native build61320
+RUNNING after initial retained missing-Parse-filename error12167. Next full
+10798 gate must use private network plus private display. External8261 continues
+SW719627/41/48/3 exact original/local audits; GLES/CTest pending. External319/three
+source freeze unchanged. No109 closure;90/65. See MODEL_ENCODER_VALIDATION.md.
+
 047 isolated native baseline79356 COMPLETE0 (test process expected1):two
 legitimate separate-output registrations FAIL,five source/security controls PASS.
 Strict warning-free build;four frozen native binaries/two109 sources exact.
