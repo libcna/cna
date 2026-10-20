@@ -9,6 +9,36 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+### Active ISSUE-011 ownership baseline (no production repair yet)
+
+CNA baseline31a580d2eb51794824499638609e113a95670901; demos baselineaf858e41d4c8756096fc00874913802714413c0f.
+Permanent refreshed demos evidence revision9e62467d027bb99d0bc49ebe0124817b7f12bfcf.
+Both worktrees/indexes were clean before this next baseline.42827 COMPLETE0:
+strict current-library build5384ms,zero diagnostics; native14=3PASS/11FAIL,242ms,
+normal exit1 retained. Every one of50 failed assertion messages exactly matches
+the retained ten-manager/four-texture XML baselines. Original test sources and
+genuine oracle byte-identical to005899e9; all frozen native/affected-source hashes
+verified before/after. Peak503,635,968 bytes,zero high/max/OOM. No heavy job live.
+Reports repair-content-ownership-after057-before-*; no ownership patch or closure.
+93FINAL/62PENDING unchanged. The completed057 checkpoint below remains accepted.
+
+Next exact task: implement the manager-owned disposal repair with matching native
+coverage, starting from the preserved14 cases and genuine108-check reference.
+Retain ordered per-materialization records (no dedup), partial-read ownership,
+caller-recorder ownership, exceptional Unload/Dispose finalization and exact
+disposed exceptions. Shared-pointer fallback alone cannot close011: by-value
+texture copies/moves must be invalidated by the manager and release actual renderer
+references while ordinary explicit wrapper disposal stays independent. C-issued
+resources must retain documented independent lifetime. Audit direct XNB font-atlas,
+model graph and non-XNB resource creation; preserve actual pixel C tests and add
+missing nested/C-resource controls. RUNTIME_OWNERSHIP_TRIAGE.md maps these sources.
+Do not adopt shared GraphicsResource identity as a blanket fix; it neither releases
+all wrapper renderer references nor preserves ordinary independent disposal.
+This handoff/matrix are committed together after demos9e62467; no source edits or
+other uncommitted work are intended. Preserve unrelated changes if they appear.
+Keep builds serial/one worker/shared cache/bounded6GiB; use private GPU runner.
+No push/merge;131 stays owner-reserved,152 remains actionable. Goal active.
+
 ### Last complete checkpoint: ISSUE-057
 
 CNA source revision83e611fe1e1196e63ccc708d2aada80e8addf512 fixes staging lifecycle
