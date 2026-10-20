@@ -476,9 +476,11 @@ namespace
                          []
         {
             Xnb::XnbModelData model = Model();
-            model.meshes[0].boundingSphere =
-                BoundingSphere(Vector3{std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f},
-                               -1.0f);
+            // Public fields can hold this input even though the XNA constructor rejects it.
+            // Exercise the writer with the same invalid payload, not constructor validation.
+            model.meshes[0].boundingSphere.Center =
+                Vector3{std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f};
+            model.meshes[0].boundingSphere.Radius = -1.0f;
             Write(model);
         }});
 

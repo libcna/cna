@@ -127,6 +127,13 @@ this is NOT a successful content checkpoint. Initial70373 guard failed because
 filter omitted two constructor tests (21/21PASS); corrected filter adds them,
 not reduces expectation. Both logs retained. External039/045 has not been built;
 external048 binaries still contain old runtime. Other011/012/043/087 remain open.
+Fixture corrections are now applied: public sphere fields retain the identical
+invalid writer input/expected Written result; Song end-to-end expectation becomes
+ContentLoadException, with explicit renamed-test mapping in the audit. Direct
+SongReader FileNotFoundException contract is unchanged. Eight-step incremental
+build28508 COMPLETE0, warning-free. Combined manager/writer/song33/33PASS146ms,
+corpus48=32refused/16written, mutations400=204refused/196written. Corrected1918
+job71175 RUNNING; new four artifacts FROZEN under repair-content-runtime-corrected.
 011 includes value-handle Texture2D ownership; a shared_ptr-only fix is insufficient.
 012 cold builtin registration depends on Game declaration; preserve family link
 boundaries and explicit reader withdrawal.043 must preserve fresh unique_ptr API.
@@ -153,8 +160,7 @@ bypass index, IDisposable value types never record, all four existing-value over
 throw InvalidOperationException due boxed identity. Do not apply reference-type
 dispatch rules to value targets or blindly preserve existing incorrect native expectations.
 
-EXACT NEXT: correct the two native test fixtures above against measured contracts,
-incrementally rebuild and rerun1918 content tests, then552 pipeline,
+EXACT NEXT: finish corrected1918 native module71175, then552 pipeline,
 1412 consumers/runtime241/originalXML and native hash audit.039/045 remain unclosed;
 after their native gate, commit runtime and rebuild external against that exact tree.
 048 is closed. Preserve047/089/148 markers.
