@@ -31,8 +31,8 @@ Validation platforms: Linux native, SOFTWARE/OPENGLES3 runtime; actual atomic-co
 helper additionally MinGW32/Wine and ASan/UBSan/leak detection. No native Windows,
 MSVC, unavailable hardware/services or all-renderer coverage claim. No new push.
 
-Next exact task: ISSUE-057 staging lifecycle. Refresh its unchanged concurrent/
-sequential reproductions against this checkpoint, then prove a cross-process and
+Next exact task: ISSUE-057 staging lifecycle. The refreshed unchanged concurrent/
+sequential probes now confirm the defect on this checkpoint; prove a cross-process and
 cross-thread lifecycle synchronization repair without suppressing malformed-state,
 ownership, symlink, lease, age or bounded-scan diagnostics. See demos
 docs/repair-evidence/content/CONTENT_STAGING_TRIAGE.md; its read-only design note
@@ -44,6 +44,19 @@ unchanged complete047 historical body and unchanged other154 matrix records.
 This metadata checkpoint commits the handoff/matrix after the separate demos
 closure. Demos worktree is clean; no uncommitted CNA production changes remain.
 Preserve unrelated changes if they appear. No push or merge was performed.
+
+057 refresh66458 COMPLETE0: strict Clang builds, unchanged permanent probes,
+1000 concurrent owners/5640 scans;3093 missing-owner warnings plus64 unreadable,
+22 incomplete,39 invalid-directory diagnostics,zero owner errors/removals. Normal
+concurrent exit1 retained; sequential1000 exits0 with zero diagnostics/errors.
+Private parents end empty and are removed non-recursively. Source hashes exact;
+scope peak141,725,696 bytes,zero high/max/OOM. Report prefix in demos:
+repair-content-staging-after047-before; baseline CNAee92c1eaa/demos1abd9ec.
+No057 production/test-oracle edit or live heavy job. Continue with lifecycle
+synchronization and independent-process/thread safety regressions; do not rerun
+this identical baseline or treat the warning as harmless. A persistent parent
+coordination file, if selected, requires explicit exact housekeeping-file checks
+and documentation, not arbitrary leftover suppression. Inventory remains92/63.
 
 ### Retained pre-closure validation chronology
 
