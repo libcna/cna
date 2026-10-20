@@ -9,6 +9,26 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+14:28 UTC: combined24685 COMPLETE1 solely the original C-root residual. CTest
+COMPLETE0:735 outcomes,684PASS/48 unchangedSKIP/three disabled,599.13s;319 hashes
+exact. Six IDs013/014/105/106/108/110 now FIXED_VALIDATED; inventory/matrix audit
+verifies every155 historical body preserved and83 FINAL/72 PENDING. Breakdown50
+FIXED_VALIDATED,23 DOCUMENTATION_CORRECTED,eightALREADY_FIXED,oneDEMO_EXPECTATION_BUG,
+oneDUPLICATE_ROOT_CAUSE. See ROOTS_BOUNDARIES_CHECKPOINT.md. Last globally accepted
+checkpoint still048; no assertion/marker hides C-root conflict. Closure commits
+pending immediately below;001 remains open pending external reconfiguration/build.
+
+016: first generic small link model did NOT reproduce (all four runs pass); retained
+as incomplete minimization, not ALREADY_FIXED. Actual current720-object demo closure
+relinked to a separate ignored executable, removing ONLY first explicit libcna.so
+token, reproduces6461 strong duplicate symbols (1725 Graphics) versus controlzero,
+and SIGABRT/double-free at exit. Original metadata invocation also sees expected
+missing assets from relocated title directory, so a --version-only control is running
+to isolate shutdown from asset lookup. Initial nm capture hit the finite output buffer;
+file-backed resumed76723 COMPLETE0,319 external hashes exact. No016 source repair.
+Next: commit six-ID closure, release external freeze, configure/build001 in demos,
+then continue016 with actual target topology, preserving static module footprint.
+
 14:19 UTC: both719 full sweeps complete, exact local comparison passes. SOFTWARE
 625/43/48/3,GLES664/45/7/3,68 cumulative improvements vs initialHEAD/70Complete1128;
 only original C-root contract residual remains.24685 now serial CTest(~342/735).

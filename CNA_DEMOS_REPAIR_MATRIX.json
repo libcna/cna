@@ -242,15 +242,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "RefreshContentManifest enumerates every regular file and groups its extension without excluding CNA pipeline bookkeeping files or its generated intermediate directory.",
-      "current_validation": "Actual ContentManager.cpp16 public/eight native manifest cases pass normal and ASan/UBSan/leak, also combined with014. Exact reserved names/subtrees only; hidden/prefix assets retained. Canonical1141 steps/45 prior warnings/zero new;1993 module/562 pipeline/consumers running. Demo adds four checks13->17, not externally built yet. No closure; ROOT_REPAIRS.md.",
+      "current_validation": "Runtime bbe2bda7b/demo1f8ae67. 16 public/eight native manifest normal/focused ASan/UBSan/leak checks pass. Native1993 module/562 pipeline,1412 consumers/241 runtime/XML/six link tests exact. External1183-step build zero warnings;146 content focus68PASS/five unchangedFAIL each,354 C API original outcomes exact,external16 manifest/12 cold-root pass. SW719625/43/48/3,GLES664/45/7/3; only105 improves from012, manifest13->17 additive.68 cumulative improvements versus initialHEAD/70 Complete1128. Both95 math/six zero-pixel visuals pass. CTest684PASS/48 unchangedSKIP/three disabled 599.13s,735 outcomes/319 hashes exact. Original C-root residual remains globallyAccepted=false; local closure only. Linux SDL runtime tested; other platforms not claimed.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "bbe2bda7b93e223d0c34a9880df68c3b7e9add57",
       "validation": [
-        "Current089 focused manifest log explicitly lists root and nested .cna-content.lock/.cna-content-manifest.json and contentproj/.cna-contentproj/cna-buildcontent.json. Native ContentManagerManifestTests cover grouping/refresh/malformed XNB but no bookkeeping exclusion. Pipeline public manifest constant and content.cpp-generated intermediate directory confirm ownership. No production repair or assertion/marker change; native012 source freeze remains."
+        "Current089 focused manifest log explicitly lists root and nested .cna-content.lock/.cna-content-manifest.json and contentproj/.cna-contentproj/cna-buildcontent.json. Native ContentManagerManifestTests cover grouping/refresh/malformed XNB but no bookkeeping exclusion. Pipeline public manifest constant and content.cpp-generated intermediate directory confirm ownership. No production repair or assertion/marker change; native012 source freeze remains.",
+        "Combined frozen repair-content-roots gates verified; see demos docs/repair-evidence/content/ROOTS_BOUNDARIES_CHECKPOINT.md. Historical assertions retained or corrected from verified public contracts; no relaxed tolerances. Failed boundary full/C ABI regression and both manifest audit setup failures retained. C compatibility adapter c57ecab8c verified by354 exact external C API cases. Sanitizers instrument actual affected TUs/probes, not all linked dependencies."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-014",
@@ -262,13 +263,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "TitleRootedDirectory uses the platform base only if HasCurrentPlatform is already true, so relative-root manifest scanning changes from cwd to the title directory after lazy title/platform initialization.",
-      "current_validation": "Fresh Linux SDL process12/12 and new native fresh-process case pass normal and actual-TU ASan/UBSan/leak. Absolute roots avoid ambient initialization; first relative scan, explicit title overrides and snapshots protected. Android namespace/cwd fallback unchanged. Canonical1141-step build passes; native regression pending. No other-platform runtime claim or closure; ROOT_REPAIRS.md.",
+      "current_validation": "Runtime bbe2bda7b/demo1f8ae67. 12 public/one fresh-process native cold-root normal/focused ASan/UBSan/leak checks pass. Native1993 module/562 pipeline,1412 consumers/241 runtime/XML/six link tests exact. External1183-step build zero warnings;146 content focus68PASS/five unchangedFAIL each,354 C API original outcomes exact,external16 manifest/12 cold-root pass. SW719625/43/48/3,GLES664/45/7/3; only105 improves from012, manifest13->17 additive.68 cumulative improvements versus initialHEAD/70 Complete1128. Both95 math/six zero-pixel visuals pass. CTest684PASS/48 unchangedSKIP/three disabled 599.13s,735 outcomes/319 hashes exact. Original C-root residual remains globallyAccepted=false; local closure only. Linux SDL runtime tested; other platforms not claimed.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "bbe2bda7b93e223d0c34a9880df68c3b7e9add57",
+      "validation": [
+        "Combined frozen repair-content-roots gates verified; see demos docs/repair-evidence/content/ROOTS_BOUNDARIES_CHECKPOINT.md. Historical assertions retained or corrected from verified public contracts; no relaxed tolerances. Failed boundary full/C ABI regression and both manifest audit setup failures retained. C compatibility adapter c57ecab8c verified by354 exact external C API cases. Sanitizers instrument actual affected TUs/probes, not all linked dependencies."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-015",
@@ -1938,13 +1941,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "ResolveImporter and ResolveProcessor filter named-only components only for multi-entry routes and then fall back to the unfiltered resolver unless exactly one ordinary candidate remains.",
-      "current_validation": "Actual-TU25 public/23 native normal/sanitizer pass; all boundary native gates and both146 focused gates pass. Demo34e530e preserves15 checks. Full SOFTWARE shows intended105 improvement but separate110 C ABI regression; no closure. Adapterc57ecab8c validated separately; combined content-roots final regression pending.",
+      "current_validation": "Runtime 1721b4182/demo34e530e. 25 public/23 native routing normal/focused ASan/UBSan/leak checks pass. Native1993 module/562 pipeline,1412 consumers/241 runtime/XML/six link tests exact. External1183-step build zero warnings;146 content focus68PASS/five unchangedFAIL each,354 C API original outcomes exact,external16 manifest/12 cold-root pass. SW719625/43/48/3,GLES664/45/7/3; only105 improves from012, manifest13->17 additive.68 cumulative improvements versus initialHEAD/70 Complete1128. Both95 math/six zero-pixel visuals pass. CTest684PASS/48 unchangedSKIP/three disabled 599.13s,735 outcomes/319 hashes exact. Original C-root residual remains globallyAccepted=false; local closure only. Linux SDL runtime tested; other platforms not claimed.",
       "related_issues": [],
-      "cna_fix_commit": "1721b4182",
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "1721b4182bf37ba4a7388e08567214d2ea7b00f5",
+      "validation": [
+        "Combined frozen repair-content-roots gates verified; see demos docs/repair-evidence/content/ROOTS_BOUNDARIES_CHECKPOINT.md. Historical assertions retained or corrected from verified public contracts; no relaxed tolerances. Failed boundary full/C ABI regression and both manifest audit setup failures retained. C compatibility adapter c57ecab8c verified by354 exact external C API cases. Sanitizers instrument actual affected TUs/probes, not all linked dependencies."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-106",
@@ -1956,13 +1961,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "The pre-built compiler overload compares all seven registry-affecting option fields but retains an FX-only refusal message; public equality/overload comments are similarly stale.",
-      "current_validation": "Actual-TU21 public/three native normal/sanitizer pass; all boundary native gates and both146 focused gates pass. Demo34e530e retains32 controls with corrected selected-option diagnostic assertion. Full boundary stopped on separate110 C ABI regression; no closure. Combined content-roots final validation pending.",
+      "current_validation": "Runtime 2ce326907/demo34e530e. 21 public/three native option normal/focused ASan/UBSan/leak checks pass. Native1993 module/562 pipeline,1412 consumers/241 runtime/XML/six link tests exact. External1183-step build zero warnings;146 content focus68PASS/five unchangedFAIL each,354 C API original outcomes exact,external16 manifest/12 cold-root pass. SW719625/43/48/3,GLES664/45/7/3; only105 improves from012, manifest13->17 additive.68 cumulative improvements versus initialHEAD/70 Complete1128. Both95 math/six zero-pixel visuals pass. CTest684PASS/48 unchangedSKIP/three disabled 599.13s,735 outcomes/319 hashes exact. Original C-root residual remains globallyAccepted=false; local closure only. Linux SDL runtime tested; other platforms not claimed.",
       "related_issues": [],
-      "cna_fix_commit": "2ce326907",
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "2ce3269073c119133bff0563f4b493e410a4cfa5",
+      "validation": [
+        "Combined frozen repair-content-roots gates verified; see demos docs/repair-evidence/content/ROOTS_BOUNDARIES_CHECKPOINT.md. Historical assertions retained or corrected from verified public contracts; no relaxed tolerances. Failed boundary full/C ABI regression and both manifest audit setup failures retained. C compatibility adapter c57ecab8c verified by354 exact external C API cases. Sanitizers instrument actual affected TUs/probes, not all linked dependencies."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-107",
@@ -1994,13 +2001,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "ExpandCharacterRegions performs an unsigned ascending loop without validating end >= start, although the public function documents an inverted-range exception and the XML parser already checks it.",
-      "current_validation": "Actual-TU12 public/eight native normal/sanitizer pass; all boundary native gates and both146 focused gates pass. Demo34e530e retains23 controls with documented runtime_error refusal. Full boundary stopped on separate110 C ABI regression; no closure. Combined content-roots final validation pending.",
+      "current_validation": "Runtime 0d63ac853/demo34e530e. 12 public/eight native font normal/focused ASan/UBSan/leak checks pass. Native1993 module/562 pipeline,1412 consumers/241 runtime/XML/six link tests exact. External1183-step build zero warnings;146 content focus68PASS/five unchangedFAIL each,354 C API original outcomes exact,external16 manifest/12 cold-root pass. SW719625/43/48/3,GLES664/45/7/3; only105 improves from012, manifest13->17 additive.68 cumulative improvements versus initialHEAD/70 Complete1128. Both95 math/six zero-pixel visuals pass. CTest684PASS/48 unchangedSKIP/three disabled 599.13s,735 outcomes/319 hashes exact. Original C-root residual remains globallyAccepted=false; local closure only. Linux SDL runtime tested; other platforms not claimed.",
       "related_issues": [],
-      "cna_fix_commit": "0d63ac853",
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "0d63ac853f005e43d362f1121f96f9e1844fbfb8",
+      "validation": [
+        "Combined frozen repair-content-roots gates verified; see demos docs/repair-evidence/content/ROOTS_BOUNDARIES_CHECKPOINT.md. Historical assertions retained or corrected from verified public contracts; no relaxed tolerances. Failed boundary full/C ABI regression and both manifest audit setup failures retained. C compatibility adapter c57ecab8c verified by354 exact external C API cases. Sanitizers instrument actual affected TUs/probes, not all linked dependencies."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-109",
@@ -2029,13 +2038,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "DecompressCnbChunk returns the None-codec copy before checking declared exact length or maxUncompressedSize; direct callers bypass the documented bounds, unlike CnbDocument's separately validated table path.",
-      "current_validation": "C++ actual-TU11 public/15 native normal/sanitizer, all boundary native gates and both146 focus pass;37 CNB controls retained. Full SOFTWARE caught a real C ABI regression: original cnb_foundations and native CnbSmoke require documented None-size-ignore semantics. Adapterc57ecab8c preserves that separate ABI without weakening C++ limits. Exact25 original C labels pass normal/sanitizer; native REQUIRE count203->207;319 external hashes exact. Failed full run retained; no GLES/finalCTest there. Combined content-roots final validation pending, no closure; CNB_C_API_COMPATIBILITY.md.",
+      "current_validation": "Runtime 2386155f2/demo34e530e. 11 public/15 native chunk, plus strict native C and original C demo normal/focused ASan/UBSan/leak checks pass. Native1993 module/562 pipeline,1412 consumers/241 runtime/XML/six link tests exact. External1183-step build zero warnings;146 content focus68PASS/five unchangedFAIL each,354 C API original outcomes exact,external16 manifest/12 cold-root pass. SW719625/43/48/3,GLES664/45/7/3; only105 improves from012, manifest13->17 additive.68 cumulative improvements versus initialHEAD/70 Complete1128. Both95 math/six zero-pixel visuals pass. CTest684PASS/48 unchangedSKIP/three disabled 599.13s,735 outcomes/319 hashes exact. Original C-root residual remains globallyAccepted=false; local closure only. Linux SDL runtime tested; other platforms not claimed.",
       "related_issues": [],
-      "cna_fix_commit": "2386155f2",
-      "validation": [],
-      "final_disposition": null,
+      "cna_fix_commit": "2386155f2ba09f6d0a616039d7b277ea8672fc02",
+      "validation": [
+        "Combined frozen repair-content-roots gates verified; see demos docs/repair-evidence/content/ROOTS_BOUNDARIES_CHECKPOINT.md. Historical assertions retained or corrected from verified public contracts; no relaxed tolerances. Failed boundary full/C ABI regression and both manifest audit setup failures retained. C compatibility adapter c57ecab8c verified by354 exact external C API cases. Sanitizers instrument actual affected TUs/probes, not all linked dependencies."
+      ],
+      "final_disposition": "FIXED_VALIDATED",
       "c_abi_compatibility_commit": "c57ecab8c"
     },
     {
