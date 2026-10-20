@@ -243,10 +243,12 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "RefreshContentManifest enumerates every regular file and groups its extension without excluding CNA pipeline bookkeeping files or its generated intermediate directory.",
-      "current_validation": "Strict minimized ManifestBookkeepingProbe16:8PASS/8FAIL against unchanged external089 library. Root/nested lock and build manifests plus generated project-intermediate subtrees leak into inventory; legitimate hidden/prefix-lookalike/lock-extension assets, cached snapshot and refresh-positive controls pass. No013 source change; ../cna-demos/docs/repair-evidence/content/PUBLIC_BOUNDARY_TRIAGE.md.",
+      "current_validation": "Actual ContentManager.cpp16 public/eight native manifest cases pass normal and ASan/UBSan/leak, also combined with014. Exact reserved names/subtrees only; hidden/prefix assets retained. Canonical1141 steps/45 prior warnings/zero new;1993 module/562 pipeline/consumers running. Demo adds four checks13->17, not externally built yet. No closure; ROOT_REPAIRS.md.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": ["Current089 focused manifest log explicitly lists root and nested .cna-content.lock/.cna-content-manifest.json and contentproj/.cna-contentproj/cna-buildcontent.json. Native ContentManagerManifestTests cover grouping/refresh/malformed XNB but no bookkeeping exclusion. Pipeline public manifest constant and content.cpp-generated intermediate directory confirm ownership. No production repair or assertion/marker change; native012 source freeze remains."],
+      "validation": [
+        "Current089 focused manifest log explicitly lists root and nested .cna-content.lock/.cna-content-manifest.json and contentproj/.cna-contentproj/cna-buildcontent.json. Native ContentManagerManifestTests cover grouping/refresh/malformed XNB but no bookkeeping exclusion. Pipeline public manifest constant and content.cpp-generated intermediate directory confirm ownership. No production repair or assertion/marker change; native012 source freeze remains."
+      ],
       "final_disposition": null
     },
     {
@@ -261,7 +263,7 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "TitleRootedDirectory uses the platform base only if HasCurrentPlatform is already true, so relative-root manifest scanning changes from cwd to the title directory after lazy title/platform initialization.",
-      "current_validation": "Fresh-process Linux ColdContentRootProbe12 controls:9PASS/threeFAIL against frozen boundary native artifacts, root code unchanged. Distinct private cwd/title assets prove wrong initial source and changed root after TitleLocation lookup plus Refresh. Authored root, snapshot cache, subsequent stability and explicit absolute root controls pass. Strict warning-free build, exact audit and four pre/post hashes pass. No Game, other-platform or genuine-XNA runtime claim; no production repair.",
+      "current_validation": "Fresh Linux SDL process12/12 and new native fresh-process case pass normal and actual-TU ASan/UBSan/leak. Absolute roots avoid ambient initialization; first relative scan, explicit title overrides and snapshots protected. Android namespace/cwd fallback unchanged. Canonical1141-step build passes; native regression pending. No other-platform runtime claim or closure; ROOT_REPAIRS.md.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [],
@@ -1937,9 +1939,9 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "ResolveImporter and ResolveProcessor filter named-only components only for multi-entry routes and then fall back to the unfiltered resolver unless exactly one ordinary candidate remains.",
-      "current_validation": "Independent before25 controls give19PASS/sixFAIL. Uncommitted actual ContentPipeline.cpp candidate passes25 public/23 native tests normal and ASan/UBSan/leak. Initial stronger-Werror compilation of reused legacy native fixture failed on pre-existing missing-field/range-loop diagnostics; retained. Canonical-policy native fixture passes, public remains strictWerror, no suppressions. Common default-eligibility filtering preserves explicit selection, writers and discovery. Four-repair canonical84-step build warning-free/source hashes exact;1990 module/562 pipeline gates running. No closure or demo marker change.",
+      "current_validation": "Actual-TU25 public/23 native normal/sanitizer pass; all boundary native gates and both146 focused gates pass. Demo34e530e preserves15 checks. Full SOFTWARE shows intended105 improvement but separate110 C ABI regression; no closure. Adapterc57ecab8c validated separately; combined content-roots final regression pending.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "1721b4182",
       "validation": [],
       "final_disposition": null
     },
@@ -1955,9 +1957,9 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "The pre-built compiler overload compares all seven registry-affecting option fields but retains an FX-only refusal message; public equality/overload comments are similarly stale.",
-      "current_validation": "Independent before21 controls give16PASS/five missing-option-nameFAIL; status2/factory-guidance/no-freeze/no-output controls pass for all seven options. Uncommitted actual tools/content/content.cpp candidate passes21 public/three selected native tests normal and ASan/UBSan/leak. Diagnostic/public comments name every registry-affecting option, comparison/timing unchanged. No external services launched. Four-repair canonical84-step build warning-free/source hashes exact;1990 module/562 pipeline gates running. No closure or demo expectation change.",
+      "current_validation": "Actual-TU21 public/three native normal/sanitizer pass; all boundary native gates and both146 focused gates pass. Demo34e530e retains32 controls with corrected selected-option diagnostic assertion. Full boundary stopped on separate110 C ABI regression; no closure. Combined content-roots final validation pending.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "2ce326907",
       "validation": [],
       "final_disposition": null
     },
@@ -1993,9 +1995,9 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "ExpandCharacterRegions performs an unsigned ascending loop without validating end >= start, although the public function documents an inverted-range exception and the XML parser already checks it.",
-      "current_validation": "Independent before12 controls give8PASS/four inverted-rangeFAIL. Uncommitted actual SpriteFontContentPipeline.cpp candidate passes12 public/eight native tests normal and ASan/UBSan/leak. Inverted ranges now throw documented runtime_error; sorting/deduplication/no mutation/fallback/U+FFFF/8192 limits preserved. Four-repair canonical84-step build warning-free/source hashes exact;1990 module/562 pipeline gates running. No closure or demo expectation change.",
+      "current_validation": "Actual-TU12 public/eight native normal/sanitizer pass; all boundary native gates and both146 focused gates pass. Demo34e530e retains23 controls with documented runtime_error refusal. Full boundary stopped on separate110 C ABI regression; no closure. Combined content-roots final validation pending.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "0d63ac853",
       "validation": [],
       "final_disposition": null
     },
@@ -2028,11 +2030,12 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "DecompressCnbChunk returns the None-codec copy before checking declared exact length or maxUncompressedSize; direct callers bypass the documented bounds, unlike CnbDocument's separately validated table path.",
-      "current_validation": "Strict before11:4PASS/seven size/limitFAIL, small buffers only. Uncommitted actual CnbChunkCompression.cpp candidate passes11 public/15 native compression tests normal and ASan/UBSan/leak. Common ceiling precedes None; exact stored/declaration equality precedes copy, compressed paths unchanged. Four-repair canonical84-step build warning-free/source hashes exact;1990 module/562 pipeline gates running. No closure or demo expectation change; BOUNDARY_REPAIRS.md records evidence.",
+      "current_validation": "C++ actual-TU11 public/15 native normal/sanitizer, all boundary native gates and both146 focus pass;37 CNB controls retained. Full SOFTWARE caught a real C ABI regression: original cnb_foundations and native CnbSmoke require documented None-size-ignore semantics. Adapterc57ecab8c preserves that separate ABI without weakening C++ limits. Exact25 original C labels pass normal/sanitizer; native REQUIRE count203->207;319 external hashes exact. Failed full run retained; no GLES/finalCTest there. Combined content-roots final validation pending, no closure; CNB_C_API_COMPATIBILITY.md.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "2386155f2",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": null,
+      "c_abi_compatibility_commit": "c57ecab8c"
     },
     {
       "id": "CNA-DEMOS-ISSUE-111",

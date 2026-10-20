@@ -9,6 +9,25 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+13:44 UTC: root module21730 COMPLETE0:1993=1989PASS/four unchangedSKIP, three new
+focus pass, exact audit/hashes. Consumers58114 COMPLETE0:1412=1408/4, runtime241=
+238/3, XML4/2 and original6/6; exact audit/hashes. Six link checks81512 allPASS.
+Pipeline85718 RUNNING(1), near final public-sample build cases. External41603
+RUNNING(2),1183 scheduled steps (~705); final319 boundary hashes checked before
+release. Native three-source freeze plus external C API/demo source hashes intact.
+Only these two jobs/three workers. No compiled source edits until both finish.
+
+Matrix six current rows now record native proof, existing fix commits and110's C
+adapterc57ecab8c; all remain CONFIRMED_OPEN. No closure helper run. Next finish
+native pipeline/build audits, content146 roots focus, C API177 per renderer and
+external16 manifest/12 cold-root probes, then full regression. No new marker edits.
+Prepared, NOT RUN media triage in demos MEDIA_PATH_TRIAGE.md: installed XNA IL
+confirms015 relative Song uses title;028 both genuine WaveBank constructors instead
+use cwd. Framework monodis134 partial dump retained, target method/MVID complete;
+Xact dump0. Genuine14 pre-native-path oracle and native6 streaming probe prepared.
+Do not close028 yet: actual reference/native runs and a source-only lazy-path/cwd
+lifetime concern remain. No media production changes.77 FINAL/78 PENDING.
+
 13:32 UTC: C adapter compatibility COMMITTED c57ecab8c after strict native CnbSmoke
 normal/sanitizer passes and the unchanged demo's exact25 labels pass in both modes.
 Native REQUIRE count203->207 (four additive assertions). All319 external hashes match;
