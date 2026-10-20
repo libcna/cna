@@ -9,6 +9,20 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Native86497 COMPLETE1:10798=10688PASS/105SKIP/fiveFAIL. All outcomes retained.
+Root capabilities caused one permission failure/four extra skips; loopback-only
+private network lacked limited-broadcast routing, causing four two-process
+discovery/migration failures. Corrected unchanged-binary control83742 PASS26/26:
+13 discovery+eight two-process+five permission cases; four binaries/three source
+hashes exact. No code/assertion/timeout changes. Both surviving full jobs ended.
+Cache-policy build61683 now RUNNING alone,one compiler worker,existing native
+tree,verified systemd scope cna-repair-model-cache-policy MemoryHigh4GiB/Max6GiB/
+Swap0. Wait for its audit, then final full usernet gate with private display,
+owner UID/all capabilities zero,cna-test0 dummy192.0.2.1/24 and explicit limited
+broadcast255.255.255.255 route. Driver now checks route and cache-rebuilt hashes.
+Three109 source/test files remain uncommitted;90/65 unchanged. Scope limits apply
+to new workloads,not the Codex application. See MODEL_ENCODER_VALIDATION.md.
+
 External8261 COMPLETE0:18 stages,CTest684PASS/48sameSKIP/three disabled964.43s;
 735 outcomes exact against XML,319 frozen artifacts/three sources exact.
 Both719/math95/six zero-pixel visuals/146 focus complete; independent
