@@ -9,10 +9,50 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-LATEST LIVE UPDATE (supersedes older ACTIVE paragraphs below): external storage
-regression3249 still RUNNING, frozen binaries unchanged. SOFTWARE719 complete:
-612PASS/56FAIL/48SKIP/three manual; GLES follows. Audit the strict comparator and
-finish isolated serial full CTest before closing056/145/151. Still62 FINAL/93 PENDING.
+AUTHORITATIVE CURRENT STATE (older ACTIVE/UPDATE paragraphs below are chronological
+history, not current instructions): Phase F content/serialization. All155 historical
+IDs retained:65 FINAL/90 PENDING (33 runtime,one verified duplicate,23 documentation,
+seven pre-campaign fixes,one demonstrated demo expectation defect).
+
+LAST COMPLETE REGRESSION: storage056/145/151 FIXED_VALIDATED. CNAcbb77e3c8/5865ae938,
+Sharp through58c6cba1 including EOF1c0fc9b5; demo markersde6bcde. Native/genuine/
+actual C ABI/sanitizers pass. Full719SW612/56/48/3 and GLES651/58/7/3: BOTH strict
+comparators exact55 improvements/differences[],57 versus Complete1128. Both95math
+93PASS/two reserved131FAIL; metadata/tools/six exact visuals pass. Final serial
+private CTest32815 COMPLETE0:732accepted/zero unexpected failures,48same skips/
+three disabled,921.47s. Three hashes verified before/after. Permanent evidence
+docs/repair-evidence/storage/CHECKPOINT.md. EXTERNAL STORAGE FREEZE RELEASED.
+
+ACTIVE native content31697: full504 post-fix regression RUNNING, currently slow
+compiler-backed XnaDifferentialBuildTest. Native CnaTests/libcna FROZEN, manifest
+repair-content-native-frozen.sha256; DO NOT rebuild native until run completes.
+Baseline497PASS/one existing XACT SKIP/six newly added FAIL,1306.990s. Final focused
+19/19PASS735ms. Actual OpaqueDataDictionary.cpp/IntermediateReader.cpp/
+IntermediateSerializer.cpp ASan/UBSan/leak9/9PASS13ms; the selected nine regression
+bodies are unchanged by the later diagnostic-only corpus assertion adjustment.
+Initial quoted-define compile failure and incomplete dynamic-only link failure
+are retained; final link uses native CnaTests' real static ContentPipelineBuild
+closure and is warning-free. Native source146/149/tests/docs UNCOMMITTED pending
+full regression; matrix146/147/149 FIXED_PENDING_REGRESSION, not final.
+
+Sharp HEAD99c2f79c: af1b0bea XML147 repair, e0601cd2 separate watcher TEST barrier,
+99c2f79c stale-comment correction. Full18146/18146 across41 zero failures/skips;
+last comment-only full build/focus49/49 warning-free. Sharp worktree clean. Two
+independent watcher stress rename findings remain documented, not claimed fixed.
+Demo9bb033e corrects149 null-root read oracle with same count/write refusal;
+e3b5deb records XML reader61/61 on Framework4 and.NET8 (PI/BOM/error timing/state).
+No148 runtime repair. Vendor-policy question and152 sharing-policy question have
+NO ANSWER; do not infer either choice. No push/merge.
+
+EXACT NEXT: commit storage closure docs/matrix; build external content against the
+current146/147/149 tree now storage is unfrozen, focused validate without removing
+markers early. Finish native504 audit and hashes; run broader native consumers
+without overlapping shared test fixtures. Commit coherent146 and149 runtime fixes
+after native regression, then external metadata/marker/full regression as appropriate.
+148 PI adapter/vendor decision and separate090/088/089 initialization/registry
+investigation can proceed without rebuilding the frozen native tree.
+
+### Chronological work log (superseded by authoritative state above)
 
 UPDATE: SOFTWARE strict comparison is exact55 improvements/differences[].
 Sharp full final gate91010 COMPLETE18146/18146 across41,zero failures/skips;
