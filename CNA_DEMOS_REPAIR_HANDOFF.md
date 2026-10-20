@@ -9,6 +9,36 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+OOM recovery at19:59 local: kernel killed Codex PID12082 with8,349,408KiB anonymous
+RSS (global OOM; cna-street requested the allocation). This identifies the victim
+and triggering allocation, not the entire causal memory breakdown. Resumed Codex
+PID3439242 initially~543MiB RSS; host~16GiB available of30GiB,no swap.
+Both original handles86497(native)/8261(external) re-polled LIVE after resume;
+native PID3401964 remains in genuine XNA differential build; CTest PID3401360
+progressed past551/735. No job restarted or stopped. Do not start new heavy jobs
+until these surviving jobs finish; subsequently run new heavy jobs serially,
+use one compiler worker, read bounded log summaries and check host memory before
+launch. Both artifact/source freezes still hold. Three109 source/test changes
+remain uncommitted; do not mark109 fixed. Preserve the known root-capability
+failure in86497 and use the corrected unprivileged usernet gate after it ends.
+
+86497 verified live but already fails one publication permission test: its
+map-root-user namespace retains capabilities that bypass the fixture's removed
+write permission. Do not accept this as a green gate. Corrected isolation46590
+preserves UID/GID1000 and drops all capability sets AFTER private loopback setup;
+unchanged native binary passes original permission test+13 discovery cases14/14.
+After86497 actually terminates, run repair-model-encoder-usernet-native-gates.mjs
+under --map-current-user --keep-caps, then setpriv --bounding-set=-all
+--inh-caps=-all --ambient-caps=-all, plus usual private graphics display.
+New driver asserts owner UID/zero capabilities, exact four binary/three source
+hashes and all10798 outcomes. Do not overlap native full runs sharing XNA build
+directories; no process was stopped.8261 finalCTest still live; both freezes hold.
+047 extended baseline52851 COMPLETE0(test expected1):11 cases=8PASS/3FAIL,
+including independent manifest rejection of the legitimate output-root report.
+Input fingerprint/security controls pass; initial strict aggregate-init failure
+retained then corrected warning-free build. See GENERATED_OUTPUT_TRIAGE.md.
+Only the three109 source/test edits remain in CNA;90/65 unchanged.
+
 109 extended sanitizer52903 COMPLETE0:61/61 PASS, actual encoder+decoder and both
 test TUs instrumented, zero warnings/findings; four frozen native artifacts/three
 source hashes verified. Full native86497/external8261 remain running. No109 closure.
