@@ -9,6 +9,23 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST NATIVE087 GATES (10:13 UTC): corrected whole build10522 COMPLETE0.
+1204 scheduled steps, terminal1201/1204 gap matches prior native3; all51 warnings
+match preceding51 by normalized diagnostic/multiplicity, build audit errors[].
+All nine candidate source hashes match. Four native artifacts now FROZEN in
+repair-content-dispatch-native-frozen.sha256; no native rebuild/source edits during
+validation.31779 RUNNING(1):36 canonical focus,1965 module exact audit against1929
+plus36/one measured rename, hashes, then552 pipeline exact comparison.
+3501 RUNNING(1):1412 consumers,241 runtime, default/original XML6, exact comparisons
+and pre/post hashes. Only this consumer job runs campaign SystemLink tests.
+External48985 RUNNING(1),1043 scheduled steps. Three campaign workers total.
+Next inspect all module failures (none may be waived); after external completion,
+run prepared repair-content-dispatch-focused.mjs initial on both renderers. It
+deliberately reports the old existing_objects null-fallback expectation as a delta;
+retain that failure before the reference-backed demo correction. After successful
+oracle focus, remove087 marker and rerun markers focus before full64-delta sweeps.
+Current CNA62594002e/demosd2adfc8; runtime087 uncommitted,74 FINAL/81 PENDING.
+
 LATEST LIVE STATE (09:51 UTC):14774 COMPLETE0,36/36 normal AND actual-TU ASan/
 UBSan/leak controls, exact errors[].089 baseline50866 COMPLETE0 helper:21 checks,
 fourPASS/seventeen expectedFAIL, strict build warning-free; no089 runtime edits.
