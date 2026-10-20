@@ -9,6 +9,80 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+016 evidence/demo closure committed6f307f4;155 historical bodies audited intact
+(154 unchanged,016 original body retained under resolution note). Counts85/70.
+Sharp full gate39469 COMPLETE0:18151PASS across41 executables,zeroFAIL/zeroSKIP,
+unchanged original Yacht service on private loopback fixture. No service fake.
+Next separate Sharp commits for Diagnostics test synchronization and148 PI parser;
+148 remains open for character-BOM/timing and downstream canonical validation.
+
+ISSUE-016 now FIXED_VALIDATED:85FINAL/70PENDING of155. Permanent evidence and
+historical inventory updated; both demo-local workarounds removed, assertions
+unchanged. Full38847 local comparisons/CTest complete as recorded below; the
+original C-root residual remains visible and is not reclassified as a pass.
+Sharp full41-component gate39469 is RUNNING after test-only four-reader latch
+repair; previous failure archived as repair-xml-pi-failed-components.log.
+Focused569 XML/350 XML.Linq/whole Diagnostics and100 fixed stress iterations pass.
+Next:commit016 closure separately; finish Sharp gate,commit independent test/parser
+repairs,then complete148 character-BOM/timing and canonical C-root gates. No push.
+
+Latest verified continuation:016 full driver38847 is COMPLETE(exit1 solely the
+two retained original C RootDirectory audits). Both719 sweeps exactly match the
+preceding roots checkpoint: SOFTWARE625/43/48/3,OPENGLES3 664/45/7/3; local errors[].
+Serial CTest completed684PASS/48SKIP/three disabled,735 inventory/732 enabled,
+990.96s,all319 frozen artifact hashes verified. Final summary and CTest audit:
+demos build/linux-full/reports/repair-mixed-runtime-{final-gates-summary,ctest-final-audit}.json.
+Artifact freeze is released.016 is ready for documented closure, not yet changed
+in the matrix;84FINAL/71PENDING remains the recorded count.
+
+Sharp Runtime ISSUE148 PI candidate remains uncommitted. Full-component attempt
+87202 failed in the pre-existing Diagnostics concurrency test (zero reader
+snapshots); the fixed100-run diagnostic reproduced one such failure. Narrow
+TEST-only latch now requires all four readers' first snapshots before stopping;
+no Process implementation change, no sleeps/retries/oracle relaxation. Incremental
+full build3684 passes; focused98557 passes fixed100 repetitions,whole Diagnostics,
+Xml and Xml.Linq. Preserve original failed component log before rerunning the
+full41 executable gate. PI sanitizer already passes4/4. BOM/timing part of148 is
+still open. Exact next task:close016 with permanent evidence; run full Sharp gate
+and commit Diagnostics test and approved PI repair separately,then148 string BOM.
+No new pushes. Owner's memory query:read-only inspection found Codex PID12082
+RSS8,807,404KiB/PSS8,807,384KiB,mostly anonymous private memory; cwd cna-demos.
+No process was stopped. The cause inside Codex is not established by this sample.
+
+15:58 UTC: C RootDirectory contract/test correction committed CNA124281bff and
+demosdab9d4f, separately from016. No runtime changes or new pushes. Focused strict
+native C and actual demo67/67 both renderers pass; all54 original labels retained
+under two explicit owner-authorized mappings,13 additions. Canonical external
+rebuild waits for frozen38847;103 marker remains and039/103 are not closed.
+016 SOFTWARE719 completed625PASS/43FAIL/48SKIP/three manual, exact predecessor
+comparison errors[] and only the original C-root residual. OPENGLES3 running.
+
+Approved C RootDirectory follow-up now has an uncommitted candidate in
+docs/c-api/CONTENT.md, modules/c-api/include/CNA/C/content.h and native ContentSmoke.
+No runtime change:583af2a5e/68a3c7b1f already implement the intended contracts.
+Native strict-C baseline22075 fails2 on both renderers; corrected15627 passes both,
+including exact InvalidOperationException and cache retention with source removed.
+Actual separately named demo47927 passes67/67 both renderers; all54 original check
+labels preserved with only two owner-authorized semantic mappings,13 additions.
+Demos source/metadata changes are uncommitted; marker remains until canonical gates.
+See demos docs/repair-evidence/content/C_ROOT_CONTRACT.md. No frozen artifact replaced.
+
+016 sanitizer97588 completes1 due an incorrect double-free prediction in the
+baseline audit: actual old graph reports2070 leaked bytes/34 allocations, repaired
+graph exits0/no ASan/UBSan/leak diagnostics. Instrumented consumer only; CNA archives/
+DSO normal. Original failed audit retained, observed-evidence read-only audit passes.
+Full38847 remains running (SOFTWARE input); counts84/71 unchanged.
+
+016 repair committed `470b12a5d`; no campaign push. Publication900d0db3b remains
+the verified remote tip. External full38847 is still RUNNING (SOFTWARE categories).
+FBX delta86754 COMPLETE0: removing only the scoped needed-state wrapper produces
+the exact previous binary hash; the repaired executable adds only libcna.so to
+DT_NEEDED and runs successfully. No unexplained artifact delta remains.
+Permanent pending evidence: demos docs/repair-evidence/build/MIXED_RUNTIME_LINKAGE.md.
+Counts84/71 remain unchanged until full sweeps/CTest complete. Next: close016 on
+complete local regression, then apply the approved XNA C RootDirectory contract
+to documentation/demo/native C coverage (039/103); preserve all ownership checks.
+
 15:42 UTC:016 root repair ready for coherent commit; full external regression38847
 RUNNING on frozen319 artifacts. Native31/31:24 mixed runtime/symbol/state cases,
 six rebuilt/requested static footprint consumers and existing shared-mode fixture.
