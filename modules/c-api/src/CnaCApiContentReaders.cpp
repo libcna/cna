@@ -1763,8 +1763,8 @@ template <typename T>
         // same payload arrives as a Model.Tag.
         resource->value = std::make_shared<CNA::Content::ObjectDictionaryEXT>(
             contentManager.value->Load<std::map<std::string, std::any>>(assetNameText));
-    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
+        throw;
     }
     return CreateHandle(ObjectKind::ObjectDictionaryEXT, resource, outDictionary);
 }

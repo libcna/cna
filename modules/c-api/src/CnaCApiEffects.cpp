@@ -2016,8 +2016,8 @@ namespace {
         }
         return CreateEffectHandle(
             std::move(loaded), contentManager.parentGame, outEffect);
-    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
+        throw;
     } catch (const std::bad_any_cast&) {
         // The asset's root reader produced something that is not an Effect. Reporting the
         // mismatch beats the exception barrier's catch-all calling it an internal fault.

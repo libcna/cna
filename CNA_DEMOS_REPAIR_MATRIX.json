@@ -1890,6 +1890,7 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "Eight C content routes catch ContentLoadException and return IoError before the shared exception barrier can record canonical exception metadata.",
+      "current_validation": "Local common-barrier repair builds without warnings. Native/evidence C17/Werror probes each44/44PASS on SOFTWARE/OPENGLES3, exactly eight canonical-type improvements with all44 labels unchanged. Existing ErrorSmoke/CoreExtSmoke/GeneratedRoutesSmoke/ContentReaderSmoke pass both; ContentModelEffectSmoke passes OPENGLES3 actual model/effect loading. Initial helper summary-format mistake retained; corrected read-only audit errors[]. Full external checkpoint and original demo blocked by separate039 C root-contract decision; marker retained, not closed.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": ["Isolated public-C probe, no successful assets or root mutation: malformed four-byte XNB gives36PASS/eight canonical-typeFAIL of44 on SOFTWARE and OPENGLES3; all IO result/category/message/output clearing controls pass. Native C17/Werror regression reproduces44/eight. Reports repair-content-exception-all-before-{SOFTWARE,OPENGLES3}.log and repair-content-exception-native-before.log. Local eight-catch barrier repair/build pending; original demo marker retained. Missing loose SoundEffect file separately yields NotSupported and is not hidden by this minimized fixture."],

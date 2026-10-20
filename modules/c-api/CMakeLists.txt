@@ -1453,6 +1453,21 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_content_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_content_smoke)
     add_test(NAME CApi_ContentSmoke COMMAND cna_c_api_content_smoke)
+    add_executable(cna_c_api_content_exception_smoke
+        tests/pure_c/ContentExceptionSmoke.c
+    )
+    set_target_properties(cna_c_api_content_exception_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_content_exception_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_content_exception_smoke)
+    add_test(NAME CApi_ContentExceptionSmoke COMMAND cna_c_api_content_exception_smoke
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/assets/content-exception")
+    set_tests_properties(CApi_ContentExceptionSmoke PROPERTIES
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+    )
     # The manifest suite builds its own content root through the storage API, so the storage root
     # is pinned to a build-tree location; dummy audio lets the WAV load route reach its real
     # success path instead of only its unsupported one.

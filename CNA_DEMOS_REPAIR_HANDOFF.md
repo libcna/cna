@@ -9,6 +9,22 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST103 UPDATE (08:37 UTC): external target67664 COMPLETE0, warning-free.
+Both native and evidence probes pass44/44 on SOFTWARE and OPENGLES3; each retains
+all original controls and exactly eight canonical-type failures disappear.
+Existing ErrorSmoke, CoreExtSmoke, GeneratedRoutesSmoke and ContentReaderSmoke
+also pass both renderers; strict C17/Werror builds pass. ContentModelEffectSmoke
+passes actual successful model/effect loading on OPENGLES3 (not just missing files).
+Initial helper12026 exits1 because it wrongly requires the native summary spelling
+from the evidence harness; actual executables all exit0. Original logs/audit are
+retained. Corrected read-only audit checks both exact formats, all44 original
+assertion labels and exactly eight improvements per renderer, errors[]. Reports
+repair-content-exception-{after-*,corrected-audit.json,model-effect-*}.
+103 runtime/test/CMake/fixture is ready for its own coherent commit; status remains
+FIXED_PENDING_REGRESSION, original demo marker retained, root-contract question
+unanswered. Native043 pipeline11324 continues, frozen four artifacts unchanged.
+Do not report these manual native C runs as registered CTest executions.
+
 LATEST AUTHORITATIVE LIVE UPDATE (08:31 UTC; supersedes running-job text below):
 CNA HEAD ba30a215b, demos HEAD99f6b18. Still74 FINAL/81 PENDING; goal unchanged.
 039/045 full job19438 COMPLETE1: both719 sweeps retain the C root-contract conflict

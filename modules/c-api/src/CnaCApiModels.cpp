@@ -4367,8 +4367,8 @@ template <typename TResource, typename TValue>
         supportsThreeD = contentManager.value->getGraphicsDeviceInternal()
             .SupportsCapability(CNA::GraphicsCapability::ThreeD);
         loaded = std::make_shared<Model>(contentManager.value->Load<Model>(assetNameText));
-    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
+        throw;
     } catch (const std::bad_any_cast&) {
         // The asset's root reader produced something that is not a Model. Reporting the
         // mismatch beats the exception barrier's catch-all calling it an internal fault.

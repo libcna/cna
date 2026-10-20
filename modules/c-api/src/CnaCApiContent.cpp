@@ -253,8 +253,9 @@ namespace {
             std::make_shared<Texture2D>(std::move(loaded)),
             contentManager->parentGame,
             outTexture);
-    } catch (const ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const ContentLoadException&) {
+        // The common barrier preserves both the IO result and the canonical exception metadata.
+        throw;
     } catch (const std::bad_any_cast&) {
         // A compiled asset whose root reader produced a different type. The canonical read
         // reports that by failing the unbox, which is not a runtime_error and would otherwise
@@ -342,8 +343,8 @@ namespace {
             outSoundEffect);
     } catch (const NoAudioHardwareException& exception) {
         return NotSupported(exception.what());
-    } catch (const ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const ContentLoadException&) {
+        throw;
     } catch (const std::bad_any_cast&) {
         // A compiled asset whose root reader produced a different type. The canonical read
         // reports that by failing the unbox, which is not a runtime_error and would otherwise
@@ -384,8 +385,8 @@ namespace {
             std::make_shared<TextureCube>(std::move(loaded)),
             contentManager->parentGame,
             outTexture);
-    } catch (const ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const ContentLoadException&) {
+        throw;
     } catch (const std::bad_any_cast&) {
         // A compiled asset whose root reader produced a different type. The canonical read
         // reports that by failing the unbox, which is not a runtime_error and would otherwise
@@ -427,8 +428,8 @@ namespace {
     try {
         font = std::make_shared<SpriteFont>(
             contentManager->value->Load<SpriteFont>(assetNameCopy));
-    } catch (const ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const ContentLoadException&) {
+        throw;
     } catch (const std::bad_any_cast&) {
         // A compiled asset whose root reader produced a different type. The canonical read
         // reports that by failing the unbox, which is not a runtime_error and would otherwise
@@ -509,8 +510,8 @@ namespace {
             contentManager->value->Load<CNA::Content::ForeignContentObjectEXT>(assetNameCopy);
         *outObject = loaded.value;
         return CNA_RESULT_SUCCESS;
-    } catch (const ContentLoadException& exception) {
-        return IoError(exception.what());
+    } catch (const ContentLoadException&) {
+        throw;
     } catch (const std::bad_any_cast&) {
         // The file's root reader produced something else, which means the asset is not the
         // caller's type at all. Reporting the mismatch beats returning a pointer into an
