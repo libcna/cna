@@ -9,6 +9,60 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST LIVE STATE (09:51 UTC):14774 COMPLETE0,36/36 normal AND actual-TU ASan/
+UBSan/leak controls, exact errors[].089 baseline50866 COMPLETE0 helper:21 checks,
+fourPASS/seventeen expectedFAIL, strict build warning-free; no089 runtime edits.
+Corrected native whole build10522 RUNNING(2), native-corrected-build.log; complete
+external build just started RUNNING(1), repair-content-dispatch-external-build.log.
+External043 freeze RELEASED only after full CTest/audit and319 hashes matched;
+that failed strict checkpoint is still not accepted globally because of the C
+root-contract delta. Current builds use corrected087 source, unlike prior043/103
+external results. NO compiled CNA/demo source edits during either build. Three
+campaign workers total. After native completion freeze four artifacts; run prepared
+repair-content-dispatch-module.mjs (1965, previous1929+36, one measured rename),
+then pipeline/consumers via repair-content-dispatch-native-regression.mjs. After
+external completion run focused content comparisons before087 marker removal.
+Uncommitted runtime/test/deviation remain in CNA; evidence update/nullable probes
+and separate089 probe are ready for logically separate demos commits.74/81 unchanged.
+
+Source-audit warning for the upcoming external focus: existing_objects.cpp has a
+demonstrably incorrect additional oracle, independent of repaired043 lookup. It
+expects ReadObject(existing) with serialized index0 to return its offered fallback,
+while genuine53 and native dispatch explicitly prove null. The corrected runtime
+will make its current "all three slots populated" guard fail early. Do NOT undo
+the runtime null fix or label this an unexplained regression. Retain the first
+focused failure, then correct that demo with the measured contract, preserving all
+other13 controls and explicitly checking the supplied fallback remains unmodified.
+No demo code changed while48985(1) builds. Current native10522(2); no source edits.
+Evidence commits: demos49f9f33 nullable and0548d55 separate089 baseline. Additional
+owner-lifetime analysis is read-only; no089 implementation choice made yet.
+
+LATEST087 BOUNDARY (09:49 UTC): genuine expanded value/nullable oracle34/34PASS,
+all original18 controls unchanged; reference53 retained. Actual-TU candidate36
+gives32PASS/fourFAIL, precisely the newly exposed null-existing Nullable cases;
+all prior28 remain passes. This is a candidate regression, not waived. Native
+whole build77714 deliberately interrupted130 after491/1203 steps (only verified
+own Ninja2371373 signaled), original log retained. No mixed build/native checkpoint
+is claimed. The candidate now normalizes empty optional payloads to "new instance"
+before invocation, matching managed Nullable boxing.36-case normal and sanitizer
+job14774 RUNNING(1); native nullable regression installed and full module helper
+updated to176 files/1965 cases, previous1929 plus36 and one explicit value-oracle
+test-name mapping. No native full rebuild until these controls pass.
+Independent089 baseline probe50866 RUNNING(1),21 initialization/owner/cache controls,
+no089 runtime edits. Other user-owned island-simulator/cna-engine builds were seen
+and were NOT signaled or modified. No concurrent campaign CTest remains;71529 passed.
+
+LATEST EXTERNAL043 CHECKPOINT (09:44 UTC):71529 COMPLETE0.735-test inventory,
+732 enabled,684PASS/48 unchangedSKIP/3 disabled,936.58s. Exact735 status comparison
+against048 and all319 pre/post hashes pass, errors[]. The separate strict719
+sweeps still retain the C API root assertion delta, so048 remains the last accepted
+full checkpoint;039/045/043/103 are NOT closed by CTest's expected-failure status.
+External freeze can be released for the next validated repair build; no external
+build has started. Native087 build77714 RUNNING(2), compiled source stays frozen.
+The third worker is now free for genuine nullable34 and actual-TU native36 controls;
+those additional controls are not yet runtime results. No overlapping SystemLink
+suite remains. CNAad34fe3ee/demosbe3c94d plus documented uncommitted087 work.
+
 LATEST087 CANDIDATE (09:33 UTC): actual ContentReader TU plus28 native regression
 cases PASS28/28, normal and ASan/UBSan/leak instrumentation, exact audits errors[].
 Before10PASS/18FAIL; no prior passing control regressed. The full candidate unifies
@@ -27,6 +81,15 @@ uncommitted until canonical validation; demos evidence commit4ff4fd4 plus a smal
 sanitizer/timestamp documentation follow-up. Next freeze native outputs after77714,
 run28 focus and the full module/consumer gates with the one explicit old-test-name
 mapping, and finish the independent external CTest/hash audit.74/81 unchanged.
+
+Additional boundary work while77714 builds: prepared16 genuine nullable controls
+in ContentValueDispatchOracle.cs (original18 retained) and eight native cases in
+the demos-only ContentNullableDispatchTests.cpp. Neither has executed yet. Source
+review suggests an outer optional containing an empty Nullable value needs the
+same "new instance" interpretation as null shared_ptr; current28 don't cover it.
+Do not claim that boundary fixed. Prepared reference/helper syntax checks pass;
+run only after a worker is free, then measure before changing native source after
+the in-flight build finishes. Native source remains frozen during77714.
 
 LATEST STATE (09:28 UTC): CNA572458ec6, demos1a139aa;74 FINAL/81 PENDING.
 Full043 external job8777 COMPLETE1: SOFTWARE620PASS/48FAIL/48SKIP/3manual;

@@ -1605,7 +1605,7 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "ReadSharedResources uses InnerReadObjectAny, whose erased ReadUntyped result bypasses disposable recording.",
-      "current_validation": "Genuine reference53/53PASS and value18/18PASS. Native28 before:10PASS/18FAIL, all previous19 outcomes unchanged. Uncommitted actual-TU candidate now28/28PASS: erased/shared and raw-new callbacks, existing identity/value rejection, explicit reference/value dispatch, null handling, wrong requested type before recording. Internal serialized-reference trait reuses collection carrier classification; no Sharp reflection stub. Existing native value-oracle correction requires exact InvalidOperation after payload consumption, supported by genuine18. Prefix repair-content-dispatch-complete-split-policy; errors[]. Canonical build, sanitizer and external regression still pending;011 manager/by-value ownership separate. No closure or fix commit yet.",
+      "current_validation": "Genuine reference53/53 and value/nullable34/34 pass (all original18 value labels retained). Original native28 before10PASS/18FAIL. Candidate28/28; expanded36 exposed four nullable-null regressions (32PASS/4FAIL), retained and corrected before whole-build completion. Current actual-TU36/36 normal and ASan/UBSan/leak passes, exact errors[]. First native build interrupted130 after491/1203, no pass claimed. Corrected native/external whole builds running; full module1965 is previous1929+36 with one measured value-oracle rename. Shared invocation covers erased/shared/raw callbacks, existing identity/value rejection, explicit dispatch, null/nullable and type-before-ownership ordering. Internal carrier metadata avoids Sharp reflection stub;011 manager/by-value ownership separate. No closure or fix commit yet.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": ["Current strict renderer sweeps retain087's exact shared-table callback failure. Genuine ContentOwnershipOracle35/35 verifies inline then two shared callbacks, shared aliases without extra callbacks, default disposal and retained records after a later shared read fails. Preserve runtime disposable capability before type erasure; do not guess std::any types or add demo-specific aliases. No runtime repair yet."],
@@ -1642,6 +1642,7 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "Registered intermediate serializers never receive InvokeInitialize; serializers are global but active read/write contexts are temporary, so initialization lifetime must be repaired deliberately.",
+      "current_validation": "2026-10-20 permanent IntermediateInitializationProbe.cpp strict C++23/Wall/Wextra/Werror build warning-free;21 controls give4PASS/17FAIL, exact audit errors[]. Both round trips and repeated XML pass, but Initialize, same-owner callback identity and retained owner/nested caches fail. Existing genuine21/21 plus cycle/eager-failure15/15 retained. No089 runtime edit; persistent callback owner must coexist with isolated per-operation aliases/relocation paths. Reports repair-intermediate-initialization-native-before-*.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [
