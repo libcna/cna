@@ -9,6 +9,68 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+AUTHORITATIVE UPDATE (supersedes the earlier checkpoint text below):
+Phase F, still68 FINAL/87 PENDING of155. CNAf421948fe; demos0b4d2ce;
+Sharp99c2f79c. Goal unchanged. No push/merge. Last fully CLOSED regression is
+146/147/149 (CNA50127b2f7, demosa604560); see content/CHECKPOINT.md.
+
+Pending coherent checkpoint:088/090/111 plus046 and pre-campaign-fixed030;
+partial148 remains open. Do not count any of these as newly closed yet.
+- 046 committedf421948fe: external TargetType and declared fixup identities use
+  namespace/generic resolution without requiring an instantiable XML serializer.
+  Genuine15/15 includes assembly-qualified whitespace acceptance and unqualified
+  whitespace refusal. Final native focus58/58 (706ms). Actual Reader/Serializer
+  plus whole intermediate corpus,18 section-order tests and17 external identity
+  tests: ASan/UBSan/leak44/44PASS565ms, exit0. Earlier wrong whitespace
+  assumptions and failing runs are retained. No public API/global aliases added.
+- 148 e0318ab52/de1b6e259 fixes empty sections AND per-section fixup ordering;
+  whole-corpus regression exposed diagnostic ordering and test-fixture cycle
+  leaks, both corrected and recorded. PI/BOM substrate defects remain open;
+  no vendor permission inferred, no vendor modification, no148 marker removal.
+- 030 actual CNA repair01534c2e7 predates campaign baseline; no net source delta.
+  Genuine simulator27/27 proves sender-only, Reliable-exempt, normally distributed
+  latency. Demo correction0b4d2ce keeps exact packet counts and all six checks,
+  moves settings/recovery to sender and replaces the invalid minimum-latency
+  contract with a mathematically justified statistical mean smoke check.
+  One staged two-process execution per SOFTWARE/OPENGLES3 passed6/6 each;
+  native deterministic/sender-receiver ENet tests11/11PASS164ms. Session8179
+  completed0. No retry, added sleep or deadline extension. Permanent evidence
+  docs/repair-evidence/NETWORK_SIMULATOR.md. Marker still present pending rebuild.
+
+PREVIOUS REGISTRY GATE: native517 gives516PASS/one same XACT SKIP958.663s,
+all508 old outcomes unchanged+nine newPASS. Consumers1412=1408PASS/four same
+SKIP; runtime241=238PASS/three same SKIP; original XML fixtures6/6. Four native
+hashes verified. SOFTWARE719=615/53/48/3 strict PASS; GLES=654/55/7/3 but strict
+comparator FAILS one030 child-assertion delta. That exit1 is retained, not waived.
+Both math95 exact48 improvements; metadata/tools/six exact visuals pass.
+Final isolated serial CTest732accepted,48same skips,three disabled,1045.68s;
+all319 hashes verified before/after. Old freezes released after these gates and
+the staged network probe; the next corrected030 sweep must pass strict comparison.
+
+RUNNING/FROZEN:
+1. Native552/123 suites session51450; repair-sections-native-after*. Focus58/58
+   already passes; full suite currently in slow differential-build test.
+   Four artifacts FROZEN in repair-sections-native-frozen.sha256. DO NOT rebuild
+   native until full552, prior1412/runtime241 consumers, original XML fixtures
+   and final hash audit. Expected: all517 old outcomes unchanged+35newPASS.
+2. External existing build/linux-full rebuild session43472, parallel2;
+   repair-sections-external-build.log. No external tests during its mutation.
+   Native full uses one worker, leaving total at mostTHREE. No other campaign
+   compiler. No concurrent SystemLink suites; private GPU wrapper only.
+
+EXACT NEXT: finish external build, run repair-sections-focused.mjs (strict56
+custom-content executions, old markers). Only after the relevant passes remove
+046/030 knownIssue, keep148 and089, final rebuild and freeze319 artifacts.
+Run sections math/full regression/tools/six visuals, then isolated serial CTest
+and hash audit. Expected cumulative60 demo improvements vs initialHEAD/62 vs
+Complete1128; expected SW617/51/48/3, GLES656/53/7/3, NOT yet observed.
+Finish native552/consumer audit in parallel. Close088/090/111/046/030 only when
+all gates genuinely pass (would73FINAL). Continue089 or047/048 afterward.
+131 OWNER-RESERVED;152 sharing policy and148 vendor policy unanswered.
+Uncommitted work: this status/matrix update only; runtime and demo changes committed.
+
+### Earlier same-day checkpoint (superseded by authoritative update above)
+
 AUTHORITATIVE CURRENT STATE: Phase F content/serialization. All155 historical IDs
 retained:68 FINAL/87 PENDING (36 runtime findings,one duplicate,23 documentation,
 seven pre-campaign fixes,one demonstrated demo-expectation defect). No push/merge.

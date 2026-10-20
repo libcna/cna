@@ -546,6 +546,7 @@
       "root_cause": "Historical reliable-loss behavior repaired before campaign by01534c2e7; current demo still configures receiver instead of sender and incorrectly treats Gaussian mean latency as a per-packet minimum.",
       "related_issues": [],
       "cna_fix_commit": "01534c2e7 (pre-campaign)",
+      "current_validation": "Corrected demo0b4d2ce built with frozen actual dependencies/Werror; once per SOFTWARE/OPENGLES3, six of six checks pass; native simulator plus sender/receiver ENet11/11PASS164ms. Genuine managed simulator27/27. Full corrected checkpoint pending; marker remains. Prior strict GLES030 child-assertion delta retained as failed gate, not whitelisted.",
       "validation": [
         "Value-batch full GLES outage assertion vacuously passes at0/24 unreliable vs baseline1/24; preceding checkpoint and unchanged follow-up both4/24. All reliable24/24 remain delivered. No network production changes. Existing native simulator7/7 and sender/receiver ENet integration4/4 pass. Demo incorrectly configures receiver and assumes minimum latency, while pre-campaign01534c2e7 and genuine XNA use sender-only Gaussian latency. Keep pending until corrected standalone oracle is validated; do not hide exact comparison exit1.",
         "Registry full GLES again changes only the unrelated outage assertion; strict exit1 retained, no retry/whitelist. Fresh genuine managed simulator27/27 and native deterministic7/7 (2ms); local primary XNA4 spec and decompiled DLL agree. No modules/net/src changes against initial688f3f23e. Corrected sender/recovery setup and justified statistical mean check prepared, separate probe binary builds with Werror; runtime validation waits for serial CTest51475. Permanent demos docs/repair-evidence/NETWORK_SIMULATOR.md. No closure yet."
@@ -837,7 +838,8 @@
       "status": "CONFIRMED_OPEN",
       "root_cause": "External TargetType is checked and stored as raw XML spelling rather than namespace-resolved canonical identity; generic declared fixups also retain noncanonical type spelling.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "f421948fe",
+      "current_validation": "Final genuine15/15 distinguishes assembly-qualified whitespace acceptance from unqualified refusal. Final native focus58/58PASS706ms; actual Reader/Serializer whole-corpus plus18 section and17 external cases ASan/UBSan/leak44/44PASS565ms. Full native552 and external rebuild running; marker and final disposition unchanged until strict regression. Earlier whitespace expectation failures retained.",
       "validation": [
         "Fresh genuine external-alias oracle12/12 verifies root/local namespace aliases, shadowing, generic arguments, assembly qualification, no-target-serializer support and refusal of surrounding whitespace. Native corrected baseline fourPASS/eightFAIL2ms. Initial missing Object::GetTypeName fixture setup and incorrect reference whitespace expectation retained. Candidate private identity resolver reuses generic namespace parser and canonicalizes table/fixups; native rebuild21039 and41-case actual-TU sanitizer compilation23734 pending. Two additional native writer-roundtrip controls preserve emitted XML. No public API/global alias added, no closure."
       ],
