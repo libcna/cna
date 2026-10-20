@@ -9,6 +9,32 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+10:30 UTC: native module/consumers complete with exact comparisons; pipeline31779
+and external build48985 still running. Post-rebuild actual-TU sanitizer rerun36/36
+PASS9ms, no ASan/UBSan/leak diagnostics, four frozen hashes match. Independent089
+owner-isolation probe42827 complete: both cases fail with exactly10 owner/init
+assertions; nested/concurrent relocation, alias and XML controls otherwise pass.
+No089 runtime changes. Current CNA81ab8a7d5/demoscaa9c1b;74 FINAL/81 PENDING.
+The failed matrix-update shell command made no changes; refreshed matrix follows.
+No new accepted global checkpoint: C API root-contract owner choice still pending.
+
+10:21 UTC: consumer60610 COMPLETE0.1412=1408PASS/four unchangedSKIP155.254s;
+runtime241=238PASS/three unchangedSKIP9.448s; default XML4PASS/two unchangedfixture
+SKIP1ms, original fixtures6/6PASS12ms. Exact four audits errors[], all four frozen
+hashes match. Native pipeline31779 continues552 cases (genuine differential build
+is the long-running gate); external48985 continues. Third worker42827 runs an
+independent demos-only089 owner-isolation probe (two cases, nested and concurrent
+contexts). No089 runtime changes or canonical test additions. Native087 remains
+frozen/uncommitted, source nine hashes verified mid-build; dependencies freshly
+verified clean/unchanged: Sharp99c2f79c, EasyGLf4d6afa, MetaGLdd3b300.
+
+10:16 UTC: canonical087 module COMPLETE0,1965=1961PASS/four unchangedSKIP,
+111.347s. All previous1929 outcomes (one measured test rename) and36 additions
+match, differences[]. Post-module four hashes match.31779 now runs552 pipeline;
+60610 runs consumers/runtime/XML after the retained setup-only log collision.
+External48985 continues1043-step build. Native freeze remains in force. Demos
+evidence4961222 records this module result; runtime087 is still uncommitted.
+
 LATEST NATIVE087 GATES (10:13 UTC): corrected whole build10522 COMPLETE0.
 1204 scheduled steps, terminal1201/1204 gap matches prior native3; all51 warnings
 match preceding51 by normalized diagnostic/multiplicity, build audit errors[].
@@ -25,6 +51,13 @@ deliberately reports the old existing_objects null-fallback expectation as a del
 retain that failure before the reference-backed demo correction. After successful
 oracle focus, remove087 marker and rerun markers focus before full64-delta sweeps.
 Current CNA62594002e/demosd2adfc8; runtime087 uncommitted,74 FINAL/81 PENDING.
+
+10:14 UTC correction: canonical focus36/36PASS3ms;31779 module continues.
+First consumer driver3501 stopped1 BEFORE launching a test: its child log name
+collided with the outer redirected driver log (EEXIST from deliberate wx guards).
+All four pre-hashes had passed. Failure log retained; only helper output naming
+was corrected.60610 RUNNING(1) resumes consumers with a fresh pre-hash report;
+no retry of any failed test and no assertion change. External48985(1) continues.
 
 LATEST LIVE STATE (09:51 UTC):14774 COMPLETE0,36/36 normal AND actual-TU ASan/
 UBSan/leak controls, exact errors[].089 baseline50866 COMPLETE0 helper:21 checks,
