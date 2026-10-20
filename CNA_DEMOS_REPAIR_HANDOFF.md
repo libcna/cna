@@ -121,8 +121,69 @@ retained failed log. Passing sanitizer uses prior project/Werror policy, not a
 claimed stronger-warning pass. GLES registry font capture visually inspected; exact
 six-image automated gate already passes. Full517 now in XnaErrorParity after the
 differential-build suite completed621s without failure. SOFTWARE sweep in graphics.
-All runtime changes committed. Only this handoff/matrix update uncommitted;
-demos and Sharp clean. No push or merge.
+IMPORTANT NEW REGRESSION: full isolated22-case section+corpus ASan gate37341 FAILS:
+21PASS/one corpus FAIL with two changed missing-reference diagnostics, plus792 bytes
+in11 leaked cyclic Node fixture allocations.13 focused cases still pass, but that
+was insufficient. Genuine expanded section oracle18/18 proves shared fixups run
+after the resource section and before external parsing, external fixups before the
+final envelope check; section-end errors still precede fixups. Production correction
+splits private ApplyFixups accordingly (UNCOMMITTED). Test-only NodeGraphCleanup
+breaks strong cycles AFTER serialization/assertions, including exceptions/ASSERTs;
+no graph assertion/expected XML is weakened. Neither correction validated yet.
+Native baseline extensions initially omitted Object::GetTypeName overrides, making
+fixtures abstract; retained setup logs. Corrected baseline compilation now running.
+046 genuine external-alias oracle12/12: root/local aliases, shadowing, generic
+arguments, assembly-qualified identities and targets without serializers; surrounding
+TargetType whitespace is REFUSED (initial contrary expectation retained11/12).
+Native046 tests prepared, no046 production change yet. Demos uncommitted oracle files.
+
+088/090/111 full native517 COMPLETE516PASS/one sameXACT SKIP958.663s; exact508 old
+outcomes unchanged, nine added PASS; four hashes verified. Consumer40129 RUNNING.
+SOFTWARE full719 strict58 improvements/differences[],615PASS/53FAIL/48SKIP/3manual;
+OPENGLES3 now654PASS/55FAIL/7SKIP/3manual, BUT STRICT COMPARATOR FAILED:030 outage
+assertion unexpectedly passes (latency assertion still fails). Original result retained,
+no whitelist/retry. Other718 outcomes and all intended changes match. Final isolated
+serial CTest51475 RUNNING independently;319 hashes verified before it. Do not close
+088/090/111 or rebuild external yet. Current permanent pending evidence:
+demos docs/repair-evidence/content/REGISTRY_CHECKPOINT.md, demoHEAD23dc47c.
+
+Native consumers40129 COMPLETE:1408PASS/4sameSKIP of1412,172.778s; runtime238PASS/
+3sameSKIP of241,10.175s; exact old outcomes unchanged. XML original fixtures14857
+6/6PASS4ms; default invocation4/2fixtureSKIP retained. Four native hashes audited
+after all gates. Native checkpoint freeze can release AFTER current isolated sanitizer
+56243 finishes linking/running (it still consumes these archives). That sanitizer
+includes corrected section ordering and RAII corpus cycle teardown, not yet a pass.
+
+030 investigation: genuine managed simulator27/27 (no network/services), native
+deterministic7/7. Source fix01534c2e7 is an ancestor of campaign baseline688f3f23e:
+simulation moved to SENDER; Reliable exempt; latency normal(meanL,sdL/4,clamp0..2L).
+xna4-spec NetworkSession.xml and actual decompiled/genuine DLL agree. Demo sets
+receiver and wrongly asserts all delays>=mean. Prepared corrected sender setup/
+recovery marker and statistically justified sample-mean check (L/2,9.8 standard
+errors for24 samples), preserving reliable/unreliable counts and native exact tests.
+No030 closure/marker removal yet. Separate demo build41625 RUNNING into build-probe,
+NOT frozen bin; do not run it while CTest/SystemLink executes. Demos uncommitted
+NetworkSimulatorOracle.cs and network main.cpp. Sharp clean. No push or merge.
+
+LATEST: sanitizer56243 COMPLETE0,27/27 in1567ms with NO leak/UB/address report.
+CNAde1b6e259 commits corrected148 ordering + tests/teardown. The earlier22-case
+failure remains evidence; no golden/input/assertion deletion. Native freeze RELEASED
+after its full/consumer/fixture/hash gates and sanitizer completion. Native rebuild
+21039 NOW RUNNING (72 steps,parallel1) for partial148 plus uncommitted046 identity
+resolver; actual-TU sanitizer23734 COMPILE-ONLY RUNNING with corpus,18 section/order
+and14 external identity/roundtrip cases (41 expected). LINK ONLY after21039 finishes.
+046 reuses namespace/generic resolver with private known-identity mode, rejects
+TargetType outer whitespace, canonicalizes both table and fixup identities, no
+global alias/public API. Two writer roundtrip tests added to12 genuine-matched reads.
+Network separate build41625 COMPLETE0 with Werror, binary build-probe/repair-network-demo;
+do not execute before CTest51475 ends. Native simulator7/7 confirms unchanged net
+source (git diff against688f3f23e is empty). DemoHEAD76e8bb4 saves evidence; only demo
+network main.cpp remains uncommitted. CNA046 code/tests and this status are dirty.
+Next: finish native build+41 sanitizer, focus content and full549 content inventory;
+finish old serial CTest+319hash audit, then run corrected standalone network onboth
+renderers and sender/receiver native integration without overlapping SystemLink.
+External old freeze still active; registry strictGLES remains FAILED on030 variance.
+Do NOT call either full checkpoint green or close088/090/111/030 yet.
 
 ### Chronological work log (superseded by authoritative state above)
 
