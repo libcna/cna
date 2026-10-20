@@ -985,15 +985,25 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
         try
         {
             manifest = Canon::ContentBuildManifest::Parse(afterManifest);
-            if (!beforeManifest.empty())
-            {
-                previous = Canon::ContentBuildManifest::Parse(beforeManifest);
-            }
         }
         catch (const std::exception& failure)
         {
             LogError(std::string("BuildContent could not read the build manifest: ") + failure.what());
             return false;
+        }
+        if (!beforeManifest.empty())
+        {
+            try
+            {
+                previous = Canon::ContentBuildManifest::Parse(beforeManifest);
+            }
+            catch (const std::exception& failure)
+            {
+                // The coordinator can safely rebuild an incompatible/corrupt cache.
+                // Only a valid previous record may classify outputs as unchanged.
+                LogWarning(std::string("BuildContent ignored an unreadable previous manifest: ") +
+                           failure.what());
+            }
         }
         for (const auto& [nodeId, entry] : manifest.Entries())
         {

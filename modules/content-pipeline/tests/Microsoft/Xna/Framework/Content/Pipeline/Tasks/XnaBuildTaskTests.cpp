@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildXact.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/CleanContent.hpp"
@@ -341,6 +342,68 @@ TEST(XnaBuildContent, AProjectBuildsToXnbAndFillsItsOutputProperties)
     ASSERT_TRUE(forced.Execute()) << (forced.ErrorsEXT().empty() ? "" : forced.ErrorsEXT().front());
     EXPECT_EQ(forced.getRebuiltContentFilesProperty().size(),
               forced.getOutputContentFilesProperty().size());
+}
+
+TEST(XnaBuildContent, RebuildsAfterAnIncompatibleOrCorruptManifestWithoutClaimingOldOutputs)
+{
+    namespace Canon = CNA::Content::Pipeline;
+    Project project("manifest_recovery");
+    Tasks::TaskItem texture(project.Add(Locate("tests/assets/xna40/texture/probe.png"), "Tree.png"));
+    texture.SetMetadata("Name", "Tree");
+    texture.SetMetadata("Importer", "TextureImporter");
+    texture.SetMetadata("Processor", "TextureProcessor");
+    Tasks::TaskItem old(project.Add(Locate("tests/assets/xna40/texture/probe.png"), "Old.png"));
+    old.SetMetadata("Name", "Old");
+    old.SetMetadata("Importer", "TextureImporter");
+    old.SetMetadata("Processor", "TextureProcessor");
+    auto first = MakeBuild(project);
+    first.setSourceAssetsProperty({texture, old});
+    ASSERT_TRUE(first.Execute()) << (first.ErrorsEXT().empty() ? "" : first.ErrorsEXT().front());
+    ASSERT_EQ(first.getOutputContentFilesProperty().size(), 2u);
+    const auto read = [](const std::filesystem::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(stream), {});
+    };
+    const auto manifestPath = project.Output() / Canon::ContentBuildManifestFileName;
+    const auto original = read(manifestPath);
+    const auto oldBytes = read(project.Output() / "Old.xnb");
+    ASSERT_FALSE(oldBytes.empty());
+    const std::string version = "\"version\":" + std::to_string(Canon::ContentBuildManifestVersion);
+    const auto offset = original.find(version);
+    ASSERT_NE(offset, std::string::npos);
+    std::string stale = original, future = original;
+    stale.replace(offset, version.size(), "\"version\":" +
+                  std::to_string(Canon::ContentBuildManifestVersion - 1u));
+    future.replace(offset, version.size(), "\"version\":" +
+                   std::to_string(Canon::ContentBuildManifestVersion + 1u));
+
+    for (const auto& invalid : {stale, std::string("{not-json"), future})
+    {
+        {
+            std::ofstream stream(manifestPath, std::ios::binary | std::ios::trunc);
+            stream << invalid;
+            ASSERT_TRUE(stream.good());
+        }
+        auto rebuilt = MakeBuild(project);
+        rebuilt.setSourceAssetsProperty({texture});
+        ASSERT_TRUE(rebuilt.Execute())
+            << (rebuilt.ErrorsEXT().empty() ? "" : rebuilt.ErrorsEXT().front());
+        EXPECT_TRUE(rebuilt.ErrorsEXT().empty());
+        ASSERT_EQ(rebuilt.getOutputContentFilesProperty().size(), 1u);
+        EXPECT_TRUE(Names(rebuilt.getOutputContentFilesProperty(), "Tree.xnb"));
+        EXPECT_EQ(rebuilt.getRebuiltContentFilesProperty().size(), 1u);
+        EXPECT_TRUE(std::any_of(rebuilt.WarningsEXT().begin(), rebuilt.WarningsEXT().end(),
+            [](const std::string& message) { return message.find("previous manifest") != std::string::npos; }));
+        EXPECT_EQ(read(project.Output() / "Old.xnb"), oldBytes)
+            << "an incompatible manifest grants no deletion authority";
+        EXPECT_NO_THROW((void)Canon::ContentBuildManifest::Parse(read(manifestPath)));
+    }
+
+    auto unchanged = MakeBuild(project);
+    unchanged.setSourceAssetsProperty({texture});
+    ASSERT_TRUE(unchanged.Execute());
+    EXPECT_TRUE(unchanged.getRebuiltContentFilesProperty().empty());
 }
 
 TEST(XnaGetLastOutputs, AnswersWhatThePreviousBuildLeftAndNothingWhenThereWasNone)
