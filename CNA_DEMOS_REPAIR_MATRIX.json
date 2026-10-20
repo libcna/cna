@@ -1606,10 +1606,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "RegisterTypeSerializer mutates ownership/type/carrier maps before unchecked name-map insertion; a distinct target with a colliding shortcut is only partly registered.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "80b8e45b2",
+      "current_validation": "Genuine duplicate-alias11/11 and allowed shortcut/full-name priority12/12. Two over-strict new rejection expectations were corrected on genuine evidence; discarded candidate/source/sanitizer logs retained. Final actual-TU ASan/UBSan/leak5/5, original16-check probe16/16 (before6/16), focused native34/34 including whole intermediate corpus. Initial native focus ran from wrong cwd and had ten missing-fixture failures; original log retained, corrected CNA-root run34/34 in705ms. Strict56 external focused runs have exactly088 and090 assertion improvements, every other status/count/failure unchanged. Full combined native/external regression remains pending;111 is now included in the next coherent content checkpoint.",
       "validation": [
         "Current strict external content focus reproduces088/089 in20 child controls with exactly two failures on both renderers. Genuine IntermediateCollisionOracle11/11: exact InvalidOperationException on conflicting XmlTypeName, original identity/output preserved, rejected target can register a distinct alias, both public round trips preserve content. Actual private XNA registration path invoked by reflection; no replacement registry. Reports repair-intermediate-collision-asserted-xna*. No runtime repair yet."
       ],
@@ -1646,6 +1647,7 @@
       "root_cause": "AddWriter invokes user Initialize while holding the same nonrecursive mutex required by GetTypeWriter.",
       "related_issues": [],
       "cna_fix_commit": "7864dd5b1",
+      "latest_validation": "Broader native consumers1408PASS/four unchanged SKIP of1412 and runtime238PASS/three same SKIP of241, hashes verified. After111 repair, combined native focus52PASS/one existing opt-in large-file SKIP of53 and strict56 external focus24PASS/four unchanged FAIL per renderer; xml_xnb_pipeline33/33. Marker ce04195 removes090/111 only after those passes. Combined native517 and frozen external full regression running; no closure yet.",
       "current_validation": "Two-phase validation/callback-outside-lock repair: warning-free native build,10/10 focused native tests, strict bounded actual-library probe9/9. Four new native regressions cover nested lookup, initializer exception atomicity, registry freezing and duplicate insertion during callbacks. Full508 native content regression507PASS/one same XACT SKIP,859.192s; all504 old results unchanged, four added PASS. Native hashes verified after full run; broader consumers running. External snapshot remains frozen at the prior146/147/149 repair. No090 closure or external pass claimed.",
       "validation": [
         "Genuine XNA CompilerInitializationOracle8/8 confirms public nested lookup inside host initialization, exactly-once initialization and compiler-local writer identity. Strict C++23/Werror native probe logs built-in lookup PASS and ENTER Initialize but never LEAVE; single five-second process deadline terminates deadlock, exit1 retained. Permanent reference/probe committed in demos3ff4e2e; reports repair-compiler-initialization-*."
@@ -2008,11 +2010,14 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "FIXED_PENDING_REGRESSION",
+      "root_cause": "Environment-aware XnaObjectXnbWriter::Write forwards only outputDirectory and takes platform/profile from registration options instead of the explicitly documented build environment.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
+      "cna_fix_commit": "6823af99a",
+      "current_validation": "Both111 builds warning-free; combined native focus52PASS/one unchanged opt-in >2GiB SKIP of53,1007ms, including all four new environment/cache tests and existing manifest fingerprint tests. Strict56 external focus24PASS/four unchanged FAIL per renderer; XML-to-XNB33/33, exact original assertion counts. Markers and version2 assertion committedce04195 only after focused validation. Full517 native and frozen319-binary external checkpoint running; no closure yet.",
+      "validation": [
+        "Current external focused33 controls retain exactly111 after090 repair. Public RegisterXnaXnbOutput header/comment explicitly delegates platform/profile to the build environment. Strict isolated four-test native baseline:one PASS/three FAIL,18ms; all three platforms/two profiles, nondefault registration with compression, no-environment backward compatibility, and output-cache version. Local fix uses explicit environment, preserves registration defaults for no-environment calls, and bumps writer component version1->2 because manifest fingerprints include it. Demo keeps the same exact identity assertion, updated only to required version2. Native/external builds running; no post-fix111 pass yet. This is a CNA extension contract, not a claim of genuine-XNA platform execution."
+      ],
       "final_disposition": null
     },
     {
