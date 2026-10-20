@@ -407,13 +407,13 @@ namespace CNA::Content::Pipeline
     /** @brief One source file copied as a non-CNB deployment artifact beside compiled content. */
     struct ContentDeploymentFile
     {
-        /** @brief Canonical native source path contained by the build's source root. */
+        /** @brief Canonical path under an authorized input root or the configured output root. */
         std::filesystem::path source;
 
         /** @brief Generic UTF-8 destination path relative to the content output root. */
         std::string outputPath;
 
-        /** @brief External source-root alias, or empty for a primary-root source. */
+        /** @brief External input-root alias, or empty for primary inputs and generated outputs. */
         std::string sourceRoot;
 
         /** @brief Compares the source and destination identities. */
@@ -926,11 +926,13 @@ namespace CNA::Content::Pipeline
                                  std::uint32_t expectedAssetTypeId = 0u);
 
         /**
-         * @brief Registers a contained source file for atomic deployment below the output root.
+         * @brief Registers a contained input or generated file for deployment below the output root.
          *
          * The source is also recorded as a byte-hashed source dependency unless it is the primary
          * source itself. An external source is accepted only after this build explicitly resolved
-         * that exact alias-qualified dependency.
+         * that exact alias-qualified dependency. A file outside the primary input root but inside
+         * the explicitly configured output directory may instead be registered as generated
+         * output, without inventing a build-time input dependency.
          *
          * @param sourcePath Native absolute path, or a path relative to the source root.
          * @param outputPath Safe generic UTF-8 path relative to the content output root.

@@ -171,7 +171,8 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
     EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":9"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":10"), std::string::npos);
+    EXPECT_NE(first.find("\"generatedOutput\":false"), std::string::npos);
     EXPECT_NE(first.find("fingerprintState"), std::string::npos);
     EXPECT_NE(first.find("contentDependencyFingerprints"), std::string::npos);
     EXPECT_NE(first.find("writerSchemas"), std::string::npos);
@@ -180,7 +181,7 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u})
+    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
@@ -275,6 +276,71 @@ TEST(ContentBuildManifestTest, ExternalRootsPersistAliasRelativeIdentityWithoutP
     malformed = entry;
     malformed.deploymentFiles.back().sourceRoot = "other";
     EXPECT_THROW(manifest.Set(malformed), std::invalid_argument);
+}
+
+TEST(ContentBuildManifestTest, GeneratedDeploymentRoundTripsWithoutHashingItsOutputAsInput)
+{
+    ScratchDirectory scratch("generated_output_identity");
+    const auto sourceRoot = scratch.Path() / "Source";
+    const auto report = scratch.Path() / "Output" / "Reports" / "result.txt";
+    auto entry = MakeEntry(sourceRoot);
+    WriteBytes(report, {7u, 8u});
+    entry.dependencies.resize(1u);
+    entry.deploymentFiles = {
+        {{}, "Reports/result.txt", "Reports/result.txt",
+         Pipeline::ContentFileSha256(report), true}};
+    Pipeline::RefreshContentBuildDirectFingerprint(entry, sourceRoot);
+    Pipeline::RefreshContentBuildEffectiveFingerprint(entry);
+    Pipeline::ContentBuildManifest manifest;
+    ASSERT_NO_THROW(manifest.Set(entry));
+    const auto parsed = Pipeline::ContentBuildManifest::Parse(manifest.Serialize());
+    ASSERT_NE(parsed.Find(entry.nodeId), nullptr);
+    EXPECT_EQ(*parsed.Find(entry.nodeId), *manifest.Find(entry.nodeId));
+    EXPECT_TRUE(parsed.Find(entry.nodeId)->deploymentFiles[0].generatedOutput);
+
+    const auto direct = entry.directFingerprint;
+    WriteBytes(report, {9u});
+    EXPECT_EQ(Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot), direct);
+    ASSERT_TRUE(std::filesystem::remove(report));
+    EXPECT_EQ(Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot), direct);
+    WriteBytes(sourceRoot / "asset.bin", {0u});
+    EXPECT_NE(Pipeline::ComputeContentBuildDirectFingerprint(entry, sourceRoot), direct);
+}
+
+TEST(ContentBuildManifestTest, GeneratedDeploymentCannotClaimAnExternalInputAlias)
+{
+    ScratchDirectory scratch("generated_output_validation");
+    auto entry = MakeEntry(scratch.Path());
+    auto& deployment = entry.deploymentFiles[0];
+    deployment.source = "Generated/report.txt";
+    deployment.path = deployment.source;
+    deployment.generatedOutput = true;
+    Pipeline::ContentBuildManifest manifest;
+    ASSERT_NO_THROW(manifest.Set(entry));
+    deployment.sourceRoot = "shared";
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+    deployment.sourceRoot.clear();
+    deployment.generatedOutput = false;
+    EXPECT_THROW(manifest.Set(entry), std::invalid_argument);
+
+    std::string malformed = manifest.Serialize();
+    const auto field = malformed.find("\"generatedOutput\":true");
+    ASSERT_NE(field, std::string::npos);
+    malformed.replace(field, std::string("\"generatedOutput\":true").size(),
+                      "\"generatedOutput\":\"true\"");
+    EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(malformed), std::runtime_error);
+}
+
+TEST(ContentBuildManifestTest, DeploymentOriginParticipatesInTheDefinitionFingerprint)
+{
+    ScratchDirectory scratch("generated_output_fingerprint");
+    auto entry = MakeEntry(scratch.Path());
+    const auto original = entry.directFingerprint;
+    const auto definitions = entry.fingerprintState.deploymentDefinitions;
+    entry.deploymentFiles[0].generatedOutput = true;
+    Pipeline::RefreshContentBuildDirectFingerprint(entry, scratch.Path());
+    EXPECT_NE(entry.directFingerprint, original);
+    EXPECT_NE(entry.fingerprintState.deploymentDefinitions, definitions);
 }
 
 TEST(ContentBuildManifestTest, FingerprintUsesBytesNotModificationTimes)

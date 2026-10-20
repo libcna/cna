@@ -925,6 +925,7 @@ namespace CNA::Content::Pipeline
             sourcePath.is_relative() ? sourceRoot_ / sourcePath : sourcePath;
         const std::filesystem::path resolved = WeaklyCanonicalOrAbsolute(candidate);
         std::string resolvedSourceRoot;
+        bool generatedOutput = false;
         if (!PathIsWithin(WeaklyCanonicalOrAbsolute(sourceRoot_), resolved))
         {
             const std::string identity = CNA::Internal::ContentPathToUtf8(resolved);
@@ -935,14 +936,22 @@ namespace CNA::Content::Pipeline
                 return dependency.kind == ContentDependencyKind::SourceFile &&
                        !dependency.sourceRoot.empty() && dependency.identity == identity;
             });
-            if (explicitDependency == dependencies.end())
+            if (explicitDependency != dependencies.end())
+            {
+                resolvedSourceRoot = explicitDependency->sourceRoot;
+            }
+            else if (!environment_.outputDirectory.empty() &&
+                     PathIsWithin(WeaklyCanonicalOrAbsolute(environment_.outputDirectory), resolved))
+            {
+                generatedOutput = true;
+            }
+            else
             {
                 throw std::invalid_argument(
                     "deployment source '" + CNA::Internal::ContentPathToUtf8(sourcePath) +
                     "' is outside the primary source root and was not explicitly resolved "
                     "through a named external source capability.");
             }
-            resolvedSourceRoot = explicitDependency->sourceRoot;
         }
         if (!std::filesystem::is_regular_file(resolved))
         {
@@ -950,7 +959,7 @@ namespace CNA::Content::Pipeline
                                         CNA::Internal::ContentPathToUtf8(sourcePath) +
                                         "' is not a regular file.");
         }
-        if (resolved != source_)
+        if (resolved != source_ && !generatedOutput)
         {
             dependencies_->Add(
                 ContentDependency{ContentDependencyKind::SourceFile,

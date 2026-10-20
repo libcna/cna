@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 9u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 10u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -57,10 +57,10 @@ namespace CNA::Content::Pipeline
     /** @brief One non-CNB deployment file owned by a build node. */
     struct ContentBuildManifestDeploymentFile
     {
-        /** @brief External source-root alias, or empty for the primary source root. */
+        /** @brief External input-root alias; empty for primary inputs or generated outputs. */
         std::string sourceRoot;
 
-        /** @brief Source path relative to the source root, using `/`. */
+        /** @brief Path relative to the selected input root, or output root when generatedOutput. */
         std::string source;
 
         /** @brief Published path relative to the output root, using `/`. */
@@ -68,6 +68,9 @@ namespace CNA::Content::Pipeline
 
         /** @brief SHA-256 of the deployed bytes for skip checks and ownership-safe collection. */
         std::string sha256;
+
+        /** @brief True when source names a processor-written output, not a byte-hashed input. */
+        bool generatedOutput = false;
 
         /** @brief Compares every stable deployment-file field. */
         bool operator==(const ContentBuildManifestDeploymentFile&) const = default;

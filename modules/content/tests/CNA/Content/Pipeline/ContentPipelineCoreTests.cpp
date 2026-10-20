@@ -883,6 +883,30 @@ TEST(ContentPipelineCoreTest, ProcessorDeploymentFilesAreContainedDeduplicatedAn
                                            CNA::Internal::ContentPathToUtf8(media)}));
 }
 
+TEST(ContentPipelineCoreTest, GeneratedDeploymentDoesNotBecomeAnInputDependency)
+{
+    ScratchDirectory source("generated_deployment_source");
+    ScratchDirectory output("generated_deployment_output");
+    Pipeline::ContentBuildRequest request = MakeRequest(source);
+    request.environment.outputDirectory = output.Path();
+    const auto report = output.Path() / "Reports" / "result.txt";
+    WriteText(report, "generated report");
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    registry->RegisterImporter(std::make_shared<NumberImporter>());
+    registry->RegisterProcessor(std::make_shared<DeploymentProcessor>(
+        std::vector<std::pair<std::filesystem::path, std::string>>{
+            {report, "Reports/result.txt"}, {report, "Reports/result.txt"}}));
+    registry->RegisterWriter(std::make_shared<NumberWriter>());
+
+    const auto result = Pipeline::ContentPipeline(registry).Build(request);
+    ASSERT_EQ(result.deploymentFiles.size(), 1u);
+    EXPECT_EQ(result.deploymentFiles[0].source, std::filesystem::weakly_canonical(report));
+    EXPECT_EQ(result.deploymentFiles[0].outputPath, "Reports/result.txt");
+    EXPECT_TRUE(result.deploymentFiles[0].sourceRoot.empty());
+    ASSERT_EQ(result.dependencies.size(), 1u);
+    EXPECT_EQ(result.dependencies[0].kind, Pipeline::ContentDependencyKind::PrimarySource);
+}
+
 TEST(ContentPipelineCoreTest, ProcessorDeploymentFilesRejectConflictsAndPathEscapes)
 {
     ScratchDirectory scratch("deployment_file_errors");

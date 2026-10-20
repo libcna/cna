@@ -676,8 +676,10 @@ Build dependency categories are primary source, source file, content-build depen
 generated dependency. Runtime references carry a logical name and optional expected CNB asset type
 ID. A source-file dependency records either the implicit primary root or an explicit stable root
 alias plus root-relative identity; the machine-local physical mapping is not semantic identity.
-Deployment files pair one byte-hashed source with one contained output-relative path. All three
-collections are separately sorted in `ContentBuildResult` and in the manifest.
+Deployment files pair an authorized input or generated-output file with one contained
+output-relative path. Input-backed deployments are byte-hashed build dependencies; a file
+generated in the configured output directory is verified as an output, not invented as an input.
+All three collections are separately sorted in `ContentBuildResult` and in the manifest.
 
 Reading a source file does not automatically create an XREF. Registering an XREF does not claim
 that the referenced runtime asset is enough to reproduce the build. For a custom type,
@@ -688,6 +690,14 @@ request, not an inference from an XREF. An external source may be deployed only 
 file was recorded through an explicit aliased dependency resolution. Publication still targets
 only the output root; clean, orphan GC, and staging scavenging never treat a source identity as a
 deletion target.
+
+`AddOutputFile()` also accepts a processor-written file under the explicitly configured output
+directory when that directory is separate from the source root. Its output-relative subdirectories
+are preserved, so `Reports/route.txt` is published and owned under that path, not flattened to
+`route.txt`. This does not authorize unrelated outside files or escaping symlinks. Source-backed
+deployments retain their existing input dependencies and named external-root capability checks.
+`AddGeneratedDependency()` remains a byte-hashed input dependency under the source root; it is
+distinct from a generated output registered for deployment.
 
 ## Build result, logging, and errors
 
@@ -726,8 +736,12 @@ It does not use mtimes to decide correctness. A fingerprint includes:
 - every owned compiled-output logical identity/type and deployment source/destination identity.
 
 Each compiled output's path, type ID, type name, schema version, and SHA-256 are stored separately.
-Each deployment-support file stores its source-root alias, root-relative source, output path, and
-SHA-256. A missing or tampered primary, child `.cnb`, or deployment file; corrupt/incompatible
+Each deployment-support file stores its source-root alias, root-relative source, output path,
+SHA-256 and `generatedOutput` boolean. When that flag is true, the source is relative to the output
+root and the input-root alias must be empty; otherwise it selects the primary or named input root.
+The provenance flag participates in the deployment-definition fingerprint. Generated-output bytes
+are checked against the published digest, not read as part of the direct input fingerprint.
+A missing or tampered primary, child `.cnb`, or deployment file; corrupt/incompatible
 manifest; changed output set; changed
 component version; changed parameter; or changed dependency forces the owning node to rebuild.
 Identical effective inputs and intact outputs produce `SKIP`. Runtime XREF records are outputs
@@ -746,7 +760,8 @@ invalidates that asset without treating the entire configuration file as a share
 an unrelated entry change leaves other assets eligible for `SKIP`.
 
 The manifest JSON layout is versioned internal build state, not a hand-edited project format.
-Version 8 gives each entry a stable build-node ID, ordered compiled and deployment ownership lists,
+Version 10 adds explicit generated-output provenance to deployment records. Version 9 added the
+XNB root reader identity. Version 8 introduced stable build-node IDs, ordered compiled and deployment ownership lists,
 explicit writer schema/codec declarations, a direct fingerprint, an effective graph fingerprint,
 and a bounded `fingerprintState` decomposition. Writer declarations are exact
 `(assetTypeId, assetTypeName, assetSchemaVersion)` tuples, so one writer can truthfully advertise
@@ -759,12 +774,16 @@ path, RTTI name, or absolute host path. Aliased source/deployment identities per
 `sourceRoot` and root-relative path fields; physical directory mappings never enter the manifest
 or CNB. Version 7 introduced the aliased source identities and current reason-state decomposition,
 but cannot represent multiple schemas for one asset identity under its declaration rule. Versions
-1 through 7 are therefore rejected as incompatible and cause a safe rebuild; there is no ambiguous
+1 through 9 are rejected as incompatible and cause a safe rebuild; there is no ambiguous
 in-place migration. An incompatible/corrupt manifest grants no deletion authority, so its existing
 outputs remain unless the new build replaces the same paths. A corrupt or future incompatible
 manifest is handled the same way.
 
-`build ... --explain` compares the current structured decision inputs with this persisted v8
+The `BuildContent` adapter likewise treats an unreadable previous manifest as missing cache
+state, reports a warning and reports the current outputs as rebuilt. Its newly produced manifest
+must still parse successfully; a missing or invalid new manifest remains a build failure.
+
+`build ... --explain` compares the current structured decision inputs with this persisted v10
 state; it never guesses a field-level cause from unequal aggregate hashes. The internal decision
 is a list of reason codes plus optional root-relative detail, and the CLI renders that structure
 only after deterministic scheduling has completed. It classifies:
@@ -1341,8 +1360,8 @@ previously open Windows compiler/runtime verification action.
   codec identities used by cache fingerprints;
 - opt-in glTF Model/Texture2D/AnimationClip generated bundles and their naming policy;
 - content-build edges, dependency builds, and bounded parallel scheduling;
-- the manifest-v8 persisted fingerprint-domain decomposition and stable aliased source identities
-  used by incremental decisions;
+- the manifest-v10 persisted fingerprint-domain decomposition, stable aliased source identities,
+  and generated-output provenance used by incremental decisions;
 - named, explicit, read-only external source-root capabilities;
 - structured incremental decisions and the human-readable `build --explain` rendering;
 

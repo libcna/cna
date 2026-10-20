@@ -412,6 +412,15 @@ namespace CNA::Content::Pipeline
         // host deploys and cleans it. The canonical equivalent is a deployment file: the source
         // is the file the processor produced, the destination is its name below the output root.
         const std::filesystem::path path = CNA::Internal::PathFromUtf8(filename);
+        const std::filesystem::path& outputRoot = context_->Environment().outputDirectory;
+        if (path.is_absolute() && !outputRoot.empty() &&
+            CNA::Internal::ValidateContainedNativePath(outputRoot, path).ok)
+        {
+            const std::filesystem::path relative = std::filesystem::weakly_canonical(path)
+                .lexically_relative(std::filesystem::weakly_canonical(outputRoot));
+            context_->AddDeploymentFile(path, CNA::Internal::PathToGenericUtf8(relative));
+            return;
+        }
         context_->AddDeploymentFile(path, CNA::Internal::PathToGenericUtf8(path.filename()));
     }
 

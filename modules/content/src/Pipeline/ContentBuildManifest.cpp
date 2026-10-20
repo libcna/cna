@@ -665,6 +665,7 @@ namespace CNA::Content::Pipeline
                 deploymentDefinitions.AddString(deployment.sourceRoot);
                 deploymentDefinitions.AddString(deployment.source);
                 deploymentDefinitions.AddString(deployment.path);
+                deploymentDefinitions.AddU64(deployment.generatedOutput ? 1u : 0u);
             }
             state.deploymentDefinitions = deploymentDefinitions.Finish();
             return state;
@@ -826,7 +827,8 @@ namespace CNA::Content::Pipeline
                     {RequireString(deployment, "sourceRoot"),
                      RequireString(deployment, "source"),
                      RequireString(deployment, "path"),
-                     RequireString(deployment, "sha256")});
+                     RequireString(deployment, "sha256"),
+                     RequireMember(deployment, "generatedOutput", JsonType::Boolean).boolValue});
             }
 
             for (const JsonValue& parameter :
@@ -937,6 +939,7 @@ namespace CNA::Content::Pipeline
                 item.Set("source", StringValue(deployment.source));
                 item.Set("path", StringValue(deployment.path));
                 item.Set("sha256", StringValue(deployment.sha256));
+                item.Set("generatedOutput", JsonValue::MakeBool(deployment.generatedOutput));
                 deploymentFiles.arrayValue.push_back(std::move(item));
             }
             value.Set("deploymentFiles", std::move(deploymentFiles));
@@ -1151,6 +1154,11 @@ namespace CNA::Content::Pipeline
         }
         for (const ContentBuildManifestDeploymentFile& deployment : entry.deploymentFiles)
         {
+            if (deployment.generatedOutput && !deployment.sourceRoot.empty())
+            {
+                throw std::invalid_argument(
+                    "content manifest generated deployment cannot name an input source-root alias.");
+            }
             if (!deployment.sourceRoot.empty())
             {
                 const std::string problem =
@@ -1214,6 +1222,7 @@ namespace CNA::Content::Pipeline
         }
         for (const ContentBuildManifestDeploymentFile& deployment : entry.deploymentFiles)
         {
+            if (deployment.generatedOutput) { continue; }
             const bool fingerprinted = std::any_of(
                 entry.dependencies.begin(), entry.dependencies.end(),
                 [&](const ContentDependency& dependency)
@@ -1395,8 +1404,13 @@ namespace CNA::Content::Pipeline
         entry.deploymentFiles.reserve(result.deploymentFiles.size());
         for (const ContentDeploymentFile& deployment : result.deploymentFiles)
         {
-            const std::filesystem::path& deploymentRoot = SelectSourceRoot(
-                sourceRoot, externalSourceRoots, deployment.sourceRoot, "deployment source");
+            const std::filesystem::path candidate = WeaklyCanonical(deployment.source);
+            const bool generatedOutput = deployment.sourceRoot.empty() && !outputRoot.empty() &&
+                !IsWithin(WeaklyCanonical(sourceRoot), candidate) &&
+                IsWithin(WeaklyCanonical(outputRoot), candidate);
+            const std::filesystem::path& deploymentRoot = generatedOutput ? outputRoot :
+                SelectSourceRoot(sourceRoot, externalSourceRoots, deployment.sourceRoot,
+                                 "deployment source");
             const std::string source = RelativeContained(
                 deploymentRoot, deployment.source, "deployment source");
             const std::filesystem::path destination =
@@ -1430,7 +1444,7 @@ namespace CNA::Content::Pipeline
             }
             entry.deploymentFiles.push_back(
                 {deployment.sourceRoot, source, path,
-                 ContentFileSha256(deployment.source)});
+                 ContentFileSha256(deployment.source), generatedOutput});
         }
         entry.dependencies.reserve(result.dependencies.size());
         for (const ContentDependency& dependency : result.dependencies)
