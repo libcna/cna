@@ -18,6 +18,44 @@ Sharp99c2f79c.039/045 runtime and eight new native cases are committed, with
 evidence-backed existing test corrections; both remain FIXED_PENDING_REGRESSION.
 They were NOT part of the completed048 checkpoint binary set.
 
+LATEST LIVE UPDATE (supersedes older running-job descriptions below):039/045 native
+validation is complete, including552 and1412/runtime241/XML, exact audits and all
+four hashes. External build6996 and marker/oracle build96000 COMPLETE0, warning-free.
+The initial146 focus11347 FAILED and is retained: ownership demo expected rawEOF
+instead of genuine ContentLoadException; the helper also miscounted failure-only
+printed lines as all assertions. Only the catch type is corrected,011 preserved;
+JSON total check counts remain exact and only the two repaired printed failures
+may disappear. Focus61606 COMPLETE0:62PASS/11 unchangedFAIL each renderer,146 exact
+comparisons errors[].039/045 markers removed only after both original demos passed.
+Cache/root screenshots show expected text/checkerboard and match byte-for-byte
+across renderers.319 external artifacts FROZEN in repair-content-runtime-binaries.sha256;
+initial sandbox hash EPERM wrote no manifest, authorized repeat93065 completed.
+Job19438 full external checkpoint RUNNING(1):both95 math exact48, metadata/tool
+tests and all six zero-difference visuals PASS; both719 sweeps/finalCTest pending.
+DO NOT rebuild external tree or alter its319 frozen artifacts before final audit.
+
+Next043 local candidate is now present in ContentTypeReaderManager.cpp/.hpp plus
+new ContentTypeReaderTargetLookupTests.cpp and plans/plan_bindings_upstream.md.
+Target names associate with actual returned factory registrations; stale callbacks
+cannot publish after removal/replacement, and clearing withdraws associations.
+Lazy factories, callable copies, fresh unique_ptr and explicit/same-name aliases
+are preserved. Actual-TU11/11PASS (before4PASS/sevenFAIL); ASan/UBSan/leak11/11PASS2ms,
+job19899 COMPLETE0. Canonical whole native build75383 RUNNING(2), log
+repair-reader-lookup-native-build.log. Native freeze was released after039/045's
+final hash audit. Do not confuse this uncommitted043 source with frozen039/045 demos.
+Maximum THREE campaign compiler/test workers total; private GPU only; no concurrent
+SystemLink suites. No other campaign jobs remain active.
+
+EXACT NEXT: finish19438 and strict62-improvement audits, then isolated serial final
+735-inventory/732-enabled CTest with319 pre/post hashes and prepared
+repair-content-runtime-ctest-audit.mjs. Only then close039/045. Meanwhile finish
+75383, audit warnings, run canonical lookup/existing contracts and complete1929
+content-module tests (old1918 unchanged +eleven lookup additions), followed by
+pipeline/consumers/sanitizer gates before a043 runtime commit. External043 must
+wait until039/045 external freeze is released.043 is NOT closed.
+Uncommitted CNA work:the043 runtime/header/native test/deviation record and this
+handoff; demos:three039/045 marker/oracle files plus primary/evidence documentation.
+
 LAST COMPLETE CLOSED CHECKPOINT:048, runtime3a1437725, unchanged demo behavior
 snapshot3d1f833 (later evidence commits only). Native251/552+1412/runtime241/XML
 and both719 renderers/math/visuals pass as below. Final CTest59450 COMPLETE0:
