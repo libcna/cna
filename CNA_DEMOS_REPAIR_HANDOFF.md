@@ -31,7 +31,8 @@ ISSUE-109 is RESOLVED by68e0acb67732efdb8a0b737ab6f43181444dee65; matrix and per
 issue now retain its history and record FIXED_VALIDATED. Totals91FINAL/64PENDING.
 No knownIssue/expected-failure count change: this was a passing diagnostic demo,
 whose assertions now require encoder rejection. Source/test repair is committed.
-Closure metadata is being finalized in both repositories; no push or merge.
+Closure metadata committed in CNA33dad9dc9 and demos90b9ba3; post-closure catalog
+CTests pass3/3. No push or merge.
 
 047 real-host baseline92605 COMPLETE0: strict warning-free fixture build, five
 expected root-authorization failures and one passing invalid-input control.
@@ -41,9 +42,11 @@ audit failure retained: it mistook the deliberately retained empty shared stagin
 root for a leaked reservation. Corrected auditor removes only the owned, empty,
 non-symlink root; all other leftover content still fails. No test/assertion change.
 Both private temporary parents are cleaned. No job remains live.
-Next commit the two validated047 fixtures and baseline evidence, then implement
-generated-output provenance/path preservation in registration and manifest flow.
-No047 production changes yet; use GENERATED_OUTPUT_TRIAGE.md for scope/controls.
+The validated047 fixtures/evidence accompany this checkpoint. Next implement
+generated-output provenance/path preservation in registration and manifest flow,
+then make the same six host and11 context/manifest cases pass. No047 production
+changes yet; use GENERATED_OUTPUT_TRIAGE.md for scope/controls. No uncommitted
+production edits or running workloads are intended at this safe checkpoint.
 
 ### Earlier checkpoint (superseded for live jobs and next actions)
 
