@@ -1605,7 +1605,7 @@
       "classification": "CODE_DEFECT",
       "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "ReadSharedResources uses InnerReadObjectAny, whose erased ReadUntyped result bypasses disposable recording.",
-      "current_validation": "CNA3d254dfa7: genuine reference53/53 and value/nullable34/34; native36/36 normal and actual-TU ASan/UBSan/leak, rebuilt-library rerun36/36. Whole CNA build passes with same51 warnings; external1043 printed steps passes warning-free. Native module1965=1961PASS/four unchangedSKIP; pipeline552=551PASS/one unchangedSKIP932s; consumers1412/runtime241/default/original XML exact, four hashes match. Initial external146 retains only demonstrably wrong zero-index demo expectation (5/13); corrected null-result/unchanged-offered-object oracle restores13/13. Both renderers now64PASS/nine unchangedFAIL, exact comparisons.087 shared-resource assertions17/17 unchanged pass; marker removed, marker build/focus pending. Full719/CTest/visual gates pending; no closure.011 manager ownership and C API root-contract residual remain separate.",
+      "current_validation": "CNA3d254dfa7, demos8b69456. Native36 regressions/ASan/UBSan/leak and module1965/pipeline552/consumers1412/runtime241/XML all exact. External whole/oracle/marker builds warning-free; both146 focused suites64PASS/nine unchangedFAIL, shared_resources17/17 unchanged and corrected null-reference demo13/13. Both719 sweeps complete:SW621PASS/47FAIL/48SKIP/three manual;GLES660/49/7/3. Original-baseline audit64 intended improvements plus unchanged C root-contract residual. Separate exact predecessor comparison permits only087 improvement, errors[], explicitly globallyAccepted=false. Both95 math and six zero-pixel-difference references pass;319 post-full/pre-CTest hashes match. Final serial CTest running. No closure;011 and C root issues remain separate.",
       "related_issues": [],
       "cna_fix_commit": "3d254dfa7",
       "validation": [
@@ -1639,12 +1639,14 @@
       "title": "Intermediate serializers never receive their Initialize callback",
       "line": 1796,
       "historical_status": "Open",
-      "demos": ["content.custom.intermediate_type_serializer"],
+      "demos": [
+        "content.custom.intermediate_type_serializer"
+      ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "Registered intermediate serializers never receive InvokeInitialize; serializers are global but active read/write contexts are temporary, so initialization lifetime must be repaired deliberately.",
-      "current_validation": "2026-10-20 permanent strict native initialization probe21 controls gives4PASS/17FAIL; genuine21/21 plus cycle/eager-failure15/15 retained. Additional two native owner-isolation cases fail with exactly10 owner/init assertions; all nested/concurrent relocation, namespace and XML controls pass. Both strict builds warning-free and exact audits errors[]. No089 runtime edit; persistent callback owner must coexist with isolated per-operation aliases/relocation paths. Reports repair-intermediate-initialization-native-before-* and repair-intermediate-owner-isolation-native-before-*.",
+      "current_validation": "Uncommitted persistent-owner candidate: genuine21/15 retained. Four actual implementation TUs pass21 basic/11 cycle/six failure controls plus four nested/concurrent/late-registration cases, normal and ASan/UBSan/leak. Seven CNA-native GTests plus fresh-process cold1/1 also pass both modes. Canonical79-step build passes; two material warnings exactly match prior048 build of those TUs, nine source hashes match. Four native artifacts frozen; canonical7 focus passes,559 pipeline and1965 module running. Initial wrong-warning-baseline and missing-freeze setup failures retained; module136940-byte argument refused E2BIG before any test, replaced by compact suite patterns with exact1965-case audit unchanged. Direct unique_ptr registrations retain failed instances/failure instead of XNA reflection-based fresh reconstruction; this explicit ownership-extension boundary is documented, not falsely claimed identical. No089 fix commit or full regression yet.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [

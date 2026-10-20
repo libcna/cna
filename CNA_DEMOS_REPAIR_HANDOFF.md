@@ -9,6 +9,80 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+11:07 UTC clarification:20915 module launch stopped before any test, with a136940-
+byte single filter argument. Read-only --gtest_list_tests reproduction confirms
+E2BIG, statusnull/stdout0; diagnostic JSON retained. Native helper now uses compact
+suite patterns (as preceding module helper did), but still requires every exact
+1965 identity/status.31942 RUNNING(1), report suffix content-module-compact and
+module-compact-audit; fresh compact pre-hashes pass.15936 RUNNING(1) canonical7
+focus PASS,559 pipeline at genuine differential build.24965 RUNNING(1) external
+CTest (~524/735). No test failure retried; all failed setup logs retained. THREE
+workers remain; do not start native SystemLink consumers yet.
+
+11:05 UTC: canonical089 build9887 COMPLETE0,79 printed steps, nine source hashes
+match. Two material-test nodiscard warnings exactly match the last build of those
+TUs (repair-effective-parameters-native-build.log). Initial auditor incorrectly
+compared to087's51 warnings, which did NOT recompile the material tests; failed
+audit retained. Both first gate launches stopped at missing pre-freeze manifest,
+BEFORE ANY TEST. Corrected warning provenance/accounting audit errors[]; four
+native artifacts now FROZEN under repair-intermediate-initialization-native-frozen.
+sha256. Resumed15936 RUNNING(1): canonical7 focus then559 pipeline;20915 RUNNING(1):
+1965 module exact comparison. Fresh pre-hash names preserve both setup failures.
+External24965 RUNNING(1): serial final CTest still in progress,319 artifacts frozen
+at087. THREE workers total, no native consumers/SystemLink until external ends.
+No compiled source changes while these gates run; native089 remains uncommitted.
+
+11:00 UTC:089 actual-TU candidate normal59761/sanitizer49008 COMPLETE0:21basic,
+11cycle,6failure,two isolation cases PASS. Expanded37339/48274 COMPLETE0: same38
+controls plus FOUR isolation cases (late registration and simultaneous first use).
+Native fixture wrappers35100/70983 COMPLETE0:7/7 native GTests plus fresh-process
+cold-start1/1, normal andASan/UBSan/leak, no diagnostics/warnings. Three permanent
+CNA test files now installed (seven cases); failed initialization uses threadsafe
+death-test re-exec to avoid poisoning the other tests. Nine source hashes captured
+in repair-intermediate-initialization-source.sha256.
+
+Canonical native build9887 RUNNING(2),79 scheduled steps. Do not edit compiled
+089 sources/tests while it builds.087 native freeze released after final hash
+verification; no old087 native hash is claimed after this rebuild. External24965
+RUNNING(1) stays FROZEN at087: BOTH719 sweeps complete,SW621/47/48/3 and GLES660/
+49/7/3. Original-baseline comparison has64 intended improvements and the identical
+C root assertion residual; additional predecessor audit has only087 improvement,
+errors[] and explicitly globallyAccepted=false. Both95 math and six exact visuals
+PASS. All319 post-full/pre-CTest hashes match; final serial CTest is running.
+No concurrent SystemLink tests. Keep global048 checkpoint and74/81 unchanged.
+
+Prepared repair-intermediate-initialization-native-gates.mjs accepts module
+(1965 exact), pipeline (previous552+seven=559, includes canonical7 focus), consumers
+(1412/runtime241/default/original XML). After9887, audit warning deltas and nine
+source hashes, freeze four artifacts under the089 prefix, then run module/pipeline
+with at most three total workers. Defer consumers/SystemLink until24965 finishes
+all external CTests. Native candidate is uncommitted; no089 full-regression pass.
+
+10:52 UTC: marker focus15417 COMPLETE0,146 exact results,64PASS/nine unchangedFAIL
+per renderer. Demos8b69456 commits corrected oracle/validated087 marker; CNA status
+6a8e77bf4 follows runtime3d254dfa7. External24965 RUNNING(1):319 artifacts FROZEN,
+both95 math exact and six pixel references0diff PASS; SOFTWARE full currently runs
+graphics. The final-gates helper will run GLES, retain original-baseline C root
+delta, perform a separate predecessor audit, then serial CTest/hashes. Do not
+rebuild external or overlap SystemLink suites.
+
+Independent089 candidate is now UNCOMMITTED in four production files: intermediate
+Serializer/ContentTypeSerializer .cpp plus Core/ContentTypeSerializer headers.
+Registry-owned callback owner, scoped thread-local per-operation state, published
+one-time initialization outside the registry lock, waiting concurrent initializers,
+and reentrant/complete built-in publication replace temporary callback owners.
+Explicit unique_ptr registrations cannot implement XNA fresh-instance recovery;
+candidate documentation states cached initialization failure without retry/copy,
+while raw lookup and retained failed owner remain usable. Genuine15 recovery
+evidence is NOT removed or claimed identical; review this CNAEXT ownership boundary
+before closing089. No factory/clone API added, no089 native regression installed yet.
+59761 normal(1) and49008 sanitizer(1) compile FOUR actual implementation TUs and
+the permanent21 basic,11 cycle,6 failure and two owner-isolation cases, then run
+all in fresh processes. Source frozen until both candidate builds finish. Exact
+helper repair-intermediate-initialization-candidate.mjs [sanitizer], reports same
+prefix. Canonical native libraries still087 and four hashes checked before work;
+no native rebuild yet. THREE workers total, no spare compiler/test slot.
+
 10:46 UTC:087 runtime COMMITTED3d254dfa7, FIXED_PENDING_REGRESSION;74/81 unchanged.
 All native gates below complete. External48985 COMPLETE0,1043 printed steps, zero
 warnings. First audit rejected terminal gap3 vs prior1; retained. Exact accounting
