@@ -711,6 +711,7 @@
       "root_cause": "Both RootDirectory setters assign without checking the loaded-asset cache.",
       "related_issues": [],
       "cna_fix_commit": null,
+      "current_validation": "Genuine expanded89/89. Native039 before twoPASS/oneFAIL3ms: both root setters wrongly allow same/different loaded-root assignment; failed Load and raw ReadAsset controls pass. Candidate guards nonempty cache, with measured XNA-over-FNA divergence recorded. Actual ContentManager+Untyped TUs and complete manager fixture ASan/UBSan/leak23/23PASS29ms. Whole native build/external regression pending; source uncommitted and excluded from frozen048 binaries.",
       "validation": ["Current strict renderer sweeps preserve039 failure. Genuine ContentOwnershipOracle35/35 confirms different AND identical root assignments throw InvalidOperationException while an asset is cached; assignment succeeds after Unload, including its exceptional cleanup. Raw ReadAsset does not populate that cache. FNA's unrestricted auto-property differs; measured XNA wins. No repair yet."],
       "final_disposition": null
     },
@@ -820,9 +821,10 @@
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
-      "root_cause": "LoadXnbAsset calls the low-level header parser outside a ContentLoadException wrapping boundary.",
+      "root_cause": "Typed/erased XNB header and object-body boundaries leak IOException. Erased compressed loading also lacks the typed path's14-byte prefix guard, causing a four-byte heap overread for a ten-byte external XNB.",
       "related_issues": [],
       "cna_fix_commit": null,
+      "current_validation": "Genuine expanded89/89 verifies all header lengths0..9, stream closure and exception distinctions. Native four-case before fourFAIL10ms. Actual-TU ASan before confirms heap-buffer-overflow at ContentManagerUntyped.cpp:154 on10-byte LZX input. Candidate shared private ReadXnbHeader applies bounds to both routes, preserving low-level EOF; ContentReader wraps IOException only. Actual ContentManager+Untyped TUs/full fixture ASan/UBSan/leak23/23PASS29ms. Whole build and external regression pending; no closure. Permanent demos docs/repair-evidence/content/RUNTIME_OWNERSHIP_TRIAGE.md.",
       "validation": ["Current strict renderer sweeps preserve the three-byte XNB failure. Genuine ContentOwnershipOracle35/35 confirms header and body I/O failures become ContentLoadException, streams close, and caller recorder InvalidOperationException remains unwrapped with caller ownership preserved. Do not indiscriminately wrap all callback failures. No repair yet."],
       "final_disposition": null
     },
