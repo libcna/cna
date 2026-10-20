@@ -9,6 +9,31 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST EXTERNAL STATE (09:08 UTC; supersedes prior build/focus jobs): full build
+54284 COMPLETE0,972 scheduled steps, warning-free. Focus99460 COMPLETE0:73 demos
+per renderer,63PASS/ten unchangedFAIL each; exact146 comparisons errors[]. Original
+043 demo passes all13 controls on both, precisely its two lookup failures removed.
+Only then removed043 marker; incremental14100 COMPLETE0, nine scheduled steps,
+warning-free; marker focus84481 COMPLETE0 with the same exact146 results.
+All319 external artifacts are now FROZEN in repair-reader-lookup-binaries.sha256.
+Full job8777 RUNNING(1):both95 math, metadata/tools, six exact visuals, both719
+renderer sweeps with63 intended cumulative status improvements against startHEAD.
+The unresolved039 C root-contract regression is deliberately NOT allowed/waived
+by the full comparator; expect it to remain a reported failure until owner decision.
+No final full checkpoint or043/103 closure yet. After full run, retain every delta,
+check hashes, run isolated serial CTest/audit as appropriate without claiming an
+accepted global checkpoint while this contract remains unresolved.
+
+103 additional static gates:3197 generated routes in57 files current; generator
+unit tests4/4PASS2.604s (34284 COMPLETE0), reports repair-content-exception-generated-
+current.log and repair-content-exception-generator-tests.log. No generated edits.
+CNA HEAD1249a46bf (runtime043252e9bca1,10368a3c7b1f), demos HEAD97d2279 plus
+uncommitted043 marker/main handoff updates. All155 IDs retained,74 FINAL/81 PENDING.
+Native043 freeze was released after its final audits; external frozen binaries
+must not be rebuilt during8777/following audits. No087 production edits yet.
+Next independent source work:087 ownership/dispatch, preserving genuine53+18,
+native19 pre-fix outcomes, and the documented C API independent resource ownership.
+
 LATEST043 NATIVE CHECKPOINT (08:53 UTC):12643 COMPLETE0.
 Runtime/test/deviation now committed as252e9bca1; demos evidence HEAD9576c6a.
 Consumers1412 give1408PASS/four unchangedSKIP183.079s; runtime241 gives238PASS/three unchangedSKIP
