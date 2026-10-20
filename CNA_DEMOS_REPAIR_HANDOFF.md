@@ -9,6 +9,23 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+14:19 UTC: both719 full sweeps complete, exact local comparison passes. SOFTWARE
+625/43/48/3,GLES664/45/7/3,68 cumulative improvements vs initialHEAD/70Complete1128;
+only original C-root contract residual remains.24685 now serial CTest(~342/735).
+All319 hashes exact before CTest. Six IDs still await final CTest/closure.
+
+Build residual001 repair committed b35fbc933:shared-mode minimum3.30 (static overall
+minimum unchanged),actual production policy/direct-helper guard,docs,native cyclic
+fixture. Four real CMake versions16 scenarios pass, including four expected early
+refusals on3.28/29 and12 build/runs. Both real old-version top-level ON calls refuse
+with version/remedy. First audit line-wrapping mismatch retained, no compiler failure
+waived. Native27369 COMPLETE0:three preludes/six tasks,only prior Draco CMP0148 dev
+warning; all four old native hashes and319 external hashes unchanged. New registered
+CTest5779/repeated33118 pass, final four-version93677 passes. Eleven source files
+frozen. ONLY24685 running. After its final freeze check/closure, external rebuild
+must validate the new configuration before001 closure. No ordinary source edits.
+Counts77/78 unchanged. No push/merge. Demos build evidence pending commit.
+
 14:08 UTC: next ownership baseline expanded, not repaired. Genuine36470 COMPLETE0:
 108/108 (91 original+17 lifecycle); native37987 COMPLETE0 as baseline audit, actual
 test exit1:10=2PASS/eightFAIL, all old seven outcomes exact and three new failures.

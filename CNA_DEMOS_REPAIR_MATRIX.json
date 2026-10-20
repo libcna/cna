@@ -18,7 +18,8 @@
       "status": "CONFIRMED_OPEN",
       "root_cause": "Cyclic static archives are repeated inside WHOLE_ARCHIVE on admitted CMake 3.27-3.29; feature-level archive deduplication is available from CMake 3.30.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "b35fbc933",
+      "current_validation": "CNA b35fbc933 corrects shared-mode gate to3.30, preserves overall/static minimum and current supported default, adds direct-helper guard and permanent native cyclic-archive test. Actual3.28.6/3.29.9/3.30.9/3.31.6:16 scenarios pass, including12 build/runs and four expected configure refusals. Real top-level old-version ON refusals verified. Canonical CNA build passes:three preludes/six tasks, only prior Draco CMP0148 warning; four old native artifacts and319 external binaries byte-identical. Registered CnaSharedRuntimeLinkage passes fresh/repeated caches. Eleven source files frozen. External configuration/build and final issue closure pending; existing content-roots full regression still running against unchanged runtime artifacts. Permanent demos docs/repair-evidence/build/SHARED_RUNTIME_POLICY.md.",
       "validation": [
         "Current production shared-runtime helper minimized to two cyclic libraries: official checksum-verified CMake 3.28.6 and 3.29.9 fail with duplicate symbols; identical 3.30.9 and 3.31.6 builds and consumer execution pass. CMP0156 OLD does not reproduce the old failure on 3.31; explicitly disabling WHOLE_ARCHIVE feature deduplication does. Logs: ../cna-demos/build/linux-full/reports/repair-baseline-shared-runtime-*.log."
       ],
