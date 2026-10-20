@@ -9,7 +9,16 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-14:03 UTC: corrected content78820 COMPLETE0:146 cases,68PASS/five unchangedFAIL
+14:08 UTC: next ownership baseline expanded, not repaired. Genuine36470 COMPLETE0:
+108/108 (91 original+17 lifecycle); native37987 COMPLETE0 as baseline audit, actual
+test exit1:10=2PASS/eightFAIL, all old seven outcomes exact and three new failures.
+Strict builds/four native hashes pass. Records demonstrate Dispose failure's finally
+cleanup and disposed-operation ordering; see RUNTIME_OWNERSHIP_TRIAGE.md. No new
+production edits.24685 full combined external RUNNING(1), SOFTWARE graphics underway;
+no other jobs. Prepared guarded repair-content-roots-close.mjs is NOT RUN and refuses
+closure without final full/CTest/focus evidence. Counts77/78 unchanged.
+
+14:01 UTC: corrected content78820 COMPLETE0:146 cases,68PASS/five unchangedFAIL
 per renderer, exact audit errors[]. All319 post-focus hashes match. Four additive
 manifest controls committed demos1f8ae67; no original assertion changed. Full
 combined24685 RUNNING(1):both95 math and six exact visuals already pass; both719
