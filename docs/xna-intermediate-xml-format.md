@@ -318,8 +318,6 @@ the corpus test (`modules/content-pipeline/tests/…/XnaIntermediateSerializerTe
   written; reading accepts both `T[]` and `List[T]` where XNA insists on the declared one
   (`accept_int_array_from_list_type`, `accept_list_from_array_type`).
 * **`std::map<K,V>` writes in key order**, where a .NET `Dictionary` enumerates in insertion order.
-* **Self-closing empty sections are accepted.** `<Resources />` and `<ExternalReferences />` are
-  read as empty sections; XNA's reader loop fails on them (§1).
 * **Multidimensional arrays remain a category difference.** XNA throws RankException;
   CNA refuses with InvalidContentException. Null value-type members now preserve
   NullReferenceException, with CNA's useful member/type diagnostic. XML character

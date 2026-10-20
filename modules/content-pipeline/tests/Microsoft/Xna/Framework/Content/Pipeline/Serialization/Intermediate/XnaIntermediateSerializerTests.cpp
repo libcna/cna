@@ -1337,8 +1337,7 @@ TEST_F(XnaIntermediateSerializerCorpus, RejectedInputsAreRefusedWithXnaMessages)
             const std::string produced = trip->second(input, RelocationFor(item.name));
             // Recorded lenience: CNA accepts these inputs that XNA refuses (docs/xna-intermediate-xml-format.md).
             static const std::set<std::string> deliberatelyAccepted = {
-                "accept_empty_resources_selfclosing", "accept_empty_externals_selfclosing",
-                "accept_resources_then_externals", "accept_int_array_from_list_type", "accept_list_from_array_type",
+                "accept_int_array_from_list_type", "accept_list_from_array_type",
                 // tinyxml2 tolerates a byte-order mark inside the text handed to it; .NET's string
                 // reader does not (substrate difference, recorded).
                 "accept_bom_and_declaration"};

@@ -527,12 +527,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
     void IntermediateReader::ReadResources()
     {
-        const bool empty = xml_.getIsEmptyElementProperty();
+        // XNA still consumes a section end after ReadStartElement. For a self-closing
+        // section that advances past the enclosing end (or encounters the next section),
+        // producing the normal XmlNodeType diagnostic instead of accepting an empty list.
         xml_.ReadStartElement();
-        if (empty)
-        {
-            return;
-        }
         ContentSerializerAttribute format;
         format.setElementNameProperty("Resource");
         while (MoveToElement("Resource"))
@@ -585,12 +583,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
     void IntermediateReader::ReadExternalReferences()
     {
-        const bool empty = xml_.getIsEmptyElementProperty();
+        // Preserve the same section traversal as ReadResources, including empty-element
+        // error timing. Explicit paired empty sections remain valid.
         xml_.ReadStartElement();
-        if (empty)
-        {
-            return;
-        }
         while (MoveToElement("ExternalReference"))
         {
             const std::string id = xml_.GetAttribute("ID");
