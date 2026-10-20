@@ -10,6 +10,9 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 ## Current checkpoint (2026-10-20)
 
 LATEST103 UPDATE (08:37 UTC): external target67664 COMPLETE0, warning-free.
+Runtime/test commit68a3c7b1f is now recorded; evidence demos7fd2618 (new results
+pending documentation commit). Full external rebuild54284 RUNNING(2) under
+repair-reader-lookup-external-build.log, alongside native pipeline11324(1).
 Both native and evidence probes pass44/44 on SOFTWARE and OPENGLES3; each retains
 all original controls and exactly eight canonical-type failures disappear.
 Existing ErrorSmoke, CoreExtSmoke, GeneratedRoutesSmoke and ContentReaderSmoke
