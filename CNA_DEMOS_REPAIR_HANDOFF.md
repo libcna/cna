@@ -72,6 +72,24 @@ optional false mode works through tinyxml2. Reports repair-xml-nul-{xna,net8}* a
 Sharp build-probe/cna-repair-xml-nul-before*. Both new witnesses are included in
 docs/repair-evidence/content/README.md. No inferred152 policy decision.
 
+148/149 fresh genuine IntermediateEnvelopeOracle16/16 confirms envelope contracts
+but CORRECTS the historical149 root-read expectation: Deserialize returns null;
+only subsequent Serialize throws ArgumentNullException(value). Old corpus Accept<T>
+combines both calls in one catch; its rejected manifest describes a round trip,
+not a failed read. Primary issue inventory now retains history with this correction.
+Value-null genuinely throws NullReferenceException. Native test-only34744 COMPLETE:
+both new direct149 tests FAIL before repair (15ms); positive Null=false control passes.
+Reports repair-intermediate-envelope-{direct,asserted}-xna*,
+repair-intermediate-null-native-before*. First genuine setup used invalid empty
+relocation (ArgumentNull path), retained as repair-intermediate-envelope-xna* exit143;
+only owned probe1396356/debugger1396535 stopped. Corrected reference uses null relocation
+and a setup exception boundary. No production content edits, no golden regeneration.
+Additional uncommitted native file: XnaIntermediateSerializerTests.cpp (two tests/includes).
+Sharp uncommitted XmlWriterValidationTests.cpp contains evidence-backed test changes
+and one new pre-write-preservation test; actual writer unchanged. Both prepared runtime
+patches repair-opaque-runtime.patch and repair-xml-nul-runtime.patch remain UNAPPLIED.
+Do not alter production until external storage marker rebuild finishes and is frozen.
+
 Historical intermediate NUL/status failures (now repaired above): review exposed
 actual wrong-file access/truncation in FileStream. Sharp3304ecd6 now rejects NUL
 and empty input before filesystem effects; genuine54/54 and dependency18143/18143

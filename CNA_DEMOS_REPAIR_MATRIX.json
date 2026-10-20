@@ -2774,7 +2774,8 @@
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [
-        "Fresh Framework4 reference XmlWriterNulOracle21/21: two NUL placements at seven doors reject with exact ArgumentException and seven ordinary-content controls pass. CheckCharacters=false separately records entitized text/attributes versus literal NUL in other doors; it is not claimed implemented. Evidence docs/repair-evidence/content/XmlWriterNulOracle.cs, repair-xml-nul-xna*. Native test-only reproduction being built; production unchanged."
+        "Fresh Framework4 reference XmlWriterNulOracle21/21: two NUL placements at seven doors reject with exact ArgumentException and seven ordinary-content controls pass. CheckCharacters=false separately records entitized text/attributes versus literal NUL in other doors; it is not claimed implemented. Evidence docs/repair-evidence/content/XmlWriterNulOracle.cs, repair-xml-nul-xna*. Native test-only reproduction being built; production unchanged.",
+        "Native test-only build warning-free;49 XmlWriterValidationTests46PASS/three expectedFAIL (2ms). Fresh .NET8 oracle also21/21. Prepared runtime patch unapplied; no closure."
       ],
       "final_disposition": null
     },
@@ -2788,11 +2789,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "XmlReader tinyxml2 rejects nested processing instructions and accepts a string BOM; IntermediateReader early-return accepts self-closing sections that XNA refuses.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Fresh genuine direct IntermediateEnvelopeOracle16/16 combined148/149 checks: PI accepted, self-closing Resources/ExternalReferences and string BOM rejected, paired expanded sections accepted. Source review confirms still-open substrate and envelope handling. No runtime repair yet."
+      ],
       "final_disposition": null
     },
     {
@@ -2805,11 +2808,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "ReadObjectCore rejects value-null with broader InvalidContent and DeserializeObject refuses null roots. Historical root-read ArgumentNull expectation misattributes a subsequent reserialization failure.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Fresh genuine direct IntermediateEnvelopeOracle16/16 proves root deserialization returns null; only subsequent Serialize raises ArgumentNullException(value). Original Accept<T> helper combines both calls in one catch (lines506-529); preserve its round-trip evidence but correct the demo's direct-read expectation. Value-null genuinely throws NullReferenceException. Primary inventory explicitly annotated; new native pre-fix tests building."
+      ],
       "final_disposition": null
     },
     {
