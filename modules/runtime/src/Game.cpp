@@ -1125,9 +1125,13 @@ namespace Microsoft::Xna::Framework
 
         if (disposing)
         {
-            for (SharpRuntime::intcs i = 0; i < Components_.getCountProperty(); ++i)
+            // XNA Game.Dispose(bool) snapshots the original components. Its managed
+            // array also keeps each object alive if an earlier callback removes it.
+            const auto components = Components_.items_;
+            const auto ownedComponents = Components_.owned_;
+            for (IGameComponent* component : components)
             {
-                if (auto* disposable = dynamic_cast<System::IDisposable*>(Components_[i]))
+                if (auto* disposable = dynamic_cast<System::IDisposable*>(component))
                 {
                     disposable->Dispose();
                 }

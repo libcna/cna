@@ -133,14 +133,13 @@ protected:
         Game& game_;
     };
 
-    // The canonical disposal is idempotent, so the forwarded one must be too: without this a second
-    // disposal would call the C handler again while the canonical event stayed silent.
-    void ForwardDisposeOnce()
+    // Like an XNA Dispose(bool) override, every explicit call reaches the handler.
+    // The consumer owns any idempotent resource-release guard inside that handler.
+    void ForwardDispose()
     {
-        if (disposeForwarded_ || callbacks_.dispose == nullptr) {
+        if (callbacks_.dispose == nullptr) {
             return;
         }
-        disposeForwarded_ = true;
         const HandlerScope scope(owner_);
         callbacks_.dispose(callbacks_.context);
     }
@@ -148,8 +147,6 @@ protected:
     CNA_GameComponentCallbacks callbacks_;
     Game& owner_;
 
-private:
-    bool disposeForwarded_ = false;
 };
 
 class CGameComponent final : public ForwardingComponent<GameComponent> {
@@ -160,7 +157,7 @@ protected:
     void Dispose(bool disposing) override
     {
         if (disposing) {
-            ForwardDisposeOnce();
+            ForwardDispose();
         }
         GameComponent::Dispose(disposing);
     }
@@ -199,7 +196,7 @@ protected:
     void Dispose(bool disposing) override
     {
         if (disposing) {
-            ForwardDisposeOnce();
+            ForwardDispose();
         }
         DrawableGameComponent::Dispose(disposing);
     }

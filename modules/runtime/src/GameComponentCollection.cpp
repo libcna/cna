@@ -39,12 +39,17 @@ namespace Microsoft::Xna::Framework
 
     void GameComponentCollection::Insert(size_type index, std::shared_ptr<IGameComponent> item)
     {
+        if (index > items_.size())
+        {
+            throw System::ArgumentOutOfRangeException("index");
+        }
+
         IGameComponent* const raw = item.get();
         if (raw != nullptr)
         {
-            // Taken before the insert so a ComponentAdded handler that removes the component
-            // again already finds the reference to release.
-            owned_.insert_or_assign(raw, std::move(item));
+            // Register before dispatch, but retain the argument through callbacks
+            // that remove it again. A duplicate must not replace existing ownership.
+            owned_.try_emplace(raw, item);
         }
 
         try
@@ -136,12 +141,14 @@ namespace Microsoft::Xna::Framework
 
     void GameComponentCollection::ClearItems()
     {
-        for (IGameComponent* component : items_)
+        // XNA GameComponentCollection.ClearItems uses a live index loop. A handler
+        // may mutate the collection; neither a snapshot nor an iterator matches it.
+        for (size_type index = 0; index < items_.size(); ++index)
         {
-            if (component != nullptr)
-            {
-                OnComponentRemoved(GameComponentCollectionEventArgs(component));
-            }
+            IGameComponent* const component = items_[index];
+            const auto found = owned_.find(component);
+            const std::shared_ptr<IGameComponent> keepAlive = found != owned_.end() ? found->second : nullptr;
+            OnComponentRemoved(GameComponentCollectionEventArgs(component));
         }
 
         items_.clear();
@@ -150,15 +157,15 @@ namespace Microsoft::Xna::Framework
 
     void GameComponentCollection::InsertItem(size_type index, IGameComponent* item)
     {
+        if (index > items_.size())
+        {
+            throw System::ArgumentOutOfRangeException("index");
+        }
+
         if (IndexOf(item) != -1)
         {
             throw System::ArgumentException(
                 "Cannot add the same game component to a game component collection multiple times.");
-        }
-
-        if (index > items_.size())
-        {
-            throw System::ArgumentOutOfRangeException("index");
         }
 
         items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(index), item);
@@ -178,13 +185,13 @@ namespace Microsoft::Xna::Framework
 
         IGameComponent* gameComponent = items_[index];
         items_.erase(items_.begin() + static_cast<std::ptrdiff_t>(index));
+        // Retain this registration through dispatch/exception unwinding. A handler
+        // may register it again; that new ownership must not be erased afterward.
+        const auto removedOwnership = owned_.extract(gameComponent);
 
         if (gameComponent != nullptr)
         {
             OnComponentRemoved(GameComponentCollectionEventArgs(gameComponent));
-            // After the event, not before: a handler must still see a live component. Dropping
-            // the reference here may be what destroys it.
-            owned_.erase(gameComponent);
         }
     }
 

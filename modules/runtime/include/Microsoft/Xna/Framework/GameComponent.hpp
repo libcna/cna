@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
@@ -87,7 +89,7 @@ namespace Microsoft::Xna::Framework
          */
         [[nodiscard]] System::EventHandler<System::EventArgs>& getUpdateOrderChangedEvent() override;
 
-        /** @brief Shuts down the component. */
+        /** @brief Removes this component from its game and raises Disposed on every explicit call. */
         void Dispose() override;
 
         /** @brief Initializes the component. */
@@ -128,12 +130,17 @@ namespace Microsoft::Xna::Framework
         virtual void OnEnabledChanged(System::Object* sender, const System::EventArgs& args);
 
         /**
-         * @brief Performs disposal. When disposing is true, managed-style events may be raised.
+         * @brief Performs disposal. Each true call removes membership before raising Disposed;
+         *        false does not invoke managed-style events.
          * @param disposing true when called from Dispose(); false when called from the destructor.
          */
         virtual void Dispose(bool disposing);
 
     private:
+        friend class DrawableGameComponent;
+
+        [[nodiscard]] std::shared_ptr<IGameComponent> RetainCollectionOwnership();
+
         Game* game_;
         bool enabled_;
         SharpRuntime::intcs updateOrder_;

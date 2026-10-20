@@ -72,7 +72,7 @@ typedef struct CNA_GameComponentCallbacks {
     /** @brief Invoked when a drawable component should release its graphics content. */
     void (*unload_content)(void* context);
 
-    /** @brief Invoked when the component is disposed, before its handle is released. */
+    /** @brief Invoked on every explicit component disposal, before the base disposed event. */
     void (*dispose)(void* context);
 
     /** @brief Caller context passed back to every handler above. */
@@ -322,8 +322,10 @@ CNA_C_API CNA_Result cna_drawable_game_component_draw(
  * @param component Owned component handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * Disposal raises the disposed event once. Unlike a sensor, a second disposal is a no-op rather than
- * a refusal, which is this canonical type's own behavior.
+ * Each explicit call invokes the disposal callback and raises the disposed event. The component
+ * removes itself from its game's collection before that event. Drawable components also invoke
+ * their unload callback on every explicit disposal, even if not initialized. Resource-release
+ * idempotence belongs inside the consumer's callbacks; the handle remains valid until destroyed.
  */
 CNA_C_API CNA_Result cna_game_component_dispose(CNA_GameComponentHandle component);
 
@@ -445,9 +447,8 @@ CNA_C_API CNA_Result cna_game_components_get_at(
  * @param component Owned component handle.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * The canonical collection accepts the same component twice, and this route does too rather than
- * inventing a refusal. A component added after the game has initialized is initialized when it is
- * added.
+ * Adding the same component twice returns `CNA_RESULT_INVALID_ARGUMENT` and preserves membership.
+ * A component added after the game has initialized is initialized when it is added.
  */
 CNA_C_API CNA_Result cna_game_components_add(CNA_Handle game, CNA_GameComponentHandle component);
 

@@ -162,6 +162,9 @@ namespace Microsoft::Xna::Framework
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
+        friend class Game;
+        friend class GameComponent;
+
         std::vector<IGameComponent*> items_;
 
         // Strong references for components added through the shared_ptr overloads; a

@@ -33,9 +33,9 @@ namespace Microsoft::Xna::Framework
     {
         if (enabled_ != value)
         {
+            const auto keepAlive = RetainCollectionOwnership();
             enabled_ = value;
-            EnabledChanged.Raise(this, System::EventArgs::Empty);
-            // FNA passes null as args to OnEnabledChanged; C++ uses Empty since references cannot be null.
+            // XNA GameComponent IL dispatches through the virtual hook, not before it.
             OnEnabledChanged(this, System::EventArgs::Empty);
         }
     }
@@ -49,16 +49,25 @@ namespace Microsoft::Xna::Framework
     {
         if (updateOrder_ != value)
         {
+            const auto keepAlive = RetainCollectionOwnership();
             updateOrder_ = value;
-            UpdateOrderChanged.Raise(this, System::EventArgs::Empty);
-            // FNA passes null as args to OnUpdateOrderChanged; C++ uses Empty since references cannot be null.
             OnUpdateOrderChanged(this, System::EventArgs::Empty);
         }
     }
 
     void GameComponent::Dispose()
     {
+        // Removing this component can release its last collection-owned reference.
+        // Keep it alive through the entire virtual call, including a derived epilogue.
+        const auto keepAlive = RetainCollectionOwnership();
         Dispose(true);
+    }
+
+    std::shared_ptr<IGameComponent> GameComponent::RetainCollectionOwnership()
+    {
+        const auto& owned = game_->getComponentsProperty().owned_;
+        const auto found = owned.find(this);
+        return found != owned.end() ? found->second : nullptr;
     }
 
     void GameComponent::Initialize()
@@ -94,19 +103,20 @@ namespace Microsoft::Xna::Framework
     void GameComponent::OnUpdateOrderChanged(System::Object* sender, const System::EventArgs& args)
     {
         (void)sender;
-        (void)args;
+        UpdateOrderChanged.Raise(this, args);
     }
 
     void GameComponent::OnEnabledChanged(System::Object* sender, const System::EventArgs& args)
     {
         (void)sender;
-        (void)args;
+        EnabledChanged.Raise(this, args);
     }
 
     void GameComponent::Dispose(bool disposing)
     {
-        // FNA's base Dispose(bool) has no disposed_ guard; C++ adds one so the destructor path is idempotent.
-        if (disposed_)
+        // XNA GameComponent.Dispose(bool) removes membership before every explicit
+        // Disposed event. Only the unmanaged/destructor path is idempotent here.
+        if (disposed_ && !disposing)
         {
             return;
         }
@@ -115,6 +125,7 @@ namespace Microsoft::Xna::Framework
 
         if (disposing)
         {
+            (void)game_->getComponentsProperty().Remove(this);
             Disposed.Raise(this, System::EventArgs::Empty);
         }
     }

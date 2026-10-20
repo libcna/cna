@@ -223,7 +223,7 @@ TEST(GameTest, AComponentRemovedMidFrameIsNotCalledLaterInThatSameFrame)
         {
             if (target_)
             {
-                getGameProperty().getComponentsProperty().Remove(target_.get());
+                EXPECT_TRUE(getGameProperty().getComponentsProperty().Remove(target_.get()));
                 target_.reset();
             }
         }
@@ -243,7 +243,7 @@ TEST(GameTest, AComponentRemovedMidFrameIsNotCalledLaterInThatSameFrame)
     ASSERT_NO_FATAL_FAILURE(game.Draw(gameTime));
     EXPECT_EQ(victim, nullptr);
 
-    game.getComponentsProperty().Remove(&remover);
+    EXPECT_TRUE(game.getComponentsProperty().Remove(&remover));
 }
 
 TEST(GameTest, ComponentsAddedFromALoadingThreadSurviveTheFrameThatIsIteratingThem)
@@ -293,7 +293,7 @@ TEST(GameTest, ComponentsAddedFromALoadingThreadSurviveTheFrameThatIsIteratingTh
 
     for (const auto& component : components)
     {
-        game.getComponentsProperty().Remove(component.get());
+        EXPECT_TRUE(game.getComponentsProperty().Remove(component.get()));
     }
 }
 

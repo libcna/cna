@@ -322,17 +322,18 @@ static int validate_component_behavior(const CNA_Handle game)
             order != 0) {
             return 0;
         }
-        /* Disposal reaches the C handler and raises the event once; a second disposal does neither,
-           which is this canonical type's own idempotence. */
+        /* Genuine XNA repeats the override and event on every explicit disposal. */
         if (cna_game_component_dispose(component) != CNA_RESULT_SUCCESS ||
             plain.dispose_calls != 1 || disposed.calls != 1 ||
             cna_game_component_dispose(component) != CNA_RESULT_SUCCESS ||
-            plain.dispose_calls != 1 || disposed.calls != 1) {
+            plain.dispose_calls != 2 || disposed.calls != 2) {
             return 0;
         }
-        /* Disposing a drawable component unloads its content. */
+        /* Every explicit drawable disposal invokes its unload hook before the base event. */
         if (cna_game_component_dispose(drawable) != CNA_RESULT_SUCCESS || drawn.unload_calls != 1 ||
-            drawn.dispose_calls != 1) {
+            drawn.dispose_calls != 1 ||
+            cna_game_component_dispose(drawable) != CNA_RESULT_SUCCESS || drawn.unload_calls != 2 ||
+            drawn.dispose_calls != 2) {
             return 0;
         }
         /* Detaching a registration stops delivery; a released one is refused. */

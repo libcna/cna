@@ -32,8 +32,8 @@ namespace Microsoft::Xna::Framework
     {
         if (drawOrder_ != value)
         {
+            const auto keepAlive = RetainCollectionOwnership();
             drawOrder_ = value;
-            DrawOrderChanged.Raise(this, System::EventArgs::Empty);
             OnDrawOrderChanged(this, System::EventArgs::Empty);
         }
     }
@@ -47,8 +47,8 @@ namespace Microsoft::Xna::Framework
     {
         if (visible_ != value)
         {
+            const auto keepAlive = RetainCollectionOwnership();
             visible_ = value;
-            VisibleChanged.Raise(this, System::EventArgs::Empty);
             OnVisibleChanged(this, System::EventArgs::Empty);
         }
     }
@@ -67,10 +67,11 @@ namespace Microsoft::Xna::Framework
 
     void DrawableGameComponent::Dispose(bool disposing)
     {
-        if (initialized_)
+        // XNA DrawableGameComponent.Dispose(bool) invokes the managed hook on
+        // every explicit call, including before Initialize; false never invokes it.
+        if (disposing)
         {
             UnloadContent();
-            initialized_ = false; // FNA does not reset the flag; C++ resets it to allow safe re-Dispose.
         }
 
         GameComponent::Dispose(disposing);
@@ -109,12 +110,12 @@ namespace Microsoft::Xna::Framework
     void DrawableGameComponent::OnVisibleChanged(System::Object* sender, const System::EventArgs& args)
     {
         (void)sender;
-        (void)args;
+        VisibleChanged.Raise(this, args);
     }
 
     void DrawableGameComponent::OnDrawOrderChanged(System::Object* sender, const System::EventArgs& args)
     {
         (void)sender;
-        (void)args;
+        DrawOrderChanged.Raise(this, args);
     }
 }

@@ -90,7 +90,7 @@ namespace Microsoft::Xna::Framework
 
     protected:
         /**
-         * @brief Releases component content when the component is disposed.
+         * @brief Calls UnloadContent on every explicit disposal, then performs base disposal.
          * @param disposing true when called from Dispose(); false when called from the destructor.
          */
         void Dispose(bool disposing) override;
@@ -98,7 +98,7 @@ namespace Microsoft::Xna::Framework
         /** @brief Loads graphics resources used by the component. */
         virtual void LoadContent();
 
-        /** @brief Releases graphics resources used by the component. */
+        /** @brief Releases graphics resources; explicit disposal invokes this even before Initialize. */
         virtual void UnloadContent();
 
         /**

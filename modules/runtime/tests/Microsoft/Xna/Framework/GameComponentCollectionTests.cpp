@@ -89,6 +89,105 @@ TEST(GameComponentCollectionTest, ClearReleasesEverySharedComponent)
     EXPECT_EQ(c.getCountProperty(), 0u);
 }
 
+TEST(GameComponentCollectionTest, RemovingInsideAddedCallbackKeepsTheComponentAliveUntilDispatchReturns)
+{
+    bool alive = false;
+    GameComponentCollection c;
+    c.ComponentAdded += [&](System::Object*, const GameComponentCollectionEventArgs& args)
+    {
+        EXPECT_TRUE(alive);
+        EXPECT_TRUE(c.Remove(args.getGameComponentProperty()));
+        EXPECT_TRUE(alive);
+    };
+    c.Add(std::make_shared<TracedComponent>(alive));
+    EXPECT_FALSE(alive);
+    EXPECT_EQ(c.getCountProperty(), 0U);
+}
+
+TEST(GameComponentCollectionTest, ThrowingRemovedCallbackStillReleasesTheRemovedOwnership)
+{
+    bool alive = false;
+    GameComponentCollection c;
+    auto component = std::make_shared<TracedComponent>(alive);
+    IGameComponent* raw = component.get();
+    c.Add(std::move(component));
+    c.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs&)
+    {
+        EXPECT_TRUE(alive);
+        throw std::runtime_error("handler");
+    };
+    EXPECT_THROW((void)c.Remove(raw), std::runtime_error);
+    EXPECT_EQ(c.getCountProperty(), 0U);
+    EXPECT_FALSE(alive);
+}
+
+TEST(GameComponentCollectionTest, ReaddingDuringRemovedCallbackPreservesTheNewRegistrationOwnership)
+{
+    bool alive = false;
+    GameComponentCollection c;
+    auto component = std::make_shared<TracedComponent>(alive);
+    std::weak_ptr<TracedComponent> weak = component;
+    IGameComponent* raw = component.get();
+    c.Add(std::move(component));
+    bool readded = false;
+    c.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs&)
+    {
+        if (!readded)
+        {
+            readded = true;
+            auto retained = weak.lock();
+            ASSERT_NE(retained, nullptr);
+            c.Add(std::move(retained));
+        }
+    };
+    EXPECT_TRUE(c.Remove(raw));
+    EXPECT_EQ(c.getCountProperty(), 1U);
+    EXPECT_TRUE(alive);
+    EXPECT_FALSE(weak.expired());
+    c.Clear(); // Handler is guarded; pre-fix stale pointer is never dereferenced.
+    EXPECT_FALSE(alive);
+}
+
+TEST(GameComponentCollectionTest, ClearUsesXnasLiveIndexLoopWhenACallbackRemovesAnEntry)
+{
+    GameComponentCollection c;
+    StubComponent first, second, third;
+    c.Add(&first); c.Add(&second); c.Add(&third);
+    std::vector<IGameComponent*> trace;
+    bool removed = false;
+    c.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs& args)
+    {
+        trace.push_back(args.getGameComponentProperty());
+        if (!removed && args.getGameComponentProperty() == &first)
+        {
+            removed = true;
+            EXPECT_TRUE(c.Remove(&first));
+        }
+    };
+    c.Clear();
+    EXPECT_EQ(trace, (std::vector<IGameComponent*>{&first, &first, &third}));
+    EXPECT_EQ(c.getCountProperty(), 0U);
+}
+
+TEST(GameComponentCollectionTest, ClearRetainsAnOwnedEventArgumentAcrossNestedRemoval)
+{
+    bool alive = false, removed = false;
+    GameComponentCollection c;
+    c.Add(std::make_shared<TracedComponent>(alive));
+    c.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs& args)
+    {
+        if (!removed)
+        {
+            removed = true;
+            EXPECT_TRUE(c.Remove(args.getGameComponentProperty()));
+            EXPECT_TRUE(alive);
+        }
+    };
+    c.Clear();
+    EXPECT_FALSE(alive);
+    EXPECT_EQ(c.getCountProperty(), 0U);
+}
+
 TEST(GameComponentCollectionTest, ARejectedSharedAddLeavesNoOwnershipBehind)
 {
     bool alive = false;
@@ -151,6 +250,45 @@ TEST(GameComponentCollectionTest, DefaultCountIsZero)
     EXPECT_EQ(c.getCountProperty(), 0u);
 }
 
+TEST(GameComponentCollectionTest, XnaInvalidInsertIndexPrecedesDuplicateValidation)
+{
+    GameComponentCollection c;
+    StubComponent first, second;
+    c.Add(&first);
+    EXPECT_THROW(c.Insert(2U, &first), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(c.Insert(2U, &second), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(c.Insert(0U, &first), System::ArgumentException);
+    ASSERT_EQ(c.getCountProperty(), 1U);
+    EXPECT_EQ(c[0], &first);
+}
+
+TEST(GameComponentCollectionTest, XnaClearIncludesNullWhileIndividualNullChangesRemainSilent)
+{
+    GameComponentCollection c;
+    StubComponent first, second;
+    c.Add(&first);
+    int added = 0, removed = 0;
+    c.ComponentAdded += [&](System::Object*, const GameComponentCollectionEventArgs&) { ++added; };
+    c.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs&) { ++removed; };
+    c.Add(nullptr);
+    EXPECT_TRUE(c.Remove(nullptr));
+    EXPECT_EQ(added, 0);
+    EXPECT_EQ(removed, 0);
+    c.Add(nullptr);
+    c.Add(&second);
+    std::vector<IGameComponent*> order;
+    c.ComponentRemoved += [&](System::Object* sender, const GameComponentCollectionEventArgs& args)
+    {
+        EXPECT_EQ(sender, &c);
+        EXPECT_EQ(c.getCountProperty(), 3U);
+        order.push_back(args.getGameComponentProperty());
+    };
+    c.Clear();
+    EXPECT_EQ(order, (std::vector<IGameComponent*>{&first, nullptr, &second}));
+    EXPECT_EQ(removed, 3);
+    EXPECT_EQ(c.getCountProperty(), 0U);
+}
+
 TEST(GameComponentCollectionTest, AddIncreasesCount)
 {
     GameComponentCollection c;
@@ -185,7 +323,7 @@ TEST(GameComponentCollectionTest, RemoveDecreasesCount)
     GameComponentCollection c;
     StubComponent comp;
     c.Add(&comp);
-    c.Remove(&comp);
+    EXPECT_TRUE(c.Remove(&comp));
     EXPECT_EQ(c.getCountProperty(), 0u);
 }
 
@@ -199,7 +337,7 @@ TEST(GameComponentCollectionTest, RemoveFiresComponentRemovedEvent)
     {
         received = a.getGameComponentProperty();
     };
-    c.Remove(&comp);
+    EXPECT_TRUE(c.Remove(&comp));
     EXPECT_EQ(received, &comp);
 }
 
