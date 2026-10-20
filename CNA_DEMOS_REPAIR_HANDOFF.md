@@ -31,8 +31,9 @@ work; see GENERATED_OUTPUT_TRIAGE.md. Do not conflate prepared assertions with
 the measured11-case context/manifest baseline. No047 CNA source changes.
 Prepared demos build-probe/repair-content-generated-output-host-before.mjs passes
 syntax check only; requires completed cache rebuild and hashes canonical artifacts.
-Ongoing61683 has16 warnings in vendored Draco PLY reader/writer lambda captures
-(deprecated implicit this in C++20); preserve diagnostics in final audit, no vendor
+Ongoing61683 has18 warnings:16 in vendored Draco PLY reader/writer lambda captures
+and two old nodiscard calls in XnaMaterialContentTests.cpp (unchanged vs688f3f23e);
+preserve diagnostics in final audit, no vendor
 edit and no warning-free broad-build claim. Native model sources compiled.
 Prepared final-native/047-host drivers additionally inspect their actual cgroup
 memory.max<=6GiB and swap.max0 before any workload. Guard-only checks PASS2 bounded
