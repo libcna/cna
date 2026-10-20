@@ -9,6 +9,31 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+13:03 UTC: ISSUE-012 RESOLVED/FIXED_VALIDATED; runtime d7ce398d8, demos marker
+dc9bfac. Current heads before closure commits CNA46c9d5654/demosdb663fa.
+77 FINAL/78 PENDING of155:44 fixed,23 documentation,8 already fixed,1 demo
+expectation,1 duplicate. Complete proof: demos STREAM_ROUTING_CHECKPOINT.md.
+Full719 SW624/44/48/3, GLES663/46/7/3; only two012 predecessor improvements;
+67 improvements versus initialHEAD/69 Complete1128. Both95 math and six exact
+visuals pass. Final CTest684PASS/48unchangedSKIP/three disabled,658.42s; all735
+outcomes and319 hashes exact. Overall driver1 solely original C API RootDirectory
+contract conflict; globallyAccepted=false, last accepted048.039/045/043/103 open.
+Nine resolved inventory blocks moved under Resolved without changing any of155
+body hashes. No IDs removed. No pushes/merges or new hardware/service claims.
+
+Boundary105/106/108/110 canonical gates COMPLETE: module1990=1986PASS/4sameSKIP;
+pipeline562=561PASS/1sameSKIP,830.126s; consumers1412=1408PASS/4sameSKIP;
+runtime241=238PASS/3sameSKIP; XML4/2 and original6/6; six link checks allPASS.
+All exact audits errors[], four native artifact hashes unchanged. Actual-TU normal
+and ASan/UBSan/leak proof already recorded below. No active jobs. Nine boundary
+source/test files uncommitted; closure matrix/handoff are separate changes.
+Next: commit each of four root causes separately with matching native tests;
+verify319 external012 hashes before release, correct historical diagnostic
+observations110/108/106 without reducing controls, build boundary external tree,
+run prepared146 initial focus BEFORE changing105 marker/106/108 restrictions.
+Then marker rebuild/focus/full719/math/visual/CTest/hashes; no boundary closure yet.
+Owner C-root choice remains unanswered; unrelated actionable work continues.
+
 12:51 UTC: boundary module62368 COMPLETE0,1990=1986PASS/four unchangedSKIP;
 five new focus PASS, exact audit/four hashes match. Six link-footprint checks98103
 COMPLETE0, all pass/no skips/four hashes match.30922 pipeline562 still RUNNING(1).

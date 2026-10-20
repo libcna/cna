@@ -220,13 +220,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Ordinary Load requires the CNA-only OpenStream-routing opt-in. Cold ResourceContentManager additionally reaches BuiltinContent registration whose RegisterDeclaredXnbReaders is a no-op without prior Game declaration; historical missing-ReadAsset-registration explanation is stale.",
-      "current_validation": "Genuine cold ResourceContentManager14/14 PASS without Game; native before failures and actual-five-TU20 normal/ASan/UBSan/leak proof retained. Initial foreign-thread SDL TLS leak fixed in fixture via documented cleanup, not suppression; canonical native fixture uses Headless seam and also passes sanitized20. Whole native1205-step build passes with51 exact prior warnings; nine source/four artifact hashes exact. Canonical20 focus,1985 module(1981PASS/fourSKIP),559 pipeline(558PASS/oneSKIP),1412 consumers(1408/four),241runtime(238/three), XML4/2 plus6/6 original fixtures, six link-footprint CTests all pass exact audits. External two-segment build warning-free/accounting/source hashes exact;146 initial focus67PASS/six unchangedFAIL each renderer. Runtime committed; only two proven markers removed,10-step marker build passes. Marker focus/full regression pending; no closure.",
+      "current_validation": "Runtime d7ce398d8/marker dc9bfac. Genuine cold14/14; native20,1985module,559pipeline,1412consumers,241runtime,XML/link exact; actual-five-TU ASan/UBSan/leak20/20. Both146 focus67PASS/six unchangedFAIL each; SW719624/44/48/3,GLES663/46/7/3. Exact predecessor only two012 improvements;67 cumulative versus start/69 Complete1128. Six zero-pixel visuals/both95 math pass. Final CTest684PASS/48 unchangedSKIP/three disabled658.42s; all735 outcomes/319 hashes exact. Original C root residual remains strict/globallyAccepted=false, overall driver1; local012 closure only.",
       "related_issues": [],
       "cna_fix_commit": "d7ce398d81a36663b23ade7e7164ebb176fb2c6b",
-      "validation": ["Both current witnesses still fail in strict renderer sweeps. Genuine ContentOwnershipOracle35/35 confirms ordinary Load invokes the virtual stream seam and preserves cache identity. Source audit finds ReadAsset already registers its builtin family, but family-closure tests establish Game's declaration state and miss a cold standalone manager. Preserve per-family linkage and explicit reader withdrawal semantics. No runtime repair yet."],
-      "final_disposition": null
+      "validation": [
+        "Both current witnesses still fail in strict renderer sweeps. Genuine ContentOwnershipOracle35/35 confirms ordinary Load invokes the virtual stream seam and preserves cache identity. Source audit finds ReadAsset already registers its builtin family, but family-closure tests establish Game's declaration state and miss a cold standalone manager. Preserve per-family linkage and explicit reader withdrawal semantics. No runtime repair yet.",
+        "Closed after frozen external repair-content-stream-routing final gates; see docs/repair-evidence/content/STREAM_ROUTING_CHECKPOINT.md. Original setup/sanitizer/build reschedule logs retained. Native platform audit and demo assertions/tolerances/isolation unchanged. Pending039/045/043/103 and global048 checkpoint unaffected."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-013",
