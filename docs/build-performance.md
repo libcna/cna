@@ -22,7 +22,7 @@ not presented as elapsed-time improvements.
 | Fast debug | Controlled content compilation fell 9.7% and the build tree fell 47.2% with line tables. | `CNA_DEBUG_INFO=FULL` is default; `dev-fast-debug` opts in. |
 | Clean-CI unity | Four-job core/math clean closure fell 25.6%; a one-source rebuild regressed 5.7%. | Default `CNA_ENABLE_UNITY_BUILD=OFF`; `unit-unity` is leaf-only. |
 | Final linking | Large Debug `CnaTests` link fell 90.9% with LLD and 89.9% with Mold versus GNU ld. | `CNA_LINKER=DEFAULT`; `AUTO`, `LLD`, and `MOLD` are explicit alternatives. |
-| Shared runtime | A Debug `VULKAN;OPENGL33` tree (2026-09-21, renderer since retired) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a renderer `.cpp` edit relinked 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.27; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
+| Shared runtime | A Debug `VULKAN;OPENGL33` tree (2026-09-21, renderer since retired) fell from 87 GB to 5.4 GB; a test executable from ~104 MB to 0.5–0.9 MB; a renderer `.cpp` edit relinked 29 targets (~1.7 GB) instead of ~800 (~83 GB), and a rebuilt `libcna.so` relinks none. | `CNA_SHARED_LIBRARY=ON` is the default on native ELF GNU/Clang with CMake ≥ 3.30; `-DCNA_SHARED_LIBRARY=OFF` restores the static link. |
 | ccache | A public-header rebuild recovered 23/23 compile edges as direct hits in 0.36 s, with no preprocessed hits or eviction. | `CNA_USE_CCACHE=OFF`; CNA never changes global sloppiness/direct-mode policy. |
 | Complete clean build | At 12 jobs GCC took 10:44 and Clang 10:05 for all 1,929 compile edges; this is the post-optimization machine baseline, not an improvement inferred from command counts. | Use a focused profile for normal edits; keep complete GCC/Clang integration in CI. |
 
@@ -298,12 +298,21 @@ first. Checked with `nm` on the built binaries: the only symbols defined in both
 of a data object a shared library defines (`BlendState::Opaque` and similar) — and no strong
 duplicate remains.
 
-**Scope.** Native ELF with GNU/Clang and CMake ≥ 3.27 only; that is also the default there. Windows
+**Scope.** Native ELF with GNU/Clang and CMake ≥ 3.30 only; that is also the default there. Windows
 DLLs would need export annotations CNA does not carry, and an Emscripten `SHARED` library is a side
 module, so those builds keep the static link, as does anything configured with
 `-DCNA_SHARED_LIBRARY=OFF`. The C API (`modules/c-api`) links the module archives directly, not
 `CNA`, so its shared library stays self-contained either way. Switching an existing build directory
 recompiles it once, because the archives that go into `libcna.so` need `-fPIC`.
+
+The shared-mode minimum is higher than CNA's overall CMake minimum: CMake 3.30
+added the link-feature deduplication needed by cyclic `WHOLE_ARCHIVE` archives.
+3.28 and 3.29 repeat whole archives and produce duplicate definitions, even though
+they understand `COMPILE_ONLY`. Older CMake defaults to static mode; an existing
+cache or explicit `CNA_SHARED_LIBRARY=ON` is refused during configuration with an
+upgrade/static-mode diagnostic (CNA-DEMOS-ISSUE-001). Static builds retain their
+existing minimum. `CnaSharedRuntimeLinkage` protects cyclic shared/static consumers
+and the actual-version gate; it can also be run with an older CMake executable.
 
 ## Clean-CI unity pilot
 

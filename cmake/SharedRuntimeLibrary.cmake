@@ -94,6 +94,11 @@ endfunction()
 # Defines cna_shared from the parts and points the `CNA` interface at it. Must run after every target
 # in the closure exists and has its final link libraries -- see the DEFER in modules/CMakeLists.txt.
 function(cna_define_shared_runtime umbrella)
+    if(CMAKE_VERSION VERSION_LESS 3.30)
+        message(FATAL_ERROR
+            "CNA_SHARED_LIBRARY requires CMake >= 3.30 for cyclic WHOLE_ARCHIVE "
+            "link-feature deduplication. Configure with -DCNA_SHARED_LIBRARY=OFF or upgrade CMake.")
+    endif()
     set(_parts ${ARGN})
     _cna_shared_walk(_whole _external _options ${_parts})
     if(NOT _whole)

@@ -59,26 +59,10 @@ endif()
 #
 # ELF with GNU/Clang only. A Windows DLL needs export annotations CNA does not carry, and an
 # Emscripten SHARED library is a side module (see modules/c-api/CMakeLists.txt CABI-14), so both keep
-# the static link. $<COMPILE_ONLY> needs CMake 3.27. Must be decided before sharp-runtime and the CNA
+# the static link. Cyclic WHOLE_ARCHIVE links need CMake 3.30's feature deduplication.
+# Must be decided before sharp-runtime and the CNA
 # modules are created, because the static archives that go into libcna.so need -fPIC.
-set(_cna_shared_library_supported OFF)
-if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID AND NOT CMAKE_CROSSCOMPILING
-   AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.27)
-    set(_cna_shared_library_supported ON)
-endif()
-option(CNA_SHARED_LIBRARY
-    "Link the CNA runtime into one shared library (libcna.so) instead of statically into every executable"
-    ${_cna_shared_library_supported})
-if(CNA_SHARED_LIBRARY)
-    if(NOT _cna_shared_library_supported)
-        message(FATAL_ERROR
-            "CNA_SHARED_LIBRARY=ON needs a native ELF GNU/Clang toolchain and CMake >= 3.27 "
-            "(have ${CMAKE_SYSTEM_NAME}, ${CMAKE_CXX_COMPILER_ID}, CMake ${CMAKE_VERSION}). "
-            "Configure with -DCNA_SHARED_LIBRARY=OFF.")
-    endif()
-    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-    set(CMAKE_LINK_DEPENDS_NO_SHARED ON)
-endif()
+include(cmake/SharedRuntimePolicy.cmake)
 
 # The native C ABI is intentionally opt-in while it is experimental. Enabling it must happen
 # before sharp-runtime and the CNA static modules are created: the exported shared C API links

@@ -994,6 +994,11 @@ executable. `CNA_SHARED_LIBRARY` (default **ON** on native ELF GNU/Clang with CM
 refused if forced — elsewhere); the mechanism and its scope are written up in
 `docs/build-performance.md` "Shared runtime library", which is where build policy lives.
 
+2026-10-20 correction (CNA-DEMOS-ISSUE-001): the original3.27 threshold above was
+insufficient for cyclic whole-archive links. Current shared mode requires3.30;
+older CMake retains static mode and refuses a forced shared configuration early.
+See the current build-policy document and `CnaSharedRuntimeLinkage` regression.
+
 **Measured on `cmake-build-vulkan`**, same code as `VKPAR-0014`:
 
 | | Before | After |
