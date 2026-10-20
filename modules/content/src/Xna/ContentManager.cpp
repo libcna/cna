@@ -21,6 +21,7 @@
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Pipeline/ContentBuildManifest.hpp"
 #include "CNA/Internal/CnjCanonicalRead.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
@@ -431,12 +432,24 @@ namespace Microsoft::Xna::Framework::Content
         const auto end = fs::recursive_directory_iterator();
         for (; !ec && it != end; it.increment(ec))
         {
+            const fs::path& path = it->path();
+            const fs::path filename = path.filename();
+            // The build tool owns this exact intermediate namespace. Do not exclude
+            // unrelated hidden assets or directories with merely similar prefixes.
+            if (filename == ".cna-contentproj" && it->is_directory(ec) && !ec)
+            {
+                it.disable_recursion_pending();
+                continue;
+            }
             if (!it->is_regular_file(ec) || ec)
             {
                 continue;
             }
-
-            const fs::path& path = it->path();
+            if (filename == ".cna-content.lock" ||
+                filename == CNA::Content::Pipeline::ContentBuildManifestFileName)
+            {
+                continue;
+            }
             fs::path relative = fs::relative(path, *root, ec);
             if (ec)
             {
@@ -499,8 +512,12 @@ namespace Microsoft::Xna::Framework::Content
         // else found none of its content. ResolveContentRoot keeps the working directory as the
         // fallback.
         std::string title = CNA::Internal::TryGetTitlePath().value_or(std::string{});
-        if (title.empty() && CNA::Platform::HasCurrentPlatform())
+        const auto root = CNA::Internal::TryPathFromUtf8(rootDirectory_);
+        if (title.empty() && root && !root->empty() &&
+            !root->is_absolute() && !root->has_root_name())
         {
+            // A relative root must not depend on whether a Game or TitleLocation was
+            // consulted first. Absolute/empty roots need no ambient platform at all.
             title = CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetBasePath();
         }
         return CNA::Internal::ResolveContentRoot(rootDirectory_, title);

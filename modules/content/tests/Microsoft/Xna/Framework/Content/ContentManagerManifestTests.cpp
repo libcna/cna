@@ -3,12 +3,17 @@
 // plans/plan_xnb.md XNB-65/65A/66/67/61a: unit tests for ContentManager's content-manifest scan.
 
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/TitlePath.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -225,4 +230,130 @@ TEST_F(ContentManagerManifestTest, ReaderUsageSummaryAggregatesAcrossFilesAndRep
             FAIL() << "Unexpected reader name in summary: " << usage.readerName;
         }
     }
+}
+
+TEST_F(ContentManagerManifestTest, PipelineBookkeepingIsExcludedWithoutHidingLookalikeAssets)
+{
+    ScratchContentRoot root;
+    for (const char* name : {".cna-content.lock", ".cna-content-manifest.json",
+                            "nested/.cna-content.lock", "nested/.cna-content-manifest.json",
+                            ".cna-contentproj/cna-buildcontent.json",
+                            "nested/.cna-contentproj/cache.bin"})
+    {
+        WriteFile(root.path() / name, "bookkeeping");
+    }
+    for (const char* name : {"good.png", ".private.png", "user.lock",
+                            ".cna-content.lock.png", ".cna-content-manifest.json.cnj",
+                            ".cna-contentproj-extra/visible.png",
+                            "ordinary/.cna-contentproj", "directory/.cna-content.lock/asset.png"})
+    {
+        WriteFile(root.path() / name, "asset");
+    }
+    ContentManager manager(nullptr, root.path().string());
+    const auto& manifest = manager.GetContentManifest();
+    ASSERT_EQ(manifest.size(), 8u);
+    for (const char* name : {".cna-content", ".cna-content-manifest",
+                            "nested/.cna-content", "nested/.cna-content-manifest",
+                            ".cna-contentproj/cna-buildcontent", "nested/.cna-contentproj/cache"})
+    {
+        EXPECT_EQ(FindEntry(manifest, name), nullptr) << name;
+    }
+    for (const char* name : {"good", ".private", "user", ".cna-content.lock",
+                            ".cna-content-manifest.json", ".cna-contentproj-extra/visible",
+                            "ordinary/.cna-contentproj", "directory/.cna-content.lock/asset"})
+    {
+        EXPECT_NE(FindEntry(manifest, name), nullptr) << name;
+    }
+}
+
+TEST_F(ContentManagerManifestTest, RefreshExcludesNewBookkeepingAndRetainsTheSnapshotContract)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "first.png", "asset");
+    ContentManager manager(nullptr, root.path().string());
+    ASSERT_EQ(manager.GetContentManifest().size(), 1u);
+    WriteFile(root.path() / "late.cnj", "asset");
+    WriteFile(root.path() / "new/.cna-content.lock", "bookkeeping");
+    WriteFile(root.path() / "new/.cna-content-manifest.json", "bookkeeping");
+    WriteFile(root.path() / "new/.cna-contentproj/intermediate.json", "bookkeeping");
+    EXPECT_EQ(manager.GetContentManifest().size(), 1u);
+    EXPECT_EQ(FindEntry(manager.GetContentManifest(), "late"), nullptr);
+    manager.RefreshContentManifest();
+    const auto& refreshed = manager.GetContentManifest();
+    ASSERT_EQ(refreshed.size(), 2u);
+    EXPECT_NE(FindEntry(refreshed, "first"), nullptr);
+    EXPECT_NE(FindEntry(refreshed, "late"), nullptr);
+    EXPECT_EQ(FindEntry(refreshed, "new/.cna-content"), nullptr);
+    EXPECT_EQ(FindEntry(refreshed, "new/.cna-content-manifest"), nullptr);
+    EXPECT_EQ(FindEntry(refreshed, "new/.cna-contentproj/intermediate"), nullptr);
+}
+
+namespace
+{
+    void CheckColdContentRoot()
+    {
+        namespace fs = std::filesystem;
+        ASSERT_FALSE(CNA::Platform::HasCurrentPlatform());
+        ASSERT_FALSE(CNA::Internal::TryGetTitlePath().has_value());
+        // An independently owned platform supplies the executable path without installing
+        // an ambient platform. This keeps the regression portable across SDL platforms.
+        const auto independent = CNA::Platform::PlatformFactory::Create();
+        const fs::path title = CNA::Internal::PathFromUtf8(independent->GetFileSystem()->GetBasePath());
+        ASSERT_FALSE(CNA::Platform::HasCurrentPlatform());
+        ScratchContentRoot working;
+        const fs::path relative = working.path().filename();
+        const fs::path stagedTitle = title / relative;
+        ASSERT_TRUE(fs::create_directory(stagedTitle));
+        struct RemoveTitle
+        {
+            fs::path path;
+            ~RemoveTitle() { std::error_code ignored; fs::remove_all(path, ignored); }
+        } removeTitle{stagedTitle};
+        WriteFile(stagedTitle / "title-only.png", "title asset");
+        WriteFile(working.path() / relative / "cwd-only.png", "decoy");
+        struct RestoreDirectory
+        {
+            fs::path path = fs::current_path();
+            ~RestoreDirectory() { std::error_code ignored; fs::current_path(path, ignored); }
+        } restore;
+        fs::current_path(working.path());
+        ContentManager absolute(nullptr, CNA::Internal::PathToGenericUtf8(working.path() / relative));
+        EXPECT_NE(FindEntry(absolute.GetContentManifest(), "cwd-only"), nullptr);
+        EXPECT_FALSE(CNA::Platform::HasCurrentPlatform());
+        ContentManager manager(nullptr, CNA::Internal::PathToGenericUtf8(relative));
+        const auto& cold = manager.GetContentManifest();
+        ASSERT_EQ(cold.size(), 1u);
+        EXPECT_NE(FindEntry(cold, "title-only"), nullptr);
+        EXPECT_EQ(FindEntry(cold, "cwd-only"), nullptr);
+        EXPECT_EQ(manager.getRootDirectoryProperty(), CNA::Internal::PathToGenericUtf8(relative));
+        const std::string detected = CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetBasePath();
+        EXPECT_TRUE(fs::equivalent(CNA::Internal::PathFromUtf8(detected), title));
+        CNA::Internal::SetTitlePath(detected);
+        manager.RefreshContentManifest();
+        ASSERT_EQ(manager.GetContentManifest().size(), 1u);
+        EXPECT_NE(FindEntry(manager.GetContentManifest(), "title-only"), nullptr);
+        CNA::Internal::SetTitlePath(CNA::Internal::PathToGenericUtf8(working.path()));
+        ContentManager overridden(nullptr, CNA::Internal::PathToGenericUtf8(relative));
+        ASSERT_EQ(overridden.GetContentManifest().size(), 1u);
+        EXPECT_NE(FindEntry(overridden.GetContentManifest(), "cwd-only"), nullptr);
+        // An explicit title override does not implicitly refresh an existing snapshot.
+        EXPECT_NE(FindEntry(manager.GetContentManifest(), "title-only"), nullptr);
+    }
+}
+
+TEST(ContentManagerColdRootTest, RelativeRootDoesNotDependOnAmbientPlatformInitialization)
+{
+#if GTEST_HAS_DEATH_TEST && !defined(__ANDROID__)
+    if (CNA::Platform::PlatformFactory::GetDefaultName() != "SDL3")
+        GTEST_SKIP() << "Executable-root regression requires the SDL desktop filesystem contract";
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_EXIT(
+        {
+            CheckColdContentRoot();
+            std::exit(::testing::Test::HasFailure() ? 1 : 0);
+        },
+        ::testing::ExitedWithCode(0), "");
+#else
+    GTEST_SKIP() << "Fresh-process title-root regression requires desktop death-test support";
+#endif
 }

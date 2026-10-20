@@ -57,9 +57,9 @@ namespace Microsoft::Xna::Framework::Content
         Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
         System::IServiceProvider* serviceProvider_ = nullptr;
         bool disposed_ = false;
-        // True for a manager whose assets are not in the content root at all (ResourceContentManager): its Load<T>()
-        // reads through the virtual OpenStream() seam, as XNA's ContentManager does for every load, instead of
-        // climbing CNA's tier ladder over the file system.
+        // Strict stream-only mode (used by ResourceContentManager) disables CNA's lower file
+        // tiers. Ordinary Load also honors virtual OpenStream, but may use those tiers when
+        // the base implementation reports a missing XNB.
         bool loadsThroughOpenStream_ = false;
 
         // plans/plan_cnj.md CNB-36: keyed by (T's type_index, normalized logical name), not name
@@ -329,6 +329,9 @@ namespace Microsoft::Xna::Framework::Content
          * The manifest is a point-in-time snapshot: a file added to the content root after this
          * call is not reflected until RefreshContentManifest() runs again. There is no
          * filesystem-watch/hot-reload mechanism.
+         * CNA pipeline bookkeeping (`.cna-content.lock`, `.cna-content-manifest.json`
+         * and `.cna-contentproj` intermediate directories) is excluded at every depth.
+         * Unrelated hidden assets and similarly prefixed names remain discoverable.
          */
         CNAEXT void RefreshContentManifest();
 
