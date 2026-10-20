@@ -77,7 +77,7 @@ CURRENT048 FIXED_PENDING_REGRESSION:
  (62vsComplete1128), differences[]. Final isolated serial CTest59450 RUNNING;
  all319 pre-test hashes passed, post-test hashes and unchanged-skip audit pending.
 Maximum THREE campaign compiler/test workers, Sharp at mostTWO; no concurrent
-SystemLink suites; private GPU wrapper only. Current jobs20911(2)+59450(1).
+SystemLink suites; private GPU wrapper only. Current jobs81669(1)+59450(1).
 
 NEXT RUNTIME BATCH EVIDENCE:
 ContentOwnershipOracle.cs35/35 actual XNA4 strict C#4/x86, no GPU/services. Pins
@@ -104,10 +104,15 @@ COMPLETE0:23/23PASS29ms. One old SoundEffect ReadAsset test now expects the genu
 ContentLoadException instead of rawEOF; its malformed payload/allocation assertion
 is unchanged. Whole-container and SoundEffect property fuzz catches are tightened
 to reject leakedEOF; low-level parser/decompressor contracts remain unchanged.
-After048 freeze release, native canonical20911 parallel2 RUNNING,1194steps,
-repair-content-runtime-native-build.log. Do not edit compiled source during build.
-No canonical whole-build or external039/045 pass yet; external048 binaries still
-contain old runtime. Other011/012/043/087 remain open.
+After048 freeze release, native canonical20911 COMPLETE0,1194steps,
+repair-content-runtime-native-build.log. All52 warnings match the original152
+baseline by normalized file/diagnostic; no new warnings. Four native artifacts
+FROZEN in repair-content-runtime-native-frozen.sha256; no native rebuild until
+content/pipeline/consumer gates and final hashes finish. Corrected manager focus
+23/23PASS; whole1918 content module81669 RUNNING. Initial70373 guard failed because
+filter omitted two constructor tests (21/21PASS); corrected filter adds them,
+not reduces expectation. Both logs retained. External039/045 has not been built;
+external048 binaries still contain old runtime. Other011/012/043/087 remain open.
 011 includes value-handle Texture2D ownership; a shared_ptr-only fix is insufficient.
 012 cold builtin registration depends on Game declaration; preserve family link
 boundaries and explicit reader withdrawal.043 must preserve fresh unique_ptr API.
@@ -124,18 +129,26 @@ tests into native coverage with the next repair. No087/043 pass claimed.
 Further prepared ContentOwnershipTests.cpp adds seven011 shared_ptr lifetime
 cases from measured XNA; opt-in stream routing isolates012 and does not repair it.
 Combined32-case source build-probe/repair-content-dispatch-lookup-tests.cpp.
-No compiled/run result yet, and value-handle Texture2D still requires separate work.
+Combined baseline45949 COMPLETE1 as expected:32tests,8PASS/24FAIL8ms; dispatch5/12,
+lookup1/7, ownership2/5. Wall/Wextra/Werror compilation passes after correcting
+anonymous-namespace linkage of generated test classes; initial failed build log
+retained. Prefix repair-content-dispatch-lookup-werror-native-before. No runtime
+repair yet, and value-handle Texture2D still requires separate work.
+Genuine ContentValueDispatchOracle1740 COMPLETE0:18/18. Explicit value-reader calls
+bypass index, IDisposable value types never record, all four existing-value overloads
+throw InvalidOperationException due boxed identity. Do not apply reference-type
+dispatch rules to value targets or blindly preserve existing incorrect native expectations.
 
 EXACT NEXT: finish external048 isolated732-enabled CTest59450 and319-hash audit.
-Native048 gates are complete. Finish runtime native build20911;
-run whole172-file content module (1918 source tests:1905 original outcomes plus
-13 additions), focused root/header/reader/sound/fuzz tests, and subsequent consumers.
+Native048 gates are complete. Finish runtime native content module81669
+(1918 source tests:1905 original outcomes plus13 additions), then552 pipeline,
+1412 consumers/runtime241/originalXML and native hash audit.
 Keep048,039,045 unclosed until their own full gates pass. Preserve047/089/148 markers.
 Uncommitted:039/045 ContentManager.hpp/.cpp, ContentManagerUntyped.cpp,
 ContentReader.hpp, eight tests in ContentManagerXnbTests.cpp, three existing
 sound/container-fuzz test files and divergence log;
 updated demo oracle/evidence and this status are being committed separately.
-Runtime native20911 is now building this candidate after048 native freeze release.
+Runtime native candidate is built and frozen; broader validation is running.
 Owner-reserved131 untouched;152 sharing policy and148
 vendor policy remain unanswered. Ordinary actionable issues remain: campaign NOT complete.
 
