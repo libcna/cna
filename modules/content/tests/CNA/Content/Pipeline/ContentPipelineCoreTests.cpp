@@ -84,10 +84,11 @@ namespace
                                 std::string extension = ".num",
                                 std::string returnedType = kImportedType,
                                 std::filesystem::path dependency = {},
-                                std::vector<std::string> outputTypes = {})
+                                std::vector<std::string> outputTypes = {},
+                                bool namedOnly = false)
             : name_(std::move(name)), extension_(std::move(extension)),
               returnedType_(std::move(returnedType)), dependency_(std::move(dependency)),
-              outputTypes_(std::move(outputTypes))
+              outputTypes_(std::move(outputTypes)), namedOnly_(namedOnly)
         {
             if (outputTypes_.empty()) { outputTypes_.push_back(kImportedType); }
         }
@@ -107,6 +108,8 @@ namespace
             return outputTypes_;
         }
 
+        [[nodiscard]] bool SelectedByNameOnly() const override { return namedOnly_; }
+
         [[nodiscard]] Pipeline::ContentValue Import(
             Pipeline::ContentImporterContext& context) const override
         {
@@ -124,13 +127,14 @@ namespace
         std::string returnedType_;
         std::filesystem::path dependency_;
         std::vector<std::string> outputTypes_;
+        bool namedOnly_;
     };
 
     class NumberProcessor final : public Pipeline::ContentProcessor
     {
     public:
-        explicit NumberProcessor(std::string name = "test.NumberProcessor")
-            : name_(std::move(name))
+        explicit NumberProcessor(std::string name = "test.NumberProcessor", bool namedOnly = false)
+            : name_(std::move(name)), namedOnly_(namedOnly)
         {
         }
 
@@ -148,6 +152,8 @@ namespace
         {
             return kProcessedType;
         }
+
+        [[nodiscard]] bool SelectedByNameOnly() const override { return namedOnly_; }
 
         void ValidateParameters(
             const Pipeline::ContentProcessorParameters& parameters) const override
@@ -186,6 +192,7 @@ namespace
 
     private:
         std::string name_;
+        bool namedOnly_;
     };
 
     class NumberWriter final : public Pipeline::ContentTypeWriter
@@ -666,6 +673,97 @@ TEST(ContentPipelineCoreTest, RegistryNeverUsesRegistrationOrderToResolveAnAmbig
     EXPECT_EQ(registry.ResolveImporter("asset.num", "test.AImporter")->Identity().name,
               "test.AImporter");
     EXPECT_THROW((void)registry.ResolveImporter("asset.wav", "test.AImporter"), std::logic_error);
+}
+
+TEST(ContentPipelineCoreTest, NamedOnlyImportersNeverSupplyTheDefaultRoute)
+{
+    Pipeline::ContentPipelineRegistry registry;
+    const auto add = [&](const std::string& name, bool namedOnly)
+    {
+        registry.RegisterImporter(std::make_shared<NumberImporter>(
+            name, ".num", kImportedType, std::filesystem::path{},
+            std::vector<std::string>{}, namedOnly));
+    };
+    const auto noDefault = [&]
+    {
+        try
+        {
+            (void)registry.ResolveImporter("ASSET.NUM");
+            FAIL() << "named-only importers cannot supply a default";
+        }
+        catch (const std::logic_error& error)
+        {
+            EXPECT_NE(std::string(error.what()).find("no importer"), std::string::npos);
+        }
+    };
+    noDefault();
+    add("test.NamedOne", true);
+    noDefault();
+    EXPECT_TRUE(registry.HasImporterForSource("ASSET.NUM"));
+    EXPECT_EQ(registry.ResolveImporter("asset.num", "test.NamedOne")->Identity().name, "test.NamedOne");
+    add("test.NamedTwo", true);
+    noDefault();
+    EXPECT_EQ(registry.ResolveImporter("asset.num", "test.NamedTwo")->Identity().name, "test.NamedTwo");
+    EXPECT_THROW((void)registry.ResolveImporter("asset.wrong", "test.NamedOne"), std::logic_error);
+    add("test.ZOrdinary", false);
+    EXPECT_EQ(registry.ResolveImporter("asset.num")->Identity().name, "test.ZOrdinary");
+    add("test.AOrdinary", false);
+    try
+    {
+        (void)registry.ResolveImporter("asset.num");
+        FAIL() << "two ordinary importers remain ambiguous";
+    }
+    catch (const std::logic_error& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("ambiguous importer"), std::string::npos);
+        EXPECT_NE(message.find("test.ZOrdinary"), std::string::npos);
+        EXPECT_LT(message.find("test.AOrdinary"), message.find("test.ZOrdinary"));
+        EXPECT_EQ(message.find("test.Named"), std::string::npos);
+    }
+    EXPECT_EQ(registry.ResolveImporter("asset.num", "test.NamedOne")->Identity().name, "test.NamedOne");
+}
+
+TEST(ContentPipelineCoreTest, NamedOnlyProcessorsNeverSupplyTheDefaultRoute)
+{
+    Pipeline::ContentPipelineRegistry registry;
+    const auto noDefault = [&]
+    {
+        try
+        {
+            (void)registry.ResolveProcessor(kImportedType);
+            FAIL() << "named-only processors cannot supply a default";
+        }
+        catch (const std::logic_error& error)
+        {
+            EXPECT_NE(std::string(error.what()).find("no processor"), std::string::npos);
+        }
+    };
+    noDefault();
+    registry.RegisterProcessor(std::make_shared<NumberProcessor>("test.NamedOne", true));
+    noDefault();
+    EXPECT_EQ(registry.ResolveProcessor(kImportedType, "test.NamedOne")->Identity().name, "test.NamedOne");
+    registry.RegisterProcessor(std::make_shared<NumberProcessor>("test.NamedTwo", true));
+    noDefault();
+    EXPECT_EQ(registry.ResolveProcessor(kImportedType, "test.NamedTwo")->Identity().name, "test.NamedTwo");
+    EXPECT_THROW((void)registry.ResolveProcessor("wrong.type", "test.NamedOne"), std::logic_error);
+    registry.RegisterProcessor(std::make_shared<NumberProcessor>("test.ZOrdinary"));
+    EXPECT_EQ(registry.ResolveProcessor(kImportedType)->Identity().name, "test.ZOrdinary");
+    registry.RegisterProcessor(std::make_shared<NumberProcessor>("test.AOrdinary"));
+    try
+    {
+        (void)registry.ResolveProcessor(kImportedType);
+        FAIL() << "two ordinary processors remain ambiguous";
+    }
+    catch (const std::logic_error& error)
+    {
+        const std::string message = error.what();
+        EXPECT_NE(message.find("ambiguous processor"), std::string::npos);
+        EXPECT_NE(message.find("test.ZOrdinary"), std::string::npos);
+        EXPECT_LT(message.find("test.AOrdinary"), message.find("test.ZOrdinary"));
+        EXPECT_EQ(message.find("test.Named"), std::string::npos);
+    }
+    EXPECT_EQ(registry.ResolveProcessor(kImportedType, "test.NamedOne")->Identity().name, "test.NamedOne");
 }
 
 TEST(ContentPipelineCoreTest, ProcessorAndWriterAmbiguitiesRequireExplicitStableNames)

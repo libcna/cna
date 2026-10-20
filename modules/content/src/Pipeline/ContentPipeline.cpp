@@ -316,7 +316,8 @@ namespace CNA::Content::Pipeline
             const std::map<std::string, std::shared_ptr<const Component>>& components,
             const std::map<RouteKey, std::set<std::string>>& routes, const RouteKey& route,
             const std::string& routeText,
-            const std::string& explicitName, const char* kind, const char* routeLabel)
+            const std::string& explicitName, const char* kind, const char* routeLabel,
+            bool (*eligibleDefault)(const Component&) = nullptr)
         {
             if (!explicitName.empty())
             {
@@ -337,18 +338,32 @@ namespace CNA::Content::Pipeline
             }
 
             const auto routeIt = routes.find(route);
-            if (routeIt == routes.end() || routeIt->second.empty())
+            std::set<std::string> eligible;
+            const auto* candidates = &eligible;
+            if (routeIt != routes.end())
+            {
+                candidates = &routeIt->second;
+                if (eligibleDefault != nullptr)
+                {
+                    for (const std::string& name : routeIt->second)
+                    {
+                        if (eligibleDefault(*components.at(name))) { eligible.insert(name); }
+                    }
+                    candidates = &eligible;
+                }
+            }
+            if (candidates->empty())
             {
                 throw std::logic_error("no " + std::string(kind) + " is registered for " +
                                        routeLabel + " '" + routeText + "'.");
             }
-            if (routeIt->second.size() != 1u)
+            if (candidates->size() != 1u)
             {
                 throw std::logic_error("ambiguous " + std::string(kind) + " for " + routeLabel +
-                                       " '" + routeText + "': " + JoinCandidates(routeIt->second) +
+                                       " '" + routeText + "': " + JoinCandidates(*candidates) +
                                        ". Select one explicitly.");
             }
-            return components.at(*routeIt->second.begin());
+            return components.at(*candidates->begin());
         }
 
         void EmitLog(ContentBuildLogger& logger, ContentLogLevel level,
@@ -1085,30 +1100,10 @@ namespace CNA::Content::Pipeline
     {
         const std::shared_lock lock(configurationMutex_);
         const std::string extension = LowerExtension(source);
-        std::string selected = explicitName;
-        if (selected.empty())
-        {
-            // The same rule the processors have: an importer registered to be asked for by name
-            // does not compete for an extension's default route, so a `.wma` stays a song unless a
-            // project asks for the sound-effect reading of it (XNAPP-332).
-            const auto route = importersByExtension_.find(extension);
-            if (route != importersByExtension_.end() && route->second.size() > 1u)
-            {
-                std::vector<std::string> candidates;
-                for (const std::string& name : route->second)
-                {
-                    const auto component = importers_.find(name);
-                    if (component != importers_.end() &&
-                        !component->second->SelectedByNameOnly())
-                    {
-                        candidates.push_back(name);
-                    }
-                }
-                if (candidates.size() == 1u) { selected = candidates.front(); }
-            }
-        }
         return ResolveByRoute(importers_, importersByExtension_, extension, extension,
-                              selected, "importer", "source extension");
+                              explicitName, "importer", "source extension",
+                              +[](const ContentImporter& importer)
+                              { return !importer.SelectedByNameOnly(); });
     }
 
     bool ContentPipelineRegistry::HasImporterForSource(
@@ -1123,30 +1118,10 @@ namespace CNA::Content::Pipeline
         const std::string& inputType, const std::string& explicitName) const
     {
         const std::shared_lock lock(configurationMutex_);
-        std::string selected = explicitName;
-        if (selected.empty())
-        {
-            // Processors that are only ever asked for by name do not take part in choosing the
-            // route for an imported type. Only a single survivor is used here; anything else falls
-            // through to the ordinary resolution so its diagnostic still names every candidate.
-            const auto route = processorsByInputType_.find(inputType);
-            if (route != processorsByInputType_.end() && route->second.size() > 1u)
-            {
-                std::vector<std::string> candidates;
-                for (const std::string& name : route->second)
-                {
-                    const auto component = processors_.find(name);
-                    if (component != processors_.end() &&
-                        !component->second->SelectedByNameOnly())
-                    {
-                        candidates.push_back(name);
-                    }
-                }
-                if (candidates.size() == 1u) { selected = candidates.front(); }
-            }
-        }
         return ResolveByRoute(processors_, processorsByInputType_, inputType, inputType,
-                              selected, "processor", "imported type");
+                              explicitName, "processor", "imported type",
+                              +[](const ContentProcessor& processor)
+                              { return !processor.SelectedByNameOnly(); });
     }
 
     std::shared_ptr<const ContentTypeWriter> ContentPipelineRegistry::ResolveWriter(
