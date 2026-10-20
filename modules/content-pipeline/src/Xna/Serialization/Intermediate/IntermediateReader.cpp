@@ -350,7 +350,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         {
             return;
         }
-        externalFixups_.push_back(ExternalFixup{id, targetTypeName, std::move(setFilename)});
+        externalFixups_.push_back(ExternalFixup{id, IntermediateSerializer::CanonicalTypeName(targetTypeName),
+                                              std::move(setFilename)});
     }
 
     std::string IntermediateReader::ReadText(const ContentSerializerAttribute& format)
@@ -593,15 +594,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             {
                 throw InvalidContentException("XML attribute \"ID\" was not found.");
             }
-            const std::string targetType = xml_.GetAttribute("TargetType");
-            if (targetType.empty())
+            const std::string spelledTargetType = xml_.GetAttribute("TargetType");
+            if (spelledTargetType.empty())
             {
                 throw InvalidContentException("XML attribute \"TargetType\" was not found.");
             }
-            if (!IntermediateSerializer::IsKnownTypeName(targetType))
-            {
-                throw System::ArgumentException("Cannot find type \"" + targetType + "\".");
-            }
+            const std::string targetType = IntermediateSerializer::ResolveExternalTargetTypeName(spelledTargetType, xml_);
             const bool wasEmpty = xml_.getIsEmptyElementProperty();
             xml_.ReadStartElement();
             std::string filename;

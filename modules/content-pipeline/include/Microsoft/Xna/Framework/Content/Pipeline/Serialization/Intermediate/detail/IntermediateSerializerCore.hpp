@@ -302,6 +302,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
         explicit IntermediateSerializer(std::string referenceRelocationPath);
 
+        // An external target needs a known identity, not an instantiable XML serializer.
+        static std::string ResolveExternalTargetTypeName(const std::string& spelledName,
+                                                        const System::Xml::XmlReader& scope);
+
         std::string referenceRelocationPath_;
         std::vector<std::pair<std::string, std::string>> aliases_;
     };

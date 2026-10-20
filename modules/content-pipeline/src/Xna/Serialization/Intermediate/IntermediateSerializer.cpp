@@ -1272,7 +1272,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             return result + "]";
         }
 
-        std::string ResolveSpelled(std::string_view spelled, const System::Xml::XmlReader& scope, bool trim = true)
+        std::string ResolveSpelled(std::string_view spelled, const System::Xml::XmlReader& scope, bool trim = true,
+                                  bool externalIdentity = false)
         {
             if (trim)
             {
@@ -1309,6 +1310,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                     Trim(base) == base ? IntermediateSerializer::FindTypeSerializer(base) : nullptr;
                 if (found == nullptr)
                 {
+                    // External references can name types (including generic arguments) that
+                    // have no XML serializer. Their complete resolved identity is validated
+                    // against the known-type registry by ResolveExternalTargetTypeName.
+                    if (externalIdentity && Trim(base) == base)
+                    {
+                        return IntermediateSerializer::CanonicalTypeName(base);
+                    }
                     throw System::ArgumentException("Cannot find type \"" + base + "\".");
                 }
                 return IntermediateSerializer::CanonicalTypeName(found->TargetTypeName());
@@ -1317,7 +1325,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             const std::string_view inner = spelled.substr(open + 1, close - open - 1);
             if (Trim(inner).empty())
             {
-                return ResolveSpelled(base, scope) + "[]";
+                return ResolveSpelled(base, scope, true, externalIdentity) + "[]";
             }
             std::string result = base + "[";
             bool first = true;
@@ -1328,7 +1336,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                     result += ',';
                 }
                 first = false;
-                result += ResolveSpelled(arg, scope, false);
+                result += ResolveSpelled(arg, scope, false, externalIdentity);
             }
             return result + "]";
         }
@@ -1354,6 +1362,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             return *found;
         }
         throw System::ArgumentException("Cannot find type \"" + canonical + "\".");
+    }
+
+    std::string IntermediateSerializer::ResolveExternalTargetTypeName(const std::string& spelledName,
+                                                                      const System::Xml::XmlReader& scope)
+    {
+        // XNA preserves whitespace for unqualified names. An assembly-qualified
+        // name instead goes through the CLR type parser, which accepts surrounding
+        // whitespace; ResolveSpelled already removes that qualification and trims it.
+        if (FindTopLevel(spelledName, ',') == std::string_view::npos && Trim(spelledName) != spelledName)
+        {
+            throw System::ArgumentException("Cannot find type \"" + spelledName + "\".");
+        }
+        const std::string canonical = CanonicalTypeName(ResolveSpelled(spelledName, scope, false, true));
+        if (!IsKnownTypeName(canonical))
+        {
+            throw System::ArgumentException("Cannot find type \"" + canonical + "\".");
+        }
+        return canonical;
     }
 
     void IntermediateSerializer::SerializeObject(System::Xml::XmlWriter& output, const ContentObject& value,
