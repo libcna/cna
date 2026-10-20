@@ -6,11 +6,17 @@
 // bytes back through CNA's independent XNB reader.
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -38,6 +44,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace
 {
@@ -102,6 +109,75 @@ namespace
         {
             output.Write(value->position);
             output.Write(value->label);
+        }
+    };
+
+    // A regression must fail within a deadline if Initialize holds the lookup mutex again.
+    // The thread is joined on normal return and on exceptions; no blocked thread is detached.
+    template<typename Action>
+    void WithCompilerCallbackDeadline(Action action)
+    {
+        std::mutex mutex;
+        std::condition_variable_any condition;
+        std::jthread deadline([&](std::stop_token stop) {
+            std::unique_lock lock(mutex);
+            condition.wait_for(lock, stop, std::chrono::seconds(30), [] { return false; });
+            if (!stop.stop_requested())
+            {
+                std::fputs("ContentCompiler Initialize deadlocked beyond the regression deadline\n", stderr);
+                std::abort();
+            }
+        });
+        action();
+    }
+
+    class InitializingWaypointWriter : public Compiler::ContentTypeWriter<Waypoint>
+    {
+    public:
+        inline static int totalCalls = 0;
+        int calls = 0;
+        std::shared_ptr<Compiler::ContentTypeWriterBase> nested;
+        std::string GetRuntimeReader(Xna::TargetPlatform) const override { return "TestGame.WaypointReader, TestGame"; }
+    protected:
+        void Initialize(Compiler::ContentCompiler& compiler) override
+        {
+            ++calls;
+            ++totalCalls;
+            nested = compiler.GetTypeWriter(System::Type::From<std::string>());
+            // Both public read paths must be callable from user initialization.
+            EXPECT_FALSE(compiler.KnownTypeNames().empty());
+        }
+        void Write(Compiler::ContentWriter& output, const std::shared_ptr<Waypoint>& value) override
+        {
+            output.Write(value->position);
+            output.Write(value->label);
+        }
+    };
+
+    class FailingWaypointInitializer final : public InitializingWaypointWriter
+    {
+        void Initialize(Compiler::ContentCompiler& compiler) override
+        {
+            InitializingWaypointWriter::Initialize(compiler);
+            throw System::InvalidOperationException("initializer failure");
+        }
+    };
+
+    class FreezingWaypointInitializer final : public InitializingWaypointWriter
+    {
+        void Initialize(Compiler::ContentCompiler& compiler) override
+        {
+            InitializingWaypointWriter::Initialize(compiler);
+            (void)compiler.TypeWriterRegistry(Xna::TargetPlatform::Windows);
+        }
+    };
+
+    class DuplicateWaypointInitializer final : public InitializingWaypointWriter
+    {
+        void Initialize(Compiler::ContentCompiler& compiler) override
+        {
+            InitializingWaypointWriter::Initialize(compiler);
+            (void)compiler.AddTypeWriter<WaypointWriter>();
         }
     };
 
@@ -324,6 +400,70 @@ namespace
         // Once compiled, the registries are frozen.
         (void)compiler.Compile<std::int32_t>(5, Options());
         EXPECT_THROW(compiler.AddTypeWriter<RouteWriter>(), Xna::PipelineException);
+    }
+
+    TEST(XnaContentCompiler, InitializeCanResolveNestedWritersExactlyOnce)
+    {
+        WithCompilerCallbackDeadline([] {
+            InitializingWaypointWriter::totalCalls = 0;
+            Compiler::ContentCompiler compiler;
+            const auto nested = compiler.GetTypeWriter(System::Type::From<std::string>());
+            const auto before = compiler.KnownTypeNames().size();
+            const auto writer = compiler.AddTypeWriter<InitializingWaypointWriter>();
+            EXPECT_EQ(writer->nested, nested);
+            EXPECT_EQ(writer->calls, 1);
+            EXPECT_EQ(compiler.GetTypeWriter(System::Type::From<Waypoint>()), writer);
+            EXPECT_EQ(compiler.KnownTypeNames().size(), before + 1);
+            EXPECT_THROW(compiler.AddTypeWriter<InitializingWaypointWriter>(), Xna::PipelineException);
+            EXPECT_EQ(InitializingWaypointWriter::totalCalls, 1);
+
+            Compiler::ContentCompiler second;
+            const auto other = second.AddTypeWriter<InitializingWaypointWriter>();
+            EXPECT_NE(other, writer);
+            EXPECT_EQ(other->calls, 1);
+            EXPECT_EQ(InitializingWaypointWriter::totalCalls, 2);
+
+            Compiler::ContentCompiler frozen;
+            (void)frozen.TypeWriterRegistry(Xna::TargetPlatform::Windows);
+            EXPECT_THROW(frozen.AddTypeWriter<InitializingWaypointWriter>(), Xna::PipelineException);
+            EXPECT_EQ(InitializingWaypointWriter::totalCalls, 2);
+        });
+    }
+
+    TEST(XnaContentCompiler, FailedInitializeDoesNotPublishAWriter)
+    {
+        WithCompilerCallbackDeadline([] {
+            Compiler::ContentCompiler compiler;
+            const auto before = compiler.KnownTypeNames();
+            EXPECT_THROW(compiler.AddTypeWriter<FailingWaypointInitializer>(), System::InvalidOperationException);
+            EXPECT_EQ(compiler.KnownTypeNames(), before);
+            EXPECT_THROW((void)compiler.GetTypeWriter(System::Type::From<Waypoint>()), Xna::PipelineException);
+            const auto writer = compiler.AddTypeWriter<InitializingWaypointWriter>();
+            EXPECT_EQ(compiler.GetTypeWriter(System::Type::From<Waypoint>()), writer);
+        });
+    }
+
+    TEST(XnaContentCompiler, RegistryFrozenDuringInitializeRejectsPublication)
+    {
+        WithCompilerCallbackDeadline([] {
+            Compiler::ContentCompiler compiler;
+            const auto before = compiler.KnownTypeNames();
+            EXPECT_THROW(compiler.AddTypeWriter<FreezingWaypointInitializer>(), Xna::PipelineException);
+            EXPECT_EQ(compiler.KnownTypeNames(), before);
+            EXPECT_THROW((void)compiler.GetTypeWriter(System::Type::From<Waypoint>()), Xna::PipelineException);
+        });
+    }
+
+    TEST(XnaContentCompiler, DuplicateRegisteredDuringInitializeIsNotOverwritten)
+    {
+        WithCompilerCallbackDeadline([] {
+            Compiler::ContentCompiler compiler;
+            const auto before = compiler.KnownTypeNames().size();
+            EXPECT_THROW(compiler.AddTypeWriter<DuplicateWaypointInitializer>(), Xna::PipelineException);
+            EXPECT_EQ(compiler.KnownTypeNames().size(), before + 1);
+            EXPECT_NE(std::dynamic_pointer_cast<WaypointWriter>(
+                compiler.GetTypeWriter(System::Type::From<Waypoint>())), nullptr);
+        });
     }
 
     TEST(XnaContentWriter, EveryBuiltInTypeTheCompilerIntendsToKnowIsActuallyKnown)

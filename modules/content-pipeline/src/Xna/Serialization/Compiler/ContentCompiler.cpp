@@ -417,19 +417,30 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                     const std::type_index carrier, const bool isReference, std::string name,
                                     WorkerFactory factory)
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (frozen_)
-        {
-            throw PipelineException("ContentCompiler: type writers cannot be added after the compiler has compiled.");
-        }
-        for (const Known& known : known_)
-        {
-            if (known.type == type)
+        // Validate before calling user code, and again before publishing: Initialize may
+        // resolve another writer, register one, or cause a platform registry to freeze.
+        const auto validate = [&] {
+            if (frozen_)
             {
-                throw PipelineException("ContentCompiler: a type writer for '{0}' is already registered.", name);
+                throw PipelineException("ContentCompiler: type writers cannot be added after the compiler has compiled.");
             }
+            for (const Known& known : known_)
+            {
+                if (known.type == type)
+                {
+                    throw PipelineException("ContentCompiler: a type writer for '{0}' is already registered.", name);
+                }
+            }
+        };
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            validate();
         }
+        // GetTypeWriter and KnownTypeNames acquire mutex_; never hold it over callbacks.
+        // An initializer exception leaves this writer unpublished.
         facade->Initialize(*this);
+        std::lock_guard<std::mutex> lock(mutex_);
+        validate();
         known_.push_back(Known{type, carrier, isReference, std::move(name), std::move(facade), std::move(factory)});
     }
 
