@@ -9,6 +9,16 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Current CNA dbfe6b4c1 includes validated strict XML corpus/docs. Both external719
+sweeps complete:SW627/41/48/3,GLES666/43/7/3; original70-change and localtwo-change
+audits errors[],319 hashes verified before serial finalCTest.74592 is now running
+CTest; freeze319 continues. Native37179 COMPLETE0 as below; no issue closure yet.
+Next final closure audit must include039/043/045/103/148, not just the latestthree.
+057 is newly CONFIRMED_OPEN from current-header fixed1000-owner concurrent probe:
+3241 missing-owner warnings,zero owner errors/removals,paired sequential1000 clean.
+Clang strict builds pass; initial GCC strict optional-handle warning retained.
+See demos CONTENT_STAGING_TRIAGE.md. No057 or011 production change. No new push.
+
 Native final37179 COMPLETE0:10791 cases=10690PASS/101 unchangedSKIP,1647.295s;
 exact case-by-case comparison with the frustum publication baseline errors[],
 all three frozen native hashes unchanged. Strict corpus9/9 also passes with

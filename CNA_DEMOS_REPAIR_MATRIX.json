@@ -1060,11 +1060,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Final staging directory name is visible before lease/metadata initialization; scavenger validates metadata before lease state, while destruction releases the lease before removing the still-visible directory. Legitimate concurrent initialization/removal is reported as malformed staging.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Current CNA dbfe6b4c1, staging header SHA25676992cf40699e95e8460973213749c8cb423cdda66cbd33a1342682fcc1ba1bd: fixed1000 concurrent owners/6407 scans reproduce3241 missing-owner warnings plus225 unreadable/80 incomplete/24 vanished-directory diagnostics; zero owner errors/removals and empty private parent. Paired1000-owner sequential control zero diagnostics/errors. Strict Clang O2/Wall/Wextra/Werror builds pass; initial GCC strict optional-handle warning retained. Permanent probes/evidence in demos CONTENT_STAGING_TRIAGE.md. No production repair; preserve malformed/symlink/ownership/age/lease safety and cover separate processes."
+      ],
       "final_disposition": null
     },
     {
