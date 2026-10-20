@@ -29,16 +29,25 @@ six exact visuals pass, representative GLES image inspected. Isolated full CTest
 Complete1128 demo-status delta54, campaign HEAD delta52. No push/merge.
 
 ACTIVE: Title145 committedcbb77e3c8, matrixFIXED_PENDING_REGRESSION. Complete external
-storage/title build63979 RUNNING, repair-storage-demo-build.log, --parallel2 in existing
-build/linux-full. It includes056/145/151 and all committed Sharp prerequisites.
-No content runtime changes until this build completes and its binaries are frozen.
+storage/title build63979 COMPLETE0, warning-free, repair-storage-demo-build.log.
+Focused16529 COMPLETE0: ten scenarios per renderer,9PASS/one unchanged152FAIL.
+Title10/lifetime14 checks retained; actual C save child38/38 on both renderers.
+Both DSOs still match the earlier actual C ABI hash manifest. Only then removed
+056/145/151 markers (no assertion edits) and corrected stale Disposing comment.
+Marker rebuild65070 COMPLETE0 warning-free; demo marker commitde6bcde. External
+executable and both DSOs FROZEN in repair-storage-frozen.sha256; C ABI DSO hashes
+still match earlier validation. Three registered CTests verified without WILL_FAIL.
+Full regression3249 RUNNING: both95math exact48 improvements/differences[], metadata/
+tools PASS, all six visual references pixel-exact; representative GLES texture inspected.
+Full SOFTWARE started; GLES follows independently even if strict comparison finds
+a delta. After both smokes finish, run full serial isolated CTest with no SystemLink
+overlap, then reverify all three hashes before closure. Do not rebuild external tree.
 Actual C ABI69669 COMPLETE: strict C17/Werror RuntimeGameSmoke, StorageSmoke and
 TitleCValidationProbe PASS (independent title13/13 versus pre-fix8/13). ldd proves
 the actual external C ABI DSO; both libraries' hashes unchanged during execution.
 Reports repair-storage-c-after-*, repair-storage-c-libraries*. Fresh isolated run
-directory build-probe/repair-storage-c-work retained. After build run
-focused demo suites on both available renderers, preserve assertions, then remove
-only genuinely passing markers, rebuild/freeze, full comparison/visual/CTest gates.
+directory build-probe/repair-storage-c-work retained. Next verify marker build,
+freeze executable/both DSOs and run full math/comparison/visual/isolated CTest gates.
 
 Native Title145 final repaired checkpoint COMPLETE. Sharp status repair58c6cba1 built warning-free and full gate95127
 passes18144/18144 across41 executables,zero failures/skips. Native build1322
@@ -89,6 +98,27 @@ Sharp uncommitted XmlWriterValidationTests.cpp contains evidence-backed test cha
 and one new pre-write-preservation test; actual writer unchanged. Both prepared runtime
 patches repair-opaque-runtime.patch and repair-xml-nul-runtime.patch remain UNAPPLIED.
 Do not alter production until external storage marker rebuild finishes and is frozen.
+
+ACTIVE native content baseline66506 runs ALL suites discovered from content-pipeline
+test sources in the existing CnaTests, private display; reports repair-content-native-
+before{,-driver,-inventory.json,.xml}. It includes the slow compiler-backed
+XnaDifferentialBuildTest (~12min historically). Six newly added pre-fix failures are
+expected (four146, two149); do not hide any other failure. Total504 tests from117 suites.
+Native CnaTests/libcna binaries and content dictionary/serializer headers MUST remain
+unchanged until this run ends. After external freeze, narrow Sharp147 NUL exception
+repair APPLIED; no signature/layout change. Its XmlWriter.hpp edit documents the
+existing unconditional-NUL limitation and new exception only, no executable header
+change. Actual CNA native/external binaries still embed pre-147 Sharp code.
+Sharp full build/focused91375 COMPLETE0 warning-free:49/49 tests3ms (before46/49).
+Full Sharp component gate43386 RUNNING with build jobs1, unchanged original XNA
+fixtures and private Yacht SOAP service; reports cna-repair-xml-nul-components-driver.log
+and build/gs-007b-components-live.log. Other jobs: native baseline66506 and external
+regression3249 (three campaign workers total).
+Sharp files: XmlWriter.cpp, XmlWriter.hpp, XmlWriterValidationTests.cpp,
+docs/Migration-XmlWriter-NulException.md; all uncommitted until warning-free full gate.
+Opaque runtime patch still UNAPPLIED until native content baseline completes.
+Prepared repair-intermediate-null-runtime.patch is also UNAPPLIED; review and add
+the exact corpus-exception branches/docs with149, preserving original golden files.
 
 Historical intermediate NUL/status failures (now repaired above): review exposed
 actual wrong-file access/truncation in FileStream. Sharp3304ecd6 now rejects NUL
