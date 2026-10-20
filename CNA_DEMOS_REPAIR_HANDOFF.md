@@ -9,9 +9,10 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-Phase C completion / Phase D repair. CNA runtime031693a9f(components141–143),
-b086814f9(launch144); latest completed external checkpoint1ad0a3916(Color132),
-demo markers e7eafac; latest evidencef3190f8. All155 IDs retained:58 FINAL/97 PENDING:
+Phase D external validation / Phase E native repairs. CNA runtime5865ae938(storage151),
+Sharp1c0fc9b5(EOF056); frozen external031693a9f/b086814f9(lifecycle141–144),
+demo markers61d344e. Last complete external checkpoint1ad0a3916(Color132), latest
+evidence1d0f897. All155 IDs retained:58 FINAL/97 PENDING:
 26 runtime findings,one verified duplicate,23 documentation corrections,seven
 already fixed before campaign,one demonstrated demo-expectation defect.
 
@@ -44,7 +45,7 @@ AFTER FREEZE: Sharp056 minimal Read EOF-state fix committed1c0fc9b5 with three t
 and migration note; full existing build70708 COMPLETE warning-free. Post-fix full
 component gate16272 COMPLETE:18140/18140 across41 executables,zero failures/skips;
 private Yacht fixture stopped/removed and original sample assertions unchanged.
-CNA151 shared disposed guard now native-validated (this repair commit), with four tests and corrected
+CNA151 shared disposed guard now native-validated in5865ae938, with four tests and corrected
 genuine-backed C StorageSmoke event-access oracle (backing-file preservation kept).
 Full build29581 deliberately interrupted at212/1051 to prioritize the affected
 target;17 warnings all exactly in original152-warning baseline,none new. Target
@@ -84,13 +85,14 @@ COMMITTED CNA: component root-cause batch031693a9f and launch batchb086814f9,
 including matching regressions and C contracts/smokes. All four matrix rows now
 FIXED_PENDING_REGRESSION; actual C ABI smokes pass, full external closure pending.
 Status commitc01e04275; lifecycle evidence8b38d2a, storage sharing edges2129f3f.
-Latest storage evidence1d0f897, lifecycle demos61d344e. This151 repair commits its
+Latest storage evidence1d0f897, lifecycle demos61d344e. Repair5865ae938 commits its
 production guard/header/C StorageSmoke oracle, four native tests and measured
 compatibility decision. Sharp056 committed1c0fc9b5. Remaining UNCOMMITTED:
-TitleContainerPathTests.cpp (five pre-fix tests only), pending matrix commit/hash
-reconciliation. Native storage before repair: one live control passes,
+TitleContainerPathTests.cpp (five pre-fix tests only), current matrix/handoff updates.
+Native storage before repair: one live control passes,
 three disposed/event groups fail. Copied151 candidate passes all4. Native CnaTests
-rebuild pending, and real external storage validation must await lifecycle closure.
+rebuild/focused/broad validation now complete as above; actual external storage
+validation must await lifecycle closure.
 Pre-fix standalone57total39PASS/18 intendedFAIL/zero skips907ms.
 First repaired native76/76 including19 Game controls; initial three warnings exactly
 match baseline GameTests ignored Remove results, then strengthened assertions build

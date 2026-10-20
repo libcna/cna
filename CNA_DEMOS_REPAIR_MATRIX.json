@@ -1005,14 +1005,16 @@
         "c_api.storage.save_game"
       ],
       "subsystem": "storage/runtime",
-      "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "classification": "DEPENDENCY_DEFECT",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "fstream EOF/fail state survives short reads, invalidating tellg/relative seek and silently losing subsequent writes.",
       "related_issues": [],
       "cna_fix_commit": null,
+      "dependency_fix_commit": "sharp-runtime:1c0fc9b5",
       "validation": [
         "Genuine .NET Framework4 EOF13/13 versus current Sharp Runtime native seven failures/13; exact data/guard/rewind controls pass. Source and strict-build witness docs/repair-evidence/storage/FileStreamEofProbe.cpp; lower-layer fix pending.",
-        "After freezing lifecycle binaries, the minimal Sharp Runtime Read-state repair is applied, uncommitted with three regression tests and migration note. Production build warning-free; complete dependency gate18140/18140 across41 executables,zero failures/skips (baseline18137). Native CNA consumer rebuild running; actual external C API and demo regression pending. No final closure yet."
+        "After freezing lifecycle binaries, the minimal Sharp Runtime Read-state repair is applied, uncommitted with three regression tests and migration note. Production build warning-free; complete dependency gate18140/18140 across41 executables,zero failures/skips (baseline18137). Native CNA consumer rebuild running; actual external C API and demo regression pending. No final closure yet.",
+        "Committed sharp-runtime1c0fc9b5 after18140/18140 dependency gate. Actual rebuilt CNA EOF13/13; actual FileStream.cpp ASan/UBSan/leak3/3. Exact1412 native consumers1408PASS/four unchanged skips; full runtime239 includes233PASS/three same skips/three previously reproduced new Title145 failures, retained with exit1. Native hashes reverified. External lifecycle binaries remain frozen, so external056 closure is pending."
       ],
       "final_disposition": null
     },
@@ -2830,13 +2832,14 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "StorageContainer lacks disposed guards on properties and file/directory/list/open operations, permitting real filesystem mutations after disposal.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "5865ae938",
       "validation": [
         "Genuine storage172/172; native public acquisition path under isolated XDG root proves all18 disposed/precedence checks fail and files are mutated, while live/state/one-shot event controls pass. docs/repair-evidence/storage/StorageContractsProbe.cpp;170total29PASS/141FAIL includes sharing findings.",
-        "Additional genuine disposal-event7/7: guarded access is refused inside Disposing, backing files and existing streams survive. Four native regressions give1PASS/three expectedFAIL before repair; copied candidate4/4PASS. Shared production guard now applied after lifecycle freeze, no layout/API change. C StorageSmoke's contradictory callback oracle corrected to INVALID_STATE with untouched output plus independent fresh-container file-preservation control. Native full build and real C ABI validation pending; no closure."
+        "Additional genuine disposal-event7/7: guarded access is refused inside Disposing, backing files and existing streams survive. Four native regressions give1PASS/three expectedFAIL before repair; copied candidate4/4PASS. Shared production guard now applied after lifecycle freeze, no layout/API change. C StorageSmoke's contradictory callback oracle corrected to INVALID_STATE with untouched output plus independent fresh-container file-preservation control. Native full build and real C ABI validation pending; no closure.",
+        "Committed5865ae938 after native18/18 storage(10ms), actual StorageContainer.cpp ASan/UBSan/leak4/4(11ms), exact1412 consumers1408PASS/four same skips272.553s. All239 runtime tests remain visible:233PASS/three same skips/three open Title145FAIL11.092s. Broad example build deliberately interrupted;17 warnings exactly baseline. Affected CnaTests target finishes warning-free; modified C smoke strict-compiles. Actual external C ABI/demo regression pending."
       ],
       "final_disposition": null
     },
