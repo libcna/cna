@@ -27,6 +27,48 @@ Native content build2419 still RUNNING; corpus NUL/null-write checks strengthene
 from ANY_THROW to their measured exception categories. All external binaries stay
 frozen at the earlier storage revision until final CTest/hash audit. No push/merge.
 
+UPDATE2: both full storage renderer comparators now pass exact55/differences[]:
+SW612/56/48/3, GLES651/58/7/3. Regression3249 COMPLETE0. Final serial private
+CTest32815 RUNNING, three frozen hashes verified immediately beforehand; no
+overlapping SystemLink suite. Permanent pending checkpoint is demo5a3d75b,
+docs/repair-evidence/storage/CHECKPOINT.md. Do not close or rebuild before final
+CTest and hash audit. Current native build2419 has two pre-existing nodiscard
+warnings in unchanged XnaMaterialContentTests.cpp:418/420; source and declarations
+are identical to campaign baseline. Record these, do not call this build warning-free.
+Actual three-TU content ASan/UBSan compile43959 RUNNING separately, one compiler;
+first harness51032 failed because whitespace splitting corrupted quoted compile
+database defines, not product compilation. Original log retained; corrected script
+uses shell-aware shlex and compiles only until the native library finishes.
+Sources/tests are existing product TUs, not emulated replacements. Link/run later.
+
+148 vendor-policy clarification asked asynchronously: permit a narrow documented
+tinyxml2 PI-position fix versus keep vendor untouched and use an owned adapter.
+No response yet; no vendor edits. Prepared untracked evidence
+docs/repair-evidence/content/XmlReaderEnvelopeOracle.cs is NOT run yet (worker cap).
+Do not infer its expected checks passed. Other work continues. Next content batch
+090/088/089 source inspection confirms callback under non-recursive compiler lock,
+uninitialized intermediate serializer registrations and unchecked alias insertion;
+no new code/test changes for those IDs, no current standalone reproduction yet.
+
+UPDATE3: native build2419 COMPLETE0 (the two unchanged material-test warnings
+above). Focused19 cases initially18PASS/one FAIL: the now-correct null-root WRITE
+raises existing modern Sharp text, while the Framework4 corpus uses a parameter
+line. Do not modify runtime to manufacture a read failure or rewrite goldens.
+Corrected corpus pins both exact diagnostic forms plus type/parameter/timing;
+message-only rebuild8525 COMPLETE0 warning-free, final19/19PASS735ms, including
+dictionary, whole intermediate corpus and hardening. Native CnaTests/libcna now
+FROZEN in repair-content-native-frozen.sha256. Full504 post-fix regression31697
+RUNNING (compiler-backed XnaDifferentialBuildTest); no native rebuild until done.
+Sharp/native147 NUL and null-write tests are strengthened from ANY_THROW.
+Matrix146/147/149 now FIXED_PENDING_REGRESSION, no final disposition/closure.
+Actual three-TU sanitizer43959 still compiling its large corpus TU; not stalled
+(cc1plus active), max three campaign workers including native full and external
+CTest32815. Sanitizer must link after compilation and run before a pass is claimed.
+Demo standalone/content.custom.intermediate_serializer/main.cpp now has the two
+genuine-backed corrected null-root read checks, unchanged total and independent
+write refusal; NOT rebuilt/externally validated yet. Existing148 marker remains.
+Uncommitted demo evidence XmlReaderEnvelopeOracle.cs remains unrun.
+
 Native complete content baseline66506 COMPLETE exit1:504 tests/117 suites,
 497PASS/one existing XACT fixture SKIP/exactly six expected newly added failures,
 1306.990s. Four146 dictionary tests and two149 direct-null tests fail; no other
