@@ -13,9 +13,10 @@ AUTHORITATIVE UPDATE (supersedes all older checkpoint text below):
 Phase F. All155 historical IDs retained:74 FINAL/81 PENDING. Totals:41 fixed runtime
 findings,23 documentation corrections,eight pre-campaign fixes,one duplicate and
 one demo-expectation defect. Goal unchanged. Nothing pushed or merged.
-CNA HEAD462096daa (status; runtime3a1437725/048), demos76e7c94 (prior closured9ebd20),
-Sharp99c2f79c. Candidate039/045 runtime and eight native tests are UNCOMMITTED.
-They are NOT part of either frozen048 checkpoint binary set.
+CNA HEAD583af2a5e (039/045 runtime), demos733404f (048 closure6633f80),
+Sharp99c2f79c.039/045 runtime and eight new native cases are committed, with
+evidence-backed existing test corrections; both remain FIXED_PENDING_REGRESSION.
+They were NOT part of the completed048 checkpoint binary set.
 
 LAST COMPLETE CLOSED CHECKPOINT:048, runtime3a1437725, unchanged demo behavior
 snapshot3d1f833 (later evidence commits only). Native251/552+1412/runtime241/XML
@@ -84,7 +85,8 @@ CLOSED048 FIXED_VALIDATED:
  (62vsComplete1128), differences[]. Final isolated serial CTest59450 COMPLETE0;
  all319 pre/post hashes and unchanged735-status/48-skip audit pass.048 now CLOSED.
 Maximum THREE campaign compiler/test workers, Sharp at mostTWO; no concurrent
-SystemLink suites; private GPU wrapper only. Those validation jobs have completed.
+SystemLink suites; private GPU wrapper only. Current jobs66736 pipeline(1) and
+6996 external build(2). Previous validation jobs have completed.
 
 NEXT RUNTIME BATCH EVIDENCE:
 ContentOwnershipOracle.cs35/35 actual XNA4 strict C#4/x86, no GPU/services. Pins
@@ -103,7 +105,7 @@ Expanded genuine envelope oracle90059 COMPLETE0:89/89, including all header leng
 Native envelope88078 COMPLETE1 expected:fourFAIL10ms, leaking header/body I/O.
 Actual-TU sanitizer28664 COMPLETE1 confirms four-byte heap overread at the end of
 a ten-byte compressed external XNB, ContentManagerUntyped.cpp:154. Evidence retained.
-Uncommitted039/045 repair: shared private ReadXnbHeader validates both paths and
+Committed039/045 repair583af2a5e: shared private ReadXnbHeader validates both paths and
 wraps I/O; ContentReader typed/erased ReadAsset wraps IOException only; both root
 setters guard nonempty cache. Low-level header parser contract remains unchanged.
 Actual ContentManager.cpp+Untyped.cpp and whole fixture ASan/UBSan/leak72209
@@ -133,7 +135,11 @@ ContentLoadException, with explicit renamed-test mapping in the audit. Direct
 SongReader FileNotFoundException contract is unchanged. Eight-step incremental
 build28508 COMPLETE0, warning-free. Combined manager/writer/song33/33PASS146ms,
 corpus48=32refused/16written, mutations400=204refused/196written. Corrected1918
-job71175 RUNNING; new four artifacts FROZEN under repair-content-runtime-corrected.
+job71175 COMPLETE0:1914PASS/four sameSKIP188.735s, all1905 previous outcomes and13
+additions match, differences[]. Four post-module hashes pass. Writer-only fixture
+correction1ec77a734, runtime583af2a5e. Native artifacts remain FROZEN under
+repair-content-runtime-corrected for full552 pipeline66736 and following consumers.
+External build6996 parallel2 RUNNING against583af2a5e; no external repair pass yet.
 011 includes value-handle Texture2D ownership; a shared_ptr-only fix is insufficient.
 012 cold builtin registration depends on Game declaration; preserve family link
 boundaries and explicit reader withdrawal.043 must preserve fresh unique_ptr API.
@@ -160,15 +166,15 @@ bypass index, IDisposable value types never record, all four existing-value over
 throw InvalidOperationException due boxed identity. Do not apply reference-type
 dispatch rules to value targets or blindly preserve existing incorrect native expectations.
 
-EXACT NEXT: finish corrected1918 native module71175, then552 pipeline,
-1412 consumers/runtime241/originalXML and native hash audit.039/045 remain unclosed;
-after their native gate, commit runtime and rebuild external against that exact tree.
+EXACT NEXT: finish552 native pipeline66736, exact552-outcome audit against048,
+then1412 consumers/runtime241/originalXML and native hashes. Finish external build6996,
+run prepared repair-content-runtime-focused.mjs (73 content demos each renderer,
+only039/045 assertion changes allowed; preserve all other failures/counts), then
+remove those markers only after focused passes. Run full62-improvement checkpoint,
+math95/visuals/finalCTest/hash audit before closing039/045. Native freeze stays.
 048 is closed. Preserve047/089/148 markers.
-Uncommitted:039/045 ContentManager.hpp/.cpp, ContentManagerUntyped.cpp,
-ContentReader.hpp, eight tests in ContentManagerXnbTests.cpp, three existing
-sound/container-fuzz test files and divergence log;
-updated demo oracle/evidence and this status are being committed separately.
-Runtime native candidate is built; failed broader gate is being investigated.
+Uncommitted runtime work: none. Current evidence/status updates are committed
+separately. All failed setup/regression logs remain; corrected native gate passes.
 Owner-reserved131 untouched;152 sharing policy and148
 vendor policy remain unanswered. Ordinary actionable issues remain: campaign NOT complete.
 
