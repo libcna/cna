@@ -52,7 +52,8 @@ namespace Microsoft::Xna::Framework::Content::detail
 {
     void RegisterEveryBuiltinXnbReader()
     {
-        // Only installs what a Game declared: without one, CNA registers no .xnb reader by itself.
-        InstallDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders);
+        // A custom graph can name any built-in, including when loaded without a Game.
+        // This translation unit is already the all-family link boundary.
+        RegisterDeclaredXnbReaders(&CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders);
     }
 }

@@ -84,6 +84,10 @@ was kept, except that an `IPlatform` implementation overrides `GetCameraService(
   new `ContentManager` or `RegisterBuiltinLoaders()` for `.cnb` loaders). The registries'
   observable answers are pinned by `ContentTypeReaderManagerTests` and the `.cnb` registry tests,
   which cover removal followed by a load.
+  Standalone `ContentManager`/`ResourceContentManager` loads also install their type's XNB family
+  without requiring a `Game` or declaring unrelated families. Lazy installation honors explicitly
+  withdrawn reader names even when a later custom graph needs every family. Explicit registration
+  or a new `Game` can restore them; a factory registered before a declaration retains priority.
 - **A family installs every reader its files may name.** A real pipeline's `.xnb` names value
   readers beside the asset's own -- a Song's duration goes through `Int32Reader`, a Video's name,
   size and frame rate through `StringReader`, `Int32Reader` and `SingleReader`, a Model's Tag may

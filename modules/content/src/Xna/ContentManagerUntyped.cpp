@@ -99,15 +99,15 @@ namespace Microsoft::Xna::Framework::Content
             return cached->second;
         }
 
-        const std::string xnbPath =
-            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-        std::vector<std::uint8_t> xnbBytes;
-        if (!TryReadAssetBytes(xnbPath, xnbBytes))
+        const auto stream = OpenStream(assetName);
+        if (!stream)
         {
             throw ContentLoadException(
-                "ContentManager: external object reference '" + assetName +
-                "' does not resolve to a compiled .xnb asset.");
+                "ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
         }
+        const auto xnbBytes = ReadStreamToEnd(*stream, assetName);
+        const std::string xnbPath =
+            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
 
         detail::RegisterEveryBuiltinXnbReader();
         std::any result = LoadXnbAssetUntyped(xnbBytes, xnbPath, assetName);

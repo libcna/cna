@@ -85,9 +85,32 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <exception>
 
 namespace Microsoft::Xna::Framework::Content
 {
+    namespace
+    {
+        // An override may delegate to the base, replace its exception, or recursively load
+        // another asset. Record the identity of only this call's base missing-file exception;
+        // neither exception type nor message alone can distinguish a deliberate override error.
+        struct CompiledStreamAttempt
+        {
+            static thread_local CompiledStreamAttempt* active;
+            const ContentManager* manager;
+            const std::string& assetName;
+            std::exception_ptr missing;
+            CompiledStreamAttempt* previous;
+
+            CompiledStreamAttempt(const ContentManager* owner, const std::string& name)
+                : manager(owner), assetName(name), previous(active) { active = this; }
+            ~CompiledStreamAttempt() { active = previous; }
+            CompiledStreamAttempt(const CompiledStreamAttempt&) = delete;
+            CompiledStreamAttempt& operator=(const CompiledStreamAttempt&) = delete;
+        };
+        thread_local CompiledStreamAttempt* CompiledStreamAttempt::active = nullptr;
+    }
+
     // ---------------------------------------------------------------------------
     // Property accessors
     // ---------------------------------------------------------------------------
@@ -258,6 +281,24 @@ namespace Microsoft::Xna::Framework::Content
         }
     }
 
+    std::unique_ptr<System::IO::Stream> ContentManager::TryOpenCompiledStream(const std::string& assetName)
+    {
+        CompiledStreamAttempt attempt(this, assetName);
+        try
+        {
+            auto stream = OpenStream(assetName);
+            if (!stream)
+                throw ContentLoadException("ContentManager: OpenStream returned no stream for asset '" + assetName + "'.");
+            return stream;
+        }
+        catch (...)
+        {
+            if (attempt.missing && std::current_exception() == attempt.missing)
+                return nullptr;
+            throw;
+        }
+    }
+
     std::unique_ptr<System::IO::Stream> ContentManager::OpenStream(const std::string& assetName)
     {
         const std::string path = ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
@@ -270,8 +311,12 @@ namespace Microsoft::Xna::Framework::Content
             // asset as one on disk, and a subclass overriding this method inherits neither concern.
             if (!TryReadAssetBytes(path, bytes))
             {
-                throw ContentLoadException(
-                    "ContentManager: could not find asset '" + assetName + "' at '" + path + "'.");
+                const auto missing = std::make_exception_ptr(ContentLoadException(
+                    "ContentManager: could not find asset '" + assetName + "' at '" + path + "'."));
+                auto* attempt = CompiledStreamAttempt::active;
+                if (attempt && attempt->manager == this && attempt->assetName == assetName)
+                    attempt->missing = missing;
+                std::rethrow_exception(missing);
             }
         }
         catch (const ContentLoadException&)

@@ -259,12 +259,14 @@ TEST_F(ContentTypeReaderManagerTest, ClearTypeCreatorsForgetsTheDeclaration)
     EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(kEffectReader));
 }
 
-TEST_F(ContentTypeReaderManagerTest, WithoutADeclarationAFamilyRegistersNoReaderByItself)
+TEST_F(ContentTypeReaderManagerTest, AStandaloneFamilyRegistersWithoutDeclaringOtherFamilies)
 {
-    // ContentManager stays neutral for isolated use: only a Game, or an explicit registration,
-    // makes the built-in readers available.
+    // ISSUE-012: genuine XNA ResourceContentManager loads built-ins without a Game.
+    // Preserve CNA's family link boundary, not the old missing-Game failure.
     ContentDetail::RegisterDeclaredXnbReaders(&RegisterEffectXnbReader);
-    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(kEffectReader));
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(kEffectReader));
+    EXPECT_FALSE(ContentTypeReaderManager::IsRegistered(kCurveReader));
+    EXPECT_FALSE(ContentDetail::BuiltinXnbReadersDeclared());
 
     ContentDetail::DeclareBuiltinXnbReaders();
     ContentDetail::RegisterDeclaredXnbReaders(&RegisterEffectXnbReader);

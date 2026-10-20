@@ -87,6 +87,9 @@ namespace Microsoft::Xna::Framework::Content
             // Registered by a game while the built-ins were declared but not installed: the name
             // may be a built-in's, which would have kept the game's registration out.
             std::unordered_set<std::string> provisional;
+            // A standalone load may install only one family. Later lazy installation of
+            // another family (or all families) must not restore explicitly removed names.
+            std::unordered_set<std::string> withdrawn;
         };
 
         DeclaredBuiltins& Declared()
@@ -96,6 +99,15 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         thread_local int builtinRegistrationDepth = 0;
+        thread_local int lazyRegistrationDepth = 0;
+
+        struct LazyRegistrationScope
+        {
+            LazyRegistrationScope() { ++lazyRegistrationDepth; }
+            ~LazyRegistrationScope() { --lazyRegistrationDepth; }
+            LazyRegistrationScope(const LazyRegistrationScope&) = delete;
+            LazyRegistrationScope& operator=(const LazyRegistrationScope&) = delete;
+        };
 
         // Serializes installing declared readers with each other, so that a reader removed after
         // everything is installed cannot be put back by an installation that began before.
@@ -118,6 +130,16 @@ namespace Microsoft::Xna::Framework::Content
         const std::unique_lock lock(CreatorsMutex());
         auto& creators = TypeCreators();
         auto& declared = Declared();
+        if (builtinRegistrationDepth > 0 && lazyRegistrationDepth > 0)
+        {
+            if (declared.withdrawn.contains(canonicalName))
+                return;
+        }
+        else
+        {
+            // An explicit registration, unlike loading another asset, restores the name.
+            declared.withdrawn.erase(canonicalName);
+        }
         const auto existing = creators.find(canonicalName);
         if (existing == creators.end())
         {
@@ -268,7 +290,10 @@ namespace Microsoft::Xna::Framework::Content
             const std::unique_lock lock(CreatorsMutex());
             Declared().provisional.erase(canonicalName);
             ForgetFactoryTargets(canonicalName);
-            return ContentTypeReaderRegistryAccess::Creators().erase(canonicalName) != 0U;
+            const bool removed = ContentTypeReaderRegistryAccess::Creators().erase(canonicalName) != 0U;
+            if (removed)
+                Declared().withdrawn.insert(canonicalName);
+            return removed;
         }
 
         void DeclareBuiltinXnbReaders()
@@ -278,6 +303,7 @@ namespace Microsoft::Xna::Framework::Content
             declared.declared = true;
             // As a second Game's constructor re-registered every reader.
             declared.installed = false;
+            declared.withdrawn.clear();
         }
 
         bool BuiltinXnbReadersDeclared()
@@ -303,13 +329,16 @@ namespace Microsoft::Xna::Framework::Content
 
         void RegisterDeclaredXnbReaders(void (*registerReaders)())
         {
-            // Once every declared reader is installed, the registry holds what the eager
-            // registration would hold, a reader removed since included: a load adds nothing.
+            // Standalone content managers need their type's family too, without constructing
+            // a Game or declaring/linking unrelated families. Once all readers have been
+            // installed, a load adds nothing (including readers explicitly removed since).
             const std::lock_guard lock(InstallMutex());
-            if (!DeclaredXnbReadersPending())
             {
-                return;
+                const std::shared_lock creatorsLock(CreatorsMutex());
+                if (Declared().installed)
+                    return;
             }
+            const LazyRegistrationScope lazy;
             const BuiltinXnbRegistrationScope scope;
             registerReaders();
         }
@@ -323,6 +352,7 @@ namespace Microsoft::Xna::Framework::Content
             const std::lock_guard lock(InstallMutex());
             if (DeclaredXnbReadersPending())
             {
+                const LazyRegistrationScope lazy;
                 registerEveryReader();
             }
         }

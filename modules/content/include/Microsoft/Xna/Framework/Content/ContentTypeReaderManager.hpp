@@ -158,6 +158,9 @@ namespace Microsoft::Xna::Framework::Content
     // installs nothing, so a reader removed since stays removed until the next Game declares the
     // built-ins again, as its constructor re-registered them. The registry therefore answers as the
     // eager registration did, while a program links only the readers of the types it loads.
+    // A standalone ContentManager also installs its loaded type's family, without declaring
+    // unrelated families. Explicit removals survive later lazy family installation; explicit
+    // re-registration or a new Game restores them.
     namespace detail
     {
         /**
@@ -188,10 +191,10 @@ namespace Microsoft::Xna::Framework::Content
         void NoteEveryBuiltinXnbReaderRegistered();
 
         /**
-         * @brief Runs one family's reader registration while the built-in readers are declared and
-         *        not all installed, as CNA's own registration: it replaces a reader a game
-         *        registered under the same name in that time, which the built-in would have kept
-         *        out had it been installed.
+         * @brief Runs one family's lazy reader registration unless all built-ins are installed.
+         *        Works without a Game declaration and preserves explicitly withdrawn readers.
+         *        Under a Game declaration, replaces provisional registrations that an eagerly
+         *        installed built-in would have kept out; earlier explicit factories retain priority.
          * @param registerReaders The family's registration function.
          */
         void RegisterDeclaredXnbReaders(void (*registerReaders)());

@@ -193,21 +193,19 @@ namespace Microsoft::Xna::Framework::Content
 
         log::Debug(std::string("Loading asset: ") + assetName);
 
-        // A manager whose assets are not in the content root (ResourceContentManager) reads them through
-        // OpenStream(), as the generic Load<T>() does for such a manager: the tiers below only see files.
+        // Preserve the explicit strict stream-only option, as in the generic Load<T>().
         if (loadsThroughOpenStream_)
             return ReadAsset<Audio::SoundEffect>(assetName, {});
 
         detail::BuiltinContent<Audio::SoundEffect>::Register(*this);
 
-        // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s
-        // own specialisation; this one needs its own copy too since move-only types skip the
-        // generic Load<T>() template's any-cache body entirely.
-        const std::string xnbCandidate =
-            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-        std::vector<std::uint8_t> xnbBytes;
-        if (TryReadAssetBytes(xnbCandidate, xnbBytes))
+        // Move-only SoundEffect skips the generic cache, but shares its virtual stream seam
+        // and .xnb-first precedence. Only the base missing-XNB case permits lower tiers.
+        if (const auto stream = TryOpenCompiledStream(assetName))
         {
+            const auto xnbBytes = ReadStreamToEnd(*stream, assetName);
+            const std::string xnbCandidate =
+                ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
             return LoadXnbAsset<Audio::SoundEffect>(xnbBytes, xnbCandidate, assetName);
         }
 

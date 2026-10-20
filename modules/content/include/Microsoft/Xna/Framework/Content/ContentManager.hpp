@@ -120,6 +120,11 @@ namespace Microsoft::Xna::Framework::Content
             const std::string& path, std::vector<std::uint8_t>& bytes) const;
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
 
+        // Calls the virtual seam. Null means only the base implementation's own missing-XNB
+        // exception, permitting CNA's lower tiers; override/decode/I/O failures still propagate.
+        [[nodiscard]] std::unique_ptr<System::IO::Stream> TryOpenCompiledStream(
+            const std::string& assetName);
+
         /// Reads a stream OpenStream() produced to its end. A ContentManager asset is read whole --
         /// LoadXnbAsset() needs the complete container to parse its header and payload -- so the
         /// stream shape an override may provide is turned into bytes once, here.
@@ -199,14 +204,13 @@ namespace Microsoft::Xna::Framework::Content
 
     protected:
         /**
-         * @brief Makes Load<T>() read every asset through OpenStream() and ReadAsset<T>().
+         * @brief Disables CNA's lower-tier fallback when the base compiled stream is absent.
          *
-         * CNAEXT. XNA's Load<T>() always reads through the virtual OpenStream() seam, so a manager that
-         * overrides it (embedded resources, a pack file) serves assets through the ordinary public call.
-         * CNA's Load<T>() instead climbs a tier ladder -- .xnb, .cnb, loose files -- over the file system,
-         * which an OpenStream() override never sees. A derived manager whose assets live somewhere else
-         * calls this from its constructor to get XNA's behaviour: the cache still applies, and the other
-         * tiers are skipped. ResourceContentManager does so.
+         * CNAEXT. Load<T>() always honors the virtual OpenStream() seam. By default, only a missing
+         * .xnb reported by the base implementation permits CNA's .cnb/loose-file tiers. Enabling this
+         * option preserves strict stream-only loading, including for that base missing-file case.
+         * Overrides do not need to opt in; their own exceptions never trigger lower-tier fallback.
+         * ResourceContentManager retains this option for its stream-only contract.
          */
         CNAEXT void RouteLoadsThroughOpenStreamEXT(bool enabled) noexcept { loadsThroughOpenStream_ = enabled; }
 
@@ -230,10 +234,9 @@ namespace Microsoft::Xna::Framework::Content
          * @brief Opens the stream an asset's compiled data is read from.
          *
          * The documented protected virtual seam. Override it to serve assets from a pack file, an
-         * archive, or embedded resources. ReadAsset<T>() always reads through it; Load<T>() does too for a
-         * manager that asks (RouteLoadsThroughOpenStreamEXT, which ResourceContentManager does), and
-         * otherwise reads the file system first, so an override changes where compiled content comes from
-         * without touching anything else.
+         * archive, or embedded resources. Both ReadAsset<T>() and Load<T>() read through it. Only the
+         * base implementation's own missing .xnb condition permits Load<T>() to try CNA's lower tiers,
+         * unless RouteLoadsThroughOpenStreamEXT requests strict stream-only loading.
          *
          * The base implementation opens `<RootDirectory>/<assetName>.xnb` for reading and reports a
          * failure as a ContentLoadException naming the asset, with the underlying error as its
@@ -555,9 +558,8 @@ namespace Microsoft::Xna::Framework::Content
             // calls Content.Load from Draw and relies on ContentManager's cache (SAMPLE-014).
             log::Debug(std::string("Loading asset: ") + assetName);
 
-            // A manager whose assets are not in the content root (ResourceContentManager) reads them through
-            // OpenStream(), exactly as XNA's Load<T>() does for every manager; the file-system tiers below
-            // would never see an override.
+            // The explicit extension keeps its strict stream-only semantics. Ordinary managers
+            // also honor OpenStream below, with CNA fallback only for the base missing-XNB case.
             if (loadsThroughOpenStream_)
             {
                 T result = ReadAsset<T>(assetName, {});
@@ -576,18 +578,13 @@ namespace Microsoft::Xna::Framework::Content
             // at all -- root-object dispatch is entirely driven by the file's own type-reader
             // table via the process-wide ContentTypeReaderManager registry (plans/plan_xnb.md XNB-17B).
             //
-            // Resolving the tier and reading the bytes is one step, because the only way to ask
-            // whether a compiled asset is available is to try to read it: TryReadAssetBytes covers
-            // the platform's packaged assets as well as the filesystem, and the packaged route has
-            // no existence-only query. ReadAsset<T>()/OpenStream() -- XNA's documented protected
-            // seams, which CNA's tier ladder sits above -- read the same way and are the route for
-            // a manager whose assets are not in the content root at all; ResourceContentManager is
-            // one, and reads through them.
-            const std::string xnbCandidate =
-                ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-            std::vector<std::uint8_t> xnbBytes;
-            if (TryReadAssetBytes(xnbCandidate, xnbBytes))
+            // The virtual seam resolves packaged/disk assets or a derived manager's source.
+            // Do not swallow an override's refusal, malformed stream, or an actual I/O failure.
+            if (const auto stream = TryOpenCompiledStream(assetName))
             {
+                const auto xnbBytes = ReadStreamToEnd(*stream, assetName);
+                const std::string xnbCandidate =
+                    ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
                 T result = LoadXnbAsset<T>(xnbBytes, xnbCandidate, assetName);
                 loadedAssets_[cacheKey] = result;
                 return result;
