@@ -27,19 +27,30 @@ Evidence ../cna-demos/docs/repair-evidence/issue-132/CHECKPOINT.md. Complete1128
 demo-status delta50,current-HEAD campaign delta48. External Color freeze RELEASED.
 Owner-reserved131 remains open; outside-entry ray method/exception untouched.
 
-ACTIVE NEXT: lifecycle141–144 external build89883 RUNNING,--parallel2, against
-031693a9f/b086814f9. Three adjacent genuine-backed demo oracles corrected; exact
-source assertion-call counts retained4/20/15. Four original knownIssue markers
-still present. Actual libraries linked at steps13/34 and separately SHA256-frozen;
-strict real C ABI RuntimeComponentsSmoke,RuntimeGameSmoke,ComponentCDisposalProbe
-allPASS (independent11/11,previousfour failures); both library hashes unchanged.
-Next finish remaining demo translation units, then20 focused scenarios per renderer; only
-remove four knownIssue markers after focusedPASS. Rebuild those marker changes
-BEFORE freezing all three lifecycle binaries and applying any storage/Sharp runtime
-fix; a marker rebuild after dependency edits would contaminate this checkpoint.
-Prepared lifecycle math/full
-comparators admit48 math changes +four game changes=52, no other differences.
-Do not apply storage/Sharp runtime fixes before lifecycle external build is frozen.
+ACTIVE: lifecycle full external regression22718 RUNNING, binaries FROZEN after
+warning-free initial89883 and marker36933 builds. Demos61d344e preserves genuine
+adjacent oracles with4/20/15 assertion calls. All20 focused scenarios per renderer
+give18PASS/two unchanged050/051FAIL; repaired four retain5/8/11/8 checks.
+Only then four knownIssue/restriction markers removed. Actual C ABI smokes allPASS
+(independent disposal11/11), library hashes unchanged through marker rebuild.
+Manifest ../cna-demos/build/linux-full/reports/repair-lifecycle-frozen.sha256 pins
+the executable and both DSOs. Both95 math sweeps exact48 changes/differences[];
+metadata/tools/six pixel-exact visuals pass. Full719-ID sweeps underway; expect52
+cumulative intended changes, admit no other differences. After both sweeps run
+isolated full CTest, then reverify hashes before closing141–144. Do NOT rebuild
+build/linux-full until that checkpoint finishes. No SystemLink overlap.
+
+AFTER FREEZE: Sharp056 minimal Read EOF-state fix now applied with three tests and
+migration note; full existing build70708 COMPLETE warning-free. Post-fix full
+component gate16272 COMPLETE:18140/18140 across41 executables,zero failures/skips;
+private Yacht fixture stopped/removed and original sample assertions unchanged.
+CNA151 shared disposed guard now applied, with four native tests and corrected
+genuine-backed C StorageSmoke event-access oracle (backing-file preservation kept).
+Native151 full build29581 RUNNING(--parallel2;1051 tasks including dependent
+examples); current17 warnings all exactly in original152-warning baseline,none new.
+Native151 focused/consumer and actual C ABI validation still pending. Title145 has
+five prepared tests,2PASS/three intendedFAIL; do not include those expected failures
+in an asserted-green storage gate or close145. FileShare152 policy question pending.
 
 Completed Color build details: runtime1ad0a3916. External build
 and marker rebuild COMPLETE warning-free; strict actual C ABI ColorSmoke and all6
@@ -66,11 +77,12 @@ COMMITTED CNA: component root-cause batch031693a9f and launch batchb086814f9,
 including matching regressions and C contracts/smokes. All four matrix rows now
 FIXED_PENDING_REGRESSION; actual C ABI smokes pass, full external closure pending.
 Status commitc01e04275; lifecycle evidence8b38d2a, storage sharing edges2129f3f.
-Latest triage commit25a1b8ad3, title evidencecf5bef5. UNCOMMITTED: new native151
-StorageContainerLifetimeTests.cpp, TitleContainerPathTests.cpp, Sharp FileStreamEofTests.cpp, three adjacent demo
-oracle corrections and lifecycle evidence/matrix/handoff updates; no storage runtime
-production changes. The storage standalone strict build passes, one live control passes,
-two disposed-path regressions fail as intended(5ms). Not rebuilt into CnaTests yet.
+Latest storage evidence71ebc53, lifecycle demos61d344e. UNCOMMITTED: CNA151 production
+guard/header/C StorageSmoke oracle and four native tests; Sharp056 Read fix/three
+tests/migration/changelog; TitleContainerPathTests.cpp (five pre-fix tests only);
+campaign handoff updates. Native storage before repair: one live control passes,
+three disposed/event groups fail. Copied151 candidate passes all4. Native CnaTests
+rebuild pending, and real external storage validation must await lifecycle closure.
 Pre-fix standalone57total39PASS/18 intendedFAIL/zero skips907ms.
 First repaired native76/76 including19 Game controls; initial three warnings exactly
 match baseline GameTests ignored Remove results, then strengthened assertions build
@@ -107,9 +119,10 @@ c_api.game.component_members requires two callbacks/events after two disposals;
 all20 assertions and the single drawable-disposal check remain. No primary
 knownIssue marker has yet been removed.
 
-Next storage056/151/152 confirmed at correct lower layer, no production edits.
-Title145 additionally has four native regression tests, strict warning-free build:
-two controls pass/two exact argument/directory groups fail(217ms), production unchanged.
+Pre-fix storage056/151/152 confirmed at correct lower layer; subsequent056/151
+production changes are recorded in ACTIVE above. Title145 has five native tests:
+strict warning-free build, two controls pass/three argument/directory/normalization
+groups fail(117ms); title production unchanged. Genuine32-path diagnostic retained.
 Actual FileShare platform policy question sent asynchronously: Windows reference
 25 opens/119 refusals versus Unix81/63. No default or oracle relaxation applied;
 continue independent repairs while awaiting that compatibility decision.
@@ -138,9 +151,10 @@ failure retained, no Win64 runtime claim/new prefix. Isolated EOF candidate now
 passes3/3 new and723/723 total IO tests(2.233s); corrected static linkage uses the
 actual IO target dependencies. Initial missing File symbols/missing compile database
 harness failures retained. Candidate clears only benign EOF/fail state, preserving
-badbit/non-EOF failures. Isolated151 shared-guard candidate passes3/3 new and17/17
-all native storage controls(10ms), no API/layout change. Both production files
-remain unchanged until lifecycle external build is complete/frozen. Color complete.
+badbit/non-EOF failures. Initial isolated151 shared-guard candidate passes3/3 new
+and17/17 native storage controls(10ms), then expanded4/4 with genuine7/7 event
+contracts(2ms), no API/layout change. These are pre-production candidate results;
+actual056/151 files are now changed AFTER lifecycle freeze. Color complete.
 Never overlap the campaign's SystemLink suites. Sharp Runtime rules/StandingApprovals
 read; at most TWO Sharp jobs, layout/migration/full-gate requirements apply.
 145 newly CONFIRMED_OPEN: genuine title-path20/20; native6PASS/14FAIL. Historical

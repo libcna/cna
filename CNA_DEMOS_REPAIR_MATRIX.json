@@ -1011,7 +1011,8 @@
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [
-        "Genuine .NET Framework4 EOF13/13 versus current Sharp Runtime native seven failures/13; exact data/guard/rewind controls pass. Source and strict-build witness docs/repair-evidence/storage/FileStreamEofProbe.cpp; lower-layer fix pending."
+        "Genuine .NET Framework4 EOF13/13 versus current Sharp Runtime native seven failures/13; exact data/guard/rewind controls pass. Source and strict-build witness docs/repair-evidence/storage/FileStreamEofProbe.cpp; lower-layer fix pending.",
+        "After freezing lifecycle binaries, the minimal Sharp Runtime Read-state repair is applied, uncommitted with three regression tests and migration note. Production build warning-free; complete dependency gate18140/18140 across41 executables,zero failures/skips (baseline18137). Native CNA consumer rebuild running; actual external C API and demo regression pending. No final closure yet."
       ],
       "final_disposition": null
     },
@@ -2834,7 +2835,8 @@
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [
-        "Genuine storage172/172; native public acquisition path under isolated XDG root proves all18 disposed/precedence checks fail and files are mutated, while live/state/one-shot event controls pass. docs/repair-evidence/storage/StorageContractsProbe.cpp;170total29PASS/141FAIL includes sharing findings."
+        "Genuine storage172/172; native public acquisition path under isolated XDG root proves all18 disposed/precedence checks fail and files are mutated, while live/state/one-shot event controls pass. docs/repair-evidence/storage/StorageContractsProbe.cpp;170total29PASS/141FAIL includes sharing findings.",
+        "Additional genuine disposal-event7/7: guarded access is refused inside Disposing, backing files and existing streams survive. Four native regressions give1PASS/three expectedFAIL before repair; copied candidate4/4PASS. Shared production guard now applied after lifecycle freeze, no layout/API change. C StorageSmoke's contradictory callback oracle corrected to INVALID_STATE with untouched output plus independent fresh-container file-preservation control. Native full build and real C ABI validation pending; no closure."
       ],
       "final_disposition": null
     },
