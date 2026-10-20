@@ -659,19 +659,22 @@ cna_cnb_copy_compressed(raw, raw_size, CNA_CNB_COMPRESSION_ZSTD, 3,
 `cna_cnb_copy_decompressed` needs no count route: the size is an input, because the file's table of
 contents declares it.
 
-Three behaviours are contract rather than incidental, and a C reader must agree with a C++ one about
-the same file:
+Three behaviours are contract rather than incidental. Compressed chunks follow the C++ helper's
+validation order; the established C ABI retains an explicit exception for stored chunks:
 
 1. **A codec this build does not implement is `CNA_RESULT_NOT_SUPPORTED`**, not an argument error. A
    caller retries with another codec; it does not fix its numbers.
-2. **A declared unpacked size above the ceiling is `CNA_RESULT_INVALID_ARGUMENT`, refused before
+2. **For compressed codecs, a declared unpacked size above the ceiling is `CNA_RESULT_INVALID_ARGUMENT`, refused before
    anything is allocated.** That is what stops a few kilobytes of hostile input from asking for
    gigabytes. When a chunk is *both* over the ceiling and in an unimplemented codec, the ceiling is
    the answer — the checks run in that order.
 3. **`CNA_CNB_COMPRESSION_NONE` consults neither size.** A stored chunk's bytes are the answer, so
-   `uncompressed_size` and `max_uncompressed_size` are not looked at.
+   `uncompressed_size` and `max_uncompressed_size` are not looked at. This C compatibility behavior
+   differs from the strict C++ `DecompressCnbChunk` helper. Destination capacity still prevents
+   partial writes; callers needing a stored-chunk allocation ceiling must validate
+   `stored_byte_count` themselves before the call.
 
-The codec must then produce **exactly** `uncompressed_size` bytes. A stream that expands to a
+For compressed codecs the result must contain **exactly** `uncompressed_size` bytes. A stream that expands to a
 different size is a corrupt file (`CNA_RESULT_IO`), not a short read for later code to treat as data.
 
 `level` is a **correction, not a contract**: a value outside the codec's range is clamped exactly as

@@ -511,14 +511,25 @@ static int validate_compression(void)
     REQUIRE(cna_cnb_copy_compressed(payload, payload_size, CNA_CNB_COMPRESSION_NONE, 3,
                                     0, 4U, &bytes) == CNA_RESULT_INVALID_ARGUMENT);
 
-    /* Stored decompression consults neither size. That is the canonical order -- `None` is
-       answered before the ceiling is looked at -- and preserving it is what makes a C reader agree
-       with the C++ one about the same file. */
+    /* Stored decompression consults neither size in the established C ABI. The strict C++ helper
+       now validates both; its adapter must preserve this explicitly documented C exception. */
     bytes = UINT64_MAX;
     REQUIRE(cna_cnb_copy_decompressed(payload, payload_size, CNA_CNB_COMPRESSION_NONE,
                                       0U, 0U, buffer, sizeof(buffer), &bytes) ==
             CNA_RESULT_SUCCESS);
     REQUIRE(bytes == payload_size && memcmp(buffer, payload, (size_t)payload_size) == 0);
+
+    /* Contradictory declarations, including a huge one, must not request an allocation of the
+       declared size. Only the already supplied stored bytes are copied by this C route. */
+    bytes = UINT64_MAX;
+    REQUIRE(cna_cnb_copy_decompressed(payload, payload_size, CNA_CNB_COMPRESSION_NONE,
+                                      UINT64_MAX, 0U, buffer, sizeof(buffer), &bytes) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(bytes == payload_size && memcmp(buffer, payload, (size_t)payload_size) == 0);
+    bytes = UINT64_MAX;
+    REQUIRE(cna_cnb_copy_decompressed(0, 0U, CNA_CNB_COMPRESSION_NONE,
+                                      UINT64_MAX, 0U, 0, 0U, &bytes) == CNA_RESULT_SUCCESS);
+    REQUIRE(bytes == 0U);
 
     memset(buffer, 0x5A, sizeof(buffer));
     bytes = UINT64_MAX;

@@ -975,10 +975,9 @@ struct CnjToCnbResultResource final {
         return result;
     }
     const Cnb::CnbCompression nativeCodec = ToCodec(codec);
-    // The order below is DecompressCnbChunk's own, and the order is contract rather than
-    // style: an unsupported codec with an over-ceiling size is reported as the ceiling, and a
-    // stored chunk consults neither size at all. Reversing any pair would answer a different
-    // question than the canonical reader answers about the same file.
+    // For compressed chunks, preserve ceiling-before-codec diagnostics. The C ABI separately
+    // promises that None ignores both declared sizes (docs/c-api/CNB.md, CBIND-106), unlike
+    // the strict C++ helper. Adapt that established ABI contract without weakening the helper.
     if (nativeCodec != Cnb::CnbCompression::None) {
         if (uncompressedSize > maxUncompressedSize) {
             return InvalidArgument(
@@ -992,8 +991,10 @@ struct CnjToCnbResultResource final {
                 ", which this build does not implement.");
         }
     }
+    const bool storedOnly = nativeCodec == Cnb::CnbCompression::None;
     const std::vector<uint8_t> raw = Cnb::DecompressCnbChunk(
-        bytes, nativeCodec, uncompressedSize, maxUncompressedSize, "The CNB chunk");
+        bytes, nativeCodec, storedOnly ? storedByteCount : uncompressedSize,
+        storedOnly ? storedByteCount : maxUncompressedSize, "The CNB chunk");
     return CopyBytes(raw, destination, capacity, outByteCount);
 }
 

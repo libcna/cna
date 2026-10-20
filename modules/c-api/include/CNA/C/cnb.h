@@ -610,6 +610,11 @@ CNA_C_API CNA_Result cna_cnb_copy_compressed(
  * that expands to a different size is a corrupt file rather than a short read someone later treats
  * as data.
  *
+ * Exception for the established C ABI: `CNA_CNB_COMPRESSION_NONE` copies the stored bytes
+ * and ignores both declared sizes. This differs from the strict C++ `DecompressCnbChunk`
+ * helper. Destination capacity is still enforced atomically; callers requiring a stored-chunk
+ * allocation ceiling must check @p stored_byte_count themselves before calling this route.
+ *
  * @param stored The chunk's stored bytes, or null only for a zero count.
  * @param stored_byte_count Number of stored bytes.
  * @param codec The codec named by the chunk's table-of-contents entry.
@@ -620,7 +625,8 @@ CNA_C_API CNA_Result cna_cnb_copy_compressed(
  * @param capacity Destination capacity in bytes.
  * @param out_byte_count Receives the required byte count; always written on a valid output.
  * @return A CNA result code. A codec this build does not implement is `CNA_RESULT_NOT_SUPPORTED`;
- *         an @p uncompressed_size above the ceiling is `CNA_RESULT_INVALID_ARGUMENT`, refused
+ *         for compressed codecs, an @p uncompressed_size above the ceiling is
+ *         `CNA_RESULT_INVALID_ARGUMENT`, refused
  *         before any allocation; a stream that fails to decode or expands to a different size is
  *         `CNA_RESULT_IO`; insufficient capacity performs no partial write.
  */
