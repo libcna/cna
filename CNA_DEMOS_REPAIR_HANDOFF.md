@@ -9,6 +9,22 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+13:51 UTC: native root pipeline85718 COMPLETE0:562=561PASS/one unchangedSDK-fixture
+SKIP,858.214s; exact audit/four hashes match. All native gates pass. Root batch
+013/014 committed bbe2bda7b (three files, no code edits since freeze). External41603
+RUNNING(2),~923/1183, includes bbe2bda7b plus C adapterc57ecab8c. No external focus
+or full final pass yet. One free worker; no other active test jobs.
+
+028 triage: genuine WaveBank path14/14PASS (93820), native streaming6/6PASS (87543),
+strict warning-free/four native hashes unchanged. Two reference compile setup failures
+retained (internal TitleLocation, then GameTime's separate assembly); final reflection
+uses Framework Curve and unchanged expectations. Initial cwd lookup matches genuine
+XNA; historical title-root expectation is wrong. No028 closure: lazy relative path
+reopen after cwd change is a separate source-only concern not yet measured; no media
+runtime patch. Permanent MEDIA_PATH_TRIAGE.md and issue028 progress retain boundaries.
+Next immediate: finish/audit external41603, run roots146 content/354 C API focus and
+external manifest16/cold12, then full frozen gates. All compiled sources remain fixed.
+
 13:44 UTC: root module21730 COMPLETE0:1993=1989PASS/four unchangedSKIP, three new
 focus pass, exact audit/hashes. Consumers58114 COMPLETE0:1412=1408/4, runtime241=
 238/3, XML4/2 and original6/6; exact audit/hashes. Six link checks81512 allPASS.
