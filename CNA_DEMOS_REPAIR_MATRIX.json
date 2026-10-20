@@ -872,11 +872,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "RunImportAndProcess supplies a filtered effective set to Process, but Build returns request.parameters. Manifest creation also copies result.parameters, so requested cache identity must be preserved separately.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Minimized native two-test baseline links frozen f421948fe dependencies:onePASS/oneFAIL4ms. Only effective result metadata fails for all-rejected and mixed sets; exact output bytes, warnings, observed Process parameters, request preservation and distinct requested manifest fingerprints pass. Initial extra-Wall/Wextra setup failure on unchanged fixture warnings retained; successful compilation uses project warning policy plusWerror. Permanent demos docs/repair-evidence/content/EFFECTIVE_PARAMETERS.md. No production fix yet."
+      ],
       "final_disposition": null
     },
     {
