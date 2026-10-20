@@ -1326,19 +1326,13 @@ TEST_F(XnaIntermediateSerializerCorpus, AcceptedInputsNormalizeExactlyAsXnaDid)
         const std::string input = ReadCorpus(item.name + ".input.xml");
         const std::string expected = ReadCorpus(item.name + ".normalized.xml");
         std::string actual;
-        // tinyxml2 cannot parse a processing instruction inside an element (a substrate limit,
-        // recorded in docs/xna-intermediate-xml-format.md).
-        static const std::set<std::string> substrateLimits = {"accept_processing_instruction"};
         try
         {
             actual = trip->second(input, RelocationFor(item.name));
         }
         catch (const std::exception& error)
         {
-            if (substrateLimits.count(item.name) == 0)
-            {
-                ADD_FAILURE() << item.name << ": XNA accepted this input; CNA threw " << error.what();
-            }
+            ADD_FAILURE() << item.name << ": XNA accepted this input; CNA threw " << error.what();
             continue;
         }
         EXPECT_EQ(NeutralizePaths(actual), NeutralizePaths(expected)) << item.name;
@@ -1369,10 +1363,7 @@ TEST_F(XnaIntermediateSerializerCorpus, RejectedInputsAreRefusedWithXnaMessages)
             const std::string produced = trip->second(input, RelocationFor(item.name));
             // Recorded lenience: CNA accepts these inputs that XNA refuses (docs/xna-intermediate-xml-format.md).
             static const std::set<std::string> deliberatelyAccepted = {
-                "accept_int_array_from_list_type", "accept_list_from_array_type",
-                // tinyxml2 tolerates a byte-order mark inside the text handed to it; .NET's string
-                // reader does not (substrate difference, recorded).
-                "accept_bom_and_declaration"};
+                "accept_int_array_from_list_type", "accept_list_from_array_type"};
             if (deliberatelyAccepted.count(item.name) == 0)
             {
                 ADD_FAILURE() << item.name << ": XNA refused this input (" << item.note << "); CNA produced\n" << produced;

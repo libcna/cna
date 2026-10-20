@@ -325,10 +325,12 @@ the corpus test (`modules/content-pipeline/tests/…/XnaIntermediateSerializerTe
 * **Number formatting is .NET Framework 4.0's.** `R` writes 7 or 9 significant digits for `float`
   and 15 or 17 for `double`, with `E+300`-style exponents (§4); sharp-runtime's own `Single::ToString`
   follows .NET Core's shortest round-trip form, which XNA never wrote.
-* **tinyxml2 is the XML substrate.** It rejects a processing instruction inside an element
-  (`accept_processing_instruction`, which XNA accepts) and tolerates a byte-order mark inside the
-  text handed to the reader (`accept_bom_and_declaration`, which .NET rejects); it keeps
-  whitespace-only element content but drops indentation between elements, reports no
+* **tinyxml2 is the XML substrate.** The Sharp Runtime processing-instruction repair
+  accepts instructions inside elements (`accept_processing_instruction`) while
+  preserving declaration restrictions. Its character-input boundary rejects a leading
+  U+FEFF on the first read (`accept_bom_and_declaration`), so the serializer wraps it
+  as `InvalidContentException`, matching XNA. Encoded file preambles remain accepted.
+  The parser keeps whitespace-only element content but drops indentation between elements, reports no
   column, so `Line L, position 0.` replaces .NET's column in messages, and refuses element
   nesting beyond 500 levels while parsing (the corpus's deepest graph has 200; XNA has no ceiling
   and overflows its stack instead). The serializer keeps its own 1024-level guard behind that for

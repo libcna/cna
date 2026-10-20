@@ -9,6 +9,17 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Native final37179 COMPLETE0:10791 cases=10690PASS/101 unchangedSKIP,1647.295s;
+exact case-by-case comparison with the frustum publication baseline errors[],
+all three frozen native hashes unchanged. Strict corpus9/9 also passes with
+original goldens/diagnostic comparisons intact and both PI/BOM exemptions removed.
+Native artifact freeze released. External74592 remains RUNNING on319 frozen
+artifacts; SOFTWARE719 exact627/41/48/3, OPENGLES3 and finalCTest still pending.
+Commit the native corpus/docs now; do not close any ID on this partial final gate.
+Audit also identified043/045 still legitimately pending the same original C-root
+conflict; include their existing focused/native/sanitizer evidence in final closure
+review alongside039/103/148. Counts85FINAL/70PENDING unchanged. No new push.
+
 Latest verified continuation: full SOFTWARE719 completes627PASS/41FAIL/48SKIP/
 three manual; both original-baseline and predecessor audits pass with no residual
 C-root discrepancy. Exactly two improvements since016,70 since initial baseline.
