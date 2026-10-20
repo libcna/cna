@@ -9,6 +9,32 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+11:25 UTC:089 runtime COMMITTED5d32ca58b, full regression pending. Native559
+pipeline15936 COMPLETE0 (558PASS/one sameSKIP818.582s); consumers93704 COMPLETE0
+(1412=1408PASS/fourSKIP129.299s,runtime238PASS/threeSKIP9.367s,XML4/2 and6/6PASS),
+all exact audits/four hashes match. External58110 COMPLETE0,105 printed steps,
+zero warnings,nine source hashes match. Initial focus31609 actual cases65PASS/eight
+unchangedFAIL eachrenderer; helperexit1 ONLY stale historical18 child count (actual
+predecessor/current both20). Read-only *initial-label-audit.json proves same20
+ordered labels/only089 improvement; first failed audit preserved, no rerun.
+087 closure remains75/80; no global C root waiver.
+
+Marker089/restriction removed after20/20 proof, build88124 COMPLETE0 nine steps
+warning-free; marker focus55039 RUNNING(1). No other active jobs. After it passes,
+freeze319 via repair-content-dispatch-final-gates.mjs intermediate-initialization
+under private GPU. Shared full/predecessor helpers extended for65 cumulative
+improvements and only089 predecessor delta; original C root residual still strict.
+Then serial CTest/hashes, no overlapping SystemLink. Do not rebuild external.
+
+012 genuine ResourceContentColdOracle now14/14PASS, strict C#4/x86; no Game/GPU
+service. Native four-case baseline1PASS/threeFAIL is committed demos7e63c20. No012
+production change yet. Ordinary stream routing and cold builtin-family registration
+are separate causes. Preserve per-family linkage, first explicit registration,
+withdrawal across later family materialization, and restoration by a subsequent
+Game; do not merely flip the initial declared flag (provisional factory precedence).
+Current uncommitted demos:089 marker and genuine012 source/evidence; CNA status
+updates only. Runtime089 committed; native artifacts still frozen pending release.
+
 11:16 UTC:087 CLOSED FIXED_VALIDATED;75 FINAL/80 PENDING of155. Final external24965
 COMPLETE1 solely for retained original-baseline C root-contract delta. CTest itself
 COMPLETE0:735 inventory/732 enabled,684PASS/48 unchangedSKIP/three disabled670.99s,
