@@ -9,6 +9,50 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Latest verified continuation: full SOFTWARE719 completes627PASS/41FAIL/48SKIP/
+three manual; both original-baseline and predecessor audits pass with no residual
+C-root discrepancy. Exactly two improvements since016,70 since initial baseline.
+OPENGLES3/CTest74592 and native37179 still running; no artifact freeze released.
+Independent ownership probe62694 COMPLETE0 (test process expected1):four actual
+Texture2D cases give onePASS/threeFAIL,15 precise missing-disposal assertions.
+All pixel/copy/move/independent-manager/Dispose(false) controls pass; strict build
+and three native frozen hashes verified. Permanent regression/evidence committed
+in demos005899e. No011 production change; counts85/70 remain unchanged.
+
+Active final checkpoints:37179 native full suite (in genuine XNA differential
+build comparison),74592 external full both719/math/visual/CTest. FREEZE native
+three test binaries and external319 artifacts until these jobs finish. No builds
+currently running. External27083 COMPLETE0(476 printed/479 steps),no compiler
+warnings; marker build68007 COMPLETE0(9/10 steps). Canonical focused21825 and
+post-marker82771 both COMPLETE0:each renderer XML36/36 exact retained labels,
+C ContentManager67/67 exact approved candidate labels,C++ cache5/5. Only103/148
+knownIssue/restriction metadata removed; source assertions unchanged.
+Prepared exact original-baseline comparator expects70 demo status improvements
+(two more than016),with no C-root residual allowed. Local comparator permits
+only these two FAIL->PASS transitions; all other status/marker/check/failure
+multisets must remain identical. Do not close039/103/148 before full audit.
+Current source changes: CNA corpus exemptions/docs plus handoff/matrix; demos
+two metadata files,HANDOFF,XML_SUBSTRATE.md. Sharp97713eb2 clean/unpushed.
+Read-only152 review confirms fstream cannot enforce requested sharing before
+truncating; a same-native-handle lower-layer design is required. No152 code edit.
+
+Current active jobs:37179 native CNA full suite on private display;27083 canonical
+demos build (two compilation workers). No other active campaign build/test jobs.
+Sharp commits d326d37b test scheduling,16993ac6 PI parser,97713eb2 character BOM
+are local/unpushed; Sharp worktree clean. Whole dependency gate18158/41 executables
+passes zeroFAIL/SKIP;574XML/352XML.Linq,actual Reader/Document ASan/UBSan/leak5/5,
+parser4/4 sanitizer,44modules/109edges boundary check,zero build warnings.
+Native CNA build39216 COMPLETE0,108 printed/111 tasks; both corpus exemptions
+removed in uncommitted test/docs candidate. Fresh genuine corpus9/9 passes with
+goldens and exact diagnostic comparisons unchanged. Full10791 outcomes pending.
+Current CNA revision92625c32b,demos6f307f4,Sharp97713eb2. Counts85FINAL/70PENDING.
+Next:finish native37179 and external27083; actual148/C-root focused runs; only
+then remove passing markers,commit corpus/evidence and full both719/CTest/visual
+checkpoint. Do not rebuild frozen native CnaTests/CnaContentTests/PipelineTests
+during37179. PI/BOM permanent evidence:demos XML_SUBSTRATE.md (uncommitted).
+Other malformed-XML eager factory timing remains explicitly documented, not
+claimed fully streaming-compatible. No process stopped for memory; no new push.
+
 016 evidence/demo closure committed6f307f4;155 historical bodies audited intact
 (154 unchanged,016 original body retained under resolution note). Counts85/70.
 Sharp full gate39469 COMPLETE0:18151PASS across41 executables,zeroFAIL/zeroSKIP,
