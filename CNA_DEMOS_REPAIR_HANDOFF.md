@@ -13,7 +13,7 @@ AUTHORITATIVE UPDATE (supersedes all older checkpoint text below):
 Phase F. All155 historical IDs retained:74 FINAL/81 PENDING. Totals:41 fixed runtime
 findings,23 documentation corrections,eight pre-campaign fixes,one duplicate and
 one demo-expectation defect. Goal unchanged. Nothing pushed or merged.
-CNA HEAD583af2a5e (039/045 runtime), demos733404f (048 closure6633f80),
+CNA runtime583af2a5e (status HEAD47ac55163), demos9c320f3 (048 closure6633f80),
 Sharp99c2f79c.039/045 runtime and eight new native cases are committed, with
 evidence-backed existing test corrections; both remain FIXED_PENDING_REGRESSION.
 They were NOT part of the completed048 checkpoint binary set.
@@ -85,8 +85,14 @@ CLOSED048 FIXED_VALIDATED:
  (62vsComplete1128), differences[]. Final isolated serial CTest59450 COMPLETE0;
  all319 pre/post hashes and unchanged735-status/48-skip audit pass.048 now CLOSED.
 Maximum THREE campaign compiler/test workers, Sharp at mostTWO; no concurrent
-SystemLink suites; private GPU wrapper only. Current jobs66736 pipeline(1) and
-6996 external build(2). Previous validation jobs have completed.
+SystemLink suites; private GPU wrapper only. Pipeline66736 COMPLETE0:552 cases,
+551PASS/one unchanged XACT SKIP1212.106s. Exact552 outcome audit against048 has
+errors[] and all four corrected native hashes match after the pipeline. Current
+native consumers80119 COMPLETE0:1412=1408PASS/four sameSKIP234.190s,
+runtime241=238PASS/three sameSKIP11.223s, defaultXML4PASS/two sameSKIP;
+original-fixture XML6/6PASS4ms. Exact four consumer audits errors[] and all four
+final hashes match. Native freeze RELEASED; external build6996(2) still reads
+the source, so defer production edits until it finishes.
 
 NEXT RUNTIME BATCH EVIDENCE:
 ContentOwnershipOracle.cs35/35 actual XNA4 strict C#4/x86, no GPU/services. Pins
@@ -166,8 +172,7 @@ bypass index, IDisposable value types never record, all four existing-value over
 throw InvalidOperationException due boxed identity. Do not apply reference-type
 dispatch rules to value targets or blindly preserve existing incorrect native expectations.
 
-EXACT NEXT: finish552 native pipeline66736, exact552-outcome audit against048,
-then1412 consumers/runtime241/originalXML and native hashes. Finish external build6996,
+EXACT NEXT: finish external build6996,
 run prepared repair-content-runtime-focused.mjs (73 content demos each renderer,
 only039/045 assertion changes allowed; preserve all other failures/counts), then
 remove those markers only after focused passes. Run full62-improvement checkpoint,
@@ -184,6 +189,21 @@ its markers argument expects only039/045 markers removed after verified passes.
 External6996 schedules1037steps; native66736 differential corpus has passed its long
 accept/refuse comparison (802.611s suite), error-parity and remaining cases continue.
 Sharp99c2f79c, EasyGLf4d6afa and MetaGLdd3b300 were freshly checked clean.
+Read-only demo review found a likely additional oracle correction: content_manager/
+read_asset_ownership.cpp catches raw EndOfStreamException around ReadAsset's
+truncated_tiles input. Genuine91/body evidence requires ContentLoadException at
+that boundary; direct ReadBytesExactOrThrow must retain EOF. Do NOT edit the demo
+while6996 compiles. First retain the completed build's strict focused failure,
+then change only the exact catch type if confirmed, preserving reader-name,
+zero-record, opened/destroyed stream checks and count.011 must remain open.
+Expanded043 lookup before probe82991 COMPLETE1 as expected:eleven cases,
+fourPASS/sevenFAIL0ms; strict Wall/Wextra/Werror compile passes. Original eight
+unchanged, three compatibility controls added (same-name/manual associations and
+throwing factory publication). Reports repair-reader-lookup-before*. Separate
+five-check genuine XNA lookup oracle54615 COMPLETE0:5/5, strict C#4/x86/Werror.
+Distinct target/reader names resolve during Initialize; implicit raw read yields73
+without an index. Genuine same-reader identity is measured separately; preserve
+CNA's documented fresh unique_ptr ownership. Reports repair-reader-lookup-xna*.
 Uncommitted runtime work: none. Current evidence/status updates are committed
 separately. All failed setup/regression logs remain; corrected native gate passes.
 Owner-reserved131 untouched;152 sharing policy and148
