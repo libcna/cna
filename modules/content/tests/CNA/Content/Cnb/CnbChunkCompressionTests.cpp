@@ -15,6 +15,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <typeinfo>
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbByteWriter.hpp"
@@ -93,6 +94,62 @@ TEST(CnbChunkCompressionTest, CompressionIsOffByDefaultAndChangesNoByte)
     {
         EXPECT_EQ(document.ChunkAt(i).compression, CnbCompression::None);
         EXPECT_EQ(document.ChunkAt(i).storedSize, document.ChunkAt(i).uncompressedSize);
+    }
+}
+
+TEST(CnbChunkCompressionTest, UncompressedChunksPreserveExactBytesAndIndependentStorage)
+{
+    using CNA::Content::Cnb::DecompressCnbChunk;
+    EXPECT_TRUE(DecompressCnbChunk({}, CnbCompression::None, 0, 0, "empty").empty());
+    const std::vector<std::uint8_t> stored{1, 2, 3, 4};
+    auto decoded = DecompressCnbChunk(stored, CnbCompression::None, 4, 4, "exact");
+    ASSERT_EQ(decoded, stored);
+    EXPECT_NE(decoded.data(), stored.data());
+    decoded.front() = 9;
+    EXPECT_EQ(stored.front(), 1);
+}
+
+TEST(CnbChunkCompressionTest, UncompressedChunksRefuseEveryDeclaredSizeMismatch)
+{
+    using CNA::Content::Cnb::DecompressCnbChunk;
+    const std::vector<std::uint8_t> stored{1, 2, 3, 4};
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    for (const std::uint64_t size : {0ull, 3ull, 5ull, static_cast<unsigned long long>(maximum)})
+    {
+        SCOPED_TRACE(size);
+        try
+        {
+            (void)DecompressCnbChunk(stored, CnbCompression::None, size, maximum, "plain chunk");
+            FAIL() << "mismatched uncompressed size must be refused";
+        }
+        catch (const ContentLoadException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(ContentLoadException));
+            EXPECT_NE(error.getMessageProperty().find("plain chunk"), std::string::npos);
+        }
+    }
+    EXPECT_THROW((void)DecompressCnbChunk({}, CnbCompression::None, 1, 1, "empty mismatch"),
+                 ContentLoadException);
+}
+
+TEST(CnbChunkCompressionTest, UncompressedChunksHonorTheCeilingBeforeCopying)
+{
+    using CNA::Content::Cnb::DecompressCnbChunk;
+    const std::vector<std::uint8_t> stored(4096, 42);
+    for (const std::uint64_t size : {4096ull, 4097ull})
+    {
+        SCOPED_TRACE(size);
+        try
+        {
+            (void)DecompressCnbChunk(stored, CnbCompression::None, size, 1, "bounded chunk");
+            FAIL() << "the limit applies to stored chunks too";
+        }
+        catch (const ContentLoadException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(ContentLoadException));
+            EXPECT_NE(error.getMessageProperty().find("bounded chunk"), std::string::npos);
+            EXPECT_NE(error.getMessageProperty().find("before allocating"), std::string::npos);
+        }
     }
 }
 

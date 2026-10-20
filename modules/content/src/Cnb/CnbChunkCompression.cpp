@@ -81,11 +81,6 @@ namespace CNA::Content::Cnb
                                                   std::uint64_t maxUncompressedSize,
                                                   const std::string& where)
     {
-        if (codec == CnbCompression::None)
-        {
-            return std::vector<std::uint8_t>(stored.begin(), stored.end());
-        }
-
         // The ceiling is checked BEFORE the allocation, not after the decode. uncompressedSize is
         // a number out of the file, so a few kilobytes of hostile input could otherwise ask for
         // gigabytes and get them.
@@ -95,6 +90,20 @@ namespace CNA::Content::Cnb
                 where + " declares an unpacked size of " + std::to_string(uncompressedSize) +
                 " bytes, above the configured limit of " + std::to_string(maxUncompressedSize) +
                 ". Refused before allocating anything.");
+        }
+
+        if (codec == CnbCompression::None)
+        {
+            // The public helper has the same exact-size contract for stored chunks. Validate
+            // before copying, even when no container parser has checked the table entry first.
+            if (stored.size() != uncompressedSize)
+            {
+                throw ContentLoadException(
+                    where + " stores " + std::to_string(stored.size()) +
+                    " uncompressed bytes, but its table-of-contents entry declares " +
+                    std::to_string(uncompressedSize) + ".");
+            }
+            return std::vector<std::uint8_t>(stored.begin(), stored.end());
         }
 
 #if defined(CNA_CNB_HAVE_ZSTD)
