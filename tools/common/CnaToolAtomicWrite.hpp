@@ -433,6 +433,7 @@ namespace CNA::Tools
      * The copy uses the same exclusively created sibling temporary and platform replacement path
      * as WriteFileAtomically(). The source is never opened for writing and the destination is not
      * changed unless the complete stream was read, written, and closed successfully.
+     * The source handle is closed before publication, including when both paths name the same file.
      *
      * @param source Existing regular file to copy.
      * @param destination Final path to create or replace.
@@ -464,9 +465,18 @@ namespace CNA::Tools
                     return false;
                 }
             }
-            if (!input.eof())
+            if (input.bad() || !input.eof())
             {
                 throw std::runtime_error("failed while reading deployment source '" +
+                                         source.string() + "'");
+            }
+            // A generated output may already be at its destination. Windows cannot
+            // replace that file while this reader still holds it without delete sharing.
+            input.clear();
+            input.close();
+            if (input.fail())
+            {
+                throw std::runtime_error("failed while closing deployment source '" +
                                          source.string() + "'");
             }
             return true;

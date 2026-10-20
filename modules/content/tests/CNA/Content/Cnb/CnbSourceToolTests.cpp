@@ -702,6 +702,21 @@ TEST(CnbSourceToolTest, WriteFileAtomicallyReplacesWhatIsThereAndWritesAnEmptyFi
     EXPECT_EQ(EntryNames(dir.path()), (std::vector<std::string>{"asset.bin"}));
 }
 
+TEST(CnbSourceToolTest, AtomicCopyCanRepublishTheSameFileAndItsLexicalAlias)
+{
+    ScratchDir dir("atomic_self_copy");
+    const auto file = dir.path() / "asset.bin";
+    for (const auto& bytes : std::vector<std::vector<std::uint8_t>>{{0u, 255u, 42u}, {}})
+    {
+        WriteBytes(file, bytes);
+        ASSERT_NO_THROW(CNA::Tools::CopyFileAtomically(file, file));
+        EXPECT_EQ(ReadBytes(file), bytes);
+        ASSERT_NO_THROW(CNA::Tools::CopyFileAtomically(file, dir.path() / "." / "asset.bin"));
+        EXPECT_EQ(ReadBytes(file), bytes);
+        EXPECT_EQ(EntryNames(dir.path()), (std::vector<std::string>{"asset.bin"}));
+    }
+}
+
 TEST(CnbSourceToolTest, CopyFileAtomicallyStreamsAndPreservesOldOutputOnSourceFailure)
 {
     ScratchDir dir("atomic_copy");
