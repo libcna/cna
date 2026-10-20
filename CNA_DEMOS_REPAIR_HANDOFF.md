@@ -9,6 +9,26 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Owner decisions received after the 14:38 checkpoint (explicit replies, not defaults):
+- ISSUE-152: preserve native .NET FileShare behavior on each platform and document
+  Windows/Linux differences. The original exclusive FileShare.None demo must pass
+  on both. This resolves the policy question, not implementation/validation.
+- ISSUE-148: a narrow, documented vendored tinyxml2 processing-instruction parser
+  repair is authorized, with regression tests and corrected vendor provenance.
+- RootDirectory C API conflict (039/103): unify with XNA/C++; explicitly correct
+  the C documentation and demo contract. Preserve cache/disposal assertions; add
+  refusal/exception evidence instead of hiding the previously observed failure.
+These three policy blockers are removed. None is newly claimed fixed by approval.
+
+016 minimized successfully to one actual-CNA translation unit: strict-built probe
+constructs no Game/device/service and only retains an uncalled GamerServices function.
+Control exits0 with zero strong Graphics definitions; without the demo's first-DSO
+workaround it aborts at exit and contains1213 strong Graphics definitions. Evidence:
+docs/repair-evidence/build/MixedRuntimeLifetimeProbe.cpp and ignored reports
+repair-mixed-runtime-minimal-before-*. Next: repair umbrella link ordering, verify
+actual mixed consumers and keep module-only consumers static. No production patch yet.
+Closure commits now CNA8f0af7a8c / demosb71f57c;84 FINAL/71 PENDING unchanged.
+
 14:38 UTC: ISSUE-001 FIXED_VALIDATED; native/external CMake policy gates complete.
 External57606 COMPLETE0,50 printed steps/only prior Draco CMP0148 dev warning,
 all319 artifacts byte-identical to the completed roots checkpoint;11 sources exact.
