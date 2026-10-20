@@ -222,6 +222,50 @@ TEST(FontDescriptionTest, CharacterRegionsExpandAscendingAndDeduplicated)
     EXPECT_EQ(characters, expected);
 }
 
+TEST(FontDescriptionTest, ProgrammaticInvertedRegionsAreRefusedWithoutMutatingInput)
+{
+    const std::vector<std::vector<Pipeline::FontCharacterRegion>> cases{
+        {{u'z', u'a'}},
+        {{u'a', u'b'}, {u'z', u'c'}},
+        {{u'z', u'c'}, {u'a', u'b'}},
+        {{u'\uffff', u'\0'}}
+    };
+    for (const auto& regions : cases)
+    {
+        Pipeline::FontDescription description;
+        description.characterRegions = regions;
+        // A fallback must not turn malformed authored regions into a valid singleton set.
+        description.defaultCharacter = u'?';
+        const auto original = description;
+        try
+        {
+            (void)Pipeline::ExpandCharacterRegions(description);
+            FAIL() << "every inverted region must be refused";
+        }
+        catch (const std::runtime_error& error)
+        {
+            EXPECT_NE(std::string(error.what()).find("ends before it starts"), std::string::npos);
+        }
+        EXPECT_EQ(description, original);
+    }
+}
+
+TEST(FontDescriptionTest, DirectExpansionRetainsEmptyEndpointAndExactLimitBehavior)
+{
+    Pipeline::FontDescription description;
+    EXPECT_TRUE(Pipeline::ExpandCharacterRegions(description).empty());
+    description.characterRegions = {{u'\uffff', u'\uffff'}};
+    EXPECT_EQ(Pipeline::ExpandCharacterRegions(description),
+              (std::vector<SharpRuntime::charcs>{u'\uffff'}));
+    description.characterRegions = {{0, 8191}};
+    EXPECT_EQ(Pipeline::ExpandCharacterRegions(description).size(), 8192u);
+    description.characterRegions = {{0, 8192}};
+    EXPECT_THROW((void)Pipeline::ExpandCharacterRegions(description), std::runtime_error);
+    description.characterRegions = {{0, 8191}};
+    description.defaultCharacter = u'\uffff';
+    EXPECT_THROW((void)Pipeline::ExpandCharacterRegions(description), std::runtime_error);
+}
+
 // A <DefaultCharacter> the regions do not cover joins them, which is what XNA does: measured on
 // font_regions.spritefont, whose two regions cover 42 characters and whose built font carries 43
 // (plans/plan_xnapipeline_parity.md XNAPP-182). Refusing was this pipeline's own idea, and the

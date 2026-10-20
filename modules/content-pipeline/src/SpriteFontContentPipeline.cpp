@@ -260,6 +260,10 @@ namespace CNA::Content::Pipeline
         std::set<SharpRuntime::charcs> characters;
         for (const FontCharacterRegion& region : description.characterRegions)
         {
+            if (region.end < region.start)
+            {
+                throw std::runtime_error("a SpriteFont character region ends before it starts");
+            }
             for (std::uint32_t code = region.start; code <= region.end; ++code)
             {
                 characters.insert(static_cast<SharpRuntime::charcs>(code));
