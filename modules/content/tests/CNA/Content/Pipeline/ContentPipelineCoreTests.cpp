@@ -301,6 +301,43 @@ namespace
         OutputBehavior behavior_ = OutputBehavior::PrimaryOnly;
     };
 
+    class EffectiveParameterProcessor final : public Pipeline::ContentProcessor
+    {
+    public:
+        Pipeline::ContentComponentIdentity Identity() const override
+        {
+            return {"test.EffectiveParameterProcessor", "1"};
+        }
+        std::string InputType() const override { return kImportedType; }
+        std::string OutputType() const override { return kProcessedType; }
+        void ValidateParameters(const Pipeline::ContentProcessorParameters& parameters) const override
+        {
+            for (const auto& [name, value] : parameters.Values())
+            {
+                if (name != "multiplier")
+                {
+                    throw Pipeline::ContentParameterError(Pipeline::ContentParameterFault::UnknownName,
+                                                          name, "Unknown multiplier parameter.");
+                }
+                if (!std::holds_alternative<std::uint64_t>(value))
+                {
+                    throw Pipeline::ContentParameterError(Pipeline::ContentParameterFault::UnconvertibleValue,
+                                                          name, "Multiplier must be unsigned.");
+                }
+            }
+        }
+        Pipeline::ContentValue Process(const Pipeline::ContentValue& input,
+                                       Pipeline::ContentProcessorContext& context) const override
+        {
+            observed = context.Parameters();
+            const auto* value = observed.Find("multiplier");
+            const auto multiplier = value ? std::get<std::uint64_t>(*value) : 1u;
+            return Pipeline::ContentValue::Create(kProcessedType,
+                ProcessedNumber{input.Get<ImportedNumber>().value * static_cast<int>(multiplier)});
+        }
+        mutable Pipeline::ContentProcessorParameters observed;
+    };
+
     class DeploymentProcessor final : public Pipeline::ContentProcessor
     {
     public:
@@ -386,6 +423,99 @@ namespace
         request.logicalName = "Numbers/asset";
         return request;
     }
+}
+
+TEST(ContentEffectiveParametersTest, LenientResultMatchesTheParametersActuallyGivenToTheProcessor)
+{
+    for (const bool validMultiplier : {false, true})
+    {
+        SCOPED_TRACE(validMultiplier);
+        ScratchDirectory scratch("effective_parameters");
+        auto request = MakeRequest(scratch);
+        request.environment.strictness = Pipeline::ContentStrictness::XnaCompatible;
+        request.parameters.Set("unknown", 1.5);
+        if (validMultiplier) request.parameters.Set("multiplier", std::uint64_t{3});
+        else request.parameters.Set("multiplier", std::string("invalid"));
+        const auto original = request.parameters.Values();
+        auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+        auto processor = std::make_shared<EffectiveParameterProcessor>();
+        registry->RegisterImporter(std::make_shared<NumberImporter>());
+        registry->RegisterProcessor(processor);
+        registry->RegisterWriter(std::make_shared<NumberWriter>());
+        const auto result = Pipeline::ContentPipeline(registry).Build(request);
+        EXPECT_EQ(request.parameters.Values(), original);
+        ASSERT_TRUE(result.requestedParameters.has_value());
+        EXPECT_EQ(result.requestedParameters->Values(), original);
+        EXPECT_EQ(processor->observed.Values().size(), validMultiplier ? 1u : 0u);
+        EXPECT_EQ(result.parameters.Values(), processor->observed.Values());
+        EXPECT_EQ(result.output.bytes, (std::vector<std::uint8_t>{
+            static_cast<std::uint8_t>(validMultiplier ? 21 : 7),
+            static_cast<std::uint8_t>(request.logicalName.size())}));
+        EXPECT_EQ(std::count_if(result.messages.begin(), result.messages.end(), [](const auto& message) {
+            return message.level == Pipeline::ContentLogLevel::Warning;
+        }), validMultiplier ? 1 : 2);
+    }
+}
+
+TEST(ContentEffectiveParametersTest, LenientManifestRetainsTheRequestedCacheIdentity)
+{
+    ScratchDirectory scratch("effective_parameter_manifest");
+    auto request = MakeRequest(scratch);
+    request.environment.strictness = Pipeline::ContentStrictness::XnaCompatible;
+    request.parameters.Set("unknown", std::string("first"));
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    registry->RegisterImporter(std::make_shared<NumberImporter>());
+    registry->RegisterProcessor(std::make_shared<EffectiveParameterProcessor>());
+    registry->RegisterWriter(std::make_shared<NumberWriter>());
+    const Pipeline::ContentPipeline pipeline(registry);
+    const auto outputRoot = scratch.Path() / "output";
+    std::filesystem::create_directories(outputRoot);
+    const auto firstResult = pipeline.Build(request);
+    const auto first = Pipeline::MakeContentBuildManifestEntry(
+        firstResult, scratch.Path(), outputRoot, outputRoot / "Numbers/asset.cnb");
+    EXPECT_EQ(first.parameters.Values(), request.parameters.Values());
+    request.parameters.Set("unknown", std::string("second"));
+    const auto secondResult = pipeline.Build(request);
+    const auto second = Pipeline::MakeContentBuildManifestEntry(
+        secondResult, scratch.Path(), outputRoot, outputRoot / "Numbers/asset.cnb");
+    EXPECT_EQ(second.parameters.Values(), request.parameters.Values());
+    EXPECT_EQ(firstResult.output.bytes, secondResult.output.bytes);
+    EXPECT_NE(Pipeline::ComputeContentBuildDirectFingerprint(first, scratch.Path()),
+              Pipeline::ComputeContentBuildDirectFingerprint(second, scratch.Path()));
+}
+
+TEST(ContentEffectiveParametersTest, StrictAndDefaultBuildsRetainBothParameterViews)
+{
+    ScratchDirectory scratch("strict_effective_parameters");
+    auto request = MakeRequest(scratch);
+    const Pipeline::ContentPipeline pipeline(MakeRegistry());
+    for (const bool configured : {false, true})
+    {
+        if (configured) request.parameters.Set("multiplier", std::uint64_t{2});
+        const auto result = pipeline.Build(request);
+        ASSERT_TRUE(result.requestedParameters.has_value());
+        EXPECT_EQ(result.parameters.Values(), request.parameters.Values());
+        EXPECT_EQ(result.requestedParameters->Values(), request.parameters.Values());
+    }
+}
+
+TEST(ContentEffectiveParametersTest, ManuallyConstructedResultsKeepTheLegacyManifestContract)
+{
+    ScratchDirectory scratch("manual_effective_parameters");
+    auto request = MakeRequest(scratch);
+    request.parameters.Set("multiplier", std::uint64_t{2});
+    auto result = Pipeline::ContentPipeline(MakeRegistry()).Build(request);
+    const auto outputRoot = scratch.Path() / "output";
+    std::filesystem::create_directories(outputRoot);
+    const auto expected = Pipeline::MakeContentBuildManifestEntry(
+        result, scratch.Path(), outputRoot, outputRoot / "Numbers/asset.cnb");
+    // An external/manual producer predating requestedParameters only populates parameters.
+    result.requestedParameters.reset();
+    const auto manual = Pipeline::MakeContentBuildManifestEntry(
+        result, scratch.Path(), outputRoot, outputRoot / "Numbers/asset.cnb");
+    EXPECT_EQ(manual.parameters.Values(), request.parameters.Values());
+    EXPECT_EQ(Pipeline::ComputeContentBuildDirectFingerprint(manual, scratch.Path()),
+              Pipeline::ComputeContentBuildDirectFingerprint(expected, scratch.Path()));
 }
 
 TEST(ContentPipelineCoreTest, RegistryRejectsDuplicateStableComponentNames)

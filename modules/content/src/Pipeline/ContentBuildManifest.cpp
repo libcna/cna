@@ -1348,7 +1348,7 @@ namespace CNA::Content::Pipeline
         entry.processor = result.processor;
         entry.writer = result.writer;
         entry.writerSchemas = result.writerSchemas;
-        entry.parameters = result.parameters;
+        entry.parameters = result.requestedParameters ? *result.requestedParameters : result.parameters;
         entry.runtimeReferences = result.runtimeReferences;
         const auto schemaFor = [&](std::uint32_t assetTypeId,
                                    const std::string& assetTypeName,

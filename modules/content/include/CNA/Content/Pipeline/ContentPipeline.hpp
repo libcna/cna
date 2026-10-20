@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <shared_mutex>
 #include <span>
@@ -1603,6 +1604,15 @@ namespace CNA::Content::Pipeline
 
         /** @brief True for the current non-incremental coordinator; future manifests may skip. */
         bool built = true;
+
+        /**
+         * @brief Original processor configuration used for incremental build identity.
+         *
+         * Build always records the request, including parameters rejected in XnaCompatible
+         * mode; parameters contains only the effective set passed to Process. When constructing
+         * a result manually, leave this unset to use parameters as the requested configuration.
+         */
+        std::optional<ContentProcessorParameters> requestedParameters;
     };
 
     /** @brief Result of ContentPipeline::ImportAndProcess(): a processed value that was not written. */

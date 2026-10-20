@@ -12,7 +12,8 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 AUTHORITATIVE UPDATE (supersedes the earlier checkpoint text below):
 Phase F, still68 FINAL/87 PENDING of155. Validated runtime sourcef421948fe;
 external marker source3d1f833 (later demo commits only add evidence); Sharp99c2f79c.
-Uncommitted048 source is now building separately. Goal unchanged. No push/merge.
+048 native build and251-case pipeline gate pass; complete regression remains pending.
+Goal unchanged. No push/merge.
 Last fully CLOSED regression is
 146/147/149 (CNA50127b2f7, demosa604560); see content/CHECKPOINT.md.
 
@@ -76,13 +77,19 @@ RUNNING/FROZEN:
    in repair-effective-parameters-project-before-driver.log:onePASS/oneFAIL4ms,
    exactly wrong effective metadata in all-rejected and mixed parameter sets;
    requested manifest/cache identity guard PASSES. Candidate048 production repair
-   now UNCOMMITTED: carry stage.effectiveParameters into result.parameters;
+   now focused validated: carry stage.effectiveParameters into result.parameters;
    append optional requestedParameters to preserve original manifest/cache identity
    (unset manual results fall back to parameters). Manifest schema/fingerprint
    algorithm unchanged. Two additional tests pin strict/default views and manual
-   result compatibility. Native whole build89679 parallel2 RUNNING (1164 steps);
-   log repair-effective-parameters-native-build.log. Only the two known material
-   nodiscard warnings seen so far. No after-pass or048 closure yet.
+   result compatibility. Native whole build89679 COMPLETE0 (1164 steps), retaining
+   only the two known material nodiscard warnings. Pipeline gate33745 COMPLETE0:
+   251cases,250PASS/one same large-file SKIP60.971s. All246 original outcomes
+   unchanged, four new048 plus the earlier digest regression PASS,differences[].
+   Original11161-case CTest log is the baseline; its LastTest file is empty.
+   Native four artifacts now FROZEN in repair-effective-parameters-native-frozen.sha256.
+   XNA pipeline552 regression8475 RUNNING; log repair-effective-parameters-native-after.log.
+   No external048 rebuild or closure yet. No native rebuild until this gate and
+   consumers/final hash audit finish.
 4. Genuine ContentOwnershipOracle.cs35/35, strict C#4/x86 build and actual XNA4
    run54890 COMPLETE0. Public custom readers and real in-memory XNB, no GPU/service
    emulation. Confirms inline/shared recording, no default identity deduplication,
@@ -96,9 +103,9 @@ MaximumTHREE workers. No concurrent SystemLink suites; private GPU wrapper only.
 EXACT NEXT: finish isolated serial CTest9154 and319-hash audit; both complete
 renderer comparisons and native552/consumer gates already pass. Keep148 and089
 markers. Close088/090/111/046/030 only when all gates genuinely pass (would73FINAL).
-Complete048 native build/focused tests, then its own external and regression gates.
+Complete048 native552/consumer/hash gates, then its external and regression gates.
 131 OWNER-RESERVED;152 sharing policy and148 vendor policy unanswered.
-Uncommitted work:048 ContentPipeline.hpp/.cpp, ContentBuildManifest.hpp/.cpp,
+Current commit:048 ContentPipeline.hpp/.cpp, ContentBuildManifest.hpp/.cpp,
 four tests in ContentPipelineCoreTests.cpp and this status update. Existing XML
 runtime repairs and external marker changes committed. External freeze stays held;
 do NOT rebuild it for048 until current both-sweep/final-CTest/hash gates finish.

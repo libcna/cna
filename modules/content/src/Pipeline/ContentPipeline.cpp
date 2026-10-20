@@ -1328,6 +1328,7 @@ namespace CNA::Content::Pipeline
         std::shared_ptr<const ContentProcessor> processor;
         ContentValue imported;
         ContentValue processed;
+        ContentProcessorParameters effectiveParameters;
         std::vector<ContentAdditionalWriteOutput> nestedOutputs;
         std::vector<ContentWriterSchemaIdentity> nestedWriterSchemas;
     };
@@ -1468,8 +1469,9 @@ namespace CNA::Content::Pipeline
                 }
             }
             stage.processor->ValidateParameters(effective);
+            stage.effectiveParameters = std::move(effective);
             ContentProcessorContext context(stage.root, stage.source, logicalName,
-                                            processorIdentity.name, effective,
+                                            processorIdentity.name, stage.effectiveParameters,
                                             externalSourceRoots, dependencies, logger,
                                             request.outputFormat, request.environment, this,
                                             request.siblings);
@@ -1671,7 +1673,8 @@ namespace CNA::Content::Pipeline
         result.writer = writerIdentity;
         result.outputFormat = writer->OutputFormat();
         result.writerSchemas = std::move(writerSchemas);
-        result.parameters = request.parameters;
+        result.parameters = std::move(stage.effectiveParameters);
+        result.requestedParameters = request.parameters;
         result.dependencies = dependencies.Dependencies();
         result.runtimeReferences = dependencies.RuntimeReferences();
         result.deploymentFiles = dependencies.DeploymentFiles();

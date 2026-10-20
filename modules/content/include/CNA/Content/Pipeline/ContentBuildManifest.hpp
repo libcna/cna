@@ -128,7 +128,7 @@ namespace CNA::Content::Pipeline
         /** @brief Stable writer asset/schema/codec declarations used by the skip path. */
         std::vector<ContentWriterSchemaIdentity> writerSchemas;
 
-        /** @brief Effective, typed processor configuration. */
+        /** @brief Requested typed processor configuration, retained for incremental build identity. */
         ContentProcessorParameters parameters;
 
         /** @brief Root-relative categorized build inputs, sorted deterministically.
