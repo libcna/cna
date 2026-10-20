@@ -13,7 +13,7 @@ AUTHORITATIVE UPDATE (supersedes all older checkpoint text below):
 Phase F. All155 historical IDs retained:73 FINAL/82 PENDING. Totals:40 fixed runtime
 findings,23 documentation corrections,eight pre-campaign fixes,one duplicate and
 one demo-expectation defect. Goal unchanged. Nothing pushed or merged.
-CNA HEADa612eb404 (status; runtime3a1437725/048), demos7abf587 (closured9ebd20),
+CNA HEAD6542db536 (status; runtime3a1437725/048), demos5ec8fe7 (closured9ebd20),
 Sharp99c2f79c. Candidate039/045 runtime and eight native tests are UNCOMMITTED.
 They are NOT part of either frozen048 checkpoint binary set.
 
@@ -71,10 +71,13 @@ CURRENT048 FIXED_PENDING_REGRESSION:
  COMPLETE0:25PASS/three remaining FAIL each,errors[]; ONLY048 failure removed,
  all36 child assertions preserved,047 still fails. No marker change or closure.
  External319 artifacts now FROZEN in repair-effective-parameters-binaries.sha256.
- Full math/visual/sweep job95510 RUNNING. Both95 math exact48 and six exact visual
- references already pass;719 SOFTWARE/GLES and final isolated CTest/hash pending.
+ Full math/visual/sweep job95510 COMPLETE0. Both95 math exact48 and six exact visual
+ references pass; GLES font screenshot visually inspected. Full719 SOFTWARE
+ 617PASS/51FAIL/48SKIP/three manual and GLES656/53/7/3, exact60 improvements vsHEAD
+ (62vsComplete1128), differences[]. Final isolated serial CTest59450 RUNNING;
+ all319 pre-test hashes passed, post-test hashes and unchanged-skip audit pending.
 Maximum THREE campaign compiler/test workers, Sharp at mostTWO; no concurrent
-SystemLink suites; private GPU wrapper only. Current jobs20911(2)+95510(1).
+SystemLink suites; private GPU wrapper only. Current jobs20911(2)+59450(1).
 
 NEXT RUNTIME BATCH EVIDENCE:
 ContentOwnershipOracle.cs35/35 actual XNA4 strict C#4/x86, no GPU/services. Pins
@@ -108,9 +111,14 @@ contain old runtime. Other011/012/043/087 remain open.
 011 includes value-handle Texture2D ownership; a shared_ptr-only fix is insufficient.
 012 cold builtin registration depends on Game declaration; preserve family link
 boundaries and explicit reader withdrawal.043 must preserve fresh unique_ptr API.
+New ContentDispatchOracle.cs genuine39/39, strict C#4/x86 build/run exit0:
+nine typed/erased/raw modes, all four existing-instance replacement rejections,
+null dispatch and null reader result. Raw new objects DO record; existing objects
+do NOT; replacement throws InvalidOperationException; null index returns null.
+Evidence repair-content-dispatch-xna*. No011/087 production change yet.
 
-EXACT NEXT: finish external048 full renderer95510 then isolated732-enabled CTest
-and319-hash audit. Native048 gates are complete. Finish runtime native build20911;
+EXACT NEXT: finish external048 isolated732-enabled CTest59450 and319-hash audit.
+Native048 gates are complete. Finish runtime native build20911;
 run whole172-file content module (1918 source tests:1905 original outcomes plus
 13 additions), focused root/header/reader/sound/fuzz tests, and subsequent consumers.
 Keep048,039,045 unclosed until their own full gates pass. Preserve047/089/148 markers.
