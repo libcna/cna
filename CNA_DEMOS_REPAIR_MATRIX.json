@@ -1645,8 +1645,8 @@
       "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "AddWriter invokes user Initialize while holding the same nonrecursive mutex required by GetTypeWriter.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "current_validation": "Local two-phase validation/callback-outside-lock repair: warning-free native build,10/10 focused native tests, strict bounded actual-library probe9/9. Four new native regressions cover nested lookup, initializer exception atomicity, registry freezing and duplicate insertion during callbacks. Full508 native content regression running; external snapshot remains frozen at the prior146/147/149 repair. No090 closure or external pass claimed.",
+      "cna_fix_commit": "7864dd5b1",
+      "current_validation": "Two-phase validation/callback-outside-lock repair: warning-free native build,10/10 focused native tests, strict bounded actual-library probe9/9. Four new native regressions cover nested lookup, initializer exception atomicity, registry freezing and duplicate insertion during callbacks. Full508 native content regression507PASS/one same XACT SKIP,859.192s; all504 old results unchanged, four added PASS. Native hashes verified after full run; broader consumers running. External snapshot remains frozen at the prior146/147/149 repair. No090 closure or external pass claimed.",
       "validation": [
         "Genuine XNA CompilerInitializationOracle8/8 confirms public nested lookup inside host initialization, exactly-once initialization and compiler-local writer identity. Strict C++23/Werror native probe logs built-in lookup PASS and ENTER Initialize but never LEAVE; single five-second process deadline terminates deadlock, exit1 retained. Permanent reference/probe committed in demos3ff4e2e; reports repair-compiler-initialization-*."
       ],
@@ -2759,7 +2759,7 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Opaque guards throw broader ArgumentException before shared key validation; NamedValueDictionary also has incorrect empty-key checks and Set/Add hook dispatch.",
       "related_issues": [],
       "cna_fix_commit": "7c4431fdf",
@@ -2768,7 +2768,8 @@
         "Genuine XNA OpaqueDictionaryOracle14/14 and protected NamedDictionaryHooksOracle7/7. New native five-test suite against unchanged production gives1PASS/four FAIL (7ms), pinning exact categories/parameter precedence, unchanged XML, successful order, and derived-hook dispatch/insertion. Reports repair-opaque-hooks-native-before*, repair-opaque-dictionary-staged-xna*, repair-named-dictionary-hooks-xna*. No production content repair yet.",
         "Native complete pre-fix content baseline504:497PASS/one existing XACT fixture SKIP/exactly six new failures (four146, two149),1306.990s. Narrow runtime repair applied; native focused19/19 now PASS735ms, including all five dictionary tests, full intermediate corpus and hardening. Initial focused18/19 exposed existing modern Sharp versus Framework4 ArgumentNull message formatting; exact native and exact historical diagnostics are now both pinned with type/parameter/timing preserved. Original18/19 log retained. Full504 post-fix run and actual-TU sanitizers underway; external regression and coherent runtime commit pending."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "closure_evidence": "Both719 renderer comparisons exact57 improvements/differences[], plus two149 assertion improvements. SW614/54/48/3, GLES653/56/7/3; metadata/tools/six pixel-exact visuals pass. Final isolated serial CTest732accepted/zero unexpected failures/48same skips/three disabled,747.99s; all319 frozen hashes verified before and after. Permanent docs/repair-evidence/content/CHECKPOINT.md. Earlier current_validation/validation entries are chronological, superseded by this closure."
     },
     {
       "id": "CNA-DEMOS-ISSUE-147",
@@ -2780,7 +2781,7 @@
       ],
       "subsystem": "content/serialization",
       "classification": "DEPENDENCY_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Sharp XmlWriter's unconditional NUL truncation guard throws XmlException; genuine default-checking .NET writer uses ArgumentException across all seven measured doors.",
       "related_issues": [],
       "cna_fix_commit": null,
@@ -2791,7 +2792,8 @@
         "Native test-only build warning-free;49 XmlWriterValidationTests46PASS/three expectedFAIL (2ms). Fresh .NET8 oracle also21/21. Prepared runtime patch unapplied; no closure.",
         "Sharp af1b0bea repairs writer and direct LINQ character-data exception categories; genuine Framework4 and .NET8 writer21/21 and LINQ74/74. Native writer49/49, LINQ20/20, warning-free Sharp build and full18146/18146 across41 zero-failure/zero-skip gate. Separate watcher test synchronization e0601cd2; two independent stress-only rename failures remain recorded, not claimed fixed. Native CNA focused19/19 includes strengthened NUL-category assertion. Full504 content regression and external rebuilt demos still pending; current external storage binaries remain pre-XML and frozen."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "closure_evidence": "Complete native/dependency gates and both strict719 renderer comparisons pass; final isolated serial CTest732accepted/zero unexpected failures/48same skips/three disabled,747.99s. All319 frozen hashes verified before and after; six pixel-exact visuals. Permanent docs/repair-evidence/content/CHECKPOINT.md. Earlier current_validation/validation entries are chronological, superseded by this closure."
     },
     {
       "id": "CNA-DEMOS-ISSUE-148",
@@ -2822,7 +2824,7 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "ReadObjectCore rejects value-null with broader InvalidContent and DeserializeObject refuses null roots. Historical root-read ArgumentNull expectation misattributes a subsequent reserialization failure.",
       "related_issues": [],
       "cna_fix_commit": "9dd0826bf",
@@ -2831,7 +2833,9 @@
         "Fresh genuine direct IntermediateEnvelopeOracle16/16 proves root deserialization returns null; only subsequent Serialize raises ArgumentNullException(value). Original Accept<T> helper combines both calls in one catch (lines506-529); preserve its round-trip evidence but correct the demo's direct-read expectation. Value-null genuinely throws NullReferenceException. Primary inventory explicitly annotated; new native pre-fix tests building.",
         "Native complete pre-fix content baseline504:497PASS/one existing XACT fixture SKIP/exactly six new failures (four146, two149),1306.990s. Narrow runtime repair applied; native focused19/19 now PASS735ms, including all five dictionary tests, full intermediate corpus and hardening. Initial focused18/19 exposed existing modern Sharp versus Framework4 ArgumentNull message formatting; exact native and exact historical diagnostics are now both pinned with type/parameter/timing preserved. Original18/19 log retained. Full504 post-fix run and actual-TU sanitizers underway; external regression and coherent runtime commit pending."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "demo_expectation_correction": "Direct null-root read succeeds and returns null; the historical ArgumentNullException(value) belongs to subsequent serialization. Demo9bb033e preserves the two read assertions and independent null-write rejection.",
+      "closure_evidence": "Both strict719 renderer comparisons remove exactly the two149 failures while retaining four148 failures and36 checks; no other unexpected deltas. Native503PASS/one same SKIP of504; actual-TU ASan/UBSan/leak9/9. Final serial CTest732accepted/zero unexpected failures/48same skips/three disabled,747.99s,319 hashes before/after pass. Permanent docs/repair-evidence/content/CHECKPOINT.md. Earlier current_validation/validation entries are chronological, superseded by this closure."
     },
     {
       "id": "CNA-DEMOS-ISSUE-150",
