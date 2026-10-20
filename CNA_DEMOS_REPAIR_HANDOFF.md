@@ -12,7 +12,8 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 AUTHORITATIVE CURRENT STATE: Phase F content/serialization. All155 historical IDs
 retained:68 FINAL/87 PENDING (36 runtime findings,one duplicate,23 documentation,
 seven pre-campaign fixes,one demonstrated demo-expectation defect). No push/merge.
-CNA runtime HEAD6823af99a; demosce04195; Sharp99c2f79c. Goal unchanged.
+CNA source HEAD e0318ab52 (partial148); demos81d6837; Sharp99c2f79c. Goal unchanged.
+Current frozen checkpoint binaries are STILL6823af99a/ce04195, without partial148.
 
 LAST COMPLETE REGRESSION:146/147/149 FIXED_VALIDATED. CNA7c4431fdf/9dd0826bf,
 Sharpaf1b0bea through99c2f79c, demo markers71e6992, closure demoa604560/CNA50127b2f7.
@@ -109,8 +110,19 @@ hashes before closing088/090/111. Preserve every ID; final count would71 only AF
 those gates. Do not whitelist030 assertion drift or any other unexpected delta.
 While frozen jobs run, prepare owned-CNA148 self-closing-section reference/native
 reproductions; vendor PI and152 policy questions must not stall independent work.
-All runtime changes committed. Only handoff/matrix updates presently uncommitted;
-demos and Sharp worktrees clean. No push or merge.
+Partial148 committed e0318ab52, demo evidence81d6837: genuine section oracle13/13;
+native frozen-library baseline sixPASS/sevenFAIL2ms; modified actual Reader TU with
+13 native cases ASan/UBSan/leak13/13,8ms. Only two early returns removed; three old
+corpus exemptions removed, golden inputs/messages retained. No148 closure or marker
+change: PI/BOM still open. Isolated sanitizer corpus extension now RUNNING (session
+record in tool history), log repair-intermediate-sections-sanitizer-corpus.log.
+Exploratory Wall/Wextra build hit an unchanged parentheses warning at Reader.cpp57;
+retained failed log. Passing sanitizer uses prior project/Werror policy, not a
+claimed stronger-warning pass. GLES registry font capture visually inspected; exact
+six-image automated gate already passes. Full517 now in XnaErrorParity after the
+differential-build suite completed621s without failure. SOFTWARE sweep in graphics.
+All runtime changes committed. Only this handoff/matrix update uncommitted;
+demos and Sharp clean. No push or merge.
 
 ### Chronological work log (superseded by authoritative state above)
 
