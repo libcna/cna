@@ -11,7 +11,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 Phase E external validation. CNA runtimecbb77e3c8(Title145),5865ae938(storage151), Sharp58c6cba1 (including
 EOF1c0fc9b5,directory551ced42,URI82b57541,NUL3304ecd6); completed external031693a9f/b086814f9(lifecycle141–144),
-demo markers61d344e, latest evidence024afe6. All155 IDs retained:62 FINAL/93 PENDING:
+demo markers61d344e, latest closure804caa1. All155 IDs retained:62 FINAL/93 PENDING:
 30 runtime findings,one verified duplicate,23 documentation corrections,seven
 already fixed before campaign,one demonstrated demo-expectation defect.
 
@@ -29,10 +29,14 @@ six exact visuals pass, representative GLES image inspected. Isolated full CTest
 Complete1128 demo-status delta54, campaign HEAD delta52. No push/merge.
 
 ACTIVE: Title145 committedcbb77e3c8, matrixFIXED_PENDING_REGRESSION. Complete external
-storage/title build RUNNING, repair-storage-demo-build.log, --parallel2 in existing
+storage/title build63979 RUNNING, repair-storage-demo-build.log, --parallel2 in existing
 build/linux-full. It includes056/145/151 and all committed Sharp prerequisites.
 No content runtime changes until this build completes and its binaries are frozen.
-After build: actual C ABI RuntimeGameSmoke/StorageSmoke/TitleCValidationProbe and
+Actual C ABI69669 COMPLETE: strict C17/Werror RuntimeGameSmoke, StorageSmoke and
+TitleCValidationProbe PASS (independent title13/13 versus pre-fix8/13). ldd proves
+the actual external C ABI DSO; both libraries' hashes unchanged during execution.
+Reports repair-storage-c-after-*, repair-storage-c-libraries*. Fresh isolated run
+directory build-probe/repair-storage-c-work retained. After build run
 focused demo suites on both available renderers, preserve assertions, then remove
 only genuinely passing markers, rebuild/freeze, full comparison/visual/CTest gates.
 
@@ -44,16 +48,29 @@ the real required Sharp archives. Android branch syntax-only check2420 passes;
 not an NDK cross-build or Android runtime claim. Broad5832 COMPLETE: exact1412
 consumers1408PASS/four same skips168.769s; runtime241total238PASS/three same skips
 12.101s. Both native hashes reverified; native freeze RELEASED. C API post-fix
-execution still pending; pre-fix independent13checks/five failures retained.
-Next commit145 runtime/tests/contracts, update matrix toFIXED_PENDING_REGRESSION,
-then rebuild actual external C ABI/demos for056/145/151, focused tests before
-marker removal and full renderer/CTest regression. No external storage closure yet.
-Content146 read-only preparation found additional key-validation ordering; the
+execution now passes above; pre-fix independent13checks/five failures retained.
+145 runtime/tests/contracts committedcbb77e3c8, matrixFIXED_PENDING_REGRESSION.
+No external storage closure yet. Content146 preparation found key-validation ordering; the
 first fresh pipeline oracle failed to load its assembly, not a behavior result.
 Its owned probe1349449/debugger1349541 were identified and terminated; wrapper
 39023 exits143 and logs remain. Do not shadow all other probes with framework DLLs.
-Use an isolated content reference staging directory if needed. No content runtime
-edits or inferred152 policy decision.
+Corrected isolated staging run94075 passes14/14 genuine XNA4 checks. Three symlinked
+original SDK assemblies live ONLY in build-probe/repair-content-reference; no shared
+probe-root DLL shadowing. Permanent OpaqueDictionaryOracle.cs is uncommitted in
+demo docs/repair-evidence/content/. Native test-only build6392 completes; three new
+OpaqueDictionaryCompatibilityTest cases give1PASS/two expectedFAIL against unchanged
+production (3ms): null-value exact type and empty-key precedence; positive insertion/
+replacement ordering passes. Reports repair-opaque-native-before{,-build}.log.
+New native test file untracked. Expanded hook oracle7/7 genuine, native expanded
+five tests1PASS/four expectedFAIL7ms (build/run1861 COMPLETE). Prepared runtime patch
+demo build-probe/repair-opaque-runtime.patch UNAPPLIED. Issue146 CONFIRMED_OPEN.
+147 default XML NUL oracle21/21 on Framework4 and.NET8; optional CheckCharacters=false
+diagnostics explicitly separate. Sharp test-only90856 COMPLETE:49tests46PASS/three
+expectedFAIL2ms, zero build warnings. Production unchanged. Issue147 DEPENDENCY_DEFECT/
+CONFIRMED_OPEN. Preserve default rejection and useful diagnostic; do not claim the
+optional false mode works through tinyxml2. Reports repair-xml-nul-{xna,net8}* and
+Sharp build-probe/cna-repair-xml-nul-before*. Both new witnesses are included in
+docs/repair-evidence/content/README.md. No inferred152 policy decision.
 
 Historical intermediate NUL/status failures (now repaired above): review exposed
 actual wrong-file access/truncation in FileStream. Sharp3304ecd6 now rejects NUL

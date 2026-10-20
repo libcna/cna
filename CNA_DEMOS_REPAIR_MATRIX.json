@@ -2750,11 +2750,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Opaque guards throw broader ArgumentException before shared key validation; NamedValueDictionary also has incorrect empty-key checks and Set/Add hook dispatch.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine XNA OpaqueDictionaryOracle14/14 and protected NamedDictionaryHooksOracle7/7. New native five-test suite against unchanged production gives1PASS/four FAIL (7ms), pinning exact categories/parameter precedence, unchanged XML, successful order, and derived-hook dispatch/insertion. Reports repair-opaque-hooks-native-before*, repair-opaque-dictionary-staged-xna*, repair-named-dictionary-hooks-xna*. No production content repair yet."
+      ],
       "final_disposition": null
     },
     {
@@ -2766,12 +2768,14 @@
         "content.custom.intermediate_text_values"
       ],
       "subsystem": "content/serialization",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "DEPENDENCY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Sharp XmlWriter's unconditional NUL truncation guard throws XmlException; genuine default-checking .NET writer uses ArgumentException across all seven measured doors.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Fresh Framework4 reference XmlWriterNulOracle21/21: two NUL placements at seven doors reject with exact ArgumentException and seven ordinary-content controls pass. CheckCharacters=false separately records entitized text/attributes versus literal NUL in other doors; it is not claimed implemented. Evidence docs/repair-evidence/content/XmlWriterNulOracle.cs, repair-xml-nul-xna*. Native test-only reproduction being built; production unchanged."
+      ],
       "final_disposition": null
     },
     {
