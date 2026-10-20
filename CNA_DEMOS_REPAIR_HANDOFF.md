@@ -9,6 +9,199 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+### Last complete checkpoint: ISSUE-057
+
+CNA source revision83e611fe1e1196e63ccc708d2aada80e8addf512 fixes staging lifecycle
+coordination, with three native regressions and public documentation in the same
+commit. Demos closure revisionaf858e41d4c8756096fc00874913802714413c0f separately
+commits permanent fixtures/evidence/issue history. Its parentf1140cc and6d4659d
+are read-only011 integration audits, not part of the057 runtime repair.
+All057 validation is complete.
+Inventory155:93FINAL/62PENDING (60FIXED_VALIDATED,23DOCUMENTATION_CORRECTED,
+8ALREADY_FIXED,oneDEMO_EXPECTATION_BUG,oneDUPLICATE_ROOT_CAUSE). Only057 closes;
+all other154 matrix records and all historical issue descriptions are retained.
+
+Full native60712 COMPLETE0:10807=10706PASS/101unchangedSKIP, independent XML and
+source/artifact comparisons exact. Canonical build12564 and external build17134
+have zero diagnostics. Focus53714:133PASS/one sameSKIP,context11/host6;
+external focus12011:146 cases exact. Full external29991 COMPLETE0:all18 stages,
+both719 sweeps unchanged versus047 (SW628PASS/40knownFAIL/48SKIP/three manual;
+GLES667PASS/42knownFAIL/7SKIP/three manual),both95 math,six pixel-exact visuals,
+CTest684PASS/48unchangedSKIP/three disabled (732 enabled,714.32s),319 hashes exact.
+External peak359,165,952 bytes,zero high/max/OOM. No057 runtime marker existed;
+known failures stay40/42,71 improvements versus initial baseline/73 Complete1128.
+
+Actual-header ASan/UBSan/leak passes the unchanged1000-owner concurrent probe;
+seven unprivileged permission controls and Linux15/MinGW32-Wine14 available
+process controls pass. Sequential81749 COMPLETE0 adds1000 exact safe-marker-only
+cleanups while preserving all original active/recent/closed checks; historical
+sequential source remains unchanged,not claimed passing the new housekeeping
+contract. Sequential peak168,828,928 bytes,zero high/max/OOM. Closure15171 COMPLETE0
+independently verifies10807 native outcomes and352 unique files,including319
+external artifacts,all fixtures/current binaries and six exact visuals;errors[].
+Wine native symlink creation is unavailable(Function not implemented),not passed;
+no native Windows/MSVC/macOS/NFS/SMB or all-renderer claim. No live heavy job.
+Post-closure catalog/validation CTests pass3/3 in7.30s. Full historical057 body
+and all155 unique issue headings remain; other154 matrix and issue records unchanged.
+
+Exact next task: after this CNA handoff/matrix status commit, verify clean
+indexes/worktrees, then run the prepared
+build-probe/repair-content-ownership-after057-before.mjs in demos on the bounded
+private native GPU runner. It refreshes14 unchanged ownership cases against this
+checkpoint (expected3PASS/11FAIL),including exact XML failure messages. Do not
+weaken them. Continue011 manager-owned lifetime at the correct layer, preserving
+independent C resources and non-XNB/nested-resource routes documented in
+RUNTIME_OWNERSHIP_TRIAGE.md.152 remains actionable;131 remains owner-reserved.
+This handoff and matrix are committed together as the057 status checkpoint.
+Production code and demos evidence are already committed; no other uncommitted
+work is intended. Preserve unrelated changes if they appear. No heavy job live.
+No push or merge. Goal remains active;62 historical IDs still need final states.
+
+### Retained ISSUE-057 pre-closure chronology (superseded)
+
+The candidate/running/uncommitted statements below record earlier checkpoints;
+the completed checkpoint above is authoritative. Do not restart finished jobs.
+
+CNA HEADfd97482067a289669699a90df60402a437a45e5f; demos HEADf1140ccdeee7da3f2a503c53ce6f303d796cf01b.
+Demos6d4659d is a separate read-only ISSUE-011 integration audit in
+docs/repair-evidence/content/RUNTIME_OWNERSHIP_TRIAGE.md, committed while29991
+runs. It does not alter057 sources/oracles or close011. It maps ordered recording,
+exceptional finalization, non-XNB acquisition routes, value-wrapper/device lifetime
+and independently owned C handles. All011 production code remains unchanged.
+057's candidate/baseline was prepared on demos16931a6; frozen runtime hashes are
+unchanged by the separate documentation commit.
+Demosf1140cc extends that same read-only011 audit: the XNB font decoder creates
+its atlas directly outside nested ReadObject, Model C handles borrow graph GPU
+resources, and existing pure-C ContentSmoke already verifies actual texture pixels
+after unload/destruction. No011 production edits; both documentation commits are
+separate from057 and leave every frozen runtime hash unchanged.
+Candidate adds an empty, persistent `.cna-staging.lock` parent identity and a short
+blocking OS lock around reservation initialization, scavenging and teardown only.
+It does not serialize builds or remove malformed-metadata diagnostics. The entire
+existing scavenger body is unchanged ignoring whitespace (audit SHA256
+44f764c3e002252c570ebd1703ff3773881ff257e934a0bc272b2b001d206efa). Windows uses
+synchronous LockFileEx; POSIX uses flock with only EINTR syscall resumption.
+Unsafe/nonempty/multiply-linked parent markers refuse scanning/reservation;
+failed destructor coordination preserves an intact abandoned tree for later cleanup.
+The new persistent housekeeping identity is documented, never deleted by production.
+Private test harnesses remove it only after all their own child processes exit,
+and only after checking the exact empty/regular/owner/single-link/no-other-entry shape.
+
+Native process v2 gate46615 COMPLETE0:15 checks, two independent1000-owner processes
+plus scanner, parent aliases, OS release without destructors, active-old retention,
+abandoned-old collection, malformed parent markers, native empty-target symlink and
+hardlink refusal, exact cleanup. Wine v2 gate98626 COMPLETE0:14 available checks;
+native symlink creation returns77 / Function not implemented. That Win32-specific
+control is explicitly unavailable, not passed. Earlier v1 native/Wine14-check runs
+remain retained; their host-created nonempty-target link did not independently
+prove native Win32 symlink handling. No native Windows/MSVC/NFS/SMB/macOS claim.
+
+Canonical build12564 COMPLETE0:12 tasks,18,585ms,zero diagnostics/errors,one worker,
+shared cache. Peak4,298,215,424 bytes,high1196,max/oom0. Focus53714 COMPLETE0:
+134 native=133PASS/one unchangedSKIP (StreamingFileHashAcceptsAFileLargerThanTwoGiB),
+three added cases; all prior selected results unchanged. Context11/11 and real
+compiler-host6/6 unchanged tests pass. Strict probe builds clean; frozen hashes
+exact; private fixtures cleaned. Focus peak1,439,477,760 bytes,zero OOM/high/max.
+Auxiliary54210 COMPLETE0: original unchanged1000-owner concurrent probe now has
+2030 scans/zero owner errors/zero diagnostics under actual-header ASan/UBSan/leak
+instrumentation. Its parent_empty=0 is precisely the one verified persistent
+coordination file, not a leaked reservation. Seven permission controls pass as
+non-root owner UID with zero capabilities. Peak159,485,952 bytes,zero OOM/high/max.
+
+Full native60712 COMPLETE0:10807=10706PASS/101unchangedSKIP in1,224,981ms.
+Every10804 previous outcome is unchanged plus three new PASS; independent XML and
+frozen hashes match. Private display/network,owner UID,zero capabilities;
+peak1,117,966,336 bytes,zero high/max/OOM events.
+External build17134 COMPLETE0:10,073ms,zero diagnostics/errors,one worker,
+peak1,605,029,888 bytes,zero high/max/OOM. Focus12011 COMPLETE0:146 content demos
+(73 per renderer),zero status/knownIssue/check/failed-assertion differences versus047;
+all36 standalone labels retained,peak208,023,552 bytes. RUNNING29991:full external
+18-stage gate alone in bounded6GiB/private-display scope. Poll29991; do not launch
+another heavy job until it finishes and its audit is accepted.
+29991 partial checkpoint: all719 SOFTWARE outcomes accepted,628PASS/40knownFAIL/
+48SKIP/three manual,651,572ms. Exact047 status/knownIssue/check/failed-assertion
+comparison errors[],all36 standalone labels retained; original-baseline audit
+also passes. Six visuals already pixel-exact and both95 math sweeps pass.
+OPENGLES3 full719 also accepted:667PASS/42knownFAIL/7SKIP/three manual,
+284,357ms,exact047 and original-baseline comparisons errors[]. Both319-artifact
+hash checks after full sweeps and before CTest pass.29991 now runs final CTest
+serially;18-stage summary and independent closure still pending. No057 closure.
+Read-only inventory audit confirms155 unique permanent headings and matrix IDs,
+92FINAL/63PENDING; only057's matrix record differs from HEAD,other154 unchanged.
+Source and artifact freeze is active, including docs/content-pipeline.md.
+Full driver: demos/build-probe/repair-staging-native-full.mjs. It requires the
+accepted focused and auxiliary gates and independently compares native XML.
+The full external regression runs against047. No knownIssue-count change is
+expected for057; all719
+statuses/checks/failures must remain unchanged on SOFTWARE and OPENGLES3. Follow
+with math95 each,six exact visuals,all735 registered CTests and independent closure.
+Do not reuse047 drivers unchanged: their hashes/baselines and private-parent
+cleanup contract are now historical. Never ignore arbitrary leftover files.
+Drivers: demos/build-probe/repair-staging-external-build.mjs (complete17134)
+and repair-staging-demo-focused.mjs (complete12011). The former requires native10807/accepted XML,
+freezes native/auxiliary sources and checks all319 previous047 external artifacts
+before building. The latter compares all146 content runs exactly against047,
+including unchanged knownIssue/check counts/failed assertions and36 internal labels.
+Run each serially in its own <=6GiB/4GiB-high/no-swap scope on the private GPU
+runner with no heavy overlap. Full external gate driver
+repair-staging-full-gates.mjs is live29991; independent repair-staging-closure-audit.mjs
+is prepared and syntax-checked, NOT RUN. They require accepted predecessor
+gates, exact status/check/knownIssue parity with047, unchanged original probe and
+scanner, explicit Wine limitations and current normalized artifact/source hashes.
+The native/full and external/build audits are accepted; do not rerun them merely
+because the preceding historical progress notes describe live jobs.
+Read-only host measurement: Codex PID3439242 RSS320,856KiB; host22GiB available.
+Native scope current477,769,728/peak1,117,966,336 bytes;MemoryHigh4GiB,
+MemoryMax6GiB,MemorySwapMax0 verified. These limits do not constrain Codex itself.
+No existing process stopped and no duplicate heavy job launched.
+Exact live command (demos cwd): systemd-run --user --scope
+--unit=cna-repair-staging-full-gates -p MemoryHigh=4G -p MemoryMax=6G
+-p MemorySwapMax=0 env -u SDL_AUDIODRIVER -u SDL_VIDEODRIVER
+../cna/tools/platform/run_gpu_tests_private.sh --exec env SDL_AUDIO_DRIVER=dummy
+SDL_VIDEO_DRIVER=x11 WAYLAND_DISPLAY= node build-probe/repair-staging-full-gates.mjs.
+After29991 COMPLETE0, inspect all18 stages, run the new sequential control below,
+then run the independent closure auditor. Only after accepted closure commit the CNA helper/tests/public docs,
+separately commit demos fixtures/evidence, then close057 with actual repair SHA
+and update totals to93/62. Preserve all155 issue histories and other154 matrix
+records. Next ordinary work includes011/152;131 remains owner-reserved. No push.
+Prepared and syntax-checked, NOT RUN: demos/build-probe/repair-content-ownership-after057-before.mjs.
+After057 closure/commit/status reconciliation and no other heavy job, run it on
+the private native GPU runner in a <=6GiB/no-swap scope. It refuses absent057
+closure or repair SHA, compiles the two unchanged permanent ownership test sources
+against current canonical native libraries using one worker/shared cache, then
+compares all14 cases and exact XML failure messages with the retained ten-manager/
+four-texture baselines (expected3PASS/11FAIL). Original fixtures and XNA oracle must
+match demos005899e9; current native frozen hashes are checked before/after.
+This is a prepared failing-baseline refresh, not new runtime evidence or closure.
+
+Additional057 closure requirement (prepared, NOT RUN): permanent
+docs/repair-evidence/content/ContentStagingSequentialLifecycleProbe.cpp retains
+the original1000-owner active/recent/closed-scan controls, replacing the obsolete
+empty-parent check with exact single empty regular singly-linked owned coordination
+file checks after EVERY lifecycle. The historical ContentStagingSequentialControl.cpp
+remains byte-identical; do not claim it passes the new housekeeping contract.
+Driver demos/build-probe/repair-staging-sequential.mjs requires accepted18-stage
+external gate, builds the actual-header new control with strict Clang/ASan/UBSan/
+leak checks, verifies1000 exact cleanups and only removes its exact owned marker
+after the synchronous fixture exits. Run serially after29991 as non-root owner
+with CapEff0 in <=6GiB/no-swap scope (no GPU needed), using existing build-probe.
+The syntax-checked independent closure auditor now REQUIRES this sequential audit
+and hashes the new fixture/binary plus unchanged original control. No production
+or already-frozen fixture changed;29991 remains the sole live heavy job.
+
+Uncommitted CNA: tools/common/CnaContentStaging.hpp, three regression cases in
+modules/content/tests/CNA/Content/Pipeline/ContentPipelineCliTests.cpp, public
+docs/content-pipeline.md, this handoff/status evidence. New demos fixtures:
+ContentStagingProcessProbe.cpp, staging_process_tests.py, staging_permission_tests.py
+and ContentStagingSequentialLifecycleProbe.cpp in docs/repair-evidence/content.
+Original concurrent/sequential probes untouched.
+Reports prefix repair-staging-lifecycle-*; exact gate suffixes are -native-v2-audit,
+-win32-wine-v2-audit, -native-canonical-build-audit, -focused-audit, -auxiliary-audit,
+plus -native-full and -external-build-audit. No057 closure or source commit;92FINAL/63PENDING.
+No push or merge. Keep the full campaign goal active.
+
+### Last complete checkpoint: ISSUE-047
+
 Latest completed gate (2026-10-21): external63473 COMPLETE0, all18 stages.
 CTest684PASS/48unchangedSKIP/three previously disabled,763.03s; both719 renderer
 sweeps,math95 each,six pixel-exact references and all comparisons accepted.
