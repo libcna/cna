@@ -791,8 +791,8 @@
       "root_cause": "CreateReaderForTargetTypeEXT passes a target identity to a factory table keyed by reader identity; no association connects distinct target and factory names.",
       "current_validation": "Before4PASS/sevenFAIL of11; genuine XNA5/5PASS. Registration-bound association repair preserves lazy fresh unique_ptr ownership/callable copies. Actual-TU11/11PASS and ASan/UBSan/leak11/11PASS. Canonical build51 pre-existing warnings/no new; module1929=1925PASS/four sameSKIP, previous1918 unchanged+11 additions. Pipeline552=551PASS/one sameSKIP969.769s; consumers1412=1408PASS/four sameSKIP183.079s; runtime241=238PASS/three sameSKIP10.238s; original XML6/6PASS. Exact previous outcomes and final four hashes match, errors[]. Native freeze released. Full external rebuild/focused/full regression pending, marker retained; not closed.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": ["Current strict renderer sweeps retain both lookup assertions. Source and existing tests inspected: native passing control uses the same target/factory spelling. CNA explicitly documents fresh unique_ptr instances, unlike genuine XNA caching; preserve that C++ ownership contract while fixing name resolution, factory removal/clear and constructor lock order. No runtime repair yet."],
+      "cna_fix_commit": "252e9bca1",
+      "validation": ["Baseline renderer sweeps retain both lookup assertions; distinct-name native before4PASS/sevenFAIL. Commit252e9bca1 preserves documented fresh unique_ptr ownership and passes11 lookup/sanitizer cases, canonical1929 content cases,552 pipeline and1412/runtime241/XML consumers with exact unchanged prior outcomes. External rebuild/focus pending; marker retained, no closure yet."],
       "final_disposition": null
     },
     {

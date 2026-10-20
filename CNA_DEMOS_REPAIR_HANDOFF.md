@@ -9,8 +9,9 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-LATEST043 NATIVE CHECKPOINT (08:53 UTC):12643 COMPLETE0. Consumers1412 give
-1408PASS/four unchangedSKIP183.079s; runtime241 gives238PASS/three unchangedSKIP
+LATEST043 NATIVE CHECKPOINT (08:53 UTC):12643 COMPLETE0.
+Runtime/test/deviation now committed as252e9bca1; demos evidence HEAD9576c6a.
+Consumers1412 give1408PASS/four unchangedSKIP183.079s; runtime241 gives238PASS/three unchangedSKIP
 10.238s. Default XML4PASS/two unchangedfixtureSKIP; original fixtures6/6PASS12ms.
 All four exact comparisons have errors[]; all four final frozen native hashes
 match. With content1929, pipeline552 and actual-TU sanitizer11/11, the043 native
