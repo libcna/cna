@@ -50,6 +50,21 @@ base `/rv`, and CMAKE_BUILD_PARALLEL_LEVEL/CTEST_PARALLEL_LEVEL=1 to test childr
 It stores complete error lists in audit JSON while bounding console output to
 counts/first ten errors plus the full audit path. Expected outcomes are unchanged;
 driver syntax passes, final native workload is still NOT RUN.
+It additionally records start/end memory counters per stage and refuses a new
+OOM-killed child. Guard/snapshot-only bounded-scope check passed (no CNA workload).
+
+The completed external checkpoint remains valid: job8261 exited0; all18 stages,
+CTest684PASS/48unchangedSKIP/three disabled, both719-demo renderer sweeps,
+95 math demos per renderer, six exact visual references and146 focused checks.
+The independent audit has no errors and verifies319 artifacts/three sources.
+Only61683 is the current heavy campaign job. Do not follow obsolete launch or
+hash-adaptation instructions in the historical recovery notes below.
+
+### Historical recovery notes (superseded by the current checkpoint above)
+
+The following notes preserve observations at earlier times. Statements that
+86497 or8261 were live, or that the prepared usernet driver still expected old
+binary hashes, are historical and are not instructions for the next run.
 
 External8261 COMPLETE0:18 stages,CTest684PASS/48sameSKIP/three disabled964.43s;
 735 outcomes exact against XML,319 frozen artifacts/three sources exact.
