@@ -5,11 +5,17 @@
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/ContentTypeSerializerAttribute.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermediate
 {
     ContentTypeSerializerAttribute::ContentTypeSerializerAttribute() = default;
+
+    void ContentTypeSerializerBase::PrepareOperation()
+    {
+        IntermediateSerializer::PrepareOperationSerializer();
+    }
 
     ContentTypeSerializerBase::ContentTypeSerializerBase(System::Type targetType) : targetType_(targetType) {}
 

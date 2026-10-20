@@ -273,6 +273,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         CNAEXT void InvokeScanChildren(IntermediateSerializer& serializer, const ChildCallback& callback,
                                        const ContentObject& value)
         {
+            PrepareOperation();
             ScanChildren(serializer, callback, value);
         }
 
@@ -286,6 +287,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         CNAEXT void InvokeSerialize(IntermediateWriter& output, const ContentObject& value,
                                     const ContentSerializerAttribute& format)
         {
+            PrepareOperation();
             Serialize(output, value, format);
         }
 
@@ -301,6 +303,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                                                              const ContentSerializerAttribute& format,
                                                              const ContentObject& existingInstance)
         {
+            PrepareOperation();
             return Deserialize(input, format, existingInstance);
         }
 
@@ -332,7 +335,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
         /**
          * @brief Retrieves and caches nested type serializers and allows deferred reading of
-         *        type-specific settings; called once when the serializer is registered.
+         *        type-specific settings; called once after registration is published and
+         *        before payload callbacks. The supplied owner outlives individual operations.
          *
          * @param serializer The content serializer.
          */
@@ -373,6 +377,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                                                         const ContentObject& existingInstance) = 0;
 
     private:
+        void PrepareOperation();
         System::Type targetType_;
         std::string xmlTypeName_;
         std::string targetTypeName_;

@@ -126,6 +126,18 @@ reader-instance cache or redesign CNA's registry API. Registration identity guar
 publication against removal/replacement inside a factory callback. Native regression
 coverage also preserves manual factory-key and same-name registrations.
 
+Intermediate initialization089 (2026-10-20, candidate validation pending): genuine
+IntermediateInitializationOracle21 and InitializationEdgesOracle15 establish one
+long-lived callback owner, one Initialize per worker, self/mutual published lookup,
+and failed-owner cache retention. CNA's explicit unique_ptr registry owns existing
+instances and exposes stable returned references; it has no reflection constructor
+catalog with which to create XNA's fresh singleton/worker instances after failure.
+The candidate preserves that ownership extension: a failed initializer is not
+retried or copied, operations retain its failure, and raw lookup remains available.
+This is not claimed equivalent to XNA's fresh reflected singleton recovery. No new
+factory/clone API is introduced. Document relocation paths and aliases remain
+operation-local (nested/concurrent controls), even though callbacks share the owner.
+
 Content runtime039/045 (2026-10-20, repair validation pending): genuine
 `../cna-demos/docs/repair-evidence/content/ContentOwnershipOracle.cs` passes89/89.
 XNA refuses RootDirectory assignment while loaded assets remain, including the

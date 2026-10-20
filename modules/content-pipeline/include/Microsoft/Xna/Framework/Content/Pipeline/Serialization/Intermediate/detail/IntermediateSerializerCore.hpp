@@ -40,9 +40,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
     /**
      * @brief Provides methods for reading and writing XNA intermediate XML format.
      *
-     * The static `Serialize` and `Deserialize` are XNA's public surface; an instance exists for
-     * the duration of one call and is what `IntermediateReader::Serializer` and
-     * `IntermediateWriter::Serializer` answer. The type-serializer registry is process-wide:
+     * The static `Serialize` and `Deserialize` are XNA's public surface. The registry owns a
+     * persistent instance, shared by Initialize, child scanning and reader/writer callbacks;
+     * cached nested serializers and their owner remain valid after an operation returns.
+     * Relocation paths and namespace aliases are isolated per operation, including nested
+     * operations on one thread. The type-serializer registry is process-wide:
      * XNA finds `ContentTypeSerializer` classes by reflection, CNA by registration
      * (`AddTypeSerializer`, or automatically for a described type on first use).
      */
@@ -168,7 +170,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
          *
          * Explicit shortcuts/aliases take precedence over full type names. Reusing an
          * alias already owned by another serializer is rejected before registry mutation.
-         * Registering an already-known target type returns its original serializer.
+         * Registering an already-known target type returns its original serializer. Registered
+         * instances are initialized once, after publication and before the next operation's
+         * payload callbacks. Lookup during Initialize may resolve self/mutual dependencies.
+         *
+         * Ownership here is explicit, unlike XNA's reflection-created singleton. If an
+         * initializer throws, operations propagate that failure; the registry retains its
+         * published instances and never retries or fabricates copies of a failed instance.
+         * Raw lookup remains available. Automatic fresh-instance recovery requires factories
+         * and is not provided by this unique_ptr registration extension.
          *
          * @param serializer The serializer; ownership passes to the registry.
          * @param additionalNames Further names that resolve to it.
@@ -299,8 +309,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
     private:
         friend class IntermediateReader;
         friend class IntermediateWriter;
+        friend class ContentTypeSerializerBase;
 
         explicit IntermediateSerializer(std::string referenceRelocationPath);
+        class OperationScope;
+        static thread_local IntermediateSerializer* activePass_;
+        static IntermediateSerializer& ActivePass();
+        static IntermediateSerializer& InitializePendingSerializers();
+        static void PrepareOperationSerializer();
 
         // An external target needs a known identity, not an instantiable XML serializer.
         static std::string ResolveExternalTargetTypeName(const std::string& spelledName,

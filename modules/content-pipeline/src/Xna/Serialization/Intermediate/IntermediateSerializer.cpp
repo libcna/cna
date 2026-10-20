@@ -6,11 +6,14 @@
 #include <cfloat>
 #include <charconv>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
+#include <exception>
 #include <format>
 #include <limits>
 #include <map>
 #include <mutex>
+#include <thread>
 #include <typeindex>
 #include <unordered_map>
 #include <unordered_set>
@@ -71,6 +74,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         struct Registry
         {
             std::mutex mutex;
+            std::condition_variable changed;
+            // Keep the callback owner alive until all its registered workers are destroyed.
+            std::unique_ptr<IntermediateSerializer> owner;
             std::vector<std::unique_ptr<ContentTypeSerializerBase>> owned;
             std::unordered_map<System::Type, ContentTypeSerializerBase*> byType;
             std::unordered_map<std::type_index, ContentTypeSerializerBase*> byCarrier;
@@ -78,6 +84,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             std::unordered_map<std::string, ContentTypeSerializerBase*> byAlias;
             std::unordered_set<std::string> knownNames;
             bool builtInsRegistered = false;
+            bool builtInsRegistering = false;
+            std::thread::id builtInsThread;
+            bool initializing = false;
+            std::thread::id initializationThread;
+            std::size_t initializedCount = 0;
+            std::exception_ptr initializationFailure;
         };
 
         Registry& TheRegistry()
@@ -945,6 +957,81 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
     {
     }
 
+    thread_local IntermediateSerializer* IntermediateSerializer::activePass_ = nullptr;
+
+    class IntermediateSerializer::OperationScope
+    {
+    public:
+        explicit OperationScope(const std::string& path) : pass_(path), previous_(activePass_)
+        {
+            activePass_ = &pass_;
+        }
+        ~OperationScope() { activePass_ = previous_; }
+        OperationScope(const OperationScope&) = delete;
+        OperationScope& operator=(const OperationScope&) = delete;
+    private:
+        IntermediateSerializer pass_;
+        IntermediateSerializer* previous_;
+    };
+
+    IntermediateSerializer& IntermediateSerializer::ActivePass()
+    {
+        // Owner lookups remain valid outside an operation. These CNAEXT formatting helpers
+        // have no current document then; do not expose another thread's or a stale pass's state.
+        static thread_local IntermediateSerializer inactive("");
+        return activePass_ ? *activePass_ : inactive;
+    }
+
+    IntermediateSerializer& IntermediateSerializer::InitializePendingSerializers()
+    {
+        EnsureBuiltInTypeSerializers();
+        Registry& registry = TheRegistry();
+        std::unique_lock lock(registry.mutex);
+        const auto thread = std::this_thread::get_id();
+        registry.changed.wait(lock, [&] { return !registry.initializing || registry.initializationThread == thread; });
+        if (registry.initializationFailure) std::rethrow_exception(registry.initializationFailure);
+        if (!registry.owner) registry.owner.reset(new IntermediateSerializer(""));
+        auto& owner = *registry.owner;
+        if (registry.initializing) return owner; // Published lookup during a callback is reentrant.
+        if (registry.initializedCount == registry.owned.size()) return owner;
+        registry.initializing = true;
+        registry.initializationThread = thread;
+        try
+        {
+            while (registry.initializedCount < registry.owned.size())
+            {
+                auto* serializer = registry.owned[registry.initializedCount++].get();
+                lock.unlock();
+                // User code may resolve itself, other workers, or register another worker.
+                // Invoke user code without holding the registry mutex.
+                serializer->InvokeInitialize(owner);
+                lock.lock();
+            }
+        }
+        catch (...)
+        {
+            if (!lock.owns_lock()) lock.lock();
+            registry.initializationFailure = std::current_exception();
+            registry.initializing = false;
+            registry.initializationThread = {};
+            lock.unlock();
+            registry.changed.notify_all();
+            throw;
+        }
+        registry.initializing = false;
+        registry.initializationThread = {};
+        lock.unlock();
+        registry.changed.notify_all();
+        return owner;
+    }
+
+    void IntermediateSerializer::PrepareOperationSerializer()
+    {
+        // Include workers registered during an active read/write before invoking their payload.
+        // Direct CNAEXT Invoke* calls outside an operation retain their caller-managed contract.
+        if (activePass_) (void)InitializePendingSerializers();
+    }
+
     ContentTypeSerializerBase& IntermediateSerializer::GetTypeSerializer(System::Type type) const
     {
         EnsureBuiltInTypeSerializers();
@@ -1147,12 +1234,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
     const std::string& IntermediateSerializer::getReferenceRelocationPathProperty() const noexcept
     {
-        return referenceRelocationPath_;
+        return ActivePass().referenceRelocationPath_;
     }
 
     const std::vector<std::pair<std::string, std::string>>& IntermediateSerializer::NamespaceAliases() const noexcept
     {
-        return aliases_;
+        return ActivePass().aliases_;
     }
 
     namespace
@@ -1344,12 +1431,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
     std::string IntermediateSerializer::SpellTypeName(const ContentTypeSerializerBase& serializer)
     {
-        return SpellCanonical(*this, CanonicalTypeName(serializer.TargetTypeName()), aliases_);
+        return SpellCanonical(*this, CanonicalTypeName(serializer.TargetTypeName()), ActivePass().aliases_);
     }
 
     std::string IntermediateSerializer::SpellDeclaredTypeName(const std::string& typeName) const
     {
-        return SpellWithExistingAlias(CanonicalTypeName(typeName), aliases_);
+        return SpellWithExistingAlias(CanonicalTypeName(typeName), ActivePass().aliases_);
     }
 
     ContentTypeSerializerBase& IntermediateSerializer::ResolveTypeName(const std::string& spelledName,
@@ -1386,7 +1473,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                                                  ContentTypeSerializerBase& serializer,
                                                  const std::string& referenceRelocationPath)
     {
-        EnsureBuiltInTypeSerializers();
+        auto& owner = InitializePendingSerializers();
         if (serializer.IsNull(value))
         {
             throw System::ArgumentNullException("value");
@@ -1398,12 +1485,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             payload = serializer.UnderlyingValue(payload);
             declared = const_cast<ContentTypeSerializerBase*>(underlying);
         }
-        IntermediateSerializer pass(referenceRelocationPath);
-        IntermediateWriter writer(pass, output);
+        const OperationScope pass(referenceRelocationPath);
+        IntermediateWriter writer(owner, output);
         writer.ScanForNamespaces(payload, *declared);
         output.WriteStartDocument();
         output.WriteStartElement("XnaContent");
-        for (const auto& [alias, ns] : pass.aliases_)
+        for (const auto& [alias, ns] : owner.NamespaceAliases())
         {
             output.WriteAttributeString("xmlns:" + alias, ns);
         }
@@ -1418,9 +1505,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                                                             ContentTypeSerializerBase& serializer,
                                                             const std::string& referenceRelocationPath)
     {
-        EnsureBuiltInTypeSerializers();
-        IntermediateSerializer pass(referenceRelocationPath);
-        IntermediateReader reader(pass, input);
+        auto& owner = InitializePendingSerializers();
+        const OperationScope pass(referenceRelocationPath);
+        IntermediateReader reader(owner, input);
         try
         {
             ContentObject result = reader.ReadRootAsset(serializer);
@@ -1545,15 +1632,34 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
 
     void IntermediateSerializer::EnsureBuiltInTypeSerializers()
     {
+        Registry& registry = TheRegistry();
         {
-            Registry& registry = TheRegistry();
-            std::lock_guard<std::mutex> lock(registry.mutex);
+            std::unique_lock lock(registry.mutex);
+            const auto thread = std::this_thread::get_id();
+            registry.changed.wait(lock, [&] { return !registry.builtInsRegistering || registry.builtInsThread == thread; });
             if (registry.builtInsRegistered)
             {
                 return;
             }
-            registry.builtInsRegistered = true;
+            if (registry.builtInsRegistering) return; // A built-in's dependency is registering on this thread.
+            registry.builtInsRegistering = true;
+            registry.builtInsThread = thread;
         }
+        struct Completion
+        {
+            Registry& registry;
+            bool succeeded = false;
+            ~Completion()
+            {
+                {
+                    std::lock_guard lock(registry.mutex);
+                    registry.builtInsRegistered = succeeded;
+                    registry.builtInsRegistering = false;
+                    registry.builtInsThread = {};
+                }
+                registry.changed.notify_all();
+            }
+        } completion{registry};
         RegisterTypeSerializer(std::make_unique<TextSerializer<bool, BoolTraits>>());
         RegisterTypeSerializer(std::make_unique<TextSerializer<std::int8_t, SByteTraits>>());
         RegisterTypeSerializer(std::make_unique<TextSerializer<std::uint8_t, ByteTraits>>());
@@ -1711,9 +1817,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                 std::string(Graphics::AnimationContentDictionary::CollectionItemName)));
         ContentTypeSerializerBase& object = RegisterTypeSerializer(std::make_unique<ObjectSerializer>());
         {
-            Registry& registry = TheRegistry();
             std::lock_guard<std::mutex> lock(registry.mutex);
             registry.byType.emplace(System::Type::From<ContentObject>(), &object);
         }
+        completion.succeeded = true;
     }
 }
