@@ -9,6 +9,45 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+10:46 UTC:087 runtime COMMITTED3d254dfa7, FIXED_PENDING_REGRESSION;74/81 unchanged.
+All native gates below complete. External48985 COMPLETE0,1043 printed steps, zero
+warnings. First audit rejected terminal gap3 vs prior1; retained. Exact accounting
+shows three printed prelude steps plus1040 contiguous body steps, whereas prior
+had one plus971. Corrected native/external *build-accounting-audit.json errors[].
+Original focus90968 COMPLETE1,146 cases: only existing_objects old null-fallback
+oracle fails5/13 on both renderers;087 shared_resources17/17 PASS both. Corrected
+demo retains13 checks (null result AND unchanged offered object); oracle build76338
+COMPLETE0 warning-free9 steps, oracle focus72580 COMPLETE0,64PASS/nine unchangedFAIL
+per renderer, exact errors[]. Marker087 removed afterward, build55301 COMPLETE0,
+nine steps warning-free; marker focus15417 RUNNING(1). No other active gate.
+Next freeze319 external artifacts and launch repair-content-dispatch-final-gates.mjs
+under private GPU. It runs both95 math, both719 smoke/six visuals, original-baseline
+strict comparison (C root residual remains), ADDITIONAL predecessor-only comparison,
+then serial735/732 CTest with319 pre/post hashes. No concurrent SystemLink suite.
+No089 runtime edits yet; new17 edge controls are demos6d45c49. CNA uncommitted only
+handoff/matrix; demos oracle/marker/evidence updates await coherent commit.
+
+10:35 UTC: native31779 COMPLETE0; pipeline552=551PASS/one unchangedSDK-fixtureSKIP,
+932.000s, exact audit errors[] and four post-hashes match. All087 native gates now
+complete, but runtime remains uncommitted pending external focus. External48985
+still builds1043 scheduled steps. Evidence demos6d45c49 includes native checkpoint
+and new089 fresh-process edge probe: cycles11=onePASS/tenFAIL; failure6=onePASS/
+fiveFAIL. Strict build warning-free, exact audits errors[], actual exits1. No089
+runtime changes. Its explicit unique_ptr registration lacks factories for XNA's
+fresh-instance retry; that boundary must not be silently replaced with same-object
+retry. Genuine15 retains the full reference behavior.
+
+Prepared additional repair-content-dispatch-predecessor-compare.mjs (syntax checked,
+not executed) compares every719 status/check/marker/failure multiset against the
+immediately preceding043 run, allowing only087's measured callback improvement.
+It also requires the ORIGINAL-baseline residual to remain identical and reports
+globallyAccepted=false when that C root-contract regression remains. This is NOT
+a waiver or replacement of the mandatory original-baseline comparison. Keep039/
+045/043/103 pending; a local batch pass alone cannot make the global campaign green.
+Next: complete external build, audit warnings, run initial146 focus and retain the
+known demonstrably wrong zero-reference fallback expectation, then correct only
+that expectation with reference evidence and rerun all146 before087 marker removal.
+
 10:30 UTC: native module/consumers complete with exact comparisons; pipeline31779
 and external build48985 still running. Post-rebuild actual-TU sanitizer rerun36/36
 PASS9ms, no ASan/UBSan/leak diagnostics, four frozen hashes match. Independent089

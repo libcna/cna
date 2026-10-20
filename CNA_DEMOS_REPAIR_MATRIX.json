@@ -1603,12 +1603,14 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "ReadSharedResources uses InnerReadObjectAny, whose erased ReadUntyped result bypasses disposable recording.",
-      "current_validation": "Genuine reference53/53 and value/nullable34/34 pass (original18 labels retained). Native28 before10PASS/18FAIL; expanded36 exposed four nullable regressions, retained and corrected. Actual-TU36/36 normal and ASan/UBSan/leak pass, including rebuilt-library rerun9ms. Initial whole build interrupted130 after491/1203; corrected whole build passes with same51 warnings. Canonical focus36/36; module1965=1961PASS/four unchangedSKIP111.347s, exact previous1929+36 with one measured value-oracle rename. Consumers1412/runtime241/default and original XML exact, four artifact hashes match. Pipeline552 and external whole build running. Existing demo zero-index fallback expectation demonstrably contradicts genuine null result; retain its initial failure before correcting that oracle.011 manager/by-value ownership remains separate. Runtime uncommitted, no closure.",
+      "current_validation": "CNA3d254dfa7: genuine reference53/53 and value/nullable34/34; native36/36 normal and actual-TU ASan/UBSan/leak, rebuilt-library rerun36/36. Whole CNA build passes with same51 warnings; external1043 printed steps passes warning-free. Native module1965=1961PASS/four unchangedSKIP; pipeline552=551PASS/one unchangedSKIP932s; consumers1412/runtime241/default/original XML exact, four hashes match. Initial external146 retains only demonstrably wrong zero-index demo expectation (5/13); corrected null-result/unchanged-offered-object oracle restores13/13. Both renderers now64PASS/nine unchangedFAIL, exact comparisons.087 shared-resource assertions17/17 unchanged pass; marker removed, marker build/focus pending. Full719/CTest/visual gates pending; no closure.011 manager ownership and C API root-contract residual remain separate.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": ["Current strict renderer sweeps retain087's exact shared-table callback failure. Genuine ContentOwnershipOracle35/35 verifies inline then two shared callbacks, shared aliases without extra callbacks, default disposal and retained records after a later shared read fails. Preserve runtime disposable capability before type erasure; do not guess std::any types or add demo-specific aliases. No runtime repair yet."],
+      "cna_fix_commit": "3d254dfa7",
+      "validation": [
+        "Current strict renderer sweeps retain087's exact shared-table callback failure. Genuine ContentOwnershipOracle35/35 verifies inline then two shared callbacks, shared aliases without extra callbacks, default disposal and retained records after a later shared read fails. Preserve runtime disposable capability before type erasure; do not guess std::any types or add demo-specific aliases. No runtime repair yet."
+      ],
       "final_disposition": null
     },
     {
