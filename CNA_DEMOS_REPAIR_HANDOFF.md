@@ -9,6 +9,56 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+12:18 UTC: native012 pipeline94252 COMPLETE0,559=558PASS/one unchangedSDK-fixture
+SKIP; exact predecessor audit errors[], four posthashes match. All prepared native
+012 gates now pass. External79065 is the only active worker (~514/1043); no source
+or metadata edits until it finishes.012 runtime still uncommitted pending external
+focus, no closure. Independent105/108 before probes also finish: named-routing25
+=19PASS/sixFAIL; font-regions12=8PASS/fourFAIL, strict warning-free/four frozen hashes
+match. Permanent sources and PUBLIC_BOUNDARY_TRIAGE.md retain failures and controls.
+Next: audit external build,146 initial focus, commit validated012 runtime, remove
+only the two012 markers on actual proof, marker rebuild/focus, then full gates.
+
+12:14 UTC: consumers7409 COMPLETE0:1412=1408PASS/four unchangedSKIP,
+runtime241=238PASS/three unchangedSKIP, XML4/2 and original fixtures6/6; exact
+audit errors[]. Six link-footprint CTests COMPLETE0 (3.24s), no skips; both
+four-artifact pre/post hashes match. Only pipeline94252 RUNNING(1) and external
+build79065 RUNNING(1), ~440/1043. No source/metadata edits. Next: finish559 pipeline
+audit and external zero-warning/source audit, then146 initial renderer focus.
+Native012 source/runtime remains uncommitted, markers unchanged, counts76/79.
+
+12:07 UTC: native module4214 COMPLETE0,1985=1981PASS/four unchangedSKIP. Canonical
+20focus PASS, exact old1965 (+one measured oracle rename)+20 new cases audit errors[],
+four posthashes match. Consumers7409 RUNNING(1), pipeline94252 RUNNING(1), external
+79065 RUNNING(1). No overlapping SystemLink; external is a build only. No source or
+metadata changes. Next free slot: six link-footprint CTests via *-native-gates.mjs
+link-footprint. External build auditor prepared *-external-build-audit.mjs: require
+all steps accounted, zero warnings and nine source hashes unchanged before146 focus.
+
+12:04 UTC: canonical native01243298 COMPLETE0,1205 printed steps,51 prior warnings
+and no new diagnostics; build accounting/provenance/nine source hashes audit errors[].
+Four artifacts FROZEN under repair-content-stream-routing-native-frozen.sha256.
+Module4214 RUNNING(1): canonical20 focus then1985 exact cases; pipeline94252 RUNNING(1):
+559 exact predecessor cases. External79065 RUNNING(1),1043 scheduled steps. THREE
+workers, no source/fixture/metadata edits. Reports *module-driver.log/*pipeline-driver.log.
+Next when4214 finishes: consumers/runtime/XML then six link-footprint CTests in the
+free slot (external is building, not SystemLink testing). After external build verifies
+zero-warning/source hashes, run146 initial focus; remove012 markers only on proof.
+Current HEADs CNAaa005dae6/demosdb2716f; CNA012 runtime/tests/docs remain uncommitted.
+Prepared full external phase content-stream-routing expects67 cumulative improvements;
+global C root conflict still retained. Counts76 FINAL/79 PENDING, no new closure.
+
+12:03 UTC scheduling update: native43298 RUNNING(2), ~636/1205,51 prior warnings/no
+new diagnostics in partial audit. Start external012 build RUNNING(1) under private GPU,
+report repair-content-stream-routing-external-build.log. This intentionally advances
+the earlier sequential schedule: focused actual-TU20/sanitizers already prove the
+candidate, both trees now build the SAME frozen sources concurrently; closure/commit
+still require all native/external gates. Nine source hashes and all319 old external
+hashes reverified immediately before external freeze release. THREE workers total.
+No compiled source/metadata/native-test edits while either build runs. Final external
+full helpers now accept phase content-stream-routing with67 cumulative improvements,
+two012 predecessor changes and the unchanged strict C root residual; not run yet.
+
 11:59 UTC: closure commits CNA57bd989a0/demos840c1e5;76 FINAL/79 PENDING unchanged.
 Only43298 native012 build RUNNING(2),1205 scheduled steps. All compiled source/test
 hashes remain frozen at *source-platform.sha256; no subsequent product edits.
