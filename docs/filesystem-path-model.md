@@ -177,6 +177,34 @@ Long paths are a separate concern from encoding and are tracked separately. With
 `MAX_PATH` and `create_directories` fails beyond it. Unicode correctness does not imply long-path
 support and this document does not claim it.
 
+### TitleContainer's XNA path contract
+
+`TitleContainer::OpenStream` accepts title-relative names, not arbitrary absolute
+filesystem paths. It first rejects empty input with `ArgumentNullException`, then
+applies XNA's dot/parent-component cleaning before validating rooted paths,
+remaining escaping parents and the reserved characters `:*?"<>|`. Invalid cleaned
+names produce `ArgumentException`. Keep this ordering: a removed component may
+contain a reserved character, and XNA's empty-component rules are not equivalent
+to a blanket `lexically_normal()`.
+
+The relative URI check retains XNA4's Framework4 limit of65520 UTF-16 code units,
+not UTF-8 bytes. This is a title compatibility boundary, not a general filesystem
+or modern Sharp Runtime URI limit. Ordinary OS path limits can fail earlier.
+
+Missing files/parents produce `FileNotFoundException`. Other open failures, such
+as an existing directory, an embedded NUL or an overlong native path, produce
+`InvalidOperationException` retaining the underlying cause. Android packaged-asset
+fallback is attempted only for genuinely missing native paths. Case-insensitive
+asset lookup remains supported.
+
+Migration for CNA-DEMOS-ISSUE-145: code that previously passed an absolute path
+must supply a title-relative name (or use the general `System::IO::FileStream`
+API when it intentionally needs filesystem access). No API signature/layout is
+changed. The C title-read route reports invalid names as `INVALID_ARGUMENT`, while
+missing/unreadable files retain its documented `IO` category and do not overwrite
+the destination buffer. The native absolute-path acceptance test was corrected
+against genuine XNA, not treated as an intentional extension.
+
 ---
 
 ## Proving a path is right

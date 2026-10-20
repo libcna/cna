@@ -774,7 +774,8 @@ CNA_C_API CNA_Result cna_title_location_set_path_ext(CNA_Handle game, CNA_String
  * @brief Reads a whole file from the title's content location.
  *
  * @param game Active owned or callback-borrowed game handle.
- * @param name UTF-8 file name relative to the title path, or an absolute path.
+ * @param name UTF-8 file name relative to the title path. Empty, rooted, escaping
+ * or otherwise invalid cleaned names return CNA_RESULT_INVALID_ARGUMENT.
  * @param destination Buffer receiving the bytes; may be null only when @p capacity is zero.
  * @param capacity Bytes available in @p destination.
  * @param out_bytes Always receives the file's byte count.
@@ -785,8 +786,9 @@ CNA_C_API CNA_Result cna_title_location_set_path_ext(CNA_Handle game, CNA_String
  * The canonical operation hands back an open stream. This ABI has no stream handle for title
  * content, and a title asset is read to use it, so the count/copy pair delivers the **whole file**
  * instead. That is a deliberate narrowing: incremental reads over a title stream are not available.
- * The canonical failure for a missing file is a plain runtime error, which this route reports as
- * `CNA_RESULT_IO` rather than letting it reach a caller as an internal failure.
+ * A missing file raises FileNotFoundException and an unreadable entry raises
+ * InvalidOperationException in C++; both map to CNA_RESULT_IO here. Invalid path
+ * arguments retain CNA_RESULT_INVALID_ARGUMENT instead of becoming I/O failures.
  */
 CNA_C_API CNA_Result cna_title_container_read_ext(
     CNA_Handle game,

@@ -21,8 +21,13 @@ namespace Microsoft::Xna::Framework
 
         /**
          * @brief Opens a title content file for reading.
-         * @param name The relative or absolute path to the content file.
+         * @param name The path relative to TitleLocation, with either slash convention.
          * @return A unique pointer to the opened stream.
+         * @throws System::ArgumentNullException if name is empty.
+         * @throws System::ArgumentException if the cleaned name is rooted, escapes
+         *         the title directory, contains reserved characters or is not a relative URI.
+         * @throws System::IO::FileNotFoundException if the title file is missing.
+         * @throws System::InvalidOperationException if an existing title entry cannot be opened.
          */
         [[nodiscard]] static std::unique_ptr<System::IO::Stream> OpenStream(const std::string& name);
 

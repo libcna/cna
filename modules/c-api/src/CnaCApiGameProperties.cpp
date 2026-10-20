@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
 #include "System/IO/Stream.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/TimeSpan.hpp"
 
 #include <algorithm>
@@ -340,12 +341,14 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    // A missing or unreadable title file is a plain runtime error naming the file, which the
-    // exception firewall would otherwise report as an internal failure. It is I/O, and the
-    // route says so.
+    // Keep invalid title names distinct from an existing but unreadable title entry.
+    // OpenStream translates open failures to InvalidOperationException; this C route
+    // intentionally retains its documented I/O category for those failures.
     std::unique_ptr<System::IO::Stream> stream;
     try {
         stream = TitleContainer::OpenStream(path);
+    } catch (const System::ArgumentException& exception) {
+        return InvalidArgument(exception.what());
     } catch (const std::exception& exception) {
         return IoError(exception.what());
     }

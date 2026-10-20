@@ -9,6 +9,7 @@
 
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/ArgumentException.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
 
 using Microsoft::Xna::Framework::TitleContainer;
@@ -66,16 +67,15 @@ TEST(TitleContainerTest, OpenStreamReturnsReadOnlyStream)
 // OpenStream — absolute (rooted) name
 // -----------------------------------------------------------------------
 
-TEST(TitleContainerTest, OpenStreamAbsolutePathReadsContent)
+TEST(TitleContainerTest, OpenStreamRejectsAbsolutePathEvenWhenTheFileExists)
 {
     auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_abs";
     std::filesystem::create_directories(tmpDir);
     const std::string absPath = WriteTempFile(tmpDir, "data.bin", "abcd");
 
-    // Rooted path is used directly, regardless of TitleLocation.
-    auto stream = TitleContainer::OpenStream(absPath);
-    ASSERT_NE(stream, nullptr);
-    stream.reset();
+    // Genuine XNA4 rejects rooted names; the old acceptance assertion was incorrect.
+    EXPECT_THROW((void)TitleContainer::OpenStream(absPath), System::ArgumentException);
+    EXPECT_TRUE(std::filesystem::exists(absPath));
 
     std::filesystem::remove_all(tmpDir);
 }

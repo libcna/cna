@@ -194,6 +194,38 @@ tests remain visible, including three pre-existing new Title145 failures and thr
 unchanged capability skips. Actual external C ABI execution is still pending.
 Evidence: `../cna-demos/docs/repair-evidence/storage/`; no FileShare152 closure.
 
+Title145 measured repair decision (2026-10-20, external validation pending):
+genuine Windows XNA4 rejects initially empty input before cleaning, normalizes
+dot/parent components before rejecting rooted/reserved/escaping names, and validates
+a relative URI including Framework4's65520 UTF16-unit boundary. A generic lexical
+normalizer does not preserve empty-component behavior. Actual GAC assembly IL,
+not the available mismatching decompilation, translates only FileNotFoundException
+and DirectoryNotFoundException to missing-file categories; other open failures
+retain their inner exception under InvalidOperationException. Genuine30/30 checks
+pin both ASCII/astral limits and existing/missing embedded-NUL prefixes.
+
+The canonical FileStream must reject empty/NUL names before filesystem effects,
+refuse directory handles and retain native stat errors; an existence precheck in
+TitleContainer masked those distinctions. Android asset fallback is retained only
+for genuine missing paths, not for invalid/denied paths. Its branch syntax-checks
+under native headers; no Android runtime/cross-build claim. Case-insensitive lookup
+is preserved. C title-read invalid arguments map to INVALID_ARGUMENT; missing or
+unreadable entries retain the route's documented IO result, with no buffer write.
+The old native absolute-path acceptance assertion contradicted genuine XNA and is
+corrected to require rejection while preserving its existing-file control.
+
+Sharp prerequisites1c0fc9b5/551ced42/82b57541/3304ecd6/58c6cba1 now pass18144/18144
+tests across41 executables,zero failures/skips. The FileStream Append/ReadWrite
+long-path guard ordering differs between Framework4 and current.NET; both measured
+72-check versions are recorded, and Sharp retains current.NET's existing validation
+order. No title OpenStream call uses Append. No FileShare policy is inferred.
+Native/C ABI pre-fix failures and the intermediate length-category regression are
+retained; no assertion was relaxed. The actual two production TUs now pass13/13
+ASan/UBSan/leak tests. Final rebuilt-native focus17/17 and all241 runtime tests
+238PASS/three unchanged skips now pass; exact1412 prior consumers1408PASS/four
+unchanged skips (168.769s), and both native hashes are reverified. Actual external
+C ABI/demos remain pending; no issue closure is claimed by this native checkpoint.
+
 The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
 both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
 the recorded rows above are superseded by this checkpoint; permanent evidence is

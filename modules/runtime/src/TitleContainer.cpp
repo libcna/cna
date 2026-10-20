@@ -2,6 +2,12 @@
 
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/IO/DirectoryNotFoundException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/Uri.hpp"
+#include "System/UriFormatException.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -25,50 +31,126 @@
 
 namespace Microsoft::Xna::Framework
 {
+    namespace
+    {
+        // XNA4 TitleContainer.GetCleanPath removes components before validation.
+        // std::filesystem::lexically_normal differs for empty/dot components before '..'.
+        std::string CleanTitlePath(std::string path)
+        {
+            for (char& value : path) if (value == '\\') value = '/';
+            for (std::size_t position = 0; (position = path.find("/./", position)) != std::string::npos; ++position)
+                path.replace(position, 3, "/");
+            while (path.starts_with("./")) path.erase(0, 2);
+            while (path.ends_with("/."))
+                path = path.size() <= 2 ? "/" : path.substr(0, path.size() - 2);
+            const auto collapse = [&path](std::size_t position, std::size_t length)
+            {
+                const std::size_t previous = path.rfind('/', position - 1);
+                const std::size_t start = previous == std::string::npos ? 0 : previous + 1;
+                path.erase(start, position - start + length);
+                return start > 1 ? start - 1 : std::size_t{1};
+            };
+            for (std::size_t position = 1; (position = path.find("/../", position)) != std::string::npos;)
+                position = collapse(position, 4);
+            if (path.ends_with("/..") && path.size() > 3)
+                collapse(path.size() - 3, 3);
+            if (path == ".") path.clear();
+            return path;
+        }
+
+        bool IsInvalidTitlePath(const std::string& path)
+        {
+            return path.find_first_of(":*?\"<>|") != std::string::npos || path.starts_with('/') ||
+                   path.starts_with("../") || path.find("/../") != std::string::npos ||
+                   path.ends_with("/..") || path == "..";
+        }
+    }
+
     std::unique_ptr<System::IO::Stream> TitleContainer::OpenStream(const std::string& name)
     {
-        const std::string safeName = NormalizeFilePathSeparators(name);
-        const std::string realName = ResolveRealPath(safeName);
-
-        CNA::Logger::Info("[TitleContainer] OpenStream requested: " + name);
-        CNA::Logger::Info("[TitleContainer] Resolved path: " + realName);
-
-        // realName is UTF-8 (docs/filesystem-path-model.md); widening it with the narrow path
-        // constructor read it as ANSI code page bytes, so an asset under a non-ASCII title path
-        // reported itself as missing.
-        if (std::filesystem::exists(CNA::Internal::PathFromUtf8(realName)))
+        if (name.empty()) throw System::ArgumentNullException("name");
+        const std::string safeName = CleanTitlePath(name);
+        if (IsInvalidTitlePath(safeName))
+            throw System::ArgumentException("The title file name must be a valid relative path.");
+        try
         {
-            return std::make_unique<System::IO::FileStream>(
-                realName, System::IO::FileMode::Open, System::IO::FileAccess::Read);
+            // XNA4 uses Framework4 Uri's 65520 UTF-16-unit limit, independently
+            // measured for ASCII and surrogate pairs. The .NET11 reference lacks
+            // this bound, so it belongs to the XNA contract, not Sharp's Uri type.
+            if (CNA::Internal::PathFromUtf8(safeName).u16string().size() >= 65520)
+                throw System::UriFormatException("The title URI exceeds the XNA4 length limit.");
+            (void)System::Uri(safeName, System::UriKind::Relative);
         }
+        catch (const std::exception&)
+        {
+            throw System::ArgumentException("The title file name must be a valid relative path.",
+                                            std::current_exception());
+        }
+        try
+        {
+            const std::string realName = ResolveRealPath(safeName);
+
+            CNA::Logger::Info("[TitleContainer] OpenStream requested: " + name);
+            CNA::Logger::Info("[TitleContainer] Resolved path: " + realName);
+
+            // Let FileStream validate the full UTF-8 name before any native open.
+            // An existence precheck masks invalid names as missing files and can
+            // alias an embedded-NUL prefix. Only genuine missing paths may fall
+            // back to Android's packaged assets; other failures retain their cause.
+#if defined(__ANDROID__)
+            try
+#endif
+            {
+                return std::make_unique<System::IO::FileStream>(realName, System::IO::FileMode::Open,
+                                                               System::IO::FileAccess::Read);
+            }
 
 #if defined(__ANDROID__)
-        // Android assets are readable through the platform's file loader even when they are not
-        // visible as normal files -- std::filesystem::exists() above returns false for them.
-        // Try the relative name first, then the resolved name.
-        const std::string androidAssetName = IsPathRooted(safeName) ? realName : safeName;
+            catch (const System::IO::FileNotFoundException&) {}
+            catch (const System::IO::DirectoryNotFoundException&) {}
+            // Android assets are readable through the platform's file loader even when they are not
+            // visible as normal files.
+            // Try the relative name first, then the resolved name.
+            const std::string androidAssetName = IsPathRooted(safeName) ? realName : safeName;
 
-        std::vector<std::uint8_t> assetData;
-        CNA::Platform::IPlatformFileSystem* fileSystem =
-            CNA::Platform::GetCurrentPlatform().GetFileSystem();
+            std::vector<std::uint8_t> assetData;
+            CNA::Platform::IPlatformFileSystem* fileSystem =
+                CNA::Platform::GetCurrentPlatform().GetFileSystem();
 
-        bool loaded = fileSystem->TryLoadFileIgnoringCase(androidAssetName, assetData);
-        if (!loaded && androidAssetName != realName)
-        {
-            loaded = fileSystem->TryLoadFileIgnoringCase(realName, assetData);
-        }
+            bool loaded = fileSystem->TryLoadFileIgnoringCase(androidAssetName, assetData);
+            if (!loaded && androidAssetName != realName)
+            {
+                loaded = fileSystem->TryLoadFileIgnoringCase(realName, assetData);
+            }
 
-        if (loaded)
-        {
-            return std::make_unique<System::IO::MemoryStream>(
-                reinterpret_cast<SharpRuntime::bytecs*>(assetData.data()),
-                static_cast<SharpRuntime::intcs>(assetData.size())
-            );
-        }
+            if (loaded)
+            {
+                return std::make_unique<System::IO::MemoryStream>(
+                    reinterpret_cast<SharpRuntime::bytecs*>(assetData.data()),
+                    static_cast<SharpRuntime::intcs>(assetData.size()));
+            }
+            // XNA documents FileNotFoundException for a title file that is not there (it was a plain
+            // runtime_error here).
+            throw System::IO::FileNotFoundException("Could not find file '" + realName + "'.", realName);
 #endif
-
-        // XNA documents FileNotFoundException for a title file that is not there (it was a plain runtime_error here).
-        throw System::IO::FileNotFoundException("Could not find file '" + realName + "'.", realName);
+        }
+        catch (const System::IO::FileNotFoundException&)
+        {
+            throw;
+        }
+        catch (const System::IO::DirectoryNotFoundException&)
+        {
+            throw System::IO::FileNotFoundException("Could not find title file '" + safeName + "'.", safeName);
+        }
+        catch (const std::exception&)
+        {
+            // Genuine Windows XNA4 OpenStream IL_0076-0084 translates only the
+            // two missing-path categories above; other errors retain their cause.
+            // The available decompiled source also listed ArgumentException here,
+            // but that branch is absent from the actual reference assembly.
+            throw System::InvalidOperationException("Could not open title file '" + safeName + "'.",
+                                                    std::current_exception());
+        }
     }
 
     void* TitleContainer::ReadToPointer(const std::string& name, IntPtr& size)

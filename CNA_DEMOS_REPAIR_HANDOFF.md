@@ -9,8 +9,8 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-Phase E native repairs. CNA runtime5865ae938(storage151), Sharp82b57541 (including
-EOF1c0fc9b5,directory551ced42); completed external031693a9f/b086814f9(lifecycle141–144),
+Phase E native repairs. CNA runtime5865ae938(storage151), Sharp58c6cba1 (including
+EOF1c0fc9b5,directory551ced42,URI82b57541,NUL3304ecd6); completed external031693a9f/b086814f9(lifecycle141–144),
 demo markers61d344e, latest evidence024afe6. All155 IDs retained:62 FINAL/93 PENDING:
 30 runtime findings,one verified duplicate,23 documentation corrections,seven
 already fixed before campaign,one demonstrated demo-expectation defect.
@@ -28,7 +28,46 @@ six exact visuals pass, representative GLES image inspected. Isolated full CTest
 911.46s. Three hashes reverified. External freeze RELEASED after closure commits.
 Complete1128 demo-status delta54, campaign HEAD delta52. No push/merge.
 
-ACTIVE native Title145: initial68183 and final37740 target builds COMPLETE
+ACTIVE native Title145: final repaired checkpoint COMPLETE, ready for coherent
+product commit. Sharp status repair58c6cba1 built warning-free and full gate95127
+passes18144/18144 across41 executables,zero failures/skips. Native build1322
+COMPLETE warning-free; focused17/17PASS53ms. Actual TitleContainer.cpp+FileStream.cpp
+and13 regression tests pass ASan/UBSan/leak52ms. Corrected sanitizer62682 links
+the real required Sharp archives. Android branch syntax-only check2420 passes;
+not an NDK cross-build or Android runtime claim. Broad5832 COMPLETE: exact1412
+consumers1408PASS/four same skips168.769s; runtime241total238PASS/three same skips
+12.101s. Both native hashes reverified; native freeze RELEASED. C API post-fix
+execution still pending; pre-fix independent13checks/five failures retained.
+Next commit145 runtime/tests/contracts, update matrix toFIXED_PENDING_REGRESSION,
+then rebuild actual external C ABI/demos for056/145/151, focused tests before
+marker removal and full renderer/CTest regression. No external storage closure yet.
+Content146 read-only preparation found additional key-validation ordering; the
+first fresh pipeline oracle failed to load its assembly, not a behavior result.
+Its owned probe1349449/debugger1349541 were identified and terminated; wrapper
+39023 exits143 and logs remain. Do not shadow all other probes with framework DLLs.
+Use an isolated content reference staging directory if needed. No content runtime
+edits or inferred152 policy decision.
+
+Historical intermediate NUL/status failures (now repaired above): review exposed
+actual wrong-file access/truncation in FileStream. Sharp3304ecd6 now rejects NUL
+and empty input before filesystem effects; genuine54/54 and dependency18143/18143
+pass. Genuine title witness expands to30/30. CNA now opens through FileStream
+without a masking existence check (Android falls back only for genuinely missing
+paths). Native93477 build COMPLETE warning-free, but focused17 has16PASS/one
+length-categoryFAIL: FileStream discards stat errors and reports overlong paths
+as missing. Broad80437 retains that failure; do not call this checkpoint green.
+Expanded sanitizer40208 failed to link File helpers, NOT a runtime sanitizer run;
+corrected builder now links the actual required Sharp archives and awaits rerun.
+Sharp status-error repair is UNCOMMITTED: preserve errno-derived categories, new
+18-case regression fails before repair. Build83227 RUNNING. Full gate still needed.
+Genuine long-path hypothesis initially71/72; actual Framework4 Append/ReadWrite
+checks full-path length before its late append-access guard. Explicit versioned
+Framework4 mode72/72 and actual.NET8.0.31 mode72/72 record that difference; Sharp
+keeps current .NET argument precedence. Original failed logs retained. No152 policy
+decision is inferred. Next finish Sharp gate/commit, rebuild native, rerun17 focus,
+two-TU13-test sanitizer and exact consumers/runtime before145 commit/external build.
+
+Previous pre-NUL native Title145: initial68183 and final37740 target builds COMPLETE
 warning-free; final16/16 title/storage focus55ms. Actual TitleContainer.cpp ASan/
 UBSan/leak6/6PASS36ms; strict C smoke syntax compilePASS. Broader10391 COMPLETE:
 exact1412consumers1408PASS/four same skips; all240runtime237PASS/three same skips
