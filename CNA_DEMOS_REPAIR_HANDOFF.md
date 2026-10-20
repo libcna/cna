@@ -25,7 +25,10 @@ to new workloads,not the Codex application. See MODEL_ENCODER_VALIDATION.md.
 
 047 next-host fixture preparation is uncommitted in demos:
 docs/repair-evidence/content/GeneratedOutputCompiler.cpp plus
-generated_output_cli_tests.py; five Python cases parse, C++/runtime NOT RUN.
+generated_output_cli_tests.py; six Python cases parse, C++/runtime NOT RUN.
+Nested-output ownership is supported by genuine XNA static IL (eight methods,
+hashes in GENERATED_OUTPUT_TRIAGE.md), not a runtime pass. CNA's unconditional
+basename mapping must not lose the output identity after root authorization.
 Use existing custom-compiler target flags/link libraries after current serial
 work; see GENERATED_OUTPUT_TRIAGE.md. Do not conflate prepared assertions with
 the measured11-case context/manifest baseline. No047 CNA source changes.
