@@ -10,8 +10,10 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 ## Current checkpoint (2026-10-20)
 
 AUTHORITATIVE UPDATE (supersedes the earlier checkpoint text below):
-Phase F, still68 FINAL/87 PENDING of155. CNAf421948fe; demos0b4d2ce;
-Sharp99c2f79c. Goal unchanged. No push/merge. Last fully CLOSED regression is
+Phase F, still68 FINAL/87 PENDING of155. Validated runtime sourcef421948fe;
+external marker source3d1f833 (later demo commits only add evidence); Sharp99c2f79c.
+Uncommitted048 source is now building separately. Goal unchanged. No push/merge.
+Last fully CLOSED regression is
 146/147/149 (CNA50127b2f7, demosa604560); see content/CHECKPOINT.md.
 
 Pending coherent checkpoint:088/090/111 plus046 and pre-campaign-fixed030;
@@ -35,7 +37,7 @@ partial148 remains open. Do not count any of these as newly closed yet.
   One staged two-process execution per SOFTWARE/OPENGLES3 passed6/6 each;
   native deterministic/sender-receiver ENet tests11/11PASS164ms. Session8179
   completed0. No retry, added sleep or deadline extension. Permanent evidence
-  docs/repair-evidence/NETWORK_SIMULATOR.md. Marker still present pending rebuild.
+  docs/repair-evidence/NETWORK_SIMULATOR.md. Marker subsequently removed3d1f833.
 
 PREVIOUS REGISTRY GATE: native517 gives516PASS/one same XACT SKIP958.663s,
 all508 old outcomes unchanged+nine newPASS. Consumers1412=1408PASS/four same
@@ -45,7 +47,7 @@ comparator FAILS one030 child-assertion delta. That exit1 is retained, not waive
 Both math95 exact48 improvements; metadata/tools/six exact visuals pass.
 Final isolated serial CTest732accepted,48same skips,three disabled,1045.68s;
 all319 hashes verified before/after. Old freezes released after these gates and
-the staged network probe; the next corrected030 sweep must pass strict comparison.
+the staged network probe; the corrected030 sweep below now passes strict comparison.
 
 RUNNING/FROZEN:
 1. Native552/123 suites51450 COMPLETE0:551PASS/one same XACT SKIP973.298s.
@@ -61,8 +63,12 @@ RUNNING/FROZEN:
    04620/20;148 exactly two remaining PI/BOM failures. Rebuilt aggregate030 gives
    six host checks PASS on both renderers (13.319s/9.033s). Markers046/030 removed
    only afterward, demos3d1f833. External319 artifacts NOW FROZEN in
-   repair-sections-binaries.sha256. Full job35425 running, both math95 and six
-   pixel-exact visuals already PASS; SOFTWARE sweep underway. Do NOT rebuild.
+   repair-sections-binaries.sha256. Full job35425 COMPLETE0:SW617/51/48/3,
+   GLES656/53/7/3, both strict60 improvements vs initialHEAD/62vsComplete1128,
+   differences[]. Math95 exact48, metadata/tools and six exact visuals PASS.
+   Pre-CTest319 hashes match; inventory735/732enabled/three disabled,046/030
+   WILL_FAIL false. Final isolated serial CTest9154 RUNNING; post-hash audit
+   included in its shell. Log repair-sections-demo-ctest.log. Do NOT rebuild.
 3. Separate048 baseline test compilation against frozen native dependencies;
    two original regression tests added to ContentPipelineCoreTests.cpp. First
    extra-Wall/Wextra attempt fails on unchanged fixture aggregate/loop warnings;
@@ -74,16 +80,23 @@ RUNNING/FROZEN:
    append optional requestedParameters to preserve original manifest/cache identity
    (unset manual results fall back to parameters). Manifest schema/fingerprint
    algorithm unchanged. Two additional tests pin strict/default views and manual
-   result compatibility. Native whole build89679 parallel2 RUNNING; log
-   repair-effective-parameters-native-build.log. No after-pass or048 closure yet.
+   result compatibility. Native whole build89679 parallel2 RUNNING (1164 steps);
+   log repair-effective-parameters-native-build.log. Only the two known material
+   nodiscard warnings seen so far. No after-pass or048 closure yet.
+4. Genuine ContentOwnershipOracle.cs35/35, strict C#4/x86 build and actual XNA4
+   run54890 COMPLETE0. Public custom readers and real in-memory XNB, no GPU/service
+   emulation. Confirms inline/shared recording, no default identity deduplication,
+   partial-load retention, disposal-failure cleanup, callback exception ownership,
+   stream closure, root/cache transitions and header/body IOException wrapping.
+   Permanent docs/repair-evidence/content/RUNTIME_OWNERSHIP_TRIAGE.md records
+   updated012 cold Game-declaration prerequisite and011 value-handle limitation.
+   No011/012/039/043/045/087 production edits; all remain open.
 MaximumTHREE workers. No concurrent SystemLink suites; private GPU wrapper only.
 
-EXACT NEXT: finish both complete external sections sweeps and strict comparisons,
-then isolated serial CTest and319-hash audit. Keep148 and089 markers. Expected
-cumulative60 demo improvements vs initialHEAD/62 vs
-Complete1128; expected SW617/51/48/3, GLES656/53/7/3, NOT yet observed.
-Finish native552/consumer audit in parallel. Close088/090/111/046/030 only when
-all gates genuinely pass (would73FINAL). Continue089 or047/048 afterward.
+EXACT NEXT: finish isolated serial CTest9154 and319-hash audit; both complete
+renderer comparisons and native552/consumer gates already pass. Keep148 and089
+markers. Close088/090/111/046/030 only when all gates genuinely pass (would73FINAL).
+Complete048 native build/focused tests, then its own external and regression gates.
 131 OWNER-RESERVED;152 sharing policy and148 vendor policy unanswered.
 Uncommitted work:048 ContentPipeline.hpp/.cpp, ContentBuildManifest.hpp/.cpp,
 four tests in ContentPipelineCoreTests.cpp and this status update. Existing XML
