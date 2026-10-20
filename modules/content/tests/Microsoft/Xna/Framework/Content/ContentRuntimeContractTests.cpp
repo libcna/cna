@@ -490,7 +490,7 @@ TEST_F(ContentRuntimeContractTest, ReadRawObjectResolvesTheReaderFromTheType)
     EXPECT_EQ(result.value, 31337);
 }
 
-TEST_F(ContentRuntimeContractTest, ReadRawObjectReadsIntoAnExistingInstance)
+TEST_F(ContentRuntimeContractTest, ReadRawObjectRejectsBoxedExistingValueIdentity)
 {
     const ContractValueReader association;
     (void)association;
@@ -503,12 +503,12 @@ TEST_F(ContentRuntimeContractTest, ReadRawObjectReadsIntoAnExistingInstance)
 
     ContractValue existing;
     existing.value = 1;
-    const ContractValue result = reader.ReadRawObject<ContractValue>(existing);
-
-    // The reader overwrites the value it reads, so what this shows is that the existing instance
-    // reached it: a reader that ignored it could not tell these apart, which is why the reader
-    // returns the instance it was handed rather than a fresh one.
-    EXPECT_EQ(result.value, 4);
+    // Genuine XNA4 boxes both the offered value and the returned value: ReferenceEquals
+    // fails even if their fields match. The failure occurs after the payload is consumed.
+    // See cna-demos ContentValueDispatchOracle.cs (all four existing-value overloads).
+    EXPECT_THROW((void)reader.ReadRawObject<ContractValue>(existing), System::InvalidOperationException);
+    EXPECT_EQ(existing.value, 1);
+    EXPECT_EQ(stream.getPositionProperty(), stream.getLengthProperty());
 }
 
 TEST_F(ContentRuntimeContractTest, ReadRawObjectAgreesWithTheExplicitReaderOverload)

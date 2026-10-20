@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "CNA/Internal/Xnb/SerializedReferenceType.hpp"
+
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
@@ -42,24 +44,6 @@ namespace CNA::Internal::Xnb
 
     namespace Detail
     {
-        template <typename T>
-        struct IsSharedPtr : std::false_type {};
-
-        template <typename U>
-        struct IsSharedPtr<std::shared_ptr<U>> : std::true_type {};
-
-        template <typename T>
-        struct IsSerializedReferenceType
-            : std::bool_constant<IsSharedPtr<T>::value ||
-                                 std::is_same_v<std::remove_cv_t<T>, std::string>> {};
-
-        // Both managed T[] and List<T> are reference types even though CNA represents their
-        // loaded value as std::vector<T>. A collection containing either therefore stores a
-        // 1-based reader dispatch index before the nested collection payload. Treating vector as
-        // a C++ value type here loses that index and shifts every following field in the stream.
-        template <typename T, typename Allocator>
-        struct IsSerializedReferenceType<std::vector<T, Allocator>> : std::true_type {};
-
         inline std::unique_ptr<ContentTypeReaderBase> RequireReader(const std::string& canonicalName)
         {
             auto reader = Microsoft::Xna::Framework::Content::detail::CreateRegisteredReader(canonicalName);

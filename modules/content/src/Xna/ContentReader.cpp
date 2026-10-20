@@ -317,7 +317,9 @@ namespace Microsoft::Xna::Framework::Content
                 "'" + assetName_ + "' has an incorrect type reader index.");
         }
         ContentTypeReaderBase& typeReader = *typeReaders_[static_cast<std::size_t>(typeReaderIndex - 1)];
-        return typeReader.ReadUntyped(*this, std::any{});
+        std::any result = typeReader.ReadUntyped(*this, std::any{});
+        if (!typeReader.TargetIsValueType()) RecordDisposable(typeReader.DisposableResult(result));
+        return result;
     }
 
     void ContentReader::ReadSharedResources()

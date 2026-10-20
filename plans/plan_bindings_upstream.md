@@ -100,6 +100,22 @@ reference decisions, not a claim that every CNA port defect also exists in FNA,
 nor that every listed native repair has completed external regression validation.
 All probes use the genuine installed Windows XNA 4.0 assembly, not a replacement.
 
+Content dispatch087 (2026-10-20, candidate; full validation pending): genuine XNA4
+reference53/value-and-nullable34 controls require one invocation boundary for typed, raw and
+erased reads. A new disposable reference is recorded after successful type checking;
+an existing reference must retain its identity and is not recorded again. A boxed
+existing value cannot preserve identity and is rejected after reading. An empty
+Nullable existing argument boxes to null and therefore creates a new value; it is
+not an existing instance merely because the caller chose that overload. Explicit
+readers bypass the serialized index only for value targets. CNA's existing
+shared_ptr carriers preserve reference identity; its by-value reference wrappers
+(String/vector/Curve/graphics/media wrappers) do not have a managed ReferenceEquals
+identity. Retain their existing value-carrier behavior instead of inventing aliasing
+or changing their public ownership model. The internal serialized-reference trait
+is shared with collection wire dispatch and does not use Sharp Type.IsValueType's
+documented stub. Manager disposal011 and by-value graphics ownership are separate
+unresolved requirements, not claimed fixed by this dispatch repair.
+
 Reader target lookup043 (2026-10-20, native validated; external regression pending): genuine
 `../cna-demos/docs/repair-evidence/content/ReaderTargetLookupOracle.cs` passes5/5.
 Initialize resolves the reader by its target type even when reader and target names

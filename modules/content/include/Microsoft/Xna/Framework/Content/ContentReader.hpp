@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "System/IDisposable.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/IOException.hpp"
 
@@ -44,16 +45,6 @@ namespace Microsoft::Xna::Framework
 namespace Microsoft::Xna::Framework::Content
 {
     class ContentManager;
-
-    namespace Detail
-    {
-        template <typename T>
-        struct IsDisposableSharedPtr : std::false_type {};
-
-        template <typename U>
-        struct IsDisposableSharedPtr<std::shared_ptr<U>>
-            : std::bool_constant<std::is_base_of_v<System::IDisposable, U>> {};
-    }
 
     /**
      * @brief Matches FNA's real, public-sealed `Microsoft.Xna.Framework.Content.ContentReader`
@@ -224,24 +215,23 @@ namespace Microsoft::Xna::Framework::Content
             return InnerReadObject<T>(std::optional<T>(std::move(existingInstance)));
         }
 
-        /** @brief FNA's `T ReadObject<T>(ContentTypeReader typeReader)`: reads using a specific reader, bypassing dispatch. */
+        /** @brief XNA's explicit-reader overload: values are raw; reference targets use the stream's dispatch index. */
         template <typename T>
         T ReadObject(ContentTypeReaderBase& typeReader)
         {
-            T result = CastReadResult<T>(typeReader.ReadUntyped(*this, std::any{}), assetName_,
-                                         typeReader.getTargetTypeNameProperty());
-            RecordDisposable(result);
-            return result;
+            return typeReader.TargetIsValueType()
+                ? InvokeReader<T>(typeReader, std::nullopt)
+                : InnerReadObject<T>(std::nullopt);
         }
 
         /** @brief FNA's `T ReadObject<T>(ContentTypeReader typeReader, T existingInstance)`. */
         template <typename T>
         T ReadObject(ContentTypeReaderBase& typeReader, T existingInstance)
         {
-            T result = CastReadResult<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))),
-                                         assetName_, typeReader.getTargetTypeNameProperty());
-            RecordDisposable(result);
-            return result;
+            auto existing = std::optional<T>(std::move(existingInstance));
+            return typeReader.TargetIsValueType()
+                ? InvokeReader<T>(typeReader, std::move(existing))
+                : InnerReadObject<T>(std::move(existing));
         }
 
         /**
@@ -285,16 +275,14 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadRawObject(ContentTypeReaderBase& typeReader)
         {
-            return CastReadResult<T>(typeReader.ReadUntyped(*this, std::any{}), assetName_,
-                                     typeReader.getTargetTypeNameProperty());
+            return InvokeReader<T>(typeReader, std::nullopt);
         }
 
         /** @brief FNA's `T ReadRawObject<T>(ContentTypeReader typeReader, T existingInstance)`. */
         template <typename T>
         T ReadRawObject(ContentTypeReaderBase& typeReader, T existingInstance)
         {
-            return CastReadResult<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))),
-                                     assetName_, typeReader.getTargetTypeNameProperty());
+            return InvokeReader<T>(typeReader, std::optional<T>(std::move(existingInstance)));
         }
 
         /**
@@ -505,10 +493,8 @@ namespace Microsoft::Xna::Framework::Content
          * @brief Type-erased counterpart of InnerReadObject<T>(), used only by
          *        ReadSharedResources() to read each shared resource without knowing its static
          *        type ahead of time (matching FNA's own `InnerReadObject<object>(null)` call
-         *        there). Deliberately does not call RecordDisposable() -- doing so would need a
-         *        dynamic "is this actually IDisposable" check with no static T to dispatch on;
-         *        see RecordDisposable()'s own docs. `ReadObject<T>()`/`ReadRawObject<T>()`, which
-         *        always know T statically, remain the disposal-tracked paths.
+         *        there). The concrete reader preserves its result carrier's disposable capability
+         *        across type erasure, so shared objects use the same recorder as typed reads.
          */
         std::any InnerReadObjectAny();
 
@@ -545,14 +531,9 @@ namespace Microsoft::Xna::Framework::Content
             const int32_t typeReaderIndex = Read7BitEncodedInt();
             if (typeReaderIndex == 0)
             {
-                // Real FNA never fails here: default(T) always succeeds, for both C# reference
-                // types (null) and value types (zero-init). Mirror that for a default-constructible
-                // T; only a T with no default constructor AND no existing instance has no C++
-                // representation for "null" to fall back to.
-                if (existingInstance.has_value())
-                {
-                    return std::move(*existingInstance);
-                }
+                // A null serialized reference is default(T), even when the caller supplied
+                // an existing instance. By-value wrappers without a default constructor have
+                // no C++ null representation and report ContentLoadException instead.
                 if constexpr (std::is_default_constructible_v<T>)
                 {
                     return T{};
@@ -561,7 +542,7 @@ namespace Microsoft::Xna::Framework::Content
                 {
                     throw ContentLoadException(
                         "'" + assetName_ + "' has a null object of a type with no default "
-                        "constructor and no existing instance to fall back to.");
+                        "constructor.");
                 }
             }
             if (typeReaderIndex < 0 || static_cast<std::size_t>(typeReaderIndex) > typeReaders_.size())
@@ -571,18 +552,55 @@ namespace Microsoft::Xna::Framework::Content
             }
             ContentTypeReaderBase& typeReader = *typeReaders_[static_cast<std::size_t>(typeReaderIndex - 1)];
 
+            return InvokeReader<T>(typeReader, std::move(existingInstance));
+        }
+
+        template <typename T>
+        T InvokeReader(ContentTypeReaderBase& typeReader, std::optional<T> existingInstance)
+        {
+            constexpr bool hasReferenceIdentity =
+                CNA::Internal::Xnb::Detail::IsSharedPtr<T>::value || std::is_pointer_v<T>;
+            if constexpr (hasReferenceIdentity || CNA::Internal::Xnb::Detail::IsOptional<T>::value)
+            {
+                // Null references and an empty Nullable<T> both box to null in XNA.
+                // The outer optional only says that the caller used an existing overload.
+                if (existingInstance && !*existingInstance) existingInstance.reset();
+            }
+
+            auto finish = [&](T result) -> T
+            {
+                // CastReadResult has already checked the requested type. An incompatible
+                // result must never be recorded or mistaken for an identity violation.
+                if (existingInstance)
+                {
+                    bool replaced = typeReader.TargetIsValueType();
+                    if constexpr (hasReferenceIdentity) replaced = result != *existingInstance;
+                    // CNA's existing by-value reference wrappers cannot express managed
+                    // ReferenceEquals. Preserve their value-carrier behavior; identity-bearing
+                    // custom reference objects use shared_ptr, checked above.
+                    if (replaced)
+                        throw System::InvalidOperationException(
+                            "The content type reader constructed a new instance instead of "
+                            "returning the supplied existing instance.");
+                }
+                else if (!typeReader.TargetIsValueType())
+                {
+                    RecordDisposable(result);
+                }
+                return result;
+            };
+
             // See ContentTypeReader<T>::ReadUntyped()'s own docs: a move-only T (no CopyConstructible,
             // e.g. SoundEffect) is boxed as std::shared_ptr<T> instead of a bare T, since std::any
             // requires CopyConstructible unconditionally.
             if constexpr (std::is_copy_constructible_v<T>)
             {
                 std::any existingAny = existingInstance.has_value()
-                    ? std::any(std::move(*existingInstance))
+                    ? std::any(*existingInstance)
                     : std::any{};
                 std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
                 T result = CastReadResult<T>(std::move(resultAny), assetName_, typeReader.getTargetTypeNameProperty());
-                RecordDisposable(result);
-                return result;
+                return finish(std::move(result));
             }
             else
             {
@@ -592,18 +610,15 @@ namespace Microsoft::Xna::Framework::Content
                 std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
                 T result = std::move(*CastReadResult<std::shared_ptr<T>>(
                     std::move(resultAny), assetName_, typeReader.getTargetTypeNameProperty()));
-                RecordDisposable(result);
-                return result;
+                return finish(std::move(result));
             }
         }
 
         template <typename T>
         void RecordDisposable(const T& result)
         {
-            if constexpr (Detail::IsDisposableSharedPtr<T>::value)
+            if (auto disposable = detail::DisposableReference(result))
             {
-                if (!result) return;
-                auto disposable = std::static_pointer_cast<System::IDisposable>(result);
                 if (recordDisposableObject_)
                 {
                     recordDisposableObject_(std::move(disposable));
@@ -611,7 +626,7 @@ namespace Microsoft::Xna::Framework::Content
                 // Falling back to contentManager_->RecordDisposable(...) is deferred to Phase B2
                 // (XNB-17B), which is when ContentManager gains that tracking mechanism at all.
             }
-            // Value types (Vector3, Matrix, Curve, ...) are never IDisposable and are skipped.
+            // Bare value carriers are not transferred into shared ownership here.
         }
 
         ContentManager* contentManager_;

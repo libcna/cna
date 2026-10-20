@@ -10,8 +10,10 @@
 #include <utility>
 
 #include "System/Object.hpp"
+#include "System/IDisposable.hpp"
 #include "System/Type.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Xnb/SerializedReferenceType.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -20,6 +22,23 @@ namespace Microsoft::Xna::Framework::Content
 
     namespace detail
     {
+        template <typename T>
+        std::shared_ptr<System::IDisposable> DisposableReference(const T&)
+        {
+            return {};
+        }
+
+        template <typename T>
+        std::shared_ptr<System::IDisposable> DisposableReference(const std::shared_ptr<T>& value)
+        {
+            if constexpr (std::is_convertible_v<T*, System::IDisposable*>)
+                return std::static_pointer_cast<System::IDisposable>(value);
+            else if constexpr (std::is_polymorphic_v<T> && !std::is_const_v<T>)
+                return std::dynamic_pointer_cast<System::IDisposable>(value);
+            else
+                return {};
+        }
+
         /**
          * @brief Records a reader's target type against its canonical XNB name.
          *
@@ -108,6 +127,12 @@ namespace Microsoft::Xna::Framework::Content
             : targetTypeName_(std::move(targetTypeName)) {}
 
     private:
+        friend class ContentReader;
+        virtual bool TargetIsValueType() const { return false; }
+        virtual std::shared_ptr<System::IDisposable> DisposableResult(const std::any&) const
+        {
+            return {};
+        }
         std::string targetTypeName_;
     };
 
@@ -132,8 +157,8 @@ namespace Microsoft::Xna::Framework::Content
          * no such name. Where CNA can derive one it does -- a `T` that is a `System::Object` and is
          * default-constructible reports its own name through `GetTypeName()`, which is exactly the
          * canonical form. For any other `T` the name is left empty, which means the reader is not
-         * addressable by name: it still reads, through an explicit `ReadObject<T>(reader)` or
-         * `ReadRawObject<T>(reader)` call, but no `.xnb` type-reader table will select it. A reader
+         * addressable by name: it still reads through `ReadRawObject<T>(reader)` (or
+         * `ReadObject<T>(reader)` for a value target), but no `.xnb` type-reader table will select it. A reader
          * that must be selectable passes its name to the constructor below.
          */
         ContentTypeReader()
@@ -170,6 +195,18 @@ namespace Microsoft::Xna::Framework::Content
         virtual T Read(ContentReader& input, std::optional<T> existingInstance) = 0;
 
     private:
+        bool TargetIsValueType() const override
+        {
+            return !CNA::Internal::Xnb::Detail::IsSerializedReferenceType<T>::value;
+        }
+
+        std::shared_ptr<System::IDisposable> DisposableResult(const std::any& result) const override
+        {
+            using Carrier = std::conditional_t<std::is_copy_constructible_v<T>, T, std::shared_ptr<T>>;
+            const auto* value = std::any_cast<Carrier>(&result);
+            return value == nullptr ? nullptr : detail::DisposableReference(*value);
+        }
+
         /// The canonical XNA name of T, where CNA can derive one. A System::Object reports its own
         /// through GetTypeName(); nothing else can be asked, so the name is left empty there.
         [[nodiscard]] static std::string DeriveTargetTypeName()
