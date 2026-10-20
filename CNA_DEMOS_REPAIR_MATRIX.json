@@ -222,6 +222,7 @@
       "classification": "CODE_DEFECT",
       "status": "CONFIRMED_OPEN",
       "root_cause": "Ordinary Load requires the CNA-only OpenStream-routing opt-in. Cold ResourceContentManager additionally reaches BuiltinContent registration whose RegisterDeclaredXnbReaders is a no-op without prior Game declaration; historical missing-ReadAsset-registration explanation is stale.",
+      "current_validation": "Genuine cold ResourceContentManager14/14 PASS without Game; original native four cases1PASS/threeFAIL. Expanded cold baseline2PASS/sixFAIL; actual-two-TU candidate6PASS/two unchanged routingFAIL. Eight routing boundaries baseline2PASS/sixFAIL expose SoundEffect specialization and erased external references too. Combined actual-five-TU16 and expanded20 pass normally; expanded ASan initially reports528-byte SDL TLS leak after20 behavioral passes. Fixture-owned foreign threads now perform SDL_thread.h-required cleanup, no suppressions; final20/20 normal and ASan/UBSan/leak pass. Canonical native build running with20 new regressions and one measured no-Game oracle correction; runtime uncommitted, no closure or marker change.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": ["Both current witnesses still fail in strict renderer sweeps. Genuine ContentOwnershipOracle35/35 confirms ordinary Load invokes the virtual stream seam and preserves cache identity. Source audit finds ReadAsset already registers its builtin family, but family-closure tests establish Game's declaration state and miss a cold standalone manager. Preserve per-family linkage and explicit reader withdrawal semantics. No runtime repair yet."],
@@ -237,11 +238,11 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "RefreshContentManifest enumerates every regular file and groups its extension without excluding CNA pipeline bookkeeping files or its generated intermediate directory.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": ["Current089 focused manifest log explicitly lists root and nested .cna-content.lock/.cna-content-manifest.json and contentproj/.cna-contentproj/cna-buildcontent.json. Native ContentManagerManifestTests cover grouping/refresh/malformed XNB but no bookkeeping exclusion. Pipeline public manifest constant and content.cpp-generated intermediate directory confirm ownership. No production repair or assertion/marker change; native012 source freeze remains."],
       "final_disposition": null
     },
     {
@@ -1645,15 +1646,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Registered intermediate serializers never receive InvokeInitialize; serializers are global but active read/write contexts are temporary, so initialization lifetime must be repaired deliberately.",
-      "current_validation": "CNA5d32ca58b: genuine21/15 retained; actual four-TU21/11/6 controls plus four isolation/late/concurrent cases pass normal and ASan/UBSan/leak. Seven native GTests plus fresh-process cold1/1 pass both modes. Canonical79-step build two prior material warnings;559 pipeline558PASS/one sameSKIP818.582s,1965 module1961PASS/four sameSKIP, consumers1412/runtime241/XML exact, four hashes match. Whole external105 steps warning-free. Initial146 focus65PASS/eight unchangedFAIL each renderer; current20 ordered child labels preserved and all pass. First helper used stale18 count; failed audit retained and read-only predecessor20-label re-audit passes without rerunning tests. Marker/restriction removed after proof; warning-free9-step marker build, marker focus running. Full719/visual/CTest gates pending. Explicit unique_ptr registry retains failed instances/failure rather than XNA reflected reconstruction; documented extension boundary, no factory/copy API or false equivalence.",
+      "current_validation": "CNA5d32ca58b/demos4c03e74: genuine21/15; actual four-TU21/11/6 plus four isolation/late/concurrent cases normal and ASan/UBSan/leak PASS, seven native plus cold1/1 both modes PASS. Native1965=1961PASS/fourSKIP,559=558PASS/oneSKIP, consumers1412/runtime241/XML exact and four hashes verified. Whole105-step and marker9-step external builds warning-free; both146 focuses65PASS/eight unchangedFAIL per renderer, all20 ordered standalone controls preserved. Full719 SW622/46/48/3,GLES661/48/7/3,65 improvements vs start/67vsComplete1128; predecessor087 only089 improves. Both95 math, metadata/tools, six zero-pixel visuals PASS. Final CTest684PASS/48 unchangedSKIP/three disabled650.59s, all735 outcomes/319 hashes exact. Original C root-contract residual remains strict, globallyAccepted=false; overall driver1 solely that retained conflict. Local089 closure does not close039/045/043/103 or supersede global048. Explicit unique_ptr failed-instance/no-retry boundary documented, not claimed equivalent to XNA reflected reconstruction. Permanent ../cna-demos/docs/repair-evidence/content/INITIALIZATION_CHECKPOINT.md.",
       "related_issues": [],
       "cna_fix_commit": "5d32ca58b",
       "validation": [
         "Current strict external focus retains the exact missing-initialization assertion on both renderers. Genuine IntermediateInitializationOracle21/21 proves one cached serializer, exactly one Initialize across two writes/two reads, nested lookup inside Initialize, initialization before scanning/reading/writing, same long-lived owner for all callbacks and usable caches afterward. Source has no production InvokeInitialize caller. Reports repair-intermediate-initialization-asserted-xna*. No runtime repair yet."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-090",

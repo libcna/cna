@@ -9,6 +9,102 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+11:52 UTC:089 CLOSED FIXED_VALIDATED, runtime5d32ca58b/marker4c03e74;76 FINAL/79
+PENDING of155 (43 fixed,23 documentation,8 already-fixed,one expectation correction,
+one duplicate). External67911 COMPLETE1 solely retained original C root-contract
+delta. CTest COMPLETE0:684PASS/48 unchangedSKIP/three disabled650.59s,735 outcomes
+and319 hashes exact; both719 predecessor audits allow only089 improvement, six exact
+visuals and both95 math PASS. Permanent demos INITIALIZATION_CHECKPOINT.md records
+explicit unique_ptr failure/reconstruction extension boundary and original residual.
+Global048 and pending039/045/043/103 unchanged. No pushes/merges.
+
+Current demos93ead6a (012 evidence), CNA HEAD56dca0b43 before closure/status commit.
+Only active job43298 native012 build RUNNING(2),1205 scheduled steps, report suffix
+native-build-platform. Source freeze still applies. External089 freeze released ONLY
+after final audits; do not build external012 until canonical native gates prove repair.
+Prepared helpers: repair-content-stream-routing-freeze.mjs (build accounting/warning
+provenance/nine source hashes/four-artifact freeze), *-native-gates.mjs module|pipeline|
+consumers|link-footprint, *-focused.mjs initial|markers. Focus allows only two012
+improvements; ResourceContentManager must rise2->4 checks (existing success branch).
+Next: finish native build and1985/559/consumer/XML/link gates; commit012 only after
+validation, rebuild external/focus before markers. Uncommitted CNA012 runtime/tests/
+docs retained; closure commit stages only handoff/matrix.013 additionally confirmed
+from current manifest output/source, no code/test edit during012 freeze.
+
+11:47 UTC correction: native13213 exited1 during CMake regeneration BEFORE compiling:
+strict platform audit correctly rejects native SDL cleanup calls in content tests.
+Retained native-build.log. No ratchet/budget relaxation: permanent native concurrency
+case now uses existing PlatformFactory Headless + ScopedCurrentPlatform, preserving
+all synchronization/exception/cache assertions. Demos fixture retains the independently
+validated default-SDL integration + documented TLS cleanup. Native fixture23730 actual-
+five-TU sanitizer20/20PASS, no diagnostics. Nonproduction audit unchanged81 files/1050
+references PASS. New nine-source manifest *-source-platform.sha256; restarted43298
+RUNNING(2) uses *-native-build-platform.log. Native freeze release remains valid;
+no build had touched the four old binaries before this restart. External67911 stays
+frozen/running serialCTest (~380/735). Next native gate plan below unchanged.
+
+11:45 UTC:012 canonical native build13213 RUNNING(2), report repair-content-stream-
+routing-native-build.log. Native089 four hashes verified immediately before release;
+nine012 source hashes captured in repair-content-stream-routing-source.sha256. Do
+not edit compiled sources/tests until build and frozen native gates finish. Added
+20 native cases (identical to permanent demos fixture); corrected exactly one old
+no-Game-registration oracle, now AStandaloneFamilyRegistersWithoutDeclaringOtherFamilies,
+using genuine ResourceContentColdOracle14/14. Per-family linkage/withdrawal controls
+remain strict. No012 marker removed or closure claimed.
+
+Candidate80098/43448 COMPLETE0:16/16 normal and actual-five-TU ASan/UBSan/leak.
+Expanded95620 normal20/20;97433 sanitizer20 behavioral passes but EXIT1/528-byte
+SDL TLS leak in fixture-owned foreign threads. Original report retained. Installed
+SDL_thread.h explicitly requires SDL_CleanupTLS before non-SDL thread exit; fixture
+now owns that cleanup conditionally for SDL3. Final13459 sanitizer/74086 normal
+COMPLETE0:20/20, no diagnostics/suppressions, errors[]. Native libraries were not all
+instrumented. Pending external08967911 continues serial CTest, both719 sweeps and
+predecessor audits done:SW622/46/48/3,GLES661/48/7/3; only089 improves from087, C root
+residual retained/globallyAccepted=false.319 hashes match after full sweeps.
+THREE workers (nativebuild2, externalCTest1). No native SystemLink until67911 ends.
+Next: verify complete native build/warning provenance/nine source hashes, freeze
+four native artifacts, run1985 module (1965 +20 +one measured rename),559 pipeline,
+then consumers/runtime/XML and link-footprint checks.089 closure waits finalCTest.
+Uncommitted CNA:012 runtime/tests/docs plus handoff/matrix; demos:012 evidence/handoff.
+
+11:40 UTC:012 candidate now changes five production TUs plus ContentManager.hpp,
+UNCOMMITTED. Expanded cold before88082 COMPLETE0 audit (2PASS/sixFAIL); first89871
+compile failed before any test because the witness omitted BuiltinContent::Register's
+manager argument. Both original failed build log and corrected baseline retained.
+Cold actual-TU42333/15563 COMPLETE0 normal/ASan+UBSan+leak: sixPASS/two unchanged
+ordinary-routing FAIL, exact audit errors[]. Linked libraries are not fully instrumented.
+Boundary before64070 COMPLETE0 audit: eight cases, twoPASS/sixFAIL, including
+SoundEffect's specialization and untyped external references bypassing OpenStream.
+
+Combined actual-five-TU candidate80098 normal/43448 sanitizer RUNNING(1 each),16
+controls. No compiled source/fixture edits until these finish.67911 external089
+still RUNNING(1), SOFTWARE719=622PASS/46FAIL/48SKIP/three manual; only retained C
+root assertion delta,65 intended improvements. Six exact visuals and metadata/tools
+pass, GLES full underway. THREE workers total. Both canonical trees remain frozen.
+Next: audit candidate16, extend reentrant/thread/exception-identity boundary coverage,
+correct the obsolete native no-Game-registration expectation using genuine14-control
+reference, then canonical native build/gates.012 not closed;089 final CTest still ahead.
+
+11:34 UTC: CNA HEAD56dca0b43, demos HEAD4c03e74. Runtime0895d32ca58b and
+marker are committed; marker focus55039 COMPLETE0, exact65PASS/eight unchangedFAIL
+per renderer, standalone20/20 ordered controls. Final external67911 RUNNING(1),
+driver repair-intermediate-initialization-final-gates-driver.log; pre319 hashes
+and both95 math gates pass. External artifacts FROZEN: do not rebuild until full
+smoke, visuals, serial CTest and posthash audits finish. Native artifacts remain
+unchanged; all native089 gates completed as recorded below. No global C root waiver.
+
+012 expanded before witness89871 RUNNING(1): eight cases, including cold family
+closure, first explicit factory precedence, withdrawal across lazy all-family
+installation, explicit restoration and new-Game restoration. Source edits only in
+demos evidence/helper; no012 production edit yet. Candidate plan: allow standalone
+family installation without declaring all families, preserve withdrawal during lazy
+installation while allowing explicit registration/new Game to restore it. Ordinary
+virtual OpenStream routing is a separate remaining cause. Genuine cold resource14/14
+and original four-case native1PASS/threeFAIL retained. TWO active workers, no agents.
+Next: verify expanded before audit, implement/test cold registration locally using
+actual production TUs against frozen native libraries; finish089 full audit when ready.
+Uncommitted: expanded012 evidence/helper and these handoff updates only.
+
 11:25 UTC:089 runtime COMMITTED5d32ca58b, full regression pending. Native559
 pipeline15936 COMPLETE0 (558PASS/one sameSKIP818.582s); consumers93704 COMPLETE0
 (1412=1408PASS/fourSKIP129.299s,runtime238PASS/threeSKIP9.367s,XML4/2 and6/6PASS),
@@ -52,8 +148,8 @@ strict warning-free; no012 runtime edit. New file ContentStreamRoutingTests.cpp
 preserves direct ReadAsset positive, ordinary virtual Load/cache, override exception,
 and cold resource/withdrawal controls. Cold resource genuine oracle is next.
 
-External087 freeze RELEASED only after all final audits;589/other old jobs are NOT
-active. New external089 build58110 RUNNING(1), report repair-intermediate-
+External087 freeze RELEASED only after all final audits.
+New external089 build58110 RUNNING(1), report repair-intermediate-
 initialization-external-build.log, against uncommitted089 candidate. THREE workers
 total (15936/93704/58110), native four artifacts stay frozen. No compiled CNA/demo
 source changes during external build; no new012 runtime or native canonical tests.
