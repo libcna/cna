@@ -9,6 +9,30 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+14:03 UTC: corrected content78820 COMPLETE0:146 cases,68PASS/five unchangedFAIL
+per renderer, exact audit errors[]. All319 post-focus hashes match. Four additive
+manifest controls committed demos1f8ae67; no original assertion changed. Full
+combined24685 RUNNING(1):both95 math and six exact visuals already pass; both719
+sweeps/serial735 inventory CTest pending.319 external artifacts remain frozen.
+No other jobs. Ordinary ownership011 investigation continues read-only: native
+Texture2D copies intentionally survive original.Dispose and C API content handles
+explicitly survive manager unload. Any manager ownership repair must preserve those
+documented independent-handle contracts, not globally change all copy disposal.
+Next finish full gates and close013/014/105/106/108/110 only on complete local proof.
+
+13:59 UTC: external41603 COMPLETE0,1183 steps/zero warnings; three core, four C API
+and one demo source hashes match.319 external artifacts frozen for focus. C API37932
+COMPLETE0:177 per renderer, SOFTWARE167PASS/10 unchangedFAIL, GLES168PASS/nine
+unchangedFAIL, original C foundations25 labels pass; exact audit errors[]. External
+strict probes12884 COMPLETE0:manifest16/16,cold-root12/12 against rebuilt libcna.so.
+Content focus8404 stopped at an AUDIT defect: ordinary DemoContext does not print
+passing labels, unlike standalone child tests. Original logs retained. Corrected
+audit proves entire original manifest source preserved after stripping the four-check
+addition and comment correction; first correction had a one-newline boundary error,
+also retained. Corrected78820 RUNNING(1), no product/assertion edits or retries of a
+product failure. Next audit146, hash319, commit demo addition, full content-roots
+regression. Counts77FINAL/78PENDING; original C-root contract decision still pending.
+
 13:51 UTC: native root pipeline85718 COMPLETE0:562=561PASS/one unchangedSDK-fixture
 SKIP,858.214s; exact audit/four hashes match. All native gates pass. Root batch
 013/014 committed bbe2bda7b (three files, no code edits since freeze). External41603
