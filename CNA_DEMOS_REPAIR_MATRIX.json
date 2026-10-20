@@ -542,16 +542,17 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": "Historical reliable-loss behavior repaired before campaign by01534c2e7; current demo still configures receiver instead of sender and incorrectly treats Gaussian mean latency as a per-packet minimum.",
+      "status": "RESOLVED",
+      "root_cause": "Historical reliable-loss defect repaired before campaign by01534c2e7. Genuine27/27 proves sender-only simulation and normally distributed latency; demo0b4d2ce corrects receiver-side setup and invalid per-packet minimum while preserving exact counts and all six checks.",
       "related_issues": [],
       "cna_fix_commit": "01534c2e7 (pre-campaign)",
-      "current_validation": "Corrected demo0b4d2ce built with frozen actual dependencies/Werror; once per SOFTWARE/OPENGLES3, six of six checks pass; native simulator plus sender/receiver ENet11/11PASS164ms. Genuine managed simulator27/27. Full corrected checkpoint pending; marker remains. Prior strict GLES030 child-assertion delta retained as failed gate, not whitelisted.",
+      "current_validation": "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md.",
       "validation": [
         "Value-batch full GLES outage assertion vacuously passes at0/24 unreliable vs baseline1/24; preceding checkpoint and unchanged follow-up both4/24. All reliable24/24 remain delivered. No network production changes. Existing native simulator7/7 and sender/receiver ENet integration4/4 pass. Demo incorrectly configures receiver and assumes minimum latency, while pre-campaign01534c2e7 and genuine XNA use sender-only Gaussian latency. Keep pending until corrected standalone oracle is validated; do not hide exact comparison exit1.",
-        "Registry full GLES again changes only the unrelated outage assertion; strict exit1 retained, no retry/whitelist. Fresh genuine managed simulator27/27 and native deterministic7/7 (2ms); local primary XNA4 spec and decompiled DLL agree. No modules/net/src changes against initial688f3f23e. Corrected sender/recovery setup and justified statistical mean check prepared, separate probe binary builds with Werror; runtime validation waits for serial CTest51475. Permanent demos docs/repair-evidence/NETWORK_SIMULATOR.md. No closure yet."
+        "Registry full GLES again changes only the unrelated outage assertion; strict exit1 retained, no retry/whitelist. Fresh genuine managed simulator27/27 and native deterministic7/7 (2ms); local primary XNA4 spec and decompiled DLL agree. No modules/net/src changes against initial688f3f23e. Corrected sender/recovery setup and justified statistical mean check prepared, separate probe binary builds with Werror; runtime validation waits for serial CTest51475. Permanent demos docs/repair-evidence/NETWORK_SIMULATOR.md. No closure yet.",
+        "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "ALREADY_FIXED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-031",
@@ -835,15 +836,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "External TargetType is checked and stored as raw XML spelling rather than namespace-resolved canonical identity; generic declared fixups also retain noncanonical type spelling.",
       "related_issues": [],
       "cna_fix_commit": "f421948fe",
-      "current_validation": "Final genuine15/15 distinguishes assembly-qualified whitespace acceptance from unqualified refusal. Final native focus58/58PASS706ms; actual Reader/Serializer whole-corpus plus18 section and17 external cases ASan/UBSan/leak44/44PASS565ms. Full native552 and external rebuild running; marker and final disposition unchanged until strict regression. Earlier whitespace expectation failures retained.",
+      "current_validation": "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md.",
       "validation": [
-        "Fresh genuine external-alias oracle12/12 verifies root/local namespace aliases, shadowing, generic arguments, assembly qualification, no-target-serializer support and refusal of surrounding whitespace. Native corrected baseline fourPASS/eightFAIL2ms. Initial missing Object::GetTypeName fixture setup and incorrect reference whitespace expectation retained. Candidate private identity resolver reuses generic namespace parser and canonicalizes table/fixups; native rebuild21039 and41-case actual-TU sanitizer compilation23734 pending. Two additional native writer-roundtrip controls preserve emitted XML. No public API/global alias added, no closure."
+        "Fresh genuine external-alias oracle12/12 verifies root/local namespace aliases, shadowing, generic arguments, assembly qualification, no-target-serializer support and refusal of surrounding whitespace. Native corrected baseline fourPASS/eightFAIL2ms. Initial missing Object::GetTypeName fixture setup and incorrect reference whitespace expectation retained. Candidate private identity resolver reuses generic namespace parser and canonicalizes table/fixups; native rebuild21039 and41-case actual-TU sanitizer compilation23734 pending. Two additional native writer-roundtrip controls preserve emitted XML. No public API/global alias added, no closure.",
+        "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-047",
@@ -872,14 +874,15 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "RunImportAndProcess supplies a filtered effective set to Process, but Build returns request.parameters. Manifest creation also copies result.parameters, so requested cache identity must be preserved separately.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "3a1437725",
       "validation": [
         "Minimized native two-test baseline links frozen f421948fe dependencies:onePASS/oneFAIL4ms. Only effective result metadata fails for all-rejected and mixed sets; exact output bytes, warnings, observed Process parameters, request preservation and distinct requested manifest fingerprints pass. Initial extra-Wall/Wextra setup failure on unchanged fixture warnings retained; successful compilation uses project warning policy plusWerror. Permanent demos docs/repair-evidence/content/EFFECTIVE_PARAMETERS.md. No production fix yet."
       ],
-      "final_disposition": null
+      "final_disposition": null,
+      "current_validation": "Whole native build1164steps COMPLETE0, only two pre-existing material nodiscard warnings. Canonical pipeline251=250PASS/one same opt-in large-file SKIP60.971s, all246 baseline outcomes unchanged+five later additions PASS, differences[]. Four048 regressions preserve request, effective metadata, exact bytes/warnings, requested cache fingerprints and manual-result fallback. Native552 gate running; external rebuild not yet started. No closure."
     },
     {
       "id": "CNA-DEMOS-ISSUE-049",
@@ -1613,15 +1616,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "RegisterTypeSerializer mutates ownership/type/carrier maps before unchecked name-map insertion; a distinct target with a colliding shortcut is only partly registered.",
       "related_issues": [],
       "cna_fix_commit": "80b8e45b2",
-      "current_validation": "Genuine duplicate-alias11/11 and allowed shortcut/full-name priority12/12. Two over-strict new rejection expectations were corrected on genuine evidence; discarded candidate/source/sanitizer logs retained. Final actual-TU ASan/UBSan/leak5/5, original16-check probe16/16 (before6/16), focused native34/34 including whole intermediate corpus. Initial native focus ran from wrong cwd and had ten missing-fixture failures; original log retained, corrected CNA-root run34/34 in705ms. Strict56 external focused runs have exactly088 and090 assertion improvements, every other status/count/failure unchanged. Full combined native/external regression remains pending;111 is now included in the next coherent content checkpoint.",
+      "current_validation": "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md.",
       "validation": [
-        "Current strict external content focus reproduces088/089 in20 child controls with exactly two failures on both renderers. Genuine IntermediateCollisionOracle11/11: exact InvalidOperationException on conflicting XmlTypeName, original identity/output preserved, rejected target can register a distinct alias, both public round trips preserve content. Actual private XNA registration path invoked by reflection; no replacement registry. Reports repair-intermediate-collision-asserted-xna*. No runtime repair yet."
+        "Current strict external content focus reproduces088/089 in20 child controls with exactly two failures on both renderers. Genuine IntermediateCollisionOracle11/11: exact InvalidOperationException on conflicting XmlTypeName, original identity/output preserved, rejected target can register a distinct alias, both public round trips preserve content. Actual private XNA registration path invoked by reflection; no replacement registry. Reports repair-intermediate-collision-asserted-xna*. No runtime repair yet.",
+        "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-089",
@@ -1650,16 +1654,17 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "AddWriter invokes user Initialize while holding the same nonrecursive mutex required by GetTypeWriter.",
       "related_issues": [],
       "cna_fix_commit": "7864dd5b1",
-      "latest_validation": "Broader native consumers1408PASS/four unchanged SKIP of1412 and runtime238PASS/three same SKIP of241, hashes verified. After111 repair, combined native focus52PASS/one existing opt-in large-file SKIP of53 and strict56 external focus24PASS/four unchanged FAIL per renderer; xml_xnb_pipeline33/33. Marker ce04195 removes090/111 only after those passes. Combined native517 and frozen external full regression running; no closure yet.",
-      "current_validation": "Two-phase validation/callback-outside-lock repair: warning-free native build,10/10 focused native tests, strict bounded actual-library probe9/9. Four new native regressions cover nested lookup, initializer exception atomicity, registry freezing and duplicate insertion during callbacks. Full508 native content regression507PASS/one same XACT SKIP,859.192s; all504 old results unchanged, four added PASS. Native hashes verified after full run; broader consumers running. External snapshot remains frozen at the prior146/147/149 repair. No090 closure or external pass claimed.",
+      "latest_validation": "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md.",
+      "current_validation": "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md.",
       "validation": [
-        "Genuine XNA CompilerInitializationOracle8/8 confirms public nested lookup inside host initialization, exactly-once initialization and compiler-local writer identity. Strict C++23/Werror native probe logs built-in lookup PASS and ENTER Initialize but never LEAVE; single five-second process deadline terminates deadlock, exit1 retained. Permanent reference/probe committed in demos3ff4e2e; reports repair-compiler-initialization-*."
+        "Genuine XNA CompilerInitializationOracle8/8 confirms public nested lookup inside host initialization, exactly-once initialization and compiler-local writer identity. Strict C++23/Werror native probe logs built-in lookup PASS and ENTER Initialize but never LEAVE; single five-second process deadline terminates deadlock, exit1 retained. Permanent reference/probe committed in demos3ff4e2e; reports repair-compiler-initialization-*.",
+        "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-091",
@@ -2017,15 +2022,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Environment-aware XnaObjectXnbWriter::Write forwards only outputDirectory and takes platform/profile from registration options instead of the explicitly documented build environment.",
       "related_issues": [],
       "cna_fix_commit": "6823af99a",
-      "current_validation": "Both111 builds warning-free; combined native focus52PASS/one unchanged opt-in >2GiB SKIP of53,1007ms, including all four new environment/cache tests and existing manifest fingerprint tests. Strict56 external focus24PASS/four unchanged FAIL per renderer; XML-to-XNB33/33, exact original assertion counts. Markers and version2 assertion committedce04195 only after focused validation. Full517 native and frozen319-binary external checkpoint running; no closure yet.",
+      "current_validation": "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md.",
       "validation": [
-        "Current external focused33 controls retain exactly111 after090 repair. Public RegisterXnaXnbOutput header/comment explicitly delegates platform/profile to the build environment. Strict isolated four-test native baseline:one PASS/three FAIL,18ms; all three platforms/two profiles, nondefault registration with compression, no-environment backward compatibility, and output-cache version. Local fix uses explicit environment, preserves registration defaults for no-environment calls, and bumps writer component version1->2 because manifest fingerprints include it. Demo keeps the same exact identity assertion, updated only to required version2. Native/external builds running; no post-fix111 pass yet. This is a CNA extension contract, not a claim of genuine-XNA platform execution."
+        "Current external focused33 controls retain exactly111 after090 repair. Public RegisterXnaXnbOutput header/comment explicitly delegates platform/profile to the build environment. Strict isolated four-test native baseline:one PASS/three FAIL,18ms; all three platforms/two profiles, nondefault registration with compression, no-environment backward compatibility, and output-cache version. Local fix uses explicit environment, preserves registration defaults for no-environment calls, and bumps writer component version1->2 because manifest fingerprints include it. Demo keeps the same exact identity assertion, updated only to required version2. Native/external builds running; no post-fix111 pass yet. This is a CNA extension contract, not a claim of genuine-XNA platform execution.",
+        "Complete sections checkpoint: native552=551PASS/one same XACT SKIP973.298s, all517 old outcomes unchanged+35newPASS; consumers1412=1408PASS/four sameSKIP, runtime241=238PASS/three sameSKIP, original XML6/6; native hashes verified. Both719 sweeps strict60 improvements vs initialHEAD/62vsComplete1128, differences[]: SW617/51/48/3, GLES656/53/7/3. Both95 math exact48 changes; metadata/tool gates and six pixel-exact references pass. Final isolated serial CTest732accepted/zero unexpected failures/48unchanged SKIP/three disabled980.07s, all319 hashes verified before/after. Runtime snapshotf421948fe, demo markersce04195/3d1f833; later048 excluded. Permanent ../cna-demos/docs/repair-evidence/content/SECTIONS_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-112",
