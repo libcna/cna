@@ -121,6 +121,10 @@ ContentDispatchTests.cpp (17) and ReaderTargetLookupTests.cpp (eight). Kept outs
 native source glob while039/045 builds. Run bounded before probes once a worker
 is free and the native library closure is stable; preserve failures, then port
 tests into native coverage with the next repair. No087/043 pass claimed.
+Further prepared ContentOwnershipTests.cpp adds seven011 shared_ptr lifetime
+cases from measured XNA; opt-in stream routing isolates012 and does not repair it.
+Combined32-case source build-probe/repair-content-dispatch-lookup-tests.cpp.
+No compiled/run result yet, and value-handle Texture2D still requires separate work.
 
 EXACT NEXT: finish external048 isolated732-enabled CTest59450 and319-hash audit.
 Native048 gates are complete. Finish runtime native build20911;
