@@ -1603,15 +1603,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "ReadSharedResources uses InnerReadObjectAny, whose erased ReadUntyped result bypasses disposable recording.",
-      "current_validation": "CNA3d254dfa7, demos8b69456. Native36 regressions/ASan/UBSan/leak and module1965/pipeline552/consumers1412/runtime241/XML all exact. External whole/oracle/marker builds warning-free; both146 focused suites64PASS/nine unchangedFAIL, shared_resources17/17 unchanged and corrected null-reference demo13/13. Both719 sweeps complete:SW621PASS/47FAIL/48SKIP/three manual;GLES660/49/7/3. Original-baseline audit64 intended improvements plus unchanged C root-contract residual. Separate exact predecessor comparison permits only087 improvement, errors[], explicitly globallyAccepted=false. Both95 math and six zero-pixel-difference references pass;319 post-full/pre-CTest hashes match. Final serial CTest running. No closure;011 and C root issues remain separate.",
+      "current_validation": "Closed2026-10-20, CNA3d254dfa7/demos8b69456. Genuine53+34; native36/36 normal and actual-TU ASan/UBSan/leak, module1965/pipeline552/consumers1412/runtime241/XML exact. Both146 focuses64PASS/nine unchangedFAIL per renderer;08717/17 unchanged and corrected null-reference demo13/13. Full719 SW621/47/48/3,GLES660/49/7/3; exact predecessor comparison permits only087 improvement. Strict original-baseline64 intended changes retains unchanged C root-contract residual, globallyAccepted=false; no global waiver. Both95 math and six zero-pixel visuals pass. Final serial CTest735/732=684PASS/48 unchangedSKIP/three disabled670.99s, every outcome and319 pre/post hashes match. Overall driverexit1 solely for retained C root delta;087 local regression fully validated. Last globally accepted checkpoint remains048. Permanent evidence docs/repair-evidence/content/DISPATCH_CHECKPOINT.md;011/039/045/043/103 remain separate.",
       "related_issues": [],
       "cna_fix_commit": "3d254dfa7",
       "validation": [
-        "Current strict renderer sweeps retain087's exact shared-table callback failure. Genuine ContentOwnershipOracle35/35 verifies inline then two shared callbacks, shared aliases without extra callbacks, default disposal and retained records after a later shared read fails. Preserve runtime disposable capability before type erasure; do not guess std::any types or add demo-specific aliases. No runtime repair yet."
+        "Current strict renderer sweeps retain087's exact shared-table callback failure. Genuine ContentOwnershipOracle35/35 verifies inline then two shared callbacks, shared aliases without extra callbacks, default disposal and retained records after a later shared read fails. Preserve runtime disposable capability before type erasure; do not guess std::any types or add demo-specific aliases. No runtime repair yet.",
+        "Final087 closure evidence: CNA3d254dfa7, demos8b69456, DISPATCH_CHECKPOINT.md. Exact full predecessor audit plus original-baseline residual retained; no unrelated failure or C API contract reclassified."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-088",

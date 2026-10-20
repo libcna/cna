@@ -9,6 +9,30 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+11:16 UTC:087 CLOSED FIXED_VALIDATED;75 FINAL/80 PENDING of155. Final external24965
+COMPLETE1 solely for retained original-baseline C root-contract delta. CTest itself
+COMPLETE0:735 inventory/732 enabled,684PASS/48 unchangedSKIP/three disabled670.99s,
+all735 outcomes and319 pre/post hashes exact. Both719 predecessor comparisons allow
+only087 improvement and explicitly globallyAccepted=false; full SW621/47/48/3,
+GLES660/49/7/3, both95 math and six zero-pixel references PASS. No C contract failure
+waived; global048 checkpoint and pending039/045/043/103 unchanged. Permanent demos
+DISPATCH_CHECKPOINT.md records local closure and original residual side by side.
+
+Native089 module31942 COMPLETE0,1965=1961PASS/four unchangedSKIP, exact errors[]
+and four post-hashes match.15936 pipeline RUNNING(1), canonical7 focus PASS,559
+cases.93704 consumers/runtime/XML RUNNING(1), started only AFTER external CTest
+ended.012 baseline35158 COMPLETE0 helper:four native cases onePASS/threeFAIL,
+strict warning-free; no012 runtime edit. New file ContentStreamRoutingTests.cpp
+preserves direct ReadAsset positive, ordinary virtual Load/cache, override exception,
+and cold resource/withdrawal controls. Cold resource genuine oracle is next.
+
+External087 freeze RELEASED only after all final audits;589/other old jobs are NOT
+active. New external089 build58110 RUNNING(1), report repair-intermediate-
+initialization-external-build.log, against uncommitted089 candidate. THREE workers
+total (15936/93704/58110), native four artifacts stay frozen. No compiled CNA/demo
+source changes during external build; no new012 runtime or native canonical tests.
+Runtime089 still uncommitted pending native gates and focused external results.
+
 11:07 UTC clarification:20915 module launch stopped before any test, with a136940-
 byte single filter argument. Read-only --gtest_list_tests reproduction confirms
 E2BIG, statusnull/stdout0; diagnostic JSON retained. Native helper now uses compact
