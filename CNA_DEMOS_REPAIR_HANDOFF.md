@@ -52,7 +52,8 @@ exact comparators admit only48 cumulative changes(two Color demos additional).
 COMMITTED CNA: component root-cause batch031693a9f and launch batchb086814f9,
 including matching regressions and C contracts/smokes. All four matrix rows now
 FIXED_PENDING_REGRESSION; no lifecycle external validation/closure yet.
-UNCOMMITTED status: matrix/plans/handoff, and external lifecycle evidence updates.
+Status commitc01e04275; lifecycle evidence8b38d2a, storage sharing edges2129f3f.
+UNCOMMITTED: latest145/152 evidence and matrix/handoff; no production changes.
 Pre-fix standalone57total39PASS/18 intendedFAIL/zero skips907ms.
 First repaired native76/76 including19 Game controls; initial three warnings exactly
 match baseline GameTests ignored Remove results, then strengthened assertions build
@@ -98,8 +99,20 @@ Genuine EOF13/13 versus seven native failures; genuine storage172/172 versus
 native170checks29PASS/141FAIL (two FileStream share checks cannot compile yet).
 Native disproves share enforcement and disposed guards, including real mutations
 of isolated fixtures. Container shorter defaults are exclusive,Append write-only;
-direct FileStream defaults read sharing. Sharp Runtime rules/StandingApprovals
+direct FileStream defaults read sharing. New genuine sharing-edge15/15 checks prove
+denied Create/Truncate preserves bytes and exclusive locks reach a child process.
+Native direct write-only Open/OpenOrCreate loses existing data:4/4FAIL; preserve
+these controls in the same lower-layer open repair. Evidence2129f3f.
+Sharp baseline build session8883 RUNNING, existing build/Debug tree,--parallel2;
+at most three campaign jobs including Color CTest. No Sharp production edits.
+Next: verify warning-free build, then full component gate with original Yacht SOAP
+fixture /rv/tmp/samples/SAMPLE-071-Yacht_4_0/xna4-build/bin on private loopback port.
+Never overlap the campaign's SystemLink suites. Sharp Runtime rules/StandingApprovals
 read; at most TWO Sharp jobs, layout/migration/full-gate requirements apply.
+145 newly CONFIRMED_OPEN: genuine title-path20/20; native6PASS/14FAIL. Historical
+missing-file exception subdefect already fixed; existing demo now fails only two
+of ten checks. Empty/rooted/invalid-name and directory categories remain wrong.
+No title runtime edits; preserve case-insensitive lookup and Android assets.
 009/020/029/150 independently confirmed despite associated passing demos.
 Linux x86_64/Radeon780M/Mesa only; private displays only. At most THREE campaign
 jobs overall. No push/merge. Continue automatically through remaining batches.

@@ -2717,11 +2717,13 @@
       ],
       "subsystem": "storage/runtime",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "OpenStream omits genuine cleaned-path validation and exception translation. Missing-file categories are already corrected in current CNA; empty/rooted names and directory/invalid-name categories remain wrong.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine XNA20/20 path checks; unchanged native6PASS/14FAIL, warning-as-error build. Four title-relative/backslash/dot-parent/cwd/data controls and two missing-file categories pass. Existing ten-check demo now has two failures rather than historical three: absolute and empty names. Native absolute-acceptance oracle/header contradict genuine reference; preserve case-insensitive lookup and Android asset path. Evidence docs/repair-evidence/storage/TitlePathsOracle.cs,TitlePathsProbe.cpp,README.md; repair-title-paths-* reports. No product repair yet."
+      ],
       "final_disposition": null
     },
     {
@@ -2845,7 +2847,8 @@
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [
-        "Genuine172/172 includes144 symmetric access/share pairs; native admits all119 incompatible pairs,25 compatible controls pass. Two shorter exclusive defaults fail and Append throws with ReadWrite. Strict build/native170total29PASS/141FAIL. Historical suggestion to retain ReadWrite default disproved, not silently adopted. docs/repair-evidence/storage/."
+        "Genuine172/172 includes144 symmetric access/share pairs; native admits all119 incompatible pairs,25 compatible controls pass. Two shorter exclusive defaults fail and Append throws with ReadWrite. Strict build/native170total29PASS/141FAIL. Historical suggestion to retain ReadWrite default disproved, not silently adopted. docs/repair-evidence/storage/.",
+        "Additional genuine .NET4 sharing edges15/15: pre-truncation Create/Truncate refusal, normalized aliases, independent child process before/after Close, failed-constructor release. Direct unchanged Sharp Runtime write-only Open/OpenOrCreate probe4/4FAIL: out-only fstream implicitly truncates existing contents. Same four genuine preservation checks pass. Sharing must be checked before destructive opening; process-local reservations alone do not prove cross-process parity. Evidence docs/repair-evidence/storage/FileShareEdgesOracle.cs,FileStreamWriteOnlyProbe.cpp,README.md. No dependency production edits."
       ],
       "final_disposition": null
     },
