@@ -33,7 +33,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/ArgumentException.hpp"
-#include "System/IO/EndOfStreamException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Audio::SoundEffect;
@@ -140,10 +139,6 @@ namespace
                 ++completed;
             }
             catch (const ContentLoadException&)
-            {
-                ++cleanlyRejected;
-            }
-            catch (const System::IO::EndOfStreamException&)
             {
                 ++cleanlyRejected;
             }

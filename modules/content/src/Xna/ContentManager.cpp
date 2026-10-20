@@ -67,6 +67,8 @@
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #include "System/IO/FileStream.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/IO/IOException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -97,12 +99,55 @@ namespace Microsoft::Xna::Framework::Content
 
     void ContentManager::setRootDirectoryProperty(const std::string& v)
     {
+        // Measured XNA refuses even same-root assignment with cached assets; FNA's auto-property does not.
+        if (!loadedAssets_.empty())
+        {
+            throw System::InvalidOperationException("RootDirectory cannot be changed while content is loaded.");
+        }
         rootDirectory_ = v;
     }
 
     void ContentManager::setRootDirectoryProperty(std::string&& v)
     {
+        if (!loadedAssets_.empty())
+        {
+            throw System::InvalidOperationException("RootDirectory cannot be changed while content is loaded.");
+        }
         rootDirectory_ = std::move(v);
+    }
+
+    CNA::Internal::Xnb::XnbHeader ContentManager::ReadXnbHeader(
+        const std::vector<std::uint8_t>& bytes, const std::string& xnbPath)
+    {
+        if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
+        {
+            throw ContentLoadException("ContentManager: '" + xnbPath + "' is too large to load.");
+        }
+        CNA::Internal::Xnb::XnbHeader header;
+        try
+        {
+            System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+            System::IO::BinaryReader reader(&stream, true);
+            header = CNA::Internal::Xnb::ParseXnbHeader(reader, xnbPath);
+        }
+        catch (const System::IO::IOException& error)
+        {
+            // The low-level parser keeps its EOF contract; XNA wraps I/O at the content-load boundary.
+            throw ContentLoadException("Error loading '" + xnbPath + "'. Invalid XNB header.", error);
+        }
+        // Validate the file's declared range before either loader performs pointer arithmetic.
+        if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
+        {
+            throw ContentLoadException(
+                "'" + xnbPath + "' declares a totalLength (" + std::to_string(header.totalLength) +
+                ") inconsistent with its actual file size (" + std::to_string(bytes.size()) + ").");
+        }
+        if (header.compression != CNA::Internal::Xnb::XnbCompression::None && header.totalLength < 14)
+        {
+            throw ContentLoadException(
+                "'" + xnbPath + "' is truncated before its compressed-payload size field.");
+        }
+        return header;
     }
 
     // ---------------------------------------------------------------------------

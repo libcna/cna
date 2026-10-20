@@ -100,6 +100,18 @@ reference decisions, not a claim that every CNA port defect also exists in FNA,
 nor that every listed native repair has completed external regression validation.
 All probes use the genuine installed Windows XNA 4.0 assembly, not a replacement.
 
+Content runtime039/045 (2026-10-20, repair validation pending): genuine
+`../cna-demos/docs/repair-evidence/content/ContentOwnershipOracle.cs` passes89/89.
+XNA refuses RootDirectory assignment while loaded assets remain, including the
+same value; FNA's unrestricted auto-property is not the intended contract here.
+Failed Load and uncached ReadAsset do not freeze the root. XNA wraps IOException
+at the XNB header and object-body boundaries while preserving a user reader's
+InvalidOperationException. CNA keeps its low-level header parser's documented
+EndOfStreamException and performs wrapping at the content-load boundary instead.
+The common header guard also prevents an ASan-confirmed four-byte heap overread
+in the erased external-reference path on a ten-byte compressed file. No broader
+FNA lifecycle/ownership rewrite is implied;011/087 remain separately open.
+
 | Findings | Measured contract and reference | CNA repair / evidence |
 |---|---|---|
 | 002/036/097/137/138, Curve | `Curve.Evaluate` Step fraction, post-loop final tangent, degenerate spans and NaN evaluation; `CurveKey.CompareTo` NaN ordering; exact key-position collection matching. Preserve the separate C++ value-ownership alias fix. | `d753d0997`; `../cna-demos/docs/repair-evidence/curve/` |

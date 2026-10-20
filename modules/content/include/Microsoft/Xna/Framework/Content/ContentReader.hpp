@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "System/IDisposable.hpp"
 #include "System/IO/BinaryReader.hpp"
+#include "System/IO/IOException.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -332,10 +333,18 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadAsset()
         {
-            InitializeTypeReaders();
-            T result = ReadObject<T>();
-            ReadSharedResources();
-            return result;
+            try
+            {
+                InitializeTypeReaders();
+                T result = ReadObject<T>();
+                ReadSharedResources();
+                return result;
+            }
+            catch (const System::IO::IOException& error)
+            {
+                // XNA wraps I/O failures, not arbitrary user-reader or recorder exceptions.
+                throw ContentLoadException("Error loading '" + assetName_ + "'. Invalid XNB data.", error);
+            }
         }
 
         /**
@@ -345,10 +354,17 @@ namespace Microsoft::Xna::Framework::Content
          */
         CNAEXT std::any ReadAsset()
         {
-            InitializeTypeReaders();
-            std::any result = InnerReadObjectAny();
-            ReadSharedResources();
-            return result;
+            try
+            {
+                InitializeTypeReaders();
+                std::any result = InnerReadObjectAny();
+                ReadSharedResources();
+                return result;
+            }
+            catch (const System::IO::IOException& error)
+            {
+                throw ContentLoadException("Error loading '" + assetName_ + "'. Invalid XNB data.", error);
+            }
         }
 
         /**

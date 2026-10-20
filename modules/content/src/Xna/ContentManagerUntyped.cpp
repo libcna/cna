@@ -119,23 +119,7 @@ namespace Microsoft::Xna::Framework::Content
                                                   const std::string& xnbPath,
                                                   const std::string& assetName)
     {
-        if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
-        {
-            throw ContentLoadException(
-                "ContentManager: '" + xnbPath + "' is too large to load.");
-        }
-
-        System::IO::MemoryStream headerStream(
-            bytes.data(), static_cast<int32_t>(bytes.size()));
-        System::IO::BinaryReader headerReader(&headerStream, true);
-        const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
-        if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
-        {
-            throw ContentLoadException(
-                "'" + xnbPath + "' declares a totalLength (" +
-                std::to_string(header.totalLength) + ") inconsistent with its actual file size (" +
-                std::to_string(bytes.size()) + ").");
-        }
+        const auto header = ReadXnbHeader(bytes, xnbPath);
 
         switch (header.compression)
         {

@@ -108,6 +108,10 @@ namespace Microsoft::Xna::Framework::Content
 
         [[nodiscard]] std::vector<std::string> ScanXnbReaderNames(const std::filesystem::path& xnbPath) const;
 
+        /**
+         * @brief Content root; assignment is refused while loaded assets remain cached.
+         * @throws System::InvalidOperationException if the cache is not empty, even for the same root.
+         */
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
 
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
@@ -121,6 +125,10 @@ namespace Microsoft::Xna::Framework::Content
         /// stream shape an override may provide is turned into bytes once, here.
         [[nodiscard]] static std::vector<std::uint8_t> ReadStreamToEnd(System::IO::Stream& stream,
                                                                       const std::string& assetName);
+
+        /// Validates the complete container before either typed or erased loading reads its payload.
+        [[nodiscard]] static CNA::Internal::Xnb::XnbHeader ReadXnbHeader(
+            const std::vector<std::uint8_t>& bytes, const std::string& xnbPath);
 
         friend class ContentReader;
         [[nodiscard]] std::any LoadUntypedXnbReference(const std::string& assetName);
@@ -792,36 +800,7 @@ namespace Microsoft::Xna::Framework::Content
             const std::string& assetName,
             std::function<void(std::shared_ptr<System::IDisposable>)> recordDisposableObject = {})
         {
-            if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max()))
-            {
-                throw ContentLoadException(
-                    "ContentManager: '" + xnbPath + "' is too large to load.");
-            }
-
-            System::IO::MemoryStream headerStream(
-                bytes.data(), static_cast<int32_t>(bytes.size()));
-            System::IO::BinaryReader headerReader(&headerStream, true);
-            const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
-
-            // header.totalLength is a value the FILE ITSELF declares, not something ParseXnbHeader
-            // can verify against the real file size on its own -- cross-check it against the
-            // actual number of bytes just read from disk before it's used for any pointer
-            // arithmetic below (plans/plan_xnb.md XNB-43). A file claiming more bytes than it actually
-            // has (truncated, or an adversarial totalLength) would otherwise let the Lzx branch's
-            // compressedSize computation read past the end of `bytes`.
-            if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
-            {
-                throw ContentLoadException(
-                    "'" + xnbPath + "' declares a totalLength (" + std::to_string(header.totalLength) +
-                    ") inconsistent with its actual file size (" + std::to_string(bytes.size()) + ").");
-            }
-            if (header.compression != CNA::Internal::Xnb::XnbCompression::None &&
-                header.totalLength < 14)
-            {
-                throw ContentLoadException(
-                    "'" + xnbPath +
-                    "' is truncated before its compressed-payload size field.");
-            }
+            const auto header = ReadXnbHeader(bytes, xnbPath);
 
             switch (header.compression)
             {

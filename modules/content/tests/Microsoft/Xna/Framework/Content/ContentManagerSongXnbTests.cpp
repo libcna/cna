@@ -13,7 +13,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/IO/BinaryWriter.hpp"
-#include "System/IO/FileNotFoundException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -129,17 +129,15 @@ TEST_F(ContentManagerSongXnbTest, LoadNestedRealFixtureWithXnaBackslashPathEndTo
     EXPECT_TRUE(std::filesystem::exists(song.getHandle()));
 }
 
-// plans/plan_media.md MEDIA-75: re-verify that Song's corrected exception type (System::IO::
-// FileNotFoundException, not a bare std::runtime_error -- see MEDIA-10) actually propagates all
-// the way out of ContentManager::Load<Song>() through the full, real .xnb container-parsing path
-// (header + type-reader table + object dispatch), not just out of SongReader::Read() called
-// directly (which SongContentTypeReaderTests.cpp already covers) or the raw Song constructor.
-TEST_F(ContentManagerSongXnbTest, UnresolvableReferenceThrowsFileNotFoundExceptionThroughLoad)
+// XNA wraps a reader's IOException (including FileNotFoundException) at ReadAsset.
+// Direct SongReader and Song constructor calls retain their FileNotFoundException contract.
+TEST_F(ContentManagerSongXnbTest, UnresolvableReferenceWrapsFileNotFoundExceptionThroughLoad)
 {
     ScratchContentRoot root;
     WriteBytes(root.path() / "broken_song.xnb", BuildBrokenSongXnbFile("does_not_exist.wma", 1234));
 
     ContentManager cm(nullptr, root.path().string());
 
-    EXPECT_THROW(cm.Load<Song>("broken_song"), System::IO::FileNotFoundException);
+    EXPECT_THROW((void)cm.Load<Song>("broken_song"),
+                 Microsoft::Xna::Framework::Content::ContentLoadException);
 }

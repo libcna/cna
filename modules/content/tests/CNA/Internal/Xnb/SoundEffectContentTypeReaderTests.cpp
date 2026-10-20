@@ -43,7 +43,6 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
-#include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 #include "../../../../../audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTestAccess.hpp"
@@ -470,9 +469,10 @@ TEST_F(SoundEffectContentTypeReaderTest, OversizedDataLengthAgainstTruncatedStre
 
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    // XNA's ReadAsset boundary wraps the low-level EOF; raw binary reads still expose EOF.
     EXPECT_THROW(
         reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
-        System::IO::EndOfStreamException);
+        ContentLoadException);
 }
 
 // ---------------------------------------------------------------------------

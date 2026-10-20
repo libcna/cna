@@ -20,7 +20,9 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/IO/BinaryWriter.hpp"
+#include "System/IO/IOException.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -204,6 +206,17 @@ namespace
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
     };
+
+    std::any ReadUntypedFixtureReference(ContentManager& manager)
+    {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(std::string("fixture"));
+        writer.Flush();
+        stream.setPositionProperty(0);
+        ContentReader reader(&manager, &stream, "parent", 5, 'w');
+        return reader.ReadExternalReference();
+    }
 }
 
 TEST(ContentManagerConstructorTest, ServiceProviderConstructorUsesXnaEmptyRootDirectory)
@@ -303,12 +316,77 @@ TEST_F(ContentManagerXnbTest, UnloadClearsXnbCachedAssets)
     WriteBytes(root.path() / "fixture.xnb", BuildTestXnbFile(1));
 
     ContentManager cm(nullptr, root.path().string());
-    cm.Load<TestValue>("fixture");
+    ASSERT_EQ(cm.Load<TestValue>("fixture").value, 1);
     WriteBytes(root.path() / "fixture.xnb", BuildTestXnbFile(2));
     cm.Unload();
     const TestValue result = cm.Load<TestValue>("fixture");
 
     EXPECT_EQ(result.value, 2);
+}
+
+TEST_F(ContentManagerXnbTest, LoadedAssetsRefuseBothRootSettersUntilUnload)
+{
+    ScratchContentRoot firstRoot;
+    ScratchContentRoot secondRoot;
+    WriteBytes(firstRoot.path() / "fixture.xnb", BuildTestXnbFile(11));
+    WriteBytes(secondRoot.path() / "fixture.xnb", BuildTestXnbFile(22));
+    for (const bool moveArgument : {false, true})
+    {
+        SCOPED_TRACE(moveArgument);
+        const std::string original = firstRoot.path().string();
+        const std::string replacement = secondRoot.path().string();
+        ContentManager cm(nullptr, original);
+        ASSERT_EQ(cm.Load<TestValue>("fixture").value, 11);
+        if (moveArgument)
+        {
+            EXPECT_THROW(cm.setRootDirectoryProperty(std::string(original)),
+                         System::InvalidOperationException);
+            EXPECT_THROW(cm.setRootDirectoryProperty(std::string(replacement)),
+                         System::InvalidOperationException);
+        }
+        else
+        {
+            EXPECT_THROW(cm.setRootDirectoryProperty(original), System::InvalidOperationException);
+            EXPECT_THROW(cm.setRootDirectoryProperty(replacement), System::InvalidOperationException);
+        }
+        EXPECT_EQ(cm.getRootDirectoryProperty(), original);
+        EXPECT_EQ(cm.Load<TestValue>("fixture").value, 11);
+        cm.Unload();
+        if (moveArgument) cm.setRootDirectoryProperty(std::string(replacement));
+        else cm.setRootDirectoryProperty(replacement);
+        EXPECT_EQ(cm.getRootDirectoryProperty(), replacement);
+        EXPECT_EQ(cm.Load<TestValue>("fixture").value, 22);
+    }
+}
+
+TEST_F(ContentManagerXnbTest, FailedLoadDoesNotPreventChangingRoot)
+{
+    ScratchContentRoot missingRoot;
+    ScratchContentRoot validRoot;
+    WriteBytes(validRoot.path() / "fixture.xnb", BuildTestXnbFile(33));
+    ContentManager cm(nullptr, missingRoot.path().string());
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
+    EXPECT_NO_THROW(cm.setRootDirectoryProperty(validRoot.path().string()));
+    EXPECT_EQ(cm.Load<TestValue>("fixture").value, 33);
+}
+
+TEST_F(ContentManagerXnbTest, UncachedReadAssetDoesNotPreventChangingRoot)
+{
+    class ExposedContentManager final : public ContentManager
+    {
+    public:
+        using ContentManager::ContentManager;
+        using ContentManager::ReadAsset;
+    };
+    ScratchContentRoot firstRoot;
+    ScratchContentRoot secondRoot;
+    WriteBytes(firstRoot.path() / "fixture.xnb", BuildTestXnbFile(44));
+    WriteBytes(secondRoot.path() / "fixture.xnb", BuildTestXnbFile(55));
+    ExposedContentManager cm(nullptr, firstRoot.path().string());
+    ASSERT_EQ(cm.ReadAsset<TestValue>("fixture", {}).value, 44);
+    const std::string replacement = secondRoot.path().string();
+    EXPECT_NO_THROW(cm.setRootDirectoryProperty(replacement));
+    EXPECT_EQ(cm.ReadAsset<TestValue>("fixture", {}).value, 55);
 }
 
 TEST_F(ContentManagerXnbTest, MalformedXnbHeaderThrowsContentLoadException)
@@ -318,7 +396,101 @@ TEST_F(ContentManagerXnbTest, MalformedXnbHeaderThrowsContentLoadException)
 
     ContentManager cm(nullptr, root.path().string());
 
-    EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
+}
+
+TEST_F(ContentManagerXnbTest, EveryTruncatedHeaderIsWrappedAtTheContentManagerBoundary)
+{
+    class ExposedContentManager final : public ContentManager
+    {
+    public:
+        using ContentManager::ContentManager;
+        using ContentManager::ReadAsset;
+    };
+    ScratchContentRoot root;
+    const auto complete = BuildTestXnbFile(66);
+    for (std::size_t length = 0; length < 10; ++length)
+    {
+        SCOPED_TRACE(length);
+        WriteBytes(root.path() / "fixture.xnb", {complete.begin(), complete.begin() + length});
+        ExposedContentManager cm(nullptr, root.path().string());
+        EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
+        EXPECT_THROW((void)cm.ReadAsset<TestValue>("fixture", {}), ContentLoadException);
+    }
+}
+
+TEST_F(ContentManagerXnbTest, TruncatedObjectBodyIsWrappedWithoutCachingAPartialAsset)
+{
+    ScratchContentRoot root;
+    auto bytes = BuildTestXnbFile(77);
+    bytes.pop_back();
+    const std::int32_t length = static_cast<std::int32_t>(bytes.size());
+    for (std::size_t i = 0; i < 4; ++i)
+        bytes[6 + i] = static_cast<std::uint8_t>(static_cast<std::uint32_t>(length) >> (i * 8));
+    WriteBytes(root.path() / "fixture.xnb", bytes);
+    ContentManager cm(nullptr, root.path().string());
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
+    WriteBytes(root.path() / "fixture.xnb", BuildTestXnbFile(88));
+    EXPECT_EQ(cm.Load<TestValue>("fixture").value, 88);
+}
+
+TEST_F(ContentManagerXnbTest, UntypedExternalReferencesWrapEveryTruncatedHeader)
+{
+    ScratchContentRoot root;
+    const auto complete = BuildTestXnbFile(66);
+    for (std::size_t length = 0; length < 10; ++length)
+    {
+        SCOPED_TRACE(length);
+        WriteBytes(root.path() / "fixture.xnb", {complete.begin(), complete.begin() + length});
+        ContentManager cm(nullptr, root.path().string());
+        EXPECT_THROW((void)ReadUntypedFixtureReference(cm), ContentLoadException);
+    }
+}
+
+TEST_F(ContentManagerXnbTest, UntypedCompressedHeaderRefusesBeforeReadingBeyondTheFile)
+{
+    ScratchContentRoot root;
+    for (std::size_t length = 10; length < 14; ++length)
+    {
+        SCOPED_TRACE(length);
+        std::vector<std::uint8_t> bytes{'X', 'N', 'B', 'w', 5, 0x80,
+                                      static_cast<std::uint8_t>(length), 0, 0, 0};
+        bytes.resize(length);
+        WriteBytes(root.path() / "fixture.xnb", bytes);
+        ContentManager cm(nullptr, root.path().string());
+        EXPECT_THROW((void)ReadUntypedFixtureReference(cm), ContentLoadException);
+    }
+}
+
+TEST_F(ContentManagerXnbTest, ReaderIoExceptionsAreWrappedButUserExceptionsKeepTheirType)
+{
+    class ThrowingValueReader final : public ContentTypeReader<TestValue>
+    {
+    public:
+        explicit ThrowingValueReader(bool io) : ContentTypeReader("CNA.Test.TestValue"), io_(io) {}
+    protected:
+        TestValue Read(ContentReader&, std::optional<TestValue>) override
+        {
+            if (io_) throw System::IO::IOException("reader IO sentinel");
+            throw System::InvalidOperationException("reader user sentinel");
+        }
+    private:
+        bool io_;
+    };
+    ScratchContentRoot root;
+    WriteBytes(root.path() / "fixture.xnb", BuildTestXnbFile(99));
+    for (const bool io : {false, true})
+    {
+        SCOPED_TRACE(io);
+        ContentTypeReaderManager::ClearTypeCreators();
+        ContentTypeReaderManager::AddTypeCreator("CNA.Test.TestValueReader",
+            [io] { return std::make_unique<ThrowingValueReader>(io); });
+        ContentManager cm(nullptr, root.path().string());
+        if (io)
+            EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
+        else
+            EXPECT_THROW((void)cm.Load<TestValue>("fixture"), System::InvalidOperationException);
+    }
 }
 
 TEST_F(ContentManagerXnbTest, TruncatedLz4ContainerThrowsContentLoadException)
@@ -329,7 +501,7 @@ TEST_F(ContentManagerXnbTest, TruncatedLz4ContainerThrowsContentLoadException)
 
     ContentManager cm(nullptr, root.path().string());
 
-    EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
 TEST_F(ContentManagerXnbTest, BothCompressionBitsSetThrowsContentLoadException)
@@ -341,7 +513,7 @@ TEST_F(ContentManagerXnbTest, BothCompressionBitsSetThrowsContentLoadException)
 
     ContentManager cm(nullptr, root.path().string());
 
-    EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
 TEST_F(ContentManagerXnbTest, UnregisteredXnbReaderNameThrowsContentLoadException)
@@ -369,7 +541,7 @@ TEST_F(ContentManagerXnbTest, UnregisteredXnbReaderNameThrowsContentLoadExceptio
 
     ContentManager cm(nullptr, root.path().string());
 
-    EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
 // plans/plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
@@ -389,7 +561,7 @@ TEST_F(ContentManagerXnbTest, TotalLengthLargerThanActualFileSizeThrowsContentLo
 
     ContentManager cm(nullptr, root.path().string());
 
-    EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
 TEST_F(ContentManagerXnbTest, XnbWinsOverCnjAndNativeExtensionForTheSameName)

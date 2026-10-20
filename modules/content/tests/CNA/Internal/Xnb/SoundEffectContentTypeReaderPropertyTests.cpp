@@ -8,7 +8,7 @@
 // to hit it), this deterministically sweeps a small cross-product of boundary values for the core
 // WAVEFORMATEX fields (wFormatTag, nChannels, wBitsPerSample, nSamplesPerSec) and asserts the
 // parser invariant holds for every combination: either a `SoundEffect` is constructed successfully,
-// or the failure is exactly `ContentLoadException`/`EndOfStreamException` -- never a crash, hang,
+// or the failure is exactly `ContentLoadException` -- never a crash, hang,
 // or any other exception type escaping uncaught. `formatLength` is held fixed at 16 (the simplest,
 // most common real case) since its own boundary values are already covered by
 // AUD-06-011/AUD-06-016. Also meant to be run under an ASan+UBSan build
@@ -25,7 +25,6 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
-#include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -122,12 +121,6 @@ TEST_F(SoundEffectContentTypeReaderPropertyTest, WaveFormatExBoundaryValueSweepN
         catch (const ContentLoadException&)
         {
             ++cleanlyRejected;
-        }
-        catch (const System::IO::EndOfStreamException&)
-        {
-            ++cleanlyRejected; // reachable if a future field/format combination reads past the
-                                // fixed 64-byte data region -- not expected today, but a clean
-                                // failure mode rather than a crash if it ever became reachable.
         }
         // Any other exception type, or a crash/hang, fails this test (uncaught exception aborts
         // it; a crash is caught by the process exit code / a sanitizer run, not by this catch
