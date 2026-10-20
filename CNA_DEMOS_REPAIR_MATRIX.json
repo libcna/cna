@@ -887,11 +887,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "XNA AddOutputFile maps generated output into input-backed deployment registration. The configured output root is not authorized; manifest/fingerprint/publication also assume primary or named external input provenance, so widening containment alone is insufficient.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Current69afba262 actual bridge/canonical context isolated native baseline: seven cases, two legitimate separate-output registrations fail with original outside-source invalid_argument; five source-contained/security controls pass, including escaping symlink. Strict C++23/Wall/Wextra/Werror build passes; four frozen native artifacts/two109 sources unchanged and all private fixtures removed. Test process expected1/driver0. No production repair, genuine XNA or host publication/clean validation claimed. See demos docs/repair-evidence/content/GENERATED_OUTPUT_TRIAGE.md and ContentGeneratedOutputTests.cpp."
+      ],
       "final_disposition": null
     },
     {

@@ -9,6 +9,17 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+047 isolated native baseline79356 COMPLETE0 (test process expected1):two
+legitimate separate-output registrations FAIL,five source/security controls PASS.
+Strict warning-free build;four frozen native binaries/two109 sources exact.
+Private fixtures removed. See demos GENERATED_OUTPUT_TRIAGE.md and permanent
+ContentGeneratedOutputTests.cpp. Matrix047 now CONFIRMED_OPEN; no production
+change. A correct repair must carry generated-output provenance through manifest,
+hash/cache/publication/clean, not only widen AddDeploymentFile containment.
+109 gates95074/8261 verified live; native has passed the genuine XNA differential
+stage and is in avatar service tests, external SOFTWARE sweep continues.
+Only two CNA109 source/test edits remain; both freezes active.90/65 unchanged.
+
 109 demo/evidence committed86e7a89 after both initial and metadata146 controls
 pass exactly (69PASS/four sameFAIL per renderer,model29/29). Canonical metadata
 build is clean; full8261 has completed both95 math/six exact visual references
