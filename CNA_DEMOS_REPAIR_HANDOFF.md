@@ -9,6 +9,31 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+XML/content final74592 COMPLETE0:CTest684PASS/48 unchangedSKIP/three disabled,
+887.44s;735 registered/732 enabled and319 frozen hashes exact. Both719 sweeps,
+both95 math,six zero-pixel references,native10791 and Sharp18158 gates complete.
+039/043/045/103/148 now FIXED_VALIDATED:90FINAL/65PENDING of155. All150 unrelated
+historical bodies unchanged and five original resolved bodies preserved.
+Evidence closure committed demos d566696; see XML_CONTENT_FINAL_CHECKPOINT.md.
+Previous external freeze released.
+New109 canonical build88321 COMPLETE0,542 printed tasks,zero warnings/source
+changes. Canonical35 codec cases pass; full10798 native95074 RUNNING with four
+binaries and two source files frozen. The uncommitted109 production/test changes
+are NOT covered by the completed XML checkpoint. Next:commit closure evidence
+separately,correct109 diagnostic demo only to stronger exact encoder-refusal
+oracle,build external against109,then focused and full regressions. No push.
+
+New coherent content batch109: uncommitted CnbModelCodec.cpp and native test file.
+Seven additions reproduce seven failures while all28 previous codec cases pass;
+actual-TU candidate passes35/35 normally and ASan/UBSan/leak, strict warning-free
+builds and exact before/after comparison. Decoder/schema/valid write path unchanged.
+Canonical native build88321 RUNNING(two workers); external XML/C-root finalCTest
+74592 RUNNING(one),still319 frozen external artifacts. The external RUNPATH uses
+its own build/linux-full/CNA/libcna.so, not the rebuilding native shared library.
+No external rebuild or109 demo edit yet. MODEL_ENCODER_VALIDATION.md records proof
+and next gates. Current counts85/70; no closure or push. Earlier native XML10791
+gate is complete and its native freeze was released before this new build.
+
 Current CNA dbfe6b4c1 includes validated strict XML corpus/docs. Both external719
 sweeps complete:SW627/41/48/3,GLES666/43/7/3; original70-change and localtwo-change
 audits errors[],319 hashes verified before serial finalCTest.74592 is now running

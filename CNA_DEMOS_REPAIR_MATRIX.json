@@ -725,13 +725,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Both RootDirectory setters assign without checking the loaded-asset cache.",
       "related_issues": [],
-      "cna_fix_commit": "583af2a5e",
-      "current_validation": "Runtime583af2a5e; genuine91/91, actual manager TUs ASan/UBSan/leak23/23, native module/pipeline and later roots checkpoints pass; prior full external retained the C API contract conflict. Owner explicitly selected XNA/C++ compatibility. Follow-up CNA124281bff corrects public C docs and ContentSmoke; demosdab9d4f preserves54 original labels with two authorized mappings plus13 additions. Strict C native baseline fails2 both renderers; corrected native passes both with exact InvalidOperationException and cache retained after fixture removal. Canonical rebuilt C demo67/67 and C++ cache5/5 both SOFTWARE/OPENGLES3, exact pre/post-marker comparisons. Marker103 removal aab4bf3. Full native37179/external74592 RUNNING; no039 closure yet. See C_ROOT_CONTRACT.md.",
-      "validation": ["Current strict renderer sweeps preserve039 failure. Genuine ContentOwnershipOracle35/35 confirms different AND identical root assignments throw InvalidOperationException while an asset is cached; assignment succeeds after Unload, including its exceptional cleanup. Raw ReadAsset does not populate that cache. FNA's unrestricted auto-property differs; measured XNA wins. No repair yet."],
-      "final_disposition": null
+      "cna_fix_commit": "583af2a5e12d5af11550538283b453a98aafb122",
+      "current_validation": "Both native root setters refuse assignment while assets remain loaded. Owner-approved C contract/docs correction CNA124281bff and demosdab9d4f preserves54 original controls under two explicit mappings plus13 additions; canonical C67/C++5 pass both renderers. Complete XML/content checkpoint: native10791=10690PASS/101 sameSKIP1647.295s; both719 sweeps SW627/41/48/3,GLES666/43/7/3. Original70 demo improvements/no residual and exactlytwo local improvements since016; all other checks/failures exact. Both95 math/six zero-pixel references pass. CTest684PASS/48 sameSKIP/three disabled 887.44s,735 inventory/732 enabled/319 frozen hashes. No unrelated hardware/platform coverage claimed. See demos XML_CONTENT_FINAL_CHECKPOINT.md.",
+      "validation": [
+        "Current strict renderer sweeps preserve039 failure. Genuine ContentOwnershipOracle35/35 confirms different AND identical root assignments throw InvalidOperationException while an asset is cached; assignment succeeds after Unload, including its exceptional cleanup. Raw ReadAsset does not populate that cache. FNA's unrestricted auto-property differs; measured XNA wins. No repair yet.",
+        "Final repair-xml-substrate gates complete with all audit errors empty. Historical ID/body and original assertions retained; owner-selected C-root contract correction is explicit. Exact native case comparison and external artifact hashes verified. Later uncommitted ISSUE109 candidate is not covered by this checkpoint."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-040",
@@ -804,13 +807,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "CreateReaderForTargetTypeEXT passes a target identity to a factory table keyed by reader identity; no association connects distinct target and factory names.",
-      "current_validation": "Before4PASS/sevenFAIL of11; genuine XNA5/5PASS. Registration-bound association repair preserves lazy fresh unique_ptr ownership/callable copies. Actual-TU11/11PASS and ASan/UBSan/leak11/11PASS. Canonical build51 pre-existing warnings/no new; module1929=1925PASS/four sameSKIP, previous1918 unchanged+11 additions. Pipeline552=551PASS/one sameSKIP969.769s; consumers1412=1408PASS/four sameSKIP183.079s; runtime241=238PASS/three sameSKIP10.238s; original XML6/6PASS. Exact previous outcomes/final four hashes match. External whole/marker builds warning-free, both146 focused gates exact63PASS/ten unchangedFAIL per renderer.043 original13 checks pass both; marker removed afterward.319 artifacts frozen for full regression8777, not closed.",
+      "current_validation": "Registration associates distinct target and reader identities while preserving documented fresh unique_ptr ownership. Genuine5/native11/actual-TU sanitizer11 and complete native/external gates pass; the separate existing-value oracle correction remains documented under087. Complete XML/content checkpoint: native10791=10690PASS/101 sameSKIP1647.295s; both719 sweeps SW627/41/48/3,GLES666/43/7/3. Original70 demo improvements/no residual and exactlytwo local improvements since016; all other checks/failures exact. Both95 math/six zero-pixel references pass. CTest684PASS/48 sameSKIP/three disabled 887.44s,735 inventory/732 enabled/319 frozen hashes. No unrelated hardware/platform coverage claimed. See demos XML_CONTENT_FINAL_CHECKPOINT.md.",
       "related_issues": [],
-      "cna_fix_commit": "252e9bca1",
-      "validation": ["Baseline renderer sweeps retain both lookup assertions; distinct-name native before4PASS/sevenFAIL. Commit252e9bca1 preserves documented fresh unique_ptr ownership and passes11 lookup/sanitizer cases, canonical1929 content cases,552 pipeline and1412/runtime241/XML consumers with exact unchanged prior outcomes. External whole build and marker rebuild pass warning-free. Initial and marker-updated146 focused runs each give63PASS/ten unchangedFAIL per renderer, exact counts/failures preserved.043 original13 checks pass both, marker removed only afterward.319 artifacts frozen for full regression8777; not closed."],
-      "final_disposition": null
+      "cna_fix_commit": "252e9bca1dd9642da8728fa83cf817f66fd2e646",
+      "validation": [
+        "Baseline renderer sweeps retain both lookup assertions; distinct-name native before4PASS/sevenFAIL. Commit252e9bca1 preserves documented fresh unique_ptr ownership and passes11 lookup/sanitizer cases, canonical1929 content cases,552 pipeline and1412/runtime241/XML consumers with exact unchanged prior outcomes. External whole build and marker rebuild pass warning-free. Initial and marker-updated146 focused runs each give63PASS/ten unchangedFAIL per renderer, exact counts/failures preserved.043 original13 checks pass both, marker removed only afterward.319 artifacts frozen for full regression8777; not closed.",
+        "Final repair-xml-substrate gates complete with all audit errors empty. Historical ID/body and original assertions retained; owner-selected C-root contract correction is explicit. Exact native case comparison and external artifact hashes verified. Later uncommitted ISSUE109 candidate is not covered by this checkpoint."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-044",
@@ -839,13 +845,16 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Typed/erased XNB header and object-body boundaries leak IOException. Erased compressed loading also lacks the typed path's14-byte prefix guard, causing a four-byte heap overread for a ten-byte external XNB.",
       "related_issues": [],
-      "cna_fix_commit": "583af2a5e",
-      "current_validation": "Committed583af2a5e. Genuine expanded91/91 verifies all header lengths0..9, stream closure and IOException/FileNotFoundException versus user exceptions. Native before fourFAIL10ms; actual-TU ASan before confirms10-byte LZX heap overread, after23/23PASS29ms with ASan/UBSan/leak. Shared header validation and content-only wrapping preserve low-level EOF and direct SongReader FileNotFoundException. Full native build succeeds, focused33/33, corrected entire content1918=1914PASS/four unchangedSKIP188.735s, differences[]. Initial failed Song expectation and writer seed remain archived; measured corrections preserve payload and strict contracts. Native552 and external rebuild running, no full-regression closure. RUNTIME_OWNERSHIP_TRIAGE.md.",
-      "validation": ["Current strict renderer sweeps preserve the three-byte XNB failure. Genuine ContentOwnershipOracle35/35 confirms header and body I/O failures become ContentLoadException, streams close, and caller recorder InvalidOperationException remains unwrapped with caller ownership preserved. Do not indiscriminately wrap all callback failures. No repair yet."],
-      "final_disposition": null
+      "cna_fix_commit": "583af2a5e12d5af11550538283b453a98aafb122",
+      "current_validation": "Typed and erased XNB paths wrap header/body I/O failures without changing caller exceptions. Shared prefix validation also removes the demonstrated four-byte LZX heap overread. Genuine91, native33 and actual-TU ASan/UBSan/leak23 pass. Complete XML/content checkpoint: native10791=10690PASS/101 sameSKIP1647.295s; both719 sweeps SW627/41/48/3,GLES666/43/7/3. Original70 demo improvements/no residual and exactlytwo local improvements since016; all other checks/failures exact. Both95 math/six zero-pixel references pass. CTest684PASS/48 sameSKIP/three disabled 887.44s,735 inventory/732 enabled/319 frozen hashes. No unrelated hardware/platform coverage claimed. See demos XML_CONTENT_FINAL_CHECKPOINT.md.",
+      "validation": [
+        "Current strict renderer sweeps preserve the three-byte XNB failure. Genuine ContentOwnershipOracle35/35 confirms header and body I/O failures become ContentLoadException, streams close, and caller recorder InvalidOperationException remains unwrapped with caller ownership preserved. Do not indiscriminately wrap all callback failures. No repair yet.",
+        "Final repair-xml-substrate gates complete with all audit errors empty. Historical ID/body and original assertions retained; owner-selected C-root contract correction is explicit. Exact native case comparison and external artifact hashes verified. Later uncommitted ISSUE109 candidate is not covered by this checkpoint."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-046",
@@ -1913,13 +1922,16 @@
       ],
       "subsystem": "c-api",
       "classification": "CODE_DEFECT",
-      "status": "FIXED_PENDING_REGRESSION",
+      "status": "RESOLVED",
       "root_cause": "Eight C content routes catch ContentLoadException and return IoError before the shared exception barrier can record canonical exception metadata.",
-      "current_validation": "Common-barrier68a3c7b1f builds without warnings. Native/evidence strict C probes44/44 both renderers, eight canonical-type improvements, all44 labels retained; ErrorSmoke/CoreExtSmoke/GeneratedRoutesSmoke/ContentReaderSmoke pass both. Owner selected XNA/C++ root contract; CNA124281bff/demosdab9d4f implement docs/test correction. Canonical rebuilt actual demo now67/67 both renderers including exact ContentLoadException and unchanged resource lifetime assertions. All54 original labels retained with two authorized root mappings plus13 additions; pre/post-marker comparisons exact. Marker103 removed in aab4bf3. Native37179/external74592 full gates RUNNING; no103 closure. Initial failed audits and original C conflict retained.",
+      "current_validation": "C content loaders preserve canonical exceptions through the common barrier. All44 typed-error controls pass both renderers; the rebuilt original C demo67 passes with resource-lifetime controls intact. Owner-approved root-contract correction CNA124281bff/demosdab9d4f and marker aab4bf3 are retained. Complete XML/content checkpoint: native10791=10690PASS/101 sameSKIP1647.295s; both719 sweeps SW627/41/48/3,GLES666/43/7/3. Original70 demo improvements/no residual and exactlytwo local improvements since016; all other checks/failures exact. Both95 math/six zero-pixel references pass. CTest684PASS/48 sameSKIP/three disabled 887.44s,735 inventory/732 enabled/319 frozen hashes. No unrelated hardware/platform coverage claimed. See demos XML_CONTENT_FINAL_CHECKPOINT.md.",
       "related_issues": [],
-      "cna_fix_commit": "68a3c7b1f",
-      "validation": ["Isolated public-C probe, no successful assets or root mutation: malformed four-byte XNB gives36PASS/eight canonical-typeFAIL of44 on SOFTWARE and OPENGLES3; all IO result/category/message/output clearing controls pass. Native C17/Werror regression reproduces44/eight. Reports repair-content-exception-all-before-{SOFTWARE,OPENGLES3}.log and repair-content-exception-native-before.log. Commit68a3c7b1f passes all44 both renderers with exact eight-improvement audit; broader full regression pending, original demo marker retained. Missing loose SoundEffect file separately yields NotSupported and is not hidden by this minimized fixture."],
-      "final_disposition": null
+      "cna_fix_commit": "68a3c7b1ff20112317dc3454fdbfcf9f6120829f",
+      "validation": [
+        "Isolated public-C probe, no successful assets or root mutation: malformed four-byte XNB gives36PASS/eight canonical-typeFAIL of44 on SOFTWARE and OPENGLES3; all IO result/category/message/output clearing controls pass. Native C17/Werror regression reproduces44/eight. Reports repair-content-exception-all-before-{SOFTWARE,OPENGLES3}.log and repair-content-exception-native-before.log. Commit68a3c7b1f passes all44 both renderers with exact eight-improvement audit; broader full regression pending, original demo marker retained. Missing loose SoundEffect file separately yields NotSupported and is not hidden by this minimized fixture.",
+        "Final repair-xml-substrate gates complete with all audit errors empty. Historical ID/body and original assertions retained; owner-selected C-root contract correction is explicit. Exact native case comparison and external artifact hashes verified. Later uncommitted ISSUE109 candidate is not covered by this checkpoint."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-104",
@@ -2028,11 +2040,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Schema-1 writer checks parent upper bounds but not negative sentinels, checks index byte counts but not decoded vertex references, and serializes material ordinals that its paired decoder rejects.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Seven new native cases reproduce sevenFAIL while all28 existing codec cases pass. Valid hierarchy/index/material/empty-buffer controls pass; invalid negatives, 16/32-bit indices/high bytes, all material slots and zero-vertex indexed geometry fail exact ContentLoadException assertions. Uncommitted localized encoder candidate gives35/35 normal and actual-TU ASan/UBSan/leak, strict warning-free builds; exact comparison and unchanged test hashes pass. No decoder/schema/valid write-path change. Canonical native build88321 running; existing XML external74592 remains frozen and does not validate this new candidate. Demo diagnostic still unchanged; no closure. See demos MODEL_ENCODER_VALIDATION.md."
+      ],
       "final_disposition": null
     },
     {
@@ -2867,18 +2881,19 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "XmlReader tinyxml2 rejects nested processing instructions and accepts a string BOM; IntermediateReader early-return accepts self-closing sections that XNA refuses.",
       "related_issues": [],
-      "cna_fix_commit": "e0318ab52, de1b6e259 (partial: sections and fixup order)",
+      "cna_fix_commit": "e0318ab52a7e2b5a2c368b353e04906f4ab606fb",
       "dependency_fix_commit": "sharp-runtime 16993ac6 (processing instructions),97713eb2 (character BOM boundary); d326d37b (separate deterministic test synchronization)",
-      "current_validation": "Approved PI parser fix: before new4 tests threeFAIL/onePASS, old564XML tests pass; actual parser ASan/UBSan/leak4/4 clean. BOM before newfive controls threePASS/twoFAIL; after574XML/352XML.Linq pass and full18158/41 executables zeroFAIL/SKIP with original private SOAP fixture. Actual Reader/Document TUs plus5 BOM controls ASan/UBSan/leak5/5 clean; other dependencies normal. Boundary checker44/109 passes. Independent pre-existing Diagnostics test race reproduced1/100 and repaired with four-reader latch; after100/100 and233 Diagnostics pass. Native/external builds pass, stricter original corpus9/9 passes, golden/error data unchanged. Canonical actual XML demo36/36 both renderers with all previous assertion labels exact, before/after marker removal eafc39e. Full native37179/external74592 RUNNING; no148 closure. See demos docs/repair-evidence/content/XML_SUBSTRATE.md.",
+      "current_validation": "CNA section/fixup repairs e0318ab52/de1b6e259 plus Sharp Runtime16993ac6/97713eb2 correct self-closing sections, processing instructions and character-input BOM handling. CNA dbfe6b4c1 removes the two corpus exemptions without changing goldens. Sharp18158/41 and actual-TU parser4/reader5 sanitizer controls pass; XML demo36 passes both renderers. Complete XML/content checkpoint: native10791=10690PASS/101 sameSKIP1647.295s; both719 sweeps SW627/41/48/3,GLES666/43/7/3. Original70 demo improvements/no residual and exactlytwo local improvements since016; all other checks/failures exact. Both95 math/six zero-pixel references pass. CTest684PASS/48 sameSKIP/three disabled 887.44s,735 inventory/732 enabled/319 frozen hashes. No unrelated hardware/platform coverage claimed. See demos XML_CONTENT_FINAL_CHECKPOINT.md.",
       "validation": [
         "Fresh genuine direct IntermediateEnvelopeOracle16/16 combined148/149 checks: PI accepted, self-closing Resources/ExternalReferences and string BOM rejected, paired expanded sections accepted. Source review confirms still-open substrate and envelope handling. No runtime repair at this initial checkpoint.",
         "Partial section repair e0318ab52: genuine IntermediateSectionsOracle13/13; matching native baseline sixPASS/sevenFAIL (strict C++23/Wall/Wextra/Werror,2ms); actual IntermediateReader.cpp plus13 cases ASan/UBSan/leak13/13,8ms. Three old corpus exemptions removed, goldens unchanged. Full native/external validation awaits release of088/090/111 freezes; parser PI/BOM defects remain open. Exploratory stronger-warning sanitizer build exposed unchanged line57 precedence warning; retained failure, successful build uses established project/Werror flags. Demo evidence81d6837.",
-        "Whole-corpus sanitizer initially21PASS/oneFAIL of22: two diagnostic regressions plus792 bytes/11 cyclic Node fixture leaks, all retained. Genuine expanded18/18 pins per-section fixup ordering; corrected native baseline sevenPASS/elevenFAIL of18. Follow-up de1b6e259 splits private shared/external fixups and adds post-assertion RAII cycle cleanup. Actual Reader/Serializer TUs plus whole corpus and18 cases now ASan/UBSan/leak27/27PASS1567ms, exit0. No parser PI/BOM repair or148 closure."
+        "Whole-corpus sanitizer initially21PASS/oneFAIL of22: two diagnostic regressions plus792 bytes/11 cyclic Node fixture leaks, all retained. Genuine expanded18/18 pins per-section fixup ordering; corrected native baseline sevenPASS/elevenFAIL of18. Follow-up de1b6e259 splits private shared/external fixups and adds post-assertion RAII cycle cleanup. Actual Reader/Serializer TUs plus whole corpus and18 cases now ASan/UBSan/leak27/27PASS1567ms, exit0. No parser PI/BOM repair or148 closure.",
+        "Final repair-xml-substrate gates complete with all audit errors empty. Historical ID/body and original assertions retained; owner-selected C-root contract correction is explicit. Exact native case comparison and external artifact hashes verified. Later uncommitted ISSUE109 candidate is not covered by this checkpoint."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-149",
