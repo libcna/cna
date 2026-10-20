@@ -9,6 +9,24 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+14:38 UTC: ISSUE-001 FIXED_VALIDATED; native/external CMake policy gates complete.
+External57606 COMPLETE0,50 printed steps/only prior Draco CMP0148 dev warning,
+all319 artifacts byte-identical to the completed roots checkpoint;11 sources exact.
+Fresh content1462930 exact68PASS/five unchangedFAIL each;catalog53901 threePASS6.60s.
+No second full sweep claimed; original both719/math/visual/CTest proof applies to
+identical runtime artifacts. All155 historical bodies verified intact.84 FINAL/71
+PENDING:51 FIXED_VALIDATED,23 DOC,eight ALREADY_FIXED,one DEMO,one DUPLICATE.
+Closure files pending immediate commit. Six-ID closure commits CNAa48c4c84f /
+demos0b6478b. No running jobs; all frozen runtime artifacts remain unchanged.
+
+016 --version confirms control exit0 versus isolated relink SIGABRT/double free,
+without assets, game construction, GPU operations or services. Three more tiny
+model variants (cycle, old policy, independent XML-like predecessor) also do NOT
+reproduce; do not mistake them for full-graph clearance. Next minimize using a
+small actual-CNA consumer with the real link closure, then repair the shared
+umbrella's transitive ordering while preserving static-only module consumers.
+No016 production change yet. Generic negative fixture remains uncommitted in demos.
+
 14:28 UTC: combined24685 COMPLETE1 solely the original C-root residual. CTest
 COMPLETE0:735 outcomes,684PASS/48 unchangedSKIP/three disabled,599.13s;319 hashes
 exact. Six IDs013/014/105/106/108/110 now FIXED_VALIDATED; inventory/matrix audit

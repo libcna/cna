@@ -15,15 +15,16 @@
       "demos": [],
       "subsystem": "build/core",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Cyclic static archives are repeated inside WHOLE_ARCHIVE on admitted CMake 3.27-3.29; feature-level archive deduplication is available from CMake 3.30.",
       "related_issues": [],
-      "cna_fix_commit": "b35fbc933",
-      "current_validation": "CNA b35fbc933 corrects shared-mode gate to3.30, preserves overall/static minimum and current supported default, adds direct-helper guard and permanent native cyclic-archive test. Actual3.28.6/3.29.9/3.30.9/3.31.6:16 scenarios pass, including12 build/runs and four expected configure refusals. Real top-level old-version ON refusals verified. Canonical CNA build passes:three preludes/six tasks, only prior Draco CMP0148 warning; four old native artifacts and319 external binaries byte-identical. Registered CnaSharedRuntimeLinkage passes fresh/repeated caches. Eleven source files frozen. External configuration/build and final issue closure pending; existing content-roots full regression still running against unchanged runtime artifacts. Permanent demos docs/repair-evidence/build/SHARED_RUNTIME_POLICY.md.",
+      "cna_fix_commit": "b35fbc9335e528eaab4fbf50317f2e176378a32a",
+      "current_validation": "CNA b35fbc933:16 real-CMake scenarios across3.28.6/3.29.9/3.30.9/3.31.6 (12 build/run passes,four expected configure refusals),plus two actual old-version top-level ON refusals. Native canonical build/new CnaSharedRuntimeLinkage fresh/repeated caches pass. External build50 printed tasks/only prior Draco CMP0148 warning;11 source hashes exact. All4 native and319 external artifacts byte-identical to the completed content-roots full checkpoint (both719,math95,six exact visuals,CTest684PASS/48SKIP/three disabled599.13s). Fresh146 content focus and three catalog CTests exact. Overall/static minimum unchanged; shared mode is deliberately unsupported before3.30. No redundant second full runtime sweep is claimed; previous original C-root conflict remains globally unaccepted.",
       "validation": [
-        "Current production shared-runtime helper minimized to two cyclic libraries: official checksum-verified CMake 3.28.6 and 3.29.9 fail with duplicate symbols; identical 3.30.9 and 3.31.6 builds and consumer execution pass. CMP0156 OLD does not reproduce the old failure on 3.31; explicitly disabling WHOLE_ARCHIVE feature deduplication does. Logs: ../cna-demos/build/linux-full/reports/repair-baseline-shared-runtime-*.log."
+        "Current production shared-runtime helper minimized to two cyclic libraries: official checksum-verified CMake 3.28.6 and 3.29.9 fail with duplicate symbols; identical 3.30.9 and 3.31.6 builds and consumer execution pass. CMP0156 OLD does not reproduce the old failure on 3.31; explicitly disabling WHOLE_ARCHIVE feature deduplication does. Logs: ../cna-demos/build/linux-full/reports/repair-baseline-shared-runtime-*.log.",
+        "Permanent native cyclic-archive/configuration regression added. Corrected support gate and public documentation, not weakened link assertions or forced duplicate-symbol acceptance. Initial line-wrapped diagnostic audit failures retained. See demos docs/repair-evidence/build/SHARED_RUNTIME_POLICY.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-002",
