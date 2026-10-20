@@ -116,6 +116,11 @@ nine typed/erased/raw modes, all four existing-instance replacement rejections,
 null dispatch and null reader result. Raw new objects DO record; existing objects
 do NOT; replacement throws InvalidOperationException; null index returns null.
 Evidence repair-content-dispatch-xna*. No011/087 production change yet.
+Prepared but NOT compiled/run: demos docs/repair-evidence/content/
+ContentDispatchTests.cpp (17) and ReaderTargetLookupTests.cpp (eight). Kept outside
+native source glob while039/045 builds. Run bounded before probes once a worker
+is free and the native library closure is stable; preserve failures, then port
+tests into native coverage with the next repair. No087/043 pass claimed.
 
 EXACT NEXT: finish external048 isolated732-enabled CTest59450 and319-hash audit.
 Native048 gates are complete. Finish runtime native build20911;
