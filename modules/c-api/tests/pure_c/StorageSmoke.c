@@ -648,10 +648,8 @@ static void on_disposing_observed(void* const context)
         observer->container, &observer->seen_disposed);
 }
 
-/* CABI-34: the other ordering half the work order asks for -- Disposing relative to the container's
-   own file cleanup. Asked from inside the callback, because that is the only moment at which the
-   answer distinguishes "the event arrives before the container tears its contents down" from
-   "after". */
+/* Query through the disposed object inside its event. Genuine XNA rejects that access
+   even though it retains the backing files; a fresh live container checks those below. */
 typedef struct FileVisibilityObserver {
     CNA_StorageContainerHandle container;
     int calls;
@@ -777,12 +775,10 @@ static int validate_disposal_edges(const CNA_StorageDeviceHandle device)
         }
     }
 
-    /* CABI-34: ordering against the container's own file cleanup. The event must arrive while the
-       container's contents are still there, for the same reason it must arrive while the handle is
-       still answerable: a subscriber whose whole purpose is to flush or inspect state cannot do it
-       after the state is gone. */
+    /* ISSUE-151: state changes before Disposing. Access through that object is refused;
+       independently retain the original backing-file preservation assertion. */
     {
-        FileVisibilityObserver observer = {CNA_INVALID_HANDLE, 0, CNA_RESULT_SUCCESS, CNA_FALSE};
+        FileVisibilityObserver observer = {CNA_INVALID_HANDLE, 0, CNA_RESULT_SUCCESS, (CNA_Bool)0xA5U};
         CNA_StorageStreamHandle file = CNA_INVALID_HANDLE;
         if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
             CNA_RESULT_SUCCESS) {
@@ -799,8 +795,17 @@ static int validate_disposal_edges(const CNA_StorageDeviceHandle device)
             cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS) {
             return 0;
         }
-        if (observer.calls != 1 || observer.query_result != CNA_RESULT_SUCCESS ||
-            observer.seen_file != CNA_TRUE) {
+        if (observer.calls != 1 || observer.query_result != CNA_RESULT_INVALID_STATE ||
+            observer.seen_file != (CNA_Bool)0xA5U) {
+            return 0;
+        }
+        CNA_StorageContainerHandle live = CNA_INVALID_HANDLE;
+        CNA_Bool exists = CNA_FALSE;
+        if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &live) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_container_file_exists(live, view("cabi-ordering.bin"), &exists) !=
+                CNA_RESULT_SUCCESS || exists != CNA_TRUE ||
+            cna_storage_container_destroy(live) != CNA_RESULT_SUCCESS) {
             return 0;
         }
         if (cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS ||

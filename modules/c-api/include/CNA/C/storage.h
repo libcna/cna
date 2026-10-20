@@ -367,6 +367,9 @@ CNA_C_API CNA_Result cna_storage_container_get_storage_device(
  * @param container Owned container handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure. Disposal is
  * idempotent and raises the canonical disposing event exactly once.
+ * The callback observes the disposed state: subsequent container file/directory and
+ * display-name/device queries report `CNA_RESULT_INVALID_STATE`, including in the callback.
+ * Backing files are retained; disposal does not delete the container's stored data.
  */
 CNA_C_API CNA_Result cna_storage_container_dispose(CNA_StorageContainerHandle container);
 

@@ -25,6 +25,10 @@ namespace Microsoft::Xna::Framework::Storage
          *
          * File and directory paths are confined to this container. Absolute paths, parent
          * traversal outside the container and symlink escapes are rejected.
+         * After disposal, file/directory operations and DisplayName/StorageDevice access
+         * throw System::ObjectDisposedException before validating their arguments.
+         * IsDisposed, type inspection and repeated Dispose remain available. Disposing is
+         * raised after the state changes; backing files and existing streams are retained.
          */
     class StorageContainer : public System::Object, public System::IDisposable
     {

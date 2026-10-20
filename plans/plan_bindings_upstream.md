@@ -178,6 +178,22 @@ explicit-vector entry), keeps the first parsed duplicate and throws ArgumentExce
 for direct duplicate Add. Genuine oracles and failing pre-fix native/C witnesses:
 `../cna-demos/docs/repair-evidence/lifecycle/`. No external lifecycle closure yet.
 
+Storage151 repair decision (2026-10-20, native validation complete/external pending):
+genuine StorageContainer marks itself disposed before Disposing. Its properties and
+filesystem operations then throw ObjectDisposedException, including from inside
+that callback; existing streams and backing files survive. Unlike GameComponent,
+its explicit disposal/event remains one-shot. One internal guard protects the
+canonical entry points before argument validation, with no public layout/API change.
+The existing C StorageSmoke incorrectly expected a successful FileExists in that
+callback. The corrected test requires INVALID_STATE with untouched output and
+independently checks file preservation via a fresh live container. The shared
+exception barrier already performs that mapping; no redundant C-side guard is added.
+Genuine172 plus seven event checks, native18/18, actual StorageContainer.cpp
+ASan/UBSan/leak4/4; exact prior consumers1408PASS/four unchanged skips. All239 runtime
+tests remain visible, including three pre-existing new Title145 failures and three
+unchanged capability skips. Actual external C ABI execution is still pending.
+Evidence: `../cna-demos/docs/repair-evidence/storage/`; no FileShare152 closure.
+
 The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
 both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
 the recorded rows above are superseded by this checkpoint; permanent evidence is

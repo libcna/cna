@@ -40,15 +40,22 @@ cumulative intended changes, admit no other differences. After both sweeps run
 isolated full CTest, then reverify hashes before closing141–144. Do NOT rebuild
 build/linux-full until that checkpoint finishes. No SystemLink overlap.
 
-AFTER FREEZE: Sharp056 minimal Read EOF-state fix now applied with three tests and
-migration note; full existing build70708 COMPLETE warning-free. Post-fix full
+AFTER FREEZE: Sharp056 minimal Read EOF-state fix committed1c0fc9b5 with three tests
+and migration note; full existing build70708 COMPLETE warning-free. Post-fix full
 component gate16272 COMPLETE:18140/18140 across41 executables,zero failures/skips;
 private Yacht fixture stopped/removed and original sample assertions unchanged.
-CNA151 shared disposed guard now applied, with four native tests and corrected
+CNA151 shared disposed guard now native-validated (this repair commit), with four tests and corrected
 genuine-backed C StorageSmoke event-access oracle (backing-file preservation kept).
-Native151 full build29581 RUNNING(--parallel2;1051 tasks including dependent
-examples); current17 warnings all exactly in original152-warning baseline,none new.
-Native151 focused/consumer and actual C ABI validation still pending. Title145 has
+Full build29581 deliberately interrupted at212/1051 to prioritize the affected
+target;17 warnings all exactly in original152-warning baseline,none new. Target
+CnaTests build66318 COMPLETE warning-free. Native18/18 storagePASS(10ms); actual
+rebuilt-library EOF13/13; production-TU ASan/UBSan/leakEOF3/3 andstorage4/4PASS.
+Broad53372 COMPLETE: exact1412consumers1408PASS/four same skips272.553s; all239
+runtime tests233PASS/three same skips/three still-open Title145FAIL11.092s. The
+driver retains exit1 and those failures; no new regression or suppressed test.
+Native executable/DSO hashes reverified unchanged; native freeze released.
+Actual external C ABI storage validation still pending; modified C smoke compiles
+strict C17/Werror. Title145 has
 five prepared tests,2PASS/three intendedFAIL; do not include those expected failures
 in an asserted-green storage gate or close145. FileShare152 policy question pending.
 
@@ -77,10 +84,11 @@ COMMITTED CNA: component root-cause batch031693a9f and launch batchb086814f9,
 including matching regressions and C contracts/smokes. All four matrix rows now
 FIXED_PENDING_REGRESSION; actual C ABI smokes pass, full external closure pending.
 Status commitc01e04275; lifecycle evidence8b38d2a, storage sharing edges2129f3f.
-Latest storage evidence71ebc53, lifecycle demos61d344e. UNCOMMITTED: CNA151 production
-guard/header/C StorageSmoke oracle and four native tests; Sharp056 Read fix/three
-tests/migration/changelog; TitleContainerPathTests.cpp (five pre-fix tests only);
-campaign handoff updates. Native storage before repair: one live control passes,
+Latest storage evidence1d0f897, lifecycle demos61d344e. This151 repair commits its
+production guard/header/C StorageSmoke oracle, four native tests and measured
+compatibility decision. Sharp056 committed1c0fc9b5. Remaining UNCOMMITTED:
+TitleContainerPathTests.cpp (five pre-fix tests only), pending matrix commit/hash
+reconciliation. Native storage before repair: one live control passes,
 three disposed/event groups fail. Copied151 candidate passes all4. Native CnaTests
 rebuild pending, and real external storage validation must await lifecycle closure.
 Pre-fix standalone57total39PASS/18 intendedFAIL/zero skips907ms.

@@ -8,9 +8,17 @@
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/IO/FileStream.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace
 {
+    // Disposal is checked before argument validation and filesystem access.
+    void VerifyNotDisposed(const Microsoft::Xna::Framework::Storage::StorageContainer& container)
+    {
+        if (container.getIsDisposedProperty())
+            throw System::ObjectDisposedException("StorageContainer");
+    }
+
     // Minimal glob: '*' = any sequence, '?' = any single char
     bool GlobMatch(const std::string& pattern, const std::string& str)
     {
@@ -88,9 +96,17 @@ namespace Microsoft::Xna::Framework::Storage
         Disposing.Raise(this, System::EventArgs::Empty);
     }
 
-    const std::string& StorageContainer::getDisplayNameProperty() const { return displayName_; }
+    const std::string& StorageContainer::getDisplayNameProperty() const
+    {
+        VerifyNotDisposed(*this);
+        return displayName_;
+    }
     bool StorageContainer::getIsDisposedProperty() const { return isDisposed_; }
-    const StorageDevice& StorageContainer::getStorageDeviceProperty() const { return *device_; }
+    const StorageDevice& StorageContainer::getStorageDeviceProperty() const
+    {
+        VerifyNotDisposed(*this);
+        return *device_;
+    }
 
     const std::string& StorageContainer::GetTypeName() const
     {
@@ -126,6 +142,7 @@ namespace Microsoft::Xna::Framework::Storage
 
     void StorageContainer::CreateDirectory(const std::string& directory)
     {
+        VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentException("Parameter directory must contain a value.");
         fs::path p = ResolveNativePath(directory);
@@ -134,6 +151,7 @@ namespace Microsoft::Xna::Framework::Storage
 
     bool StorageContainer::DirectoryExists(const std::string& directory) const
     {
+        VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentException("Parameter directory must contain a value.");
         return fs::is_directory(ResolveNativePath(directory));
@@ -141,6 +159,7 @@ namespace Microsoft::Xna::Framework::Storage
 
     void StorageContainer::DeleteDirectory(const std::string& directory)
     {
+        VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentException("Parameter directory must contain a value.");
         fs::remove(ResolveNativePath(directory));
@@ -148,6 +167,7 @@ namespace Microsoft::Xna::Framework::Storage
 
     std::vector<std::string> StorageContainer::GetDirectoryNames() const
     {
+        VerifyNotDisposed(*this);
         std::vector<std::string> result;
         for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
             if (e.is_directory())
@@ -158,6 +178,7 @@ namespace Microsoft::Xna::Framework::Storage
     std::vector<std::string> StorageContainer::GetDirectoryNames(
         const std::string& searchPattern) const
     {
+        VerifyNotDisposed(*this);
         if (searchPattern.empty())
             throw System::ArgumentException("Parameter searchPattern must contain a value.");
         std::vector<std::string> result;
@@ -176,6 +197,7 @@ namespace Microsoft::Xna::Framework::Storage
     std::unique_ptr<System::IO::Stream> StorageContainer::CreateFile(
         const std::string& file)
     {
+        VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentException("Parameter file must contain a value.");
         return std::make_unique<System::IO::FileStream>(
@@ -184,6 +206,7 @@ namespace Microsoft::Xna::Framework::Storage
 
     bool StorageContainer::FileExists(const std::string& file) const
     {
+        VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentException("Parameter file must contain a value.");
         return fs::is_regular_file(ResolveNativePath(file));
@@ -191,6 +214,7 @@ namespace Microsoft::Xna::Framework::Storage
 
     void StorageContainer::DeleteFile(const std::string& file)
     {
+        VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentException("Parameter file must contain a value.");
         fs::remove(ResolveNativePath(file));
@@ -198,6 +222,7 @@ namespace Microsoft::Xna::Framework::Storage
 
     std::vector<std::string> StorageContainer::GetFileNames() const
     {
+        VerifyNotDisposed(*this);
         std::vector<std::string> result;
         for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
             if (e.is_regular_file())
@@ -208,6 +233,7 @@ namespace Microsoft::Xna::Framework::Storage
     std::vector<std::string> StorageContainer::GetFileNames(
         const std::string& searchPattern) const
     {
+        VerifyNotDisposed(*this);
         if (searchPattern.empty())
             throw System::ArgumentException("Parameter searchPattern must contain a value.");
         std::vector<std::string> result;
@@ -241,6 +267,7 @@ namespace Microsoft::Xna::Framework::Storage
         const std::string& file, System::IO::FileMode fileMode,
         System::IO::FileAccess fileAccess, System::IO::FileShare /*fileShare*/)
     {
+        VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentException("Parameter file must contain a value.");
         return std::make_unique<System::IO::FileStream>(
