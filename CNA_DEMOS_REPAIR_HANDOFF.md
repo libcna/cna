@@ -9,6 +9,45 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+LATEST043 NATIVE CHECKPOINT (08:53 UTC):12643 COMPLETE0. Consumers1412 give
+1408PASS/four unchangedSKIP183.079s; runtime241 gives238PASS/three unchangedSKIP
+10.238s. Default XML4PASS/two unchangedfixtureSKIP; original fixtures6/6PASS12ms.
+All four exact comparisons have errors[]; all four final frozen native hashes
+match. With content1929, pipeline552 and actual-TU sanitizer11/11, the043 native
+batch is validated and ready for its coherent runtime/test/deviation commit.
+Status FIXED_PENDING_REGRESSION, not closed. Native freeze RELEASED after final
+audit, but DO NOT edit compiled content sources while external54284 still builds.
+Only external54284 RUNNING(2) remains. Next run the prepared146 focused comparisons
+when that build finishes. Docs/evidence HEAD9576c6a includes measured087 boundaries.
+039/045/103 remain pending the separate C root-contract question/full checkpoint.
+
+LATEST LIVE STATE (08:50 UTC; overrides all prior running-job descriptions):
+CNA3e27412c1 (103 runtime68a3c7b1f), demos4df894d.74 FINAL/81 PENDING unchanged.
+043 pipeline11324 COMPLETE0:552=551PASS/one unchangedXACT SKIP969.769s, exact
+comparison against039/045 errors[], all four frozen native hashes match.
+Remaining native job12643 RUNNING(1):1412 consumers, runtime241, default XML,
+original-fixture XML6, exact comparisons and final four hashes. External full
+rebuild54284 RUNNING(2),972 scheduled steps. Native freeze remains in force.
+
+Prepared087 boundary probes are now executed: genuine53/53PASS (all39 original
+labels unchanged +14 boundary controls), native19=5PASS/14FAIL (all17 original
+outcomes unchanged +two failing grouped cases), audit errors[]. Source-only
+bracing warning initially stopped the Werror compile; corrected braces preserve
+every assertion. Initial failed build/driver retained. Prefix
+repair-content-dispatch-boundaries; native result suffix native-before-braced.
+The first remaining-native driver15098 stopped on that compile failure before
+consumers;12643 resumes only after the corrected independent probe/audit succeeds.
+No087 production patch/design selected; no native frozen artifact changed.
+
+Next: finish12643 and hash gate, commit043 runtime/test/deviation separately;
+finish54284 then prepared repair-reader-lookup-focused.mjs (73 content demos
+each renderer, exact prior039/045 focused outcomes with only043's two failures
+removed). Only remove043 marker after its actual demo passes. No accepted full
+checkpoint/039045103 closure while the C root contract remains unanswered.
+Sharp99c2f79c, EasyGLf4d6afa, MetaGLdd3b300 freshly verified clean/unchanged.
+Uncommitted:043 production/native test/deviation;087 permanent reference/native
+probe additions and evidence, plus this handoff/matrix. Nothing pushed/merged.
+
 LATEST103 UPDATE (08:37 UTC): external target67664 COMPLETE0, warning-free.
 Runtime/test commit68a3c7b1f is now recorded; evidence demos7fd2618 (new results
 pending documentation commit). Full external rebuild54284 RUNNING(2) under

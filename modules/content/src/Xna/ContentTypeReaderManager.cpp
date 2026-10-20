@@ -8,8 +8,21 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
+    namespace detail
+    {
+        struct ContentTypeReaderRegistryAccess
+        {
+            static auto& Creators()
+            {
+                return ContentTypeReaderManager::TypeCreators();
+            }
+        };
+    }
+
     namespace
     {
+        using FactoryRegistration = std::shared_ptr<ContentTypeReaderManager::ReaderFactory>;
+
         // Built-in readers register on the first Load<T>() of their type (detail::BuiltinContent),
         // which may run on a loading thread while another thread reads a file, so the two tables
         // are guarded. A factory is always called outside the lock: a reader's constructor may
@@ -24,6 +37,46 @@ namespace Microsoft::Xna::Framework::Content
         {
             static std::shared_mutex mutex;
             return mutex;
+        }
+
+        struct TargetFactory
+        {
+            std::string readerName;
+            std::weak_ptr<ContentTypeReaderManager::ReaderFactory> registration;
+        };
+
+        // Guarded by CreatorsMutex; an association belongs to one registration, not a reusable key.
+        std::unordered_map<std::string, TargetFactory>& TargetFactories()
+        {
+            static std::unordered_map<std::string, TargetFactory> factories;
+            return factories;
+        }
+
+        void ForgetFactoryTargets(const std::string& readerName)
+        {
+            std::erase_if(TargetFactories(), [&](const auto& entry) {
+                return entry.second.readerName == readerName;
+            });
+        }
+
+        std::unique_ptr<ContentTypeReaderBase> CreateAndAssociateReader(
+            const std::string& readerName, const FactoryRegistration& registration)
+        {
+            // Preserve the existing per-request callable copy, including mutable captures.
+            auto factory = *registration;
+            auto reader = factory();
+            if (reader && !reader->getTargetTypeNameProperty().empty())
+            {
+                const std::unique_lock lock(CreatorsMutex());
+                const auto& creators = detail::ContentTypeReaderRegistryAccess::Creators();
+                const auto current = creators.find(readerName);
+                // A callback may remove or replace itself while the lock is released.
+                if (current != creators.end() && current->second == registration)
+                {
+                    TargetFactories()[reader->getTargetTypeNameProperty()] = {readerName, registration};
+                }
+            }
+            return reader;
         }
 
         // The declared built-in readers (see the header), guarded by CreatorsMutex().
@@ -53,10 +106,10 @@ namespace Microsoft::Xna::Framework::Content
         }
     }
 
-    std::unordered_map<std::string, ContentTypeReaderManager::ReaderFactory>&
+    std::unordered_map<std::string, std::shared_ptr<ContentTypeReaderManager::ReaderFactory>>&
     ContentTypeReaderManager::TypeCreators()
     {
-        static std::unordered_map<std::string, ReaderFactory> creators;
+        static std::unordered_map<std::string, std::shared_ptr<ReaderFactory>> creators;
         return creators;
     }
 
@@ -68,7 +121,7 @@ namespace Microsoft::Xna::Framework::Content
         const auto existing = creators.find(canonicalName);
         if (existing == creators.end())
         {
-            creators.emplace(canonicalName, std::move(factory));
+            creators.emplace(canonicalName, std::make_shared<ReaderFactory>(std::move(factory)));
             if (builtinRegistrationDepth == 0 && declared.declared && !declared.installed)
             {
                 declared.provisional.insert(canonicalName);
@@ -77,7 +130,9 @@ namespace Microsoft::Xna::Framework::Content
         }
         if (builtinRegistrationDepth > 0 && declared.provisional.erase(canonicalName) != 0U)
         {
-            existing->second = std::move(factory);
+            auto replacement = std::make_shared<ReaderFactory>(std::move(factory));
+            ForgetFactoryTargets(canonicalName);
+            existing->second = std::move(replacement);
         }
     }
 
@@ -85,6 +140,7 @@ namespace Microsoft::Xna::Framework::Content
     {
         const std::unique_lock lock(CreatorsMutex());
         TypeCreators().clear();
+        TargetFactories().clear();
         Declared() = DeclaredBuiltins{};
     }
 
@@ -108,8 +164,9 @@ namespace Microsoft::Xna::Framework::Content
 
     void ContentTypeReaderManager::ClearTargetTypeAssociationsEXT()
     {
-        const std::unique_lock lock(TargetNamesMutex());
+        const std::scoped_lock lock(TargetNamesMutex(), CreatorsMutex());
         TargetTypeNames().clear();
+        TargetFactories().clear();
     }
 
     namespace detail
@@ -146,22 +203,33 @@ namespace Microsoft::Xna::Framework::Content
             }
             canonicalName = found->second;
         }
-        return detail::CreateRegisteredReader(canonicalName);
+        FactoryRegistration registration;
+        std::string readerName = canonicalName;
+        {
+            const std::shared_lock lock(CreatorsMutex());
+            const auto associated = TargetFactories().find(canonicalName);
+            if (associated != TargetFactories().end())
+            {
+                registration = associated->second.registration.lock();
+                if (registration)
+                    readerName = associated->second.readerName;
+            }
+            if (!registration)
+            {
+                const auto found = TypeCreators().find(canonicalName);
+                if (found == TypeCreators().end())
+                    return nullptr;
+                registration = found->second;
+            }
+        }
+        return CreateAndAssociateReader(readerName, registration);
     }
 
     namespace detail
     {
-        struct ContentTypeReaderRegistryAccess
-        {
-            static std::unordered_map<std::string, ContentTypeReaderManager::ReaderFactory>& Creators()
-            {
-                return ContentTypeReaderManager::TypeCreators();
-            }
-        };
-
         std::unique_ptr<ContentTypeReaderBase> CreateRegisteredReader(const std::string& canonicalName)
         {
-            ContentTypeReaderManager::ReaderFactory factory;
+            FactoryRegistration factory;
             {
                 const std::shared_lock lock(CreatorsMutex());
                 const auto& creators = ContentTypeReaderRegistryAccess::Creators();
@@ -172,7 +240,7 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 factory = it->second;
             }
-            return factory();
+            return CreateAndAssociateReader(canonicalName, factory);
         }
 
         std::vector<std::string> RegisteredReaderNames()
@@ -199,6 +267,7 @@ namespace Microsoft::Xna::Framework::Content
         {
             const std::unique_lock lock(CreatorsMutex());
             Declared().provisional.erase(canonicalName);
+            ForgetFactoryTargets(canonicalName);
             return ContentTypeReaderRegistryAccess::Creators().erase(canonicalName) != 0U;
         }
 

@@ -101,12 +101,15 @@ namespace Microsoft::Xna::Framework::Content
          * readers know their target type as a canonical XNA *name* -- a `System::Type` is RTTI here
          * and carries no XNA name -- so the bridge between the two is recorded where both are still
          * known: `ContentTypeReader<T>`'s constructors call AssociateTargetType() with `typeid(T)`
-         * and the name they were given. This resolves the type to that name and creates a reader
-         * from the registered factory, which is what the name-based route does.
+         * and the target name they were given. A successfully returned registered reader also
+         * associates that target name with its factory key; the two names need not match.
+         * Lookup constructs a fresh reader from that factory. Removing or replacing a factory
+         * withdraws its target associations. Explicit factory-key associations and factories
+         * registered directly under a target name remain supported.
          *
          * @param targetType The type the reader will handle.
-         * @return A freshly created reader for @p targetType, or nullptr when no reader has ever
-         *         been constructed for it and so nothing associated a name with it.
+         * @return A freshly created reader for @p targetType, or nullptr when no associated
+         *         factory is registered. Registration alone does not construct a reader.
          */
         [[nodiscard]] std::unique_ptr<ContentTypeReaderBase> GetTypeReader(
             const System::Type& targetType) const;
@@ -124,15 +127,16 @@ namespace Microsoft::Xna::Framework::Content
         CreateReaderForTargetTypeEXT(const System::Type& targetType);
 
         /**
-         * @brief Records that @p targetType is the type a reader named @p canonicalName handles.
+         * @brief Associates a C++ target type with its canonical target name or explicit factory key.
          *
          * CNAEXT: the association XNA gets for free from `ContentTypeReader.TargetType`. Called by
          * `ContentTypeReader<T>`'s constructors, which are the only place where the C++ type and the
-         * canonical name are both known. A repeat call for the same type replaces the name, so the
-         * most recently constructed reader for a type is the one GetTypeReader() resolves to.
+         * canonical target name are both known. A repeat call for the same type replaces its name.
+         * Registered reader creation separately associates target names with factory keys.
          *
          * @param targetType    The C++ type the reader handles.
-         * @param canonicalName The reader's canonical XNB name; an empty name is ignored.
+         * @param canonicalName The canonical target name or explicit registered factory key;
+         *                      an empty name is ignored.
          */
         CNAEXT static void AssociateTargetType(const System::Type& targetType,
                                                const std::string& canonicalName);
@@ -142,7 +146,7 @@ namespace Microsoft::Xna::Framework::Content
 
     private:
         friend struct detail::ContentTypeReaderRegistryAccess;
-        static std::unordered_map<std::string, ReaderFactory>& TypeCreators();
+        static std::unordered_map<std::string, std::shared_ptr<ReaderFactory>>& TypeCreators();
         static std::unordered_map<std::type_index, std::string>& TargetTypeNames();
     };
 

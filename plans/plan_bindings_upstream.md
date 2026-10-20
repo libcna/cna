@@ -100,6 +100,16 @@ reference decisions, not a claim that every CNA port defect also exists in FNA,
 nor that every listed native repair has completed external regression validation.
 All probes use the genuine installed Windows XNA 4.0 assembly, not a replacement.
 
+Reader target lookup043 (2026-10-20, native validated; external regression pending): genuine
+`../cna-demos/docs/repair-evidence/content/ReaderTargetLookupOracle.cs` passes5/5.
+Initialize resolves the reader by its target type even when reader and target names
+differ; implicit ReadRawObject uses that association without consuming a type index.
+Genuine XNA returns its existing table reader. CNA's already documented fresh
+unique_ptr reader ownership is retained; this repair does not import XNA's static
+reader-instance cache or redesign CNA's registry API. Registration identity guards
+publication against removal/replacement inside a factory callback. Native regression
+coverage also preserves manual factory-key and same-name registrations.
+
 Content runtime039/045 (2026-10-20, repair validation pending): genuine
 `../cna-demos/docs/repair-evidence/content/ContentOwnershipOracle.cs` passes89/89.
 XNA refuses RootDirectory assignment while loaded assets remain, including the
