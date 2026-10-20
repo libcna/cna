@@ -8,6 +8,7 @@
 # Native-only (the probes exist to inspect host link lines; Emscripten/Android links are
 # covered by their own configurations' full builds).
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/MixedRuntime.cmake)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(TARGET Python3::Interpreter)
         # This is a host tool, even when the compiled probes need Wine or another emulator.

@@ -299,10 +299,11 @@
       ],
       "subsystem": "build/core",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "Static sidecar dependencies precede the transitive shared umbrella and extract a second CNA runtime into the executable; interposed global objects are finalized twice.",
+      "status": "FIXED_PENDING_REGRESSION",
+      "root_cause": "Static sidecar dependencies precede the transitive shared umbrella and extract a second CNA runtime; interposed globals are finalized twice. GNU ld --as-needed also discards an early DSO when the first CNA reference arrives from a later opaque STATIC framework.",
       "related_issues": [],
       "cna_fix_commit": null,
+      "current_validation": "Shared target injects its needed DSO into direct dependencies and excludes direct contained module archives. Native31/31 includes24 mixed-consumer runtime/symbol/state gates, six static footprint gates, one policy fixture. All21 static closures remain static. Eleven actual consumer topologies each pass ld.bfd/LLD/Mold (33), including as-needed opaque wrappers and old explicit workaround. Four CMake versions16 scenarios plus Clangfour pass. Native three artifacts byte-identical to published full10791/math969 validation. External build passes without demo workarounds,318/319 prior artifacts identical; FBX delta under audit. Full external38847 running, no closure.",
       "validation": [
         "Current exact 720-object demo relink without only the explicit first-DSO workaround: --version SIGABRT/double free,6461 duplicated strong definitions versus control exit0/zero duplicates. Single-TU actual-CNA minimization constructs no Game/device/service: control exit0/zero strong Graphics definitions; without workaround SIGABRT/1213 Graphics definitions. Generic miniature models did not reproduce and are negative controls only. Reports repair-mixed-runtime-{actual,version,minimal}-*; permanent MixedRuntimeLifetimeProbe.cpp. No production repair yet."
       ],

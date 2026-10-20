@@ -291,9 +291,14 @@ The 29 targets that still relink are the ones that link module archives directly
 link-closure checks, which exist to test the static closure.
 
 **One copy of everything.** A symbol defined both in `libcna.so` and in an executable would give it
-two copies of that code and of its static state. That happens only if a static archive that also
-went into `libcna.so` precedes `libcna.so` on an executable's link line, so `CnaTests` names `CNA`
-first. Checked with `nm` on the built binaries: the only symbols defined in both are
+two copies of that code and of its static state. Naming the `CNA` interface first alone does not
+guarantee ordering through STATIC/OBJECT wrappers and optional sidecars such as GamerServices,
+Net and ContentPipelineBuild. The shared target therefore injects its DSO into consumers' direct
+link dependencies and excludes direct module archives already contained in that DSO. A scoped
+`--no-as-needed` link feature retains this early DSO even when the application's first CNA
+reference comes from a later static framework; the previous linker state is restored immediately.
+Module-only consumers do not inherit this shared-target interface and remain static.
+Checked with `nm` on the built binaries: the only symbols defined in both are
 `R_X86_64_COPY` relocations — the ELF mechanism by which an executable holds the single live copy
 of a data object a shared library defines (`BlendState::Opaque` and similar) — and no strong
 duplicate remains.

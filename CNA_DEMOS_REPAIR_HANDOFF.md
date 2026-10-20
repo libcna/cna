@@ -9,6 +9,45 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+15:42 UTC:016 root repair ready for coherent commit; full external regression38847
+RUNNING on frozen319 artifacts. Native31/31:24 mixed runtime/symbol/state cases,
+six rebuilt/requested static footprint consumers and existing shared-mode fixture.
+All21 module/footprint link closures remain static. Eleven actual consumer graphs
+pass on each of GNU ld.bfd,LLD,Mold (33 links/runs/symbol audits). Initial draft
+FAILED on opaque ld.bfd --as-needed (SIGABRT/1200 strong Graphics definitions);
+retained evidence led to a scoped needed-library feature, not global --no-as-needed.
+Permanent opaque BFD regression also checks CNA retained/unrelated unused DSO omitted.
+Four real CMake versions16 scenarios still pass; Clang addsfour passes. No new
+compiler warnings; only existing Draco CMP0148 configure warning.
+
+Native CnaTests,CnaMathTests,libcna.so are byte-identical to the immediately preceding
+publication full10791/math969 validation. Reuse that exact-binary evidence; do NOT
+claim a second full native run. External12110 COMPLETE0 (three preludes+47/50 tasks),
+both demo link workarounds removed without changing assertions.318/319 artifacts
+are identical to roots checkpoint; FBX standalone differs (needed-state control
+86754 running). Fresh both95 math and six exact visuals pass; both719/CTest pending.
+Counts84/71 unchanged. Source/issue closure follows only completed evidence. No push.
+
+15:25 UTC: campaign resumed after the owner-requested frustum publication task.
+Explicit one-task push authorization was used: origin/next is verified at
+900d0db3b52d76d3115ebda0a0e04a25fefad1a5, fast-forward from688f3f23e; it contains
+5ab1c7729. Commit900d0db3b adds ONLY the requested orthographic point regression.
+Publication gates used the committed shared-runtime helper without overwriting
+the unrelated six-file016 draft: math967PASS/twoSKIP; complete CnaTests10690PASS/
+101SKIP,zero failures,1622.817s. Three frozen binaries and all six draft hashes
+unchanged. Temporary CMake preload removed; publication evidence is demos reports
+publish-frustum-completed.json. Sharp Runtime99c2f79c was used, NOT pushed.
+No additional campaign pushes are authorized by that one-task publication request.
+
+016 draft now exists (uncommitted): shared-target direct DSO injection and direct
+owned-module exclusion. Eight native link orders/aliases pass16 runtime/symbol
+checks; baseline explicit shared/Graphics-first variants abort and define1200
+strong Graphics functions. Full publication suite did NOT validate this draft.
+Next: cover opaque STATIC consumers with --as-needed, verify module-only static
+footprints, then actual external browser/pipeline graph without demo workarounds.
+No jobs active at resume; counts84 FINAL/71 PENDING unchanged. Preserve failures
+and generic non-reproducing models. Owner policy decisions below remain binding.
+
 Owner decisions received after the 14:38 checkpoint (explicit replies, not defaults):
 - ISSUE-152: preserve native .NET FileShare behavior on each platform and document
   Windows/Linux differences. The original exclusive FileShare.None demo must pass
