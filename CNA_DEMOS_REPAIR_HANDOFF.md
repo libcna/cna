@@ -9,14 +9,40 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
-Phase D external validation / Phase E native repairs. CNA runtime5865ae938(storage151),
-Sharp1c0fc9b5(EOF056); frozen external031693a9f/b086814f9(lifecycle141–144),
-demo markers61d344e. Last complete external checkpoint1ad0a3916(Color132), latest
-evidence1d0f897. All155 IDs retained:58 FINAL/97 PENDING:
-26 runtime findings,one verified duplicate,23 documentation corrections,seven
+Phase E native repairs. CNA runtime5865ae938(storage151), Sharp82b57541 (including
+EOF1c0fc9b5,directory551ced42); completed external031693a9f/b086814f9(lifecycle141–144),
+demo markers61d344e, latest evidence024afe6. All155 IDs retained:62 FINAL/93 PENDING:
+30 runtime findings,one verified duplicate,23 documentation corrections,seven
 already fixed before campaign,one demonstrated demo-expectation defect.
 
-LAST COMPLETE REGRESSION: Color132 now FIXED_VALIDATED, runtime1ad0a3916.
+LAST COMPLETE REGRESSION: lifecycle141–144 FIXED_VALIDATED. Native77/77, actual
+five-TU sanitizer58/58, consumers1408PASS/four skips, genuine and actual C ABI pass.
+Both95math93PASS/two reserved131FAIL. Full719SW609/59/48/3 exact52 changes/differences[];
+GLES648/61/7/3 same52 status improvements but strict comparator retains one030
+unreliable-outage assertion fluctuation, exit1. Same frozen CTest independently
+reproduces both030 failures with24/24 unreliable deliveries versus0/24 in GLES.
+Simulator/demo source blobs unchanged since baseline. No comparator relaxation or
+network closure; details docs/repair-evidence/lifecycle/CHECKPOINT.md. Metadata/tools/
+six exact visuals pass, representative GLES image inspected. Isolated full CTest
+35298 COMPLETE:732accepted/zero unexpected failures,48same skips/three disabled,
+911.46s. Three hashes reverified. External freeze RELEASED after closure commits.
+Complete1128 demo-status delta54, campaign HEAD delta52. No push/merge.
+
+ACTIVE native Title145: initial68183 and final37740 target builds COMPLETE
+warning-free; final16/16 title/storage focus55ms. Actual TitleContainer.cpp ASan/
+UBSan/leak6/6PASS36ms; strict C smoke syntax compilePASS. Broader10391 COMPLETE:
+exact1412consumers1408PASS/four same skips; all240runtime237PASS/three same skips
+11.599s (previous three Title failures now pass, one new length test passes).
+Native hashes reverified, native freeze RELEASED. Product/C adapter/docs/tests
+UNCOMMITTED pending review and commit; external C ABI probe13checks/five pre-fix
+failures retained. Genuine28/28; actual GAC IL corrects the decompiled source's
+incorrect ArgumentException missing-file branch. OldFramework4 length65520 UTF16
+guard is now included and pinned for ASCII/astral input; Sharp modern Uri stays
+unbounded. Next: review embedded-NUL lower-path handling, commit coherent145 repair,
+then rebuild actual external C ABI/demos for056/145/151 focused/full regression.
+FileShare152 policy question still pending; no implementation assumed.
+
+PREVIOUS COMPLETE REGRESSION: Color132 FIXED_VALIDATED, runtime1ad0a3916.
 Native966PASS/two same skips;registered70/70;exact1412consumers1408PASS/four skips;
 actual Color.cpp ASan/UBSan/float-cast-overflow/leak64/64. Actual C ABI ColorSmoke6
 stages pass; all6 focused demos per rendererPASS, original7/9 checks retained.
@@ -28,7 +54,8 @@ Evidence ../cna-demos/docs/repair-evidence/issue-132/CHECKPOINT.md. Complete1128
 demo-status delta50,current-HEAD campaign delta48. External Color freeze RELEASED.
 Owner-reserved131 remains open; outside-entry ray method/exception untouched.
 
-ACTIVE: lifecycle full external regression22718 RUNNING, binaries FROZEN after
+Historical lifecycle build/run details (superseded by completed checkpoint above):
+full external regression22718 COMPLETE with exit1, binaries then FROZEN after
 warning-free initial89883 and marker36933 builds. Demos61d344e preserves genuine
 adjacent oracles with4/20/15 assertion calls. All20 focused scenarios per renderer
 give18PASS/two unchanged050/051FAIL; repaired four retain5/8/11/8 checks.
@@ -36,9 +63,16 @@ Only then four knownIssue/restriction markers removed. Actual C ABI smokes allPA
 (independent disposal11/11), library hashes unchanged through marker rebuild.
 Manifest ../cna-demos/build/linux-full/reports/repair-lifecycle-frozen.sha256 pins
 the executable and both DSOs. Both95 math sweeps exact48 changes/differences[];
-metadata/tools/six pixel-exact visuals pass. Full719-ID sweeps underway; expect52
-cumulative intended changes, admit no other differences. After both sweeps run
-isolated full CTest, then reverify hashes before closing141–144. Do NOT rebuild
+metadata/tools/six pixel-exact visuals pass; GLES texture image also inspected.
+Full719SW609/59/48/3 has exact52 intended changes/differences[]. GLES648/61/7/3
+has the same52 status improvements but one retained strict-comparator difference:
+net.network_session.simulated_conditions no longer fails its unreliable-outage
+assertion in this run (latency still fails). Original comparator/logs retain exit1;
+do not relabel the sweep exact or close030. The receiver-side demo configuration
+and non-guaranteed unreliable delivery were already identified before this batch;
+finish the bounded delta investigation separately, without relaxing assertions.
+Isolated serial full CTest35298 RUNNING, repair-lifecycle-demo-ctest.log. No other
+SystemLink run may overlap. Then reverify hashes before closing141–144. Do NOT rebuild
 build/linux-full until that checkpoint finishes. No SystemLink overlap.
 
 AFTER FREEZE: Sharp056 minimal Read EOF-state fix committed1c0fc9b5 with three tests
@@ -89,6 +123,24 @@ Latest storage evidence1d0f897, lifecycle demos61d344e. Repair5865ae938 commits 
 production guard/header/C StorageSmoke oracle, four native tests and measured
 compatibility decision. Sharp056 committed1c0fc9b5. Remaining UNCOMMITTED:
 TitleContainerPathTests.cpp (five pre-fix tests only), current matrix/handoff updates.
+Sharp directory prerequisite for145 committed551ced42: minimal directory
+classification, one18-case regression, migration and changelog. Genuine sharing
+oracle36/36PASS; native pre-fixFAIL retained. Build33779 warning-free and full gate
+50969 passes18141/18141 across41 executables,zero failures/skips. URI prerequisite
+committed82b57541: empty/whitespace relative references accepted under allowed
+kinds,OriginalString preserved. Genuine36-outcome diagnostic; new matrix fails
+against committed pre-fix Uri.cpp compiled into separate object. Initial test-only
+compiler failures retained, not claimed as runtime failures. Build80011 warning-free;
+fullgate68746 passes18142/18142,zero failures/skips. Neither changes public layout.
+Title145 production/C adapter/docs/new tests now UNCOMMITTED; native target build
+68183 RUNNING. Path cleaning faithfully precedes validation; private Android loader
+and case-insensitive lookup retained. Native absolute-path acceptance oracle corrected
+against genuine evidence, not weakened. External binaries still frozen. Need native
+focus/broad/sanitizer and actual C ABI/external gates before commit/closure. New
+genuine diagnostics identify old Framework4 relative-URI length limit65520 UTF16
+units and an ArgumentException-inner translation discrepancy with decompiled source;
+investigate before claiming full145 compatibility. Current Title implementation has
+no old Framework4 length-limit guard yet. FileShare152 policy still pending.
 Native storage before repair: one live control passes,
 three disposed/event groups fail. Copied151 candidate passes all4. Native CnaTests
 rebuild/focused/broad validation now complete as above; actual external storage
