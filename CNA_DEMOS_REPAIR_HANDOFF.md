@@ -10,14 +10,21 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 ## Current checkpoint (2026-10-20)
 
 AUTHORITATIVE UPDATE (supersedes all older checkpoint text below):
-Phase F. All155 historical IDs retained:73 FINAL/82 PENDING. Totals:40 fixed runtime
+Phase F. All155 historical IDs retained:74 FINAL/81 PENDING. Totals:41 fixed runtime
 findings,23 documentation corrections,eight pre-campaign fixes,one duplicate and
 one demo-expectation defect. Goal unchanged. Nothing pushed or merged.
-CNA HEAD6542db536 (status; runtime3a1437725/048), demos5ec8fe7 (closured9ebd20),
+CNA HEAD462096daa (status; runtime3a1437725/048), demos76e7c94 (prior closured9ebd20),
 Sharp99c2f79c. Candidate039/045 runtime and eight native tests are UNCOMMITTED.
 They are NOT part of either frozen048 checkpoint binary set.
 
-LAST COMPLETE CLOSED CHECKPOINT:088/090/111/046/030, runtimef421948fe and external
+LAST COMPLETE CLOSED CHECKPOINT:048, runtime3a1437725, unchanged demo behavior
+snapshot3d1f833 (later evidence commits only). Native251/552+1412/runtime241/XML
+and both719 renderers/math/visuals pass as below. Final CTest59450 COMPLETE0:
+732accepted/zero unexpected failures/48sameSKIP/three disabled1427.54s; all735
+statuses match previous and319 hashes pass before/after, errors[]. External freeze
+RELEASED. Permanent ../cna-demos/docs/repair-evidence/content/EFFECTIVE_PARAMETERS.md.
+
+PREVIOUS CLOSED CHECKPOINT:088/090/111/046/030, runtimef421948fe and external
 marker snapshot3d1f833. Permanent ../cna-demos/docs/repair-evidence/content/
 SECTIONS_CHECKPOINT.md. Native552=551PASS/one same XACT SKIP973.298s, all517 old
 outcomes unchanged+35newPASS. Consumers1412=1408PASS/four sameSKIP187.433s;
@@ -49,7 +56,7 @@ Prior registry GLES strict030-delta failure remains archived, not whitelisted.
 Partial148 e0318ab52/de1b6e259 fixes empty sections and section-local fixup order;
 PI/BOM remain open, marker retained. No vendor changes or permission inferred.
 
-CURRENT048 FIXED_PENDING_REGRESSION:
+CLOSED048 FIXED_VALIDATED:
 -Commit3a1437725 returns the actual effective processor parameters; appended optional
  requestedParameters preserves original manifest/cache identity, with legacy
  fallback for manual results. Manifest schema/fingerprint algorithm unchanged.
@@ -69,15 +76,15 @@ CURRENT048 FIXED_PENDING_REGRESSION:
  final hashes match. Native freeze RELEASED only afterward for runtime build below.
 -External048 rebuild5276 COMPLETE0,346steps,warning-free. Strict56 focus37051
  COMPLETE0:25PASS/three remaining FAIL each,errors[]; ONLY048 failure removed,
- all36 child assertions preserved,047 still fails. No marker change or closure.
- External319 artifacts now FROZEN in repair-effective-parameters-binaries.sha256.
+ all36 child assertions preserved,047 still fails. No marker change required.
+ External319 artifacts recorded in repair-effective-parameters-binaries.sha256.
  Full math/visual/sweep job95510 COMPLETE0. Both95 math exact48 and six exact visual
  references pass; GLES font screenshot visually inspected. Full719 SOFTWARE
  617PASS/51FAIL/48SKIP/three manual and GLES656/53/7/3, exact60 improvements vsHEAD
- (62vsComplete1128), differences[]. Final isolated serial CTest59450 RUNNING;
- all319 pre-test hashes passed, post-test hashes and unchanged-skip audit pending.
+ (62vsComplete1128), differences[]. Final isolated serial CTest59450 COMPLETE0;
+ all319 pre/post hashes and unchanged735-status/48-skip audit pass.048 now CLOSED.
 Maximum THREE campaign compiler/test workers, Sharp at mostTWO; no concurrent
-SystemLink suites; private GPU wrapper only. Current jobs81669(1)+59450(1).
+SystemLink suites; private GPU wrapper only. Those validation jobs have completed.
 
 NEXT RUNTIME BATCH EVIDENCE:
 ContentOwnershipOracle.cs35/35 actual XNA4 strict C#4/x86, no GPU/services. Pins
@@ -107,9 +114,16 @@ to reject leakedEOF; low-level parser/decompressor contracts remain unchanged.
 After048 freeze release, native canonical20911 COMPLETE0,1194steps,
 repair-content-runtime-native-build.log. All52 warnings match the original152
 baseline by normalized file/diagnostic; no new warnings. Four native artifacts
-FROZEN in repair-content-runtime-native-frozen.sha256; no native rebuild until
-content/pipeline/consumer gates and final hashes finish. Corrected manager focus
-23/23PASS; whole1918 content module81669 RUNNING. Initial70373 guard failed because
+recorded in repair-content-runtime-native-frozen.sha256. Corrected manager focus
+23/23PASS; whole1918 module81669 COMPLETE1:1912PASS/four sameSKIP/two FAIL262.712s.
+Song end-to-end test expects unwrapped FileNotFoundException, contradicted by
+genuine91/91 expanded reference (81817 COMPLETE0). Direct SongReader contract must
+remain FileNotFoundException. Writer fuzz's negative-sphere seed throws in its
+constructor after the earlier math fix before reaching the writer; preserve the
+same invalid payload using public field assignment, not by relaxing its writer oracle.
+Both regressions require fixture corrections and revalidation, not suppression.
+All four failed-gate hashes match. Native freeze RELEASED for these corrections;
+this is NOT a successful content checkpoint. Initial70373 guard failed because
 filter omitted two constructor tests (21/21PASS); corrected filter adds them,
 not reduces expectation. Both logs retained. External039/045 has not been built;
 external048 binaries still contain old runtime. Other011/012/043/087 remain open.
@@ -139,16 +153,16 @@ bypass index, IDisposable value types never record, all four existing-value over
 throw InvalidOperationException due boxed identity. Do not apply reference-type
 dispatch rules to value targets or blindly preserve existing incorrect native expectations.
 
-EXACT NEXT: finish external048 isolated732-enabled CTest59450 and319-hash audit.
-Native048 gates are complete. Finish runtime native content module81669
-(1918 source tests:1905 original outcomes plus13 additions), then552 pipeline,
-1412 consumers/runtime241/originalXML and native hash audit.
-Keep048,039,045 unclosed until their own full gates pass. Preserve047/089/148 markers.
+EXACT NEXT: correct the two native test fixtures above against measured contracts,
+incrementally rebuild and rerun1918 content tests, then552 pipeline,
+1412 consumers/runtime241/originalXML and native hash audit.039/045 remain unclosed;
+after their native gate, commit runtime and rebuild external against that exact tree.
+048 is closed. Preserve047/089/148 markers.
 Uncommitted:039/045 ContentManager.hpp/.cpp, ContentManagerUntyped.cpp,
 ContentReader.hpp, eight tests in ContentManagerXnbTests.cpp, three existing
 sound/container-fuzz test files and divergence log;
 updated demo oracle/evidence and this status are being committed separately.
-Runtime native candidate is built and frozen; broader validation is running.
+Runtime native candidate is built; failed broader gate is being investigated.
 Owner-reserved131 untouched;152 sharing policy and148
 vendor policy remain unanswered. Ordinary actionable issues remain: campaign NOT complete.
 
