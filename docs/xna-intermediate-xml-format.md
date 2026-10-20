@@ -116,10 +116,16 @@ generic brackets (`accept_list_int_space_in_generic`: *Cannot find type " int "*
 * A member's value is written as element text or child elements as the sections below describe. A
   null reference is `<X Null="true" />`; the reader also accepts `Null="false"` as not null
   (`accept_null_false`), lets `Null="true"` win over element content (`accept_null_with_content`),
-  and crashes with `NullReferenceException` on `Null="true"` for a value-type member
-  (`accept_null_on_value_type`) — CNA refuses that case with an `InvalidContentException` instead
-  (recorded divergence). A null root asset cannot be written (`root_null_string`:
-  `ArgumentNullException`) and `<Asset Null="true" />` is rejected the same way (`accept_asset_null`).
+  and throws `NullReferenceException` on `Null="true"` for a value-type member
+  (`accept_null_on_value_type`), as does CNA. A null root asset cannot be written
+  (`root_null_string`: `ArgumentNullException(value)`). Reading `<Asset Null="true" />`
+  succeeds and returns null. The `accept_asset_null` corpus rejection describes the
+  subsequent serialization in its combined round-trip oracle, not deserialization.
+  Direct genuine-XNA evidence: cna-demos `IntermediateEnvelopeOracle.cs` (ISSUE-149).
+  The existing Sharp ArgumentNullException uses modern .NET parameter formatting
+  (`Value cannot be null. (Parameter 'value')`), whereas the Framework4 corpus uses
+  a separate `Parameter name: value` line. Type, parameter identity and timing match;
+  the corpus test retains both exact diagnostics without changing the golden data.
 
 ### `[ContentSerializer]` (`attributes`, `accept_*` over `Attributes`)
 
@@ -290,9 +296,10 @@ failed, or a direct message (*XML element "X" not found*, *Missing shared resour
 serializer itself refused, with these exceptions that surface as other exception types:
 `InvalidOperationException` for `<Item>` in a packed collection and for abstract types,
 `NullReferenceException` for `Null="true"` on a value type, `ArgumentNullException` for a null
-root or an empty external filename, `RankException` for multidimensional arrays and
-`ArgumentException` for U+0000. CNA reports all of them as `InvalidContentException` carrying the
-XML line and position; the message texts above are what CNA reproduces.
+root being serialized or an empty external filename, `RankException` for multidimensional arrays
+and `ArgumentException` for U+0000. CNA now preserves the null-value NullReferenceException and
+null-root serialization ArgumentNullException categories. Other remaining category differences
+are tracked separately; a round-trip rejection must not be interpreted as a failed read.
 
 ## 12. Where CNA differs, and why
 
@@ -313,9 +320,10 @@ the corpus test (`modules/content-pipeline/tests/…/XnaIntermediateSerializerTe
 * **`std::map<K,V>` writes in key order**, where a .NET `Dictionary` enumerates in insertion order.
 * **Self-closing empty sections are accepted.** `<Resources />` and `<ExternalReferences />` are
   read as empty sections; XNA's reader loop fails on them (§1).
-* **Three XNA crashes are refusals.** `Null="true"` on a value type, a multidimensional array and
-  U+0000 in a string are `InvalidContentException`s in CNA (the first with a message naming the
-  member and type; XNA's is a `NullReferenceException`).
+* **Multidimensional arrays remain a category difference.** XNA throws RankException;
+  CNA refuses with InvalidContentException. Null value-type members now preserve
+  NullReferenceException, with CNA's useful member/type diagnostic. XML character
+  exception alignment is tracked separately under CNA-DEMOS-ISSUE-147.
 * **Number formatting is .NET Framework 4.0's.** `R` writes 7 or 9 significant digits for `float`
   and 15 or 17 for `double`, with `E+300`-style exponents (§4); sharp-runtime's own `Single::ToString`
   follows .NET Core's shortest round-trip form, which XNA never wrote.

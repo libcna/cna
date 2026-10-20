@@ -9,6 +9,7 @@
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/NullReferenceException.hpp"
 #include "System/Xml/XmlException.hpp"
 #include "System/Xml/XmlNodeType.hpp"
 
@@ -209,7 +210,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                 }
                 if (!declaredSerializer.IsNullable())
                 {
-                    throw InvalidContentException("XML element \"" + name + "\" is null, but " +
+                    throw System::NullReferenceException("XML element \"" + name + "\" is null, but " +
                                                   declaredSerializer.TargetTypeName() +
                                                   " is a value type and cannot be null.");
                 }

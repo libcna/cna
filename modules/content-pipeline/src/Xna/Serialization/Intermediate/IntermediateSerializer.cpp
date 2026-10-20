@@ -55,6 +55,7 @@
 #include "System/Decimal.hpp"
 #endif
 #include "System/FormatException.hpp"
+#include "System/NullReferenceException.hpp"
 #include "System/OverflowException.hpp"
 #include "System/TimeSpan.hpp"
 #include "System/Xml/XmlConvert.hpp"
@@ -1344,11 +1345,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         try
         {
             ContentObject result = reader.ReadRootAsset(serializer);
-            const ContentTypeSerializerBase* actual = FindTypeSerializer(result);
-            if (actual == nullptr || actual->IsNull(result))
-            {
-                throw InvalidContentException("Value cannot be null.\nParameter name: value");
-            }
             // XNA reads a section when it is present, and requires it once a reference into it is
             // pending: a document with shared references but no Resources is refused.
             if (reader.HasPendingSharedFixups() || reader.MoveToElement("Resources"))
@@ -1372,6 +1368,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             return result;
         }
         catch (const InvalidContentException&)
+        {
+            throw;
+        }
+        catch (const System::NullReferenceException&)
         {
             throw;
         }

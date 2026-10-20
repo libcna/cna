@@ -76,8 +76,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
          * @param input The XML reader positioned at the start of the document.
          * @param referenceRelocationPath Final name of the output file, used to relative encode
          *        external reference filenames.
-         * @return The deserialized object.
+         * @return The deserialized object, including null for a nullable root marked Null="true".
          * @throws InvalidContentException when the document is not intermediate XML of @p T.
+         * @throws System::NullReferenceException when Null="true" is applied to a non-nullable value.
          */
         template<typename T>
         [[nodiscard]] static Carrier<T> Deserialize(System::Xml::XmlReader& input,

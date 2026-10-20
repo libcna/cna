@@ -8,7 +8,8 @@
 // the same message.
 #include <gtest/gtest.h>
 #include "System/Environment.hpp"
-#include <optional>
+#include "System/ArgumentNullException.hpp"
+#include "System/NullReferenceException.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -1348,13 +1349,26 @@ TEST_F(XnaIntermediateSerializerCorpus, RejectedInputsAreRefusedWithXnaMessages)
         }
         catch (const InvalidContentException& error)
         {
-            // XNA crashes with a NullReferenceException on Null="true" for a value type; CNA refuses
-            // with a message that names the member and type (recorded divergence).
-            static const std::set<std::string> ownMessage = {"accept_null_on_value_type"};
-            if (ownMessage.count(item.name) == 0)
-            {
-                EXPECT_EQ(StripLocation(error.getMessageProperty()), ExpectedMessage(item.note)) << item.name;
-            }
+            EXPECT_NE(item.name, "accept_null_on_value_type");
+            EXPECT_NE(item.name, "accept_asset_null");
+            EXPECT_EQ(StripLocation(error.getMessageProperty()), ExpectedMessage(item.note)) << item.name;
+        }
+        catch (const System::NullReferenceException& error)
+        {
+            EXPECT_EQ(item.name, "accept_null_on_value_type") << error.getMessageProperty();
+            EXPECT_NE(error.getMessageProperty().find("Value"), std::string::npos);
+        }
+        catch (const System::ArgumentNullException& error)
+        {
+            // Accept<T> records the entire round trip: reading null succeeds, writing it fails.
+            EXPECT_EQ(item.name, "accept_asset_null") << error.getMessageProperty();
+            EXPECT_EQ(error.getParamNameProperty(), "value");
+            // This is the existing Serialize(null) ArgumentNullException, whose Sharp base
+            // formats parameters like modern .NET, not Framework 4's separate line. Keep
+            // both exact diagnostics pinned; do not manufacture a different read failure.
+            EXPECT_EQ(ExpectedMessage(item.note), "Value cannot be null.\nParameter name: value");
+            EXPECT_EQ(error.getMessageProperty(),
+                      System::ArgumentNullException("value").getMessageProperty());
         }
         catch (const std::exception& error)
         {
@@ -1371,10 +1385,32 @@ TEST_F(XnaIntermediateSerializerCorpus, OpaqueDataDictionaryGetContentAsXmlMatch
     EXPECT_EQ(OpaqueDataDictionary().GetContentAsXml(), "");
 }
 
+TEST_F(XnaIntermediateSerializerCorpus, NullRootDeserializationIsSeparateFromReserialization)
+{
+    // ISSUE-149: the old Accept<T> oracle combines Deserialize and Serialize in one catch.
+    // Genuine direct-read evidence: cna-demos IntermediateEnvelopeOracle.cs (16/16).
+    std::shared_ptr<Nested> value;
+    ASSERT_NO_THROW(value = DeserializeString<Nested>(ReadCorpus("accept_asset_null.input.xml")));
+    EXPECT_EQ(value, nullptr);
+    EXPECT_THROW((void)SerializeToString<Nested>(value), System::ArgumentNullException);
+}
+
+TEST_F(XnaIntermediateSerializerCorpus, NullValueMemberReportsNullReferenceException)
+{
+    EXPECT_THROW((void)DeserializeString<Nested>(ReadCorpus("accept_null_on_value_type.input.xml")),
+                 System::NullReferenceException);
+    const auto ordinary = DeserializeString<Nested>(
+        "<XnaContent><Asset Type=\"Cna.Xna40.IntermediateOracle.Nested\">"
+        "<Name>retained</Name><Value Null=\"false\">3</Value></Asset></XnaContent>");
+    ASSERT_NE(ordinary, nullptr);
+    EXPECT_EQ(ordinary->Name, std::optional<std::string>("retained"));
+    EXPECT_EQ(ordinary->Value, 3);
+}
+
 TEST_F(XnaIntermediateSerializerCorpus, GraphsXnaCouldNotWriteAreRefusedTooWhereTheyExist)
 {
-    EXPECT_ANY_THROW(SerializeToString<NulCharacter>(std::make_shared<NulCharacter>()));
-    EXPECT_ANY_THROW(SerializeToString<std::optional<std::string>>(std::nullopt));
+    EXPECT_THROW(SerializeToString<NulCharacter>(std::make_shared<NulCharacter>()), System::ArgumentException);
+    EXPECT_THROW(SerializeToString<std::optional<std::string>>(std::nullopt), System::ArgumentNullException);
 }
 
 TEST_F(XnaIntermediateSerializerCorpus, DeserializedValuesCarryTheCorpusData)
