@@ -9,6 +9,21 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+12:51 UTC: boundary module62368 COMPLETE0,1990=1986PASS/four unchangedSKIP;
+five new focus PASS, exact audit/four hashes match. Six link-footprint checks98103
+COMPLETE0, all pass/no skips/four hashes match.30922 pipeline562 still RUNNING(1).
+External01278862 finished both719 sweeps:SW624/44/48/three manual,GLES663/46/7/three;
+predecessor audit differences[] on both, only two012 improvements. Original C-root
+residual unchanged, globallyAccepted=false retained.319 hashes match; final serial
+CTest RUNNING(1), ~340/735. No source/metadata edits/rebuilds during either freeze.
+Independent014 probe88540 COMPLETE0 audit:12=9PASS/threeFAIL, strict warning-free,
+four boundary native hashes match. Fresh Linux cwd/title decoy proves root changes
+after TitleLocation initialization; absolute root/cache controls pass. Permanent
+ColdContentRootProbe.cpp/PUBLIC_BOUNDARY_TRIAGE.md, matrix CONFIRMED_OPEN. No014 fix.
+Prepared boundary focus helper requires73 cases per renderer, only105 improves,
+retains37 CNB controls and exact32 compiler/23 font child labels except deliberate
+contract-corrected historical observations. Not run; no demo edits yet. Counts76/79.
+
 12:45 UTC: all four boundary candidates pass focused normal/sanitized gates;
 10624736/49964 COMPLETE0:21 public+three selected native. Canonical83644 COMPLETE0,
 84 printed steps/zero warnings/nine source hashes exact, audit errors[]. Old native
