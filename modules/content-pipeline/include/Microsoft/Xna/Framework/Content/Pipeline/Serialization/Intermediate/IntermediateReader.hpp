@@ -363,7 +363,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         void ReadResources();
         void ReadExternalReferences();
         void ExpectEndOfDocument();
-        void ApplyFixups();
+        void ApplySharedFixups();
+        void ApplyExternalFixups();
         ContentTypeSerializerBase& ResolveDeclared(const ContentSerializerAttribute& format,
                                                    ContentTypeSerializerBase& declaredSerializer, bool rootAsset);
         [[noreturn]] void ThrowInvalidNodeType() const;

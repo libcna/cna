@@ -635,7 +635,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         }
     }
 
-    void IntermediateReader::ApplyFixups()
+    void IntermediateReader::ApplySharedFixups()
     {
         for (const SharedFixup& fixup : sharedFixups_)
         {
@@ -682,6 +682,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             }
             fixup.apply(resource->value);
         }
+    }
+
+    void IntermediateReader::ApplyExternalFixups()
+    {
         const std::string& relocation = serializer_.getReferenceRelocationPathProperty();
         for (const ExternalFixup& fixup : externalFixups_)
         {

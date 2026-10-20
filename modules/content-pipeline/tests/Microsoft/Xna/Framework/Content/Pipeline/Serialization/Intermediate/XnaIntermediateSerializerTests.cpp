@@ -889,13 +889,43 @@ namespace
     /** @brief Re-serializes what the reader produced: the corpus's own round-trip and normalization. */
     using RoundTrip = std::function<std::string(const std::string& xml, const std::string& relocation)>;
 
+    // The corpus deliberately owns strong shared_ptr cycles. Break their links only
+    // after serialization/assertions, including an early ASSERT or exception. This is
+    // fixture teardown, not a change to the graph being tested or its ownership model.
+    class NodeGraphCleanup
+    {
+    public:
+        explicit NodeGraphCleanup(std::shared_ptr<Node> root) : root_(std::move(root)) {}
+        ~NodeGraphCleanup()
+        {
+            auto node = std::move(root_);
+            while (node)
+            {
+                auto next = std::move(node->Next);
+                node = std::move(next);
+            }
+        }
+        NodeGraphCleanup(const NodeGraphCleanup&) = delete;
+        NodeGraphCleanup& operator=(const NodeGraphCleanup&) = delete;
+    private:
+        std::shared_ptr<Node> root_;
+    };
+
     template<typename T>
     RoundTrip MakeRoundTrip()
     {
         return [](const std::string& xml, const std::string& relocation)
         {
             Carrier<T> value = DeserializeString<T>(xml, relocation);
-            return SerializeToString<T>(value, relocation);
+            if constexpr (std::is_same_v<T, Node>)
+            {
+                const NodeGraphCleanup cleanup(value);
+                return SerializeToString<T>(value, relocation);
+            }
+            else
+            {
+                return SerializeToString<T>(value, relocation);
+            }
         };
     }
 
@@ -1005,6 +1035,7 @@ namespace
         map["shared_cycle"] = []
         {
             auto a = std::make_shared<Node>();
+            const NodeGraphCleanup cleanup(a);
             a->Name = "a";
             auto b = std::make_shared<Node>();
             b->Name = "b";
@@ -1015,6 +1046,7 @@ namespace
         map["shared_self"] = []
         {
             auto self = std::make_shared<Node>();
+            const NodeGraphCleanup cleanup(self);
             self->Name = "self";
             self->Next = self;
             return SerializeToString<Node>(self);
@@ -1434,6 +1466,7 @@ TEST_F(XnaIntermediateSerializerCorpus, DeserializedValuesCarryTheCorpusData)
     EXPECT_EQ(shared->NullShared, nullptr);
 
     auto cycle = DeserializeString<Node>(ReadCorpus("shared_cycle.xml"));
+    const NodeGraphCleanup cleanup(cycle);
     ASSERT_TRUE(cycle->Next);
     ASSERT_TRUE(cycle->Next->Next);
     EXPECT_EQ(cycle->Next->Next->Next, cycle->Next) << "the cycle closes on the resource, not the root";

@@ -1407,6 +1407,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                     throw InvalidContentException("XML element \"Resources\" not found.");
                 }
                 reader.ReadResources();
+                // XNA resolves each section before advancing to the next one. Preserve
+                // missing-reference diagnostics ahead of later envelope/type errors.
+                reader.ApplySharedFixups();
             }
             if (reader.HasPendingExternalFixups() || reader.MoveToElement("ExternalReferences"))
             {
@@ -1415,9 +1418,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                     throw InvalidContentException("XML element \"ExternalReferences\" not found.");
                 }
                 reader.ReadExternalReferences();
+                reader.ApplyExternalFixups();
             }
             reader.ExpectEndOfDocument();
-            reader.ApplyFixups();
             return result;
         }
         catch (const InvalidContentException&)
