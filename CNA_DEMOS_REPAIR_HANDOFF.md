@@ -173,6 +173,17 @@ only039/045 assertion changes allowed; preserve all other failures/counts), then
 remove those markers only after focused passes. Run full62-improvement checkpoint,
 math95/visuals/finalCTest/hash audit before closing039/045. Native freeze stays.
 048 is closed. Preserve047/089/148 markers.
+Prepared helpers (syntax checked, not run yet): repair-content-runtime-native-audit.mjs
+accepts pipeline or consumers and compares exact outcomes with048; consumers include
+the original-fixture XML6/6 run using
+XNA_SAMPLES_ROOT=/rv/data/development/github.com/libcna/sharp-runtime/build-probe/cna-repair-xna-samples
+(existing links only). repair-content-runtime-{math,math-compare,regression,full-compare}.mjs
+require exactly62 improvements vs initialHEAD/64vsComplete1128, retaining048's
+child-only improvement and all previous deltas. Focus script defaults to old markers;
+its markers argument expects only039/045 markers removed after verified passes.
+External6996 schedules1037steps; native66736 differential corpus has passed its long
+accept/refuse comparison (802.611s suite), error-parity and remaining cases continue.
+Sharp99c2f79c, EasyGLf4d6afa and MetaGLdd3b300 were freshly checked clean.
 Uncommitted runtime work: none. Current evidence/status updates are committed
 separately. All failed setup/regression logs remain; corrected native gate passes.
 Owner-reserved131 untouched;152 sharing policy and148
