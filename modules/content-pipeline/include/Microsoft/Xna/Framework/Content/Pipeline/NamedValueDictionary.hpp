@@ -103,8 +103,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         /**
          * @brief Gets, for assignment, the value slot associated with the specified key.
          *
-         * Reading through this reference requires the key to exist; assigning adds or replaces
-         * the entry through `SetItem`/`AddItem`, matching the C# indexer setter.
+         * The key must exist. Direct reference assignment bypasses the mutation hooks;
+         * use Set() for the validated C# indexer-setter behavior.
          *
          * @param key The key to look up.
          * @return A reference to the stored value.
@@ -130,8 +130,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          */
         void Set(const std::string& key, const T& value)
         {
-            if (Find(key) == entries_.end()) { AddItem(key, value); }
-            else { SetItem(key, value); }
+            SetItem(key, value);
         }
 
         /**
@@ -139,7 +138,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          *
          * @param key The key; must not be empty or already present.
          * @param value The value.
-         * @throws System::ArgumentException when the key is empty or already present.
+         * @throws System::ArgumentNullException when the key is empty or a reference value is null.
+         * @throws System::ArgumentException when the key is already present.
          */
         void Add(const std::string& key, const T& value) override
         {
@@ -214,7 +214,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          * @brief Gets the type of serializer used when the value type cannot be determined from
          *        a value alone -- the `object` element type of an opaque dictionary.
          *
-         * @return `System::Type::From<T>()` here; `OpaqueDataDictionary` answers `Object`.
+         * @return `System::Type::From<T>()` here; `OpaqueDataDictionary` answers `std::string`.
          */
         [[nodiscard]] virtual System::Type getDefaultSerializerTypeProperty() const
         {
@@ -226,11 +226,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          *
          * @param key The key; must be non-empty and absent.
          * @param value The value.
-         * @throws System::ArgumentException when the key is empty or already present.
+         * @throws System::ArgumentNullException when the key is empty or a reference value is null.
+         * @throws System::ArgumentException when the key is already present.
          */
         virtual void AddItem(const std::string& key, const T& value)
         {
-            if (key.empty()) { throw System::ArgumentException("The dictionary key must not be empty.", "key"); }
+            RequireKey(key);
             RequireValue(value);
             if (Find(key) != entries_.end())
             {
@@ -263,6 +264,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
         }
 
+        /**
+         * @brief Rejects an empty mutation key before validating the value.
+         * @param key The key being added, replaced or removed.
+         * @throws System::ArgumentNullException when the key is empty.
+         */
+        static void RequireKey(const std::string& key)
+        {
+            if (key.empty()) { throw System::ArgumentNullException("key"); }
+        }
+
         /** @brief Removes all elements. */
         virtual void ClearItems()
         {
@@ -277,6 +288,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          */
         virtual bool RemoveItem(const std::string& key)
         {
+            RequireKey(key);
             auto it = Find(key);
             if (it == entries_.end()) { return false; }
             entries_.erase(it);
@@ -284,22 +296,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
 
         /**
-         * @brief Replaces the value of an existing element.
+         * @brief Adds or replaces an element without dispatching the AddItem hook.
          *
-         * @param key The key; must be present.
+         * @param key The non-empty key.
          * @param value The new value.
-         * @throws System::Collections::Generic::KeyNotFoundException when the key is absent.
+         * @throws System::ArgumentNullException when the key is empty or a reference value is null.
          */
         virtual void SetItem(const std::string& key, const T& value)
         {
+            RequireKey(key);
             RequireValue(value);
             auto it = Find(key);
-            if (it == entries_.end())
-            {
-                throw System::Collections::Generic::KeyNotFoundException(
-                    "The key '" + key + "' was not present in the dictionary.");
-            }
-            it->second = value;
+            if (it == entries_.end()) { entries_.emplace_back(key, value); }
+            else { it->second = value; }
         }
 
     private:

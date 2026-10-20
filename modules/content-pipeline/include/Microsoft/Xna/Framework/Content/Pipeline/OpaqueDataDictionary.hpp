@@ -74,9 +74,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
     protected:
         /**
-         * @brief Gets the serializer type for values whose type cannot be inferred: `Object`.
+         * @brief Gets the default value serializer: strings omit their Type attribute.
          *
-         * @return `System::Type::From<System::Object>()`.
+         * @return `System::Type::From<std::string>()`.
          */
         [[nodiscard]] System::Type getDefaultSerializerTypeProperty() const override;
 
@@ -85,7 +85,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
          *
          * @param key The key.
          * @param value The boxed value.
-         * @throws System::ArgumentException for an empty key, a duplicate key or an empty box.
+         * @throws System::ArgumentNullException for an empty key or an empty box (key checked first).
+         * @throws System::ArgumentException for a duplicate key.
          */
         void AddItem(const std::string& key, const ContentObject& value) override;
 
@@ -101,11 +102,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         bool RemoveItem(const std::string& key) override;
 
         /**
-         * @brief Replaces an element's value; an empty box is refused.
+         * @brief Adds or replaces an element's value; an empty box is refused.
          *
-         * @param key The key; must be present.
+         * @param key The non-empty key.
          * @param value The boxed value.
-         * @throws System::ArgumentException for an empty box.
+         * @throws System::ArgumentNullException for an empty key or an empty box (key checked first).
          */
         void SetItem(const std::string& key, const ContentObject& value) override;
     };

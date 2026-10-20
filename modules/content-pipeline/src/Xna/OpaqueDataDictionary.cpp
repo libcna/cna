@@ -4,7 +4,7 @@
 #include <memory>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
-#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/Xml/XmlWriter.hpp"
 #include "System/Xml/XmlWriterSettings.hpp"
 #include "System/Object.hpp"
@@ -41,9 +41,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
     void OpaqueDataDictionary::AddItem(const std::string& key, const ContentObject& value)
     {
+        RequireKey(key);
         if (value.Empty())
         {
-            throw System::ArgumentException("Opaque data values must not be null.", "value");
+            throw System::ArgumentNullException("value");
         }
         NamedValueDictionary<ContentObject>::AddItem(key, value);
     }
@@ -60,9 +61,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
 
     void OpaqueDataDictionary::SetItem(const std::string& key, const ContentObject& value)
     {
+        RequireKey(key);
         if (value.Empty())
         {
-            throw System::ArgumentException("Opaque data values must not be null.", "value");
+            throw System::ArgumentNullException("value");
         }
         NamedValueDictionary<ContentObject>::SetItem(key, value);
     }
