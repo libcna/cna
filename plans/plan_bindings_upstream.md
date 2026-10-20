@@ -156,6 +156,13 @@ Native math963PASS/two skips; registered247/247; four-production-TU ASan/UBSan/l
 13/13; broad consumers1408PASS/four unchanged skips. Actual C ABI/external
 containment closure still pending. Preserve the failed parity hypothesis/log.
 
+Containment127/129/133 external closure completed2026-10-20: isolated full CTest
+732accepted/zero failures(1233.07s), both719-ID SOFTWARE/OPENGLES3 sweeps with
+exact46 cumulative repaired statuses and no unrelated deltas, six pixel-exact
+visual references. Frozen executable and both actual libraries reverified.
+The pending containment annotations above are superseded; permanent evidence:
+`../cna-demos/docs/repair-evidence/geometry/CONTAINMENT_CHECKPOINT.md`.
+
 The 118/123/140 external closures completed on 2026-10-20: full732 enabled CTests,
 both719-ID renderer sweeps and six exact visuals pass. The pending annotations in
 the recorded rows above are superseded by this checkpoint; permanent evidence is

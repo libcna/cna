@@ -9,6 +9,61 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-20)
 
+Phase C completion / Phase D preparation. CNA status revisiond77ee1df2;
+latest runtime1ad0a3916(Color132), latest completed runtime checkpoint5ab1c7729
+plus99d790167(containment). Demo evidence063840a; containment74622b4; new closure
+documentation currently uncommitted. All155 IDs retained:57 FINAL/98 PENDING:
+25 runtime findings,one verified duplicate,23 documentation corrections,seven
+already fixed before campaign,one demonstrated demo-expectation defect.
+
+LAST COMPLETE REGRESSION: containment127/129/133 now FIXED_VALIDATED. Native963PASS/
+two unchanged skips;registered247/247;consumers1408PASS/four unchanged skips;
+actual four-TU ASan/UBSan/float-cast-overflow/leak13/13. Strict actual C ABI Geometry/
+Vertex smokes pass; focused17 per renderer15PASS/two unchanged reserved131 failures.
+Both95math91PASS/four expectedFAIL. Full719SW603/65/48/3,GLES642/67/7/3,exact46
+cumulative expected changes,differences[]. Metadata719/0,tools7+4+5,six exact visuals.
+Isolated full CTest732accepted/zero failures/48skips/three disabled,1233.07s;
+executable and both DSOs SHA256 reverified after completion. Permanent evidence
+../cna-demos/docs/repair-evidence/geometry/CONTAINMENT_CHECKPOINT.md.
+Complete1128 demo-status delta48; current-HEAD campaign delta46. External freeze
+released. Owner-reserved131 remains open; ray method/exception untouched.
+
+ACTIVE NEXT: Color132 FIXED_PENDING_REGRESSION, runtime1ad0a3916. External full
+build RUNNING session45310,three jobs,repair-color-demo-build.log. NO lifecycle
+production edits until this build, focused passes, marker-only rebuild and Color
+binary freeze are complete. Then launch Color full smoke followed by isolated
+full CTest (never overlap SystemLink suites) and implement lifecycle natively.
+Color native already complete: genuine/native1782/1782; math966/two skips;
+registered70/70; actual Color.cpp ASan/UBSan/float-cast-overflow/leak64/64;
+exact1412 consumers1408PASS/four same skips(282.277s). No external pass/closure yet.
+Prepared drivers build-probe/repair-color-{c-smoke,focused,math,regression}.mjs;
+exact comparators admit only48 cumulative changes(two Color demos additional).
+
+UNCOMMITTED CNA: closure matrix/handoff plus lifecycle tests in LaunchParameters,
+GameComponentCollection,new ComponentLifecycleCompatibilityTests. Tests have no
+production companion yet: standalone57total39PASS/18 intendedFAIL/zero skips907ms.
+Integrated native binary still earlier50tests39PASS/11 intendedFAIL. Genuine
+lifecycle29+8+3+4 checks pass; current actual C ABI disposal11checks/seven passes/
+four failures. Existing Game19/19 controls pass. Derived explicit disposal always
+invokes UnloadContent before event, even without Initialize; false path silent.
+Collection Clear uses live-index iteration, not snapshot/fail-fast. Game.Dispose
+requires an owning original snapshot. Keep owned references alive across the entire
+virtual component Dispose, nested removal, exceptions and re-registration.
+See ../cna-demos/docs/repair-evidence/lifecycle/ and prepared sanitizer builder.
+
+Next storage056/151/152 confirmed at correct lower layer, no production edits.
+Genuine EOF13/13 versus seven native failures; genuine storage172/172 versus
+native170checks29PASS/141FAIL (two FileStream share checks cannot compile yet).
+Native disproves share enforcement and disposed guards, including real mutations
+of isolated fixtures. Container shorter defaults are exclusive,Append write-only;
+direct FileStream defaults read sharing. Sharp Runtime rules/StandingApprovals
+read; at most TWO Sharp jobs, layout/migration/full-gate requirements apply.
+009/020/029/150 independently confirmed despite associated passing demos.
+Linux x86_64/Radeon780M/Mesa only; private displays only. At most THREE campaign
+jobs overall. No push/merge. Continue automatically through remaining batches.
+
+## Superseded containment preparation (2026-10-20)
+
 Phase C. Current CNA product1ad0a3916 (Color132); external frozen containment5ab1c7729
 plus C regression companion99d790167. Demo evidencea0b2fb6, containment74622b4,
 latest final closure2cea947.
@@ -116,6 +171,14 @@ Reports repair-storage-contracts-native-corrected-before*,repair-component-c-dis
 No Sharp/runtime production changes. Native runtime test additions remain uncommitted
 pending coherent repair. Prepared ignored Color exact-comparison drivers admit exactly
 48 cumulative demo changes; containment comparisons rechecked unchanged46/differences[].
+Derived disposal companion: genuine DrawableDisposalOracle4/4; two new native tests
+fail because explicit Dispose must always invoke UnloadContent even before Initialize,
+before base event; false path silent, throwing unload does not suppress later attempt.
+Standalone combined runtime suite57tests39PASS/18intendedFAIL/zero skips907ms,
+repair-drawable-lifecycle-native-before*. Native integrated binary still only earlier
+50-test version. Include derived disposal in141 root-cause batch; do not assume
+initialized_ is a valid one-shot guard for managed hooks. Separate device-service
+initialization/event hookup is not validated by this no-Initialize oracle.
 
 ## Superseded chronological checkpoint notes
 
