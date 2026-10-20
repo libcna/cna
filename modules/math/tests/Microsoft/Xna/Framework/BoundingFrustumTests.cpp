@@ -156,6 +156,38 @@ TEST(BoundingFrustumTest, ContainsPointOutRef)
     EXPECT_EQ(result, ContainmentType::Disjoint);
 }
 
+TEST(BoundingFrustumTest, OrthographicPointContainmentMatchesXnaFarPlaneTolerance)
+{
+    // cna-engine UP-004 / cna-extended EXT-002: the 2D camera's far plane is Z=0.
+    // XNA Contains(ref Vector3, out ContainmentType) checks every plane with 1e-5f
+    // tolerance and never returns Intersects for a point.
+    const Matrix view = Matrix::CreateLookAt(Vector3::Zero, Vector3(0, 0, -1), Vector3(0, 1, 0));
+    const BoundingFrustum frustum(view * Matrix::CreateOrthographic(640.0f, 480.0f, -1.0f, 0.0f));
+    const Plane far = frustum.getFarProperty();
+    ASSERT_EQ(far.Normal, Vector3(0, 0, -1));
+    ASSERT_FLOAT_EQ(far.D, 0.0f);
+
+    const struct
+    {
+        const char* name;
+        Vector3 point;
+        ContainmentType expected;
+    } cases[] = {
+        {"exactly on far plane", Vector3(0, 0, 0), ContainmentType::Contains},
+        {"1e-6 beyond far plane", Vector3(0, 0, -1e-6f), ContainmentType::Contains},
+        {"1e-3 beyond far plane", Vector3(0, 0, -1e-3f), ContainmentType::Disjoint},
+        {"on far plane but outside right plane", Vector3(321, 0, 0), ContainmentType::Disjoint},
+    };
+    for (const auto& item : cases)
+    {
+        SCOPED_TRACE(item.name);
+        EXPECT_EQ(frustum.Contains(item.point), item.expected);
+        ContainmentType output = ContainmentType::Intersects;
+        frustum.Contains(item.point, output);
+        EXPECT_EQ(output, item.expected);
+    }
+}
+
 // --- Contains (BoundingBox) ---
 
 TEST(BoundingFrustumTest, ContainsBoxInsideFrustum)
