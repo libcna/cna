@@ -1606,11 +1606,13 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "RegisterTypeSerializer mutates ownership/type/carrier maps before unchecked name-map insertion; a distinct target with a colliding shortcut is only partly registered.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Current strict external content focus reproduces088/089 in20 child controls with exactly two failures on both renderers. Genuine IntermediateCollisionOracle11/11: exact InvalidOperationException on conflicting XmlTypeName, original identity/output preserved, rejected target can register a distinct alias, both public round trips preserve content. Actual private XNA registration path invoked by reflection; no replacement registry. Reports repair-intermediate-collision-asserted-xna*. No runtime repair yet."
+      ],
       "final_disposition": null
     },
     {
@@ -1618,14 +1620,16 @@
       "title": "Intermediate serializers never receive their Initialize callback",
       "line": 1796,
       "historical_status": "Open",
-      "demos": [],
+      "demos": ["content.custom.intermediate_type_serializer"],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Registered intermediate serializers never receive InvokeInitialize; serializers are global but active read/write contexts are temporary, so initialization lifetime must be repaired deliberately.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Current strict external focus retains the exact missing-initialization assertion on both renderers. Genuine IntermediateInitializationOracle21/21 proves one cached serializer, exactly one Initialize across two writes/two reads, nested lookup inside Initialize, initialization before scanning/reading/writing, same long-lived owner for all callbacks and usable caches afterward. Source has no production InvokeInitialize caller. Reports repair-intermediate-initialization-asserted-xna*. No runtime repair yet."
+      ],
       "final_disposition": null
     },
     {
@@ -1638,11 +1642,14 @@
       ],
       "subsystem": "content/serialization",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "FIXED_PENDING_REGRESSION",
+      "root_cause": "AddWriter invokes user Initialize while holding the same nonrecursive mutex required by GetTypeWriter.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "current_validation": "Local two-phase validation/callback-outside-lock repair: warning-free native build,10/10 focused native tests, strict bounded actual-library probe9/9. Four new native regressions cover nested lookup, initializer exception atomicity, registry freezing and duplicate insertion during callbacks. Full508 native content regression running; external snapshot remains frozen at the prior146/147/149 repair. No090 closure or external pass claimed.",
+      "validation": [
+        "Genuine XNA CompilerInitializationOracle8/8 confirms public nested lookup inside host initialization, exactly-once initialization and compiler-local writer identity. Strict C++23/Werror native probe logs built-in lookup PASS and ENTER Initialize but never LEAVE; single five-second process deadline terminates deadlock, exit1 retained. Permanent reference/probe committed in demos3ff4e2e; reports repair-compiler-initialization-*."
+      ],
       "final_disposition": null
     },
     {
@@ -2755,7 +2762,8 @@
       "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "Opaque guards throw broader ArgumentException before shared key validation; NamedValueDictionary also has incorrect empty-key checks and Set/Add hook dispatch.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "7c4431fdf",
+      "current_validation": "Complete native content504:503PASS/one unchanged XACT SKIP, exact six expected failure-to-pass changes; broader consumers1408PASS/four same SKIP of1412, runtime238PASS/three same SKIP of241, XML consumers6/6 with original ShipGame fixtures. Actual three-production-TU ASan/UBSan/leak9/9. External strict56 focused runs match all expected statuses/counts/failure multisets, demo markers71e6992. Full719 SOFTWARE614PASS/54FAIL/48SKIP/3manual with strict57 improvements/differences[]; OPENGLES3 and final CTest pending. No closure yet.",
       "validation": [
         "Genuine XNA OpaqueDictionaryOracle14/14 and protected NamedDictionaryHooksOracle7/7. New native five-test suite against unchanged production gives1PASS/four FAIL (7ms), pinning exact categories/parameter precedence, unchanged XML, successful order, and derived-hook dispatch/insertion. Reports repair-opaque-hooks-native-before*, repair-opaque-dictionary-staged-xna*, repair-named-dictionary-hooks-xna*. No production content repair yet.",
         "Native complete pre-fix content baseline504:497PASS/one existing XACT fixture SKIP/exactly six new failures (four146, two149),1306.990s. Narrow runtime repair applied; native focused19/19 now PASS735ms, including all five dictionary tests, full intermediate corpus and hardening. Initial focused18/19 exposed existing modern Sharp versus Framework4 ArgumentNull message formatting; exact native and exact historical diagnostics are now both pinned with type/parameter/timing preserved. Original18/19 log retained. Full504 post-fix run and actual-TU sanitizers underway; external regression and coherent runtime commit pending."
@@ -2776,6 +2784,8 @@
       "root_cause": "Sharp XmlWriter's unconditional NUL truncation guard throws XmlException; genuine default-checking .NET writer uses ArgumentException across all seven measured doors.",
       "related_issues": [],
       "cna_fix_commit": null,
+      "dependency_fix_commit": "sharp-runtime:af1b0bea",
+      "current_validation": "Native content504 and broader1412/runtime241 consumers have no new failures; original-fixture XML consumers6/6. External strict56 focused runs match expected statuses/counts/assertions; marker71e6992 updated only afterward. Metadata/tools/six zero-pixel-difference visual comparisons pass. Full719 SOFTWARE has exact57 improvements/differences[]; OPENGLES3 and final CTest pending. No closure yet.",
       "validation": [
         "Fresh Framework4 reference XmlWriterNulOracle21/21: two NUL placements at seven doors reject with exact ArgumentException and seven ordinary-content controls pass. CheckCharacters=false separately records entitized text/attributes versus literal NUL in other doors; it is not claimed implemented. Evidence docs/repair-evidence/content/XmlWriterNulOracle.cs, repair-xml-nul-xna*. Native test-only reproduction being built; production unchanged.",
         "Native test-only build warning-free;49 XmlWriterValidationTests46PASS/three expectedFAIL (2ms). Fresh .NET8 oracle also21/21. Prepared runtime patch unapplied; no closure.",
@@ -2815,7 +2825,8 @@
       "status": "FIXED_PENDING_REGRESSION",
       "root_cause": "ReadObjectCore rejects value-null with broader InvalidContent and DeserializeObject refuses null roots. Historical root-read ArgumentNull expectation misattributes a subsequent reserialization failure.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "9dd0826bf",
+      "current_validation": "Complete native content504:503PASS/one same XACT SKIP and exactly six expected FAIL-to-PASS changes; actual three-production-TU ASan/UBSan/leak9/9. Broader1412/runtime241 and original-fixture XML6 have no new failures. External strict56 focus preserves all assertions/counts and removes exactly two149 failures from the36-check demo, leaving four148 failures. Full SOFTWARE strict comparison exact57 demo improvements plus those two149 assertions; GLES/final CTest pending. No closure yet.",
       "validation": [
         "Fresh genuine direct IntermediateEnvelopeOracle16/16 proves root deserialization returns null; only subsequent Serialize raises ArgumentNullException(value). Original Accept<T> helper combines both calls in one catch (lines506-529); preserve its round-trip evidence but correct the demo's direct-read expectation. Value-null genuinely throws NullReferenceException. Primary inventory explicitly annotated; new native pre-fix tests building.",
         "Native complete pre-fix content baseline504:497PASS/one existing XACT fixture SKIP/exactly six new failures (four146, two149),1306.990s. Narrow runtime repair applied; native focused19/19 now PASS735ms, including all five dictionary tests, full intermediate corpus and hardening. Initial focused18/19 exposed existing modern Sharp versus Framework4 ArgumentNull message formatting; exact native and exact historical diagnostics are now both pinned with type/parameter/timing preserved. Original18/19 log retained. Full504 post-fix run and actual-TU sanitizers underway; external regression and coherent runtime commit pending."

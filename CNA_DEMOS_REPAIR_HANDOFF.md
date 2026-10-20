@@ -23,17 +23,21 @@ private CTest32815 COMPLETE0:732accepted/zero unexpected failures,48same skips/
 three disabled,921.47s. Three hashes verified before/after. Permanent evidence
 docs/repair-evidence/storage/CHECKPOINT.md. EXTERNAL STORAGE FREEZE RELEASED.
 
-ACTIVE native content31697: full504 post-fix regression RUNNING, currently slow
-compiler-backed XnaDifferentialBuildTest. Native CnaTests/libcna FROZEN, manifest
-repair-content-native-frozen.sha256; DO NOT rebuild native until run completes.
+Native content31697 COMPLETE0:504 tests,503PASS/one unchanged XACT fixture SKIP,
+999.450s. Exact before/after identity comparison: only the six new failures become
+PASS. Broader consumer87566 COMPLETE0:1408PASS/four unchanged SKIP of1412;
+runtime238PASS/three unchanged SKIP of241; XML consumers4PASS/two missing sample
+fixture SKIP of6. XML rerun with the existing original ShipGame sample alias passes
+6/6,10ms (repair-content-native-xml-consumers-fixtures.*); original skip log retained.
+Native hashes verified after both runs; the content146/147/149 native freeze ended.
 Baseline497PASS/one existing XACT SKIP/six newly added FAIL,1306.990s. Final focused
 19/19PASS735ms. Actual OpaqueDataDictionary.cpp/IntermediateReader.cpp/
 IntermediateSerializer.cpp ASan/UBSan/leak9/9PASS13ms; the selected nine regression
 bodies are unchanged by the later diagnostic-only corpus assertion adjustment.
 Initial quoted-define compile failure and incomplete dynamic-only link failure
 are retained; final link uses native CnaTests' real static ContentPipelineBuild
-closure and is warning-free. Native source146/149/tests/docs UNCOMMITTED pending
-full regression; matrix146/147/149 FIXED_PENDING_REGRESSION, not final.
+closure and is warning-free. Runtime146 committed7c4431fdf,149 committed9dd0826bf;
+matrix146/147/149 FIXED_PENDING_REGRESSION, not final.
 
 Sharp HEAD99c2f79c: af1b0bea XML147 repair, e0601cd2 separate watcher TEST barrier,
 99c2f79c stale-comment correction. Full18146/18146 across41 zero failures/skips;
@@ -44,13 +48,56 @@ e3b5deb records XML reader61/61 on Framework4 and.NET8 (PI/BOM/error timing/stat
 No148 runtime repair. Vendor-policy question and152 sharing-policy question have
 NO ANSWER; do not infer either choice. No push/merge.
 
-EXACT NEXT: commit storage closure docs/matrix; build external content against the
-current146/147/149 tree now storage is unfrozen, focused validate without removing
-markers early. Finish native504 audit and hashes; run broader native consumers
-without overlapping shared test fixtures. Commit coherent146 and149 runtime fixes
-after native regression, then external metadata/marker/full regression as appropriate.
-148 PI adapter/vendor decision and separate090/088/089 initialization/registry
-investigation can proceed without rebuilding the frozen native tree.
+Storage closure committed: demo da035e6, CNA status903b8c354. External full content
+build1315 and marker build8578 COMPLETE0 warning-free. Strict28-demo/per-renderer
+focus15764 COMPLETE0:56 expected results,23PASS/five unchanged FAIL per renderer;
+parent metadata AND exact child counts/failure multisets verified. Only146/147
+become PASS;149 removes two specific failed assertions while148 stays open.
+Demo markers71e6992 updated only after these passes. External binaries FROZEN:
+repair-content-binaries.sha256 has319 entries including statically linked children,
+both DSOs and content tool. Do not use empty repair-content-all-frozen.sha256
+(failed initial manifest invocation retained). Full regression10512 RUNNING;
+metadata/tools/all six pixel-exact visuals already pass. DO NOT rebuild external
+until both renderer comparisons AND final isolated serial CTest/hash audit finish.
+Regression10512 COMPLETE0: BOTH719 strict comparators exact57 demo improvements
+versus campaign HEAD (59 versus Complete1128), differences[], plus exactly two149
+failed assertions removed. SW614/54/48/3, GLES653/56/7/3. All319 hashes pass before
+the now-running isolated serial CTest, repair-content-demo-ctest.log. No overlapping
+SystemLink suite. GLES font capture inspected; six visual references pixel-exact.
+
+090 CURRENT REPRODUCTION: genuine CompilerInitializationOracle8/8. Actual XNA
+constructor discovers attributed writers; build-host GetTypeWriterInternal creates
+the initialization context, and the callback's PUBLIC GetTypeWriter(string) works
+once with stable identity and compiler-local instances. Initial duplicate manual
+registration and public lookup outside initialization are retained setup failures,
+not CNA defects or runtime passes. Permanent oracle/probe files committed3ff4e2e
+in demo docs/repair-evidence/content/. Strict C++23/Werror native probe53258 confirms
+the actual current deadlock: built-in lookup control passes, logs ENTER Initialize,
+never logs LEAVE, process deadline5s terminates it (SIGTERM/ETIMEDOUT,exit1 retained).
+No orphan thread. Subsequent local090 repair now invokes Initialize outside mutex,
+validates duplicate/frozen state both before callback and before publication, and
+leaves failed initializations unpublished. Native build95540 COMPLETE0 warning-free;
+focused10/10PASS13ms, post-fix strict bounded probe19188 passes9/9. Four new native
+regressions cover nested lookup/identity, failed initialization, reentrant freezing
+and duplicate registration. A joined stop-aware deadline makes a returning deadlock
+fail boundedly; no sleep/retry or detached thread. Runtime/test edits UNCOMMITTED.
+Full native508 regression10094 RUNNING, report repair-compiler-native-full.*;
+native binary/library/static archive FROZEN in repair-compiler-native-frozen.sha256.
+DO NOT rebuild native while this run is active. Reports repair-compiler-initialization-*.
+
+088/089 references: permanent IntermediateCollisionOracle11/11 and
+IntermediateInitializationOracle21/21 genuine XNA. Collision rejects atomically
+with InvalidOperationException and supports clean re-registration/round trips.
+Initialize runs exactly once on one cached instance, with nested lookup before
+all scans/reads/writes and a long-lived SAME owner. Do not initialize a shared
+serializer with a temporary pass context. Both current demo failures remain,
+matrix088/089 CONFIRMED_OPEN; no runtime changes for them yet.
+
+EXACT NEXT: finish final external serial CTest and319-hash audit before closing
+146/147/149. Finish090 full native508 regression10094,
+then inspect consumer coverage and commit coherent090 fix before rebuilding external.
+148 PI adapter/vendor decision and152 sharing policy remain unanswered; do not
+stall unrelated work. Handoff/matrix and090 runtime/test changes uncommitted.
 
 ### Chronological work log (superseded by authoritative state above)
 
