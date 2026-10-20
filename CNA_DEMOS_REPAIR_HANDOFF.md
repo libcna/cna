@@ -29,6 +29,15 @@ generated_output_cli_tests.py; five Python cases parse, C++/runtime NOT RUN.
 Use existing custom-compiler target flags/link libraries after current serial
 work; see GENERATED_OUTPUT_TRIAGE.md. Do not conflate prepared assertions with
 the measured11-case context/manifest baseline. No047 CNA source changes.
+Prepared demos build-probe/repair-content-generated-output-host-before.mjs passes
+syntax check only; requires completed cache rebuild and hashes canonical artifacts.
+Ongoing61683 has16 warnings in vendored Draco PLY reader/writer lambda captures
+(deprecated implicit this in C++20); preserve diagnostics in final audit, no vendor
+edit and no warning-free broad-build claim. Native model sources compiled.
+Prepared final-native/047-host drivers additionally inspect their actual cgroup
+memory.max<=6GiB and swap.max0 before any workload. Guard-only checks PASS2 bounded
+acceptances/2 unbounded refusals; no compiler or CNA suite launched. Use a new
+bounded systemd scope for the final private-display/unprivileged-broadcast gate.
 
 External8261 COMPLETE0:18 stages,CTest684PASS/48sameSKIP/three disabled964.43s;
 735 outcomes exact against XML,319 frozen artifacts/three sources exact.
