@@ -39,7 +39,7 @@ namespace CNA::Content::Pipeline
             [[nodiscard]] ContentComponentIdentity Identity() const override
             {
                 return ContentComponentIdentity{"CNA.XnaObjectXnbWriter[" + typeName_ + "]",
-                                                "1;" + XnbOutputOptionsDigest(options_)};
+                                                "2;" + XnbOutputOptionsDigest(options_)};
             }
 
             [[nodiscard]] ContentOutputFormat OutputFormat() const override { return ContentOutputFormat::Xnb; }
@@ -59,7 +59,18 @@ namespace CNA::Content::Pipeline
 
             [[nodiscard]] ContentWriteResult Write(const ContentValue& input, const std::string& logicalName) const override
             {
-                return Write(input, logicalName, ContentBuildEnvironment{});
+                // Without an explicit environment, retain the registration's target defaults.
+                ContentBuildEnvironment environment;
+                switch (options_.platform)
+                {
+                    case CNA::Internal::Xnb::XnbTargetPlatform::Xbox360: environment.targetPlatform = ContentTargetPlatform::Xbox360; break;
+                    case CNA::Internal::Xnb::XnbTargetPlatform::WindowsPhone: environment.targetPlatform = ContentTargetPlatform::WindowsPhone; break;
+                    default: environment.targetPlatform = ContentTargetPlatform::Windows; break;
+                }
+                environment.targetProfile = options_.graphicsProfile == CNA::Internal::Xnb::XnbGraphicsProfile::HiDef
+                                                ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
+                                                : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach;
+                return Write(input, logicalName, environment);
             }
 
             [[nodiscard]] ContentWriteResult Write(const ContentValue& input, const std::string& logicalName,
@@ -70,15 +81,8 @@ namespace CNA::Content::Pipeline
                 compile.assetName = logicalName;
                 compile.outputDirectory = environment.outputDirectory;
                 compile.compressContent = options_.compression == CNA::Internal::Xnb::XnbOutputCompression::Lzx;
-                switch (options_.platform)
-                {
-                    case CNA::Internal::Xnb::XnbTargetPlatform::Xbox360: compile.targetPlatform = Xna::TargetPlatform::Xbox360; break;
-                    case CNA::Internal::Xnb::XnbTargetPlatform::WindowsPhone: compile.targetPlatform = Xna::TargetPlatform::WindowsPhone; break;
-                    default: compile.targetPlatform = Xna::TargetPlatform::Windows; break;
-                }
-                compile.targetProfile = options_.graphicsProfile == CNA::Internal::Xnb::XnbGraphicsProfile::HiDef
-                                            ? Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
-                                            : Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach;
+                compile.targetPlatform = ToXnaTargetPlatform(environment.targetPlatform);
+                compile.targetProfile = environment.targetProfile;
                 const CNA::Internal::Xnb::XnbAssetWriteResult written = compiler_->CompileObject(input, compile);
                 ContentWriteResult result;
                 result.bytes = written.bytes;

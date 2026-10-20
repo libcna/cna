@@ -459,7 +459,7 @@ namespace CNA::Content::Pipeline
      * @param registry The registry to configure before builds begin.
      * @param compiler The compiler, shared with the writers; add user type writers before calling.
      * @param options Container options every registered writer emits; platform and profile come
-     *        from the build environment at write time.
+     *        from an explicit build environment, or these defaults when none is supplied.
      */
     void RegisterXnaXnbOutput(ContentPipelineRegistry& registry,
                               std::shared_ptr<const Xna::Serialization::Compiler::ContentCompiler> compiler,
