@@ -185,10 +185,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* ShaderEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         auto* clone = new ShaderEffect(*device_, vertSrc_, fragSrc_);
         clone->selectedVertexLabelEXT_ = selectedVertexLabelEXT_;
         clone->selectedFragmentLabelEXT_ = selectedFragmentLabelEXT_;
         clone->selectedShaderLanguageEXT_ = selectedShaderLanguageEXT_;
+        clone->world_ = world_;
+        clone->view_ = view_;
+        clone->projection_ = projection_;
         return clone;
     }
 }

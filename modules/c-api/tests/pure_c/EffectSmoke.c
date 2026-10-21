@@ -661,6 +661,30 @@ static int validate_shader_effect(const CNA_Handle device)
             expect_effect_string(
                 clone, "CNA.ShaderEffect", cna_effect_get_type_name_byte_count,
                 cna_effect_copy_type_name));
+    /* ISSUE-055: clone all three authored matrices through the public C route. */
+    {
+        CNA_Matrix expected = identity;
+        CNA_Matrix changed = identity;
+        expected.m41 = 7.0F;
+        REQUIRE(cna_shader_effect_get_world(clone, &value) == CNA_RESULT_SUCCESS &&
+                memcmp(&value, &expected, sizeof(value)) == 0);
+        expected = identity;
+        expected.m42 = 8.0F;
+        REQUIRE(cna_shader_effect_get_view(clone, &value) == CNA_RESULT_SUCCESS &&
+                memcmp(&value, &expected, sizeof(value)) == 0);
+        expected = identity;
+        expected.m43 = 9.0F;
+        REQUIRE(cna_shader_effect_get_projection(clone, &value) == CNA_RESULT_SUCCESS &&
+                memcmp(&value, &expected, sizeof(value)) == 0);
+        changed.m41 = -3.0F;
+        expected = identity;
+        expected.m41 = 7.0F;
+        REQUIRE(cna_shader_effect_set_world(clone, changed) == CNA_RESULT_SUCCESS &&
+                cna_shader_effect_get_world(shader, &value) == CNA_RESULT_SUCCESS &&
+                memcmp(&value, &expected, sizeof(value)) == 0);
+        REQUIRE(cna_shader_effect_get_world(clone, &value) == CNA_RESULT_SUCCESS &&
+                memcmp(&value, &changed, sizeof(value)) == 0);
+    }
     REQUIRE(cna_effect_destroy(clone) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_get_techniques(shader, &techniques) == CNA_RESULT_SUCCESS &&
             cna_effect_technique_collection_get_at(techniques, 0U, &technique) ==

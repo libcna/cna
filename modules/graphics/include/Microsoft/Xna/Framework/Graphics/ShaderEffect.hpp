@@ -282,7 +282,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * (`std::unique_ptr<IEffectRenderer>`), so genuine sharing would need a reference-counted
          * renderer-ownership model, out of scope for this CNAEXT extension.
          *
-         * @return Pointer to the cloned Effect.
+         * The clone retains the current World, View and Projection values independently.
+         * Raw uniform values and texture bindings are not copied into the new program.
+         *
+         * @return Owning pointer to the cloned Effect. Caller takes ownership.
+         * @throws System::ObjectDisposedException If this effect has been disposed.
          */
         [[nodiscard]] Effect* Clone() override;
 
