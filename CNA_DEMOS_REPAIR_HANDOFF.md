@@ -9,7 +9,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
-**Latest checkpoint2026-10-22: native/sanitizer accepted; full smoke66351 LIVE.**
+**Latest checkpoint2026-10-22: full smoke collected; multi-renderer33697 LIVE.**
 Sanitizer83125 terminated0: configure6395ms, instrumented libraries123701ms,
 strict original22 compile12762ms, run3422ms, inspect18ms. All22 PASS/noSKIP
 under ASan/UBSan/float-cast/leaks, including actual SOFTWARE compiled effects.
@@ -40,28 +40,33 @@ Safety review initially rejected an ambiguous dry-run wrapper; it executed no
 regression. The replacement has an explicit no-import --check-plan branch,
 then passed host syntax/transform checks before this actual authorized launch.
 
-Sole heavy66351: scope cna-repair-sprite-binding-full, driver
-build-probe/repair-sprite-binding-full-observe.mjs. Actual host verification:
-active/running, observer PID2505185, SOFTWARE category driver PID2505260;
-private GPU/network/caps0,6GiB/no swap. Original719 inventory frozen. All six
-existing visual references PASS with zero differing pixels and zero tolerance;
-all six screenshots were also individually inspected (checkerboard, numeric
-font and clear background on both renderers), with no visual anomaly observed.
-SOFTWARE gamer_services is still running; OPENGLES3 follows serially. Sources
-and319 consumer artifacts remain frozen. No full-smoke result is claimed yet.
+Full66351 TERMINAL0 as a complete observation, explicitly accepted:false.
+SOFTWARE761459ms:635PASS/33FAIL/48SKIP/3NOT RUN; OPENGLES3263603ms:
+675PASS/34FAIL/7SKIP/3NOT RUN. Exact719 identities each; no frozen-input drift,
+peak372277248 bytes/all memory events0. Six exact visual references PASS,
+zero difference/tolerance, all screenshots individually inspected. Scope verified
+inactive/dead before the next launch. All16 deltas per renderer audited against
+the previous full staging-lifecycle checkpoint in demos
+graphics/SPRITE_BINDING_FULL_SMOKE_AUDIT.md: SOFTWARE tenFAIL->PASS/threePASS->FAIL;
+GLES eleven/three. Its only different delta is the accepted055 clone repair.
+The three failed C scenarios and082 inner failure remain explicitly unaccepted.
 
-Next collect66351 and audit every delta against the previous full staging-lifecycle
-checkpoint; then validate the still-unbuilt FNA3D/WebGPU/D3D9 candidate paths.
+Sole heavy33697: scope cna-repair-sprite-binding-multi, driver
+build-probe/repair-sprite-binding-multi.mjs, existing cmake-build-multi.
+One worker/shared cache/private GPU/4GiB high/6GiB max/no swap. Only three
+runtime renderer gates broadened to Fna3d/WebGPU/DirectX9 in native/evidence
+copies; every original assertion is byte-identical. Driver verifies that exact
+change against the full-smoke frozen manifest. Configuration13966ms exit0 enables
+actual compiled WebGPU; FNA3D already supports compiled effects. Both shared
+dependency helpers explicitly report already applied/skipping; no vendor reset.
+One Draco CMake CMP0148 developer warning is retained, not suppressed; do not
+claim warning-free configuration. Shared-library build is live; no new renderer
+test result yet. Inputs are frozen again; no concurrent heavy work/source edit.
+Next collect33697, review diagnostics, then require22PASS/noSKIP on each
+FNA3D/WebGPU. D3D9 cross-build and C expectation correction remain afterward.
 No003 closure or marker change.
-Continuation preparation: build-probe/repair-sprite-binding-multi.mjs is syntax/
-plan checked, UNRUN. It reuses cmake-build-multi, enables real compiled WebGPU,
-checks the shared dependency no-op stamp, and requires all22 original assertions
-on FNA3D/WebGPU with no skips. After66351 terminates, broaden only the three
-existing renderer gates (native and evidence copies) to Fna3d/WebGPU/DirectX9;
-the driver verifies that exact change and otherwise unchanged frozen inputs.
-Do not start it concurrently or infer acceptance from preparation.
 
-Partial full-SOFTWARE audit has completed352 non-graphics plus186 graphics IDs.
+The full-SOFTWARE audit covers every719 demo.
 Its C effect_core now exercises the enabled compiled branch:32PASS/2FAIL versus
 the previous compiled-off27PASS refusal branch. Source-backed review identifies
 two incorrect expectations, not yet corrected: source-program presence for a
