@@ -1960,15 +1960,15 @@
       "demos": [],
       "subsystem": "graphics",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Four stock effect setters store an arbitrary cascade Count; their common CPU draw-parameter loops index source and destination arrays of capacity4 before renderer clamps. Reject outside0..4 before assignment, preserving prior state.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "current_validation": "93365 safe baseline20=12PASS/8boundaryFAIL, no invalid count drawn;3873/679/30ms,peak473071616/events0,unchanged hashes. First compile failure under added Wextra retained; native target does not enable that unused-parameter policy, corrected witness retains Wall/Werror.45372 original visual baselines:16 cascade+6 PBR checks PASS on both OPENGLES3/OPENGL33, four screenshots inspected,peak194887680/events0. Uncommitted narrow guards/docs and identical20 native tests added.93255 native graphics/full parity RUNNING, one worker/private GPU/network/6GiB/no swap. No final disposition, marker change or production commit.",
+      "cna_fix_commit": "ce88b5f9bf4a6771d4650d182c014944837452a0",
+      "current_validation": "Safe before20=12PASS/8boundaryFAIL without invalid draw; after20PASS. Native graphics2890PASS/73SKIP; full10867PASS/101sameSKIP, exact previous10948 parity plus20PASS. ASan/UBSan/float-cast/leaks27PASS/no findings. External build458110ms/zero diagnostics;20 original witnesses PASS on each actual SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU(Vulkan)/HEADLESS/STUB.112 original audio/video outcomes exact, including globally unaccepted C video failures/smoke exit2. Stock66 exact52PASS/12rendererSKIP/2known070FAIL before/after. Four800x480 GL images zero pixel differences; two OPENGLES3 images inspected, corresponding GL33 files byte-identical. No approved-reference/SOFTWARE shadow-image/unavailable-platform claim. All frozen hashes unchanged, no OOM; external peak4302151680/high1113/max0. Original diagnostic/harness stops preserved in triage; no assertion/marker weakened. No push.",
       "validation": [
         "Current source inspected against c04f80d65 plus recorded unrelated011/099/100/101 candidates. All four receiver implementations share the unguarded assignment. No shadow-cascade C API route exists; do not add one. See demos docs/repair-evidence/graphics/SHADOW_CASCADE_COUNT_TRIAGE.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-103",

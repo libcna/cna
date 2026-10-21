@@ -9,6 +9,16 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**Committed checkpoint:** CNA repair `ce88b5f9bf4a6771d4650d182c014944837452a0`
+closes102 with all gates detailed below. Demos at9593e86 before the matching
+closure evidence commit; Runtime c26614e85dffff4cadc5c4803b00d78953706b21.
+Matrix155historical/98final/57pending; all historical IDs retained. No knownIssue
+marker existed for102, so none removed. Last native full10867PASS/101sameSKIP.
+Next run repair-pbr-clone-before.mjs (8 prepared tests; original C070 already
+reproduced four failures on both renderers), then repair only the omitted four
+fields in each PBR copy constructor. Inherited011/video work remains dirty and
+unaccepted, excluded from102 commit; both C video choices pending. No push/merge.
+
 **ISSUE-102 validation complete, ready for scoped product commit:** native full
 10867PASS/101sameSKIP (20newPASS, all old outcomes unchanged), graphics2890PASS/
 73SKIP, sanitizer27PASS/no findings. External build458,110ms/zero diagnostics;
