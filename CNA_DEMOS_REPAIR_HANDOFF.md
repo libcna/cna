@@ -9,7 +9,35 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
-**Latest checkpoint2026-10-22: full smoke collected; multi-renderer33697 LIVE.**
+**2026-10-22 continuation: multi-renderer observations collected; WebGPU Immediate defect confirmed.**
+The former33697 build is terminal: configure0, libraries0 (712365ms), peak
+2169597952 bytes, no memory events. Its strict diagnostic gate remains failed;
+exactly16 existing Draco warnings were separately reviewed against unchanged
+vendor hashes. Observer42676 did not rebuild: strict fixtures12036ms0,
+FNA3D22PASS/noSKIP3970ms, WebGPU21PASS/1FAIL/noSKIP2706ms. No input drift;
+peak469401600 bytes/no memory events. Both old scopes verified inactive/dead.
+The failing `FailedImmediateDrawIsNotReplayedByEnd` observes no OnApply at Draw:
+WebGPU does not implement SetImmediateMode, so compiled sprites wait until End.
+Genuine XNA InternalDraw calls RenderBatch immediately, and RenderBatch applies
+passes then publishes Textures[0]. Two additional pre-End assertions now protect
+successful Draw timing without removing any previous assertion. Baseline35351
+completed with FNA3D22PASS and WebGPU20PASS/2FAIL; build9194ms, runs2750/2109ms,
+peak455569408 bytes/no events. Original assertions remain; both new timing checks
+fail as intended. The renderer now implements the existing SetImmediateMode hook
+and flushes staged compiled sprites before Draw returns. Driver19040 completed:
+incremental library build23165ms0/no diagnostics, fixture build12102ms0,
+FNA3D22PASS4237ms and WebGPU22PASS2841ms, no skips/drift; peak954060800/events0.
+Driver: build-probe/repair-sprite-binding-immediate.mjs (before/after).
+MinGW84891 also completed: all four D3D9/common translation units compile with
+existing Windows flags and no diagnostics (5695/3404/5227/1570ms), no source
+drift; peak669827072/events0. This is compile-only, not a Windows runtime pass.
+Sole heavy38691 now builds existing CnaGraphicsTests in cmake-build-multi and runs
+native Sprite* plus WebGPUCompiled* suites on private GPU, one worker/6GiB/no swap.
+Next collect that broader regression, then correct and validate the two documented
+C compiled-effect demo expectations. Product/source inputs frozen during38691.
+ISSUE-003 stays open;011/082 changes and failures remain separate. No push/merge.
+
+**Historical checkpoint2026-10-22: full smoke collected; multi-renderer33697 was live.**
 Sanitizer83125 terminated0: configure6395ms, instrumented libraries123701ms,
 strict original22 compile12762ms, run3422ms, inspect18ms. All22 PASS/noSKIP
 under ASan/UBSan/float-cast/leaks, including actual SOFTWARE compiled effects.
@@ -65,6 +93,19 @@ test result yet. Inputs are frozen again; no concurrent heavy work/source edit.
 Next collect33697, review diagnostics, then require22PASS/noSKIP on each
 FNA3D/WebGPU. D3D9 cross-build and C expectation correction remain afterward.
 No003 closure or marker change.
+Continuation:33697 is still live. Both changed FNA3D/WebGPU translation units
+compiled;16 Draco deprecated-capture warnings exactly match the original
+diagnostic review and both unchanged vendor header hashes. The strict driver
+will stop before tests after build success; do not call it warning-free.
+Prepared repair-sprite-binding-multi-observed.mjs passes host syntax/transform
+checks, UNRUN. It requires the terminal original build0 and exactly those16
+diagnostics, keeps the failed gate, performs no configure/rebuild, and runs the
+original22 fixtures on each FNA3D/WebGPU without allowing skips. Any different
+diagnostic must be reviewed, not waived. No second heavy job launched.
+Prepared repair-sprite-binding-d3d9-compile.mjs is syntax checked, UNRUN, and
+requires that future accepted observed audit. It reuses existing MinGW flags
+for four changed D3D9/common translation units, no configure/download/link or
+native-Windows runtime claim. Product inputs remain frozen until33697 ends.
 
 The full-SOFTWARE audit covers every719 demo.
 Its C effect_core now exercises the enabled compiled branch:32PASS/2FAIL versus
