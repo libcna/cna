@@ -9,6 +9,49 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**ISSUE-003 candidate IN VALIDATION:** sole heavy tool78015, scope
+`cna-repair-sprite-binding-candidate`, driver demos
+`build-probe/repair-sprite-binding-candidate.mjs`. Existing external incremental
+build, one worker, shared cache, private display,6GiB/no swap. Source inputs
+frozen in `repair-sprite-binding-candidate-inputs.json`; do not edit production
+while it runs. It recompiles all16 original witnesses because Texture2D and the
+renderer interface layout changed, then records SW/GLES/GL33/SDL_GPU separately.
+No pass claimed yet; compiled12SKIP cannot establish compiled-route coverage.
+Candidate files: new internal SpriteTextureBinding header/source; SpriteBatch
+header/source; Texture2D own spriteIdentity hunks (mixed with inherited011);
+IGraphicsRenderer interface; narrow software/easygl/SDL_GPU/FNA3D/D3D9/WebGPU
+sprite binding seams; three native byte-identical witness copies. No product
+commit. Preserve all other011/082 dirty work. Explicit remaining audit: compiled
+End failure/retry timing, enabled compiled runtime, extra lifetime/copy-assignment
+and renderer-control tests, native/full external regression and ASan/UBSan. Do not
+close003 on the first13 focused passes. No push/merge.
+Prepared separately in demos: `SpriteCompiledBindingLifetimeTests.cpp`, four
+UNCOMPILED/UNRUN cases, not in78015's frozen manifest. XNA End's Begin-pair reset
+follows successful Flush; current renderer-End recovery may wrongly clear it on
+a compiled binding failure. First reproduce with compiled effects enabled; do not
+weaken the retry oracle. Existing multi-tree uses shared FNA3D source
+`/home/robertvokac/deps/FNA3D`, reusable if enabling SOFTWARE/EasyGL support later.
+Last host check confirms78015 scope active/running,917716992current/970432512peak
+bytes under6GiB. No competing campaign job. Wait for terminal status, inspect the
+candidate audit, then continue the outstanding gates; no product acceptance yet.
+Static review while78015 runs found an unbuilt FNA3D compile-name collision:
+DrawSpriteRunEXT's new `binding` parameter shadows its existing local vertex
+binding. Apply demos `build-probe/repair-sprite-binding-fna3d-name.patch` AFTER
+78015 terminates (two identifier-only edits), before compiling that renderer.
+This patch is prepared, UNAPPLIED; do not claim FNA3D currently builds.
+
+**ISSUE-003 supplemental checkpoint:** demos `82ee978` preserves seven lifetime/
+stock-pass witnesses and three compiled-effect witnesses. Lifetime baseline:
+sixFAIL/one retained-renderer destruction controlPASS on each SW/GLES/GL33/SDL_GPU;
+compiled v2: strict buildPASS but all12 runtime observations SKIP because configured
+compiled-effect support is OFF, reproduced=false. Original strict compiler failure
+is retained. No003 runtime repair or closure, original six-case oracle unchanged.
+Tool28520 is missing; its host scope is inactive/dead; no campaign heavy job lives.
+Reports/limits are in demos graphics/SPRITE_TEXTURE_BINDING_TRIAGE.md. Next implement
+lifetime-safe public binding and correctly publish after stock/compiled effect
+passes; compiled skips are a validation gap, not success. Preserve011/082 work and
+pending082/131 owner choices. No push/merge.
+
 **Safe continuation checkpoint:** CNA product7097e1684/status2f6eac0f1;
 demos closure23bbbaf,003 baseline d8ed678,082 evidence c07e948. All156 IDs retained,
 105final/51pending. No heavy job is live:98308 terminal0,70430 terminal2 with
