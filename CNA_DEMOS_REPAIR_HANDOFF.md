@@ -9,6 +9,16 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+Continuation preparation while68394 remains live: read-only027/066 blend audit
+is recorded in demos graphics/BLEND_STATE_RANGE_TRIAGE.md. Six new
+BlendSourceRangeTests.cpp witnesses are UNCOMPILED/UNRUN, outside the frozen
+native input set; no native registration, production edit or second heavy job.
+Four Color-target cases and two exact HDR controls prevent an unconditional
+clamp repair.066 also has differing legacy factor behavior across renderer
+families; do not silently normalize the public CNAEXT contract. Both IDs remain
+pending runtime verification. Finish003 validation before starting this batch.
+
+
 **Latest continuation: native68394 LIVE; older live notes below are historical.**
 CNA0d1a9bdfb/demosc07f1bd verified; old campaign scope inactive/dead.
 84495 terminal: build0/897240ms, then diagnostic guard1; no tests ran.
