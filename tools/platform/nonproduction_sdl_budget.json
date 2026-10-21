@@ -145,6 +145,10 @@
       "category": "audio-native-fixture",
       "max_references": 1
     },
+    "modules/media/tests/Microsoft/Xna/Framework/Media/MediaQueueReplayTests.cpp": {
+      "category": "audio-native-fixture",
+      "max_references": 1
+    },
     "modules/platform/tests/CNA/Platform/ContractIsSdlFreeTests.cpp": {
       "category": "containment-assertion",
       "max_references": 6

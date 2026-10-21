@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <stdexcept>
+#include <utility>
 
 #include "CNA/Internal/Media/VisualizationCapture.hpp"
 #include "CNA/Internal/Media/VisualizationFFT.hpp"
@@ -309,6 +310,8 @@ namespace Microsoft::Xna::Framework::Media
     {
         Song* previousSong = queue_.getCountProperty() > 0 ? queue_[0] : nullptr;
 
+        // The input may belong to the old queue; keep it alive through LoadSong and PlaySong.
+        MediaQueue retainedQueue(std::move(queue_));
         queue_.Clear();
         numSongsInQueuePlayed_ = 0;
         LoadSong(song);
@@ -329,6 +332,8 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::Play(const SongCollection& songs, SharpRuntime::intcs index)
     {
+        // A non-owning collection can contain any old queue entry, including repeated aliases.
+        MediaQueue retainedQueue(std::move(queue_));
         queue_.Clear();
         numSongsInQueuePlayed_ = 0;
 

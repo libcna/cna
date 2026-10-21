@@ -72,6 +72,7 @@ def classify(record: FileRecord) -> str | None:
     if path in {
         "modules/content/tests/Microsoft/Xna/Framework/Content/CnjCapabilityMatrixTests.cpp",
         "modules/media/tests/Microsoft/Xna/Framework/Media/MediaPlayerTests.cpp",
+        "modules/media/tests/Microsoft/Xna/Framework/Media/MediaQueueReplayTests.cpp",
     }:
         return "audio-native-fixture"
 
