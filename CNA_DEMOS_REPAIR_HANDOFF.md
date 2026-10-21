@@ -53,6 +53,24 @@ and319 consumer artifacts remain frozen. No full-smoke result is claimed yet.
 Next collect66351 and audit every delta against the previous full staging-lifecycle
 checkpoint; then validate the still-unbuilt FNA3D/WebGPU/D3D9 candidate paths.
 No003 closure or marker change.
+Continuation preparation: build-probe/repair-sprite-binding-multi.mjs is syntax/
+plan checked, UNRUN. It reuses cmake-build-multi, enables real compiled WebGPU,
+checks the shared dependency no-op stamp, and requires all22 original assertions
+on FNA3D/WebGPU with no skips. After66351 terminates, broaden only the three
+existing renderer gates (native and evidence copies) to Fna3d/WebGPU/DirectX9;
+the driver verifies that exact change and otherwise unchanged frozen inputs.
+Do not start it concurrently or infer acceptance from preparation.
+
+Partial full-SOFTWARE audit has completed352 non-graphics plus186 graphics IDs.
+Its C effect_core now exercises the enabled compiled branch:32PASS/2FAIL versus
+the previous compiled-off27PASS refusal branch. Source-backed review identifies
+two incorrect expectations, not yet corrected: source-program presence for a
+bytecode Effect, and INVALID_ARGUMENT instead of XNA InvalidOperationException's
+INVALID_STATE for a non-current pass. Permanent evidence/required follow-up is
+docs/repair-evidence/graphics/COMPILED_EFFECT_C_EXPECTATIONS.md in cna-demos.
+Keep original failures; correct/validate this demo and clarify C documentation
+after the frozen validation, before claiming external closure. Existing011 C
+Effect lifetime and082 callback failures remain independent and unaccepted.
 Preserve011/082 work and owner decisions. All156 IDs retained,105final/51pending.
 No push/merge. Prepared027/066 witnesses remain uncompiled/unrun.
 
