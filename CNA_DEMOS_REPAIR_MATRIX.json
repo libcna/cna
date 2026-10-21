@@ -58,11 +58,14 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "SpriteBatch retains renderer handles and submits them through flushSingle/drawThroughStockEffect without updating the public TextureCollection. Genuine XNA RenderBatch assigns Textures[0] before each render and after each custom-effect pass. Public wrapper lifetime must be preserved before adding binding retention.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "2026-10-21 read-only audit at2af199aad plus unchanged011/082/156 candidates: current sprite paths still omit the public slot. Six public-state witnesses prepared in demos graphics/SpriteTextureBindingTests.cpp, UNCOMPILED/UNRUN while native98308 is live. Source evidence and lifetime hazards recorded in SPRITE_TEXTURE_BINDING_TRIAGE.md. No fresh runtime result, production repair, genuine-XNA GPU execution or closure claimed. Run after native156 and broad external132 gates.",
+        "Actual baseline61003 at7097e1684: strict build2210ms, each SW/GLES/GL33/SDL_GPU gives fiveFAIL/one empty-batch controlPASS; runs78/387/338/909ms. Eight failed assertions per renderer: only missing public texture bindings and missing bound SetData refusal. Unbinding/readback and empty controls pass. Frozen inputs unchanged, peak415399936bytes/all memory events0. No003 production edit or closure; lifetime-safe wrapper identity and custom-effect ordering need focused coverage before repair."
+      ],
       "final_disposition": null
     },
     {
@@ -1602,9 +1605,11 @@
       "root_cause": "The historical demo requires Dispose to release open-batch accounting, but genuine XNA retains it; existing SOFTWARE-351 behavior and regression intentionally preserve that accounting. Separate event/exception positive controls also differ from XNA and require explicit audit before closure.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Broader external70430 completes132 observations at the same candidates:123PASS/8FAIL/1sameSKIP. On each of four renderers begin_end_rules retains its original accounting failure and additionally fails callback-before-disposed; C resource_lifecycle changes PASS-to-FAIL on its callback-before-disposed assertion. Eight082 delta rows remain explicitly unaccepted; no oracle/knownIssue edits or public C contract decision. Independent156 depth improvement is separately committed7097e1684."
+      ],
       "final_disposition": null,
-      "current_validation": "2026-10-21 genuine pinned XNA managed reference91995:13PASS, constructor-free state seam (no native GPU destruction claim). Original begin_end_rules still fails only its accounting assertion on SOFTWARE/OPENGLES3/OPENGL33 in baseline87. No expectation or marker changed. Review additional IsDisposed/event and repeated Begin controls against public CNA contract; preserve inherited011 GraphicsResource edits. See SPRITE_BATCH_TRIAGE.md and SpriteBatchDisposeAccountingOracle.cs."
+      "current_validation": "2026-10-21 genuine accounting13/event8 PASS, old native event5FAIL/1PASS on SW/GLES/GL33. Native-v2/88430 accepted10899PASS/101unchangedSKIP, exactly six new eventPASS and all10994 old outcomes retained. Original30524 audio coverage failure preserved; test-only scheduling repair2af199aad validated20/20, audio771PASS/4SKIP and sanitizer2. Event sanitizer83569 original6PASS/no findings; original external17557 lifecycle16PASS on four renderers (C child30 checks each). After external rebuild with the independent156 candidate,72013 captures12 C++PASS/four C resource_lifecycle FAIL, one original callback-before-disposed assertion out of30 checks on each renderer. This is NOT accepted external regression. No082 marker/oracle/C-contract change or closure. Owner choices pending for explicit C callback timing and SpriteBatch post-disposal guards. Inherited011 preserved; see SPRITE_BATCH_TRIAGE.md."
     },
     {
       "id": "CNA-DEMOS-ISSUE-083",
@@ -2606,11 +2611,14 @@
       ],
       "subsystem": "math",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "BLOCKED",
+      "root_cause": "Outside-origin rays are rejected solely by origin containment; the remaining ray/frustum implementation is explicitly reserved for the human author by CNA handoff.md section6. Earlier containment repair naturally corrected boundary starts without changing this reserved method.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "2026-10-21 read-only continuation audit: current BoundingFrustum.cpp still contains the origin-only implementation and reserved exception. CNA handoff.md section6 explicitly forbids implementing/generating the real method or removing the exception; geometry/CONTAINMENT_CHECKPOINT.md records the previously measured two remaining131 demo failures and96 genuine boundary-ray passes. No implementation, oracle change or new runtime run performed.",
+        "Asked owner asynchronously whether the explicit reservation is lifted for this campaign or must remain. Awaiting that narrow decision; unrelated native88430 and subsequent repairs continue. BLOCKED here is an issue-level authority boundary, not a completed final disposition or a blocked campaign."
+      ],
       "final_disposition": null
     },
     {
@@ -3129,6 +3137,30 @@
         "Documentation checkpoint: warning-free native targeted and full demo builds; 266 native contract CTests and 9 packet-example rows passed. Both SOFTWARE and OPENGLES3 focused runs (28 demos each) exactly match original status/knownIssue/check-count/failed-assertion baseline. All 732 enabled demo CTests pass. C API generated routes, public headers, coverage inventory and release-gate consistency checks pass. No unavailable hardware/backend/service runtime coverage is claimed. Evidence: ../cna-demos/build/linux-full/reports/repair-docs-*."
       ],
       "final_disposition": "DOCUMENTATION_CORRECTED"
+    },
+    {
+      "id": "CNA-DEMOS-ISSUE-156",
+      "title": "SDL_GPU SpriteBatch reverses layer depth in its default projection",
+      "line": null,
+      "historical_status": "Discovered during repair campaign; not in original Complete1128 inventory",
+      "demos": [
+        "graphics.sprite_batch.layer_depth_sorting"
+      ],
+      "subsystem": "graphics/SDL_GPU",
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "RESOLVED",
+      "root_cause": "SDL_GPU QueueSprite's 0.5-0.5*Z/W projection reverses identity layerDepth, while genuine XNA SpriteBatch.SetRenderState uses M33=1/M44=1 with no Z translation. Five minimized pixel tests fail on original SDL_GPU and pass on three control renderers; the local Z/W candidate passes all20 cases. The existing bias fixture's sprite depth0 formerly mapped to geometry depth0.5, so its default is corrected to0.5 to retain coplanarity and all72 original assertions.",
+      "related_issues": [],
+      "cna_fix_commit": "7097e1684cc7d4956b94224ab51f62f11970210d",
+      "validation": [
+        "Original demo executes7checks on SDL_GPU before and after independent004 repair; only depth-order assertion fails identically. SOFTWARE/OPENGLES3/OPENGL33 pass. Accepted repair-sprite-sampler-external-v2-audit preserves this residual.",
+        "Read genuine XNA Windows SpriteBatch.SetRenderState decompilation and current QueueSprite source; no genuine XNA GPU or non-Linux SDL_GPU runtime claim. No knownIssue marker, skip or relaxed oracle introduced.",
+        "Continuation source audit: SDL_GPU compiled-sprite projection already uses near0/far-1, unlike CPU QueueSprite; preserve that path. Existing depth-bias fixture assumes layerDepth0 maps to geometry depth0.5, so future repair must restore intended coplanarity with explicit sprite depth0.5 without changing color/bias/cache assertions. Five-case/four-renderer baseline driver prepared and syntax checked, UNRUN; run after original external lifecycle16 capture and before external rebuild. See demos SPRITE_DEPTH_PROJECTION_TRIAGE.md. Separate custom ShaderEffect depth-disabled source concern remains unconfirmed, not silently folded into this projection fix.",
+        "Actual before49609:15PASS/5SDL_GPU FAIL; after96584:20PASS. Original72 bias checks remain identical after correcting fixture coplanarity. Four original seven-check demos PASS; every repaired RGBA pixel equals the original correct SOFTWARE frame; images inspected. Native98308:10904PASS/101sameSKIP, all11000 old outcomes retained plus fivePASS; frozenunchanged, max/OOM0. All five platform boundary gates PASS.",
+        "External70430 completes132 observations with123PASS/8FAIL/1sameSKIP, exit2/unaccepted overall. Reviewed all nine delta rows: one156 depth FAIL-to-PASS and eight082 callback-contract regressions; other123 rows unchanged, no count/knownIssue drift. The raw comparator also flags the156 improvement because C++ successful checks are not logged; this harness false positive is retained, not silently erased."
+      ],
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-21 resolved by7097e1684; native five tests and original demo assertions retained. No156 marker ever added or removed. Linux SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU actual runtime; no genuine XNA GPU or other SDL_GPU platforms claimed. No lifetime code changed, no new projection-specific sanitizer claim. Separate082 callback failures remain visible and uncommitted; inherited011 untouched.156 permanent IDs now105final/51pending. See demos SPRITE_DEPTH_PROJECTION_TRIAGE.md."
     }
   ]
 }

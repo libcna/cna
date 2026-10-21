@@ -9,6 +9,214 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**156 CLOSED;003 reproduced.** Product CNA7097e1684 fixes only SDL_GPU depth,
+with its five native tests/bias fixture/reference row. Native98308 accepted
+10904PASS/101sameSKIP (all11000 old outcomes +5PASS); external70430 completed132
+with123PASS/8FAIL/1sameSKIP and exit2. All nine delta rows reviewed: one156 fix,
+eight separately pending082 callback regressions;123 rows unchanged. The raw
+comparator additionally flags the156 improvement because C++ successful checks
+are not logged; the original audit remains unmodified/unaccepted. No marker or
+oracle weakening. Matrix156IDs=105final/51pending; original155 IDs preserved.
+Next actual baseline61003 TERMINAL0 confirms003: five failures/one empty-batch
+controlPASS on EACH SW/GLES/GL33/SDL_GPU, strict build2210ms, runs78/387/338/909ms,
+frozenunchanged, peak415399936/all memory events0. No003 product fix yet.
+No heavy job remains. Next: design/test lifetime-safe public texture binding,
+including custom-effect ordering and destroyed/moved wrappers, before editing
+SpriteBatch/Texture2D. Preserve inherited011 and owner-pending082/131 choices.
+No push/merge; current documentation closure commits are being recorded.
+
+**Native156 ACCEPTED; external70430 LIVE.**98308 terminated0: full11005 in
+1323219ms,10904PASS/101unchangedSKIP. Exact comparison134ms retains all11000
+old outcomes and adds only the five depthPASS; graphics2917PASS/73sameSKIP.
+Frozen inputs unchanged; peak4301795328bytes, max/OOM/kill0. Sole heavy70430 now
+executes the original132 external observations on four private-GPU renderers,
+6GiB/no swap, no rebuild/oracle edits. It must expose pending082 C callback
+regressions rather than accept them. Poll70430, inspect every delta, then commit
+the independent156 repair if its scope is clean;082 remains separately open.
+Next baseline003 is prepared but UNRUN. CNA2af199aad/demos16fb075; no push/merge.
+
+**Evidence checkpoint demos16fb075:** committed only the already-run five original
+ISSUE-156 pixel witnesses and projection triage (no product code or closure).
+All five read-only platform gates passed: inventory, classification956/16,
+ratchet0/0, renderer SDL allowlist exactly fna3d/sdl-gpu, and hot-path181 methods/
+1767 sources. Native98308 remains the sole heavy job; source inputs unchanged.
+Prepared003 fixture/driver remain uncompiled/unrun and uncommitted. Pending082
+C callback policy is not bypassed. No push/merge. Poll98308 then run132 comparison.
+
+**Continuation checkpoint:** sole heavy98308 is verified live (systemd scope
+active/running, current4264685568bytes/peak4301795328,6GiB cap). Build21145ms,
+original depth5PASS389ms, graphics2990 exit0/42391ms; full11005 still running,
+currently XnaDifferentialBuildTest. Do not restart or claim full acceptance.
+Prepared demos `build-probe/repair-sprite-depth-external-regression.mjs` syntax/plan
+checks pass:132 original observations (116 sampler/effect +16 lifecycle), preserving
+the final004 metadata corrections. UNRUN, requires accepted native audit first;
+reports every status/check/assertion/marker delta and exits2 on regressions,
+including the four already observed C callback failures. No oracle normalization.
+Demos audio evidence now committed `0f3420e`; CNA remains `2af199aad`.
+Read-only003 audit and six uncompiled/unrun public-state witnesses are in demos
+graphics/SPRITE_TEXTURE_BINDING_TRIAGE.md and SpriteTextureBindingTests.cpp.
+No003 production change; preserve queue lifetime safety and inherited011 before
+designing public texture-slot retention. No second heavy job, push or merge.
+Follow-up verified wait:98308 remains active/running, its CnaTests child is in
+the existing XNA differential corpus with an actual fxc/Wine child. No restart,
+timeout inference or second Wine use. Prepared003 demos driver
+`build-probe/repair-sprite-texture-binding-before.mjs` passes syntax/transform
+checks but is UNRUN; it records six witnesses on four renderers after the132-case
+external observation completes (without accepting the pending C failures).
+Next remains: poll98308 to terminal, inspect exact11005 delta, then run132 gate
+serially under the same6GiB/private GPU policy. Preserve all failed reports.
+
+**Latest:156 actual focused/bias/visual gates ACCEPTED; native98308 LIVE.**
+External96584 build98700ms, original five depth tests PASS on each SW/GLES/GL33/
+SDL_GPU (828/493/451/1517ms); frozenunchanged/OOM0, only three expected output
+artifacts changed (cna-content/libcna/libcna_c_api). Corrected bias61930 retains
+exactly the original72 PASS labels/outcomes (strict4564ms/run668ms). Visual98930
+passes all original seven checks on four renderers; every RGBA pixel equals the
+original correct SOFTWARE frame. All four repaired images actually viewed.
+No SDL_GPU source commit or156 closure yet. Sole heavy98308 validates native
+focus5/graphics2990/full11000+5 exact old outcomes, one worker/private GPU+network/
+owner UID/caps0/shared cache/6GiB/no swap. Poll it; all inputs frozen again.
+IMPORTANT: lifecycle-after72013 completed observations, NOT a passing regression:
+12 C++ PASS, four C resource_lifecycle FAIL (one of30 checks each), exactly the
+documented callback-before-disposed expectation. No knownIssue marker added;
+owner C callback decision remains pending. C++ SpriteBatch guard choice and131
+reservation also remain pending. Do not call the overall external suite green.
+Next after native acceptance: broader original SpriteBatch/effect/external deltas,
+resolve those explicit contract choices, then coherent graphics commits/closure.
+Committed audio repair2af199aad remains validated; inherited011 untouched.
+
+**Latest: ISSUE-156 candidate focused validation96584 LIVE.** HEAD2af199aad is
+the committed audio-test repair. Native88430 accepted10899PASS/101sameSKIP;
+audio sanitizer75848 accepted2PASS; event sanitizer83569 accepted6PASS/no findings
+(build481ms/strict6825ms/run128ms/inspect52ms, frozenunchanged/OOM0). Original
+external lifecycle17557 captured16PASS on SW/GLES/GL33/SDL_GPU; each C child has30
+checks even though its outer demo report counts0. Before any external rebuild,
+156 baseline49609 strict3141ms:five PASS on each SW/GLES/GL33, five FAIL on SDL_GPU.
+Original seven-check visuals16525 reproduced only SDL_GPU depth failure; all four
+images actually inspected, three controls pixel-identical and SDL differs only in
+16000 pixels at x560..759,y20..99 (blue instead of red). Original depth-bias fixture
+27937/v2 passed72/72 (strict4566ms/run1154ms). Initial27588 missing Game.hpp include
+was a preserved harness failure, not a product failure; v2 adds actual consumer
+includes/compatible ABI definitions without changing the original fixture.
+Now candidate changes ONLY SDL_GPU CPU sprite Z/W projection and sets the existing
+bias fixture's default layerDepth to0.5 to preserve coplanarity with depth0.5
+geometry. Five original witnesses copied unchanged into native graphics tests
+(not yet built there); XNA decision row added. No custom-depth policy change.
+96584 is the sole heavy job: one external build, original20 depth witnesses on
+four actual renderers. Next: corrected bias72, original four demo images/exact
+pixels, native regression and external lifecycle/C deltas.082/C callback and
+SpriteBatch post-disposal guard choices remain pending; no full external closure
+may be inferred from156 focused success. Preserve011; no push/merge.
+
+**Latest: audio test repair committed2af199aad; event sanitizer83569 LIVE.**
+Audio sanitizer75848 accepted2PASS/no findings: build18679ms/strict8665ms/run398ms/
+inspect29ms, frozenunchanged/peak3717730304/all events0. With native-v2 full10899PASS/
+101unchangedSKIP and20/20 focus, committed ONLY DynamicSoundEffectInstanceTests.cpp
+as2af199aad4d11053a7549bee01f9efff272cd9e0. Original failed30524 preserved;
+no production audio change or historical issue closure. Sole heavy83569 now runs
+original6 event/lifetime witnesses with actual graphics/Runtime instrumentation.
+Next after acceptance: original external16, then156 five-case/four-renderer baseline
+before any external rebuild. Pending C callback/SpriteBatch guard choices and
+owner-reserved131 remain explicit. Inherited011 untouched; no push/merge.
+
+**Latest: native88430 ACCEPTED; audio sanitizer75848 LIVE.** Native-v2 full11000
+completed1508686ms:10899PASS/101unchangedSKIP. Exact comparison292ms retains all
+10994 old outcomes and adds only the six expected eventPASS; audio775 outcomes
+also match the full run. Frozen inputs unchanged; peak4297629696bytes/maxOOM0.
+The original failed30524 audit remains preserved. Sole heavy75848 now runs actual
+audio/Runtime ASan+UBSan+float-cast/leaks on both dynamic stress tests, one worker,
+private GPU/shared cache/6GiB/no swap. Poll75848; then event sanitizer6, original
+external16 lifecycle capture, and original156 depth20 baseline BEFORE rebuilding
+external artifacts. Audio test-only commit awaits sanitizer acceptance; graphics
+candidate and inherited011 must remain separated. No issue closure or push/merge.
+
+**Issue-specific authority boundary revalidated:** handoff.md§6 explicitly reserves
+ISSUE-131's real ray/frustum implementation for the human author and forbids
+generating it/removing the exception. Matrix131 now records BLOCKED with no final
+disposition instead of generic PENDING_VERIFICATION. Asked owner whether that
+reservation is lifted for this campaign; no code/oracle change or new runtime
+claim. Existing boundary-start improvement from containment remains preserved.
+This does not block native88430 or the other51 pending issues.
+
+**Latest: original native30524 TERMINAL1; repaired test validating in88430.**
+Full11000 completed1442390ms:10898PASS/101unchangedSKIP/one audio coverageFAIL.
+Exactly six new event tests PASS; only old-outcome delta is the recorded
+`callsThrown==0` stress assertion. Frozen sources unchanged, peak4297887744bytes,
+max/OOM/kill0. Original failed XML/log/audit retained, never accepted as green.
+After termination, changed only DynamicSoundEffectInstanceTests.cpp:16 rendezvous
+cycles require opposite-format rejection (eight each direction), exact count and
+Playing-state checks; all original3000 free-running submit/Play/Stop cycles remain.
+No audio production change, sleep, retry or weakened assertion. Sole heavy88430
+(`cna-repair-resource-event-native-v2`) now builds one worker then requires20/20
+focused iterations, audio module, original6 event tests, graphics2985 and full11000
+exact parity against004. Same private GPU/network/caps0/shared cache/6GiB/no swap.
+Poll88430; inputs frozen again. Only after full acceptance may the prepared event
+sanitizer use this v2 audit, followed by original external lifecycle baselines.
+See demos docs/repair-evidence/audio/DYNAMIC_STRESS_SCHEDULING.md. Test candidate
+remains uncommitted; isolate it from graphics/011 in its eventual coherent commit.
+88430 progress: build11796ms;20/20 stressPASS804ms;audio771PASS/4unchangedSKIP9070ms;
+focus6PASS218ms;graphics2912PASS/73SKIP41221ms;full11000 LIVE. The repaired stress
+also passed inside that full run, not a full acceptance claim. Exact next after
+full acceptance: prepared audio stress sanitizer2, then event sanitizer6, then
+old external16 capture. All three drivers syntax/transform checked, UNRUN.
+During the verified native-v2 wait, added source-backed156 triage in demos
+docs/repair-evidence/graphics/SPRITE_DEPTH_PROJECTION_TRIAGE.md: genuine XNA
+M33=1/no Z translation, SDL_GPU compiled sprite path already correct, and the
+existing depth-bias fixture's hidden layerDepth0-to-depth0.5 assumption. Prepared
+demos repair-sprite-depth-before.mjs (syntax/plan checked, UNRUN) must capture the
+original five pixel cases on four renderers AFTER external16 but BEFORE any
+external rebuild. It preserves all outcomes, not assumed control passes.
+Separately noted custom ShaderEffect depth-disabled source concern; not reproduced
+or a new issue yet. No production/registered-test edits during this frozen run.
+
+**Continuation audit: native30524 remains live, but is NOT green.** The full
+suite failed `DynamicSoundEffectInstanceTest.StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream`
+at line1130 (`callsThrown == 0`,52ms). Original log is retained; no blind retry,
+assertion removal or sanitizer-prerequisite bypass is permitted. Source inspection
+shows the producer and3000 Play/Stop cycles have no rendezvous guaranteeing the
+required live opposite-format submission. The same unchanged test passed in both
+previous055/004 full XMLs (28/21ms); that does not invalidate this failure.
+Keep original30524 running and collect all outcomes before modifying frozen inputs.
+Next: establish deterministic live-format coverage while preserving concurrent
+stress, validate that test change independently, then restore the full native gate.
+No audio product change or test change has been made at this checkpoint.
+
+**Current: ISSUE-082 base-resource event candidate, native30524 LIVE.**
+Current status7ad1f8470/product0049359a26b6; demos ecf2ed46e6e1138a3d6ea0c5a2907f6227f5e950
+(004 closure99f4069; new156 inventory1f016d0). Actual XNA reference97591
+accepted8PASS; original native before65198 accepted5FAIL/1finalizerPASS on each
+SW/GLES/GL33 (build6750ms/runs191/446/401ms, frozenunchanged/peak3603423232/events0).
+Local candidate edits only old non-shared GraphicsResource::Dispose: flag/diagnostic
+state before callbacks; exception-safe device registration retirement; preserve
+normal callback order and original exception. Inherited011 metadata/shared identity
+untouched. Six witnesses copied unchanged into native graphics; measured decision
+row added to plans/plan_bindings_upstream.md. These are UNCOMMITTED candidate edits.
+30524 sole heavy job validates focused6/graphics2985/full10994+6; inputs frozen,
+one worker/private GPU/network/owner UID/caps0/shared cache/6GiB/no swap. Poll it;
+after full acceptance run actual lifetime sanitizers6 then external regressions.
+Do not stage the whole inherited011 GraphicsResource.cpp when committing: isolate
+only this disposal hunk.082's marker/oracle unchanged, pending owner decision on
+SpriteBatch post-disposal guard compatibility. SDL_GPU depth residual remains
+separate/unhidden, now permanently ISSUE-156: original155+1new=156/104final/52pending.
+30524 build55531ms/focused6PASS350ms/graphics2912PASS+73SKIP54259ms accepted;
+full11000 confirmed live, no full result. After acceptance run prepared
+repair-resource-event-sanitizer.mjs (syntax/transform checked, UNRUN, original6
+SOFTWARE callbacks/registration, actual production/Runtime ASan/UBSan/float-cast/leaks).
+Additional owner decision pending: C GRAPHICS_RESOURCES.md and strict-C/demo
+fixtures explicitly expect is_disposed=false inside Disposing, contrary to XNA.
+Do not silently change that contract or suppress the assertions. No C edits yet.
+Continuation re-polled30524 and verified original native process/scope live in the
+long XNA differential corpus. Prepared demos SpriteDepthProjectionTests.cpp is an
+unregistered/UNCOMPILED/UNRUN five-case156 witness: depth order, no-depth control,
+numeric interval against geometry, Z translation/scale. No renderer source change.
+Next heavy task remains082 sanitizer after native acceptance, not a parallel build.
+30524 subsequently passed the genuine XNA differential build test and advanced
+to XnaErrorParityTest. After sanitizer acceptance run prepared demos driver
+repair-resource-event-external-before.mjs:16 original lifecycle/C cases on four
+renderers, unchanged004 external artifacts, before any rebuild/oracle correction.
+Driver syntax/plan/key-inventory checked only (319 frozen keys present), UNRUN.
+No push/merge. Original155 IDs and their dispositions retained.
+
 **Accepted checkpoint: ISSUE-004 product9359a26b6 committed.** Product
 `9359a26b61ded101eff35ee4008fbee3a490e9dc` contains only common sampler forwarding
 and four native pixel regressions. Native10893PASS/101sameSKIP, graphics2906PASS/
