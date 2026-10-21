@@ -76,12 +76,20 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The ordinary Immediate sprite renderer retained Begin's private sampler values instead of observing live GraphicsDevice SamplerStates[0]. The common draw path now forwards all seven live properties through the existing hook; Deferred and stock-effect paths unchanged.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "9359a26b61ded101eff35ee4008fbee3a490e9dc",
+      "validation": [
+        "Native HiDef before-v3:3 filter/address pixel failures and1DeferredPASS; original four assertions retained and registered natively.",
+        "Native42945: focused4PASS, graphics2906PASS/73SKIP, full10893PASS/101unchangedSKIP; exact old10990 outcomes retained plus4newPASS.",
+        "Sanitizer93821: original4 SOFTWARE pixels PASS under production/Runtime ASan/UBSan/float-cast/leaks; no findings or suppressions.",
+        "External86378 and source-backed read-only reassessment83834:116 original observations, only004 FAIL-to-PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. Original pixel4PASS on SW/GLES/GL33. Original evaluator error retained: successful game assertions are not logged.",
+        "Actual four-renderer images inspected: left sprite and complete blend control RGBA unchanged; right sprite linearly filtered. GLES/GL33 images identical.",
+        "Final58657: marker-only incremental build, exact catalog delta, original Immediate siblings on four renderers and five CTests PASS. No frozen drift or OOM; no full campaign sweep claim."
+      ],
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-21 closed with original assertions retained and only004 knownIssue removed. Historical155 inventory now104final/51withoutfinal. Separate082 failures and pre-existing unmarked SDL_GPU layer_depth_sorting depth failure remain visible; see demos IMMEDIATE_SAMPLER_REPAIR.md and SPRITE_BATCH_TRIAGE.md."
     },
     {
       "id": "CNA-DEMOS-ISSUE-005",
@@ -1589,13 +1597,14 @@
         "graphics.sprite_batch.cross_device_texture"
       ],
       "subsystem": "graphics/c-api",
-      "classification": "CODE_DEFECT",
+      "classification": "DEMO_EXPECTATION_BUG",
       "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "root_cause": "The historical demo requires Dispose to release open-batch accounting, but genuine XNA retains it; existing SOFTWARE-351 behavior and regression intentionally preserve that accounting. Separate event/exception positive controls also differ from XNA and require explicit audit before closure.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [],
-      "final_disposition": null
+      "final_disposition": null,
+      "current_validation": "2026-10-21 genuine pinned XNA managed reference91995:13PASS, constructor-free state seam (no native GPU destruction claim). Original begin_end_rules still fails only its accounting assertion on SOFTWARE/OPENGLES3/OPENGL33 in baseline87. No expectation or marker changed. Review additional IsDisposed/event and repeated Begin controls against public CNA contract; preserve inherited011 GraphicsResource edits. See SPRITE_BATCH_TRIAGE.md and SpriteBatchDisposeAccountingOracle.cs."
     },
     {
       "id": "CNA-DEMOS-ISSUE-083",
