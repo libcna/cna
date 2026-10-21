@@ -250,7 +250,7 @@ TEST_F(CnjCapabilityMatrixTest, SpriteFontRejectsSourceFile)
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
-    EXPECT_THROW(cm.Load<SpriteFont>("wrong"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<SpriteFont>("wrong"), ContentLoadException);
 }
 
 TEST_F(CnjCapabilityMatrixTest, EffectRejectsSourceFile)
@@ -262,7 +262,7 @@ TEST_F(CnjCapabilityMatrixTest, EffectRejectsSourceFile)
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
-    EXPECT_THROW(cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);
 }
 
 TEST_F(CnjCapabilityMatrixTest, ModelRejectsSourceFile)
@@ -274,7 +274,7 @@ TEST_F(CnjCapabilityMatrixTest, ModelRejectsSourceFile)
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
-    EXPECT_THROW(cm.Load<Model>("wrong"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<Model>("wrong"), ContentLoadException);
 }
 
 TEST_F(CnjCapabilityMatrixTest, AnimationClipRejectsSourceFile)
@@ -285,5 +285,5 @@ TEST_F(CnjCapabilityMatrixTest, AnimationClipRejectsSourceFile)
 
     ContentManager cm(nullptr, root.path().string());
 
-    EXPECT_THROW(cm.Load<AnimationClipEXT>("wrong"), ContentLoadException);
+    EXPECT_THROW((void)cm.Load<AnimationClipEXT>("wrong"), ContentLoadException);
 }
