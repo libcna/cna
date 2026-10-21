@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <semaphore>
 #include <thread>
 #include <vector>
 
@@ -1052,8 +1053,10 @@ TEST(DynamicSoundEffectInstanceTest, StressProducerConsumerWithRandomPauseStopDi
 // deliberately-reintroduced pre-AUD-15-006 unlocked-guard regression under 5 ASan runs). Alternating
 // keeps isFloat_ toggling and the guard genuinely live throughout. Acceptance: every call either
 // succeeds cleanly or throws exactly InvalidOperationException/ObjectDisposedException -- never
-// any other exception, and never a crash -- across many interleavings with repeated real Play/Stop
-// cycles, not just one static state snapshot.
+// any other exception, and never a crash. A rendezvous phase guarantees opposite-format guard
+// coverage over repeated real Play/Stop cycles; the original free-running stress then retains
+// the teardown/submit interleavings. Without the rendezvous, a valid schedule can complete every
+// Play/Stop pair before the producer runs and never exercise a live-format rejection.
 TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
@@ -1078,10 +1081,38 @@ TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPl
     std::atomic<long long> callsAttempted{0};
     std::atomic<long long> callsThrown{0};
     std::atomic<bool> producerDone{false};
+    constexpr int guardedCycles = 16;
+    std::atomic<int> guardedRejections{0};
+    std::binary_semaphore playbackReady{0};
+    std::binary_semaphore submissionFinished{0};
 
     std::thread producer([&]() {
         const std::vector<float> floatBuf(4 * 32, 0.0f); // 32 stereo float frames of silence
         const std::vector<unsigned char> intBuf(4 * 64, 0); // 64 stereo S16 frames of silence
+        for (int i = 0; i < guardedCycles; ++i)
+        {
+            playbackReady.acquire();
+            try
+            {
+                if (i % 2 == 0) d->SubmitFloatBufferEXT(floatBuf);
+                else d->SubmitBuffer(intBuf);
+                ADD_FAILURE() << "live opposite-format submission was accepted in cycle " << i;
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+                ADD_FAILURE() << "instance was not disposed during guarded cycle " << i;
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                guardedRejections.fetch_add(1, std::memory_order_relaxed);
+                callsThrown.fetch_add(1, std::memory_order_relaxed);
+            }
+            catch (...)
+            {
+                ADD_FAILURE() << "unexpected exception in guarded cycle " << i;
+            }
+            submissionFinished.release();
+        }
         // Deliberately smaller than the other producer/consumer stress test above: each
         // alternating call here can trigger a real EnsureStream() rebuild (SDL_CreateAudioStream/
         // SDL_DestroyAudioStream), unlike that test's single fixed-format producer -- 3000 of
@@ -1112,6 +1143,22 @@ TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPl
         producerDone.store(true, std::memory_order_relaxed);
     });
 
+    // Stop cannot overtake the producer's checked submission. Alternate the live format so
+    // both guards must reject, regardless of how the scheduler distributes CPU time.
+    for (int i = 0; i < guardedCycles; ++i)
+    {
+        if (i % 2 == 0)
+            EXPECT_NO_THROW(d->SubmitBuffer(std::vector<unsigned char>(4 * 64, 0)));
+        else
+            EXPECT_NO_THROW(d->SubmitFloatBufferEXT(std::vector<float>(4 * 32, 0.0f)));
+        EXPECT_NO_THROW(d->Play());
+        EXPECT_EQ(d->getStateProperty(), SoundState::Playing);
+        playbackReady.release();
+        submissionFinished.acquire();
+        EXPECT_EQ(d->getStateProperty(), SoundState::Playing);
+        EXPECT_NO_THROW(d->Stop(true));
+    }
+
     // "Game" thread (this thread): repeated real Play()/Stop(true) cycles, the exact scenario
     // named in this task's acceptance criteria, while the producer above concurrently hammers
     // both submission entry points.
@@ -1127,10 +1174,9 @@ TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPl
     EXPECT_TRUE(producerDone.load());
     EXPECT_TRUE(d->getIsDisposedProperty());
     EXPECT_GT(callsAttempted.load(), 0);
+    EXPECT_EQ(guardedRejections.load(), guardedCycles);
     EXPECT_GT(callsThrown.load(), 0)
-        << "expected at least some submissions to genuinely race a live Play()'d stream in the "
-           "other format and be rejected -- zero here would mean this test never actually "
-           "exercised the guard it exists to verify";
+        << "the rendezvous must exercise live opposite-format rejection before free-running stress";
     // Not asserted that every call throws or that none do -- both are legitimate outcomes
     // depending on exactly how Play()/Stop() and Submit*() happened to interleave; what matters
     // is that calls were attempted, some were genuinely rejected by the guard, and none produced
