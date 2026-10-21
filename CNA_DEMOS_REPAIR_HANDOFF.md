@@ -9,6 +9,67 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**LIVE93255,15:24 CEST:**102 source candidate is now only four pre-assignment
+count guards/docs plus identical20 native witnesses. Native graphics/full
+parity RUNNING with source hashes frozen, one worker/shared cache/private GPU
+and network/4GiB high/6GiB hard/no swap. Safe before20=12PASS/8FAIL; original
+visual16+6 checks PASS on each OPENGLES3/OPENGL33, two inspected images with
+byte-identical counterparts on the other GL profile. Next sanitizer27, actual
+external renderer/public regression, exact before/after images. No product
+commit/closure. Preserve unrelated011/099/100/101 candidates; C choices pending.
+
+**Authoritative continuation,15:20 CEST:** external68581 finished1 (unaccepted):
+build2,576,494ms/zero diagnostics; actual external43PASS; each SOFTWARE/OPENGLES3
+50PASS/5FAIL/1manual.099 C++27,100 pixels9,101 URI9 pass; four unrelated failures
+unchanged, same five C VideoPlayer assertions fail on both, pure-C smoke exits2.
+Frozen hashes unchanged,peak4,302,946,304/high3924/max0/OOM0. No C edits or closure.
+Safe102 baseline93365 completed:20=12PASS/8 boundaryFAIL, exact four receivers,
+no invalid count drawn;3873/679/30ms,peak473071616/events0,unchanged hashes.
+Original compile failure under added Wextra preserved; native targets do not
+enable that unused-parameter policy, corrected probe retains Wall/Werror.
+45372 original shadow visual baseline RUNNING, private OPENGLES3/OPENGL33.
+Next verify it, add only the four count guards/docs and unchanged20 native tests,
+then native graphics/full parity, sanitizers, external renderer and visual gates.
+099/100/101 remain open; both C choices unanswered;101 actual decoder-open
+failure follow-up also remains. Preserve inherited011.155IDs/97final/58pending.
+No new product commit/push/merge. Earlier live-state paragraphs are historical.
+
+**LIVE68581 EXTERNAL-v2:** sanitizer97309 TERMINAL0: all43PASS, actual Video/
+VideoPlayer/Sharp Runtime and CMake TitleLocation object instrumented; libraries
+57,823ms, strict witnesses22,209ms, run501ms/audit27ms; no findings/suppressions,
+unchanged hashes,peak920498176/events0. External43227 stopped before build because
+native audit retained old ASan archive hashes; v2 takes the successful sanitizer's
+new ASan hashes while requiring all native sources/artifacts unchanged. No test
+failure hidden.68581 now rebuilds demos linux-full then43 original witnesses,
+112 SOFTWARE/OPENGLES3 scenarios and pure-C smoke. Same single-worker/private
+GPU/6GiB/no swap. C failures remain failures;099/101 decisions still unanswered.
+No product closure/push. Native59093 accepted full10847PASS/101unchangedSKIP.
+
+Resume detail (15:06 CEST): external build807/1022, sole heavy job. Prepared
+safe ISSUE-102 witness has20 cases acrossfour effects; it never draws an
+accepted-invalid count. Drivers in demos/build-probe cover before reproduction,
+native full parity, sanitizer27 (20new+7existing), and original OPENGLES3/
+OPENGL33 shadow images. All shadow drivers remain UNRUN; no production edit.
+A separate uncompiled VideoDeferredOpenFailureTests.cpp witness documents why
+the101 File.Exists precheck is not proof of actual decoder-open failure
+propagation. Resolve that root-cause follow-up and the pending C decisions
+before101 closure. No new C API source/assertion changes or remote writes.
+
+### Earlier checkpoints (historical; the live state above takes precedence)
+
+**CURRENT97309 SANITIZER RUNNING:** native59093 TERMINAL0, full10,948=
+10,847PASS/101sameSKIP in1,341,053ms; exact old10,934 parity and14newPASS,
+compare136ms. Frozen hashes unchanged; peak2,626,609,152 bytes/all memory events0.
+Runtime c26614e8 committed/clean, CNA c04f80d65 / demos377a5b0 plus candidates.
+97309 uses existing build-asan/Media archives and the actual instrumented
+CMake TitleLocation.cpp.o (not a new umbrella build),43 witnesses, private GPU,
+one worker/shared cache/6GiB/no swap. No other heavy job. Sources frozen.
+Exact next: sanitizer audit, external43/112 and pure-C smoke; retain rejected C
+regressions until explicit099 AND101 contract decisions. Both choices have been
+asked asynchronously; generic continuation is not authorization. Afterwards
+safe ISSUE-102 boundary baseline is prepared/unrun in demos graphics evidence.
+No new CNA production commit, closure, knownIssue removal, push or merge.
+
 **LIVE59093 (native-v3):** incremental build18,503ms/zero diagnostics;
 focused43/43PASS1,037ms, media345/345PASS12,715ms; full10948 now RUNNING.
 14068 exited before build because the guard detected libcna.so rebuilt at step52
