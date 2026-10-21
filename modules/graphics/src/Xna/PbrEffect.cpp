@@ -723,6 +723,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void PbrEffect::setShadowCascadesEXT(const ShadowCascadeStateEXT& state)
     {
+        if (state.Count < 0 || state.Count > ShadowCascadeStateEXT::kMaxCascades)
+            throw System::ArgumentOutOfRangeException(
+                "state", "Cascade count must be between zero and kMaxCascades.");
         shadowCascadesEXT_ = state;
     }
 

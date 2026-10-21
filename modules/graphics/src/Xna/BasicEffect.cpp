@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -522,6 +523,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void BasicEffect::setShadowCascadesEXT(const ShadowCascadeStateEXT& state)
     {
+        if (state.Count < 0 || state.Count > ShadowCascadeStateEXT::kMaxCascades)
+            throw System::ArgumentOutOfRangeException(
+                "state", "Cascade count must be between zero and kMaxCascades.");
         shadowCascadesEXT_ = state;
     }
 

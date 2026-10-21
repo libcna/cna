@@ -9,6 +9,67 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**ISSUE-102 validation complete, ready for scoped product commit:** native full
+10867PASS/101sameSKIP (20newPASS, all old outcomes unchanged), graphics2890PASS/
+73SKIP, sanitizer27PASS/no findings. External build458,110ms/zero diagnostics;
+original20 witnesses PASS on each SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU(Vulkan)/
+HEADLESS/STUB. Actual renderer identity checked.112 original audio/video cases
+exactly unchanged; existing video C regressions and smoke exit2 remain globally
+unaccepted. Stock66 before/after exact52PASS/12rendererSKIP/2known070FAIL.
+All four original OPENGLES3/OPENGL33 images800x480 have zero differing pixels;
+two OPENGLES3 captures visually inspected, GL33 counterparts byte-identical.
+Not an approved-reference or SOFTWARE shadow-image claim. External peak
+4,302,151,680/high1113/max0/OOM0; stock-after193,142,784/events0;
+visual-after197,160,960/events0. Every gate's frozen hashes unchanged.
+Commit only four receiver guards, six public headers, original20 native tests
+and this handoff; then record the resulting SHA in matrix/demos issue history.
+Next immediately reproduce prepared070 C++8 against the repaired library,
+then minimal two-copy-constructor repair and all focused/regression gates.
+Preserve inherited011/video work. No push/merge; video decisions still pending.
+
+**Live45102 external shadow gate:** sanitizer27/27PASS, actual four effects/
+runtime instrumented, no findings,30,047/6,386/136/19ms,peak851,980,288/events0,
+frozen hashes unchanged. Stock66 BEFORE52PASS/12rendererSKIP/2known070FAIL.
+External incremental335 tasks now running, one worker/6GiB/no swap. First
+wrapper ambiguity stopped before building; fix selects only C++ flags, C17
+flags unchanged. Next stock66 AFTER/four exact images, then review/commit102
+only. Corrected101 owner question now explicitly proposes ArgumentException/
+INVALID_ARGUMENT from genuine XNA, superseding prior IO suggestion. Decisions
+pending; no C contract/expectation edit. Prepared070 baseline remains UNRUN.
+
+**Current continuation after native45760:** focused20PASS; graphics2890PASS/
+73SKIP; full10867PASS/101sameSKIP in1,259,563ms, exact old10948 outcomes plus
+20newPASS, comparison177ms. Frozen hashes unchanged, peak1,357,451,264/events0.
+Genuine XNA missing-file oracle32/32PASS confirms pre-decoder E_INVALIDARG
+maps to exact ArgumentException/null ParamName, not FileNotFoundException.
+This is actual guard/translator coverage, not native decoding/playback. Earlier
+C IO proposal must be corrected before any contract decision or101 closure.
+Stock-effect66 BEFORE now runs against old external binaries; next sanitizer27,
+external120 across six renderers plus112 parity, stock66 AFTER/four exact images.
+One heavy job/one compiler/6GiB/no swap.102 still open; no product commit/push.
+Preserve inherited011 and video candidates. Earlier running states are historical.
+
+**Reference caution,15:40 CEST:** genuine Framework IL's missing-file video
+guard returns E_INVALIDARG, mapped to ArgumentException, not FNA/demo
+FileNotFoundException. Installed Framework MVID matches inspected dump. New
+VideoFileFailureOracle.cs/driver in demos are prepared/unrun; run serially after
+active45760 and settle XNA precedence before101 closure/expectation correction
+or adopting the earlier C IO proposal. No video production/demo edits now.
+070 PBR clone witness/triage prepared/unrun outside registered native sources.
+45760 full still runs its normal long XNA differential compiler test; only heavy job.
+
+**LIVE45760,15:30 CEST:** original20 shadow witnesses PASS498ms after no-op
+build460ms; full graphics module RUNNING, then exact full10968 parity.93255
+first build succeeded364819ms but stopped before tests to review five old
+nodiscard/EXPECT_THROW warnings in unchanged ModelContentTypeReaderTests,
+CnjModelTests and CnjStockEffectTests. Failed gate/log retained. V2 requires
+all first-build source hashes unchanged and explicitly reuses its owned rebuilt
+artifacts; no content edits or native warning-policy changes. Sources frozen.
+Next stock-effect66 before against still-old external binaries, sanitizer27,
+external20x6 actual-renderer witnesses/112 exact outcome parity, stock66 after,
+four original exact visual comparisons. These gates are pending, no closure.
+Same one worker/shared cache/private GPU/network/4GiB high/6GiB hard/no swap.
+
 **LIVE93255,15:24 CEST:**102 source candidate is now only four pre-assignment
 count guards/docs plus identical20 native witnesses. Native graphics/full
 parity RUNNING with source hashes frozen, one worker/shared cache/private GPU

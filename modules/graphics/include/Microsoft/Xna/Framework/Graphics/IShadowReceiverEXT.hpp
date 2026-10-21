@@ -102,6 +102,8 @@ namespace Microsoft::Xna::Framework::Graphics {
          * that never hears about cascades behaves exactly as it did before they existed.
          *
          * @param state The cascade set, as one value; see `ShadowCascadeStateEXT` for why.
+         * @throws System::ArgumentOutOfRangeException If state.Count is outside
+         *         0..ShadowCascadeStateEXT::kMaxCascades. The previous state is unchanged.
          */
         CNAEXT virtual void setShadowCascadesEXT(const ShadowCascadeStateEXT& state) = 0;
 

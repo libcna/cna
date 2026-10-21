@@ -28,6 +28,8 @@ namespace Microsoft::Xna::Framework::Graphics {
         /**
          * @brief How many cascades are in use; 0 means "not cascaded", and every field below is
          *        then ignored, which is what leaves an ordinary single-map draw untouched.
+         * Receiver setters accept only 0 through kMaxCascades, inclusive, and reject
+         * other counts without changing the receiver's previous cascade state.
          */
         int Count = 0;
 
