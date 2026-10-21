@@ -123,12 +123,17 @@ namespace Microsoft::Xna::Framework::Audio
 
     SharpRuntime::intcs DynamicSoundEffectInstance::getPendingBufferCountProperty() const
     {
+        // XNA get_PendingBufferCount checks disposal before reading the native queue.
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         std::lock_guard<std::mutex> lock(queueMutex_);
         return static_cast<SharpRuntime::intcs>(queuedBuffers_.size() + submittedChunkSizes_.size());
     }
 
     bool DynamicSoundEffectInstance::getIsLoopedProperty() const
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         return false;
     }
 
@@ -161,6 +166,9 @@ namespace Microsoft::Xna::Framework::Audio
     System::TimeSpan DynamicSoundEffectInstance::GetSampleDuration(
         SharpRuntime::intcs sizeInBytes) const
     {
+        // XNA IL checks disposal before delegating to AudioFormat; FNA omits this guard.
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         // FNA delegates straight to SoundEffect.GetSampleDuration, which always assumes 16-bit
         // PCM regardless of whether SubmitFloatBufferEXT put this instance in float (32-bit)
         // mode -- match that exactly rather than computing from the real bytes-per-sample.
@@ -170,6 +178,8 @@ namespace Microsoft::Xna::Framework::Audio
     SharpRuntime::intcs DynamicSoundEffectInstance::GetSampleSizeInBytes(
         System::TimeSpan duration) const
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         return SoundEffect::GetSampleSizeInBytes(duration, sampleRate_, channels_);
     }
 

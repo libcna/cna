@@ -35,6 +35,18 @@ using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
 
+namespace Microsoft::Xna::Framework::Audio
+{
+    struct DynamicSoundEffectInstanceTestAccess
+    {
+        static std::size_t PendingBuffers(const DynamicSoundEffectInstance& instance)
+        {
+            std::lock_guard<std::mutex> lock(instance.queueMutex_);
+            return instance.queuedBuffers_.size() + instance.submittedChunkSizes_.size();
+        }
+    };
+}
+
 namespace
 {
     // Tries to start playback under the SDL "dummy" audio driver so device-dependent
@@ -107,23 +119,21 @@ TEST(DynamicSoundEffectInstanceTest, ConstructorRefusesWhatXnaRefuses)
     EXPECT_NO_THROW(DynamicSoundEffectInstance(48000, AudioChannels::Stereo));
 }
 
-// P10-DYN-004/005: real FNA's GetSampleDuration/GetSampleSizeInBytes (DynamicSoundEffectInstance.cs)
-// delegate straight to the static SoundEffect helpers using the stored sampleRate/channels
-// fields, with no `IsDisposed` guard at all -- confirmed by reading the FNA source. Matching that
-// (not adding a new ObjectDisposedException guard CNA-side) is the resolved decision; these tests
-// lock it down.
-TEST(DynamicSoundEffectInstanceTest, GetSampleDurationAfterDisposeDoesNotThrow)
+// ISSUE-038: genuine XNA's conversion helpers check disposal before validating inputs;
+// the previous FNA-derived no-throw expectation was incorrect.
+TEST(DynamicSoundEffectInstanceTest, GetSampleDurationAfterDisposeThrowsObjectDisposed)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     d.Dispose();
-    EXPECT_NO_THROW({ auto result = d.GetSampleDuration(4000); (void)result; });
+    EXPECT_THROW((void)d.GetSampleDuration(4000), System::ObjectDisposedException);
 }
 
-TEST(DynamicSoundEffectInstanceTest, GetSampleSizeInBytesAfterDisposeDoesNotThrow)
+TEST(DynamicSoundEffectInstanceTest, GetSampleSizeInBytesAfterDisposeThrowsObjectDisposed)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     d.Dispose();
-    EXPECT_NO_THROW({ auto result = d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0)); (void)result; });
+    EXPECT_THROW((void)d.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0)),
+                 System::ObjectDisposedException);
 }
 
 // KF-12: a streamed voice cannot loop. XNA refuses IsLooped = true with InvalidOperationException
@@ -782,7 +792,8 @@ TEST(DynamicSoundEffectInstanceTest, PendingBufferCountResetsToZeroAfterDisposeW
 
     d.Dispose();
 
-    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
+    EXPECT_EQ(Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess::PendingBuffers(d), 0u);
+    EXPECT_THROW((void)d.getPendingBufferCountProperty(), System::ObjectDisposedException);
 }
 
 // P9-DYNAMIC-001: SubmitBuffer while Playing must still increment PendingBufferCount immediately
@@ -1020,7 +1031,8 @@ TEST(DynamicSoundEffectInstanceTest, StressProducerConsumerWithRandomPauseStopDi
     // caller is expected to stop its own producer before disposing) -- not memory-unsafe, and
     // not "corrupt" in the sense this task's acceptance criteria means (implausibly large or
     // negative). Bounded generously here to still catch genuine unbounded growth.
-    EXPECT_LT(d->getPendingBufferCountProperty(), 1000);
+    EXPECT_LT(Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess::PendingBuffers(*d), 1000u);
+    EXPECT_THROW((void)d->getPendingBufferCountProperty(), System::ObjectDisposedException);
 }
 
 // AUD-07-003: T-2C's SubmitFloatAfterPlayingThrowsInvalidOperation above already locks down the

@@ -21,6 +21,9 @@ namespace Microsoft::Xna::Framework::Audio
     /** @brief Sound effect instance whose audio buffers are submitted dynamically by user code. */
     class DynamicSoundEffectInstance final : public SoundEffectInstance
     {
+        // Read-only native regression seam: disposal must still clear both buffer queues.
+        CNAEXT friend struct DynamicSoundEffectInstanceTestAccess;
+
     public:
         /** @brief Raised when the instance needs more submitted audio buffers. */
         System::EventHandler<System::EventArgs> BufferNeeded;
@@ -45,13 +48,15 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Gets the number of submitted buffers still pending hardware playback.
          *
          * @return Pending buffer count.
+         * @throws System::ObjectDisposedException If the instance has been disposed.
          */
         [[nodiscard]] SharpRuntime::intcs getPendingBufferCountProperty() const;
 
         /**
-         * @brief Dynamic instances cannot be looped; always returns false.
+         * @brief Dynamic instances cannot be looped; returns false for a live instance.
          *
          * @return false.
+         * @throws System::ObjectDisposedException If the instance has been disposed.
          */
         [[nodiscard]] bool getIsLoopedProperty() const override;
 
@@ -83,6 +88,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param sizeInBytes Number of PCM data bytes.
          * @return Corresponding playback duration.
+         * @throws System::ObjectDisposedException If disposed, before validating the byte count.
          */
         [[nodiscard]] System::TimeSpan GetSampleDuration(SharpRuntime::intcs sizeInBytes) const;
 
@@ -91,6 +97,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param duration Desired playback duration.
          * @return Number of bytes required.
+         * @throws System::ObjectDisposedException If disposed, before validating the duration.
          */
         [[nodiscard]] SharpRuntime::intcs GetSampleSizeInBytes(System::TimeSpan duration) const;
 
