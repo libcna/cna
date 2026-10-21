@@ -1058,12 +1058,17 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "ShaderEffect::Clone recreates an independent program and copies language/labels but omits World/View/Projection and the inherited disposed-clone guard.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "1ba26ed18b520b3469a8250a8a6fe032e664c84e",
+      "validation": [
+        "Baseline45813: structural4=3FAIL/1PASS; original GL9 exactly three failures on each OPENGLES3/OPENGL33, SOFTWARE capability SKIP. Same strict C binary reproduces old clone-World retention failure and passes against repaired libraries on three renderers.",
+        "Native73916: focused4PASS, graphics2902PASS/73sameSKIP, full10889PASS/101sameSKIP; exact previous10986 outcomes preserved plus4newPASS. Actual implementation ASan/UBSan/float-cast/leak5PASS, no findings/suppressions. Structural4 additionally pass on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU/HEADLESS/STUB; no structural shader-execution claim.",
+        "External79676:39 paired shader/C cases, only exact055 failures improve; both actual GL screenshot pairs inspected, repaired images RGBA-identical. Seven original C metadata gates PASS. Final15342 reuses successful build after correcting relative-path alias verification bug, GL9 each PASS, SOFTWARE SKIP77, catalog3PASS/1shaderSKIP; only055 marker removed, frozen inputs unchanged. See demos SHADER_CLONE_STATE_TRIAGE.md and repair-shader-clone-*-audit.json."
+      ],
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-21 accepted native/sanitizer/external/C metadata/visual/final marker gates. Product1ba26ed18 contains only four repair/test files. Inherited011 and its metadata preserved separately. Original failed diagnostic/inventory/path-audit runs retained and explained; no test suppression, no full-campaign or unavailable-platform claim."
     },
     {
       "id": "CNA-DEMOS-ISSUE-056",

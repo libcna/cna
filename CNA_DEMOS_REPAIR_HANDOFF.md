@@ -9,6 +9,114 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**Latest accepted: ISSUE-055 closed and committed.** Product CNA
+`1ba26ed18b520b3469a8250a8a6fe032e664c84e`; demos closure
+`a445241795fc9bcb971043d0536657b89cbdcb89`; Runtimec26614e85 (clean).
+Matrix155historical/103final/52withoutfinal;101 remains explicit native-Windows
+codec-validation pending. Four-file product commit contains only ShaderEffect
+implementation/header, four native regressions and strict C EffectSmoke extension.
+Inherited011 and its C metadata remain uncommitted, unchanged by this repair.
+
+Accepted: native10889PASS/101sameSKIP, graphics2902PASS/73sameSKIP, sanitizer5/no
+findings, external39 exact comparisons, original C smoke on three renderers,
+structural4 on six renderers, actual GL before/after images, seven C metadata gates.
+Final15342 accepted0: originalGL9 each, SOFTWARE honestSKIP77, catalog3PASS/1SKIP;
+only055 marker removed, frozen sources/catalog otherwise unchanged. Final61523
+build succeeded0/7961ms; verifier failed on relative/absolute executable alias.
+Canonical-path resume reused the pinned build without rebuilding; original failed
+log retained. No new compiler warning, original native nodiscard review retained.
+Last complete native checkpoint is73916; last full external campaign sweep remains
+the earlier recorded checkpoint, not this39-case subset. No push or merge.
+
+No heavy job live at this checkpoint. Exact next task: SpriteBatch003/004/082.
+Genuine082 managed reference91995 completed13PASS (build3504ms/run644ms,
+peak751284224/events0), confirming retained accounting and disposed-before-event;
+constructor-free seam, NOT GPU resource destruction coverage. Review existing
+SOFTWARE-351 native tests/ledger and current CNA contract, reproduce current demos,
+then correct only demonstrably wrong expectations or actual compatibility defects.
+Separate SpriteBatch prep remains uncommitted in demos. All older LIVE notes below
+are historical; do not restart completed jobs or stage inherited011 accidentally.
+
+**Latest: ISSUE-055 final marker gate61523 running; older LIVE notes are historical.**
+Inventory74105 accepted0, seven original gates PASS; classifications unchanged
+(467headers/8122symbols/7011implemented/15partial/643planned/453N/A).
+Regenerated full inventory changes only six ShaderEffect source line numbers.
+External79676 accepted39 paired cases; only exact three055 GL failures improve.
+Same strict C regression fails old World retention and passes on three repaired
+renderers; structural4 pass on six. Both repaired GL images inspected and exactly
+RGBA-identical. Native10889PASS/101sameSKIP and sanitizer5 remain accepted.
+Final before97106 accepted; only knownIssue055 line removed.61523 runs final build,
+GL9 each, honest SOFTWARE skip and focused/catalog4. Poll61523 before any heavy
+job or frozen-input edit. Then commit four ShaderEffect/native/C files only,
+demos evidence/closure and CNA status separately; preserve inherited011. No push.
+Matrix155/102final/53withoutfinal until closure. Next SpriteBatch003/004/082,
+with genuine082 managed reference first; never blindly impose its old demo oracle.
+
+**Current: sanitizer43739 accepted; external79676 LIVE.** Actual SAN5PASS,
+no findings/suppressions;build12,713ms/strict fixtures6,128ms/run105ms/inspect25ms;
+frozen unchanged,peak833,327,104/events0. Native73916 accepted below. Extended C
+EffectSmoke strictly compiled284ms and exact clone-World failure reproduced on old
+SOFTWARE C library (exit1/63ms/stage3). All39 old shader/C captures complete;
+79676 now sole heavy incremental external build,one worker/private GPU/6GiB/no swap.
+Poll79676; do not edit frozen inputs. Then GL image inspection/inventory7/final
+marker-only gates. No055 closure/commit or marker removal. Inherited011 preserved.
+
+**Current: native73916 accepted; sanitizer43739 LIVE.** Full10,889PASS /
+101sameSKIP1,688,536ms; exact old10,986 outcomes plus4newPASS, compare135ms.
+Focus4PASS440ms; graphics2,902PASS/73SKIP59,418ms; frozen unchanged.
+Peak2,705,068,032/all memory events0. Original60373 warning review retained.
+After native completion added C EffectSmoke.c's exact three-matrix clone retention
+and independent World mutation checks; otherwise original C assertions untouched,
+new C checks UNRUN.43739 sole heavy job: actual SAN5/one worker/private GPU/6GiB
+no swap. Poll43739; then external39 + old/new C regression, GL images, inventory7,
+marker-only final gates and coherent055 commit. No closure/marker removal yet.
+Preserve inherited011 and exclude SpriteBatch preparation. Older LIVE notes historical.
+
+**Current: ISSUE-055 native resume73916 LIVE;60373 terminal before tests.**
+Original build PASS146,150ms; three non-fatal nodiscard warnings from unchanged
+HEAD CnjEffect/CnjStockEffect EXPECT_THROW tests triggered diagnostic review.
+Draco CMP0148 dev warning retained too. Exact source/log/binary hashes and review
+are in demos reports/repair-shader-clone-diagnostics-review.json. No warning or
+test suppression, no product/fixture edit and no warning-free claim.73916 reuses
+the successful build under the same one-job/private GPU/net/caps0/6GiB/no-swap
+limits: focused4 PASS440ms; graphics2975/full10986+4 still pending. Poll73916;
+do not restart60373 or edit frozen inputs. Then sanitizer/external GL/C gates.
+Graphics completed59,418ms:2,902PASS/73SKIP, no failures; full native still LIVE.
+Prepared syntax-checked UNRUN shader-clone-sanitizer5 and external39 paired shader/C
+demos+6x4 structural+original C EffectSmoke3. Run serially only after prerequisites,
+then inspect actual screenshots and C metadata gates. See demos055 triage.
+No055 closure/marker removal/commit. Earlier LIVE/no-source-edit notes superseded.
+Prepared `repair-shader-clone-inventory.mjs` is syntax-checked/UNRUN, requires
+accepted external39 and runs the seven original C metadata gates under2GiB/no swap.
+Inherited011 mapping/generated summaries remain excluded from055's commit.
+Read-only next SpriteBatch triage found genuine XNA source also retains active
+accounting on Dispose: verify082's expectation before any repair, not blindly
+decrement to make the demo green. See demos SPRITE_BATCH_TRIAGE.md; no SpriteBatch
+code/oracle/status changed, and that preparation is not part of055's commit.
+Prepared055 final marker driver requires external39/inventory7 and actual GL image
+review, is syntax-checked/UNRUN; no marker removed. Prepared082 genuine managed
+counter/event probe13 is UNCOMPILED/UNRUN; never run its Wine prefix concurrently
+with73916. See demos SpriteBatchDisposeAccountingOracle.cs and triage.
+Continuation19:17:73916 is authoritatively LIVE, past differential/error/effect
+compiler/public sample tests; no failed-test line yet, not final acceptance.
+After completion add exact3-matrix retention/independent World mutation checks to
+clean C EffectSmoke.c's existing ShaderEffect clone block (NOT edited yet). The
+revised UNRUN external driver requires that regression and proves its exact old
+C-library World-copy failure before the rebuild, then same C binary PASS on3
+renderers. This joins055's test commit, not inherited011. Sanitizer5 precedes it.
+
+**ISSUE-055 native60373 LIVE.** Video is committed below (CNA productabbd8a4ea,
+status61baeb155; demosb325b6a). Shader baseline45813 reproduces3FAIL/1PASS in four
+unchanged structural cases; original GL demo9 has same3failures on OPENGLES3 and
+OPENGL33; SOFTWARE honestSKIP77. Both screenshots inspected. Candidate only adds
+existing disposal guard+three matrix copies and public documentation, registers
+unchanged4. Sole heavy job60373 now builds/runs focus4, graphics2975, full10986+4
+with private GPU/network/caps0/one worker/6GiB/no swap. Poll60373; never restart
+for silence or modify its frozen inputs. After acceptance: sanitizer, actual GL
+pixel/program-lifetime regressions and C metadata/ABI checks; no055 closure yet.
+The source-baseline snapshot's sandbox EPERM and exact HEAD-based recovery are
+documented honestly in demos SHADER_CLONE_STATE_TRIAGE.md. Inherited011 preserved.
+
 **Video batch committed; next ISSUE-055.** Product CNA
 `abbd8a4ea7ae3f511e0f3aac3faaba411f6de0a4`; demos evidence/marker closure
 `b325b6a6120aded1f7962e1d31e41fc0a99a29f6`; Runtimec26614e85.
