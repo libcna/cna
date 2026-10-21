@@ -9,6 +9,46 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**LIVE59093 (native-v3):** incremental build18,503ms/zero diagnostics;
+focused43/43PASS1,037ms, media345/345PASS12,715ms; full10948 now RUNNING.
+14068 exited before build because the guard detected libcna.so rebuilt at step52
+of the first failed build. This artifact is now explicitly recorded/rehashed;
+all unrelated source hashes remain pinned. Earlier failed logs retained. No test
+assertion changed. Only59093 is active, same one worker/private GPU/network/6GiB.
+Runtime dependency c26614e8 is committed/clean/not pushed. Next full parity,
+then prepared sanitizer43 and external112 gates, with unchanged C regressions
+still rejecting acceptance. No CNA production commit/issue closure.
+
+**LATEST:** runtime repair committed locally as c26614e85dffff4cadc5c4803b00d78953706b21;
+runtime worktree clean, no push. Native18544 TERMINAL1 after324516ms build:
+new URI fixture called TitleLocation from isolated CnaMediaTests without linking
+runtime. Corrected fixture placement to tests/MediaVideoUriContractTests.cpp in
+the existing cross-module group, preserving all9 assertions/public calls and
+production module boundaries. Old failure log retained. Native-v2 job14068 now
+RUNNING, same limits/isolation, expected43focus/345media/10948full. All sources
+frozen again. Prepared sanitizer now uses canonical CnaTests link closure for
+its public TitleLocation witness. No CNA issue closure or C expectation change.
+
+**CURRENT (supersedes historical notes below):** ISSUE-101 URI/file-path candidate
+is now implemented locally, not committed or accepted. Dependency gates are green:
+Sharp Runtime baseline18,158/18,158; candidate18,193/18,193 across41 executables,
+zero failures/skips/diagnostics, URI311→345. Latest runtime audit
+repair-uri-runtime-after-v2: peak830410752 bytes, all memory events0, frozen hashes
+unchanged. Genuine Framework4/.NET8 URI34-input oracle records their actual
+differences; candidate follows modern.NET invalid-UTF8 escaping. Native baseline
+URI9 was5FAIL/4PASS; new file-path boundary5 allFAIL against the old CNA library.
+No expectation weakened. URI fixture now uses PathToGenericUtf8 (same Linux bytes).
+Native job18544 is RUNNING in cna-repair-video-uri-native.scope: one worker,
+shared cache, existing cmake-build-debug, private GPU/network,4GiB high/6GiB max,
+no swap. Planned focused43/media354/full10948 with exact previous10934 parity.
+Do not edit candidate sources while it runs. Driver/reports in demos build-probe
+and build/linux-full/reports under repair-video-uri-native prefix.
+Exact next: inspect this gate, document/commit validated runtime dependency,
+refresh sanitizer and external renderer gates; preserve099 C API failures until
+owner contract choice is explicit. C API source/docs/tests unchanged. Preserve011.
+CNA ba56ddf5a / demos ca6310b / Sharp Runtime97713eb2 plus pending changes.
+Matrix155/97final/58pending unchanged. No new product commit, closure, push/merge.
+
 **CURRENT: no running job.** Native-v2 completed10,833PASS/101unchangedSKIP;
 sanitizer29PASS. External37654 finished unaccepted: original099 C++27/27 and100
 public-pixel9/9 PASS on SOFTWARE and OPENGLES3, but five unchanged C VideoPlayer
