@@ -9,7 +9,34 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
-**2026-10-22 continuation: multi-renderer observations collected; WebGPU Immediate defect confirmed.**
+**Latest checkpoint2026-10-22: final focus passed; SDL compiled-on84921 LIVE.**
+CNA89cd0b202 / demosfbab2d9. Separate C Effect documentation/expectation correction
+is committed and validated: SW/GLES34PASS each, SDL compiled-off27PASS, native11PASS.
+ISSUE-003 product remains uncommitted/open; inherited011/082 changes remain untouched.
+Final focus46333 completed0: consumer build73819ms/no diagnostics; registry719;
+stronger22 allPASS on SW/GLES/GL33, SDL13PASS/9 compiled-offSKIP; original two
+texture demos pass on allfour, rectangle checks7->9. No drift, peak1310486528/events0.
+All eight screenshots individually inspected. Paint differences exactly match
+seeded Update sequences (SW compatible685..687, GLES89, GL3388, SDL86); every
+pixel matches the original palette/cell layout with zero tolerance. This is
+scheduling-state reconstruction, not an exact cross-renderer reference claim.
+See demos graphics/SPRITE_BINDING_FINAL_FOCUS.md for full evidence and limitations.
+Final review found the same missing Immediate hook in D3D9. Narrow mode/flush
+repair added; MinGW17526 five relevant units compile0/no diagnostics, including
+allocating DirectX9Renderer, no drift, peak648994816/events0. No Windows runtime pass.
+SDL compiled effects require no unavailable hardware here: existing patched
+MojoShader suffices. Sole84921 now runs repair-sprite-binding-sdl-compiled.mjs:
+existing cmake-build-multi, enables SDL compiled effects while retaining WebGPU ON,
+strict shared-dependency no-op guards, one worker/shared cache/private GPU/6GiB/no swap.
+Requires22PASS/noSKIP each on SDL_GPU/FNA3D/WebGPU. External compiled-off config
+is untouched. All product/source inputs frozen; no simultaneous heavy job.
+Exact next task: collect84921, investigate any real failure, then stage only003
+code/tests (split Texture2D sprite identity hunks from inherited011 ownership),
+commit the repair, remove the old rectangle restriction only after validation,
+record repair SHA and permanent disposition; continue027/066 or next actionable batch.
+Do not close003 from compiled-off skips or infer native Windows coverage. No push/merge.
+
+**Earlier2026-10-22 continuation: multi-renderer observations collected; WebGPU Immediate defect confirmed.**
 The former33697 build is terminal: configure0, libraries0 (712365ms), peak
 2169597952 bytes, no memory events. Its strict diagnostic gate remains failed;
 exactly16 existing Draco warnings were separately reviewed against unchanged
@@ -59,11 +86,20 @@ and all11 native EffectApply checks PASS1103ms. Exact InvalidOperationException/
 STATE diagnostics observed on both compiled-on renderers. No input drift;
 peak1394274304 bytes/all memory events0. This corrects two demonstrated demo
 expectation errors, not native runtime behavior; full-smoke reports remain historical.
-Next commit this narrow C documentation/demo correction separately, then finish003:
-add direct post-SpriteBatch binding/SetData checks to the original rectangle demo,
-validate those and the strengthened22 across applicable renderers, stage only003
-hunks (Texture2D also contains inherited011 work), record its repair SHA, remove
-the obsolete restriction only after passes, and update the permanent issue/matrix.
+C documentation committed separately as89cd0b202; demos correction/evidence as
+fbab2d9. Two direct post-SpriteBatch checks are now added to the original rectangle
+demo: Textures[0] equals the drawn canvas, and a valid one-pixel SetData is refused
+with InvalidOperationException until explicit unbinding. Original seven checks
+remain, so nine are expected. The old003 restriction is deliberately still present
+until validation and the CNA repair commit are recorded.
+Sole46333 now runs build-probe/repair-sprite-binding-final-focus.mjs: existing
+cna-demos target/registry, strengthened22 on SW/GLES/GL33/SDL_GPU (only SDL's
+nine compiled-off skips permitted), both original texture demos on each renderer,
+and eight screenshots. One worker/shared cache/private GPU/6GiB/no swap. All
+source inputs frozen during this run; generated319 consumer replacements audited.
+Next collect46333, inspect every screenshot, then stage only003 code/test hunks
+(Texture2D also contains inherited011 work), commit the product repair, record SHA,
+remove the obsolete restriction only after passes, and update permanent issue/matrix.
 Other011/082 failures remain unaccepted. No003 closure or push/merge yet.
 ISSUE-003 stays open;011/082 changes and failures remain separate. No push/merge.
 
