@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "VideoPlayerTestAccess.hpp"
 
@@ -346,15 +347,14 @@ TEST(VideoPlayerTest, IsMutedRoundTrips)
     EXPECT_FALSE(player.getIsMutedProperty());
 }
 
-// plans/plan_media.md MEDIA-89: Volume clamping -- zero coverage anywhere in this file (only the
-// default value of 1.0f was checked).
-TEST(VideoPlayerTest, VolumeClampsToZeroOneRange)
+// ISSUE-099: genuine XNA refuses these writes instead of FNA's clamping.
+TEST(VideoPlayerTest, VolumeRefusesOutOfRangeWithoutMutation)
 {
     VideoPlayer player;
-    player.setVolumeProperty(2.0f);
+    EXPECT_THROW(player.setVolumeProperty(2.0f), System::ArgumentOutOfRangeException);
     EXPECT_FLOAT_EQ(player.getVolumeProperty(), 1.0f);
-    player.setVolumeProperty(-1.0f);
-    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 0.0f);
+    EXPECT_THROW(player.setVolumeProperty(-1.0f), System::ArgumentOutOfRangeException);
+    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 1.0f);
 }
 
 // plans/plan_media.md MEDIA-90: SetAudioTrackEXT/SetVideoTrackEXT round-trip against a real multi-track
@@ -500,7 +500,8 @@ TEST(VideoPlayerTest, PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNo
     EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
     EXPECT_EQ(player.getVideoProperty(), nullptr);
     EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), nullptr);
-    EXPECT_EQ(player.GetTexture(), nullptr);
+    EXPECT_FALSE(VideoPlayerTestAccess::HasFrameTexture(player));
+    EXPECT_THROW((void)player.GetTexture(), System::InvalidOperationException);
 
     // The player must still be fully usable afterward, not left in some broken half-open state.
     Video secondVideo(kFixture, &gd);

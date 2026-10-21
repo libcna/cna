@@ -219,18 +219,26 @@ layer itself invalidates on the **next call to that player** — any later route
 instead of touching freed memory. Draw with it or copy its pixels before calling anything else on
 that player.
 
-Three canonical behaviors are reported rather than corrected:
+File construction and decoding remain separate operations:
 
 - A file that exists but cannot be decoded leaves the video's width, height, frame rate and
   duration at **zero**. It is not an error; playing it is what surfaces the problem.
 - Playing an undecodable file leaves the player **stopped**, and the canonical player then clears
   its video — so `cna_video_player_get_video` answers `CNA_FALSE`. Read the state back rather than
   assuming a play call started playback.
-- The URI factory **does not parse URIs**. Unlike the song factory, it forwards its string straight
-  to the file constructor, so a `file:` URI is not resolved and an `http:` one is simply a path that
-  does not exist.
+- The URI factory decodes absolute file URIs, resolves relative URIs against TitleLocation, and
+  refuses absolute non-file URIs with `CNA_RESULT_INVALID_STATE` without accessing the network.
+  Missing files at probing construction yield `CNA_RESULT_IO`; missing files deferred until Play
+  yield `CNA_RESULT_INVALID_ARGUMENT` (XNA's ArgumentException), not IO.
 
-Asking for a frame before playback is an ordinary `CNA_FALSE`: the canonical implementation
-deliberately answers null there, where the original API faults. Disposal makes every playback route
-report the canonical disposed-object failure as `CNA_RESULT_INVALID_STATE`, while the disposal query
-keeps answering.
+Frame queries before successful Play, after failed Play, and after disposal return
+`CNA_RESULT_INVALID_STATE`. Stop retains the associated Video and last frame without advancing
+decoding, while resetting playback position to zero. The borrowed frame-handle invalidation rule
+above is unchanged. Volume outside0..1 is rejected as `CNA_RESULT_INVALID_ARGUMENT` without mutation;
+NaN remains accepted, matching XNA's ordered comparisons. Disposal guards transport/state queries
+and configuration setters; the disposal, Video and configuration getters retain XNA's behavior.
+
+Compatibility correction (CNA-DEMOS-ISSUE-099/101, owner-approved2026-10-21): earlier C documentation
+promised fresh-frame success, clamped volume, and literal URI forwarding. Those were accidental
+differences, now aligned with the verified XNA/C++ contract. Existing-undecodable-file stopped
+behavior is CNA-specific; native Windows codec/error timing has not been established under Wine.

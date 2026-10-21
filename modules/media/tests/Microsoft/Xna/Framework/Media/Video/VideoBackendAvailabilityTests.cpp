@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include "CNA/Internal/Media/AudioDurationProbe.hpp"
 #include "CNA/Internal/Media/VideoDecoder.hpp"
@@ -9,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -42,7 +45,7 @@ TEST(VideoBackendAvailabilityTest, DisabledBuildRetainsMetadataApiAndRejectsDeco
         System::IO::FileNotFoundException);
     EXPECT_THROW(Video raw(kFixture, &graphicsDevice), System::NotSupportedException);
     EXPECT_THROW(
-        (void)Video::FromUriEXT(kFixture, &graphicsDevice),
+        (void)Video::FromUriEXT(CNA::Internal::PathToGenericUtf8(std::filesystem::absolute(kFixture)), &graphicsDevice),
         System::NotSupportedException);
 
     Video metadata(
@@ -60,10 +63,11 @@ TEST(VideoBackendAvailabilityTest, DisabledBuildRetainsMetadataApiAndRejectsDeco
     VideoPlayer player;
     EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
     EXPECT_EQ(player.getVideoProperty(), nullptr);
-    EXPECT_EQ(player.GetTexture(), nullptr);
+    EXPECT_THROW((void)player.GetTexture(), System::InvalidOperationException);
     EXPECT_THROW(player.Play(&metadata), System::NotSupportedException);
     EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
     EXPECT_EQ(player.getVideoProperty(), nullptr);
+    EXPECT_THROW((void)player.GetTexture(), System::InvalidOperationException);
     EXPECT_NO_THROW(player.Pause());
     EXPECT_NO_THROW(player.Resume());
     EXPECT_NO_THROW(player.Stop());

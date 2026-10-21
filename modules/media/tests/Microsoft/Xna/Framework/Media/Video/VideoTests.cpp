@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/IO/FileNotFoundException.hpp"
@@ -61,7 +63,7 @@ TEST(VideoTest, XnbConstructorUsesSuppliedMetadataVerbatim)
 TEST(VideoTest, FromUriEXTConstructsFromLocalPath)
 {
     GraphicsDevice gd;
-    Video* video = Video::FromUriEXT(kFixture, &gd);
+    Video* video = Video::FromUriEXT(CNA::Internal::PathToGenericUtf8(std::filesystem::absolute(kFixture)), &gd);
     ASSERT_NE(video, nullptr);
     EXPECT_EQ(video->getWidthProperty(), 160);
     delete video;

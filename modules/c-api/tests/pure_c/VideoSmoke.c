@@ -170,12 +170,12 @@ static int validate_video_values(
         return 0;
     }
 
-    /* The URI factory does not parse URIs: it forwards the text to the file constructor, so a
-       plain path works and a scheme-bearing string is simply a path that does not exist. */
+    /* The URI factory resolves relative inputs against TitleLocation. Use the build's absolute
+       fixture path here; the raw undecodable-file constructor remains covered above. */
     {
         CNA_VideoHandle from_uri = CNA_INVALID_HANDLE;
         const CNA_Result from_uri_result =
-            cna_video_create_from_uri_ext(device, view(path), &from_uri);
+            cna_video_create_from_uri_ext(device, view(RealVideoPath), &from_uri);
         if (((*out_video_available != 0) &&
              (from_uri_result != CNA_RESULT_SUCCESS ||
               cna_video_destroy(from_uri) != CNA_RESULT_SUCCESS)) ||
@@ -183,7 +183,7 @@ static int validate_video_values(
              (from_uri_result != CNA_RESULT_NOT_SUPPORTED ||
               from_uri != CNA_INVALID_HANDLE)) ||
             cna_video_create_from_uri_ext(
-                device, view("http://example.com/v.mp4"), &rejected) != CNA_RESULT_IO ||
+                device, view("http://example.com/v.mp4"), &rejected) != CNA_RESULT_INVALID_STATE ||
             rejected != CNA_INVALID_HANDLE) {
             return 0;
         }
@@ -224,10 +224,11 @@ static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
         flag != CNA_FALSE || playing != CNA_INVALID_HANDLE) {
         return 0;
     }
-    /* Asking for a frame before playback is an ordinary "none", not a fault: the canonical
-       implementation deliberately answers null where the original API would crash. */
-    if (cna_video_player_get_texture(player, &frame, &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE || frame != CNA_INVALID_HANDLE) {
+    /* XNA refuses a frame query before successful Play. Handle output is cleared; the scalar
+       output is not published on failure. */
+    flag = UINT8_C(9);
+    if (cna_video_player_get_texture(player, &frame, &flag) != CNA_RESULT_INVALID_STATE ||
+        flag != UINT8_C(9) || frame != CNA_INVALID_HANDLE) {
         return 0;
     }
 
@@ -236,6 +237,10 @@ static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
         cna_video_player_set_is_muted(player, CNA_TRUE) != CNA_RESULT_SUCCESS ||
         cna_video_player_get_is_muted(player, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
         cna_video_player_set_volume(player, 0.5F) != CNA_RESULT_SUCCESS ||
+        cna_video_player_get_volume(player, &volume) != CNA_RESULT_SUCCESS || volume != 0.5F ||
+        cna_video_player_set_volume(player, -0.5F) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_video_player_get_volume(player, &volume) != CNA_RESULT_SUCCESS || volume != 0.5F ||
+        cna_video_player_set_volume(player, 1.5F) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_video_player_get_volume(player, &volume) != CNA_RESULT_SUCCESS || volume != 0.5F ||
         cna_video_player_get_play_position_ticks(player, &ticks) != CNA_RESULT_SUCCESS ||
         ticks < INT64_C(0)) {
@@ -251,6 +256,18 @@ static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
     }
 
     if (video_available) {
+        CNA_VideoHandle missing = CNA_INVALID_HANDLE;
+        if (cna_video_create_with_metadata(device, view("repair_missing_xna_video.mkv"),
+                1000, 160, 90, 25.0F, CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC, &missing) !=
+                CNA_RESULT_SUCCESS ||
+            cna_video_player_play(player, missing) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS ||
+            state != CNA_MEDIA_STATE_STOPPED ||
+            cna_video_player_get_video(player, &playing, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE || playing != CNA_INVALID_HANDLE ||
+            cna_video_destroy(missing) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
         /* Playing a file the platform cannot decode leaves the player stopped rather than failing
            when the decoder exists. A player that really starts reports the video it was given. */
         if (cna_video_create(device, view(path), &video) != CNA_RESULT_SUCCESS ||
@@ -559,11 +576,11 @@ int main(void)
 
         frame.struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
         frame.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
-        if (cna_video_player_get_frame_ext(player, &frame) != CNA_RESULT_SUCCESS) {
+        if (cna_video_player_get_frame_ext(player, &frame) != CNA_RESULT_INVALID_STATE) {
             (void)remove(FixturePath);
             return 10;
         }
-        /* Nothing has played, so there is no frame -- an ordinary answer, not a failure. */
+        /* Nothing has played: the refusal leaves a deterministic cleared descriptor. */
         if (frame.available != CNA_FALSE || frame.texture != CNA_INVALID_HANDLE ||
             frame.generation != UINT64_C(0)) {
             (void)remove(FixturePath);
@@ -574,7 +591,7 @@ int main(void)
            lets a caller treat inequality as "the frame changed". */
         again.struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
         again.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
-        if (cna_video_player_get_frame_ext(player, &again) != CNA_RESULT_SUCCESS ||
+        if (cna_video_player_get_frame_ext(player, &again) != CNA_RESULT_INVALID_STATE ||
             again.generation != frame.generation) {
             (void)remove(FixturePath);
             return 12;
@@ -589,7 +606,7 @@ int main(void)
         }
         again.struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
         again.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
-        if (cna_video_player_get_frame_ext(player, &again) != CNA_RESULT_SUCCESS ||
+        if (cna_video_player_get_frame_ext(player, &again) != CNA_RESULT_INVALID_STATE ||
             again.generation < before_stop) {
             (void)remove(FixturePath);
             return 14;

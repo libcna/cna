@@ -2,6 +2,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Media/VideoSoundtrackType.hpp"
@@ -56,18 +57,17 @@ namespace Microsoft::Xna::Framework::Media
               VideoSoundtrackType soundtrackType);
 
         /**
-         * @brief Gets the width of the video in pixels.
-         *
-         * @return Video width.
-         */
-        /**
-         * @brief Stops a VideoPlayer that is still playing this video.
+         * @brief Detaches players that still reference this video and stops their playback.
          *
          * XNA's garbage collector keeps a Video alive for as long as a player holds it; a C++ owner
          * can destroy it first, and the player must not be left pointing at it.
          */
         CNAEXT ~Video() override;
 
+        /**
+         * @brief Gets the width of the video in pixels.
+         * @return Video width.
+         */
         [[nodiscard]] SharpRuntime::intcs getWidthProperty() const;
 
         /**
@@ -114,8 +114,12 @@ namespace Microsoft::Xna::Framework::Media
          * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
          * not a CNA invention.
          *
+         * Relative URIs resolve below TitleLocation. Explicit file URIs are decoded
+         * through System::Uri; a plain native absolute path keeps its literal spelling.
          * @param uri    File URI or local path.
          * @param device GraphicsDevice used for frame rendering.
+         * @throws System::InvalidOperationException If an absolute URI is not a file URI.
+         * @throws System::IO::FileNotFoundException If the resolved path does not name a file.
          * @throws System::NotSupportedException If CNA was built without a video backend.
          * @return Pointer to the newly created Video.
          */
@@ -171,6 +175,17 @@ namespace Microsoft::Xna::Framework::Media
 
         SharpRuntime::intcs audioTrack_ = -1;
         SharpRuntime::intcs videoTrack_ = -1;
-        VideoPlayer* parent_ = nullptr;
+        // Associations belong to this C++ object's identity, not its copyable metadata.
+        // Copy construction starts detached; assignment preserves the destination's observers.
+        struct PlayerReferences
+        {
+            std::vector<VideoPlayer*> players;
+            VideoPlayer* activeParent = nullptr;
+
+            PlayerReferences() = default;
+            PlayerReferences(const PlayerReferences&) noexcept {}
+            PlayerReferences& operator=(const PlayerReferences&) noexcept { return *this; }
+        };
+        PlayerReferences playerReferences_;
     };
 }

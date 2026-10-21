@@ -73,6 +73,7 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Sets whether the video loops when it reaches the end.
          *
          * @param value New loop state.
+         * @throws System::ObjectDisposedException If this player has been disposed.
          */
         void setIsLoopedProperty(bool value);
 
@@ -87,6 +88,7 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Sets whether audio playback is muted.
          *
          * @param value New muted state.
+         * @throws System::ObjectDisposedException If this player has been disposed.
          */
         void setIsMutedProperty(bool value);
 
@@ -94,6 +96,7 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Gets the current playback position within the video.
          *
          * @return Current position as a TimeSpan.
+         * @throws System::ObjectDisposedException If this player has been disposed.
          */
         [[nodiscard]] System::TimeSpan getPlayPositionProperty() const;
 
@@ -101,13 +104,16 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Gets the current playback state.
          *
          * @return Current MediaState.
+         * @throws System::ObjectDisposedException If this player has been disposed.
          */
         [[nodiscard]] MediaState getStateProperty() const;
 
         /**
          * @brief Gets the video currently associated with this player.
          *
-         * @return Pointer to the active Video, or nullptr.
+         * Stop and Dispose retain the last associated Video. Its C++ owner must keep it
+         * alive; destroying that Video safely clears this association.
+         * @return Pointer to the last associated live Video, or nullptr.
          */
         [[nodiscard]] Video* getVideoProperty() const;
 
@@ -122,6 +128,9 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Sets the playback volume. Range [0, 1].
          *
          * @param value New volume.
+         * @throws System::ObjectDisposedException If disposed, before range validation.
+         * @throws System::ArgumentOutOfRangeException If value is below zero or above one;
+         *         the previous volume is preserved. NaN follows XNA's comparison semantics.
          */
         void setVolumeProperty(float value);
 
@@ -132,7 +141,10 @@ namespace Microsoft::Xna::Framework::Media
          * last decoded presentation timestamp.
          *
          * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
-         * @return Pointer to the frame Texture2D, or nullptr if no video is active.
+         * @throws System::InvalidOperationException If no video has been successfully opened.
+         * @return Pointer to the frame Texture2D, or nullptr if the video has no graphics device
+         *         or its independent C++ owner has destroyed it. Destruction stops and detaches
+         *         the player; a subsequent Play starts a new lifetime association.
          */
         Graphics::Texture2D* GetTexture();
 
@@ -140,9 +152,11 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Starts playback of the given video from the beginning.
          *
          * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         * @throws System::ArgumentNullException If video is null.
          * @throws System::NotSupportedException If CNA was built without a video backend.
          * @throws System::InvalidOperationException If the video's declared width/height/frame
          *         rate does not match what the decoded file actually reports.
+         * @throws System::ArgumentException If the video path does not name an existing file.
          * @param video Video to play.
          */
         void Play(Video* video);
@@ -224,12 +238,18 @@ namespace Microsoft::Xna::Framework::Media
          */
         CNAEXT [[nodiscard]] double GetFramePresentationTimeEXT() const noexcept
         {
-            return lastFramePts_;
+            return framePresentationTime_;
         }
 
     private:
+        friend class Video;
+
         void OpenDecoder(Video* video);
         void CloseDecoder();
+        void StopPlayback();
+        void AssociateVideo(Video* video);
+        void DetachVideo();
+        void OnVideoDestroyed();
         void ApplyVolume();
         [[nodiscard]] double GetElapsedSeconds() const;
 
@@ -261,6 +281,7 @@ namespace Microsoft::Xna::Framework::Media
         bool isDisposed_ = false;
         bool isLooped_   = false;
         bool isMuted_    = false;
+        bool videoWasDestroyed_ = false;
         MediaState state_ = MediaState::Stopped;
         float volume_     = 1.0f;
         Video* video_     = nullptr;
@@ -277,6 +298,8 @@ namespace Microsoft::Xna::Framework::Media
         Clock::time_point startTime_;
         double            pauseOffset_ = 0.0; // elapsed seconds at last pause
         double            lastFramePts_= -1.0;
+        // The decode cursor can rewind while the last uploaded texture remains visible.
+        double            framePresentationTime_ = -1.0;
         /**
          * @brief Counts decoded frames, so a caller can tell a new frame from the same one again.
          *

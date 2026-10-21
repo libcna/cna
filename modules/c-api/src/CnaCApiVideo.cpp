@@ -299,8 +299,7 @@ template<typename TRead>
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    // Read the identity before the texture: GetTexture() is what advances the frame, so
-    // asking afterwards would report the generation of a frame the caller was not handed.
+    // GetTexture may advance decoding; read the identity afterwards so it describes that frame.
     Texture2D* const frame = resource->value->GetTexture();
     outFrame->generation = resource->value->GetFrameGenerationEXT();
     outFrame->presentation_time = resource->value->GetFramePresentationTimeEXT();
@@ -332,8 +331,8 @@ template<typename TRead>
     }
     Texture2D* const frame = resource->value->GetTexture();
     if (frame == nullptr) {
-        // The canonical implementation deliberately answers null before playback rather than
-        // faulting the way the original API does, so this is an ordinary answer.
+        // A successfully opened video without a graphics device can have no texture.
+        // Fresh/failed-play and disposed-player refusals propagate through the exception barrier.
         *outAvailable = CNA_FALSE;
         return CNA_RESULT_SUCCESS;
     }

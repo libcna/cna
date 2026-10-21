@@ -101,15 +101,15 @@ CNA_C_API CNA_Result cna_video_create_with_metadata(
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param uri UTF-8 `file:` URI or plain path.
  * @param out_video Receives an owned video handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when nothing exists at that path,
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when the resolved path does not name a file,
+ *         `CNA_RESULT_INVALID_STATE` for an absolute non-file URI,
  *         `CNA_RESULT_NOT_SUPPORTED` when CNA was built without its optional video decoder,
  *         `CNA_RESULT_ENCODING`, or a documented argument/handle/thread failure.
  *
- * The canonical factory carries an `EXT` suffix because it is an extension beyond XNA 4.0 rather
- * than a CNA invention, and this route keeps it. **It does not parse the string as a URI**: unlike
- * the song factory, it hands the text straight to the file constructor, so a `file:` URI is not
- * resolved and a `http:` one is simply a path that does not exist — `CNA_RESULT_IO`, not a
- * scheme refusal. That is the canonical behavior, reported rather than corrected here.
+ * This extension decodes absolute file URIs to local paths, resolves relative URIs against
+ * TitleLocation, and rejects absolute non-file URIs without a network request. Plain absolute
+ * native paths remain supported with literal percent characters. This factory probes the file;
+ * its missing-file IO result differs from the INVALID_ARGUMENT result of deferred Play.
  */
 CNA_C_API CNA_Result cna_video_create_from_uri_ext(
     CNA_Handle graphics_device,
@@ -370,15 +370,15 @@ CNA_C_API CNA_Result cna_video_player_get_state(
     CNA_MediaState* out_state);
 
 /**
- * @brief Returns the video a player is playing.
+ * @brief Returns the video associated with a player, including after Stop.
  *
  * @param player Owned player handle.
- * @param out_video Receives a borrowed video handle when one is playing; untouched otherwise.
+ * @param out_video Receives the associated video's handle, or CNA_INVALID_HANDLE when absent.
  * @param out_available Receives `CNA_TRUE` when the player has a video.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The handle refers to the same video the caller passed to `cna_video_player_play`; it does not
- * transfer ownership. A video whose file the platform could not open is **not** reported: the
+ * transfer ownership. Stop retains the association. A video whose file the platform could not open is **not** reported: the
  * canonical player clears its video when the decoder fails, so the answer is `CNA_FALSE` and the
  * player is left stopped.
  */
@@ -391,7 +391,7 @@ CNA_C_API CNA_Result cna_video_player_get_video(
  * @brief Returns the current playback volume.
  *
  * @param player Owned player handle.
- * @param out_volume Receives the volume in the range 0 through 1.
+ * @param out_volume Receives the stored volume (0 through 1, or NaN).
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_video_player_get_volume(
@@ -402,29 +402,13 @@ CNA_C_API CNA_Result cna_video_player_get_volume(
  * @brief Sets the playback volume.
  *
  * @param player Owned player handle.
- * @param volume New volume; the canonical setter clamps it to 0 through 1.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @param volume New volume. Values below 0 or above 1 are rejected without changing the value;
+ *        NaN is accepted, matching XNA's ordered range comparisons.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an out-of-range value,
+ *         `CNA_RESULT_INVALID_STATE` for a disposed player, or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_video_player_set_volume(CNA_VideoPlayerHandle player, float volume);
 
-/**
- * @brief Returns the current video frame as a texture.
- *
- * @param player Owned player handle.
- * @param out_texture Receives a borrowed texture handle when a frame exists; untouched otherwise.
- * @param out_available Receives `CNA_TRUE` when a frame texture exists.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the player has been disposed, or a
- *         documented argument/handle/thread/native failure.
- *
- * **The returned handle is valid only until the next call on this player.** The player owns and
- * replaces its frame texture, so any later call — including another `get_texture` — invalidates the
- * handle it handed out, and using it afterwards fails with `CNA_RESULT_INVALID_HANDLE` rather than
- * touching freed memory. Draw with it or copy its pixels before calling anything else. It belongs
- * to the game the player was created for, so that game's SpriteBatch and effects accept it.
- *
- * Asking before playback has produced a frame is an ordinary answer of `CNA_FALSE`, not a failure:
- * the canonical implementation deliberately returns null there where the original API would fault.
- */
 /** @brief Version of @ref CNA_VideoFrameEXT understood by this header. */
 #define CNA_VIDEO_FRAME_EXT_STRUCT_VERSION UINT32_C(1)
 
@@ -476,13 +460,34 @@ typedef struct CNA_VideoFrameEXT {
  * @param out_frame Receives the descriptor. Its `struct_size`/`struct_version` must be set by the
  *        caller before the call.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed descriptor,
- *         `CNA_RESULT_INVALID_STATE` when the player has been disposed, or a documented
+ *         `CNA_RESULT_INVALID_STATE` before successful Play, after failed Play, or when disposed,
+ *         or a documented
  *         handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_video_player_get_frame_ext(
     CNA_VideoPlayerHandle player,
     CNA_VideoFrameEXT* out_frame);
 
+/**
+ * @brief Returns the current video frame as a texture.
+ *
+ * @param player Owned player handle.
+ * @param out_texture Receives a borrowed texture handle when a frame exists. A non-null output
+ *        is initialized to `CNA_INVALID_HANDLE` before dispatch.
+ * @param out_available Receives `CNA_TRUE` when a frame texture exists, `CNA_FALSE` when absent
+ *        on success; untouched on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` before successful Play, after failed
+ *         Play, or when disposed, or a documented argument/handle/thread/native failure.
+ *
+ * **The returned handle is valid only until the next call on this player.** The player owns and
+ * replaces its frame texture, so any later call — including another `get_texture` — invalidates the
+ * handle it handed out, and using it afterwards fails with `CNA_RESULT_INVALID_HANDLE` rather than
+ * touching freed memory. Draw with it or copy its pixels before calling anything else. It belongs
+ * to the game the player was created for, so that game's SpriteBatch and effects accept it.
+ *
+ * Stop retains the last frame without advancing it. A fresh player has no valid decoder and
+ * refuses the query; this is distinct from an opened video that has no frame texture.
+ */
 CNA_C_API CNA_Result cna_video_player_get_texture(
     CNA_VideoPlayerHandle player,
     CNA_Handle* out_texture,
@@ -495,11 +500,13 @@ CNA_C_API CNA_Result cna_video_player_get_texture(
  * @param video Owned video handle; it stays the caller's.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the player has been disposed or the
  *         video's declared metadata disagrees with the file, `CNA_RESULT_NOT_SUPPORTED` when CNA
- *         was built without its optional video decoder, or a documented argument/handle/thread/
+ *         was built without its optional video decoder, `CNA_RESULT_INVALID_ARGUMENT` when the
+ *         deferred file path does not name a file, or a documented argument/handle/thread/
  *         native failure.
  *
- * A file the platform cannot decode leaves the player stopped rather than failing, exactly as the
- * canonical operation does — read `cna_video_player_get_state` back to see whether playback began.
+ * An existing file the platform cannot decode leaves the player stopped with no associated video;
+ * read `cna_video_player_get_state` to see whether playback began. This is CNA's decoder behavior,
+ * not a guarantee of native XNA codec/error-timing equivalence. Missing files are rejected.
  */
 CNA_C_API CNA_Result cna_video_player_play(
     CNA_VideoPlayerHandle player,
@@ -507,6 +514,8 @@ CNA_C_API CNA_Result cna_video_player_play(
 
 /**
  * @brief Stops playback and resets the position.
+ *
+ * Retains the associated Video and last frame. A subsequent frame query does not advance decoding.
  *
  * @param player Owned player handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the player has been disposed, or a

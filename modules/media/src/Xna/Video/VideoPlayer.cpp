@@ -12,13 +12,24 @@
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/IO/File.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
     namespace
     {
+        // XNA VideoPlayer.ThrowIfDisposed guards transport, state and configuration writes.
+        void CheckDisposed(bool isDisposed)
+        {
+            if (isDisposed)
+                throw System::ObjectDisposedException("VideoPlayer");
+        }
+
         // The mixer engine is the SDL3_mixer implementation and is
         // excluded from the archive for every other CNA_AUDIO_PLATFORM value, so this file linked
         // only under SDL3 audio -- and only ever got built at all where FFmpeg is present, which
@@ -72,6 +83,7 @@ namespace Microsoft::Xna::Framework::Media
     VideoPlayer::~VideoPlayer()
     {
         Dispose();
+        DetachVideo();
     }
 
     void VideoPlayer::Dispose()
@@ -85,16 +97,25 @@ namespace Microsoft::Xna::Framework::Media
 
     bool VideoPlayer::getIsDisposedProperty()  const { return isDisposed_; }
     bool VideoPlayer::getIsLoopedProperty()    const { return isLooped_; }
-    void VideoPlayer::setIsLoopedProperty(bool v)    { isLooped_ = v; }
+    void VideoPlayer::setIsLoopedProperty(bool v)    { CheckDisposed(isDisposed_); isLooped_ = v; }
     bool VideoPlayer::getIsMutedProperty()     const { return isMuted_; }
-    void VideoPlayer::setIsMutedProperty(bool v)     { isMuted_ = v; ApplyVolume(); }
-    MediaState VideoPlayer::getStateProperty() const { return state_; }
+    void VideoPlayer::setIsMutedProperty(bool v)     { CheckDisposed(isDisposed_); isMuted_ = v; ApplyVolume(); }
+    MediaState VideoPlayer::getStateProperty() const { CheckDisposed(isDisposed_); return state_; }
     Video*     VideoPlayer::getVideoProperty() const { return video_; }
     float      VideoPlayer::getVolumeProperty() const { return volume_; }
-    void VideoPlayer::setVolumeProperty(float v) { volume_ = std::clamp(v, 0.0f, 1.0f); ApplyVolume(); }
+    void VideoPlayer::setVolumeProperty(float v)
+    {
+        CheckDisposed(isDisposed_);
+        // XNA set_Volume uses ordered comparisons: NaN is not a range refusal.
+        if (v < 0.0f || v > 1.0f)
+            throw System::ArgumentOutOfRangeException("value");
+        volume_ = v;
+        ApplyVolume();
+    }
 
     System::TimeSpan VideoPlayer::getPlayPositionProperty() const
     {
+        CheckDisposed(isDisposed_);
         if (state_ == MediaState::Stopped) return System::TimeSpan::Zero;
         return System::TimeSpan::FromMilliseconds(GetElapsedSeconds() * 1000.0);
     }
@@ -171,17 +192,22 @@ namespace Microsoft::Xna::Framework::Media
     void VideoPlayer::OpenDecoder(Video* video)
     {
         CloseDecoder();
-        // CloseDecoder() unconditionally resets video_ to nullptr (it's also the standalone
-        // Stop()/Dispose() path) -- restore it here so ReconfigureVideoOutputForCurrentTrack()
-        // below (and getVideoProperty(), for the rest of this call) see the real Video being
-        // opened, not a stale null.
-        video_ = video;
+        videoWasDestroyed_ = false;
+        // Detach the old relationship before publishing a replacement. Play must not overwrite
+        // video_ first, or the old Video would still point back at this player.
+        AssociateVideo(video);
 
+        if (!System::IO::File::Exists(video->getFileNameProperty()))
+        {
+            DetachVideo();
+            // XNA's pre-decoder file guard returns E_INVALIDARG, unlike FNA's IO exception.
+            throw System::ArgumentException();
+        }
         decoder_ = std::make_unique<CNA::Internal::Media::VideoDecoder>();
         if (!decoder_->Open(video->getFileNameProperty()))
         {
             decoder_.reset();
-            video_ = nullptr;
+            DetachVideo();
             return;
         }
 
@@ -196,7 +222,7 @@ namespace Microsoft::Xna::Framework::Media
             std::abs(video->getFramesPerSecondProperty() - decoder_->GetFPS()) > 1.0f)
         {
             decoder_.reset();
-            video_ = nullptr;
+            DetachVideo();
             throw System::InvalidOperationException(
                 "Video metadata (width/height/framesPerSecond) does not match the decoded file.");
         }
@@ -208,9 +234,13 @@ namespace Microsoft::Xna::Framework::Media
         // bug found by external code review: a caller that set a track preference via
         // SetAudioTrackEXT()/SetVideoTrackEXT() before Play() had that preference silently
         // ignored for the texture/audio-stream's own format/size).
-        if (audioTrack_ >= 0) decoder_->SetAudioStream(audioTrack_);
-        if (videoTrack_ >= 0) decoder_->SetVideoStream(videoTrack_);
-        video->parent_ = this;
+        // Per-Video settings override this playback's defaults without changing the player's
+        // preferences for a later, unrelated Video. Apply them before allocating either output.
+        const auto audioTrack = video->audioTrack_ >= 0 ? video->audioTrack_ : audioTrack_;
+        const auto videoTrack = video->videoTrack_ >= 0 ? video->videoTrack_ : videoTrack_;
+        if (audioTrack >= 0) decoder_->SetAudioStream(audioTrack);
+        if (videoTrack >= 0) decoder_->SetVideoStream(videoTrack);
+        video->playerReferences_.activeParent = this;
 
         // Set state_ to Playing BEFORE ReconfigureAudioOutputForCurrentTrack() runs -- that
         // function only resumes the stream when state_ == Playing (so a
@@ -227,7 +257,7 @@ namespace Microsoft::Xna::Framework::Media
         // decode, leaving an exception thrown by ReconfigureVideoOutputForCurrentTrack()'s
         // Texture2D construction (or, in principle, a future throwing path inside the audio-side
         // reconfigure) to bypass CloseDecoder() entirely: state_ was already Playing and
-        // decoder_/video_/video->parent_ were already live at that point, same half-open-player
+        // decoder_, video_ and the video's player association were already live, same half-open-player
         // problem MEDIA-149 fixed for the narrower first-frame-decode case (found by external code
         // review, plans/plan_media.md MEDIA-152).
         try
@@ -241,6 +271,7 @@ namespace Microsoft::Xna::Framework::Media
                 frameTexture_->SetDataRGBA(rgbaBuffer_.data(),
                                            static_cast<int>(rgbaBuffer_.size() / 4));
                 lastFramePts_ = pts;
+                framePresentationTime_ = pts;
                 // CABI-9: only where a frame is actually decoded into the texture. Counting
                 // GetTexture() calls instead would make "same frame again" indistinguishable
                 // from "the frame advanced", which is the whole question this answers.
@@ -251,6 +282,7 @@ namespace Microsoft::Xna::Framework::Media
         catch (...)
         {
             CloseDecoder();
+            DetachVideo();
             throw;
         }
     }
@@ -267,7 +299,7 @@ namespace Microsoft::Xna::Framework::Media
         audioBuffer_.clear();
     }
 
-    void VideoPlayer::CloseDecoder()
+    void VideoPlayer::StopPlayback()
     {
         if (audioStream_)
         {
@@ -278,35 +310,45 @@ namespace Microsoft::Xna::Framework::Media
         // audio device open (plans/plan_media.md MEDIA-153) -- clear it so a later, successful Play() on
         // a real device never gets stale audio from a previous, unrelated playback prepended to it.
         audioBuffer_.clear();
-        if (video_) video_->parent_ = nullptr;
-        frameTexture_.reset();
-        decoder_.reset();
-        state_        = MediaState::Stopped;
-        video_        = nullptr;
-        pauseOffset_  = 0.0;
-        lastFramePts_ = -1.0;
+        state_ = MediaState::Stopped;
+        pauseOffset_ = 0.0;
     }
 
-    // -------------------------------------------------------------------------
-
-    namespace
+    void VideoPlayer::CloseDecoder()
     {
-        // FNA's real checkDisposed() throws ObjectDisposedException("VideoPlayer") -- a hardcoded
-        // literal type-name string, not nameof/reflection -- reproduced verbatim here for message
-        // fidelity (plans/plan_media.md MEDIA-43). Deliberately NOT applied to Dispose() itself: FNA's
-        // own Dispose() also calls checkDisposed() (throws on a second call), but ~VideoPlayer()
-        // unconditionally calls Dispose() -- replicating that would make a second explicit
-        // Dispose() followed by normal destruction throw from inside the destructor, which is
-        // undefined behavior in C++ (destructors are implicitly noexcept) rather than a merely
-        // surprising API quirk as it is in C#. Kept safely idempotent instead; documented, not
-        // silently diverged.
-        void CheckDisposed(bool isDisposed)
-        {
-            if (isDisposed)
-            {
-                throw System::ObjectDisposedException("VideoPlayer");
-            }
-        }
+        StopPlayback();
+        if (video_ && video_->playerReferences_.activeParent == this)
+            video_->playerReferences_.activeParent = nullptr;
+        frameTexture_.reset();
+        decoder_.reset();
+        lastFramePts_ = -1.0;
+        framePresentationTime_ = -1.0;
+    }
+
+    void VideoPlayer::AssociateVideo(Video* video)
+    {
+        if (video_ == video) return;
+        // Allocate first, leaving the old association intact if allocation fails.
+        if (video) video->playerReferences_.players.push_back(this);
+        DetachVideo();
+        video_ = video;
+    }
+
+    void VideoPlayer::DetachVideo()
+    {
+        if (!video_) return;
+        auto& references = video_->playerReferences_;
+        std::erase(references.players, this);
+        if (references.activeParent == this) references.activeParent = nullptr;
+        video_ = nullptr;
+    }
+
+    void VideoPlayer::OnVideoDestroyed()
+    {
+        // Unsubscribe before resource destruction; never call public Stop on a disposed player.
+        DetachVideo();
+        CloseDecoder();
+        videoWasDestroyed_ = true;
     }
 
     void VideoPlayer::Play(Video* video)
@@ -317,12 +359,11 @@ namespace Microsoft::Xna::Framework::Media
         // first frame the same generation as playback A's -- the exact collision the contract in
         // CNA/C/video.h forbids.
         CheckDisposed(isDisposed_);
-        if (!video) return;
+        if (!video) throw System::ArgumentNullException("video");
         // CNA's optional-backend profile intentionally keeps VideoPlayer's state/configuration API
         // usable without FFmpeg. Reject before assigning video_ so a failed Play is transactional
         // and leaves the observable stopped/no-video state intact (plans/plan_media.md MEDIA-233).
         CNA::Internal::Media::RequireVideoDecoderAvailable();
-        video_ = video;
         OpenDecoder(video);
         if (!decoder_) return;
 
@@ -337,8 +378,9 @@ namespace Microsoft::Xna::Framework::Media
         // restart it either, or a generation captured before Stop would compare equal to one
         // handed out after the next Play.
         CheckDisposed(isDisposed_);
-        CloseDecoder();
-        state_ = MediaState::Stopped;
+        // XNA Stop (IL RVA 0x2644) retains activeVideo and decoder/frame resources; only
+        // Dispose destroys them. Keep the last decoded frame available without advancing it.
+        StopPlayback();
     }
 
     void VideoPlayer::Pause()
@@ -411,12 +453,14 @@ namespace Microsoft::Xna::Framework::Media
     {
         CheckDisposed(isDisposed_);
 
-        // plans/plan_media.md MEDIA-45: FNA's own GetTexture() dereferences its impl unguarded, so
-        // calling it before any Play() is a raw NullReferenceException in real XNA/FNA -- not a
-        // bug to silently improve there. CNA instead returns nullptr gracefully (frameTexture_ is
-        // simply still unset), a documented, deliberate deviation: C++ has no safe equivalent to
-        // "let it NRE" the way a managed runtime does.
-        if (state_ == MediaState::Stopped || !decoder_ || !frameTexture_)
+        // XNA's GC cannot destroy a referenced Video. Preserve CNA's established C++ owner-
+        // destruction contract separately from the fresh/failed-play XNA guard below.
+        if (videoWasDestroyed_) return nullptr;
+
+        // XNA GetTexture (IL RVA 0x26a8) refuses an invalid decoder or absent activeVideo.
+        if (!video_ || !decoder_)
+            throw System::InvalidOperationException();
+        if (state_ == MediaState::Stopped || !frameTexture_)
             return frameTexture_.get();
 
         if (state_ == MediaState::Paused)
@@ -473,6 +517,7 @@ namespace Microsoft::Xna::Framework::Media
             frameTexture_->SetDataRGBA(rgbaBuffer_.data(),
                                        static_cast<int>(rgbaBuffer_.size() / 4));
             lastFramePts_ = pts;
+            framePresentationTime_ = pts;
             ++frameGeneration_;   // CABI-9, see the note on the other decode site.
         }
 

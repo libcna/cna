@@ -529,6 +529,39 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* the chosen behavior is implemented and covered by a test; the choice (and why) is recorded
   in `CHECKLIST.md`'s deviations table if it diverges from FNA's crash-on-misuse shape.
 
+  **2026-10-21 correction (CNA-DEMOS-ISSUE-099, validated):** the
+  historical claim above incorrectly equated FNA's null-implementation dereference
+  with genuine XNA. The pinned current XNA Video assembly (SHA256
+  `63c7673c936747abd9ebe779e8837c8b8add2c078a31216684fbf8c6bcab2745`) explicitly
+  throws `InvalidOperationException` in GetTexture (IL RVA0x26a8) when the decoder
+  handle is invalid or activeVideo is null.41 managed reference controls and the
+  native pre-repair9=5FAIL/4PASS witness are in the repair evidence. XNA wins this
+  difference; do not describe FNA's behavior as genuine XNA or null as necessary
+  for C++ safety. The repair also preserves Stop/Dispose Video identity, applies
+  the exact disposed guards and refuses out-of-range Volume without mutation.
+  Dispose is idempotent in genuine XNA; configuration getters remain readable after
+  disposal. This supersedes the blanket statements in MEDIA-43/88/89 and the old
+  null-return test rationale in MEDIA-137, whose historical entries remain intact.
+  The owner subsequently approved C API alignment with genuine XNA, including
+  fresh-frame refusal and atomic Volume range refusal. The five affected C demo
+  predicates are explicitly corrected with unchanged assertion count/history.
+  Native53 focused/355 media/full10885PASS+101sameSKIP and sanitizer53 pass.
+  External112 comparisons preserve unrelated outcomes; C frame identity now passes
+  on SOFTWARE/OPENGLES3. Seven C metadata gates, strict C17/C++23 ABI/error/bool
+  checks, real-frame pure-C smoke and final ten demo/eight CTest checks pass.
+  The three knownIssue markers are removed with assertions retained; see
+  CNA_DEMOS_REPAIR_HANDOFF.md for exact evidence and shared-worktree limitations.
+
+  **2026-10-21 URI/file correction (CNA-DEMOS-ISSUE-101, locally validated):** the
+  genuine XNA pre-decoder file guard returns E_INVALIDARG, translated to exact
+  ArgumentException with absent ParamName (32 actual reference checks). This
+  supersedes FNA's FileNotFoundException for deferred missing-file Play; the raw
+  Video constructor and URI factory retain their separate FileNotFoundException.
+  The owner approved INVALID_ARGUMENT for C Play. File URI decoding is provided
+  by Sharp Runtime; relative URI resolution uses the existing TitleLocation bridge.
+  No claim of arbitrary invalid-codec/native Windows error timing is made: Wine's
+  valid WMV reference control failed at unimplemented MFCreateVideoMediaType.
+
 ### Phase 3 — Real local media-library backend (`CNA::Internal::Media::*`, all `NOXNA`)
 
 > Per §4's decisions. This is genuinely new engineering, not a port — there is no FNA logic here to

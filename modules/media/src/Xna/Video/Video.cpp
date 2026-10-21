@@ -4,11 +4,15 @@
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 
 #include <filesystem>
-#include <optional>
 #include <utility>
 
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/TitlePath.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "System/IO/File.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/Uri.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
@@ -21,17 +25,8 @@ namespace Microsoft::Xna::Framework::Media
           soundtrackType_(VideoSoundtrackType::MusicAndDialog),
           duration_(System::TimeSpan::Zero)
     {
-        // FNA's raw-file constructor explicitly checks File.Exists and throws
-        // FileNotFoundException before ever touching the file (Video.cs). CNA's equivalent
-        // previously just probed via VideoDecoder::Open and silently left width_/height_/
-        // duration_ at 0 on failure, with no exception at all -- a real fidelity gap
-        // (plans/plan_media.md MEDIA-44).
-        // fileName_ is UTF-8 path text and is widened before it is stat-ed. Text that cannot name a
-        // path on this platform names no existing file either, so it takes the same exit as a
-        // genuinely missing one rather than surfacing a filesystem_error here.
-        const std::optional<std::filesystem::path> nativeFileName =
-            CNA::Internal::TryPathFromUtf8(fileName_);
-        if (!nativeFileName || !std::filesystem::exists(*nativeFileName))
+        // Existence means a file, not a directory or a truncated invalid filename.
+        if (!System::IO::File::Exists(fileName_))
         {
             throw System::IO::FileNotFoundException(
                 "Could not find file '" + fileName_ + "'.", fileName_);
@@ -56,17 +51,10 @@ namespace Microsoft::Xna::Framework::Media
 
     Video::~Video()
     {
-        if (parent_ == nullptr) return;
-        try
-        {
-            // Stop closes the decoder, which clears parent_ and the player's pointer to this video.
-            parent_->Stop();
-        }
-        catch (...)
-        {
-            // A destructor cannot report; the player is being left stopped either way.
-            parent_ = nullptr;
-        }
+        // Includes stopped and disposed players: retaining XNA's Video identity must not
+        // retain a dangling pointer when its independent C++ owner destroys the asset.
+        while (!playerReferences_.players.empty())
+            playerReferences_.players.back()->OnVideoDestroyed();
     }
 
     Video::Video(std::string fileName, Graphics::GraphicsDevice* device,
@@ -120,18 +108,38 @@ namespace Microsoft::Xna::Framework::Media
     void Video::SetAudioTrackEXT(SharpRuntime::intcs track)
     {
         audioTrack_ = track;
-        if (parent_) parent_->SetAudioTrackEXT(track);
+        if (playerReferences_.activeParent) playerReferences_.activeParent->SetAudioTrackEXT(track);
     }
 
     void Video::SetVideoTrackEXT(SharpRuntime::intcs track)
     {
         videoTrack_ = track;
-        if (parent_) parent_->SetVideoTrackEXT(track);
+        if (playerReferences_.activeParent) playerReferences_.activeParent->SetVideoTrackEXT(track);
     }
 
     Video* Video::FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device)
     {
-        return new Video(uri, device);
+        // Preserve the string overload's plain native absolute-path input; percent signs
+        // in a native filename are literal, unlike escapes in an explicit file URI.
+        const auto nativePath = CNA::Internal::TryPathFromUtf8(uri);
+        if (nativePath && nativePath->is_absolute()) return new Video(uri, device);
+
+        const System::Uri parsed(uri, System::UriKind::RelativeOrAbsolute);
+        if (parsed.getIsAbsoluteUriProperty())
+        {
+            if (!parsed.getIsFileProperty())
+                throw System::InvalidOperationException("Only local file URIs are supported for now.");
+            return new Video(parsed.getLocalPathProperty(), device);
+        }
+
+        // Media is below the runtime module that owns TitleLocation; use its existing bridge.
+        const auto configuredTitle = CNA::Internal::TryGetTitlePath();
+        std::string title = configuredTitle ? *configuredTitle :
+            CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetBasePath();
+        if (!configuredTitle && title.empty())
+            title = CNA::Internal::PathToGenericUtf8(std::filesystem::current_path());
+        return new Video(CNA::Internal::PathToGenericUtf8(
+            CNA::Internal::PathFromUtf8(title) / CNA::Internal::PathFromUtf8(parsed.ToString())), device);
     }
 
     const std::string& Video::GetTypeName() const

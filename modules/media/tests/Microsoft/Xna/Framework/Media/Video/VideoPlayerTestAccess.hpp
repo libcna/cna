@@ -23,6 +23,20 @@ namespace Microsoft::Xna::Framework::Media
     // plans/plan_media.md MEDIA-90/MEDIA-131, found by external code review.
     struct VideoPlayerTestAccess
     {
+        static bool HasFrameTexture(const VideoPlayer& player)
+        {
+            return player.frameTexture_ != nullptr;
+        }
+
+        // Advance the existing playback clock without sleeping or bypassing real decoding.
+        static void SetElapsedSeconds(VideoPlayer& player, double seconds)
+        {
+            player.pauseOffset_ = 0.0;
+            player.startTime_ = VideoPlayer::Clock::now() -
+                std::chrono::duration_cast<VideoPlayer::Clock::duration>(
+                    std::chrono::duration<double>(seconds));
+        }
+
         static int GetDecoderSampleRate(const VideoPlayer& player)
         {
             return player.decoder_ ? player.decoder_->GetSampleRate() : -1;
