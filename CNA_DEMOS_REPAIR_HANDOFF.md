@@ -9,6 +9,64 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**CURRENT LIVE JOB86932:** native-v2 full10934 RUNNING after clean45964ms build
+and media340/340PASS11990ms.92340 after-v2 TERMINAL0: all29 focusedPASS, build61433ms/
+zero diagnostics, unchanged hashes,peak1226051584/events0.4221 sanitizer-v2 TERMINAL0:
+29PASS, libraries12500ms/strict fixtures14043ms/run399ms/XML23ms, actual Video/runtime
+ASan/UBSan/float-cast/leaks, no findings/suppressions, unchanged hashes,
+peak629182464/events0. One worker/private GPU/network/6GiB/no swap. Sources frozen.
+Next prepared demos repair-video-external.mjs: original29 against actual external
+library and112 renderer scenarios. C API regressions deliberately FAIL its gate;
+do not turn them into known issues. C contract owner choice still unanswered.
+CNA product base ab97df323 / demos c847549 (permanent evidence) plus pending099/100,
+preserved011. No new source commit,
+marker removal, issue closure, push or merge. Full10934/external acceptance pending.
+
+**Latest, superseding running states below:**15439 TERMINAL0 full10929=
+10828PASS/101sameSKIP1416421ms, compare123ms; exact old10905 outcomes plus24PASS,
+one reference-justified Volume rename. Hashes unchanged;peak4295897088/high61/
+max0/OOM0.63091 then reproduced the missed C++ destruction assertion1FAIL and
+ISSUE-100 tracks3FAIL/1PASS, strict3302/342/20ms,peak459255808/events0.
+Local follow-up preserves null frame after independent Video destruction (separate
+from fresh/failed-play guards), applies per-Video track overrides before output
+setup without replacing player defaults, corrects misplaced width Doxygen, and
+registers real-decoder fixtures only in enabled profiles. Pure guards stay enabled;
+OFF-profile test now requires the same fresh refusal (OFF runtime not tested).
+92340 after-v2 focused29 RUNNING, sole heavy job/one worker/private GPU/6GiB/no swap;
+sources frozen. Exact next: focused29, updated sanitizer29/full10934 parity, then
+external112 and C routes. Owner decision about099 C contracts still pending;
+no C API edits, no new closure/source commit/push/merge. Preserve011 changes.
+
+**Latest099 candidate:** CNA ab97df323 / demos7b94712 plus uncommitted four
+Video/VideoPlayer production files, two existing test files and three new native
+fixtures.25907 focused TERMINAL0: build80477ms/zero diagnostics, original9guards,
+original6lifetime and9new association cases all PASS. Hashes unchanged,
+peak1191071744/all memory events0.41878 sanitizer TERMINAL0:24PASS, library17306ms/
+strict fixture12219ms/run472ms/XML30ms, peak1118015488/events0 and unchanged hashes;
+actual Video/VideoPlayer/runtime instrumented, no suppressions/findings.15439 native
+RUNNING: build79272ms/zero diagnostics, media335/335PASS14598ms, full10929 ongoing.
+One worker/private GPU/network/6GiB/no swap. Sources frozen. New demos fixture
+VideoDestroyedFrameTests.cpp is UNRUN: protects the existing pause_and_loop
+after-Video-destruction GetTexture==null contract, missed by the original24. Run it
+after15439; do not mistake the current focused/media passes for full acceptance.
+Pending owner choice: C API promises SUCCESS/no frame before Play, but genuine XNA
+and corrected C++ throw InvalidOperationException. Asked whether C should map to
+INVALID_STATE with explicit docs/tests correction or keep an intentional C-only
+extension. No answer or C API edits yet. Next sanitizer, native media/full parity,
+contract resolution, external and registered gates. No099 closure/commit/marker
+removal. Preserve inherited unaccepted011 owner changes. No new push/merge.
+Earlier entries are chronological history, not current running state.
+
+15439 continuation: XnaDifferentialBuild parity PASS696715ms; full still RUNNING.
+Immediately afterward run demos build-probe/repair-video-followup-before.mjs:
+one existing C++ destruction-contract case plus four ISSUE-100 track preference
+cases, currently UNRUN. See VIDEO_EXTENSIONS_TRIAGE.md (current official FNA docs
+and local b35512475ed7980169574d2c40927381c1764d5a). C owner question expanded to
+include documented Volume clamping and Stop-clears-video/frame demo expectations;
+no answer yet. New real-decoder fixtures need the existing UnitTests.cmake OFF-
+profile exclusion, while pure guards stay enabled; OFF-profile fresh GetTexture
+assertion needs the same reference correction. No100/101 production edit/closure.
+
 **Product checkpoint:** CNA7af2cd42b;073 repair514a6a8c2 and038 repair85a23569c,
 CNJ warning cleanup a52d6f0ce, no-hardware harness7af2cd42b. Matrix155 permanentIDs:
 97 final (89RESOLVED/7ALREADY_FIXED/1DEMO_EXPECTATION_BUG),58pending. Demos base

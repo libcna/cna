@@ -1899,12 +1899,14 @@
         "media.video_player.pause_and_loop"
       ],
       "subsystem": "audio/media",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Missing guards/range refusal; Stop and Dispose discard Video identity; Play overwrites the old Video before detaching its back-reference. Private observer lifetime must protect retained identity and multiple players.",
       "related_issues": [],
       "cna_fix_commit": null,
+      "current_validation": "CNA product base ab97df323 plus uncommitted099/100 and preserved011. Pre-follow-up15439 full10929=10828PASS/101sameSKIP with exact old10905 outcomes and one XNA Volume rename.63091 reproduces missed C++ Video-destruction no-frame assertion1FAIL; original assertion retained and local candidate corrected.92340 focused29PASS;4221 integrated sanitizer29PASS/no findings, hashes unchanged,peak629182464/events0.86932 current native-v2 media340PASS/full10934 RUNNING; external112 and C API owner choice pending. No knownIssue removal or final closure. Demos evidence c847549.",
       "validation": [
+        "95880 original guards9=5FAIL/4PASS;69241 lifetime-v2 original6=4FAIL/2PASS. Candidate25907 strict build80477ms/zero diagnostics, original15 and9new copy/multiple-player/resource tests PASS, unchanged hashes,peak1191071744/events0. Sanitizer/full/external validation pending. C API fresh GetTexture SUCCESS/no-frame contract conflicts with genuine XNA/C++; owner decision pending, no C API edits or closure.",
         "56438 genuine current Video/Graphics/Framework pinned reference:41/41 managed guard/retention controls PASS, compile2246ms/run445ms, hashes unchanged/peak295788544/events0. Current Video SHA63c7673c936747abd9ebe779e8837c8b8add2c078a31216684fbf8c6bcab2745 differs from historical reference; initialized-field invalid-decoder seam only, not native decode/playback/destruction. No production099 repair or closure."
       ],
       "final_disposition": null
@@ -1919,11 +1921,14 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Video stores detached track preferences, but OpenDecoder only reads the player's separate fields. Apply nonnegative Video overrides before output setup without changing fallback preferences for unrelated later Videos.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "current_validation": "92340 candidate passes all four unchanged track cases within29 focused cases;4221 sanitizer29PASS/no findings;86932 media340PASS/full10934 RUNNING. External public-pixel oracle still required. No source commit, marker removal or closure; see demos c847549 VIDEO_EXTENSIONS_TRIAGE.md.",
+      "validation": [
+        "63091 strict native track preference fixture4=3FAIL/1PASS after099 native checkpoint10929. Uses existing mono48000/44100 bank and the decoder's read-only selected-rate seam, not physical output. Combined with099 destruction witness: build3302ms/run342ms/XML20ms,peak459255808/events0,unchanged hashes. Current official FNA extension docs and local b35512475ed7980169574d2c40927381c1764d5a confirm Video-level preselection/priority. Candidate29 focused cases running92340; full/external public-pixel validation pending, no closure."
+      ],
       "final_disposition": null
     },
     {
