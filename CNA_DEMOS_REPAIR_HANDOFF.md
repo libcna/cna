@@ -9,6 +9,27 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**2026-10-22 ISSUE-003 product and metadata validation complete.**
+CNA repair `3b6a2eaf3bc51a7cf44cf645b5cfa66494e0a6bb` contains only003
+code/tests; inherited011 ownership and082 lifecycle changes remain uncommitted.
+Metadata gate92221 completed0: incremental consumer build3894ms/no diagnostics,
+registry719/0 problems, both original texture demos PASS on SOFTWARE/OPENGLES3/
+OPENGL33/SDL_GPU (eight passes, checks1/9), five enabled focused/catalog CTests
+PASS/no skips in17.01s. Catalog comparison proves only the obsolete003 restriction
+was removed; all other metadata and frozen inputs unchanged. Peak1267585024 bytes,
+all memory events0. The initial preflight used the older focus manifest and stopped
+before building on the already-validated D3D9/multi-library changes; the successful
+run uses the later accepted84921 manifest. No failure was suppressed.
+Matrix:156 historical IDs,106 with dispositions (including003/101 requiring final
+platform validation),50 without final disposition.003 still requires native
+Windows/D3D9 execution; compile-only coverage is not a runtime pass. The last full
+native/full-smoke checkpoints below remain historical, with separate011/082
+failures unaccepted; focused passes do not replace that final campaign gate.
+Exact next task: run the six prepared BlendSourceRangeTests and original066 C draw
+scenario on the current linked libraries; investigate target-range and blend-toggle
+contracts before the027/066 repair. No heavy validation remains live. No push/merge.
+
+
 **2026-10-22 accepted compiled-on checkpoint84921.** Configuration12627ms0;
 libraries95586ms0 (exact16 unchanged/reviewed Draco warnings, no suppression),
 strict fixtures9453ms0. SDL_GPU22PASS2962ms, FNA3D22PASS3329ms, WebGPU22PASS2186ms;
