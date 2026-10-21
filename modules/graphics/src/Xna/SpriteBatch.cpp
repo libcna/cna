@@ -555,6 +555,24 @@ namespace Microsoft::Xna::Framework::Graphics
             GpuDrawParams params;
             params.texture0 = s.texture.get();
             graphicsDevice_->validateDrawState(&params);
+            if (sortMode_ == SpriteSortMode::Immediate)
+            {
+                // Immediate draws observe the live device slot, not the state captured by Begin.
+                // Keep the renderer's private sprite channel in sync without rebinding the device.
+                const SamplerState& sampler = graphicsDevice_->getSamplerStatesProperty()[0];
+                renderer_->SetSamplerState(
+                    CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
+                        static_cast<int>(sampler.getFilterProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(sampler.getAddressUProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(sampler.getAddressVProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(sampler.getAddressWProperty())),
+                    sampler.getMaxAnisotropyProperty(),
+                    sampler.getMaxMipLevelProperty(),
+                    sampler.getMipMapLevelOfDetailBiasProperty());
+            }
         }
         renderer_->Draw(*s.texture,
                        s.destX, s.destY, s.destWidth, s.destHeight,
