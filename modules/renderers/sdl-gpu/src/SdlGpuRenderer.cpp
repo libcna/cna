@@ -5927,10 +5927,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             const float transformedW =
                 rotatedX * transform.M14 + rotatedY * transform.M24
                 + layerDepth * transform.M34 + transform.M44;
-            // FNA applies transform * CreateOrthographicOffCenter(..., -1, 1). Preserve that
-            // projection's Z/W result even though this renderer CPU-expands the 2D X/Y transform.
+            // XNA SpriteBatch.SetRenderState uses M33=1 with no Z translation. Preserve
+            // that Z/W result even though this renderer CPU-expands the 2D X/Y transform.
             projectedDepths[corner] = transformedW != 0.0f
-                ? (0.5f * transformedW - 0.5f * transformedZ) / transformedW
+                ? transformedZ / transformedW
                 : 0.0f;
             point.X = rotatedX * transform.M11 + rotatedY * transform.M21 + transform.M41;
             point.Y = rotatedX * transform.M12 + rotatedY * transform.M22 + transform.M42;

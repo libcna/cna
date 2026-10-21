@@ -331,8 +331,10 @@ class SdlGpuDepthBiasTest final : public Game
         const RasterizerState& spriteRasterizer,
         Microsoft::Xna::Framework::Graphics::Effect* customEffect = nullptr,
         float referenceDepth = 0.5f,
-        float layerDepth = 0.0f)
+        float layerDepth = 0.5f)
     {
+        // Keep the default sprite coplanar with the reference geometry: XNA's stock
+        // sprite projection preserves layerDepth rather than mapping zero to0.5.
         BeginTarget(device, target, DepthStencilState::Default);
         device.setRasterizerStateProperty(BiasState(0.0f, 0.0f));
         DrawTriangle(
