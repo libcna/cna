@@ -9,6 +9,20 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**070 closed:** product `1c8bbb6b83bab2fc3b15bf2370b426226fd87204`, demos based on
+676f36d plus closure evidence. Marker gate44634 completed0: build6,929ms/zero
+diagnostics; original C070 both renderers PASS; four focused/catalog CTests
+PASS13,767ms; exact catalog delta only070, frozen hashes unchanged. Peak
+3,006,173,184/events0. Matrix155historical/99final/56pending. No full external
+CTest/smoke claim. Next owner-approved099/100/101: preserve genuine32 reference,
+correct missing-file Play to exact ArgumentException/INVALID_ARGUMENT; align C
+docs/smoke/demo with XNA fresh-frame refusal/Volume refusal/retained Stop Video
+and frame, preserving all unrelated assertions and explicit change mapping.
+Do not infer arbitrary invalid-codec exceptions from platform-limited Wine.
+Capture current final070 inputs before changes, run focused before/after then
+native/media/full, sanitizer and external gates.055 preparation is deferred.
+Inherited011 and video candidates remain uncommitted/unaccepted; no push/merge.
+
 **070 repair accepted for scoped product commit:** eight assignments in two PBR
 copy constructors and eight native regression tests; no header/C/backend change.
 Native10875PASS/101sameSKIP, graphics2898PASS/73SKIP, sanitizer35PASS/no findings,

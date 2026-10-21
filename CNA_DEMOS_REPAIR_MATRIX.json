@@ -1351,12 +1351,15 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Both PBR copy constructors omit VertexColorEnabledEXT, alphaMode_, alphaCutoff_ and doubleSided_, so Clone resets four authored material values while copying other fields.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "1c8bbb6b83bab2fc3b15bf2370b426226fd87204",
+      "current_validation": "Resolved2026-10-21: full native10875PASS/101sameSKIP (all old10968 outcomes exact plus8PASS), graphics2898PASS/73SKIP; sanitizer35PASS/no findings. Original8 witnesses PASS each SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU/HEADLESS/STUB.112 audio/video exact preceding outcomes; existing C video failures remain unaccepted. Stock66 improves only two070 scenarios to PASS (54PASS/12sameSKIP), all original assertions retained. Four shadow images800x480 pixel-identical. Marker-only final build zero diagnostics, original C070 bothPASS and four focused/catalog CTests PASS; exact catalog diff only070, all other source/library/binary hashes retained. See demos PBR_CLONE_MATERIAL_STATE_TRIAGE.md.",
+      "validation": [
+        "2026-10-21 original C demo reverified on SOFTWARE/OPENGLES3 with exactly four old property failures and passing independent output-encoding/metallic/Apply controls. C++ baseline67425:6FAIL/2PASS across both effect families;2836/363/23ms,peak447148032/events0,frozen hashes unchanged. Eight assignments added in two copy constructors; original8 witness bodies registered, only stale preparation comment corrected with exact reconstructed-hash check. Historical pre-acceptance record; final results are in current_validation."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-071",
@@ -1946,6 +1949,7 @@
       "current_validation": "Native59093 full10847PASS/101sameSKIP;97309 sanitizer43PASS/no findings.68581 external-v2 completed1, unaccepted: build2576494ms/zero diagnostics, actual43PASS, original101 URI9PASS on SOFTWARE and OPENGLES3. Each renderer50PASS/5FAIL/1manual; same C VideoPlayer five assertions fail and pure-C smoke exits2. Frozen hashes unchanged,peak4302946304/high3924/max0/OOM0. Both C choices unanswered, actual decoder-open failure witness prepared/unrun. No CNA production commit/marker removal/closure; dependency c26614e85 committed only locally. See VIDEO_URI_REPAIR_CHECKPOINT.md latest outcome.",
       "related_issues": [],
       "cna_fix_commit": null,
+      "current_validation": "URI dependency c26614e85 validated; combined video gate remains unaccepted. Genuine XNA32 guard/translator checks confirm deferred missing-file ArgumentException, not the current FNA-based FileNotFound assertion; correction not yet applied. Native codec observer under Wine captured immediate missing E_INVALIDARG and text/empty/truncated success returns, but valid WMV hit unimplemented MFCreateVideoMediaType/WineDbg. Owned scope stopped, observer130, no completed positive control or Windows/public-Play/asynchronous parity claim. Do not impose an unverified generic invalid-file exception. Corrected C101 contract question is pending, as is C099. See VIDEO_CODEC_REFERENCE_LIMITATION.md and VIDEO_URI_REPAIR_CHECKPOINT.md. No closure or marker conversion.",
       "validation": [
         "94692 strict native baseline9=5FAIL/4PASS: absolute file URI, escaped filename, title-relative path, non-file URI exact refusal, deferred missing-file refusal fail; absolute path/raw missing-file/trusted metadata/atomic mismatch controls pass. Build2332ms/run351ms/audit23ms, unchanged hashes,peak475160576/events0. External37654 unchanged original101 demo retains exactly four failures on both renderers. FNA b35512475 plus Microsoft LocalPath documentation supports the URI contract. At this historical baseline no101 production edit/closure; C Play undecodable-file success contract requires separate review. See demos VideoUriContractTests.cpp and VIDEO_REPAIR_VALIDATION_CHECKPOINT.md.",
         "2026-10-21 candidate: genuine Framework4/Wine and .NET8/Linux URI34-input oracle measured version differences. Runtime full18158 baseline→18193PASS across41 executables,0fail/skip/diagnostics; URI311→345 plus1IO; peak830410752/events0/frozen hashes unchanged. Dependency committed locally c26614e85dffff4cadc5c4803b00d78953706b21, no push. New file-boundary5 allFAIL against old native library.18544 failed test-only TitleLocation linkage; moved unchanged9 checks to cross-module fixture.14068 guard caught an already-rebuilt artifact; old logs retained.59093 native-v3 TERMINAL0:build18503ms/zero diagnostics,43focusPASS1037ms,345mediaPASS12715ms; full10948=10847PASS/101sameSKIP1341053ms, exact old10934 parity and14newPASS/compare136ms. Frozen hashes unchanged,peak2626609152/events0.97309 sanitizer TERMINAL0:43PASS, actual Video/runtime/TitleLocation instrumented,57823/22209/501/27ms, no findings/suppressions,peak920498176/events0,unchanged hashes.43227 external stopped before build on superseded ASan hashes;68581 external-v2 RUNNING using the accepted sanitizer snapshot without relaxing native source/artifact checks. C099/101 choices unanswered. One worker/private GPU/network(native)/6GiB/no swap. No closure/marker removal/C contract edit. See VIDEO_URI_REPAIR_CHECKPOINT.md."
