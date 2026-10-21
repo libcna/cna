@@ -9,6 +9,37 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**Latest checkpoint2026-10-22: native68394 ACCEPTED; sanitizer83125 LIVE.**
+CNA status4f3ed89e5/demos35d2a3d; product003 remains uncommitted/open.
+Native-unbound: build11472ms/no diagnostics, focused22=13PASS/9 compiledSKIP
+2667ms, corrected DXT refillPASS342ms, graphics3012=2930PASS/82SKIP43532ms.
+Full11027 completed1174074ms:10917PASS/110SKIP, no failures. Exact compare112ms
+retains every original11005 identity/outcome, adds only13PASS/9 compiledSKIP;
+no missing/changed old outcome. Inputs unchanged, peak3681579008 bytes, all
+memory events0. Original47617 DXT failure preserved; fixture precondition repair
+and its two added guard assertions are still own uncommitted003 work.
+
+Old native scope inactive/dead, no native child remains. A transient host
+ninja/cc1plus was observed before sanitizer launch and confirmed absent on the
+next process check; nothing was killed and no second heavy job launched.
+Sole heavy83125 scope cna-repair-sprite-binding-sanitizer, demos driver
+build-probe/repair-sprite-binding-sanitizer.mjs, existing build-asan.
+Native accepted audit is its hard prerequisite. Private GPU, one compiler,
+shared cache, MemoryHigh4GiB/Max6GiB/no swap. Configuration6395ms exit0 enables
+SOFTWARE compiled effects after exact shared-dependency safety checks; instrumented
+library closure build now running. It requires original22 PASS/noSKIP under
+ASan/UBSan/float-cast/leaks. No sanitizer result yet. Production/dependency
+inputs frozen again; do not start another heavy job or edit frozen sources.
+
+Next collect83125 and inspect diagnostics, all22 outcomes, memory and source
+stability. Then external C API/demo ABI-consumer rebuild, focused/full external
+regression deltas and visual comparisons, and available unbuilt renderer checks.
+The separate082 C callback regressions remain unaccepted and owner choices
+remain pending. Prepared027/066 source triage/six uncompiled witnesses are in
+demos3e74913, outside the current frozen set; finish003 before that repair batch.
+All156 IDs retained,105final/51pending. No product commit/closure/push/merge.
+
+
 Continuation preparation while68394 remains live: read-only027/066 blend audit
 is recorded in demos graphics/BLEND_STATE_RANGE_TRIAGE.md. Six new
 BlendSourceRangeTests.cpp witnesses are UNCOMPILED/UNRUN, outside the frozen
