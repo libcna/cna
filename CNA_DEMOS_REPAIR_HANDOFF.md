@@ -9,6 +9,17 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**Safe continuation checkpoint:** CNA product7097e1684/status2f6eac0f1;
+demos closure23bbbaf,003 baseline d8ed678,082 evidence c07e948. All156 IDs retained,
+105final/51pending. No heavy job is live:98308 terminal0,70430 terminal2 with
+eight openly unresolved082 deltas,61003 terminal0 capturing20FAIL/4PASS under003.
+This handoff-only checkpoint does not include product/oracle changes.
+Next concrete task: inspect/extend003 lifetime and custom-effect ordering
+regressions, then implement the smallest safe public TextureCollection binding
+repair. Original six-case witness must remain unchanged. The existing queue's
+retained renderer lifetime must survive wrapper destruction/moves. Preserve
+inherited011 changes and pending082/131 authority choices. No push or merge.
+
 **156 CLOSED;003 reproduced.** Product CNA7097e1684 fixes only SDL_GPU depth,
 with its five native tests/bias fixture/reference row. Native98308 accepted
 10904PASS/101sameSKIP (all11000 old outcomes +5PASS); external70430 completed132
@@ -23,7 +34,7 @@ frozenunchanged, peak415399936/all memory events0. No003 product fix yet.
 No heavy job remains. Next: design/test lifetime-safe public texture binding,
 including custom-effect ordering and destroyed/moved wrappers, before editing
 SpriteBatch/Texture2D. Preserve inherited011 and owner-pending082/131 choices.
-No push/merge; current documentation closure commits are being recorded.
+No push/merge; documentation closure commits are recorded above.
 
 **Native156 ACCEPTED; external70430 LIVE.**98308 terminated0: full11005 in
 1323219ms,10904PASS/101unchangedSKIP. Exact comparison134ms retains all11000
