@@ -9,6 +9,64 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**ISSUE-003 retry focus ACCEPTED45982; native84495 LIVE.** Shared runtime
+build148080ms, strict original22 compilation10008ms. SW1452/GLES832/GL33814ms
+each22PASS, SDL2267ms13PASS/9 compiledSKIP. All original assertions/pixel equality
+unchanged; source inputs stable; peak1653633024/all memory events0. This is
+focused acceptance only, not003 closure or product commit.
+Sole heavy84495 scope `cna-repair-sprite-binding-native`, demos driver
+`build-probe/repair-sprite-binding-native.mjs`: existing debug build, one worker/
+shared cache/private GPU+network, owner UID/all caps0,6GiB/no swap. Native22/
+graphics3012/full11027 will compare every prior11005 outcome. Default native
+compiled support remains OFF, expecting new13PASS/9 explicit compiledSKIP;
+enabled compiled routes were separately runtime-tested above. Sources frozen.
+Next collect84495; lifetime sanitizer, external C API/demo ABI rebuild and full
+external/visual deltas, FNA3D/WebGPU/available cross-build checks remain. Preserve
+011/082 and owner-pending082/131. No product commit/closure/marker change/push.
+
+**Retry correction validating45982; demos evidence2fdf525.** Candidate adds
+internal FlushPendingSpritesEXT/DiscardPendingSpritesEXT to distinguish failed
+pass submission from renderer End; common deferred queue/Begin survives failure,
+failed Immediate staging is discarded without replay. Six renderer families
+delegate to existing flushes and clear only unsubmitted geometry. All original22
+assertions unchanged; original pixel test registered natively byte-identically.
+Sole heavy45982 scope `cna-repair-sprite-binding-retry-candidate`, demos driver
+`build-probe/repair-sprite-binding-retry-candidate.mjs`: existing external target
+`cna_shared`, one worker/shared cache/private GPU/6GiB/no swap, then22/four renderers.
+No result yet. C API/demo ABI consumers are NOT rebuilt by this focused gate;
+rebuild before external regression. Sources frozen; do not edit until terminal.
+No003 product commit/closure/marker change. Next collect45982; native regression,
+full external/visual/lifetime sanitizer and unbuilt renderer paths remain. Preserve
+011/082 dirty changes and owner-pending decisions. No push/merge.
+
+**Compiled baseline captured; all heavy jobs terminal.**48754 build721899ms
+exit0, diagnostic gate exit1 on16 pre-existing Draco warnings; each matches
+original campaign baseline. No suppression/vendor edit; no clean-submodule claim
+because Draco nested Git metadata is absent (9598 preflight failure retained).
+Corrected82479 strict6437ms: SW/GLES/GL33 each19PASS/2FAIL, SDL13PASS/8 compiledSKIP.
+Frozen unchanged/peak472776704/events0. End cleanup repeats Apply, and failed
+Immediate Draw is replayed at End. Pixel44928 strict2073ms: SW/GLES/GL33FAIL,
+nontransparent controlsPASS, SDL capabilitySKIP; peak446980096/events0/unchanged.
+All original22 assertions retained. No003 product commit/closure/marker change.
+Next implement pending-submit/discard seams, preserve deferred front-end queue/
+Begin on failure, prevent Immediate replay. Register original pixel witness
+byte-identically. Preserve old native renderer-End recovery and texture lifetime
+controls. Then22 focused/four renderer, native/full external/visual/sanitizer.
+Detailed reports in demos SPRITE_TEXTURE_BINDING_TRIAGE.md. Preserve011/082 work.
+
+Continuation:48754 remains verified live (tool plus host scope active/running;
+current4263153664/peak4301078528 bytes,6GiB hard cap; OOM/kill/max0).
+Existing external build passed1524/1878. No production/dependency inputs changed
+and no second heavy job. Demos now has an additional **UNCOMPILED/UNRUN**
+`SpriteCompiledRetryPixelTests.cpp`, outside48754's frozen21 and not yet native
+registered. Its syntax-checked driver
+`build-probe/repair-sprite-binding-retry-pixels.mjs` must run only after48754 is
+terminal and its complete unchanged-source audit has been inspected. It compares
+exact successful/retried pixels to detect duplicate queued geometry after a
+recoverable Apply exception. No new runtime pass, issue closure or marker change.
+Next remains: collect48754, baseline the pixel witness, diagnose/fix actual
+compiled failures, then native/full external/visual/sanitizer acceptance.
+
 **ISSUE-003 first focused gate ACCEPTED; compiled gate LIVE48754.**78015
 terminated0: external build1678789ms, strict original16 witness build4948ms;
 each SW/GLES/GL33/SDL_GPU gives13PASS/3 compiledSKIP (runs106/678/598/1662ms).
