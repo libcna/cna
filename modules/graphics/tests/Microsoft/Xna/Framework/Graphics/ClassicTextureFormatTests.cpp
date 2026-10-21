@@ -38,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -50,6 +51,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using namespace CNA::Testing::Renderers;
@@ -627,6 +629,10 @@ TEST(ClassicTextureFormat, DxtAlphaBlocksSampleTheirOwnEncoding)
     // the second endpoint (40): the next draw sees the new block.
     const std::uint8_t green[16] = {200, 40, 0x49, 0x92, 0x24, 0x49, 0x92, 0x24,
                                     0xE0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    // SpriteBatch leaves the sampled texture bound; SetData requires explicit unbinding.
+    ASSERT_EQ(device.getTexturesProperty()[0], &texture);
+    EXPECT_THROW(texture.SetData(green, 16), System::InvalidOperationException);
+    device.getTexturesProperty()(0, nullptr);
     texture.SetData(green, 16);
     const Color refilled = DrawWithSpriteBatch(device, texture);
     EXPECT_NEAR(refilled.getRProperty(), 0, 2);

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Graphics/SpriteTextureBinding.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -43,6 +44,7 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         struct SpriteInfo {
             std::shared_ptr<ITextureRenderer> texture;
+            CNA::Internal::Graphics::SpriteTextureBinding binding;
             // Destination kept as XNA/FNA keep it: unrounded, so a sprite drawn at a fractional
             // position stays between pixels all the way to the renderer.
             float destX              = 0.0f;

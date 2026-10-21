@@ -4344,6 +4344,16 @@ namespace CNA::Internal::Renderers::EasyGL
                                      SampledRowOrderIsBottomUp(current_texture_);
     }
 
+    void EasyGLSpriteBatchRenderer::SetTextureBindingEXT(
+        const CNA::Internal::Graphics::SpriteTextureBinding& binding)
+    {
+        if (textureBinding_ != binding)
+            FlushBatch();
+        textureBinding_ = binding;
+        if (customEffect_ == nullptr)
+            textureBinding_.Apply();
+    }
+
     void EasyGLSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         if (customEffect_ != effect)
@@ -4398,6 +4408,18 @@ namespace CNA::Internal::Renderers::EasyGL
         begun = false;
     }
 
+    void EasyGLSpriteBatchRenderer::FlushPendingSpritesEXT()
+    {
+        FlushBatch();
+    }
+
+    void EasyGLSpriteBatchRenderer::DiscardPendingSpritesEXT() noexcept
+    {
+        pending_vertices_.clear();
+        pending_indices_.clear();
+        current_texture_ = nullptr;
+    }
+
     void EasyGLSpriteBatchRenderer::SetGlViewport(int x, int y, int width, int height)
     {
         if (graphicsRenderer_)
@@ -4443,6 +4465,7 @@ namespace CNA::Internal::Renderers::EasyGL
             if (renderer && renderer->IsValid())
                 prog = &renderer->GetProgram();
             customEffect_->Apply();
+            textureBinding_.Apply();
         }
 
         prog->use();
@@ -4759,6 +4782,7 @@ namespace CNA::Internal::Renderers::EasyGL
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass]->Apply();
+            textureBinding_.Apply();
             graphicsRenderer_->ApplyStencilPrimitiveTopology(PrimitiveType::TriangleList);
             vao.bind();
             graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,

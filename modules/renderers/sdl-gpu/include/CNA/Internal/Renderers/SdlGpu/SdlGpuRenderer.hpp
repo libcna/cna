@@ -1535,6 +1535,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         void End() override;
         void SetTransformMatrix(const Matrix& matrix) override { transform_ = matrix; }
         void SetCustomEffect(Effect* effect) override;
+        /**
+         * @brief Flushes an earlier public identity before capturing the next sprite binding.
+         * @param binding Lifetime-safe public texture identity for the next draw.
+         */
+        void SetTextureBindingEXT(const CNA::Internal::Graphics::SpriteTextureBinding& binding) override;
+        /** @brief Submits the pending sprite run without closing the active batch. */
+        void FlushPendingSpritesEXT() override;
+        /** @brief Drops unsubmitted geometry after a failure without replaying effect callbacks. */
+        void DiscardPendingSpritesEXT() noexcept override;
         void SetViewportSizeEXT(int width, int height) override
         {
             projectionWidth_ = width;

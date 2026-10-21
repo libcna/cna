@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/RendererThreadContextLease.hpp"
+#include "CNA/Internal/Graphics/SpriteTextureBinding.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
@@ -962,10 +963,40 @@ namespace CNA::Internal::Renderers
 
     class ISpriteBatchRenderer
     {
+    protected:
+        CNA::Internal::Graphics::SpriteTextureBinding textureBinding_;
+
     public:
         virtual ~ISpriteBatchRenderer() = default;
+        /**
+         * @brief Captures the public texture identity for the following sprite submission.
+         *
+         * Renderers applying custom effects defer publication until after each pass. Before
+         * replacing this binding they flush any queued run belonging to the previous identity.
+         * @param binding Lifetime-safe public identity, independent of the retained renderer.
+         */
+        virtual void SetTextureBindingEXT(const CNA::Internal::Graphics::SpriteTextureBinding& binding)
+        {
+            textureBinding_ = binding;
+            textureBinding_.Apply();
+        }
         virtual void Begin() = 0;
         virtual void End() = 0;
+        /**
+         * @brief Submits queued sprites without closing the renderer's Begin/End pair.
+         *
+         * Effect and texture-validation failures belong to the public Flush operation, not
+         * renderer shutdown. SpriteBatch keeps its deferred queue for retry if this throws.
+         * Renderers that submit synchronously have no pending work.
+         */
+        virtual void FlushPendingSpritesEXT() {}
+        /**
+         * @brief Drops unsubmitted sprite staging after a failed submission, without rendering.
+         *
+         * Leaves the active pair and effect intact. Already submitted draws are not rolled back.
+         * The deferred front-end queue remains the sole source for a retry; Immediate has none.
+         */
+        virtual void DiscardPendingSpritesEXT() noexcept {}
         /// Sets the transform matrix applied on top of the 2D ortho projection.
         /// Must be called before the first Draw of each Begin/End block.
         virtual void SetTransformMatrix(const Matrix& m) {}

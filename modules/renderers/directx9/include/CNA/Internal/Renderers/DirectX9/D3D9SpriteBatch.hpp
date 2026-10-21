@@ -64,6 +64,11 @@ namespace CNA::Internal::Renderers::DirectX9
 
         void Begin() override;
         void End() override;
+        /**
+         * @brief Selects per-Draw submission instead of accumulating a sprite run.
+         * @param immediate True when the current batch uses Immediate sort mode.
+         */
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void SetTransformMatrix(const Matrix& m) override;
         /**
          * @brief Retains logical dimensions for the batch projection.
@@ -72,6 +77,15 @@ namespace CNA::Internal::Renderers::DirectX9
          */
         void SetViewportSizeEXT(int width, int height) override;
         void SetCustomEffect(Effect* effect) override;
+        /**
+         * @brief Flushes an earlier public identity before capturing the next sprite binding.
+         * @param binding Lifetime-safe public texture identity for the next draw.
+         */
+        void SetTextureBindingEXT(const CNA::Internal::Graphics::SpriteTextureBinding& binding) override;
+        /** @brief Submits the pending sprite run without closing the active batch. */
+        void FlushPendingSpritesEXT() override;
+        /** @brief Drops unsubmitted geometry after a failure without replaying effect callbacks. */
+        void DiscardPendingSpritesEXT() noexcept override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
         void SetSamplerMipState(int maxMipLevel, float lodBias) override;
@@ -119,6 +133,7 @@ namespace CNA::Internal::Renderers::DirectX9
         const ITextureRenderer* currentTexture_ = nullptr;
 
         bool begun_ = false;
+        bool immediateMode_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         int projectionWidth_ = 0, projectionHeight_ = 0;
 

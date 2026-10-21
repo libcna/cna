@@ -124,6 +124,18 @@ namespace CNA::Internal::Renderers::DirectX9
         begun_ = false;
     }
 
+    void D3D9SpriteBatchRenderer::FlushPendingSpritesEXT()
+    {
+        FlushBatch();
+    }
+
+    void D3D9SpriteBatchRenderer::DiscardPendingSpritesEXT() noexcept
+    {
+        pendingVertices_.clear();
+        pendingIndices_.clear();
+        currentTexture_ = nullptr;
+    }
+
     void D3D9SpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
         transform_ = m;
@@ -133,6 +145,16 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         projectionWidth_ = width;
         projectionHeight_ = height;
+    }
+
+    void D3D9SpriteBatchRenderer::SetTextureBindingEXT(
+        const CNA::Internal::Graphics::SpriteTextureBinding& binding)
+    {
+        if (textureBinding_ != binding)
+            FlushBatch();
+        textureBinding_ = binding;
+        if (customEffect_ == nullptr)
+            textureBinding_.Apply();
     }
 
     void D3D9SpriteBatchRenderer::SetCustomEffect(Effect* effect)
@@ -313,6 +335,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             customRenderer->SetUniformVec2("vpSize", vpW, vpH);
             customEffect_->Apply();
+            textureBinding_.Apply();
             customRenderer->Bind();
         }
         else
@@ -415,6 +438,7 @@ namespace CNA::Internal::Renderers::DirectX9
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass]->Apply();
+            textureBinding_.Apply();
             owner_->DrawCompiledEffectEXT(
                 vb_, &ib_, PrimitiveType::TriangleList,
                 static_cast<int>(pendingIndices_.size() / 3u), 1, params, *runtime,
@@ -524,5 +548,8 @@ namespace CNA::Internal::Renderers::DirectX9
         pendingIndices_.push_back(base + 2);
         pendingIndices_.push_back(base + 3);
         pendingIndices_.push_back(base + 0);
+
+        if (immediateMode_)
+            FlushBatch();
     }
 }

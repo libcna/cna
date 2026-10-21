@@ -422,18 +422,14 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 if (sortMode_ != SpriteSortMode::Immediate)
                     flushBatch();
+                renderer_->FlushPendingSpritesEXT();
                 rendererEndAttempted = true;
                 renderer_->End();
                 renderer_->SetCustomEffect(nullptr);
                 // Deferred renderers may submit their final texture group only from End(). Retain
                 // every queued texture renderer through that call, then release the queue.
-                //
-                // A texture disposed between Draw and End is therefore still drawn, where XNA's End
-                // throws ObjectDisposedException from the Textures[0] setter (cna-killer KF-11).
-                // Deliberate: the queue holds the texture's renderer, not the Texture2D, which a
-                // C++ caller may destroy -- a temporary drawn and gone before End -- as legitimately
-                // as dispose it. Refusing would need a per-texture disposal token on every queued
-                // sprite; drawing what was queued is not undefined and costs nothing.
+                // The separate public identity distinguishes a destroyed C++ wrapper from an
+                // explicitly disposed live wrapper; only the latter is refused by Textures[0].
                 spriteQueue_.clear();
             }
             customEffect_ = nullptr;
@@ -441,6 +437,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         catch (...)
         {
+            if (renderer_)
+                renderer_->DiscardPendingSpritesEXT();
             // Microsoft leaves the Begin/End pair and device counters active when deferred state
             // application or Flush fails. A repeated End retries the same work, and Immediate
             // remains blocked on this device. A CNA-private renderer End failure is different: its
@@ -521,6 +519,10 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/SpriteSubmissions", 1);
         SpriteInfo info;
         info.texture    = std::move(textureRenderer);
+        if (!texture.spriteIdentity_)
+            texture.spriteIdentity_ = std::make_shared<Texture2D*>(const_cast<Texture2D*>(&texture));
+        info.binding = CNA::Internal::Graphics::SpriteTextureBinding(
+            graphicsDevice_, texture.spriteIdentity_);
         info.destX      = destX;
         info.destY      = destY;
         info.destWidth  = destWidth;
@@ -534,7 +536,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (sortMode_ == SpriteSortMode::Immediate)
         {
-            flushSingle(info);
+            try
+            {
+                flushSingle(info);
+            }
+            catch (...)
+            {
+                // XNA InternalDraw renders directly and never queues a failed Immediate draw.
+                // A renderer may have staged vertices before applying the caller's effect.
+                if (renderer_)
+                    renderer_->DiscardPendingSpritesEXT();
+                throw;
+            }
         }
         else
         {
@@ -574,6 +587,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     sampler.getMipMapLevelOfDetailBiasProperty());
             }
         }
+        renderer_->SetTextureBindingEXT(s.binding);
         renderer_->Draw(*s.texture,
                        s.destX, s.destY, s.destWidth, s.destHeight,
                        s.srcRect, s.color,
@@ -623,7 +637,8 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 std::size_t end = start + 1;
                 while (end < spriteQueue_.size() && end - start < maxBatchSize &&
-                       spriteQueue_[end].texture == spriteQueue_[start].texture)
+                       spriteQueue_[end].texture == spriteQueue_[start].texture &&
+                       spriteQueue_[end].binding == spriteQueue_[start].binding)
                     ++end;
                 drawThroughStockEffect(&spriteQueue_[start], end - start);
                 start = end;
@@ -704,6 +719,8 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int pass = 0; pass < passes.getCountProperty(); ++pass)
         {
             passes[pass]->Apply();
+            // XNA SpriteBatch.RenderBatch publishes after Apply, before every draw/pass.
+            sprites[0].binding.Apply();
             GpuDrawParams drawParams;
             customEffect_->FillGpuDrawParams(drawParams);
             drawParams.texture0 = &texture;

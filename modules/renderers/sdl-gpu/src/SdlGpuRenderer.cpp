@@ -13647,6 +13647,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             for (int pass = 0; pass < passCount; ++pass)
             {
                 technique->getPassesProperty()[pass]->Apply();
+                textureBinding_.Apply();
                 GpuDrawParams params;
                 customEffect_->FillGpuDrawParams(params);
                 for (std::size_t i = runStart; i < runEnd; ++i)
@@ -13664,6 +13665,32 @@ namespace CNA::Internal::Renderers::SdlGpu
         pendingSprites_.clear();
     }
 #endif
+
+    void SdlGpuSpriteBatchRenderer::FlushPendingSpritesEXT()
+    {
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        FlushPendingCompiledSpritesEXT();
+#endif
+    }
+
+    void SdlGpuSpriteBatchRenderer::DiscardPendingSpritesEXT() noexcept
+    {
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        pendingSprites_.clear();
+#endif
+    }
+
+    void SdlGpuSpriteBatchRenderer::SetTextureBindingEXT(
+        const CNA::Internal::Graphics::SpriteTextureBinding& binding)
+    {
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        if (textureBinding_ != binding)
+            FlushPendingCompiledSpritesEXT();
+#endif
+        textureBinding_ = binding;
+        if (customEffect_ == nullptr)
+            textureBinding_.Apply();
+    }
 
     void SdlGpuSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
@@ -13716,7 +13743,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         // held before it was ever applied, which is all zeros. That was invisible while this
         // renderer could not run a custom effect's source at all: the draw was skipped, so the
         // uniforms it would have used never mattered.
-        if (customEffectRenderer != nullptr) customEffect_->Apply();
+        if (customEffectRenderer != nullptr)
+        {
+            customEffect_->Apply();
+            textureBinding_.Apply();
+        }
         // plans/plan_fx.md FX-071: customEffect_ is either ShaderEffect-derived (resolved above) or a
         // compiled effect (resolved here), never both -- Effect::GetCompiledRuntimePtr() returns
         // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
@@ -13757,6 +13788,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             for (int pass = 0; pass < passCount; ++pass)
             {
                 technique->getPassesProperty()[pass]->Apply();
+                textureBinding_.Apply();
                 GpuDrawParams params;
                 customEffect_->FillGpuDrawParams(params);
                 owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,

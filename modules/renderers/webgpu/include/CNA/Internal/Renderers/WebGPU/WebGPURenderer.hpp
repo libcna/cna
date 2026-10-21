@@ -1228,8 +1228,22 @@ namespace CNA::Internal::Renderers::WebGPU
 
         void Begin() override;
         void End() override;
+        /**
+         * @brief Selects per-Draw submission of compiled-effect sprite runs.
+         * @param immediate True when the current batch uses Immediate sort mode.
+         */
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void SetTransformMatrix(const Matrix& matrix) override { transform_ = matrix; }
         void SetCustomEffect(Effect* effect) override;
+        /**
+         * @brief Flushes an earlier public identity before capturing the next sprite binding.
+         * @param binding Lifetime-safe public texture identity for the next draw.
+         */
+        void SetTextureBindingEXT(const CNA::Internal::Graphics::SpriteTextureBinding& binding) override;
+        /** @brief Submits the pending sprite run without closing the active batch. */
+        void FlushPendingSpritesEXT() override;
+        /** @brief Drops unsubmitted geometry after a failure without replaying effect callbacks. */
+        void DiscardPendingSpritesEXT() noexcept override;
         void SetViewportSizeEXT(int width, int height) override
         {
             projectionWidth_ = width;
@@ -1267,6 +1281,7 @@ namespace CNA::Internal::Renderers::WebGPU
     private:
         WebGPURenderer* owner_ = nullptr;
         bool begun_ = false;
+        bool immediateMode_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         int textureFilter_ = 0;
         int addressU_ = 1;
@@ -2889,6 +2904,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /// block when the sprite is queued, so it calls it there instead -- one step earlier, and
         /// per sprite rather than per batch, which is the stricter of the two readings.
         Microsoft::Xna::Framework::Graphics::Effect* activeSpriteCustomEffectObject_ = nullptr;
+        CNA::Internal::Graphics::SpriteTextureBinding activeSpriteTextureBinding_;
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
         /**
          * @brief plans/plan_webgpu.md WEBGPU-170: one sprite vertex of a compiled-effect batch.

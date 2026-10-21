@@ -836,6 +836,15 @@ namespace CNA::Internal::Renderers::Fna3d
 
         /** @brief Selects a compiled Effect Framework effect for subsequent sprite runs. */
         void SetCustomEffect(Effect* effect) override;
+        /**
+         * @brief Flushes an earlier public identity before capturing the next sprite binding.
+         * @param binding Lifetime-safe public texture identity for the next draw.
+         */
+        void SetTextureBindingEXT(const CNA::Internal::Graphics::SpriteTextureBinding& binding) override;
+        /** @brief Submits the pending sprite run without closing the active batch. */
+        void FlushPendingSpritesEXT() override;
+        /** @brief Drops unsubmitted geometry after a failure without replaying effect callbacks. */
+        void DiscardPendingSpritesEXT() noexcept override;
 
         /**
          * @brief Sets the transform applied on top of the 2D orthographic projection.
@@ -1539,10 +1548,13 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param filter      Raw `TextureFilter` ordinal.
          * @param addressU    Raw `TextureAddressMode` ordinal for U.
          * @param addressV    Raw `TextureAddressMode` ordinal for V.
+         * @param customEffect Caller-selected effect, or null for the stock sprite effect.
+         * @param binding Public texture identity published after each custom pass.
          */
         void DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices, int vertexCount,
                               const Matrix& transform, int filter, int addressU, int addressV,
-                              Effect* customEffect);
+                              Effect* customEffect,
+                              const CNA::Internal::Graphics::SpriteTextureBinding& binding = {});
 
         /**
          * @brief CNAEXT. Re-applies the currently bound render-target set to FNA3D.

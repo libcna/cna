@@ -738,6 +738,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         std::shared_ptr<ITextureRenderer> renderer_;
+        // Allocated only when submitted to SpriteBatch. Copies have independent public
+        // identities; moves transfer this identity and destruction invalidates it.
+        mutable std::shared_ptr<Texture2D*> spriteIdentity_;
+        void InvalidateSpriteIdentity() noexcept;
         int width  = 0;
         int height = 0;
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;

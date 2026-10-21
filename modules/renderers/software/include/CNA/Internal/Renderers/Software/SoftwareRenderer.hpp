@@ -1326,6 +1326,15 @@ namespace CNA::Internal::Renderers::Software
         void End() override;
         void SetTransformMatrix(const Matrix& m) override { transformMatrix_ = m; }
         void SetCustomEffect(Effect* effect) override;
+        /**
+         * @brief Flushes an earlier public identity before capturing the next sprite binding.
+         * @param binding Lifetime-safe public texture identity for the next draw.
+         */
+        void SetTextureBindingEXT(const CNA::Internal::Graphics::SpriteTextureBinding& binding) override;
+        /** @brief Submits the pending sprite run without closing the active batch. */
+        void FlushPendingSpritesEXT() override;
+        /** @brief Drops unsubmitted geometry after a failure without replaying effect callbacks. */
+        void DiscardPendingSpritesEXT() noexcept override;
         void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerMaxAnisotropy(int maxAnisotropy) override

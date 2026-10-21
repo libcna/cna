@@ -67,6 +67,17 @@ namespace CNA::Internal::Renderers::Software
         begun_ = false;
     }
 
+    void SoftwareSpriteBatchRenderer::FlushPendingSpritesEXT()
+    {
+        FlushCompiledBatch();
+    }
+
+    void SoftwareSpriteBatchRenderer::DiscardPendingSpritesEXT() noexcept
+    {
+        pendingCompiledSprites_.clear();
+        compiledTexture_ = nullptr;
+    }
+
     bool SoftwareSpriteBatchRenderer::UsesCompiledEffect() const noexcept
     {
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
@@ -82,6 +93,16 @@ namespace CNA::Internal::Renderers::Software
             return;
         FlushCompiledBatch();
         customEffect_ = effect;
+    }
+
+    void SoftwareSpriteBatchRenderer::SetTextureBindingEXT(
+        const CNA::Internal::Graphics::SpriteTextureBinding& binding)
+    {
+        if (textureBinding_ != binding)
+            FlushCompiledBatch();
+        textureBinding_ = binding;
+        if (!UsesCompiledEffect())
+            textureBinding_.Apply();
     }
 
     void SoftwareSpriteBatchRenderer::ApplyCompiledSpriteEffect()
@@ -150,6 +171,7 @@ namespace CNA::Internal::Renderers::Software
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass]->Apply();
+            textureBinding_.Apply();
             GpuDrawParams effectParams;
             customEffect_->FillGpuDrawParams(effectParams);
             if (effectParams.compiledEffectRuntime == nullptr)

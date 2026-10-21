@@ -3625,6 +3625,39 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 #endif
 
+    void WebGPUSpriteBatchRenderer::FlushPendingSpritesEXT()
+    {
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        owner_->FlushCompiledSpriteBatchEXT();
+#endif
+    }
+
+    void WebGPUSpriteBatchRenderer::DiscardPendingSpritesEXT() noexcept
+    {
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        owner_->pendingCompiledSpriteVertices_.clear();
+        owner_->pendingCompiledSpriteTextureId_ = nullptr;
+#endif
+    }
+
+    void WebGPUSpriteBatchRenderer::SetTextureBindingEXT(
+        const CNA::Internal::Graphics::SpriteTextureBinding& binding)
+    {
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        if (owner_->activeSpriteTextureBinding_ != binding)
+            owner_->FlushCompiledSpriteBatchEXT();
+#endif
+        textureBinding_ = binding;
+        owner_->activeSpriteTextureBinding_ = binding;
+        if (owner_->activeSpriteCustomEffectObject_ != nullptr)
+            return;
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        if (owner_->activeSpriteCompiledEffect_ != nullptr)
+            return;
+#endif
+        textureBinding_.Apply();
+    }
+
     void WebGPUSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         // WEBGPU-142: SpriteBatch.Begin(..., effect) routes every sprite of this batch through a
@@ -3720,6 +3753,9 @@ namespace CNA::Internal::Renderers::WebGPU
         owner_->QueueSprite(texture, *samplable, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
                             addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, blendSnapshot);
+        // Immediate applies every effect pass and captures its state before Draw returns.
+        if (immediateMode_)
+            FlushPendingSpritesEXT();
     }
 
     WebGPURenderer::WebGPURenderer(const GraphicsRendererCreateArgs& args)
@@ -8160,7 +8196,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // parameters instead of the zeroes it was constructed with. Without it a packaged
         // post-process effect ran with every parameter at zero, which for CRT and DepthEffect is
         // an exact copy of the input -- a pass that reported success and did nothing.
-        if (activeSpriteCustomEffectObject_ != nullptr) activeSpriteCustomEffectObject_->Apply();
+        if (activeSpriteCustomEffectObject_ != nullptr)
+        {
+            activeSpriteCustomEffectObject_->Apply();
+            activeSpriteTextureBinding_.Apply();
+        }
 
         SpriteCommand command{};
         // The resolved view plus its keep-alive, never `&samplable` -- a SpriteBatch
@@ -11635,6 +11675,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass]->Apply();
+            activeSpriteTextureBinding_.Apply();
             GpuDrawParams params{};
             activeSpriteCompiledEffect_->FillGpuDrawParams(params);
             QueueCompiledEffectDraw(*compiledSpriteVertexBuffer_, nullptr,

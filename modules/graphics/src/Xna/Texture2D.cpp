@@ -494,7 +494,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D::~Texture2D()
     {
+        InvalidateSpriteIdentity();
         Dispose(false);
+    }
+
+    void Texture2D::InvalidateSpriteIdentity() noexcept
+    {
+        if (spriteIdentity_)
+            *spriteIdentity_ = nullptr;
+        spriteIdentity_.reset();
     }
 
     Texture2D::Texture2D(const Texture2D& other)
@@ -518,6 +526,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (this != &other)
         {
+            InvalidateSpriteIdentity();
             GraphicsDevice* const previousDevice = graphicsDevice_;
             const bool previousDeviceAlive =
                 previousDevice != nullptr && !graphicsDeviceLifetime_.expired();
@@ -553,12 +562,15 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D(Texture2D&& other) noexcept
         : Texture(std::move(other))
         , renderer_(std::move(other.renderer_))
+        , spriteIdentity_(std::move(other.spriteIdentity_))
         , width(other.width)
         , height(other.height)
         , cpuPixels_(std::move(other.cpuPixels_))
         , extraMipLevels_(std::move(other.extraMipLevels_))
         , gpuOnlyContent_(other.gpuOnlyContent_)
     {
+        if (spriteIdentity_)
+            *spriteIdentity_ = this;
         if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
             graphicsDevice_->TransferMovedTexture(&other, this);
         other.width = 0;
@@ -570,6 +582,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (this != &other)
         {
+            InvalidateSpriteIdentity();
             GraphicsDevice* const previousDevice = graphicsDevice_;
             const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
             if (previousDevice != nullptr && previousDeviceAlive &&
@@ -579,6 +592,9 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             Texture::operator=(std::move(other));
             renderer_ = std::move(other.renderer_);
+            spriteIdentity_ = std::move(other.spriteIdentity_);
+            if (spriteIdentity_)
+                *spriteIdentity_ = this;
             width = other.width;
             height = other.height;
             cpuPixels_ = std::move(other.cpuPixels_);

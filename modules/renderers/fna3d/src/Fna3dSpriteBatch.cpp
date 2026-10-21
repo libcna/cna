@@ -52,6 +52,27 @@ namespace CNA::Internal::Renderers::Fna3d
         Flush();
     }
 
+    void Fna3dSpriteBatchRenderer::FlushPendingSpritesEXT()
+    {
+        Flush();
+    }
+
+    void Fna3dSpriteBatchRenderer::DiscardPendingSpritesEXT() noexcept
+    {
+        vertices_.clear();
+        batchTexture_ = nullptr;
+    }
+
+    void Fna3dSpriteBatchRenderer::SetTextureBindingEXT(
+        const CNA::Internal::Graphics::SpriteTextureBinding& binding)
+    {
+        if (textureBinding_ != binding)
+            Flush();
+        textureBinding_ = binding;
+        if (customEffect_ == nullptr)
+            textureBinding_.Apply();
+    }
+
     void Fna3dSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         if (customEffect_ == effect) return;
@@ -255,7 +276,7 @@ namespace CNA::Internal::Renderers::Fna3d
             const std::size_t vertexCount = std::min(remaining, maxVerticesPerDraw);
             renderer.DrawSpriteRunEXT(sampled->GetFna3dTextureEXT(), vertices_.data() + first,
                                       static_cast<int>(vertexCount), transform_, samplerFilter_,
-                                      addressU_, addressV_, customEffect_);
+                                      addressU_, addressV_, customEffect_, textureBinding_);
         }
         vertices_.clear();
     }
@@ -267,7 +288,8 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dRenderer::DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices,
                                          int vertexCount, const Matrix& transform, int filter,
-                                         int addressU, int addressV, Effect* customEffect)
+                                         int addressU, int addressV, Effect* customEffect,
+                                         const CNA::Internal::Graphics::SpriteTextureBinding& publicBinding)
     {
         if (texture == nullptr || vertices == nullptr || vertexCount < 4)
         {
@@ -434,6 +456,7 @@ namespace CNA::Internal::Renderers::Fna3d
                      passIndex < technique->getPassesProperty().getCountProperty(); ++passIndex)
                 {
                     technique->getPassesProperty()[passIndex]->Apply();
+                    publicBinding.Apply();
                     GpuDrawParams params{};
                     customEffect->FillGpuDrawParams(params);
                     // XNA deliberately sets SpriteBatch's texture after EffectPass.Apply so a

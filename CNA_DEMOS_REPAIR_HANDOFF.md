@@ -9,7 +9,21 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
-**Latest checkpoint2026-10-22: final focus passed; SDL compiled-on84921 LIVE.**
+**2026-10-22 accepted compiled-on checkpoint84921.** Configuration12627ms0;
+libraries95586ms0 (exact16 unchanged/reviewed Draco warnings, no suppression),
+strict fixtures9453ms0. SDL_GPU22PASS2962ms, FNA3D22PASS3329ms, WebGPU22PASS2186ms;
+no skips or source drift, peak2133086208 bytes/all memory events0. Existing
+MojoShader/FNA3D patch helpers explicitly skipped; no dependency reset/fetch.
+All six available Linux renderer identities now execute the22 binding witnesses
+with compiled effects where supported; external SDL compiled-off refusal controls
+also remain verified. D3D9 source/owner compile validation is recorded separately;
+native Windows execution still pending. ISSUE-003 code/test batch is ready for its
+coherent commit; Texture2D's sprite-only index patch excludes all011 ownership
+changes, leaving those working-tree edits intact. Next record the repair SHA,
+remove the obsolete demo restriction, refresh permanent status and continue the
+next unresolved batch. No global campaign completion or push/merge claimed.
+
+**Earlier checkpoint2026-10-22: final focus passed; SDL compiled-on84921 was live.**
 CNA89cd0b202 / demosfbab2d9. Separate C Effect documentation/expectation correction
 is committed and validated: SW/GLES34PASS each, SDL compiled-off27PASS, native11PASS.
 ISSUE-003 product remains uncommitted/open; inherited011/082 changes remain untouched.
