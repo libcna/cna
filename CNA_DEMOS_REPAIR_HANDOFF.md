@@ -31,10 +31,40 @@ Driver: build-probe/repair-sprite-binding-immediate.mjs (before/after).
 MinGW84891 also completed: all four D3D9/common translation units compile with
 existing Windows flags and no diagnostics (5695/3404/5227/1570ms), no source
 drift; peak669827072/events0. This is compile-only, not a Windows runtime pass.
-Sole heavy38691 now builds existing CnaGraphicsTests in cmake-build-multi and runs
-native Sprite* plus WebGPUCompiled* suites on private GPU, one worker/6GiB/no swap.
-Next collect that broader regression, then correct and validate the two documented
-C compiled-effect demo expectations. Product/source inputs frozen during38691.
+Native38691 build completed0 in569153ms; the diagnostic guard stopped before
+execution on two unchanged MorphTargetEXTTests EXPECT_THROW/nodiscard warnings
+(lines146/147), not on a production failure. Both test and declaration match HEAD;
+review retained in repair-sprite-binding-webgpu-native-observed-diagnostic-review.json.
+No suppression/rebuild/source change. Observer58197 inventory25ms0, run5482ms0:
+189 Sprite cases =169PASS/20SKIP/0FAIL, all22 new binding tests actually pass.
+All20 skips are existing WebGPU-excluding renderer gates:11 rasterization,
+five depth/projection, four Immediate sampler. They are not runtime validation.
+No source drift; original build peak1123647488/events0, observer187244544/events0.
+UnitTests.cmake places renderer-owned tests in CnaRendererTests, not the graphics
+target. Build12544 completed0 in56918ms;15 unchanged FNA3D static_assert comparisons
+between neutral and MojoShader enums produce GCC enum-compare warnings. Exact
+source/line review retained, no suppression. Observer36123 ran actual WebGPUCompiled
+suites in8234ms:57=56PASS/1SKIP/0FAIL, no drift, peak158949376/events0; build
+peak907333632/events0. The one skip is SharedCubeAndVolumeSamplerContract: its
+fixture constructs a default Reach device then asks for Texture3D. Not a hardware
+or platform pass, and no claim of volume validation from this skipped fixture.
+The two source-proven C demo expectations are now corrected without runtime
+changes: bytecode Effect has no ShaderEffect source program; non-current pass is
+INVALID_STATE with exact System.InvalidOperationException/STATE diagnostics.
+C effects.h and docs/c-api/EFFECTS.md clarify both contracts. Original34 checks
+and all other controls retained; source evidence remains in COMPILED_EFFECT_C_EXPECTATIONS.md.
+Validation25303 completed0: actual C demo build224911ms/no diagnostics,
+SOFTWARE34PASS71ms, GLES34PASS257ms, SDL_GPU27PASS249ms (compiled-off refusal),
+and all11 native EffectApply checks PASS1103ms. Exact InvalidOperationException/
+STATE diagnostics observed on both compiled-on renderers. No input drift;
+peak1394274304 bytes/all memory events0. This corrects two demonstrated demo
+expectation errors, not native runtime behavior; full-smoke reports remain historical.
+Next commit this narrow C documentation/demo correction separately, then finish003:
+add direct post-SpriteBatch binding/SetData checks to the original rectangle demo,
+validate those and the strengthened22 across applicable renderers, stage only003
+hunks (Texture2D also contains inherited011 work), record its repair SHA, remove
+the obsolete restriction only after passes, and update the permanent issue/matrix.
+Other011/082 failures remain unaccepted. No003 closure or push/merge yet.
 ISSUE-003 stays open;011/082 changes and failures remain separate. No push/merge.
 
 **Historical checkpoint2026-10-22: full smoke collected; multi-renderer33697 was live.**

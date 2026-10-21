@@ -914,6 +914,8 @@ CNA_C_API CNA_Result cna_effect_pass_get_annotations(
  *
  * Ownerless passes are the native successful no-op. Effect-owned pass views introduced with the
  * effect lifecycle validate their technique against that effect's current technique.
+ * A pass from a non-current technique reports `CNA_RESULT_INVALID_STATE`, preserving
+ * `System.InvalidOperationException` in the thread-local exception-type diagnostic.
  *
  * @param pass Pass handle.
  * @return A CNA result code.
@@ -1500,7 +1502,17 @@ CNA_C_API CNA_Result cna_effect_copy_fragment_source(
     uint64_t capacity,
     uint64_t* out_byte_count);
 
-/** @brief Reports whether the effect exposes a live renderer-specific compiled program. */
+/**
+ * @brief Reports whether a source-based effect exposes a live renderer-specific program.
+ *
+ * This queries the ShaderEffect-style source program, not the separate XNA Effect Framework
+ * bytecode runtime. Use `cna_effect_get_is_compiled_ext` to query that runtime; an ordinary
+ * bytecode Effect reports false here even when its compiled runtime is available.
+ *
+ * @param effect Effect handle.
+ * @param out_has_renderer Receives whether a source-based renderer program is present.
+ * @return A CNA result code.
+ */
 CNA_C_API CNA_Result cna_effect_has_renderer(
     CNA_EffectHandle effect,
     CNA_Bool* out_has_renderer);

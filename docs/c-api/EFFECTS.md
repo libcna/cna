@@ -117,11 +117,18 @@ compiled effect's parameters, techniques and passes were reflected out of byteco
 built by hand, and `cna_effect_clone` clones the runtime and copies the parameter values with it.
 A clone therefore always reports the same answer as its source.
 
+`cna_effect_has_renderer` is a different query: it reports the source-based program exposed
+by `ShaderEffect`, not the XNA bytecode runtime. An ordinary compiled bytecode `Effect`
+reports true for `cna_effect_get_is_compiled_ext` and false for `cna_effect_has_renderer`.
+
 Parameter, technique, current-technique and nested pass views alias the native effect storage.
 Destroying the parent effect handle does not invalidate a live descendant view: the descendant
 retains the native effect, its game-child ownership and any shader-bound texture until the final
 view is released. A current technique must originate from the same effect; the invalid handle
 explicitly selects null, after which applying one of that effect's passes reports invalid state.
+Applying an owned pass whose technique is not current also reports `CNA_RESULT_INVALID_STATE`,
+with `CNA_ERROR_CATEGORY_STATE` and the exact `System.InvalidOperationException` diagnostic.
+Selecting its owning technique again makes the pass applicable; the refusal does not dispose it.
 
 Type names and vertex/fragment shader sources use exact count/copy operations. Compiled bytecode is
 never reinterpreted as source: `cna_shader_effect_create` takes GLSL/SPIR-V/WGSL **source**
