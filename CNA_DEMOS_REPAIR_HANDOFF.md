@@ -9,6 +9,54 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**Latest checkpoint2026-10-22: native/sanitizer accepted; full smoke66351 LIVE.**
+Sanitizer83125 terminated0: configure6395ms, instrumented libraries123701ms,
+strict original22 compile12762ms, run3422ms, inspect18ms. All22 PASS/noSKIP
+under ASan/UBSan/float-cast/leaks, including actual SOFTWARE compiled effects.
+Six relevant CNA translation units and129 Sharp Runtime units verified
+instrumented; third-party libraries are not claimed instrumented. No build
+diagnostics, source drift or memory events; peak1378291712 bytes.
+Native68394 acceptance below remains valid (11027,10917PASS/110SKIP, exact
+old11005 parity). Product003 is still uncommitted/open.
+
+External consumer build1277 terminated0: full existing build45973ms without
+diagnostics, registry46ms reports719 demos/0 problems. All319 listed consumer
+artifacts frozen after rebuild. No source drift, peak4095909888/all events0.
+A transient island-simulator build was observed and allowed to finish before
+launch; no foreign process was stopped. Driver repair-sprite-binding-external-build.mjs
+requires accepted native/sanitizer and records the deliberate generated-library
+replacement separately from immutable source hashes.
+
+External62600 terminated2: original132 cases on SW/GLES/GL33/SDL_GPU completed
+with123PASS/8FAIL/1SKIP. Direct comparison with the preceding sprite-depth132
+observations retains every identity, status, check count, knownIssue, failed
+assertion and assertion label. No new delta, no source drift; peak168407040 bytes
+and all memory events0. All eight existing082 callback failures remain
+unaccepted; this is not a green suite. The comparator recognizes only the exact
+removal of previously failing C++ labels because DemoContext::Check prints
+failures only; CApiDemo prints both. Check counts, metadata, new failures and
+all other label changes stay strict. Original depth audit remains unmodified.
+Safety review initially rejected an ambiguous dry-run wrapper; it executed no
+regression. The replacement has an explicit no-import --check-plan branch,
+then passed host syntax/transform checks before this actual authorized launch.
+
+Sole heavy66351: scope cna-repair-sprite-binding-full, driver
+build-probe/repair-sprite-binding-full-observe.mjs. Actual host verification:
+active/running, observer PID2505185, SOFTWARE category driver PID2505260;
+private GPU/network/caps0,6GiB/no swap. Original719 inventory frozen. All six
+existing visual references PASS with zero differing pixels and zero tolerance;
+all six screenshots were also individually inspected (checkerboard, numeric
+font and clear background on both renderers), with no visual anomaly observed.
+SOFTWARE gamer_services is still running; OPENGLES3 follows serially. Sources
+and319 consumer artifacts remain frozen. No full-smoke result is claimed yet.
+
+Next collect66351 and audit every delta against the previous full staging-lifecycle
+checkpoint; then validate the still-unbuilt FNA3D/WebGPU/D3D9 candidate paths.
+No003 closure or marker change.
+Preserve011/082 work and owner decisions. All156 IDs retained,105final/51pending.
+No push/merge. Prepared027/066 witnesses remain uncompiled/unrun.
+
+
 **Latest checkpoint2026-10-22: native68394 ACCEPTED; sanitizer83125 LIVE.**
 CNA status4f3ed89e5/demos35d2a3d; product003 remains uncommitted/open.
 Native-unbound: build11472ms/no diagnostics, focused22=13PASS/9 compiledSKIP
