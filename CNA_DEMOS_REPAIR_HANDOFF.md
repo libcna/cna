@@ -9,6 +9,202 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**Product checkpoint:** CNA7af2cd42b;073 repair514a6a8c2 and038 repair85a23569c,
+CNJ warning cleanup a52d6f0ce, no-hardware harness7af2cd42b. Matrix155 permanentIDs:
+97 final (89RESOLVED/7ALREADY_FIXED/1DEMO_EXPECTATION_BUG),58pending. Demos base
+7486b2b plus validated closure metadata/docs; separate evidence commit follows.
+038/073 are FIXED_VALIDATED, details in demos AUDIO_INSTANCE_GUARDS_CHECKPOINT.md.
+No push/merge. Only011 ownership production/test changes remain uncommitted,
+including owner ContentReader/ContentTypeReader files; do not stage/stash/rewrite.
+
+**No active heavy job. Next task:099 VideoPlayer guard and lifetime repair.**
+95880 completed028 sparse-large-offset9/9PASS (1911ms build/128ms run, peak365604864)
+and099 guards9=5FAIL/4PASS (2231/47/25ms,peak420233216). Its lifetime fixture failed
+Werror dangling-else compile; source/log retained. Braces-only69241v2 confirms
+lifetime6=4FAIL/2PASS (2180/302/23ms,peak445419520). All hashes unchanged and memory
+events0. These are pre-repair defect baselines, not product passes. Real decoder
+fixtures confirm retained-identity failures and old-video destruction stopping the
+replacement playback. Repair the private relationships safely, including copy/
+multiple-player lifetimes; do not simply retain a raw pointer. No028/029/099 source
+edits yet. Keep028's now-measured >2GiB lazy streaming capability when repairing IO.
+Older entries below are chronological history, not current RUNNING state.
+
+038/073 VALIDATION COMPLETE, commits/issue ledgers being finalized.69886 external-v2
+TERMINAL0 (build7019ms/zero diagnostics), original23 PASS,112 exact comparisons:
+each renderer48PASS/7 unchanged historicalFAIL/1manualNOTRUN.22724 metadata-final
+TERMINAL0 (build9836ms/zero diagnostics), same23/112 outcomes, only038/073 markers
+removed,318 other binaries byte-identical. Both keep all counts and failed labels;
+the one measured Apply3D oracle correction is explicitly retained, not hidden.
+23775 registered32native PASS11393ms and19demo PASS23532ms; hashes unchanged,
+peak228753408/events0. v2 peak1996042240/events0;final peak1265840128/events0.
+No new full719 sweep/visual/hardware claim; prior011 dirty ownership work remains
+unaccepted and excluded from these commits. No push/merge. Next: record exact
+073/038 commits, then run028 large-offset9 and099 guards9/lifetime6 baselines
+serially before choosing the next repair; do not stop at this batch.
+
+37318 original external TERMINAL1: strict112-case comparison rejected exactly
+the SOFTWARE/OPENGLES3 Apply3D demo's old assertion requiring a refused Pan write
+to mutate-0.5 to0.75. Both original038/073 demos and the original23 fixtures PASS
+against the actual external library. Build2680774ms/zero diagnostics, frozen
+sources unchanged;peak4303581184/high2623/max0/OOM0. The old demo expectation
+(introduced9a6234b, retained7486b2b) contradicts measured XNA and073's C oracle.
+Correct only that strict expected value/comment/label, retaining all18 assertions;
+first failed logs/audit stay intact.69886 external-v2 RUNNING, same112 comparisons
+and exact oracle-diff proof; source repairs stay frozen and markers remain.
+Final driver requires v2, and registered gate now includes the corrected demo:
+32native/19demo CTests. No closure/push/merge. Follow up with prepared028 large-
+offset9 and099 guard9 plus new real-decoder lifetime6 baselines, all currently
+UNRUN. Details and uncommitted lifetime fixture in demos HANDOFF/triage.
+
+08:45 UTC:76943 integrated sanitizer TERMINAL0,27/27PASS (original23 plus4
+existing disposal/cleanup controls), actual audio and Sharp Runtime ASan/UBSan/
+float-cast-overflow/leak instrumentation, no suppressions/findings. Library build
+32465ms/zero diagnostics, strict fixtures15999ms/run223ms/XML22ms; hashes unchanged,
+peak1258749952/events0.37318 external original gate RUNNING, sole heavy job:
+cna-repair-audio-instance-guards-external.scope, existing linux-full/1002 tasks,
+ONE worker/6GiB/no swap/private GPU. Original23 fixtures and112 renderer cases follow.
+Keep038/073 markers until their actual demos pass; metadata-only final112 and
+32native/18demo CTests remain. No closure/push/merge. Sources frozen.
+55931 also completed028 baselines: retained-file6=4PASS/2FAIL, compile1449ms/run113ms,
+peak365621248/events0; ctor14=5PASS/9FAIL, compile2704ms/run45ms/XML21ms,
+peak476516352/events0. Hashes unchanged. Absolute paths alone do not fix lost
+file identity; constructor path/refusal defects also reproduced. No028 repair yet.
+
+08:42 UTC:16641 native-v4 TERMINAL0. Full10905=10804PASS/101sameSKIP,
+1202840ms; all10882 prior outcomes preserved with the two documented XNA helper
+renames and23newPASS. Wayland case PASS88ms. Compare115ms, source hashes unchanged,
+peak1140305920/all memory events0. Audio775=771PASS/4sameSKIP8726ms, focus175PASS2468ms.
+No audio closure yet: sanitizer27, external112/original markers, final metadata-only
+external112, then registered32native/18demo gates remain. Sources stay frozen.
+56438 genuine VideoPlayer reference completed0 AFTER the full suite:41/41 managed
+guards/retention checks PASS, compile2246ms/run445ms,peak295788544/events0. No real
+decoder/playback validation. The two prepared028 baseline probes now run serially
+in cna-repair-wave-bank-followup-before.scope; no production028 change.
+
+08:37 UTC: native-v4 still running; XnaDifferentialBuild parity PASS552480ms.
+Additional static platform gates: classification, renderer boundary, ratchet and
+hot-path lint pass. Inventory check found two stale descriptive counts in
+plans/plan_platform.md (131/81 versus132/82). Comparing to its last committed
+generated block identifies exactly the already committed058 MediaQueueReplayTests.cpp
+with SDL_AUDIODRIVER; no new production coupling (50 production files unchanged),
+no changed identifier set (956), no raised budget. Corrected only those two counts;
+fresh five-gate validation39347 PASS (1332/1243/1287/1230/1081ms), reports
+repair-audio-instance-guards-platform-v2-*. Retain the first failed-check report.
+Demos79fa7c1 preserves prepared028 constructor14/029 WAV-format19 cases, UNRUN.
+
+LATEST 08:21 UTC:16641 native-v4 RUNNING, sole heavy campaign job.60977 finished
+full10905=10803PASS/102SKIP in1298418ms but failed strict parity: exactly the
+formerly PASS Wayland recentering case became SKIP. No failed runtime tests;
+hashes unchanged, peak2213658624/all memory events0. The launch had incorrectly
+forced SDL_VIDEO_DRIVER=x11 and removed private WAYLAND_DISPLAY. Fresh same-binary
+controls reproduce forced-X11 SKIP and private-Wayland PASS93ms. No oracle/source
+change. v4 retains private Wayland, unsets both global video pins and modern audio
+override, uses overridable legacy SDL_AUDIODRIVER=dummy. Same full/parity assertions,
+only new report prefix; preserve v3 failure. Build429ms/zero diagnostics and three
+driver controls41/44/44ms PASS. Final audio/full audit pending.6GiB/no swap,1worker,
+private GPU/network/owner UID/no caps. Downstream scripts require native-v4 success.
+
+Prepared after60977 (NOT run): demos build-probe/repair-audio-instance-guards-sanitizer.mjs
+reuses existing build-asan canonical CnaAudioTests library closure, instruments both
+changed TUs and Sharp Runtime, runs original23 cases with ASan/UBSan/float-cast and
+leaks enabled. Then repair-audio-instance-guards-external.mjs: actual external
+library/original23,112 scenarios, only038/073 improve and markers remain. After
+that passes remove exactly the two marker lines and073 obsolete restriction;
+external-final driver proves exact metadata-only changes against demos HEAD,
+requires sanitizer acceptance and318 unchanged non-browser artifacts, reruns112.
+Do not commit demo marker edits before external-final. Finally ctest driver expects
+32 native and18 demo cases. Run serially under same6GiB private scopes.
+Separate validated commits for073,038, four nodiscard casts, missing-device harness,
+and ledger/evidence; preserve011. New028 retained-file rename/replacement six-check
+probe/driver is prepared but UNRUN, see demos MEDIA_PATH_TRIAGE.md. No new closure.
+
+### Latest:60977 native-v3 FULL10905 RUNNING; audio/focus green
+
+60977 cna-repair-audio-instance-guards-native-v3.scope is the ONLY live heavy job.
+Build9521ms/zero diagnostics PASS, harness modern/legacy/both driver-env controls
+PASS55/54/58ms; audio775=771PASS/4sameSKIP8923ms; focused175PASS2601ms. Full10905
+is running, final parity/hash/memory audit pending. Same one-worker/sharedcache/
+private GPU and cna-test0 namespace, owner UID/no capabilities,6GiB max/no swap.
+
+12090 TERMINAL1 after audio9063ms, before full: exactly two failures retained.
+The no-hardware harness only overrode legacy SDL_AUDIODRIVER; SDL3's current
+SDL_AUDIO_DRIVER=dummy inherited from the runner took precedence (confirmed in
+third_party/SDL/src/SDL_hints.c GetHintEnvironmentVariable). Set both to the same
+nonexistent name; keep expected NoAudioHardwareException. The stress test's final
+disposed PendingBufferCount call now throws; preserve its SAME1000 queue-size
+bound via the read-only seam and additionally assert public refusal. This is not
+a changed tolerance/new skip. No final v2 hash/memory audit was emitted; logs kept.
+
+v3 verifies the exact v2 failed-ID set, the exact four original diagnostic lines,
+and the source-only stress correction against its prior hash. Expected rebuilt
+CnaTests artifact is explicitly recorded. Frozen set includes the harness and
+four-cast CnjCapabilityMatrixTests change. Keep those two infrastructure fixes
+separate from audio commits. Prepared sanitizer/external drivers now require
+native-v3 audit. Next sanitizer23 original cases, external112 parity, then marker
+updates/registered CTests and isolated commits. No038/073 closure or push yet.
+
+### Latest:12090 native-v2 RUNNING after four diagnosed legacy test warnings
+
+21670 TERMINAL1 before tests: successful222655ms build, but strict diagnostic
+review found four nodiscard warnings in clean HEAD CnjCapabilityMatrixTests.cpp
+lines253/265/277/288. ContentManager::Load was already nodiscard in HEAD. Original
+log/progress retained; no final hash/memory audit. Corrected only those four
+EXPECT_THROW expressions with explicit(void), preserving inputs/exception types
+and case names; commit separately from audio fixes after validation.
+
+12090 RUNNING cna-repair-audio-instance-guards-native-v2.scope. Driver verifies
+the exact initial diagnostic set and unchanged inputs, permits only the expected
+rebuilt CnaTests hash, then runs the normal strict build/audio/focus/full gates.
+Incremental build8290ms/zero diagnostics PASS; audio module now running. Same
+private GPU/network, owner UID/no capabilities, one worker/sharedcache/6GiB/no swap.
+Only12090 is live; sources frozen until final audit. Prepared sanitizer/external
+drivers require native-v2 audit, not the incomplete original. No issue closure.
+
+### Latest:21670 native audio/full regression RUNNING; focused23/23 PASS
+
+41722 TERMINAL0: build116708ms/zero diagnostics; original18 pan cases PASS
+(strict compile3448ms/run131ms/XML32ms), original5 dynamic-disposal cases PASS
+(compile2702ms/run53ms/XML29ms). Hashes unchanged;peak1260371968/all events0.
+21670 now RUNNING cna-repair-audio-instance-guards-native.scope: existing
+CnaTests/CnaAudioTests rebuild, module/focus/full, exact prior015 full comparison.
+Expected10905 cases, only the two documented old-helper name/contract corrections
+and23 newPASS; every other prior outcome must remain. Private GPU/network
+cna-test0, owner UID/all capabilities zero, one worker/sharedcache/6GiB max/no swap.
+No second heavy job; freeze native sources until final audit. External original
+probes/112 demo comparisons and registered CTests remain pending. Markers038/073
+are still unchanged; no closure/commit yet. Driver/reports repair-audio-instance-guards-native-*.
+
+### Latest:41722 audio-instance focused candidate RUNNING
+
+Current CNA94423036b plus uncommitted038/073 candidate and preserved011 changes.
+Demosaf5a986 contains the accepted015 evidence. New baselines:0288353 gives exactly
+6PASS/2lazy-pathFAIL (compile1680ms/run114ms,peak357634048/events0);07375902 gives
+8PASS/10FAIL across18 cases (compile2456ms/run110ms,peak454631424/events0);03834449
+gives1setterPASS/4FAIL (compile1968ms/run45ms,peak410947584/events0). All hashes
+unchanged.073's first compile59404 failed two dangling-else warnings in the new
+fixture; braces fixed, Werror retained, original50d0c97/log preserved. No cases ran
+in that failed setup.028 is now CONFIRMED_OPEN for lazy retained-path identity,
+NOT its disproved title-root expectation. No028 production repair yet.
+
+41722 runs cna-repair-audio-instance-guards-after.scope with ONE worker/private
+GPU/sharedcache/existing native tree/6GiB max/no swap. Driver in demos build-probe;
+reports repair-audio-instance-guards-after-*. Builds cna_shared then original
+unchanged18+5 fixtures. Freeze sources until final hash audit. Candidate changes
+SoundEffectInstance pan ordering/mutation and DynamicSoundEffectInstance's four
+disposal guards, matching header comments, two new native fixture files and the
+bindings divergence ledger. Original queue-cleanup assertion is preserved through
+a narrow read-only DynamicSoundEffectInstanceTestAccess friend. Two old wrongly
+FNA-derived *AfterDisposeDoesNotThrow tests are deliberately corrected/renamed to
+*AfterDisposeThrowsObjectDisposed; full parity must explicitly map those two IDs
+and add exactly23 cases (expected total10905). No closure/commit before focused,
+native/full and external regression, marker updates and CTests are validated.
+
+Matrix95FINAL/60pending:87RESOLVED/7ALREADY_FIXED/1demo correction,
+51PENDING_VERIFICATION/9CONFIRMED_OPEN. Next after41722: native audio/full gates,
+external original fixtures and112 audio/media/C comparisons (only038/073 expected
+improvements), registered CTests, isolated commits, then028/029.011 remains OPEN;
+all its ContentReader/ownership changes stay unstaged. No push/merge.
+
 ### Latest: ISSUE-015 CLOSED; continue audio reproductions
 
 CNA fix `9639707991b589914d8db8224b6d79f3867d60d0` contains only title-relative

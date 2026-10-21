@@ -535,11 +535,14 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Historical title-root expectation is incorrect: genuine XNA uses cwd. CNA closes the streaming metadata handle and later reopens a retained filename, losing file identity after cwd changes or rename/replacement even for absolute paths. Nonstreaming construction also substitutes title files; both constructors suppress invalid-header refusal and streaming suppresses missing-file refusal.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine constructor14 controls and native initial-path6 controls verify cwd resolution, not TitleLocation.8353 lazy-path witness8 checks=6PASS/2FAIL exactly, all four banks prepared before cwd change; changed-cwd/decoy relative reads fail while absolute/unchanged-cwd reads pass. Strict compile1680ms/run114ms, hashes unchanged, peak357634048/events0. No repair yet; missing-file timing/non-streaming contracts remain to audit.",
+        "55931 follow-ups: retained-file6 checks=4PASS/2FAIL exactly, compile1449ms/run113ms, hashes unchanged/peak365621248/events0. Absolute renamed and replaced paths fail lazy access; an absolute-path-only fix is insufficient. Constructor14 cases=5PASS/9FAIL, compile2704ms/run45ms/XML21ms, hashes unchanged/peak476516352/events0. Null/empty controls and nonstreaming absolute-missing pass; both overloads fail four relative/header contracts, streaming also misses absolute FileNotFoundException. Linux file-identity evidence, not Windows sharing validation. No repair yet."
+      ],
       "final_disposition": null
     },
     {
@@ -720,15 +723,19 @@
       ],
       "subsystem": "audio/media",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Dynamic audio getters and both sample-conversion helpers omit XNA's disposal-before-access/argument-validation guards; old native helper tests deliberately follow the contrary FNA contract.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "85a23569cf8df6ce048eb34fcd9bb0f30ba54f53",
       "validation": [
         "Completed058 external baseline: SOFTWARE and OPENGLES3 each retain exactly the two historical post-disposal getter failures. Current015 full native retains the old helper tests that expect no throw after Dispose; the affected implementation is unchanged.",
-        "2026-10-21:18009 genuine managed guard oracle24/24PASS with pinned Framework hash/MVID, strict C# build3248ms/run780ms, peak268726272/events0 and source hashes unchanged. Explicitly populated uninitialized disposed fixture validates exception order/object name, not native voice creation or real disposal. Five new native tests prepared but UNRUN; no code fix yet."
+        "2026-10-21:18009 genuine managed guard oracle24/24PASS with pinned Framework hash/MVID, strict C# build3248ms/run780ms, peak268726272/events0 and source hashes unchanged. Explicitly populated uninitialized disposed fixture validates exception order/object name, not native voice creation or real disposal. Five new native tests prepared but UNRUN; no code fix yet.",
+        "34449 original native5-case fixture exactly4FAIL/1setterPASS, strict compile1968ms/run45ms, hashes unchanged, peak410947584/events0. Local four-guard candidate and identical native regression added; preserves real buffer cleanup via read-only seam and explicitly corrects/renames two old FNA no-throw cases.41722 focused candidate gate RUNNING; no closure.",
+        "16641 native-v4 accepted: full10905=10804PASS/101sameSKIP, all10882 prior outcomes retained with two measured helper-contract renames and23newPASS across038/073; full1202840ms/compare115ms, audio775=771PASS/4sameSKIP, focus175PASS, hashes unchanged/peak1140305920/events0. v3 comparison failure (extra Wayland SKIP) retained and diagnosed with forced-X11 versus private-Wayland controls; no test weakened.76943 sanitizer27 RUNNING; external original112/metadata-final112/registered CTests pending. No closure.",
+        "2026-10-21 accepted checkpoint: native full10905=10804PASS/101 unchangedSKIP; audio775=771PASS/4sameSKIP; focused175PASS; integrated ASan/UBSan/float-cast/leak27PASS. External original23 plus112 exact comparisons on SOFTWARE/OPENGLES3, each48PASS/7 unchanged historicalFAIL/1manualNOTRUN versus prior46/9/1. Metadata-final retains outcomes and318 other binary hashes. Registered32native/19demo CTestsPASS. Original external failure of the old Apply3D demo's mutation expectation retained; exactly one strict expected value corrected from genuine XNA, all18 checks preserved. No new full719/visual/hardware claim; inherited011 dirty work remains unaccepted. See demos docs/repair-evidence/media/AUDIO_INSTANCE_GUARDS_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-21 accepted checkpoint: native full10905=10804PASS/101 unchangedSKIP; audio775=771PASS/4sameSKIP; focused175PASS; integrated ASan/UBSan/float-cast/leak27PASS. External original23 plus112 exact comparisons on SOFTWARE/OPENGLES3, each48PASS/7 unchanged historicalFAIL/1manualNOTRUN versus prior46/9/1. Metadata-final retains outcomes and318 other binary hashes. Registered32native/19demo CTestsPASS. Original external failure of the old Apply3D demo's mutation expectation retained; exactly one strict expected value corrected from genuine XNA, all18 checks preserved. No new full719/visual/hardware claim; inherited011 dirty work remains unaccepted. See demos docs/repair-evidence/media/AUDIO_INSTANCE_GUARDS_CHECKPOINT.md."
     },
     {
       "id": "CNA-DEMOS-ISSUE-039",
@@ -1402,15 +1409,19 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "The canonical Pan setter assigns Pan_ before refusing a latched live3D instance, and validates range before XNA's mode gate. A failed assignment therefore mutates the property and can report the wrong exception family.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "514a6a8c2a1d81b9dd54187f7a3a0aecb925414c",
       "validation": [
         "Completed058 external baseline retains the original C spatial-state failed-pan assertion on SOFTWARE and OPENGLES3; implementation remains unchanged during015.",
-        "2026-10-21:69388 first genuine draft10PASS/4FAIL disproved a new range-before-mode assumption, not the historical finding. Source/logs preserved. Actual Framework set_Pan IL RVA0x1ac10 and corrected67026 oracle33/33PASS establish disposal, prepacket latch reset, live3D refusal, range validation, then mutation. Strict C# build4003ms/run837ms, peak262078464/events0, source/Framework hash/MVID intact. Managed initialized-field refusal seam only, not native playback. No code repair yet."
+        "2026-10-21:69388 first genuine draft10PASS/4FAIL disproved a new range-before-mode assumption, not the historical finding. Source/logs preserved. Actual Framework set_Pan IL RVA0x1ac10 and corrected67026 oracle33/33PASS establish disposal, prepacket latch reset, live3D refusal, range validation, then mutation. Strict C# build4003ms/run837ms, peak262078464/events0, source/Framework hash/MVID intact. Managed initialized-field refusal seam only, not native playback. No code repair yet.",
+        "59404 first native compile failed Werror dangling-else around GoogleTest macros, no runtime. Original source50d0c97/log retained. Braces-only correction75902 gives18 cases=8PASS/10FAIL exactly, real looping voices Playing; compile2456ms/run110ms, hashes unchanged, peak454631424/events0. Local refusal-order/state fix with identical native cases added;41722 focused gate RUNNING, no closure.",
+        "16641 native-v4 accepted: full10905=10804PASS/101sameSKIP, all10882 prior outcomes retained with two measured helper-contract renames and23newPASS across038/073; full1202840ms/compare115ms, audio775=771PASS/4sameSKIP, focus175PASS, hashes unchanged/peak1140305920/events0. v3 comparison failure (extra Wayland SKIP) retained and diagnosed with forced-X11 versus private-Wayland controls; no test weakened.76943 sanitizer27 RUNNING; external original112/metadata-final112/registered CTests pending. No closure.",
+        "2026-10-21 accepted checkpoint: native full10905=10804PASS/101 unchangedSKIP; audio775=771PASS/4sameSKIP; focused175PASS; integrated ASan/UBSan/float-cast/leak27PASS. External original23 plus112 exact comparisons on SOFTWARE/OPENGLES3, each48PASS/7 unchanged historicalFAIL/1manualNOTRUN versus prior46/9/1. Metadata-final retains outcomes and318 other binary hashes. Registered32native/19demo CTestsPASS. Original external failure of the old Apply3D demo's mutation expectation retained; exactly one strict expected value corrected from genuine XNA, all18 checks preserved. No new full719/visual/hardware claim; inherited011 dirty work remains unaccepted. See demos docs/repair-evidence/media/AUDIO_INSTANCE_GUARDS_CHECKPOINT.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-21 accepted checkpoint: native full10905=10804PASS/101 unchangedSKIP; audio775=771PASS/4sameSKIP; focused175PASS; integrated ASan/UBSan/float-cast/leak27PASS. External original23 plus112 exact comparisons on SOFTWARE/OPENGLES3, each48PASS/7 unchanged historicalFAIL/1manualNOTRUN versus prior46/9/1. Metadata-final retains outcomes and318 other binary hashes. Registered32native/19demo CTestsPASS. Original external failure of the old Apply3D demo's mutation expectation retained; exactly one strict expected value corrected from genuine XNA, all18 checks preserved. No new full719/visual/hardware claim; inherited011 dirty work remains unaccepted. See demos docs/repair-evidence/media/AUDIO_INSTANCE_GUARDS_CHECKPOINT.md."
     },
     {
       "id": "CNA-DEMOS-ISSUE-074",
@@ -1893,7 +1904,9 @@
       "root_cause": null,
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "56438 genuine current Video/Graphics/Framework pinned reference:41/41 managed guard/retention controls PASS, compile2246ms/run445ms, hashes unchanged/peak295788544/events0. Current Video SHA63c7673c936747abd9ebe779e8837c8b8add2c078a31216684fbf8c6bcab2745 differs from historical reference; initialized-field invalid-decoder seam only, not native decode/playback/destruction. No production099 repair or closure."
+      ],
       "final_disposition": null
     },
     {
