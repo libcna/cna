@@ -48,7 +48,12 @@ active/running, CnaTests PID2417036, peak2646577152 bytes under6GiB.
 Inventory audit:156 unique IDs exactly match all156 issue headings; no missing
 or extra entry. Final dispositions:71 fixed,23 documentation,8 already fixed,
 one platform-validation pending, one demo correction, one duplicate;51 pending.
-Next collect68394; change sanitizer prerequisite only after accepted comparison.
+Continuation2026-10-22:68394 still verified live; the long differential build
+case PASS543003ms and the run has reached effect-compiler tests. Host peak
+3176636416 bytes under6GiB. Prepared sanitizer prerequisite now points to
+native-unbound-audit.json, with an unchanged hard requirement for successful
+final compare/no drift; host syntax/transform checkPASS, actual run still UNRUN.
+Next collect68394 and inspect the complete audit before launching sanitizer.
 Sanitizer/external ABI rebuild+regression/visuals/unbuilt renderer checks remain.
 Preserve011/082 and owner choices.003 open,105final/51pending; no push/merge.
 
