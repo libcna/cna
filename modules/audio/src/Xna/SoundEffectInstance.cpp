@@ -1238,16 +1238,8 @@ namespace Microsoft::Xna::Framework::Audio
         {
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
-        if (!(pan >= -1.0f && pan <= 1.0f)) // NaN included, as in XNA
-        {
-            throw System::ArgumentOutOfRangeException("value");
-        }
-        Pan_ = pan;
-
-        // CABI-25: XNA's mirror of the Apply3D gate (SoundEffectInstance.cs:130-138). Before the
-        // packet is submitted, setting Pan takes the instance back out of 3D; once it is playing,
-        // a 3D instance refuses Pan rather than silently ignoring it, which is what FNA -- and CNA
-        // until now -- did.
+        // XNA SoundEffectInstance.set_Pan (IL RVA 0x1ac10) resets the prepacket 3D latch,
+        // refuses a live 3D voice, then validates the range. A refusal must retain Pan_.
         if (!packetSubmitted_)
         {
             is3D_ = false;
@@ -1257,6 +1249,11 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::InvalidOperationException(
                 "Pan cannot be set on a playing instance that is using 3D audio.");
         }
+        if (!(pan >= -1.0f && pan <= 1.0f)) // NaN included, as in XNA
+        {
+            throw System::ArgumentOutOfRangeException("value");
+        }
+        Pan_ = pan;
 
         // AUDIO-001: routed through the same shared composition routine Play()/Apply3D()/the
         // Volume/Pitch setters use (was a standalone `filterState_->pan = Pan_` write) -- since

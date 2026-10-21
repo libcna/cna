@@ -101,11 +101,9 @@ namespace Microsoft::Xna::Framework::Audio
         float Pan_          = 0.0f;
         float Pitch_        = 0.0f;
 
-        // CP-20: once Apply3D has been called, matches FNA's `is3D` latch (SoundEffectInstance.cs)
-        // -- setPanProperty() still updates the Pan_ property (callers must keep reading back
-        // what they last set), but stops writing the real track output, since Apply3D's own pan
-        // approximation is what should keep governing the actual output until Apply3D runs
-        // again. Never reset back to false once set (matches FNA: is3D is only ever set to true).
+        // Apply3D selects spatial output. Before packet submission Pan can clear this latch;
+        // afterwards Pan is refused without changing its stored value, until Stop permits
+        // changing the mode again.
         bool  is3D_         = false;
         /**
          * @brief Whether playback has begun, which is what locks the 3D-versus-pan choice.
@@ -435,6 +433,8 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param pan New pan value.
          * @throws System::ObjectDisposedException if the instance has been disposed.
+         * @throws System::InvalidOperationException if a submitted voice is using 3D audio;
+         *         this check precedes range validation and leaves the pan unchanged.
          * @throws System::ArgumentOutOfRangeException if @p pan is outside [-1, 1].
          */
         void setPanProperty(const float& pan);
