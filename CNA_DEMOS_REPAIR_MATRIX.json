@@ -283,15 +283,22 @@
       "title": "`Song::FromUri` resolves a relative path against the working directory",
       "line": 3095,
       "historical_status": "Open",
-      "demos": [],
+      "demos": [
+        "media.media_player.play_song"
+      ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "Scheme-less relative Song::FromUri input is passed directly to the Song constructor, so cwd shadows TitleLocation despite the genuine XNA/FNA title-root contract.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "9639707991b589914d8db8224b6d79f3867d60d0",
+      "validation": [
+        "Genuine XNA MediaSong_FromUri IL and local FNA agree on TitleLocation. Original fixture six relative failures/two absolute controls before, all eight unchanged PASS after in native and actual external library; both cold-title overloads PASS.",
+        "Full native10882=10781PASS/101sameSKIP; all10874 old outcomes retained plus eightPASS. External112 exact parity except one added passing play_song identity assertion; per renderer46PASS/9historicalFAIL/1manual NOT RUN. Native9/demo16 registered CTests PASS. All frozen sources/artifacts unchanged. No runtime marker existed.",
+        "Validation used the shared worktree with unaccepted011 ownership changes, selectively excluded from this commit. Linux SOFTWARE/OPENGLES3 only; no new sanitizer, visual, full719-demo or global campaign acceptance. See demos docs/repair-evidence/content/MEDIA_PATH_TRIAGE.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "CNA9639707991 validated:31828 native full exact parity,79454 external-v2 TERMINAL0 build917304ms zero diagnostics, original8/8+cold string/typed PASS,112 comparisons without unexpected delta, peak2254340096/all events0.49056 registered9+16PASS3621/11881ms, peak211771392/events0. Original23738 build timeout1800106ms/SIGTERM/ETIMEDOUT preserved; no source/test change in incremental continuation. Demo relative URI workaround removed; all five old playback assertions retained plus one title-file identity assertion."
     },
     {
       "id": "CNA-DEMOS-ISSUE-016",
@@ -550,7 +557,8 @@
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [
-        "Fresh current1ad0a3916 canonical stream C++23/Wall/Wextra/Werror syntax probe fails to convert System::IO::Stream to std::istream&. Permanent ../cna-demos/docs/repair-evidence/api-shape/SoundEffectStreamProbe.cpp; repair-sound-effect-stream-before-build.log. No playback or repair claimed."
+        "Fresh current1ad0a3916 canonical stream C++23/Wall/Wextra/Werror syntax probe fails to convert System::IO::Stream to std::istream&. Permanent ../cna-demos/docs/repair-evidence/api-shape/SoundEffectStreamProbe.cpp; repair-sound-effect-stream-before-build.log. No playback or repair claimed.",
+        "2026-10-21:95566 genuine managed WAV/public refusal oracle25/25PASS;52326 extended managed chunk/loop/duration oracle71/71PASS, pinned Framework hash/MVID, strict C# build2708ms/run585ms, peak285597696/events0, source unchanged. Successful public native sound creation and hardware output are not claimed. Nine native cases prepared but UNCOMPILED; no production fix."
       ],
       "final_disposition": null
     },
@@ -711,12 +719,15 @@
         "audio.dynamic_sound_effect_instance.streaming"
       ],
       "subsystem": "audio/media",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Dynamic audio getters and both sample-conversion helpers omit XNA's disposal-before-access/argument-validation guards; old native helper tests deliberately follow the contrary FNA contract.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Completed058 external baseline: SOFTWARE and OPENGLES3 each retain exactly the two historical post-disposal getter failures. Current015 full native retains the old helper tests that expect no throw after Dispose; the affected implementation is unchanged.",
+        "2026-10-21:18009 genuine managed guard oracle24/24PASS with pinned Framework hash/MVID, strict C# build3248ms/run780ms, peak268726272/events0 and source hashes unchanged. Explicitly populated uninitialized disposed fixture validates exception order/object name, not native voice creation or real disposal. Five new native tests prepared but UNRUN; no code fix yet."
+      ],
       "final_disposition": null
     },
     {
@@ -1391,11 +1402,14 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "The canonical Pan setter assigns Pan_ before refusing a latched live3D instance, and validates range before XNA's mode gate. A failed assignment therefore mutates the property and can report the wrong exception family.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Completed058 external baseline retains the original C spatial-state failed-pan assertion on SOFTWARE and OPENGLES3; implementation remains unchanged during015.",
+        "2026-10-21:69388 first genuine draft10PASS/4FAIL disproved a new range-before-mode assumption, not the historical finding. Source/logs preserved. Actual Framework set_Pan IL RVA0x1ac10 and corrected67026 oracle33/33PASS establish disposal, prepacket latch reset, live3D refusal, range validation, then mutation. Strict C# build4003ms/run837ms, peak262078464/events0, source/Framework hash/MVID intact. Managed initialized-field refusal seam only, not native playback. No code repair yet."
+      ],
       "final_disposition": null
     },
     {

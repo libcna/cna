@@ -9,6 +9,150 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+### Latest: ISSUE-015 CLOSED; continue audio reproductions
+
+CNA fix `9639707991b589914d8db8224b6d79f3867d60d0` contains only title-relative
+Song resolution/comments and native tests. All pending011 ownership hunks,
+including those in Song.cpp/Song.hpp and the owner's content reader files, remain
+uncommitted and untouched. Demos validation source is50d0c97 plus the now-tested
+play_song relative-path/identity assertion; matching evidence commit follows.
+
+79454 TERMINAL0: external-v2 incremental build917304ms/zero diagnostics, original
+eight cases PASS and both cold-title overloads PASS;112 audio/media/C comparisons
+preserve all previous statuses/markers/failure labels. play_song alone adds one
+passing file-identity assertion (six checks); each renderer46PASS/9historicalFAIL/
+1manual NOT RUN. Sources/artifacts unchanged;peak2254340096/all memory events0.
+Original23738 timeout remains explicitly retained, not counted as a product pass.
+49056 TERMINAL0:9 native CTests3621ms+16 demo CTests11881ms, exact JUnit counts,
+hashes unchanged;peak211771392/events0. Full native checkpoint10882=10781PASS/
+101sameSKIP retains every10874 predecessor outcome plus eightPASS. See demos
+docs/repair-evidence/content/MEDIA_PATH_TRIAGE.md for all reports and limitations.
+
+Matrix95FINAL/60pending:87RESOLVED/7ALREADY_FIXED/1DEMO_EXPECTATION_BUG;
+52PENDING_VERIFICATION/8CONFIRMED_OPEN. Linux SOFTWARE/OPENGLES3 runtime only;
+no new sanitizer/visual/full719-demo/global acceptance, and011 remains OPEN with
+the C Effect lifetime regression. No live heavy process at this checkpoint.
+Exact next task: run prepared028 lazy-path baseline, then07318-case pan baseline
+serially under existing6GiB/no-swap/private GPU scopes.029/038 native witnesses
+remain unrun. No push/merge. All older RUNNING entries below are historical.
+
+### Latest:79454 external-v2 RUNNING after explicit build-timeout continuation
+
+23738 TERMINAL1 at07:16UTC: build1800106ms reached the driver's30-minute limit,
+SIGTERM/ETIMEDOUT after683/1001 steps, zero compiler warning/error diagnostics.
+No runtime case ran; no final memory/hash audit was emitted. Original logs and
+progress preserved. Host inspection verified its scope inactive/dead and no
+remaining build processes before continuation. This is not a source/test failure
+or a product pass.79454 now RUNNING cna-repair-song-uri-path-external-v2.scope:
+same existing build/one worker/sharedcache/private GPU/4GiB high/6GiB max/no swap,
+90-minute build allowance,324 remaining steps (38 done07:19UTC). Source freeze
+unchanged, no second heavy job. Driver requires the recorded timeout explicitly;
+all assertions and058 comparison unchanged. Next actual external probes/112 cases,
+then repair-song-uri-path-ctest-v2.mjs (native9 and demo CLI/play_song16), isolated
+015-only commit and status update. Preserve011 ownership hunks and all historical
+failures. CNA a9d74c023; demos ee116cf plus play_song/handoff changes. No push.
+Prepared028 lazy path and native029/038 witnesses remain unrun. Genuine029(25+71),
+038(24) and corrected073(33) measured controls are complete; initial073 wrong-order
+oracle4FAIL remains preserved. Matrix94FINAL/61pending (52PENDING/9CONFIRMED).
+
+###073 genuine refusal order measured;015 external build still running
+
+69388 first draft TERMINAL1:10PASS/4FAIL disproved its range-before-live3D
+assumption. Original source/logs retained. Actual XNA set_Pan IL0x1ac10 orders
+disposal, prepacket latch reset, live3D refusal, range validation, native call,
+then public mutation. Corrected67026 gives33/33PASS, C# build4003ms/run837ms,
+peak262078464/events0. Managed refusal fixture only, not native voice/playback.
+No CNA source changes.073 CONFIRMED_OPEN;94FINAL/61pending now52PENDING/9CONFIRMED.
+External23738 still RUNNING (~559/1001 steps07:08UTC), no diagnostics. Its driver
+has a30-minute build timeout; if reached, retain that setup failure and continue
+incrementally only once its owned process tree has exited. Do not weaken tests or
+launch another heavy job. No015 closure or source commit yet.
+
+### Small genuine audio references completed beside the sole external C++ build
+
+52326 TERMINAL0:029 extended71/71 managed WAV checks PASS, C# build2708ms/run585ms,
+peak285597696/events0.18009 TERMINAL0:038 genuine24/24 disposal-guard controls
+PASS, build3248ms/run780ms,peak268726272/events0. Each used a separate1GiB/private
+display/no-swap scope; they ran serially and have both exited. No second heavy
+C++ build or CNA source mutation. Sources and actual Framework hash/MVID intact.
+No successful native sound creation, real XNA disposal or hardware output claim.
+038 is CONFIRMED_OPEN, including the two conversion helpers' shared missing guard;
+matrix94FINAL/61pending, now53PENDING_VERIFICATION/8CONFIRMED_OPEN. Native new038/
+029 witnesses and028 lazy-path probe remain UNRUN. Demos evidence checkpoint2da9d23
+plus these reference results.23738 remains the only live job, around485/1001 build
+steps at07:03UTC, zero diagnostics so far. No015 closure, source commit or push.
+
+### Latest:015 full native PASS;23738 external renderer regression RUNNING
+
+31828 TERMINAL0: full10882=10781PASS/101sameSKIP, all10874 old outcomes unchanged
+plus eightPASS. Full1228182ms/compare124ms, frozen inputs unchanged; peak4297228288,
+high943/max/OOM0. Media311PASS and focused247 cases have no failures. Cold-title
+string/typed controls PASS. No015 closure yet; matrix94FINAL/61pending.
+
+23738 RUNNING cna-repair-song-uri-path-external.scope, driver in demos build-probe.
+Existing linux-full incremental build, unchanged eight-case/cold-title probes
+linked to its actual shared library, then112 audio/media/C renderer comparisons.
+The play_song demo uses a relative URI and adds one title-file identity assertion;
+all five original playback checks stay. All other statuses/checks/markers must
+match058 external baseline. Private GPU/one worker/sharedcache/4GiB high/6GiB max/
+no swap. Freeze CNA and demo source; no concurrent heavy job. Next registered
+CTests then isolated015 commit, preserving all011 hunks. Prepared next evidence:
+028 lazy-path eight-check probe and029 genuine71 WAV chunk controls (both UNRUN).
+Demos also contains prepared029 nine-case native stream fixture, UNCOMPILED.
+No new push/merge. The sandbox ctest -N attempt failed read-only discovery writes,
+not a runtime test; rerun real CTest with proper permissions after this gate.
+
+### Resume:31828 full native RUNNING; media and cold-title controls PASS
+
+2026-10-21 06:29 UTC: build147276ms PASS, strict cold-title probe build1643ms,
+string44ms/typed43ms both resolved=1 in fresh processes. Media311PASS11821ms;
+broader focused gate PASS2064ms. Full native suite still runs; final10874-to10882
+parity, memory and hash audit not yet available. No concurrent heavy job/source
+changes. Cold-title probe is committed in demos dc12e06; older prepared/not-run
+notes below are historical. Next full parity, then external relative-path demo
+and SOFTWARE/OPENGLES3 regression. No015 closure or new push/merge.
+
+### Latest:015 focused8PASS;31828 native/default-title/full regression RUNNING
+
+23666 TERMINAL0: incremental cna_shared build103408ms/zero diagnostics; unchanged
+original eight-case fixture now8PASS (build2858ms/run43ms/inspect22ms).
+All frozen sources unchanged; expected rebuilt libraries recorded;peak1353715712,
+all memory events0. No015 closure yet. Matrix94FINAL/61pending,015 CONFIRMED_OPEN.
+
+31828 RUNNING cna-repair-song-uri-path-native.scope. Rebuild CnaTests/CnaMediaTests,
+strict fresh-process default-title probe (string and typed), media, focused/full
+native regression. Compare every10874 preceding outcome and exactly eight newPASS.
+The moved existing relative-URI test must retain its full-suite ID/outcome (focused
+media count becomes311 because that one test now belongs to integration).
+Driver ../cna-demos/build-probe/repair-song-uri-path-native.mjs; reports same prefix.
+Private GPU and user/network namespace, capabilities dropped, one worker/shared
+cache/4GiB high/6GiB max/no swap. Freeze CNA production/native tests, no overlapping
+heavy job. New cold-title probe source in demos not yet committed/run. Next external
+demo path assertion and SOFTWARE/OPENGLES3 regression after native gate.011 separate
+ownership work remains uncommitted; preserve its hunks when eventually staging015.
+
+### Current:015 reproduced/local repair;029 genuine25PASS
+
+11469 TERMINAL0 confirms OPEN015: strict eight-case baseline gives six relative
+title/cwd/decoy failures and two absolutePASS;build2196ms/run35ms/audit20ms,
+peak867409920/events0/hashes unchanged.95566 TERMINAL0: genuine XNA managed WAV
+and public pre-native FromStream oracle25/25PASS, MVID34d977ae-c3ec-4d07-aa6d-
+6fed6d8e3864,peak317890560/events0. No native audio/playback claim for that oracle.
+
+23666 RUNNING: repair-song-uri-path-after.mjs rebuilds existing cna_shared then
+reruns unchanged015 eight-case fixture. Single worker/sharedcache/private display/
+6GiB max/no swap. Source/native tests frozen. Local015 uses core TitlePath bridge
+and platform base path; no new runtime dependency. Eight reproduced tests copied
+to tests/MediaSongTitlePathTests.cpp. Existing typed-relative SongTest keeps its
+ID but moves there for public TitleLocation setup and correct title-rooted handle;
+two plain-path controls use existing absolute fixture. Full comparison must retain
+all10874 outcomes and add eightPASS. No015 closure/commit yet.
+IMPORTANT: Song.cpp/Song.hpp contain BOTH pending011 and015 hunks. Stage only015
+hunks when validated, never sweep in the unaccepted011 ownership work.
+CNA a9d74c023, demos aa4551b plus current evidence updates.058 remains closed;
+011 C effect/model contract choice still pending. No push/merge. Next after015
+focused gate: native media/integration/full and external path/media regression.
+
 ### Latest closure:058 fixed in 380c32153c8063c38f6354dc9e37a3c23c2dd0f0
 
 All targeted sanitizer/native/external/CTest gates below have completed. Matrix
