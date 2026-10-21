@@ -9,6 +9,707 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+### Latest closure:058 fixed in 380c32153c8063c38f6354dc9e37a3c23c2dd0f0
+
+All targeted sanitizer/native/external/CTest gates below have completed. Matrix
+now94FINAL/61pending (86RESOLVED/7ALREADY_FIXED/1DEMO_EXPECTATION_BUG;
+55PENDING_VERIFICATION/6CONFIRMED_OPEN). No historical ID removed. CNA source
+commit contains only058 fix, tests and narrow test-audit registration;011 remains
+uncommitted and unaccepted. Demos evidence at c206224 plus closure notes pending.
+No live job; immediately run repair-song-uri-path-before.mjs, then
+repair-sound-effect-stream-reference.mjs, serially under the same6GiB/private
+display/shared-cache policy. Prepared sources are committed, not yet executed.
+No push or merge. No full719/visual/735-CTest green claim for the ownership batch.
+
+### Current:058 validated and ready for its isolated source commit
+
+31597 TERMINAL0: external incremental build49748ms/zero diagnostics; original
+unchanged replay probe links the exact external library and passes caller109ms/
+queue110ms.112 audio/media/C runs preserve all prior statuses/checks/markers and
+failed assertions on SOFTWARE/OPENGLES3 (each46PASS/9historicalFAIL/1manualNOT RUN).
+Frozen319 artifacts/native inputs unchanged;peak4306530304/high924/max/OOM0.
+73297 TERMINAL0: all six registered replay CTests PASS,2.10s; logs/XML retained.
+Together with integrated sanitizer and full10874 native parity,058 can be closed.
+Only MediaPlayer.cpp, six native regressions and their exact one-reference SDL
+test-fixture classification belong to the source commit. Preserve every011 file.
+No process remains running. Next record repair SHA/status in both repositories,
+then run prepared015 native decoy baseline and029 genuine managed stream oracle.
+011 remains open/uncommitted; no full campaign acceptance, push or merge.
+
+### Current:058 full native PASS;31597 external regression RUNNING
+
+90349 TERMINAL0: full10874=10773PASS/101sameSKIP, all10868 predecessor outcomes
+unchanged and exactly six newPASS. Full1235135ms, compare96ms; frozen hashes
+unchanged;peak4297822208/high2020/max/OOM0. Build18594ms zero diagnostics;
+media312/312PASS12263ms, wider625PASS/4SKIP6143ms. Sanitizer after-v3 remains green.
+
+31597 RUNNING cna-repair-media-queue-replay-external.scope. Existing linux-full
+incremental build, unchanged original probe linked to that exact external shared
+library, then56 audio/media/C scenarios on each SOFTWARE/OPENGLES3 with exact
+status/check/knownIssue/failed-assertion parity. Historical failures and manual
+NOT RUN are retained, not counted as product passes. Driver in demos build-probe;
+reports repair-media-queue-replay-external-*. Serial/shared cache/private display/
+4GiB high/6GiB max/no swap. Freeze production/native sources. No overlapping job.
+Next finish058 external gate, commit only its source/test/audit changes, update
+permanent issue status. Then run prepared015 and029 evidence (demos c206224).
+The011 ownership batch remains uncommitted/open with the recorded C Effect
+lifetime regression; owner C contract question unanswered. No push/merge.
+
+### Current:058 sanitizer PASS;90349 full native regression RUNNING
+
+98405 TERMINAL0 (after-v3): unchanged original caller AND queue probe PASS;
+all six unchanged native regressions PASS under ASan/leaks/UBSan/float-cast-overflow.
+Media archive rebuild6516ms, original probe1581ms, six-test fixture2458ms, zero
+diagnostics. Expected MediaPlayer/media archive delta only; all other frozen
+inputs unchanged. Peak654491648/all memory events0. First two configure failures
+remain preserved: new dummy-driver test lacked platform-audit classification;
+it now has exactly one audio-native-fixture entry, scanner rules unchanged.
+
+90349 RUNNING, cna-repair-media-queue-replay-native.scope: build18594ms PASS;
+CnaMediaTests312/312PASS12263ms; wider focus625PASS/4SKIP6143ms. Full CnaTests
+running, must preserve all10868 previous ownership-checkpoint outcomes plus six
+newPASS. Driver ../cna-demos/build-probe/repair-media-queue-replay-native.mjs,
+reports repair-media-queue-replay-native-*. Private GPU/network cna-test0, owner
+UID/all capabilities dropped, one worker/shared cache/4GiB high/6GiB max/no swap.
+Freeze production/native tests; no overlapping heavy job. Next full comparison,
+then external media reproduction and renderer regression. No closure/commit yet.
+011 C effect/model contract decision pending; no broad acceptance claimed.
+Matrix93FINAL/62pending;058 now CONFIRMED_OPEN. No push/merge.
+
+### Latest:058 reproduced; local queue lifetime repair awaiting validation
+
+16171 TERMINAL0: external build2864576ms/zero diagnostics; same independent-C
+fixture passes SOFTWARE125ms/OPENGLES3 282ms.60398 TERMINAL1: focused54 runs
+give52PASS/2FAIL, only C content_manager (Effect after Unload/destruction on each
+renderer). Original011 ownership/disposal demos now PASS on both with unchanged
+assertions. Frozen inputs unchanged; build peak4301131776/high2903/OOM0;
+focused peak1311191040/events0. C effect/model owner choice remains pending.
+
+6576 TERMINAL0 confirms OPEN058 in fully instrumented existing build-asan:
+unchanged historical probe caller0/queue ASan UAF; six new strict-compiled tests
+give two caller controls PASS/four queue-alias UAFs at LoadSong after Clear.
+All frozen hashes unchanged;peak3494117376/events0. Reports in demos
+build/linux-full/reports/repair-media-queue-replay-before-*.
+MediaPlayer.cpp now locally retains the old queue through both Play overloads;
+the exact six baseline tests are copied to native media tests. NOT validated yet.
+Next rebuild sanitizer media archive, relink unchanged probes, then native media
+and full regression. No heavy job currently running. CNA8d73b19c0 plus separate
+uncommitted011 ownership batch and this058 candidate; demos9de99c3 plus evidence.
+No issue closure, marker removal, push or merge. Older RUNNING notes are history.
+
+### Latest diagnostic:53232 C effect regression;16171 still RUNNING
+
+Candidate C shared library linked successfully during16171. Early pure-C
+content_manager diagnostic53232 TERMINAL1: SOFTWARE and OPENGLES3 each fail
+exactly2/67 checks (Effect use after Unload/manager Destroy); other65 pass.
+Renderer identities and all artifact/source hashes verified;peak158732288/events0.
+Reports repair-content-c-contract-early-*. No stale C++ executable run. Separate
+512MiB scope for this brief no-compile diagnostic;16171 remains the only heavy
+job. Do not call the ownership batch accepted or hide the two failures.
+Owner now has the measured C effect/model lifetime contract choice; no answer
+presumed. Preserve assertions until the intended public contract is settled.
+
+Prepared, NOT run: build-probe/repair-content-ownership-c-focused.mjs (24 C
+content scenarios plus three original ownership/cache/unload demos,54 cases on
+both renderers), and
+build-probe/repair-media-queue-replay-before.mjs (unchanged058 probe against
+existing integrated build-asan, caller control and actual UAF diagnostic, then
+six new prepared native-style alias/control tests in separate processes).
+Run after16171 finishes, serial heavy work. Source-only058 collection-alias
+audit and proposed move-retainer fix are in demos evidence, not implemented.
+Demos commits b4f3a38,868f684,3935305,4a0533d preserve C baseline/native results,
+058 original probe and020 relocation constraints; newest runtime notes pending
+commit. CNA matrix current_validation updated for011, status stays open.
+
+### Current:26923 native PASS;6476 C baseline PASS;16171 external build RUNNING
+
+26923 TERMINAL0: full10868=10767PASS/101sameSKIP, all10807 original057 outcomes
+unchanged plus61 newPASS. Wider focus1524=1519PASS/5SKIP. Build857043ms,
+focus65764ms, full1152852ms, compare118ms;peak4296716288,high308,max/OOM0.
+All frozen source/artifact hashes unchanged;66 build warnings exactly match the
+previous native location/message multiset. Integrated sanitizer61PASS still valid.
+
+6476 TERMINAL0: permanent demos ContentIndependentHandleLifetimeProbe.c compiled
+C17/Wall/Wextra/Werror and passed against original057 C ABI on SOFTWARE/OPENGLES3.
+Actual96 exact cube pixels, existing looped playback and new playable instance
+at all three boundaries (before Unload, after Unload, after manager Destroy).
+Build261ms, SOFTWARE126ms, OPENGLES3 280ms;peak278118400/events0;hashes unchanged.
+Reports ../cna-demos/build/linux-full/reports/repair-content-independent-c-before-*.
+
+16171 RUNNING in cna-repair-content-ownership-external.scope: existing external
+linux-full incremental rebuild, then SAME compiled C fixture with candidate C
+library on both renderers. Driver ../cna-demos/build-probe/repair-content-ownership-external.mjs;
+reports repair-content-ownership-external-*. One worker/shared cache/private GPU,
+4GiB high/6GiB max/no swap. Freeze production/native sources; no overlapping build.
+Next inspect candidate actual C use, run existing C content scenarios and complete
+SW/GLES/CTest/visual parity. C effect/model lifetime choice still pending; preserve
+their post-Unload assertions.93FINAL/62PENDING,011 open. CNA8d73b19c0 ownership
+batch uncommitted. Demos has new C fixture plus read-only020 triage and preserved
+historical058 probe; neither020 nor058 has a new runtime result. No push/merge.
+Older RUNNING sections below are chronology, not active process status.
+
+### Current:90369 sanitizer61PASS;26923 native regression RUNNING
+
+90369 TERMINAL0. Reused sanitizer libraries160ms; fixtures compile35927ms;
+diagnostic comparison20ms verifies exactly145 unchanged renderer-interface
+location/message warnings, with no other diagnostic. Actual61 native tests from
+11 suites allPASS, process462ms (GTest238ms), XML audit21ms. ASan/leak/UBSan/
+float-cast-overflow enabled; no sanitizer report or suppression. SOFTWARE;
+affected CNA and129 enabled Sharp Runtime TUs instrumented, vendors not.
+Peak1215119360,all memory events0; all source/artifact hashes unchanged.
+Original13324 failed compile and35869 preflight remain preserved evidence.
+
+26923 RUNNING, cna-repair-ownership-native-current-v3.scope. Driver
+../cna-demos/build-probe/repair-content-ownership-native-current.mjs; reports
+repair-content-ownership-native-current-v3-*. Sanitizer audit/hash prerequisite
+passed; canonical CnaTests is rebuilding after public-layout changes, followed
+by wider focused tests and full suite. Exact057 comparison requires all10807
+original outcomes unchanged plus61 newPASS (expected10868 total). Private display
+and private network, owner UID/all capabilities dropped, cna-test0 limited
+broadcast route verified by driver. One worker/shared cache/4GiB high/6GiB max/
+no swap. Freeze production/native tests; poll26923, no concurrent heavy job.
+
+CNA8d73b19c0 still uncommitted; demos checkpoint b465720 is committed/clean.93FINAL/
+62PENDING;011 open, no knownIssue removal. After native gate: rebuild external
+C API/demos, validate actual independent C-handle use and both renderers/CTest/
+visuals. C model/effect lifetime decision remains pending. No push/merge.
+Read-only C coverage audit: standalone/c_api.content.content_manager/main.c already
+checks texture pixels and font measurement after Unload/Destroy and subsequently
+draws them. Reuse it. additional_loaders currently destroys sound/cube before
+Unload; add focused real-C sound-instance/cube-pixel lifetime coverage after the
+current source-frozen native gate. Do not mistake native C-style detachment tests
+for actual ABI validation. No new C fixture/source has been added yet.
+
+### Prior:90369 sanitizer continuation started;13324 TERMINAL1
+
+13324 libraries-build0/1262919ms, then strict native-fixture compile1/37387ms.
+All145 errors are unused parameters in unchanged HEAD IGraphicsRenderer.hpp,
+required by the cube weak-renderer-expiry assertion. No tests ran; do not call
+this a sanitizer runtime failure/pass. Library build has16 existing Draco warnings;
+configuration has the unused FetchContent flag warning. Peak4297129984,
+high1707,max/OOM0; all frozen source/artifact hashes unchanged.
+
+90369 reuses the exact existing build-asan/cache and verifies original hashes.
+35869 stopped before any compile: cache guard expected literal ccache, but CNA
+uses /usr/bin/cmake;-E;env;CCACHE_BASEDIR=/rv;/usr/bin/ccache. Verified that exact
+existing wrapper and corrected the guard; no configuration or source changed.
+Driver same path, report prefix repair-content-ownership-integrated-asan-v2.
+It retains Wall/Wextra/Werror, demotes only unused-parameter errors to visible
+warnings and requires the exact145 original location/message diagnostics, with
+no new/changed diagnostics, before running all61 unmodified native tests. No
+production/header/test/assertion edits, suppression, reconfigure or clean rebuild.
+One worker, private display, shared cache,4GiB high/6GiB max/no swap as before.
+Poll90369; no overlapping heavy job. Native-current-v3 is prepared, NOT launched,
+and requires v2 sanitizer completion/hashes before rebuilding/running native tests.
+93FINAL/62PENDING;011 remains open. Older RUNNING notes below are chronology.
+
+### Prior:39 focused PASS;13324 integrated sanitizer build started
+
+Demos checkpoint committed efb6e2d; worktree clean. CNA remains8d73b19c0 with
+the current ownership/race/metadata batch uncommitted.13324 remains authoritative
+live job, last observed603/725 library build steps. Do not start another build.
+The host has about24GiB available RAM at the latest read-only check. Resumed CLI
+PID3439242 RSS380272KiB and tool-serving Codex PID10934 RSS793936KiB are separate
+processes; do not describe either number as total Codex memory. No process stopped.
+Scope peak2918453248 bytes so far. Driver71806 has no inherited ASAN/UBSAN/LSAN/TSAN
+options; its children explicitly enable ASan/leak/UBSan halt-on-error checks.
+Prepared (NOT launched) native-current-v3 driver requires the completed sanitizer
+audit and matching source/artifact hashes, then rebuilds CnaTests and compares the
+full suite to057 with exactly61 newPASS and no changed/missing previous outcomes.
+
+57618 TERMINAL0: all canonical link-closure archives and shared libcna.so rebuilt
+in353534ms with zero diagnostics; strict39-case fixture compiles20631ms with zero
+diagnostics, runs747ms/all39PASS. Exact XML comparison21ms: previous30PASS retained,
+two metadata baselineFAIL->PASS, other two metadata controls unchanged, five new
+boundaryPASS; no missing cases. All source/fixture/library hashes unchanged;
+peak2356383744,all memory events0. The four original metadata tests, genuine oracle
+and concurrency reproduction remain byte-identical to e32db28. Both new native
+metadata files match their permanent external originals exactly.
+
+13324 RUNNING: cna-repair-ownership-integrated-asan.scope, private display,
+one worker/shared ccache,4GiB high/6GiB max/no swap. Driver
+../cna-demos/build-probe/repair-content-ownership-integrated-asan.mjs. Existing
+build-asan/cmake-build-asan and devices sanitizer variants were absent; created
+only the standard persistent CNA build-asan for this genuinely different config.
+Debug, SOFTWARE, SDL3 platform/audio, CNA_SANITIZE=address,undefined (GCC adds
+float-cast-overflow), O0,FULL debug; examples/C API off, tests enabled, existing
+SDL prebuilt reused. No /tmp build/new dependency clone/private ccache.
+
+Configure0/7530ms, with one honest CMake warning: unused
+FETCHCONTENT_UPDATES_DISCONNECTED (no FetchContent operation in this config).
+Instrumentation audit verifies nine affected CNA implementations and129 enabled
+Sharp Runtime translation units have actual sanitizer compile flags. BuildPerformance
+explicitly instruments the enabled Sharp Runtime closure; earlier speculation that
+Sharp Runtime could not be instrumented was incorrect. Vendored libraries remain
+uninstrumented per project policy; do not claim otherwise. Current725-step library
+build is active; last scope~547MB current/~578MB peak. No sanitizer runtime result
+yet. It will strictly compile/run the actual61 native ownership/core/metadata
+tests against the canonical CnaContentTests link closure, not mixed old artifacts.
+
+Reports repair-content-ownership-integrated-asan-*; poll13324, do not restart solely
+on a timeout. Its driver intentionally refuses overwriting an existing sanitizer
+cache: if a future run is needed, inspect/reuse this same tree, do not create a
+second variant. Production/native/fixture source and canonical native libraries
+are frozen throughout. CnaTests and external C API/demos executables are still
+STALE after the GraphicsResource layout change and must be rebuilt before use.
+Next after terminal: investigate sanitizer findings, then current native/full and
+external C API/demos/renderer/visual gates. C model/effect ownership decision still
+pending.93FINAL/62PENDING;011 not closed, no knownIssue removal, no production
+commit/push/merge. Demos boundary evidence/status checkpoint is being committed.
+
+### Live metadata candidate:57618 RUNNING (2026-10-21)
+
+CNA8d73b19c0 retains the uncommitted ownership batch plus the proven core race
+repair. New metadata patch adds opt-in shared Name/Tag storage at GraphicsResource,
+activated by Texture2D/TextureCube content recording before capturing the stable
+representative. Copy/move construction and assignment retain/replace that scope.
+Ordinary unrecorded copies keep snapshots; disposal/events/device registration
+are not coupled to SharedIdentity. C-boundary DetachContentOwnership first clones
+the metadata snapshot, then removes manager ownership, including const wrappers.
+Texture2D/TextureCube public copy comments describe the distinction. No broad
+renderer-specific change or ContentManager-special-case property setter.
+
+The four measured metadata cases from e32db28 remain unchanged and are copied
+exactly into native content tests. New demos ContentTextureMetadataBoundaryTests.cpp
+adds five controls: cube copies plus explicit independent disposal, detached const
+2D snapshot/pixels after unload, detached cube metadata/pixels, assigning an
+unrecorded wrapper, and move assignment between manager scopes. All five also
+have exact native copies, but are NOT yet claimed passing. New native total is
+expected10868 (old05710807+61 additions), not the previous10857; audit actual XML.
+
+57618 RUNNING: cna-repair-ownership-metadata-candidate.scope, private GPU runner,
+one worker/shared ccache,4GiB high/6GiB max/no swap. Driver remains
+../cna-demos/build-probe/repair-content-ownership-residuals.mjs but report prefix
+is repair-content-ownership-metadata-candidate. Rebuilds the canonical CnaTests
+link closure's relative archives AND shared libcna.so, then strict39-case external
+fixture (previous30, original4 metadata, new5 boundaries). Comparator requires all
+oldPASS unchanged, exactly the two original metadata FAIL->PASS and five addedPASS.
+Records source/fixture/archive/shared-library hashes; freeze these files until
+terminal. Build reconfigured only because native test globs grew;193 tasks.
+CnaTests itself and external C API/demos executables remain STALE until rebuilt.
+
+Demos HEAD e32db28; new boundary fixture uncommitted. A mechanical native-copy
+attempt via a shell pipe failed because apply_patch is a provided command wrapper,
+not a shell executable; it made no changes. The direct apply_patch invocation then
+added both exact native files successfully. No expectation/knownIssue changes.
+Next: inspect57618 compile/runtime/compare outcome, fix any failure, then rebuild
+native executables and external C API/demos and run integrated sanitizers and full
+native/renderers/visual regressions. C model/effect policy remains pending;93FINAL/
+62PENDING,011 open, no production commit/push/merge. Older RUNNING notes superseded.
+
+### Current: native checkpoint green; candidate race repaired; metadata reproduced
+
+Demos evidence committed e32db28; worktree clean. CNA remains8d73b19c0 with
+the ownership candidate/core synchronization/test changes uncommitted. No heavy
+job live; all job handles in this checkpoint are terminal. Continue metadata
+repair before the next integrated rebuild, retaining the measured four-case oracle.
+
+80015 TERMINAL0: incremental build8175ms; focus1513=1508PASS/5SKIP in62690ms;
+full10857=10756PASS/101sameSKIP in1239549ms. Independent XML compare0/143ms
+preserves every old057 outcome, adds exactly50PASS, no missing cases. All frozen
+source/executable/libcna.so hashes unchanged. Owner UID1000, zero capabilities,
+private cna-test0 broadcast/display verified; peak2008776704, all memory events0.
+This is a real pre-followup native checkpoint, NOT a current pass after the core
+helper edits below; no external/C API/renderer-sweep/integrated sanitizer claim.
+
+28128 TERMINAL1 (expected observed defect, not a passing gate): strict actual
+ContentOwnership.cpp TSan probe build0/2050ms, run66/56ms, reports a real race
+between Attach line86 and Unlink line97 on another worker's link. Four threads
+only copy/move/destroy DISTINCT wrappers from a stable recorded source; owning
+disposal runs after join. Peak169361408/events0. This defect was introduced by
+the uncommitted ownership candidate, not claimed as a new historical issue.
+Original report repair-content-ownership-concurrency-before-* retained.
+
+Corrected the core helper with a per-group recursive mutex for membership and
+state. Disposal removes a member under lock but calls user Dispose outside the
+lock, so callbacks may join copying workers. Same-wrapper mutation/destruction
+still needs caller synchronization.1170 TERMINAL0: identical4000-copy TSan
+reproduction passes27ms, strict build1676ms,peak169459712/events0. Added two native
+core tests: concurrent distinct wrappers and callback joining a copy worker
+(10-second fail-fast deadlock guard, no detached dangling thread).99336 TERMINAL0:
+actual helper and all13 native core tests pass ASan/UBSan/leak, strict build5189ms,
+run24ms,peak360095744/events0. Integrated library binaries are now stale and need
+rebuilding after the next source batch; no test suppression or runtime workaround.
+
+Metadata baseline94947: genuine XNA15/15PASS, but first new C++ fixture compilation
+failed because System::Object is abstract. Added only a concrete MetadataTag with
+GetTypeName; unchanged Name/Tag assertions.95660 TERMINAL0 records the expected
+native exit1: strict C++ build3674ms/zero diagnostics, four cases2PASS/2FAIL with
+12 failed assertions,242ms. Genuine XNA repeats15/15PASS (445ms); native frozen
+hashes unchanged; peak494956544/events0. It uses real ContentManager/custom XNB
+reader and real unbound BlendState for reference metadata, NOT a reference GPU
+Texture2D runtime. Separate-manager/reload and unrecorded-copy controls pass;
+cached metadata and its value-copy/base-reference propagation fail. Original
+compile failure plus corrected reports repair-content-metadata-before{-v2}-*
+retained. Both metadata source files and concurrency probe are permanent demos
+evidence, with a documentation checkpoint being prepared from2e0a4f4.
+
+NO heavy job remains live. Next: repair content-acquired Texture2D/TextureCube
+metadata sharing at the common GraphicsResource metadata layer, preserving
+ordinary unrecorded copies, explicit independent disposal and the independent
+C-handle boundary. Do not reuse SharedIdentity wholesale (it also couples device/
+disposal/events). Preserve the four-case failing fixture; add native coverage.
+Then rebuild current binaries, rerun original ownership/metadata/race controls,
+integrated sanitizer and native/external/C API/renderer/visual regressions. C
+model/effect policy still awaits owner choice.93FINAL/62PENDING;011 open, no marker
+change or production commit/push/merge. Older RUNNING entries are chronology.
+
+### Resume checkpoint:80015 RUNNING;42874 terminal, not a passing gate
+
+Continuation audit (source-only while80015 remains live): original011 explicitly
+mentions Name/Tag divergence between cached Texture2D results. GraphicsResource
+copying snapshots these fields; the current ownership link only coordinates
+disposal. Do not close that related observation as fixed by the disposal work.
+Its existing ShareResourceIdentityWith seam also shares disposal/events, so it
+cannot be substituted blindly for metadata sharing. Ordinary unrecorded C++
+copies have documented independent-wrapper behavior and must retain it.
+
+Demos has two NEW UNCOMMITTED, UNRUN evidence files:
+docs/repair-evidence/content/ContentTextureMetadataTests.cpp (four cases: cached
+bidirectional metadata, content copies/moves through base refs, independent
+managers/reload, ordinary unrecorded-copy control) and ContentMetadataOracle.cs
+(15 intended checks using genuine ContentManager/custom XNB reader plus ordinary
+unbound BlendState to examine GraphicsResource metadata without a GPU). The
+reference is NOT a Texture2D/GPU runtime claim. Neither file is in the frozen
+native test suite. Prepared ignored driver build-probe/repair-content-metadata-
+before.mjs passes node --check; it refuses execution until80015's full compare
+gate succeeds and preserves source/binary hashes, then sequentially runs genuine
+XNA and strictly compiles/runs the four-case CNA baseline. Expected native2PASS/
+2FAIL is an explicit hypothesis, not yet an observed result. Run only after80015
+actually terminates and passes; otherwise investigate its failures first.
+
+Additional source-review risk to investigate before ownership closure: the new
+ContentOwnershipLink intrusive Group list is unguarded. Parallel copying and
+destruction of distinct wrappers from one stable recorded source may race even
+without concurrent ContentManager use. No race has been experimentally confirmed
+yet; add a focused actual-helper concurrency/TSan check rather than assuming the
+eleven single-threaded ASan/UBSan controls establish thread safety.
+
+Prepared third uncommitted demos fixture ContentOwnershipConcurrencyProbe.cpp
+and ignored repair-content-ownership-concurrency.mjs (node --check PASS), NOT
+built/run yet. It compiles the actual core helper under TSan and copies/moves/
+destroys4000 distinct wrappers on four workers from one stable source; source
+mutation and manager/group disposal occur only after joining all workers. Any
+TSan runtime/setup failure must not be called a race or a pass. After80015 is
+terminal, prioritize this small lifetime-safety probe, then the metadata baseline
+against unchanged artifacts, before editing production. Run serially under the
+same6GiB/no-swap scope discipline, never alongside the current heavy job.
+Latest authoritative scope check:80015 active10min, genuine differential-build
+test has live fxc/Wine children,~1.2GiB current/~1.8GiB peak. No restart warranted.
+
+Demos checkpoint committed2e0a4f4, worktree clean.80015 wider focus is now
+TERMINAL0/62690ms:1513=1508PASS/5SKIP, no failures/errors. The unchanged structural
+count passes with the corrected call spelling. Full native is RUNNING under the
+verified private network/display. Scope MemoryCurrent1068859392,peak1975140352,
+hard maximum6442450944 at transition. No full-native result yet; poll80015.
+
+Read-only host checks after the reported OOM found resumed Codex3439242 at
+360804 then366460KiB RSS (~352-358MiB); host had23689MiB available, no swap.
+No process was stopped or configuration changed. The build scope does not limit
+Codex itself. Keep tool output bounded; do not read the entire enormous demos
+HANDOFF merely to obtain its current checkpoint.
+
+42874 TERMINAL1: native build0/834467ms; focus1513 gives1507PASS/5SKIP/1FAIL
+in72359ms. The sole failure is the pre-existing source-structure assertion
+CnbSharedModelBuilderTest.TheSharedBuilderIsTheOneEveryModelFrontEndCalls: it
+still searches BuildModelMeshPartGeometryEXT(device, geometry), whereas all
+three reviewed callers now pass the owning cm. Updated only that exact search
+string to (device, cm, geometry), retaining the expected count3 and all other
+structural assertions. Runtime expectations unchanged. Source/binary freeze
+passed; peak4298309632 bytes, high1225,max/OOM0. Full suite never started because
+focus failed. Original reports repair-content-ownership-native-current-* retained.
+
+The original launcher also omitted the baseline's private network namespace.
+It is not accepted as a full comparable checkpoint. Corrected driver now asserts
+repository-owner UID, all five capability sets zero, and the private cna-test0
+limited-broadcast route before building/testing. The launcher uses
+unshare --user --map-current-user --keep-caps --net, loopback plus dummy
+cna-test0/192.0.2.1/24 and explicit broadcast255.255.255.255 route, followed by
+setpriv --bounding-set=-all --inh-caps=-all --ambient-caps=-all. No host network
+configuration changes. XML comparison additionally checks total counts, error
+elements, all old057 outcomes and exactly50 newPASS.
+
+80015 RUNNING: cna-repair-ownership-native-current-v2.scope, private GPU runner,
+one worker/shared cache,4GiB high/6GiB max/no swap. Incremental CnaTests build
+passes0/8175ms; wider focus running, then full native if green. Driver remains
+../cna-demos/build-probe/repair-content-ownership-native-current.mjs; reports now
+repair-content-ownership-native-current-v2-*. Poll80015, do not restart it or
+overlap another heavy job. Production/native tests frozen again. The temporary
+unrun isolated-only driver was removed after merging its guards into this driver.
+Next: investigate every delta, then continue the C API/demos/integrated sanitizer
+and Name/Tag audit listed below.93FINAL/62PENDING;011 remains open. No production
+commit, push, merge or knownIssue change. Older RUNNING notes are chronology.
+
+### Current job:42874 native rebuild/regression (2026-10-21)
+
+Demos evidence/status is committed asf881dfb; its worktree is clean. Read-only
+host check during this job found resumed Codex3439242 at369804KiB RSS (~361MiB),
+host MemAvailable23733MiB, no swap. Nothing was stopped or reconfigured. Build
+scope limits do not constrain Codex itself. The OpenAI docs describe /compact
+as context/token compaction, not a guaranteed RSS remedy; no such claim is made.
+
+Child controls are complete:36218 compile failed on ambiguous Google Test macro
+syntax, fixed by braces only.8582 strict build0/4447ms,4PASS/1FAIL: the newly authored
+CNB-v2 fixture incorrectly used default0 skin weights; codec correctly refused
+that input. Setting that fixture field to valid4 (no assertion/production change)
+yields93419 TERMINAL0: strict build6156ms/zero diagnostics,5PASS/324ms,
+peak526106624/events0. Four other results unchanged. Native copy of all five
+controls added. Current candidate therefore has25+5 externalPASS, plus actual core
+helper11 ASan/UBSan/leakPASS; no wider-current-native or integrated sanitizer claim.
+
+42874 RUNNING: cna-repair-ownership-native-current.scope; one worker/sharedcache,
+private display,4GiB high/6GiB max/no swap. Driver
+../cna-demos/build-probe/repair-content-ownership-native-current.mjs rebuilds
+CnaTests, runs the wider Content/Cnj/RuntimeGltf/resource focus, then full native
+suite and compares all old057 outcomes. Records changed-source plus executable/
+libcna.so hashes and refuses changes during validation. Poll this actual session.
+Reports repair-content-ownership-native-current-*. Freeze production/native tests.
+
+Next after terminal: investigate every regression; rebuild external C API/demos,
+test independent C texture/font/sound with actual use, resolve pending C model/
+effect policy from owner response. Standard integrated sanitizer build still
+needed; neither cmake-build-debug nor cmake-build-multi is instrumented, and no
+existing build-asan/cmake-build-asan tree was found. Do not substitute a mixed-ABI
+or stale executable. Audit the original011 related Name/Tag observation explicitly
+before final disposition; the scoped disposal repair has not changed metadata
+sharing. Then full SOFTWARE/OPENGLES3/visual/CTest regression.93FINAL/62PENDING;
+no closure/knownIssue change/production commit/push/merge. Demos child evidence and
+status are being checkpointed from1ca1f78; CNA source remains uncommitted on8d73b19c0.
+
+### Latest residual checkpoint:25PASS; child controls running
+
+58839 TERMINAL1: archive build0/376998ms and strict25-case fixture build0/19796ms
+had no diagnostics, but fixture SIGSEGV after10 managerPASS. Peak2182914048/events0;
+NOT OOM and NOT a pass. Debugger76318 reproduced an invalid virtual dispatch at
+ContentOwnershipAccess::Record<Texture2D>. Root cause was the validation driver:
+it rebuilt relative `.a` targets but omitted the canonical link line's `libcna.so`.
+The executable therefore loaded the old shared ABI alongside new headers. No
+production workaround was made. The original crash log/backtrace remain intact.
+
+Driver corrected to build all relative `.a` AND `.so` link targets, explicitly
+requiring libcna.so.44058 TERMINAL0: shared relink0/673ms; strict unchanged25-case
+build0/13569ms/zero diagnostics;25PASS/487ms. All18 previous cases stayPASS and all
+six measured residual failures improve. Peak848592896,all events0. Reports
+repair-content-ownership-residuals-v2-*; no all-renderer/full-native/C-API pass.
+CnaTests and other pre-layout-change executables remain stale until rebuilt.
+
+New demos-only ContentModelChildOwnershipTests.cpp has five prepared controls:
+CNB-v2's five stock effects/shared buffers, completed-child retention after failed
+CNJ model load, one disposal record for a reused cached external effect, embedded
+glTF texture, generated white SkinnedEffect texture. Its private bounded driver
+is RUNNING as36218, with source/native libraries frozen until it
+finishes. Reports repair-content-ownership-children-candidate-*. These are new
+candidate controls, not a claimed pre-fix red/green measurement. Demos has only
+this new untracked source on1ca1f78. No production commit/closure/push/merge.
+
+### Active residual-path repair (uncommitted; 58839 RUNNING)
+
+Demos evidence/status committed as1ca1f78, its worktree clean. CNA still based on
+8d73b19c0 with the ownership batch uncommitted. Added internal polymorphic
+ContentOwnedResource capability to the four participating resource types, so an
+Object/IDisposable reference preserves the same concrete disposal record. Const
+shared-pointer wrappers now use that const-safe capability; arbitrary const custom
+IDisposable pointers are not cast to mutable. Added a core erased-const regression;
+copied all seven permanent model/polymorphic cases into native content tests.
+
+Non-XNB model loaders now record completed buffers/effects and generated/embedded
+textures at materialization, including CNB-v2 and variant buffers. Model-owned
+buffers share ownership with the manager instead of being unique-only; a narrow
+private content-module recorder reaches the existing registry. External cached
+custom effects are not recorded again, and cached/generated texture reuse is not
+duplicated. No graph scan, no deep clone or C model/effect policy change.
+
+39862 TERMINAL0: strict actual core helper+11 tests with ASan/UBSan/leak,
+build4441ms/run19ms;11PASS;peak335880192;all memory events0. This does not certify
+the integrated graphics/audio implementations under sanitizers.
+
+58839 RUNNING: cna-repair-ownership-residuals-candidate.scope, one worker/shared
+ccache/private display,4GiB high/6GiB max/no swap. Driver
+../cna-demos/build-probe/repair-content-ownership-residuals.mjs rebuilds the exact
+in-tree archive targets in the canonical CnaTests link closure (not the test
+objects), then strictly compiles/runs the unchanged25 external cases. Reports
+repair-content-ownership-residuals-candidate-*. Poll this session; freeze CNA
+production/native test sources while it runs. CnaTests and other executables are
+now STALE after changed public layouts; do not run them as a current validation.
+
+Next: inspect58839 compile/runtime outcome, then add focused coverage for CNB-v2,
+generated/embedded model textures, partial model reads and reused external effects.
+Rebuild native executables before wider tests. Rebuild external C API/demos and
+verify actual independent C texture/font/sound use; owner C model/effect policy
+answer remains nonblocking. Full native/renderers/visuals and integrated lifetime
+sanitizer coverage are still required.93FINAL/62PENDING; no011 closure/marker change,
+no production commit/push/merge. Historical RUNNING notes below are superseded.
+
+### Latest ISSUE-011 integrated checkpoint and measured residuals (2026-10-21)
+
+94457 TERMINAL0: CnaTests builds0/1291420ms; broader native focus1414 gives
+1409PASS/5SKIP in54862ms. Independent XML comparison against057 preserves all1377
+previous outcomes exactly (including those5 skips), plus37 newPASS. Strict external
+fixtures compile0/9617ms/zero diagnostics; all18PASS in365ms. Both original C++
+fixtures and genuine108-check C# oracle remain byte-identical to005899e9. Native
+build emitted66 warnings, all in unchanged test files; not diagnostic-free.
+Scope peak4300394496,high2551,max0,OOM0. No full-suite/C-API/all-renderer pass yet.
+
+37046 TERMINAL1 (honest reproduced failures, not a crash): additional permanent
+demos ContentModelOwnershipTests.cpp and ContentPolymorphicOwnershipTests.cpp
+compile strictly0/7240ms/zero diagnostics; seven cases1PASS/6FAIL in384ms,20 failed
+assertions. XNB model is the passing control. CNB/CNJ/glTF each leave vertex/index
+buffers and effects undisposed. Object-typed texture disposes the original but
+not its later value copy; const Object/Texture shared pointers record neither.
+All initial loads/operations succeed. Scope peak507011072,all memory events0.
+Reports repair-content-ownership-model-formats-candidate-*; original assertions
+are retained, not reclassified. These are further paths of011, not new issue IDs.
+
+No heavy job remains; production freeze for94457/37046 is lifted. Next implement
+polymorphic/const value-resource recording and record each materialized non-XNB
+model child at its owning loader. Preserve partial-read retention, custom-effect
+cache hits, and ordinary independent disposal. Audit generated/embedded textures
+and CNB-v2 as well as the measured formats. Rebuild affected libraries and run
+the unchanged25 external cases before another wider build. C model/effect policy
+still awaits the owner's nonblocking answer. CNA production/helper/native tests
+remain uncommitted on8d73b19c0; demos evidence/status are being checkpointed from
+3f5bf7e.93FINAL/62PENDING; no knownIssue change/closure/push/merge.
+
+The RUNNING descriptions below are superseded launch chronology; do not restart
+completed exclusive-report drivers.
+
+### Active ISSUE-011 value-resource integration (uncommitted, not closed)
+
+Previous turn made concrete progress: registry implementation,101 passing native
+focus tests, eight original failure-to-pass changes and demos evidence3f5bf7e.
+Current turn implements ContentOwnershipLink in core, with intrusive live-wrapper
+membership and a retained concrete representative. Copies/moves preserve the
+scope; ordinary explicit wrapper disposal stays independent; the representative
+keeps the real resource alive after an uncached returned wrapper dies. The
+disposer retains the concrete resource type, rather than returning a type-erasing
+IDisposable surrogate. Callback destruction/movement removes or relocates members
+without stale pointer snapshots. Representative links are weak to avoid cycles.
+
+Integrated into Texture2D, TextureCube, move-only SoundEffect and copyable Song.
+Resource disposal state/native reference fields that an owner can invalidate
+through a const handle are mutable. Existing GraphicsResource shared identity was
+NOT repurposed. Direct XNB font atlas now records once; non-XNB root load routes
+record results; CNB font records its atlas. C-issued 2D/cube/font wrappers detach
+from native manager scope. The unique uncached C SoundEffect transfers its owner
+without letting the manager cascade into C-owned instances. C model/effect policy
+still awaits the nonblocking owner answer; no clone or contract change applied.
+
+33874 TERMINAL0: actual new core helper +8 tests, strict ASan/UBSan/leak build,
+all8PASS,peak341397504,events0.32375 TERMINAL0 extends this to10 tests, including
+exclusive transfer/refusal; strict build3790ms,run16ms,10PASS,peak337207296,events0.
+These are helper tests, NOT yet an integrated resource/sanitizer pass.
+
+94457 RUNNING: cna-repair-ownership-values-candidate.scope,6GiB max/4GiB high,
+no swap,one worker/shared cache/private display. Revalidate/poll this actual
+session. Driver ../cna-demos/build-probe/repair-content-ownership-values.mjs builds
+canonical CnaTests, runs Content/Texture/GraphicsResource/SoundEffect/Song/
+SpriteFont/Cnb/model-reader focus, then strictly builds/runs the unchanged14
+original external cases plus the four committed nested cases. Reports prefix
+repair-content-ownership-values-candidate-. Freeze production and native tests
+until this run is terminal; no integrated result claimed yet.
+
+Added native tests include the original4 texture and4 nested cases, concrete
+explicit-recorder ownership, resource retention after uncached wrapper destruction,
+const/copy invalidation, callback deletion, C-style pixel-preserving detach,
+cube release, independent C-style sound lifetime and Song-manager isolation.
+Core tests10,manager tests11 remain separate. All original demos assertions are
+unchanged. Demos worktree remains clean at3f5bf7e; CNA has this handoff plus the
+uncommitted production/helper/tests from this coherent ownership batch. No commit,
+closure, push or merge.93FINAL/62PENDING; goal active;131 owner-reserved.
+
+Next: finish94457, inspect every new/changed test outcome and warnings. Then build
+the external C API/demos against the candidate and verify independent texture/
+font/sound lifetime with actual use. Resolve the C model/effect policy with the
+owner response; audit non-XNB model graph/partial-read ownership and polymorphic
+reference routes before claiming011 complete. Full native/renderer/visual and
+integrated memory-lifetime regressions still required. Do not treat helper10PASS
+or a passing18-case focused probe as full closure.
+
+### Active ISSUE-011 registry candidate (uncommitted, not closed)
+
+Permanent demos evidence is now committed as3f5bf7e (nested/native fixture,
+exploratory C lifetime probe, triage and handoff). Demos worktree is clean.
+Only the CNA production candidate/native tests/status below remain uncommitted;
+no CNA repair commit, issue closure, push or merge has occurred.
+
+LATEST:40668 TERMINAL exit1 (intentional honest aggregate of an incomplete
+candidate, not a process crash). Canonical CnaTests build exits0 in709535ms;
+101 native focus tests PASS in1274ms: all90 prior outcomes exactly match057's
+full XML, plus11 new ownership regressions PASS. Strict external-fixture build
+exits0/5761ms/zero diagnostics; original14 now11PASS/3FAIL in265ms. Exactly eight
+formerly failing manager cases improve; all15 remaining texture assertion
+messages are byte-identical to the prior baseline. Both original C++ fixture
+files and the genuine108-check C# oracle match005899e9 byte-for-byte. Native
+incremental build reports51 warnings in unchanged tests (volatile/nodiscard);
+do not call it diagnostic-free. Scope peak4302471168,high2858,max0,OOM0.
+
+5983 is also TERMINAL exit1: new four-case nested fixture builds strictly with
+zero diagnostics and produces onePASS (model buffers/effect) / threeFAIL (font
+atlas, loose Texture2D, moved SoundEffect and its instance), nine assertions.
+All pre-unload operations succeed. Reports repair-content-ownership-nested-candidate-*.
+Before that, the unchanged native C model smoke and exploratory C model lifetime
+probe both compile strictly and pass against the hash-verified unchanged057
+external libcna_c_api.so (9730dd4a990b011cce60659211a063a89605a997349f0d2dc778ce0ab23d1782).
+Thus pre-repair C model drawing/Apply after manager unload/destroy is real baseline
+behavior, not an assumed pass; intended model/effect contract remains awaiting
+the owner's answer. No claim these C probes pass the new native candidate.
+Nested/C scope peak539287552,all high/max/OOM0. No heavy process remains alive.
+
+Exact next engineering step: implement ownership tracking for by-value resource
+wrappers (copies/moves/destruction/manual Dispose vs manager Dispose), preserving
+renderer release and SoundEffect instance cascading. Register direct XNB font
+atlas and non-XNB resources; use the new four-case fixture alongside the unchanged
+14 cases. Keep an actual disposable object/resource alive until manager unload,
+not merely a flag or raw-address list. Ensure callbacks that destroy/move another
+wrapper cannot leave stale addresses. Ordinary explicit texture disposal must
+remain independent; Dispose(false) drops records without invalidating wrappers.
+The C model/effect policy question is nonblocking for this native work. No final
+ownership helper architecture has yet been applied. All production changes and
+the native11-case test remain uncommitted; no full-suite/sanitizer/renderer-wide
+pass, no marker changes, no closure.93FINAL/62PENDING; goal active.
+
+The RUNNING descriptions below are retained launch chronology, superseded by the
+terminal results above. Do not restart either driver (reports use exclusive names).
+
+After resume/OOM inspection, both repositories were clean at CNA8d73b19c0 /
+demos9e62467. The previous turn verified host memory/checkpoint only; this turn
+starts production engineering. ContentManager now has ordered per-materialization
+disposal records, ContentReader's default fallback, exact disposed Load/Unload
+exceptions and exceptional Unload/Dispose finalization. Enumeration detects a
+callback registering more assets rather than keeping invalid vector iterators.
+Four production files are modified; native ContentOwnershipTests.cpp adds the ten
+unchanged behavioral cases plus a callback-mutation regression. Original external
+14-case sources and the genuine oracle remain untouched. This is a partial
+candidate: value wrappers, direct font atlases, non-XNB roots and C boundaries
+remain to be implemented/validated. Do not close011 or change knownIssue markers.
+
+Build/test driver session40668 is RUNNING as
+cna-repair-ownership-registry-candidate.scope (6GiB max,4GiB high,no swap,
+one compiler/shared cache/private display). Revalidate/poll this actual handle;
+do not restart from a historical RUNNING label. Driver:
+../cna-demos/build-probe/repair-content-ownership-candidate.mjs.
+It builds canonical CnaTests, runs ContentOwnershipCompatibilityTest plus existing
+ContentReader/ContentManager tests, then compiles/runs the original14 external
+cases. All exits/logs are retained, including anticipated still-failing texture
+cases; it does NOT claim partial improvement is a complete green repair.
+Reports prefix repair-content-ownership-registry-candidate-. Freeze the four
+production files/native test until this build is terminal.
+
+Additional demos-only ContentNestedOwnershipTests.cpp stages direct font-atlas
+and model-buffer/effect checks (not compiled yet). ContentModelLifetimeProbe.c is
+an exploratory C post-Unload/post-Destroy use probe, NOT an approved oracle.
+The actual native C smoke source was restored unchanged. A nonblocking owner
+question asks whether C model/effect resources follow native XNA Unload or need
+independent ownership; only texture independence is explicit in CONTENT.md,
+whereas models.h explicitly promises sharing the cached model graph. Do not
+silently use shallow copies, deep clones or a changed lifetime oracle to decide
+this ambiguity. Texture/font independence remains required either way.
+
+No commit, push or closure yet;93FINAL/62PENDING. No agent/process was stopped.
+Next: finish this candidate's build/focused evidence, validate added nested probes,
+then continue value-resource ownership and the C boundary under the chosen
+contract. No full-suite or sanitizer pass is claimed for this candidate.
+
 ### Active ISSUE-011 ownership baseline (no production repair yet)
 
 CNA baseline31a580d2eb51794824499638609e113a95670901; demos baselineaf858e41d4c8756096fc00874913802714413c0f.
