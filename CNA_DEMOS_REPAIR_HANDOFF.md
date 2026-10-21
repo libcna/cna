@@ -9,6 +9,63 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**Latest continuation: native68394 LIVE; older live notes below are historical.**
+CNA0d1a9bdfb/demosc07f1bd verified; old campaign scope inactive/dead.
+84495 terminal: build0/897240ms, then diagnostic guard1; no tests ran.
+All45 warnings (44 nodiscard, one volatile) exactly match the original baseline
+and13 HEAD-identical files; no suppression or warning-free claim.
+Reviewed47617 terminal1: focus13PASS/9 compiledSKIP/906ms;
+graphics3012=2929PASS/82SKIP/1FAIL/40304ms. Exact old2990 comparison has only
+ClassicTextureFormat.DxtAlphaBlocksSampleTheirOwnEncoding PASS->FAIL.
+No old case missing;22 additions13PASS/9SKIP. No full-native run was reached.
+Frozen inputs unchanged; peak672497664 bytes/all memory events0.
+
+Genuine local XNA SpriteBatch.RenderBatch leaves Textures[0] bound, and
+Texture2D.CopyData refuses SetData while bound. The DXT fixture wrongly refilled
+the sampled texture without unbinding. Added identity/refusal assertions and
+explicit unbind before refill. All original RGB/alpha assertions, bytes and
+tolerances remain unchanged; original failing XML retained. No product guard
+weakened. This fixture is own003 work, not inherited011.
+
+Sole heavy68394, scope cna-repair-sprite-binding-native-unbound, demos driver
+build-probe/repair-sprite-binding-native-unbound.mjs. One worker/shared cache/
+existing debug tree/private GPU+network/caps0/6GiB/no swap. Exact fixture-only
+diff verified and other inputs frozen. Incremental build11472ms exit0 without
+diagnostics; original22 focus2667ms exit0; corrected refill342ms PASS.
+Graphics3012 completed43532ms exit0:2930PASS/82SKIP, no failure. Full11027
+and exact old11005 comparison are still running/pending. Host scope verified
+active/running, CnaTests PID2417036, peak2646577152 bytes under6GiB.
+Inventory audit:156 unique IDs exactly match all156 issue headings; no missing
+or extra entry. Final dispositions:71 fixed,23 documentation,8 already fixed,
+one platform-validation pending, one demo correction, one duplicate;51 pending.
+Next collect68394; change sanitizer prerequisite only after accepted comparison.
+Sanitizer/external ABI rebuild+regression/visuals/unbuilt renderer checks remain.
+Preserve011/082 and owner choices.003 open,105final/51pending; no push/merge.
+
+
+Native84495 still live, build passed251/347;13 pre-existing Guide nodiscard
+warnings now observed, all exactly present in original campaign build log and
+unchanged HEAD test source. Strict diagnostic guard will stop before tests; no
+warning-free claim. Prepared demos
+`build-probe/repair-sprite-binding-native-observe.mjs` is syntax/transform checked,
+UNRUN. After84495 terminal/build0 only, it verifies exact13 diagnostics and source
+hashes, records review, runs native22/graphics3012/full11027 without rebuilding.
+Initial wrapper syntax-only quoting error corrected before execution; no product
+test ran. Sanitizer prerequisite now names future observed native audit. If more
+diagnostics appear, inspect them; never bypass the exact check. No second heavy
+job or production edit. All sources remain frozen while84495 lives.
+
+Follow-up verified wait:84495 still live, native build passed146/347 without
+observed diagnostics. Exact88 focused observations reconcile70PASS/9FAIL/9SKIP
+to79PASS/9SKIP, only nine intended FAIL->PASS transitions. Five platform gates
+PASS: inventory,956/16 classification, exact fna3d+sdl-gpu allowlist, ratchet0/0,
+hot-path181/1769. Prepared demos driver
+`build-probe/repair-sprite-binding-sanitizer.mjs` passes host syntax/transform
+checks, **UNRUN**; requires accepted84495, then safely enables SOFTWARE compiled
+effects in existing build-asan after shared dependency/stamp verification.
+Actual CNA/Runtime ASan/UBSan/float-cast/leaks must give22PASS/noSKIP. No second
+heavy job, sanitizer result, closure, push or merge. Source freeze still applies.
+
 **ISSUE-003 retry focus ACCEPTED45982; native84495 LIVE.** Shared runtime
 build148080ms, strict original22 compilation10008ms. SW1452/GLES832/GL33814ms
 each22PASS, SDL2267ms13PASS/9 compiledSKIP. All original assertions/pixel equality
