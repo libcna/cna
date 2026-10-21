@@ -9,6 +9,28 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**ISSUE-003 first focused gate ACCEPTED; compiled gate LIVE48754.**78015
+terminated0: external build1678789ms, strict original16 witness build4948ms;
+each SW/GLES/GL33/SDL_GPU gives13PASS/3 compiledSKIP (runs106/678/598/1662ms).
+All original44 failing test cases (11 per renderer) become passing tests;
+original eight passing controls remain passing. No frozen
+input drift. Peak4298645504 bytes; high1262, max/OOM/kill0. This is focused
+acceptance only, not003 closure or full regression/sanitizer acceptance.
+FNA3D identifier collision correction is now APPLIED, with missing parameter
+documentation; no FNA3D build claim. Five additional compiled lifetime/retry cases
+are now native-registered byte-identically, still UNCOMPILED/UNRUN at launch.
+Sole heavy48754: `cna-repair-sprite-binding-compiled-enabled`, driver demos
+`build-probe/repair-sprite-binding-compiled-enabled.mjs`. Configuration7428ms exit0
+enables SOFTWARE/EasyGL compiled effects in the existing external build. Both
+shared dependency patch helpers explicitly reported already-applied/skipping;
+no dependency reset or new clone. Build now running, one worker/shared cache/
+private GPU/6GiB/no swap. It will record21 cases on each renderer, preserving
+every failure; SDL_GPU compiled support remains OFF/eight explicit skips.
+Poll48754; do not edit frozen production or shared dependency inputs. Diagnose
+any new compiled error-path failures, then native/full external/visual/sanitizer
+gates. All156 IDs retained,105final/51pending; inherited011/082 untouched by staging.
+No product commit, push or merge. Report prefix `repair-sprite-binding-compiled-enabled-*`.
+
 **ISSUE-003 candidate IN VALIDATION:** sole heavy tool78015, scope
 `cna-repair-sprite-binding-candidate`, driver demos
 `build-probe/repair-sprite-binding-candidate.mjs`. Existing external incremental
@@ -25,7 +47,7 @@ commit. Preserve all other011/082 dirty work. Explicit remaining audit: compiled
 End failure/retry timing, enabled compiled runtime, extra lifetime/copy-assignment
 and renderer-control tests, native/full external regression and ASan/UBSan. Do not
 close003 on the first13 focused passes. No push/merge.
-Prepared separately in demos: `SpriteCompiledBindingLifetimeTests.cpp`, four
+Prepared separately in demos: `SpriteCompiledBindingLifetimeTests.cpp`, five
 UNCOMPILED/UNRUN cases, not in78015's frozen manifest. XNA End's Begin-pair reset
 follows successful Flush; current renderer-End recovery may wrongly clear it on
 a compiled binding failure. First reproduce with compiled effects enabled; do not
@@ -39,6 +61,17 @@ DrawSpriteRunEXT's new `binding` parameter shadows its existing local vertex
 binding. Apply demos `build-probe/repair-sprite-binding-fna3d-name.patch` AFTER
 78015 terminates (two identifier-only edits), before compiling that renderer.
 This patch is prepared, UNAPPLIED; do not claim FNA3D currently builds.
+Next prepared serial driver: demos
+`build-probe/repair-sprite-binding-compiled-enabled.mjs`, syntax/transform checked
+on host, UNRUN. Requires accepted78015, FNA3D identifier correction, native
+byte-identical registration of the five new compiled-lifetime/error witnesses.
+It enables SOFTWARE/EasyGL compiled effects in the existing external tree and
+records21 cases per renderer; only SDL_GPU compiled cases may skip. Read-only
+preflight confirms shared133-patch MojoShader stamp matches tracked diff exactly,
+and FNA3D final patch reverse-check passes. The driver refuses mismatch BEFORE
+configure because the existing MojoShader helper has a destructive checkout
+fallback; do not erase dependency changes. Full hashes/source evidence in demos
+SPRITE_TEXTURE_BINDING_TRIAGE.md. No additional heavy job has been launched.
 
 **ISSUE-003 supplemental checkpoint:** demos `82ee978` preserves seven lifetime/
 stock-pass witnesses and three compiled-effect witnesses. Lifetime baseline:
