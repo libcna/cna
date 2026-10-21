@@ -78,6 +78,10 @@ namespace Microsoft::Xna::Framework::Graphics
         emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
         specularColorTextureIsSrgbEXT_ = src.specularColorTextureIsSrgbEXT_;
         encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
+        VertexColorEnabledEXT  = src.VertexColorEnabledEXT;
+        alphaMode_             = src.alphaMode_;
+        alphaCutoff_           = src.alphaCutoff_;
+        doubleSided_           = src.doubleSided_;
         textureCoordinateSetsEXT_ = src.textureCoordinateSetsEXT_;
         textureTransformsEXT_ = src.textureTransformsEXT_;
         specularTextureCoordinateSetEXT_ = src.specularTextureCoordinateSetEXT_;

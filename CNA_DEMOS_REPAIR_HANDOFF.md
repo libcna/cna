@@ -9,6 +9,70 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**070 repair accepted for scoped product commit:** eight assignments in two PBR
+copy constructors and eight native regression tests; no header/C/backend change.
+Native10875PASS/101sameSKIP, graphics2898PASS/73SKIP, sanitizer35PASS/no findings,
+six actual renderers8PASS each. External112 exact preceding outcomes (existing
+C video regressions still unaccepted). Stock66 improves only070 on both renderers:
+54PASS/12sameSKIP; all original assertion labels retained. Four shadow images
+800x480 exactly unchanged, zero differing pixels; OPENGLES3 pair inspected and
+OPENGL33 byte-identical. No clone/BRDF image claim. Frozen hashes unchanged.
+External peak4,301,479,936/high812/max0/OOM0; stock192,016,384/events0;
+visual194,105,344/events0. Catalog-before capture completed. Commit only the two
+PBR implementations, native fixture and this handoff. Then remove only070 marker/
+restriction, rebuild incrementally, assert exact catalog delta and two original
+C passes/four focused CTests; only then close070 and record repair SHA. Next
+resume owner-approved099/100/101. Preserve inherited changes; no push/merge.
+
+**Owner decisions received:** C VideoPlayer099 must align with verified XNA/C++;
+update public docs/tests with history. Latest101 answer supersedes the earlier
+IO proposal: missing-file Play throws ArgumentException, C INVALID_ARGUMENT;
+correct URI handling too. Existing-invalid-codec failure remains unproven on
+Windows; preserve the platform limitation. Finish070, then resume099/100/101,
+not055. No new push/merge. External070 finished112 exact prior outcomes and48
+renderer checks, errors0/frozen unchanged. Stock66 now54PASS/12sameSKIP, exactly
+two070 scenarios improve with original assertions. Visual/marker gates pending.
+
+**LIVE38861 PBR external:** sanitizer35/35PASS/no findings,14,068/9,239/172/22ms,
+peak816,594,944/events0, frozen hashes unchanged. Existing external build now
+runs one worker/6GiB/no swap, then48 six-renderer clone witnesses/112 parity.
+Next stock66 with only070 improvements/four exact shadows/marker-only gate.
+Codec observer19914 is PLATFORM-LIMITED, NOT PASS: valid silent WMV aborted
+at Wine MFCreateVideoMediaType; only the inspected owned scope was stopped,
+observer130, lingering winedevice killed within that scope. See demos
+VIDEO_CODEC_REFERENCE_LIMITATION.md. No video exception or C contract change.
+
+**72714 completed0:** full10875PASS/101sameSKIP1,245,153ms, exact previous10968
+outcomes plus8PASS, comparison127ms; graphics2898PASS/73SKIP. Frozen hashes
+unchanged,peak4,296,978,432/high1602/max0/OOM0. Real decoder observer now runs
+alone under1GiB/no swap. Next PBR sanitizer35/external48 plus112/stock66 with
+only070 improvements/four exact shadows/marker gate. No070 closure or product
+commit yet; do not rerun the accepted native full. Preserve inherited candidates.
+
+**LIVE72714, ISSUE-070 candidate:** CNA cbe9b9388, demos03ed687. Original C demo
+still fails exactly four properties on both SOFTWARE/OPENGLES3. New safe C++
+baseline67425 confirms6FAIL/2PASS across PbrEffect/SkinnedPbrEffect;2,836/363/23ms,
+peak447,148,032/events0,frozen hashes unchanged. Eight assignments now copy four
+omitted fields in the two constructors. Original8 test bodies registered;
+preparation-comment-only change is explicitly checked against the original hash.
+Native graphics/full10968+8 parity RUNNING, private GPU/network/caps dropped,
+one worker/6GiB/no swap. Source frozen. Next sanitizer and external six-renderer
+clone witnesses/C070 improvement plus unchanged stock/video/visual regression,
+then scoped commit and marker update only after acceptance.070 remains open.
+Preserve inherited011 and video work. No new push/merge; C video choices pending.
+
+72714 update: build22,793ms/zero diagnostics; focused8PASS320ms; graphics module
+passed44,459ms. Full suite advanced through compiler differential/error parity
+and is running original content integration projects. Do not edit frozen sources.
+After completion: optionally run prepared repair-video-codec-reference.mjs serially
+under1GiB/no swap (real normally constructed decoder/proxy, valid silent WMV
+positive control;77 is unavailable, not PASS), then required PBR sanitizer35,
+external8x6/112, stock66 with only070 improvements, four unchanged shadow images.
+Prepared marker-only before/after driver repair-pbr-clone-final.mjs verifies exact
+catalog delta, both original C assertions and four focused/catalog CTests only
+after all those gates. All these drivers are UNRUN. Shader055 structural4 fixture/
+triage exists only in demos, uncompiled/unrun; no055 product source changed.
+
 **Committed checkpoint:** CNA repair `ce88b5f9bf4a6771d4650d182c014944837452a0`
 closes102 with all gates detailed below. Demos at9593e86 before the matching
 closure evidence commit; Runtime c26614e85dffff4cadc5c4803b00d78953706b21.
