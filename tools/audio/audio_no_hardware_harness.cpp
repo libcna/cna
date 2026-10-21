@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // Task P9-HARDWARE-005 / PLAT-99: a small standalone (non-GTest) executable that forces
-// SDL_AUDIODRIVER to a nonexistent name before anything in this fresh process touches audio,
+// both SDL audio-driver environment spellings to a nonexistent name before this process touches audio,
 // then calls a real XNA-facing entry point. The selected SDL3 device must translate the failed
 // open to NoAudioHardwareException; the selected NULL device must succeed silently without
 // consulting SDL at all. The shared CnaTests binary cannot reliably exercise the SDL3 failure
@@ -23,9 +23,9 @@
 
 int main()
 {
-    // Must be set before any SDL subsystem in this process ever touches audio -- SDL only reads
-    // SDL_AUDIODRIVER on the first SDL_Init(SDL_INIT_AUDIO) call, so this only works because this
-    // harness is a brand-new process with no prior audio initialization.
+    // The SDL3 spelling takes precedence over the legacy one. Override both so an inherited
+    // SDL_AUDIO_DRIVER=dummy cannot turn this deliberate open failure into a success.
+    System::Environment::SetEnvironmentVariable("SDL_AUDIO_DRIVER", "cna_p9hw005_nonexistent_driver");
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "cna_p9hw005_nonexistent_driver");
 
     try
