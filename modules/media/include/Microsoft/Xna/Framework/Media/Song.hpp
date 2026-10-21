@@ -211,7 +211,8 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Constructs a song from the specified URI.
          *
          * Only local file URIs are supported; any other scheme is refused. A relative URI is
-         * taken as a path. The song's file must exist, as for every other Song factory.
+         * resolved against the title directory. Absolute paths remain unchanged. The song's
+         * file must exist, as for every other Song factory.
          *
          * @param name Display name for the song.
          * @param uri  Uri object that represents the URI.
@@ -224,6 +225,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * CNA extension: the same factory taking the URI as text, which is what callers holding a
          * plain path or a URI string already have. It carries the resolution both overloads use.
+         * Relative paths are resolved against the title directory, not the working directory.
          *
          * @param name Display name for the song.
          * @param uri  File URI or local path.

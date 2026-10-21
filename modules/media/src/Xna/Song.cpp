@@ -9,6 +9,8 @@
 #include <utility>
 
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/TitlePath.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
@@ -203,12 +205,24 @@ namespace Microsoft::Xna::Framework::Media
         // literal "file:///..." and always failed (plans/plan_media.md MEDIA-217/219).
         const std::size_t colon = uri.find(':');
 
-        // No scheme at all: a plain relative or absolute path, used as-is. (FNA combines a relative
-        // URI with TitleLocation.Path; CNA has no such content-root concept for Song, and every
-        // existing caller already passes a usable path.) A bare Windows drive letter like "C:/x" is
-        // a path, not a scheme -- a single-character "scheme" is never a real one.
+        // A drive letter is a path, not a URI scheme. Absolute paths keep their existing spelling.
         if (colon == std::string::npos || colon <= 1)
         {
+            const auto localPath = CNA::Internal::TryPathFromUtf8(uri);
+            if (!uri.empty() && colon == std::string::npos && localPath && localPath->is_relative())
+            {
+                // XNA's MediaSong_FromUri combines a relative URI with TitleLocation.Path.
+                // Use the lower-layer bridge so media does not depend on the runtime module.
+                const auto configuredTitle = CNA::Internal::TryGetTitlePath();
+                std::string title = configuredTitle ? *configuredTitle :
+                    CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetBasePath();
+                if (!configuredTitle && title.empty())
+                {
+                    title = CNA::Internal::PathToGenericUtf8(std::filesystem::current_path());
+                }
+                return new Song(CNA::Internal::PathToGenericUtf8(
+                    CNA::Internal::PathFromUtf8(title) / *localPath), name);
+            }
             return new Song(uri, name);
         }
 

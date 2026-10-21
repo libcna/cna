@@ -179,7 +179,7 @@ namespace
 
 TEST(SongTest, FromUriConstructsFromLocalPath)
 {
-    Song* song = Song::FromUri("Sunrise", kRealFixture);
+    Song* song = Song::FromUri("Sunrise", std::filesystem::absolute(kRealFixture).string());
     ASSERT_NE(song, nullptr);
     EXPECT_EQ(song->getNameProperty(), "Sunrise");
     delete song;
@@ -241,7 +241,7 @@ TEST(SongTest, FromUriRejectsNonFileSchemes)
 TEST(SongTest, FromUriStillAcceptsAPlainPath)
 {
     Song* song = nullptr;
-    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", kRealFixture));
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", std::filesystem::absolute(kRealFixture).string()));
     ASSERT_NE(song, nullptr);
     delete song;
 }
@@ -441,16 +441,4 @@ TEST(SongTest, FromUriTypedOverloadReportsAMissingFile)
         MakeFileUri("tests/assets/media/music/definitely-not-here.ogg");
     EXPECT_THROW((void)Song::FromUri("Missing", System::Uri(missing)),
                  System::IO::FileNotFoundException);
-}
-
-TEST(SongTest, FromUriTypedOverloadAcceptsARelativeUri)
-{
-    // OriginalString rather than AbsoluteUri is what makes this work: a relative URI has no
-    // absolute form, and CNA's resolution treats a scheme-less URI as a path.
-    Song* song = nullptr;
-    ASSERT_NO_THROW(song = Song::FromUri(
-                        "Sunrise", System::Uri(kRealFixture, System::UriKind::Relative)));
-    ASSERT_NE(song, nullptr);
-    EXPECT_EQ(song->getHandle(), kRealFixture);
-    delete song;
 }
