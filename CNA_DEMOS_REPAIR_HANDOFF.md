@@ -9,6 +9,41 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**CURRENT: no running job.** Native-v2 completed10,833PASS/101unchangedSKIP;
+sanitizer29PASS. External37654 finished unaccepted: original099 C++27/27 and100
+public-pixel9/9 PASS on SOFTWARE and OPENGLES3, but five unchanged C VideoPlayer
+assertions fail on each renderer and pure-C VideoSmoke exits2. Each renderer now
+49PASS/6FAIL/1manual, versus48/7/1 before (two improvements, one C regression).
+Four apparent C++ label differences were a log-parser error: DemoContext prints
+failures only. Separate source-pinned reanalysis retains all three real C failures
+and the failed gate; original audit unchanged. External build129390ms/zero
+diagnostics, original29PASS; peak4302004224/high1192/max0/OOM0, hashes unchanged.
+URI baseline94692 now confirms101: fiveFAIL/fourPASS,2332/351/23ms,
+peak475160576/events0, hashes unchanged; no101 production change.
+Exact next: obtain the unanswered099 C contract choice, implement its scoped
+adapter/explicit contract correction, repeat affected gates, then coherent commits
+and closure metadata. Do not weaken assertions or accept the current C regression.
+Continue101 through the URI dependency layer after complete dependency guidance;
+its C Play failure contract is separate. Preserve all011 owner changes.
+Permanent evidence: demos docs/repair-evidence/media/VIDEO_REPAIR_VALIDATION_CHECKPOINT.md.
+CNA d1ed3d9ae / demos ca6310b plus this evidence checkpoint and uncommitted099/100,
+011. Matrix155/97final/58pending,099/100/101 CONFIRMED_OPEN. No product commit,
+knownIssue removal, push or merge. Earlier RUNNING entries below are history.
+
+**Latest:** native-v2 session86932 finished successfully: full10,934 =10,833PASS/
+101unchangedSKIP (1,328,138ms), exact original10,905 outcome parity with the one
+reference-corrected Volume rename and29 newPASS; comparison121ms. Media340/340PASS.
+Frozen hashes unchanged; peak3,127,988,224 bytes/all memory events0. External
+session37654 (`cna-repair-video-external.scope`) is now RUNNING: one worker,
+private GPU,6GiB/no swap, existing demos linux-full tree. It rebuilds and runs
+29 original witnesses,112 unchanged renderer scenarios and pure-C VideoSmoke.
+The C ABI embeds CNA static module libraries: linkage checks require the actual
+external libcna_c_api.so, not a nonexistent libcna.so dynamic dependency.
+No expectation weakening, marker removal, product commit or issue closure.
+CNA d1ed3d9ae / demos c847549 plus uncommitted099/100 and preserved011; keep sources
+frozen. Exact next: inspect external audit, resolve the unanswered099 C contract
+choice, then registered/final metadata gates. No new push/merge.
+
 **CURRENT LIVE JOB86932:** native-v2 full10934 RUNNING after clean45964ms build
 and media340/340PASS11990ms.92340 after-v2 TERMINAL0: all29 focusedPASS, build61433ms/
 zero diagnostics, unchanged hashes,peak1226051584/events0.4221 sanitizer-v2 TERMINAL0:
