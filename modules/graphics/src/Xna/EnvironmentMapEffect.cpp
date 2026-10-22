@@ -63,8 +63,8 @@ namespace Microsoft::Xna::Framework::Graphics
         environmentMapSpecular_ = src.environmentMapSpecular_;
         fresnelFactor_          = src.fresnelFactor_;
 
-        texture_        = src.texture_;
-        environmentMap_ = src.environmentMap_;
+        setTextureProperty(src.getTextureProperty());
+        setEnvironmentMapProperty(src.getEnvironmentMapProperty());
         ownedTexture_        = src.ownedTexture_;
         ownedEnvironmentMap_ = src.ownedEnvironmentMap_;
 
@@ -82,6 +82,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void EnvironmentMapEffect::CacheEffectParameters()
     {
         auto& params = getParametersProperty();
+        AddStockParameterInternal(params, "Texture", 0, 0, EffectParameterClass::Object, EffectParameterType::Texture2D);
+        AddStockParameterInternal(params, "EnvironmentMap", 0, 0, EffectParameterClass::Object, EffectParameterType::TextureCube);
         AddStockParameterInternal(params, "EnvironmentMapAmount",   1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
         AddStockParameterInternal(params, "EnvironmentMapSpecular", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "FresnelFactor",          1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
@@ -95,6 +97,8 @@ namespace Microsoft::Xna::Framework::Graphics
         AddStockParameterInternal(params, "WorldViewProj",          4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
         AddStockParameterInternal(params, "ShaderIndex",            1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
 
+        textureParam_               = params["Texture"];
+        environmentMapParam_        = params["EnvironmentMap"];
         environmentMapAmountParam_   = params["EnvironmentMapAmount"];
         environmentMapSpecularParam_ = params["EnvironmentMapSpecular"];
         fresnelFactorParam_          = params["FresnelFactor"];
@@ -227,20 +231,32 @@ namespace Microsoft::Xna::Framework::Graphics
         dirtyFlags_ |= DirtyFog;
     }
 
-    Texture2D*   EnvironmentMapEffect::getTextureProperty() const        { return texture_; }
-    void         EnvironmentMapEffect::setTextureProperty(Texture2D* v)  { texture_ = v; }
+    Texture2D* EnvironmentMapEffect::getTextureProperty() const
+    {
+        return textureParam_->GetValueTexture2D();
+    }
+    void EnvironmentMapEffect::setTextureProperty(Texture2D* v)
+    {
+        textureParam_->SetValue(v);
+    }
     void EnvironmentMapEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
     {
         ownedTexture_ = std::move(texture);
-        texture_ = ownedTexture_.get();
+        setTextureProperty(ownedTexture_.get());
     }
 
-    TextureCube* EnvironmentMapEffect::getEnvironmentMapProperty() const         { return environmentMap_; }
-    void         EnvironmentMapEffect::setEnvironmentMapProperty(TextureCube* v) { environmentMap_ = v; }
+    TextureCube* EnvironmentMapEffect::getEnvironmentMapProperty() const
+    {
+        return environmentMapParam_->GetValueTextureCube();
+    }
+    void EnvironmentMapEffect::setEnvironmentMapProperty(TextureCube* v)
+    {
+        environmentMapParam_->SetValue(v);
+    }
     void EnvironmentMapEffect::SetOwnedEnvironmentMap(std::shared_ptr<TextureCube> cubeMap)
     {
         ownedEnvironmentMap_ = std::move(cubeMap);
-        environmentMap_ = ownedEnvironmentMap_.get();
+        setEnvironmentMapProperty(ownedEnvironmentMap_.get());
     }
 
     float EnvironmentMapEffect::getEnvironmentMapAmountProperty() const { return environmentMapAmount_; }
@@ -280,8 +296,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void EnvironmentMapEffect::OnApply()
     {
-        BindStockTextureInternal(0, texture_);
-        BindStockTextureInternal(1, environmentMap_);
+        BindStockTextureInternal(0, getTextureProperty());
+        BindStockTextureInternal(1, getEnvironmentMapProperty());
 
         // World * View * Projection and fog vector
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
@@ -402,11 +418,11 @@ namespace Microsoft::Xna::Framework::Graphics
         p.lightingEnabled    = true;
         p.vertexColorEnabled = false;
 
-        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, texture_)))
+        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, getTextureProperty())))
             p.texture0 = &texture->GetRenderer();
         if (auto* environmentMap =
-                dynamic_cast<TextureCube*>(SampledStockTextureInternal(1, environmentMap_)))
-            p.envMap = &environmentMap->GetRenderer();
+                dynamic_cast<TextureCube*>(SampledStockTextureInternal(1, getEnvironmentMapProperty())))
+            p.envMap = environmentMap->GetRendererRaw();
 
         p.envMapAmount      = environmentMapAmount_;
         p.envMapSpecular[0] = environmentMapSpecular_.X;

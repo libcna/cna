@@ -19,6 +19,76 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**EnvironmentMapEffect texture reflection, base f0caebc0d47aabd02e7b051c96cb8430e636974e / demos adbeeaf.**
+The preceding SDL_GPU lifetime repair is committed f0caebc0d, owner notified, no push.
+Baseline `repair-museum-envmap-before-*`: build PASS; each of eight native renderer
+identities runs 140 tests with exactly six failures, all new texture-reflection tests.
+No source drift; peak 865771520 bytes, all memory events zero. Both XNA IL and local FNA
+read Texture/EnvironmentMap through typed EffectParameters. Candidate adds those two
+parameters, uses them for properties, clone, Apply and draw bindings, and removes the
+redundant private raw pointers. Existing shared ownership remains unchanged.
+Six permanent regressions cover metadata/defaults, both write directions, bindings,
+null unbind, independent clone and owned resources. Job81120: build36025ms PASS,
+all eight selections exit0, peak833798144/events0/drift0. External16722: build172657ms,
+60 demo runs (10 IDs x3 renderers xbefore/after), all PASS, zero status/check-count/
+knownIssue/exit deltas, three zero-tolerance pixel comparisons PASS. Inspected GLES
+screenshot: two colored reflection spheres with the expected different Fresnel response.
+Peak4302069760/high715/max0/oom0/kill0/drift0. No demo oracle or marker changes.
+
+Broader validation29504: all six renderer test runs exit0 and five boundary gates PASS,
+but NOT a clean run: WebGPU emits five VUID-vkCmdCopyBufferToImage-pRegions-00173 messages
+in BasicEffect/PBR/SkinnedPBR/AlphaTest clone tests. Needs isolation, not suppression.
+Actual EnvironmentMapEffect TU +51 permanent tests instrumented with ASan/UBSan/LSan:
+SOFTWARE and HEADLESS PASS, STUB reports a null cube-renderer reference in FillGpuDrawParams.
+The same raw-reference conversion predates this fix; STUB creates no cube renderer.
+Candidate reads the existing nullable raw accessor through a narrow EnvironmentMapEffect
+friend (no public API expansion). The test exposes that protected accessor in a test
+subclass and compares nullable pointers, never forms an invalid reference. No skip added.
+Owned-resource test additionally releases original owners and verifies clone lifetime.
+Final native40820: all51 tests PASS with ASan/UBSan/LSan on SOFTWARE/HEADLESS/STUB,
+no suppressions; changed implementation TU and both test TUs instrumented, not all CNA.
+Broader583 per renderer: SOFTWARE/GLES/GL33 566PASS17SKIP each; WEBGPU/SDL_GPU
+578PASS5SKIP each; FNA3D573PASS10SKIP. All original skip sets unchanged from v1.
+Five boundary gates PASS; peak1552023552/events0/drift0. WebGPU still emits the same
+five copy-overlap VUIDs, so the complete driver correctly exits1.
+Isolation99237: a program that only constructs GraphicsDevice +4x4 Texture2D, with NO
+Effect, emits one identical VUID on lavapipe and none on RADV. Two unchanged BasicEffect/
+AlphaTest clone tests emit two on lavapipe, none on RADV. Therefore independent of the
+EnvironmentMapEffect patch; do not attribute its root cause to CNA vs driver yet.
+Peak328749056/events0. A direct wgpu-native-only control is prepared, not yet run.
+Final external13128 completed: build234492ms PASS,60/60 runs PASS, zero status/check-count/
+knownIssue/exit deltas; three exact pixel comparisons PASS. Peak4302196736/high841,
+max0/oom0/kill0/drift0. The earlier original-vs-candidate pixel comparison also passes,
+so final images equal the original pre-repair images. No warning from the changed TUs.
+Direct wgpu-native-only control20863: same copy-overlap VUID on lavapipe, none on RADV;
+no CNA/SDL dependency (ldd), no effect or surface. Library hash exactly matches the pinned
+v29.0.1.1 build (be0d8270dd9d78e1039eeb413ee21be8a89776a752e56d6b0f57eefbbc2d749c).
+Thus the VUID reproduces below CNA; dependency/driver/validation attribution remains
+open, not a reason to add a CNA upload workaround. Peak288071680/events0. First direct
+control77650 was stopped by an overbroad ldd-name regex matching the libcna directory;
+corrected to match only SONAMEs, old logs retained. No error suppression or vendor patch.
+Ready to commit ONLY our one friend line from TextureCube.hpp (all its ownership changes
+belong to another agent), EnvironmentMapEffect header/source, new tests and this handoff.
+Exact next task: revalidate the already-landed MUSEUM-NET-002 fix against permanent
+CNA-DEMOS-ISSUE-033, preserving the separate ISSUE032 failure in join_refused. No active
+heavy job, no push or merge. Foreign source hashes equal the pre-repair snapshot after
+subtracting just our friend line; the index was empty before staging.
+
+CNB intake caveat: the museum's standalone None-codec finding overlaps resolved ISSUE110.
+C++2386155f2 is strict, but C adapter c57ecab8c deliberately preserves the documented C
+exception. Asked owner asynchronously whether to adopt strict C semantics now or retain
+the published exception. No CNB source/tests changed; continue independent work.
+
+Residual leak investigation: direct SDL-only control job6802 has no CNA linked (ldd
+verified). Pinned SDL initialization/destruction still leaks: lavapipe 50016 bytes/911
+allocations; RADV 50400/914, both with and without requested validation layer.
+These totals differ from the 384-byte CNA no-texture control, so they do NOT conclusively
+attribute that exact leak. Keep the original LSan failure open; no suppressions or
+vendor changes. Direct control peak184905728/events0. Evidence prefix
+`repair-museum-sdl-init-control-v2-*`. No clean full sanitizer or platform-wide claim.
+
+## Previous validated lifetime batch
+
 **Validated SDL_GPU escaped-resource lifetime repair, base830e9a9346b1adb84d236fb0f8b71579c89b05ba / demosadbeeaf.**
 External6400 completed: build88878ms PASS,84 runs, exact zero status/check-count/
 knownIssue/exit deltas; source drift0. Peak4303187968/high539/max0/oom0/kill0.

@@ -378,12 +378,11 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         void CacheEffectParameters();
 
-        // Textures stored directly (Texture2D/TextureCube do not inherit from Texture)
-        Texture2D*   texture_        = nullptr;
-        TextureCube* environmentMap_ = nullptr;
         std::shared_ptr<Texture2D>   ownedTexture_;        // see SetOwnedTexture()
         std::shared_ptr<TextureCube> ownedEnvironmentMap_; // see SetOwnedEnvironmentMap()
 
+        EffectParameter* textureParam_                = nullptr;
+        EffectParameter* environmentMapParam_         = nullptr;
         EffectParameter* environmentMapAmountParam_   = nullptr;
         EffectParameter* environmentMapSpecularParam_ = nullptr;
         EffectParameter* fresnelFactorParam_          = nullptr;

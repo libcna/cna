@@ -718,6 +718,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        friend class EnvironmentMapEffect;
         void ValidateCopyPreludeEXT(
             const char* api, bool setting, int level, const void* data,
             int startIndex, int elementCount) const;
