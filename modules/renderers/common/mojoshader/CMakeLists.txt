@@ -12,7 +12,8 @@ target_link_libraries(cna_renderer_mojoshader_effect PUBLIC cna_renderer_common 
 # one: the default includes Xml (cmake/SharpRuntimeConsumption.cmake), and through this PUBLIC edge it
 # reached every program linking the renderer (plans/plan_apple_m4.md AM4-205).
 cna_link_sharp_runtime(cna_renderer_mojoshader_effect PUBLIC ${CNA_SHARP_RUNTIME_RENDERER_COMPONENTS})
-target_include_directories(cna_renderer_mojoshader_effect PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cna_module_include_root(cna_renderer_mojoshader_effect PUBLIC)
+cna_register_cxx_target(cna_renderer_mojoshader_effect Internal_MojoShaderEffect)
 # Same reverse edges as every renderer target: this compiles against the graphics/math/core public
 # headers and calls CNA-owned symbols.
 target_link_libraries(cna_renderer_mojoshader_effect PRIVATE cna_graphics_core cna_core cna_math)

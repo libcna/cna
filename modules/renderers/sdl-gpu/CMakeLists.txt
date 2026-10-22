@@ -80,7 +80,9 @@ if(_cna_sdl_gpu_shader_effect_spirv_target AND CNA_SDL_GPU_SHADERC_LIBRARY)
     set(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE ON)
     message(STATUS
         "CNA: SDL_GPU ShaderEffect enabled with target libshaderc at ${CNA_SDL_GPU_SHADERC_LIBRARY}")
-    target_link_libraries(${RENDERER_TARGET} PRIVATE "${CNA_SDL_GPU_SHADERC_LIBRARY}")
+    add_library(CNA::Shaderc UNKNOWN IMPORTED GLOBAL)
+    set_target_properties(CNA::Shaderc PROPERTIES IMPORTED_LOCATION "${CNA_SDL_GPU_SHADERC_LIBRARY}")
+    target_link_libraries(${RENDERER_TARGET} PRIVATE CNA::Shaderc)
     target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)
 else()
     message(STATUS

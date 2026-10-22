@@ -17,6 +17,7 @@ else()
 endif()
 message(STATUS "CNA: version ${CNA_VERSION_STRING}")
 include(cmake/Version.cmake)
+include(cmake/InstallCxx.cmake)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -417,3 +418,6 @@ cna_apple_configure_all_bundles()
 cna_apply_build_support_to_cna_targets()
 cna_apply_ipo_to_cna_targets()
 cna_apply_unity_to_pilot_targets()
+
+# Export after the deferred shared-runtime construction has completed.
+cmake_language(DEFER CALL cna_install_cxx_package)

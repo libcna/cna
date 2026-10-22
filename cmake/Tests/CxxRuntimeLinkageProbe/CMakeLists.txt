@@ -9,7 +9,8 @@ project(CNACxxRuntimeLinkageProbe LANGUAGES CXX)
 if(PROBE_FETCHED_CNA)
     # CNA fetched into the build tree, where FetchContent puts it.
     set(_probe_cna "${CMAKE_BINARY_DIR}/fetched-cna")
-    file(COPY "${CNA_SOURCE_DIR}/cmake/BuildPerformance.cmake" DESTINATION "${_probe_cna}/cmake")
+    file(COPY "${CNA_SOURCE_DIR}/cmake/BuildPerformance.cmake"
+        "${CNA_SOURCE_DIR}/cmake/CxxRuntimeLinkage.cmake" DESTINATION "${_probe_cna}/cmake")
     file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/system/CMakeLists.txt" DESTINATION "${_probe_cna}/system")
 else()
     set(_probe_cna "${CNA_SOURCE_DIR}")

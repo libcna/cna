@@ -15,6 +15,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_property(TARGET Python3::Interpreter PROPERTY CROSSCOMPILING_EMULATOR "")
     endif()
 
+    if(CNA_INSTALL_CXX AND Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
+        set(_cna_sdk_probe_options)
+        # Imported PkgConfig targets are scoped to their owning modules, while
+        # their discovery results are cached and visible here.
+        if(LIBAVCODEC_FOUND OR CNA_OPUS_FOUND)
+            list(APPEND _cna_sdk_probe_options --check-pkg-dependency)
+        endif()
+        add_test(NAME CnaInstalledCppPackage
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/build/check_installed_cpp_package.py"
+                --build-dir "${CMAKE_CURRENT_BINARY_DIR}"
+                --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}"
+                --config "$<CONFIG>" ${_cna_sdk_probe_options})
+        set_tests_properties(CnaInstalledCppPackage PROPERTIES
+            RUN_SERIAL TRUE TIMEOUT 1800 LABELS "configuration;install")
+    endif()
+
     add_test(NAME CnaHostPkgConfigPolicy
         COMMAND ${CMAKE_COMMAND}
             -DCNA_HOST_PKG_CONFIG_POLICY_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/HostPkgConfig.cmake

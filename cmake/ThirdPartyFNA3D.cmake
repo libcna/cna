@@ -363,7 +363,8 @@ function(cna_configure_mojoshader)
         target_link_libraries(cna_mojoshader INTERFACE FNA3D)
     endif()
     target_include_directories(cna_mojoshader SYSTEM INTERFACE
-        "${fna3d_SOURCE_DIR}/MojoShader")
+        "$<BUILD_INTERFACE:${fna3d_SOURCE_DIR}/MojoShader>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cna/dependencies/mojoshader>")
     target_compile_definitions(cna_mojoshader INTERFACE
         MOJOSHADER_EFFECT_SUPPORT
         MOJOSHADER_NO_VERSION_INCLUDE)
@@ -411,7 +412,8 @@ function(cna_configure_fna3d)
     add_library(cna_fna3d INTERFACE)
     target_link_libraries(cna_fna3d INTERFACE FNA3D cna_mojoshader)
     target_include_directories(cna_fna3d SYSTEM INTERFACE
-        "${_cna_fna3d_source_dir}/include")
+        "$<BUILD_INTERFACE:${_cna_fna3d_source_dir}/include>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cna/dependencies/fna3d>")
 
     message(STATUS "CNA: FNA3D pinned at ${CNA_FNA3D_GIT_TAG} (${_cna_fna3d_source_dir})")
 endfunction()

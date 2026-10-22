@@ -31,6 +31,11 @@ CNA 0.1.0 requires the sibling checkouts **sharp-runtime 0.1.0**, **easy-gl 0.1.
 those tags next to this repository; configuration stops with instructions when a checkout
 declares an incompatible version (`cmake/DependencyVersions.cmake`).
 
+For binary C++ consumers, opt in to `CNA_INSTALL_CXX=ON` and install the configured
+SDK; it exports `CNA::` and `SharpRuntime::` modules for `find_package(CNA CONFIG)`.
+See [the installed SDK guide](docs/installed-cpp-sdk.md) for prerequisites, install
+components, relocation, version semantics and tested platform coverage.
+
 > **Looking for a specific doc?** See [`docs/README.md`](docs/README.md) for an index of what's
 > current vs. historical. **Current state, known bugs and limitations:** [`handoff.md`](handoff.md) (§5 is
 > the one authoritative bug list). Implementation roadmaps and retained task logs are

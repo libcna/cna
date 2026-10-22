@@ -15,9 +15,189 @@ The related museum C/C++ runtime repair is published as
 14 native CTests pass, and installed/relocated shared/static C clients pass.
 Full C demo outcomes remain unchanged (SOFTWARE168PASS/9FAIL; GLES169PASS/8FAIL).
 Exact evidence and limitations are in CNA_MUSEUM_REPAIR_HANDOFF.md. No active heavy
-job remains. Next engine task: UP-001 installed C++ module package, still open;
-this C-adapter repair does not supply the missing installed C++ module targets.
+job remains. UP-001 now has the installed C++ module package described below;
+the earlier C-adapter repair alone did not supply those targets.
 The chronological notes below retain earlier failures and intermediate checkpoints.
+
+## UP-001 installed SDK implementation and validation (2026-10-22)
+
+The commit containing this entry implements the missing installed CNA C++ package
+(commit subject includes `cna-engine UP-001`). Baseline was published CNA
+`9cfe94f2a8cf32609738ec5bca135a27cd08e062`; Sharp Runtime remains published
+`1dc8785b35284b5cf50f3aec361703bfaf090b72`, demos remains `1295899bbaa2d657348a115b831f31b928d2df6c`.
+UP-001 is FIXED / NATIVE_VALIDATED; consumer agents own their pin movement and
+revalidation. Windows/WebAssembly installed-runtime validation remains pending,
+not claimed as a native pass. No other intake or historical demos issue is closed
+by this packaging change. The full repair campaign remains active.
+
+Completed beyond the historical working checkpoint below:
+
+- `CNA_INSTALL_CXX`, actual module/dependency exports, shared/static relocation,
+  `CNA::CNA`, SharpRuntime:: components, narrow Math headers/link closure, and
+  consumer-selected C++ runtime all work. C ABI package version/compatibility is
+  retained. `docs/installed-cpp-sdk.md` documents production/consumption and limits.
+- Explicit CApi-only lookup in C or C++ does not load the C++ SDK/dependencies.
+  A later C++ request establishes the shared identity contract. Unknown required
+  components, unknown optional components and incompatible versions are tested.
+- Missing Sharp Runtime and real missing pkg-config multimedia packages are
+  tested in fresh consumers. QUIET now returns NOTFOUND with a dependency name;
+  it no longer terminates through pkg_check_modules(REQUIRED). Library discovery
+  follows the same rule. The C++ CApi-only and missing-FFmpeg cases were observed
+  red against the first-v2 installed prototype before repairing the templates.
+- `CnaInstalledCppPackage` is a permanent serial opt-in CTest. It builds with one
+  worker, installs separate components, removes the original location by moving
+  the prefix, rejects source/build paths and escaping symlinks, and builds/runs
+  fresh consumers. No producer options are changed by the gate. Failed artifacts
+  and all logs/audits survive; only its own successful generated artifacts are
+  cleaned (or retained with --keep-artifacts). Linux runtime uses the private runner.
+- Bundled dependency headers/licences are included; native WGPU and cross-JSON
+  notices supplement dependency distributions missing licence files. Embedded
+  stb/dr_libs licence texts travel as complete source files. This is not a legal
+  audit of transitive Rust crates inside an externally supplied WGPU binary.
+- The MinGW export graph initially exposed the unregistered D3D9Effect helper;
+  the helper now uses the same install/include rules. SDL_shadercross and its
+  SPIRV-Cross static closure are exported, and cross JSON copies the isolated
+  portable headers rather than publishing a symlink to host /usr/include.
+  ALSA was inspected: it uses runtime loading, no libasound link export is needed.
+
+Executed final evidence (existing build directories, shared ccache, one compiler,
+4G-high/6G-max/no-swap scopes; no OOM events):
+
+- Shared permanent gate `cmake-build-multi/installed-cpp-probe/run-ocao4uq3`:
+  6 runtime/closure tests plus three C/C++ API-consumer executables, all pass;
+  four negative configure cases plus the three API configure cases pass.
+  Peak2,314,186,752 bytes. `run-rrsetkkw` is the preceding first permanent gate.
+- Static permanent gate `run-esc64bgu`: 6/6 runtime/closure tests, four negative
+  configure cases pass; C API deliberately OFF, no mixed-static-adapter claim.
+  Peak1,793,683,456. Driver's finally restored shared/C API ON and removed the
+  temporary explicit PIC cache override. Logs: demos reports
+  `repair-cna-install-static-gate-v2-*`.
+- Restored shared SDK plus seven module probes and both engine-style mixed
+  consumers rebuilt, 42 scheduled steps, no compiler warnings/errors observed.
+  Private regression gate **16/16**: new installed SDK, three existing build/link
+  configuration gates, seven module consumers, both runtime/symbol link orders,
+  and the original CApi_InstalledConsumer. The nested SDK gate `run-l_x_51u_`
+  also exercised actual ContentManager/AudioEmitter/LaunchParameters symbols.
+  Peak2,105,581,568. Logs: `repair-cna-package-native-final-{build,tests}-v1.log`.
+- Final SDK rerun adds escaping-symlink checks and the explicit old-Sharp-install
+  capability diagnostic: `repair-cna-package-native-final-sdk-v2.log`.
+- MinGW configure/export passes after the helper fix; logs
+  `repair-cna-package-mingw-configure-v{1,2}.log` preserve red/green evidence.
+  WebAssembly/WebGPU configure/export also passes (`repair-cna-package-wasm-configure-v1.log`).
+  No relocated Windows/browser SDK execution is claimed.
+- Source-only install-OFF configure passes and the SDK flags are restored;
+  `repair-cna-package-optout{-restore,}-v1.log`. Build-performance policy and
+  diff whitespace checks pass. No full CNA runtime/demos sweep is newly claimed
+  for this CMake-only batch; it does not change runtime behavior or knownIssue oracles.
+
+All reports above are under `cna-demos/build/linux-full/reports/` unless an explicit
+CNA build path is given. SDK install flags remain ON intentionally in the native,
+MinGW and WebAssembly producer trees; the latter two are configure-only checks.
+No engine/extended/museum source or pin was changed. Inherited content ownership,
+ISSUE-113, storage and their tests remain dirty and excluded from this commit.
+Next: publish this validated isolated package commit, then re-read the museum's
+current Open section and continue the highest-priority actionable runtime finding;
+the cna-demos campaign still has unfinished findings and is not complete.
+
+## Historical UP-001 working C++ SDK checkpoint (2026-10-22)
+
+Published/local HEAD is `9cfe94f2a8cf32609738ec5bca135a27cd08e062`; the SDK work
+described here is NOT committed or published yet. Sharp remains published
+`1dc8785b35284b5cf50f3aec361703bfaf090b72`, demos remains `1295899b`.
+The previous turn made concrete progress (published the build-policy prerequisite);
+this turn implements and executes the actual installed C++ target graph. UP-001
+remains OPEN until distribution/gate work below is finished. No unrelated source,
+engine, extended, museum or dependency repository was edited.
+
+Implementation now in the worktree:
+
+- Opt-in `CNA_INSTALL_CXX`, `CNACpp` install component, and `cna_cpp_sdk` build target.
+  The exact configured Sharp Runtime package is enabled/installed separately as
+  `SharpRuntime`. Public module aliases retain their individual archive closures.
+- Per-module installed header roots, generated Version.hpp, all configured CNA
+  module/helper exports, bundled private ENet/Draco/EasyGL/MetaGL/FNA3D/MojoShader
+  archives, SDL headers/packages/runtime, and native WebGPU headers/runtime.
+  System FFmpeg/FreeType/Zlib/Curl/Opus/JSON/Zstd/shaderc are located on the consumer.
+  Zstd/shaderc now use named imported targets instead of producer absolute paths.
+- Existing C ABI package/version remains the entry point (SameMajorVersion, ABI
+  version, not a silent switch to runtime 0.1.0). `CNA_RUNTIME_VERSION` reports the
+  separate C++ release. C-only installations still need no C++ package.
+- Shared imports preserve early DSO injection and both C/C++ link orders. The
+  TARGET_FILE genex needed an explicit install-side CNA::Shared spelling; CMake
+  remaps the other target references automatically. Custom link features have
+  cache scope so find_package inside a function does not lose them.
+- C++ runtime selection was mechanically factored from BuildPerformance.cmake into
+  CxxRuntimeLinkage.cmake and reused by installed clients. Producer runtime-first
+  flags are build-only; installed clients choose their own static/shared C++ runtime.
+  The single policy exception was moved with its unchanged read-only flag scanner,
+  not broadened. The fetched-source fixture now copies both helper files.
+
+Executed evidence (all in existing build directories, one SDK/consumer compiler,
+shared ccache, 4G-high/6G-max/no-swap scopes):
+
+- Full eight-renderer native configuration generates the export successfully.
+  SDK build first compiled the previously unbuilt design/pipeline/phone archives
+  (101 scheduled steps), then subsequent builds were incremental. No compiler
+  warning was observed; the existing Draco CMP0148 configure warning remains.
+- `repair-cna-install-first-v1-*`: original red InstalledRuntimeProbe is now green
+  against a genuinely relocated prefix: 2/2 C++/C link-order tests, assembly title
+  and logger share state, no source/build/home path leaks in installed CMake files.
+  Peak2,522,324,992 bytes, all memory/OOM events zero.
+- `repair-cna-install-first-v2-*`: 6/6. Adds Math-only runtime and ELF closure checks,
+  rejects accidental Graphics/XML header exposure, verifies a requested static
+  libstdc++/libgcc stays static, and checks repeated/function-scoped find_package.
+  Math has no CNA shared/SDL/WebGPU/FFmpeg/ENet DSO dependency. Peak2,406,453,248,
+  memory/OOM events all zero. EasyGL/MetaGL FILE_SET headers now belong to CNACpp.
+- `repair-cna-install-static-v1-*`: 6/6 against the fully STATIC CNA SDK (C API OFF),
+  including the same Math and C++ runtime checks. This is not a static C/C++ mixed
+  adapter validation: the two runtime executables are C++ only in this mode.
+  Peak1,735,507,968, all memory/OOM events zero. Producer shared/C API settings were
+  restored successfully in the driver's finally block.
+- Source linkage gates: CnaCxxRuntimeLinkage, CnaSharedRuntimeLinkage,
+  CnaBuildSupportExport 3/3 after refactor. The first fetched-source run failed
+  because the fixture copied only BuildPerformance.cmake; the missing helper copy
+  was corrected, no assertions changed. Before/after logs are
+  `repair-cna-package-linkage-{before,after}-v1.log`. Build policy check passes.
+
+Logs/audit JSON live in `cna-demos/build/linux-full/reports/`. SDK copies remain in
+`cna-demos/build-probe/cna-sdk-{first-v1,first-v2,static-v1}-relocated`; original
+unrelocated prefixes are absent. Driver: ignored
+`cna-demos/build-probe/repair-cna-install.mjs <unique-tag> [static]` (static mode
+restores producer flags). No job remains active. `build-consumer` currently points
+to static-v1. Producer `cmake-build-multi` is restored to CNA_SHARED_LIBRARY=ON,
+CNA_BUILD_C_API=ON, no explicit CMAKE_POSITION_INDEPENDENT_CODE cache entry;
+CNA_INSTALL_CXX=ON and SHARP_RUNTIME_INSTALL=ON remain intentionally enabled for
+SDK development. The temporary CMAKE_PROJECT_CNA_INCLUDE graph hook was removed.
+
+Exact next work before committing/pushing this batch:
+
+1. Harden package failure/component behavior: QUIET dependency discovery must not
+   hard-fail via pkg_check_modules(REQUIRED)/find_library(REQUIRED); explicitly
+   CApi-only requests should not require C++ dependencies. Add negative component/
+   version and C-only compatibility checks, retain existing ABI/version promises.
+2. Complete distribution manifest/licences (especially wgpu-native and compiled
+   header-only third-party code); validate installed dependency header presence.
+   No exhaustive licence-completeness claim yet. Check optional native dependency
+   configurations (ALSA, SDL_shadercross) and cross-configuration limitations; only
+   the current Linux SDL3 eight-renderer SDK has been tested so far. The earlier
+   Emscripten helper test is NOT a full installed CNA WebAssembly validation.
+3. Turn the ignored install driver into a permanent scoped gate; register it only
+   when SDK installation is enabled. Strengthen installed runtime smoke as useful;
+   test shared/static modes, narrow closure, relocation and source independence.
+4. Rebuild restored native consumers; run affected module/mixed-runtime/C API
+   install/linkage gates and compare to previous baseline. No new full CNA/demos
+   runtime sweep has been performed for this CMake-only work yet. Then document
+   consumption, commit only this batch, push normally, and give the engine the SHA.
+
+Owned uncommitted paths: root CMakeLists.txt; cmake/InstallCxx.cmake,
+InstallCxxDependencies.cmake, CNACppConfig.cmake.in, CxxRuntimeLinkage.cmake,
+BuildPerformance.cmake, SharedRuntimeLibrary.cmake, ThirdPartyENet.cmake,
+ThirdPartyFNA3D.cmake, Tests/CxxRuntimeLinkageProbe/CMakeLists.txt,
+Tests/InstalledRuntimeProbe/*; modules/CMakeLists.txt and the CMakeLists.txt in
+core/content/net/gamer-services/renderers/renderers/common/mojoshader/
+renderers/sdl-gpu; modules/c-api/cmake/CNAConfig.cmake.in;
+tools/build/check_build_performance_policy.py; this handoff. All other dirty files
+remain inherited ownership/content/ISSUE-113/storage work. Do not stage them.
 
 ## UP-001 build-support export prerequisite (2026-10-22)
 
@@ -220,7 +400,7 @@ cna-demos/build/linux-full/reports/repair-storage-path-before-v1-*.
 | UP-019 | Fixed in `144d9f909`; engine confirms intended corrected orientation; DirectX runtime validation pending | CNA renderer regressions pass as recorded below. Engine reports 338/339 at CNA `08c1387ec` + Sharp `c26614e8`; remaining failure is its calibration assertion for the old orientation, not a full-green consumer result. No Windows runtime claim. |
 | UP-018 | CLOSED — NOT_A_CNA_DEFECT / ENGINE_EXPECTATION_ERROR | Engine confirmed and fixed in `8b7610c`: store target.getFormatProperty(), not the preference. Existing exact pin/next checks prove Reach selects Color and HiDef Single retains float precision. No CNA production repair required. |
 | UP-006 | ALREADY_FIXED and CNA-validated; engine revalidation pending | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). Engine-style consumers pass in both orders with zero duplicate strong Graphics/Input/Vector3 symbols. Engine owns pin movement/revalidation. The museum's separate C adapter duplication is now fixed and published in `89fb1493f`. |
-| UP-001 | CONFIRMED_OPEN — installed C++ module package missing | The existing CNAConfig package serves CApi/CApiStatic only; it does not export the C++ module aliases. Provide relocatable Core/Math/Input/GraphicsCore/Content/Runtime/Audio and their SharpRuntime dependencies, preserving shared/static identity and the existing C ABI package/version contract. |
+| UP-001 | FIXED / NATIVE_VALIDATED — installed C++ SDK | Commit containing the installed SDK checkpoint above exports CNA and SharpRuntime component targets. Relocated Linux shared/static clients and native C compatibility pass. Windows/WebAssembly export graphs pass; installed runtime validation on those platforms remains pending. Engine/extended own pin movement and consumer revalidation. |
 | UP-002 | Documentation corrected | `docs/migration-guide.md`, CNAEXT and C++ language artefacts, distinguishes declaration markers from implicit/synthesized C# semantics and explicitly retains strict compiler diagnostics. No runtime/header/test changes needed. |
 | UP-020 | RESOLVED_BY_DEPENDENCY_PUBLICATION | Required Sharp Runtime `c26614e8` is an ancestor of verified published next `1dc8785b`. No new runtime repair/version bump. The shared 0.1.0 version still does not distinguish older checkouts; use the verified commit. |
 

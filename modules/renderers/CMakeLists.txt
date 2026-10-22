@@ -56,8 +56,9 @@ function(cna_renderer_common_setup target)
     # interface (cmake/SharpRuntimeConsumption.cmake).
     cna_link_sharp_runtime(${RENDERER_TARGET} PUBLIC ${CNA_SHARP_RUNTIME_RENDERER_COMPONENTS})
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
-        target_include_directories(${RENDERER_TARGET} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        cna_module_include_root(${RENDERER_TARGET} PUBLIC)
     endif()
+    cna_register_cxx_target(${RENDERER_TARGET} "Internal_${RENDERER_TARGET}")
     # The three PLAT-76 allowlisted SDL-backed families resolve the snapshot's WindowId at one
     # SDL3 implementation edge. This remains PRIVATE so the platform implementation tree never
     # becomes part of the renderer or framework include contract; every other family is SDL-free.

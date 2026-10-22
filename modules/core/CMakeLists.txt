@@ -4,16 +4,20 @@
 # link this interface instead of the archive, keeping their accepted link closures exact.
 add_library(cna_core_headers INTERFACE)
 add_library(CNA::CoreHeaders ALIAS cna_core_headers)
-target_include_directories(cna_core_headers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+cna_module_include_root(cna_core_headers INTERFACE)
 # The generated release identity (CNA/Version.hpp, cmake/Version.cmake) is part of core's
 # public header surface, so it rides the same include roots as the checked-in headers -- a
 # consumer includes "CNA/Version.hpp" without knowing which of the two roots resolves it.
-target_include_directories(cna_core_headers INTERFACE ${CNA_GENERATED_INCLUDE_DIR})
+target_include_directories(cna_core_headers INTERFACE
+    "$<BUILD_INTERFACE:${CNA_GENERATED_INCLUDE_DIR}>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cna/generated>")
 
 file(GLOB CNA_CORE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 cna_add_module(cna_core Core ${CNA_CORE_SOURCES})
 cna_link_sharp_runtime(cna_core PUBLIC Core.Base)
-target_include_directories(cna_core PUBLIC ${CNA_GENERATED_INCLUDE_DIR})
+target_include_directories(cna_core PUBLIC
+    "$<BUILD_INTERFACE:${CNA_GENERATED_INCLUDE_DIR}>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cna/generated>")
 
 # GraphicsRendererSelectionEmscripten.cpp (RTR-P10-23) reads Module.cnaPreferredRenderer through
 # emscripten::val, whose implementation lives in libembind. Emscripten does not link that library

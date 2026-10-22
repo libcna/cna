@@ -9,6 +9,8 @@ on it) rather than assuming either way.
 
 ## Start here
 
+- **[`installed-cpp-sdk.md`](installed-cpp-sdk.md)** — opt-in binary C++ SDK, exported
+  CNA/Sharp Runtime modules, relocation, C API coexistence and install regression gate.
 - **[`../handoff.md`](../handoff.md)** (repo root) — the current state of the project. Its §5 is the
   **one** authoritative list of current known bugs and limitations; treat it as the source of truth
   for "is X still broken" over any dated snapshot below. Nothing else in the repository keeps a live

@@ -162,7 +162,8 @@ function(cna_define_shared_runtime umbrella)
     set(CMAKE_LINK_LIBRARY_cna_shared_needed_ATTRIBUTES "LIBRARY_TYPE=SHARED;OVERRIDE=DEFAULT"
         CACHE INTERNAL "CNA shared-runtime consumer link feature attributes" FORCE)
     set_property(TARGET cna_shared APPEND PROPERTY INTERFACE_LINK_LIBRARIES_DIRECT
-        "$<LINK_LIBRARY:cna_shared_needed,$<TARGET_FILE:cna_shared>>")
+        "$<BUILD_INTERFACE:$<LINK_LIBRARY:cna_shared_needed,$<TARGET_FILE:cna_shared>>>"
+        "$<INSTALL_INTERFACE:$<LINK_LIBRARY:cna_shared_needed,$<TARGET_FILE:CNA::Shared>>>")
     # Explicit module targets must not extract objects before the injected DSO.
     # Their transitive occurrences after the DSO are harmless and retain external
     # dependency closure; COMPILE_ONLY below retains public compile requirements.

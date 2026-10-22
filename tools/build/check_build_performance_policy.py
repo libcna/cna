@@ -170,7 +170,7 @@ def check_no_global_raw_flags(errors: list[str]) -> None:
         },
         # The runtime-first link option (LINK-043) must know whether a program's directory already
         # links a static C++ runtime, so it reads -- never sets -- that directory's flags.
-        "cmake/BuildPerformance.cmake": {
+        "cmake/CxxRuntimeLinkage.cmake": {
             "foreach(_cna_variable IN ITEMS CMAKE_CXX_FLAGS CMAKE_${_cna_kind}_LINKER_FLAGS)",
         },
         # The CnaCxxRuntimeLinkage fixture (cmake/Tests/ModuleProbes.cmake) configures separate

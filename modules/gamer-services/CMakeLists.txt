@@ -2,7 +2,8 @@ file(GLOB_RECURSE CNA_GAMERSERVICES_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_library(CNA_GamerServices STATIC ${CNA_GAMERSERVICES_SOURCES})
 add_library(CNA::GamerServices ALIAS CNA_GamerServices)
 target_link_libraries(CNA_GamerServices PUBLIC cna_build_config)
-target_include_directories(CNA_GamerServices PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+cna_module_include_root(CNA_GamerServices PUBLIC)
+cna_register_cxx_target(CNA_GamerServices GamerServices)
 # A released avatar description must assemble the same model on every machine; the digests in
 # AvatarCatalogTest.V3DescriptionsAssembleExactlyAsReleased pin it. Clang 14+ and GCC contract
 # `a * b + c` into a fused multiply-add wherever the target has one, which every arm64 machine

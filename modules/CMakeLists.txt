@@ -125,6 +125,8 @@ else()
     endif()
     if(CNA_ZSTD_FOUND)
         set(CNA_CNB_ZSTD_AVAILABLE ON)
+        add_library(CNA::Zstd INTERFACE IMPORTED GLOBAL)
+        set_target_properties(CNA::Zstd PROPERTIES INTERFACE_LINK_LIBRARIES "${CNA_ZSTD_LIBRARIES}")
         message(STATUS "CNA: .cnb Zstandard support enabled (opt-in per chunk, off by default)")
     elseif(CNA_CNB_ZSTD STREQUAL "ON")
         message(FATAL_ERROR "CNA: CNA_CNB_ZSTD=ON but libzstd was not found.")
@@ -230,8 +232,8 @@ if(CNA_DRACO_AVAILABLE)
     target_link_libraries(cna_draco INTERFACE draco::draco)
     if(NOT CNA_USE_SYSTEM_DRACO)
         target_include_directories(cna_draco INTERFACE
-            "${_cna_draco_dir}/src"
-            "${CMAKE_BINARY_DIR}")
+            "$<BUILD_INTERFACE:${_cna_draco_dir}/src>"
+            "$<BUILD_INTERFACE:${CMAKE_BINARY_DIR}>")
     endif()
 endif()
 
@@ -353,7 +355,8 @@ function(cna_add_module target alias)
     add_library(${target} STATIC ${ARGN})
     add_library(CNA::${alias} ALIAS ${target})
     target_link_libraries(${target} PUBLIC cna_build_config)
-    target_include_directories(${target} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    cna_module_include_root(${target} PUBLIC)
+    cna_register_cxx_target(${target} "${alias}")
 endfunction()
 
 # The graphics module's examples/ directory owns the shared renderer-agnostic example

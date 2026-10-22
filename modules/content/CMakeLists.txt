@@ -28,7 +28,7 @@ target_include_directories(cna_content PRIVATE
 if(CNA_CNB_ZSTD_AVAILABLE)
     target_compile_definitions(cna_content PRIVATE CNA_CNB_HAVE_ZSTD=1)
     target_include_directories(cna_content PRIVATE ${CNA_ZSTD_INCLUDE_DIRS})
-    target_link_libraries(cna_content PRIVATE ${CNA_ZSTD_LIBRARIES})
+    target_link_libraries(cna_content PRIVATE CNA::Zstd)
 endif()
 
 if(CNA_DRACO_AVAILABLE)

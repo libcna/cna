@@ -24,7 +24,9 @@ function(cna_configure_vendored_enet)
     endif()
 
     # Make enet headers available via <enet/enet.h>
-    target_include_directories(enet PUBLIC "${ENET_DIR}/include")
+    target_include_directories(enet PUBLIC
+        "$<BUILD_INTERFACE:${ENET_DIR}/include>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 
     message(STATUS "CNA: Using vendored ENet from ${ENET_DIR}")
 endfunction()
