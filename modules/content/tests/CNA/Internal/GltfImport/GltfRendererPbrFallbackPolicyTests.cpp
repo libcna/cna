@@ -1724,10 +1724,11 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60Record
     const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
     ASSERT_TRUE(std::filesystem::is_directory(renderers));
 
-    // Binds the record through its own stride table.
-    constexpr std::array<const char*, 6> strideTable{{
-        "directx9", "easygl", "fna3d", "software", "sdl-gpu", "webgpu",
+    // Binds the record through a stride table or a declaration-normalized shader variant.
+    constexpr std::array<const char*, 5> strideTable{{
+        "directx9", "easygl", "fna3d", "software", "sdl-gpu",
     }};
+    constexpr std::array<const char*, 1> normalized{{"webgpu"}};
     // No stride-60 row and no declaration path: the record degrades visibly (no attributes, or a
     // refusal) rather than being mis-bound. GLTF-465 owns closing these, and each needs pipeline or
     // shader-descriptor work rather than a table entry.
@@ -1735,9 +1736,10 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60Record
 
     std::set<std::string> classified;
     for (const char* name : strideTable) { classified.insert(name); }
+    for (const char* name : normalized) { classified.insert(name); }
     for (const char* name : notYet) { classified.insert(name); }
-    ASSERT_EQ(strideTable.size() + notYet.size(), classified.size())
-        << "the two dispositions must be disjoint";
+    ASSERT_EQ(strideTable.size() + normalized.size() + notYet.size(), classified.size())
+        << "the dispositions must be disjoint";
 
     // Discovered exactly as the PBR-map inventory discovers its own set.
     std::set<std::string> expected;
@@ -1754,6 +1756,14 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60Record
         EXPECT_TRUE(source.find(Normalize("case 60:")) != std::string::npos ||
                     source.find(Normalize("stride == 60")) != std::string::npos)
             << "listed as binding the stride-60 record, but no stride-60 row exists";
+    }
+    for (const char* name : normalized)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(renderers, name);
+        EXPECT_NE(std::string::npos, source.find(Normalize("NormalizeRigidPbrStreamEXT(")));
+        EXPECT_NE(std::string::npos, source.find(Normalize("command.colored = (pbrStride == 60);")));
+        EXPECT_NE(std::string::npos, source.find(Normalize("GetOrCreatePipelinePbr3D(command.colored,")));
     }
     for (const char* name : notYet)
     {
@@ -2097,15 +2107,14 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
     };
     // Each row is the predicate that decides whether a PBR draw of that stride reaches the PBR
     // shader at all -- not the layout it would then be read with.
-    const std::array<RouteGate, 6> gates{{
-        {"webgpu", "the rigid PBR stride check", "if (pbrStride != 48 && pbrStride != 60)"},
+    const std::array<RouteGate, 5> gates{{
         {"webgpu", "the skinned PBR stride check",
          "if (skinnedPbrStride != 68 && skinnedPbrStride != 80)"},
         {"directx9", "the rigid PBR stride check",
          "if (!skinned && stride != 48 && stride != 60)"},
         {"directx9", "the skinned PBR stride check",
          "if (skinned && stride != 68 && stride != 80)"},
-        {"sdl-gpu", "the draw-entry dispatch (both routes)",
+        {"sdl-gpu", "the remaining stride-derived draw-entry dispatch",
          "if (params.pbr &&"
          "    ((params.skinned && (stride == 68 || stride == 80)) ||"
          "     (!params.skinned && (stride == 48 || stride == 60))))"},
@@ -2136,7 +2145,15 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
         const char* renderer;
         const char* evidence;
     };
-    const std::array<UngatedRoute, 3> ungated{{
+    const std::array<UngatedRoute, 5> ungated{{
+        {"webgpu", "if (params.pbr && !params.skinned) { RequireSingleStreamRouteEXT(params, route);"
+                   " QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,"
+                   " instanceCount, instanceStream); return; }"},
+        {"sdl-gpu", "if (params.pbr && !params.skinned) { if (streams.count != 1)"
+                    " throw System::NotSupportedException("
+                    "\"CNA SDL_GPU: PbrEffect requires one per-vertex stream\");"
+                    " QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);"
+                    " return; }"},
         {"easygl", "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;"},
         {"fna3d", "if (params.pbr) return params.skinned ? StockEffectKind::SkinnedPbr : StockEffectKind::Pbr;"},
         {"software", "const bool tangentLayout = stride == 48 || stride == 60 || stride == 68 || stride == 76 || stride == 80"},
@@ -2160,6 +2177,32 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
         "easygl", "software", "sdl-gpu", "directx9", "fna3d", "webgpu"};
     EXPECT_EQ(applies, covered)
         << "a renderer listed as applying COLOR_0 has no route-reachability disposition";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, DeclarationDrivenRigidPbrPreservesTheColourRecord)
+{
+    const auto root = RepositoryRoot();
+    const std::string helper = Normalize(ReadFile(root / "modules/graphics/include/CNA/Internal/Graphics/PbrVertexStream.hpp"));
+    ASSERT_FALSE(helper.empty());
+    EXPECT_NE(std::string::npos, helper.find(Normalize("const std::size_t targetStride = color || uv1 ? 60 : 48;")));
+    EXPECT_NE(std::string::npos, helper.find(Normalize("copy(color, 56, 4);")));
+    EXPECT_NE(std::string::npos, helper.find(Normalize("stride = targetStride;")));
+    for (const char* name : {"webgpu", "sdl-gpu"})
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(root / "modules/renderers", name);
+        const auto queue = source.find("::QueuePbrDraw(");
+        ASSERT_NE(std::string::npos, queue);
+        const auto normalize = source.find("NormalizeRigidPbrStreamEXT(", queue);
+        const auto colored = source.find("command.colored=", queue);
+        ASSERT_NE(std::string::npos, normalize);
+        ASSERT_NE(std::string::npos, colored);
+        EXPECT_LT(normalize, colored) << "select the shader from the normalized record, not the input stride";
+        EXPECT_NE(std::string::npos, source.find(Normalize(
+            std::string("const auto& shadow = normalized.empty() ? ") +
+            (std::string_view(name) == "webgpu" ? "webgpuVb" : "sdlGpuVb") +
+            ".ShadowData() : normalized;"), colored));
+    }
 }
 
 TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)

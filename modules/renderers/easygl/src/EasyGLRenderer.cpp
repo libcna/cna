@@ -9433,6 +9433,16 @@ namespace CNA::Internal::Renderers::EasyGL
         return StockProgramShape::Colored;
     }
 
+    namespace
+    {
+        bool UsesExtendedRigidPbrInputs(std::size_t stride, const GpuDrawParams& params)
+        {
+            // COLOR0 is consumed when the effect enables it, regardless of the declaration's
+            // byte stride. The extended shader also retains the legacy dual-UV record.
+            return stride == 60 || params.vertexColorEnabled;
+        }
+    }
+
     EasyGLRenderer::Prog3D& EasyGLRenderer::SelectProgram(
         std::size_t stride, const GpuDrawParams& params)
     {
@@ -9445,8 +9455,8 @@ namespace CNA::Internal::Renderers::EasyGL
             return (stride == 76 || stride == 80) ? prog_pbr_skinned_dual_uv_
                                                   : prog_pbr_skinned_;
         case StockProgramShape::Pbr:
-            EnsurePbrProgram(stride == 60);
-            return stride == 60 ? prog_pbr_dual_uv_ : prog_pbr_;
+            EnsurePbrProgram(UsesExtendedRigidPbrInputs(stride, params));
+            return UsesExtendedRigidPbrInputs(stride, params) ? prog_pbr_dual_uv_ : prog_pbr_;
         case StockProgramShape::SkinnedVertexLit:
             EnsureSkinnedVertexLitProgram();    return prog_skinned_vertexlit_;
         case StockProgramShape::Skinned:
@@ -9545,7 +9555,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             name = "pbr_skinned3d"; break;
         case StockProgramShape::Pbr:
-            if (stride == 60)
+            if (UsesExtendedRigidPbrInputs(stride, params))
             {
                 inputs = kPbrDualUv; count = std::size(kPbrDualUv);
             }
@@ -9665,7 +9675,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             break;
         case StockProgramShape::Pbr:
-            if (stride == 60)
+            if (UsesExtendedRigidPbrInputs(stride, params))
             {
                 inputs = kPbrDualUv;
                 count = std::size(kPbrDualUv);

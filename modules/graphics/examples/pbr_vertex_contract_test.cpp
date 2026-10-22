@@ -75,8 +75,42 @@ class PbrVertexContractTest final : public Game
         IndexBuffer indices(device, 7);
         const std::uint16_t indexData[]{6, 0, 1, 2, 3, 4, 5};
         indices.SetData(indexData, 7);
+        struct ColoredTangentVertex
+        {
+            PackedTangentVertex vertex;
+            Vector2 uv1;
+            std::uint32_t color;
+        };
+        struct ColoredPlainVertex
+        {
+            Vector3 position, normal;
+            Vector2 uv;
+            std::uint32_t color;
+        };
+        static_assert(sizeof(ColoredTangentVertex) == 60);
+        static_assert(sizeof(ColoredPlainVertex) == 36);
+        std::array<ColoredTangentVertex, 6> coloredTangent;
+        std::array<ColoredPlainVertex, 6> coloredPlain;
+        for (std::size_t i = 0; i < 6; ++i)
+        {
+            constexpr std::uint32_t color = 0xff80c040u;
+            coloredTangent[i] = {tangent[i], Vector2::Zero, color};
+            coloredPlain[i] = {positions[i], Vector3(0, 0, 1), Vector2::Zero, color};
+        }
+        const VertexDeclaration coloredTangentDeclaration(
+            60, {{0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0},
+                 {12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0},
+                 {24, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0},
+                 {40, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0},
+                 {48, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1},
+                 {56, VertexElementFormat::Color, VertexElementUsage::Color, 0}});
+        const VertexDeclaration coloredPlainDeclaration(
+            36, {{0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0},
+                 {12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0},
+                 {24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0},
+                 {32, VertexElementFormat::Color, VertexElementUsage::Color, 0}});
         const auto render = [&](int route, float metallic, float roughness, Vector3 base, Vector3 emission,
-                                bool light) {
+                                bool light, bool vertexColor = true) {
             device.SetRenderTarget(&target);
             device.Clear(Color::Black);
             PbrEffect effect(device);
@@ -87,6 +121,7 @@ class PbrVertexContractTest final : public Game
             effect.setRoughnessFactorProperty(roughness);
             effect.setEmissiveFactorProperty(emission);
             effect.setTextureProperty(&white);
+            effect.VertexColorEnabledEXT = route >= 5 && vertexColor;
             effect.DirectionalLight0.setEnabledProperty(light);
             effect.DirectionalLight0.setDirectionProperty(Vector3(0, 0, -1));
             effect.DirectionalLight0.setDiffuseColorProperty(Vector3::One);
@@ -104,6 +139,12 @@ class PbrVertexContractTest final : public Game
                 device.DrawUserPrimitives(PrimitiveType::TriangleList, plain.data(), 0, 2);
             else if (route == 2)
                 device.DrawUserPrimitives(PrimitiveType::TriangleList, padded.data(), 1, 2, declaration);
+            else if (route == 5)
+                device.DrawUserPrimitives(PrimitiveType::TriangleList, coloredTangent.data(), 0, 2,
+                                          coloredTangentDeclaration);
+            else if (route == 6)
+                device.DrawUserPrimitives(PrimitiveType::TriangleList, coloredPlain.data(), 0, 2,
+                                          coloredPlainDeclaration);
             else
             {
                 device.SetVertexBuffer(&buffer);
@@ -148,11 +189,25 @@ class PbrVertexContractTest final : public Game
                     pass &= actual.getRProperty() == 0 && actual.getGProperty() == 0 &&
                             actual.getBProperty() == 0;
             }
+            const Color coloredExpected = render(5, metallic, roughness, base, emission, scene != 4);
+            const Color coloredActual = render(6, metallic, roughness, base, emission, scene != 4);
+            const bool colorEqual = coloredActual == coloredExpected;
+            std::printf(
+                "scene%d COLOR0 tangent=%u,%u,%u actual=%u,%u,%u %s\n", scene, coloredExpected.getRProperty(),
+                coloredExpected.getGProperty(), coloredExpected.getBProperty(), coloredActual.getRProperty(),
+                coloredActual.getGProperty(), coloredActual.getBProperty(), colorEqual ? "PASS" : "FAIL");
+            pass &= colorEqual;
+            if (scene == 0)
+            {
+                pass &= coloredExpected != expected &&
+                        coloredExpected.getGProperty() > coloredExpected.getRProperty();
+                pass &= render(6, metallic, roughness, base, emission, true, false) == expected;
+            }
         }
         pass &= std::abs(reference[0].getRProperty() - reference[1].getRProperty()) > 10;
         pass &= reference[0] != reference[2];
         pass &= reference[3].getGProperty() > 240;
-        std::printf("PBR_VERTEX_RESULT comparisons=20 failures=%d\n", pass ? 0 : 1);
+        std::printf("PBR_VERTEX_RESULT comparisons=25 failures=%d\n", pass ? 0 : 1);
         result_ = pass ? 0 : 1;
         Exit();
     }

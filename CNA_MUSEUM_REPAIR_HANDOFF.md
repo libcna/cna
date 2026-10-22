@@ -19,6 +19,68 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**PBR follow-up validated; next DEF_PROP visibility. Base CNA91612a0a3 / demosadbeeaf.**
+PBR batch committed91612a0a3a39605b594ec9c54a61eaa9ec50de9c; owner notified, no push.
+Read-only audit: DEF_PROP and its DDATA/DGETTER wrappers occur in only ContentManager
+and Viewport. Viewport already puts all macros in public scope. ContentManager's
+RootDirectory macro changes access from private to public and leaks11 loader/lifetime
+helpers until the next private label. New ContentManagerVisibilityTests.cpp reproduces
+all11 exposures; property accessibility controls pass. Current baseline job26047,
+scope cna-museum-visibility-before, driver demos build-probe/repair-museum-visibility.mjs
+before: build14749ms PASS, visibility3tests=2PASS/1expectedFAIL; existing full content
+suite finished2056tests=2050PASS/4SKIP/2FAIL. Both failures are PBR source-structure
+audits still pinning the old WebGPU stride gate, removed in91612a0a3. No product
+access fix yet. Active follow-up updates those audits for declaration normalization
+and adds exact colored PBR pixel coverage, retaining the behavioral expectations.
+Follow-up content job61391 passed2053/2057, same4SKIP,110490ms, peak1492205568/events0;
+evidence prefix repair-museum-visibility-pbr-followup. Expanded pixel regression
+exposed a genuine EasyGL bug: declared COLOR0 without tangent (stride36) is ignored,
+while canonical60 produces tinted pixels. GLES/GL33 each fail3colored comparisons;
+SOFTWARE/WEBGPU/SDL_GPU pass25. Native color-followup-v2 records this before state;
+first color-followup build caught the fixture's incorrect use of polymorphic Color
+as packed data, fixed to uint32 without changing pixel expectations (logs retained).
+EasyGL candidate selects matching extended PBR shader/validation/binding inputs when
+VertexColorEnabledEXT is true, not just stride60; shared local predicate, no shader
+changes. New pixel control also proves disabling the color flag restores uncolored
+output. Native job36906 color-followup-v3 completed: build9221ms and all five renderer
+pixel CTests PASS (25comparisons each). Renderer tests WEBGPU66PASS/1SKIP,
+SDL_GPU58PASS/1SKIP, GLES28PASS/1SKIP, GL33 22PASS/7SKIP. Graphics/PBR/vertex499 each:
+WEBGPU479PASS/20SKIP, SDL_GPU467PASS/32SKIP, GLES497PASS/2SKIP, GL33 495PASS/4SKIP.
+All six existing rigid/skinned/instanced PBR fixture runs PASS; helper ASan/UBSan/LSan
+5PASS with no reports. Peak1426870272/events0/source drift0.
+Browser build99568 PASS36332ms, peak461877248/events0/source drift0. Chrome40670:
+25/25 with tier1 present and25/25 masked, zero page/uncaptured/validation errors,
+peak468709376/events0/artifact drift0. Evidence repair-museum-webgpu-pbr-color-followup*.
+External46958:54 demo runs, exact zero deltas (status/checks/knownIssue/exit): eachphase
+GLES9PASS, SDL_GPU7PASS/2SKIP, SOFTWARE9SKIP. No oracle/metadata change. Build64718ms,
+peak4302499840/high1887/max0/oom0/kill0. Five boundary gates PASS.
+Final content job98717 (repair-museum-visibility-pbr-final): build9887ms PASS;
+2053PASS/4unchangedSKIP,133442ms,peak3459633152/events0. PBR follow-up is fully validated
+within the stated native/browser scope; no full aggregate or museum rerun claim.
+Next: run pure-C ContentSmoke baseline, then repair visibility. Its new failing test
+stays uncommitted outside the PBR commit; all unrelated dirty work remains preserved.
+Exact planned local repair: explicit public RootDirectory/private helper boundary;
+keep C API asset-path/normalized-key routes and built-in media loader resolution via
+a narrow internal friend accessor, not duplicated path logic. Current C API directly
+calls BuildAssetPath/NormalizeKey (four calls), ContentMediaLoaders free helper calls
+BuildAssetPath/ResolveExistingAssetPath. Other helper users already have the intended
+ContentReader/BuiltinContent/ModelResourceRecorder friendship. Preserve unrelated
+ContentManager/CnaCApiContent ownership edits; stage only new access hunks when done.
+
+Phone browser follow-up remains read-only pending exact reference contract: missing
+ErrorOccurred confirmed; Open silently returns on socket/listen/getsockname failures.
+PushNotificationSender Post reports only send byte count and ignores recv result,
+so browser socket queuing can report acceptance without a connected receiver.
+Official Microsoft archived ff707848/ff707611 and property pagesff707802/ff708179/
+ff707322/ff707957 (vs.110) confirm NotificationChannelErrorEventArgs properties:
+ErrorAdditionalData Int32, ErrorCode Int32, ErrorType ChannelErrorType, Message String.
+The correct enum name is ChannelErrorType, not museum's NotificationChannelErrorType.
+Six names documented; numeric values not verified. No local Microsoft.Phone.dll found
+in deps, repository references, NuGet cache or the two Wine prefixes; no guessed API
+or Phone production edit made. Direct curl can read these Learn pages though web open
+reports cache miss. Next Phone step: authentic enum metadata and browser baseline,
+then failure-event and sender-completion fixes at the proper HTTP abstraction layer.
+
 **Museum PbrEffect FIXED_NATIVE_BROWSER_VALIDATED, following CNA f8d8f06d0 / demos adbeeaf.**
 HapticDevice implementation is committed974c1ac08; its matrix closuref8d8f06d0 and
 demo workaround removaladbeeaf are complete. No push.
