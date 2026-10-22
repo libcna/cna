@@ -1,5 +1,16 @@
 # SDL GPU Graphics Renderer — classic XNA / EasyGL parity plan and execution log
 
+## Museum PBR follow-up (2026-10-22)
+
+The museum rv-shading case exposed rejection of PbrEffect with tangent-free vertices.
+Rigid PBR now resolves POSITION0/NORMAL0 Vector3, TEXCOORD0 Vector2 and optional
+TANGENT0 Vector4, TEXCOORD1 Vector2, COLOR0 Color by declaration. Missing tangents use
+the GL neutral input; canonical48/60-byte streams retain resident storage. Shader BRDFs
+are unchanged. The Linux/Vulkan PbrVertexContract_SDL_GPU test passes20 exact pixel
+comparisons across user/buffered/indexed draws and reordered/padded records with offsets;
+existing rigid/skinned/instanced PBR examples pass. No new D3D12/Metal runtime claim.
+See CNA_MUSEUM_REPAIR_HANDOFF.md for complete evidence and consumer revalidation status.
+
 > **Renderer note (2026-10-14).** Since CNA's own `VULKAN`, `DIRECTX11` and `METAL` renderers were
 > retired on 2026-10-13 (`docs/removed-renderers.md`), `SDL_GPU` is CNA's modern native path and
 > the default on Windows, macOS and iOS. "Vulkan", "D3D12" and "Metal" in this file mean SDL's own

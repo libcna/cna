@@ -19,7 +19,50 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
-**Active CNA-DEMOS-ISSUE-009 / museum HapticDevice:** repair follows `c2664bad6`.
+**Museum PbrEffect FIXED_NATIVE_BROWSER_VALIDATED, following CNA f8d8f06d0 / demos adbeeaf.**
+HapticDevice implementation is committed974c1ac08; its matrix closuref8d8f06d0 and
+demo workaround removaladbeeaf are complete. No push.
+PBR minimized native baseline before-v3: GLES/GL33/SOFTWARE five comparisons PASS;
+WEBGPU uses unlit fallback (metallic0/1 both204 vs canonical148/255), SDL_GPU rejects
+the tangent-free declaration. Initial before/before-v2 fixture mistakes (state setter
+spelling and unpacked polymorphic tangent vertex) were corrected, logs retained.
+Candidate shares a declaration-driven rigid-PBR normalization helper; missing tangent
+uses GL neutral(0,0,0,1), canonical48/60 streams retain resident GPU storage. No shader
+or expected-value change. Both affected renderers route PBR by effect, not byte stride.
+Native after-v2:20 exact comparisons each on GLES/GL33/SOFTWARE/WEBGPU/SDL_GPU PASS,
+covering user, padded/reordered, buffered and indexed/nonzero-offset vertices, metallic,
+roughness, emission and disabled-light controls. Peak791625728/events0; build18482ms.
+Separate residual: FNA3D with SDLGPU driver rejects missingTangent0 explicitly both
+before and after (exit2); not repaired or suppressed. Museum's FNA3D result may use GL.
+Full driver exits remain1 because of this recorded residual, not falsely called green.
+Final native job55522 completed:5 registered renderer CTests PASS; WEBGPU renderer67
+=66PASS/1SKIP; SDL_GPU59=58PASS/1SKIP. Graphics/PBR/vertex suite499 per renderer:
+WEBGPU479PASS/20SKIP, SDL_GPU467PASS/32SKIP. Existing rigid/skinned/instanced fixtures
+all six executions PASS. Five helper tests ASan/UBSan/LSan PASS, no reports.
+Peak1054932992/events0/source drift0. Earlier90844/79419 retained include-path and SDL
+link-line harness failures; no product assertions were changed to pass them.
+Browser build39133:50489ms, two preexisting warnings (32-bit hash constant, enum switch)
+matching earlier webgpu-after-build evidence; peak495022080/events0/source drift0.
+Chrome job84962:20/20 comparisons each with tier1 available and masked, zero page,
+uncaptured or validation errors; peak459329536/events0/artifact drift0.
+External job51000: nine PBR demos each SOFTWARE/GLES/SDL_GPU before/after (54 runs).
+GLES9PASS unchanged; SOFTWARE9 historical SKIP unchanged; SDL_GPU6PASS/1FAIL/2SKIP
+becomes7PASS/2SKIP. The sole behavior delta is metallic_roughness refusal->PASS,
+checks0->1, exit1->0. The audit intentionally exits1 on any delta; reviewed changes
+are exactly this intended repair. No oracle, tolerance, knownIssue or restriction edits.
+Build67824ms, peak4307984384, high1846 but max/oom/kill0. SOFTWARE native pixel tests
+above genuinely run; skipped external demos are NOT counted as passes. Those older
+SOFTWARE restrictions need separate validation, not blanket removal in this repair.
+Five platform boundary gates PASS. One compiler/private GPU/MemoryMax6GiB throughout.
+No full aggregate, museum rerun, or new Windows/macOS claim; museum owns revalidation.
+Evidence prefixes repair-museum-pbr-* and repair-museum-webgpu-pbr-* in demos reports.
+No heavy job remains; commit only this PBR batch, retain all inherited dirty work.
+Next independent item: browser HttpNotificationChannel ErrorOccurred contract and
+failure event. ISSUE-131 remains owner-reserved by handoff.md section6; asked owner
+again2026-10-22 whether the new museum request lifts that explicit reservation. Do not
+implement/generate the method while that choice remains unanswered.
+
+**Completed CNA-DEMOS-ISSUE-009 / museum HapticDevice:** repair follows `c2664bad6`.
 Fresh public-header test fails before the patch with unique_ptr's sizeof(incomplete
 IPlatformHapticDevice); its preexisting noexcept trait passes. Native baseline36
 haptics tests PASS23177ms (before-v2). First baseline tried a not-yet-built focused
@@ -36,13 +79,10 @@ Consumer jobs59317/52602: both haptics demos on SOFTWARE/GLES pass before and af
 rumble checks1->2 and effects12->13 add default-member construction without removing
 hardware restrictions or behavior assertions. Rebuild71030ms, peak3890540544/events0.
 Evidence: demos build/linux-full/reports/repair-museum-haptic-*. No hardware claim.
-One compiler, private display,6GiB cap. Commit CNA and demos separately; update only
-issue009 in the already-dirty matrix/issue inventory.
+One compiler, private display,6GiB cap. CNA974c1ac08, matrixf8d8f06d0, demosadbeeaf.
 Preserve all inherited ISSUE113 and content/audio edits, including dirty docs.
 
-**Next priority: museum PbrEffect WEBGPU lighting and SDL_GPU tangent-free vertices.**
-Read museum ValidationLab.cpp852-905 and CNA_FINDINGS.md PbrEffect entry; reproduce
-the actual pixel differences before changing either renderer. No PBR repair yet.
+**Museum external revalidation received before the PBR batch above.**
 Owner's museum revalidation2026-10-22 at5b6aab981: NET-001/002 net23PASS0FAIL;
 TRAY-00113PASS twice; WEBGPU-001/002 browser320rooms, none skipped, zero destroyed
 texture/uncaptured errors, exit0. App-device workaround removed. NET-003 remains

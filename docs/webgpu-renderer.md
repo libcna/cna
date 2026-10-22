@@ -373,8 +373,13 @@ pixel-verified, not merely implemented.
 
 `pbr3d.wgsl` / `GetOrCreatePipelinePbr3D()` implement `PbrEffect`'s real glTF 2.0
 metallic-roughness BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel),
-ported from `EasyGLRenderer::EnsurePbrProgram()`'s GLSL shader, for stride-48
-(`VertexPositionNormalTangentTexture`) draws. Base color, normal, metallic-roughness, emissive
+ported from `EasyGLRenderer::EnsurePbrProgram()`'s GLSL shader. Rigid PBR accepts a single
+vertex stream declaring POSITION0/NORMAL0 as Vector3 and TEXCOORD0 as Vector2, with optional
+TANGENT0 Vector4, TEXCOORD1 Vector2 and COLOR0 Color. Offsets/order/padding are resolved from
+the declaration; missing tangents use the GL neutral input `(0,0,0,1)`. Canonical 48/60-byte
+streams retain resident GPU storage; other supported layouts are normalized at draw capture.
+The `PbrVertexContract_WEBGPU` regression also exercises buffered/indexed nonzero offsets.
+Base color, normal, metallic-roughness, emissive
 and occlusion maps are all supported, each falling back to a 1x1 default texture (flat normal /
 white, matching the EasyGL renderer's own "map absent" convention) when `PbrEffect` leaves that
 map unbound. Group 0 reuses the existing `Uniforms`/`LitLightParams` UBO shapes byte-for-byte

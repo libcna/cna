@@ -1,5 +1,6 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
+#include "CNA/Internal/Graphics/PbrVertexStream.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
 #include "Fna3dStockEffectBlobs.hpp"
 // WEBGPU-169: a compiled sampler can name any of the three public texture kinds, and sorting them
@@ -5589,11 +5590,11 @@ namespace CNA::Internal::Renderers::WebGPU
         // attribute arrays and the declaration-fidelity refusal that makes reading a declaration
         // those arrays cannot represent impossible rather than silent (WEBGPU-172/177 own their
         // conversion). The condition matches the ladder this function replaced exactly: a skinned
-        // draw never reached the unlit/lit families, and a PBR draw only bypassed them once its
-        // stride was one of PBR's own.
+        // draw never reached the unlit/lit families. PBR must also keep its effect family at any
+        // stride; its rigid queue resolves supported declarations into the canonical record.
         if (needsAlphaTest || needsDualTexture) return StockVertexShapeEXT::StrideDerived;
         if (params.skinned) return StockVertexShapeEXT::StrideDerived;
-        if (params.pbr && (stride == 48 || stride == 60 || stride == 68 || stride == 80))
+        if (params.pbr)
             return StockVertexShapeEXT::StrideDerived;
 
         // Task 1105 / plans/plan_dx9.md Divergence 1: XNA's BasicEffect defaults
@@ -14085,8 +14086,16 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             return;
         }
 
-        // The skinned and PBR families still select their attribute arrays
-        // from the byte stride, so the PBR family still needs the guard that refuses a declaration
+        if (params.pbr && !params.skinned)
+        {
+            RequireSingleStreamRouteEXT(params, route);
+            QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
+                         instanceCount, instanceStream);
+            return;
+        }
+
+        // The skinned PBR family still selects its attribute arrays
+        // from the byte stride, so that family still needs the guard that refuses a declaration
         // those arrays would silently reinterpret. WEBGPU-155 deliberately did not convert it; the
         // check is here rather than at the top of the entry points so a converted family is
         // judged by its declaration instead.
@@ -14105,12 +14114,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             QueueSkinnedPbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
                                 instanceCount, instanceStream);
-            return;
-        }
-        if (params.pbr && !params.skinned && (stride == 48 || stride == 60))
-        {
-            QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
-                         instanceCount, instanceStream);
             return;
         }
         // An unsupported effect on a stride that carries no palette or tangent basis, or a buffer
@@ -15829,11 +15832,13 @@ namespace
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // plans/plan_gltf.md GLTF-465: stride 60 is the same record with TEXCOORD_1 and a packed COLOR_0
         // appended, and it selects the colour-carrying pipeline and shader module.
-        const std::size_t pbrStride = webgpuVb.Stride();
-        if (pbrStride != 48 && pbrStride != 60)
-            throw std::invalid_argument("CNA WebGPU: QueuePbrDraw requires a stride-48 or stride-60 "
-                                        "(VertexPositionNormalTangentTexture, optionally with "
-                                        "COLOR_0) vertex buffer");
+        std::size_t pbrStride = webgpuVb.Stride();
+        std::vector<std::uint8_t> normalized;
+        if (!CNA::Internal::Graphics::NormalizeRigidPbrStreamEXT(
+                webgpuVb.Declaration().GetElements(), webgpuVb.ShadowData(), pbrStride, normalized))
+            throw System::NotSupportedException(
+                "CNA WebGPU: PbrEffect requires POSITION0/ NORMAL0 Vector3 and TEXCOORD0 Vector2; "
+                "optional TANGENT0 Vector4, TEXCOORD1 Vector2 and COLOR0 Color");
 
         EnsurePbrDefaultTextures();
 
@@ -15841,7 +15846,7 @@ namespace
         command.colored = (pbrStride == 60);
         // plans/plan_street_webgpu.md STREETW-0001/0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "PbrEffect", command.instance);
-        const auto& shadow = webgpuVb.ShadowData();
+        const auto& shadow = normalized.empty() ? webgpuVb.ShadowData() : normalized;
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * pbrStride;
         if (byteOffset < shadow.size() && &shadow == &webgpuVb.ShadowData() &&
             webgpuVb.Storage() != nullptr)

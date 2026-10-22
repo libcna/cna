@@ -19,16 +19,23 @@ that only external-platform work remains.
   `texture-formats-tier1` and refuses feature-gated probes before entering WebGPU; browser checks
   pass10/10 with it enabled and10/10 on a real device created without it. Native fixture9PASS;
   WebGPU renderer suite66PASS/1unchangedSKIP; format/capability checks28PASS each on WEBGPU,
-  OPENGLES3 and SOFTWARE. The museum's own tour revalidation is pending.
+  OPENGLES3 and SOFTWARE. Museum revalidation at5b6aab981 confirms the browser tour.
 - Browser canvas textures used after invalidation: repaired separately from optional formats.
   An owned browser backbuffer survives Asyncify waits; canvas acquisition/copy/submission never
   yields. Native reconfiguration releases the acquired surface first (the reproducer previously
   aborted). Fixture16/16 on Chrome and native, exact presented canvas3840/3840 pixels; existing
   native pixel fixtures51/51, browser coverage9/9 and four effect pages21/21. Optional-format
-  checks still10/10+10/10; native renderer/format outcomes unchanged. The museum tour remains
-  awaiting consumer revalidation; these are not full aggregate or all-platform results.
-- PBR lighting, vertex texture fetch/float storage and surface-free device creation: museum
-  follow-up still requires contract/reproduction work; none is closed by the optional-format fix.
+  checks still10/10+10/10; native renderer/format outcomes unchanged. Museum confirms320 rooms,
+  none skipped, zero destroyed-texture/uncaptured errors, exit0, application workaround removed.
+  These are not all-platform results.
+- PBR tangent-free declarations: the old stride gate selected the unlit shader for
+  VertexPositionNormalTexture. Rigid PBR now preserves its effect family and normalizes supported
+  declarations into the existing shader record, using the GL neutral tangent when absent.
+  Native WEBGPU/SDL_GPU/GLES/GL33/SOFTWARE each pass20 exact layout/pixel comparisons;
+  Chrome passes the same20 with optional tier1 features enabled and absent, no validation errors.
+  Existing rigid/skinned/instanced PBR examples and helper ASan/UBSan checks pass. Details and
+  residual FNA3D SDLGPU missing-tangent refusal are in CNA_MUSEUM_REPAIR_HANDOFF.md.
+- Vertex texture fetch/float storage and surface-free device creation remain open museum findings.
 
 ## Historical row summary (2026-09-09)
 

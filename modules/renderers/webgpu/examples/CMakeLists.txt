@@ -1154,6 +1154,8 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     endmacro()
 
     cna_webgpu_effect_page(cna_webgpu_pbr3d_page       webgpu_pbr3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_pbr_vertex_page
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/pbr_vertex_contract_test.cpp)
     cna_webgpu_effect_page(cna_webgpu_envmap3d_page    webgpu_envmap3d_test.cpp)
     cna_webgpu_effect_page(cna_webgpu_skinned3d_page   webgpu_skinned3d_test.cpp)
     # The last two shader pairs: narrow variants of the already-verified textured3d path, built to

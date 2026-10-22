@@ -43,6 +43,20 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    if(NOT EMSCRIPTEN)
+        add_executable(CnaPbrVertexContractTest modules/graphics/examples/pbr_vertex_contract_test.cpp)
+        target_link_libraries(CnaPbrVertexContractTest PRIVATE CNA)
+        cna_link_sharp_runtime(CnaPbrVertexContractTest PRIVATE)
+        foreach(_pbr_renderer SOFTWARE OPENGLES3 OPENGL33 WEBGPU SDL_GPU)
+            if(_pbr_renderer IN_LIST CNA_RENDERER_IDENTITIES)
+                add_test(NAME PbrVertexContract_${_pbr_renderer} COMMAND CnaPbrVertexContractTest)
+                set_tests_properties(PbrVertexContract_${_pbr_renderer} PROPERTIES
+                    ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_pbr_renderer}"
+                    TIMEOUT 60 LABELS "Pbr;VertexDeclaration")
+            endif()
+        endforeach()
+    endif()
+
     # Observe real native texture retirement and deferred SDL_GPU binding, without
     # replacing either driver. ELF interposition requires the shared CNA library.
     if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_SHARED_LIBRARY

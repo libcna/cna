@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
+#include "CNA/Internal/Graphics/PbrVertexStream.hpp"
 #include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 
@@ -8050,8 +8051,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
+        std::size_t stride = sdlGpuVb.Stride();
         const bool skinned = params.skinned;
+        std::vector<std::uint8_t> normalized;
+        if (!skinned && !CNA::Internal::Graphics::NormalizeRigidPbrStreamEXT(
+                sdlGpuVb.Declaration().GetElements(), sdlGpuVb.ShadowData(), stride, normalized))
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: PbrEffect requires POSITION0/ NORMAL0 Vector3 and TEXCOORD0 Vector2; "
+                "optional TANGENT0 Vector4, TEXCOORD1 Vector2 and COLOR0 Color");
         // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
         // TEXCOORD_1 and a packed COLOR_0 appended, and glTF 3.9.2 makes that colour a multiplier on
         // base colour. They select the colour-carrying shader variants, which also read TEXCOORD_1.
@@ -8071,12 +8078,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.skinned = skinned;
         command.colored = colored;
         const int vertexStart = params.vertexStart;
-        const auto& shadow = sdlGpuVb.ShadowData();
+        const auto& shadow = normalized.empty() ? sdlGpuVb.ShadowData() : normalized;
         const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
         if (byteOffset <= shadow.size())
         {
             // STREETPERF-0002: PBR reads the buffer's bytes unchanged, so it binds its storage.
-            if (sdlGpuVb.Storage() != nullptr && byteOffset < shadow.size())
+            if (normalized.empty() && sdlGpuVb.Storage() != nullptr && byteOffset < shadow.size())
             {
                 command.resident.vertexStorage = sdlGpuVb.Storage();
                 command.resident.vertexOffset = static_cast<Uint32>(byteOffset);
@@ -10957,6 +10964,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 QueueSkinnedDraw(vb, ib, world, view, projection,
                                  primitive, primitiveCount, params);
+                return;
+            }
+            if (params.pbr && !params.skinned)
+            {
+                if (streams.count != 1)
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: PbrEffect requires one per-vertex stream");
+                QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
                 return;
             }
             RequireFaithfulDeclarationEXT(vb, ib == nullptr ? "ordinary-nonindexed" : "ordinary-indexed");
