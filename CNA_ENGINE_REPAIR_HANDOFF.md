@@ -4,8 +4,13 @@ Owner-requested intake, 2026-10-22. Read-only source inventory:
 `../cna-engine/upstream-issues.md`. Do not edit cna-engine or cna-extended.
 Use `cna-engine UP-NNN` in every associated commit message. No push authorized.
 
-Current checkpoint: UP-002 `99b54079e`, UP-018 `a6e731cc2`, UP-006 `a2f0378cf`,
-UP-019 `144d9f909`. No active build/test job. Next task: UP-001 installed package.
+Current checkpoint: UP-002 `99b54079e`, UP-018 regression/evidence `a6e731cc2` and
+`d49c080d9`, UP-006 regression `a2f0378cf` (runtime repair `470b12a5d`),
+UP-019 repair `144d9f909`. UP-018 is closed as NOT_A_CNA_DEFECT after the engine
+confirmed and corrected its own format bookkeeping in `8b7610c`.
+The related museum C/C++ runtime packaging batch is still being validated; active
+jobs and exact continuation are in CNA_MUSEUM_REPAIR_HANDOFF.md. Do not start a
+second heavy build. Next engine task: UP-001 installed C++ module package.
 The chronological notes below retain earlier failures and intermediate checkpoints.
 
 Baseline: CNA `a8800619e1b063e4e7f8bed5cf1b19744362c189`, branch `next`;
@@ -17,10 +22,10 @@ cna-demos/build/linux-full/reports/repair-storage-path-before-v1-*.
 
 | Finding | Current disposition | Evidence / next task |
 | --- | --- | --- |
-| UP-019 | Fixed in `144d9f909`; DirectX runtime validation pending | Four public-effect producer/receiver regressions pass on SOFTWARE/GLES/GL33/WEBGPU/SDL_GPU/FNA3D, including both FNA3D drivers. DirectX bytecode regenerated and all 26 register tables verified; no Windows runtime claim. |
-| UP-018 | ENGINE_EXPECTATION_ERROR verified on pin and next | Default device is Reach; preferred Single substitutes actual Color. Engine caches the requested enum rather than target.getFormatProperty(). HiDef Single retains float precision through Clear, Depth24 and indexed fog draws. No production repair required; see exact follow-up below. |
-| UP-006 | ALREADY_FIXED and verified | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). New engine-style module-only static library + umbrella consumers pass in both orders, with zero duplicate strong Graphics/Input/Vector3 symbols. |
-| UP-001 | Confirmed source gap | No CNA install export/config/version package exists. Design relocatable dependency/target export without breaking source consumers or duplicating the runtime. |
+| UP-019 | Fixed in `144d9f909`; engine revalidation and DirectX runtime validation pending | Four public-effect producer/receiver regressions pass on SOFTWARE/GLES/GL33/WEBGPU/SDL_GPU/FNA3D, including both FNA3D drivers. DirectX bytecode regenerated and all 26 register tables verified; no Windows runtime claim. Engine will rerun after publication and pin movement. |
+| UP-018 | CLOSED — NOT_A_CNA_DEFECT / ENGINE_EXPECTATION_ERROR | Engine confirmed and fixed in `8b7610c`: store target.getFormatProperty(), not the preference. Existing exact pin/next checks prove Reach selects Color and HiDef Single retains float precision. No CNA production repair required. |
+| UP-006 | ALREADY_FIXED and CNA-validated; engine revalidation pending | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). Engine-style consumers pass in both orders with zero duplicate strong Graphics/Input/Vector3 symbols. Engine will rerun after publication and pin movement; the museum's C adapter duplication is a separate, active repair. |
+| UP-001 | CONFIRMED_OPEN — installed C++ module package missing | The existing CNAConfig package serves CApi/CApiStatic only; it does not export the C++ module aliases. Provide relocatable Core/Math/Input/GraphicsCore/Content/Runtime/Audio and their SharpRuntime dependencies, preserving shared/static identity and the existing C ABI package/version contract. |
 | UP-002 | Documentation corrected | `docs/migration-guide.md`, CNAEXT and C++ language artefacts, distinguishes declaration markers from implicit/synthesized C# semantics and explicitly retains strict compiler diagnostics. No runtime/header/test changes needed. |
 
 Only one heavy job/compiler worker at a time, existing build directories, shared
@@ -121,3 +126,24 @@ allocation/readback sources have no committed differences pin->current next.
 No new runtime fix SHA is claimed for UP-018. UP-006's470b12a5d is NOT in the engine
 pin; the prior mixed-runtime validation applies to local next, not to900d0db3b.
 Nothing has been pushed; the engine must revalidate after its pin actually moves.
+
+## Engine confirmation and package requirements (2026-10-22)
+
+Owner forwarded the engine's explicit closure of UP-018. Read-only inspection of
+engine commit `8b7610cef6dd74ee0a6e3b9a2f82ba0a3153e4c2` confirms ShadowMap now stores
+`target_->getFormatProperty()` and its upstream inventory preserves the original
+mistaken report under a resolved/not-a-CNA-defect status. No engine or extended
+files were edited by this campaign. This finding is not counted as a CNA code fix.
+
+The engine acknowledged UP-019 `144d9f909` and UP-006 `470b12a5d`, but has not
+revalidated either at its pinned revision yet. Do not replace that pending state
+with CNA's focused test results. This message does not authorize a new push.
+
+UP-001 remains the engine's sole open item from this intake. The owner reports
+cna-extended0.2.0 already tries `find_package(CNA CONFIG)` before attaching CNA
+targets supplied by the consumer. Required exports: CNA::Core, CNA::Math,
+CNA::Input, CNA::GraphicsCore, CNA::Content, CNA::Runtime, CNA::Audio, plus the
+SharpRuntime:: targets their interfaces require. Validate a relocated installed
+package without source-tree paths and without embedding a second runtime. Keep
+the existing C API package working; its version follows the C ABI, not the C++
+project version. Complete the active shared C adapter/package validation first.
