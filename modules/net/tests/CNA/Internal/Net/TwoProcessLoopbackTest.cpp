@@ -250,7 +250,7 @@ TEST(TwoProcessLoopbackTest, StartHostingRollsBackCleanlyOnDiscoveryRegistration
 // so this ordering deterministically makes SurvivorA (not SurvivorB) the one with the lower
 // surviving wire id once HostPlayer (wire id 0) dies, and therefore the one Task 5.1's own "lowest
 // remaining wire id" rule promotes - a guaranteed outcome, not a race this test has to tolerate.
-TEST(TwoProcessLoopbackTest, HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses) {
+static void CheckHostMigrationAcrossRealProcesses(int hostLocals) {
     // Confirmed flaky at 10s under heavy concurrent load (observed timing out once inside a full
     // ~4700-test suite run, despite 711ms/run consistently in isolation across 8 separate runs) -
     // this test spawns 3 real processes and waits on a real cross-process ENet handshake plus a
@@ -261,7 +261,8 @@ TEST(TwoProcessLoopbackTest, HostMigrationPromotesOneSurvivorAndTheOtherReconnec
     std::string timeoutArg = "--timeout=" + std::to_string(kMigrationHarnessTimeoutSeconds);
     auto outerDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(kOuterWatchdogSeconds + 30);
 
-    SpawnedProcess host = SpawnHarness({"--role=migration-host", timeoutArg});
+    const std::string localsArg = "--host-locals=" + std::to_string(hostLocals);
+    SpawnedProcess host = SpawnHarness({"--role=migration-host", timeoutArg, localsArg});
     ASSERT_NE(host.pid, -1);
 
     std::string hostOutput;
@@ -273,7 +274,7 @@ TEST(TwoProcessLoopbackTest, HostMigrationPromotesOneSurvivorAndTheOtherReconnec
     ASSERT_GT(port, 0) << "host reported an invalid port";
     std::string portArg = "--port=" + std::to_string(port);
 
-    SpawnedProcess survivorA = SpawnHarness({"--role=migration-survivor", "--gamertag=SurvivorA", portArg, timeoutArg});
+    SpawnedProcess survivorA = SpawnHarness({"--role=migration-survivor", "--gamertag=SurvivorA", portArg, timeoutArg, localsArg});
     ASSERT_NE(survivorA.pid, -1);
 
     std::string survivorAOutput;
@@ -282,7 +283,7 @@ TEST(TwoProcessLoopbackTest, HostMigrationPromotesOneSurvivorAndTheOtherReconnec
     ASSERT_NE(survivorAOutput.find("JOINED"), std::string::npos)
         << "SurvivorA did not print JOINED first; output was: " << survivorAOutput;
 
-    SpawnedProcess survivorB = SpawnHarness({"--role=migration-survivor", "--gamertag=SurvivorB", portArg, timeoutArg});
+    SpawnedProcess survivorB = SpawnHarness({"--role=migration-survivor", "--gamertag=SurvivorB", portArg, timeoutArg, localsArg});
     ASSERT_NE(survivorB.pid, -1);
 
     int hostExitCode = -1, survivorAExitCode = -1, survivorBExitCode = -1;
@@ -313,4 +314,12 @@ TEST(TwoProcessLoopbackTest, HostMigrationPromotesOneSurvivorAndTheOtherReconnec
         << "expected SurvivorA to be promoted; output: " << survivorAOutput;
     EXPECT_NE(survivorBOutput.find("RECONNECTED"), std::string::npos)
         << "expected SurvivorB to reconnect to the promoted SurvivorA; output: " << survivorBOutput;
+}
+
+TEST(TwoProcessLoopbackTest, HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses) {
+    CheckHostMigrationAcrossRealProcesses(1);
+}
+
+TEST(TwoProcessLoopbackTest, MuseumMigrationExcludesBothLocalGamersOfTheDepartingHost) {
+    CheckHostMigrationAcrossRealProcesses(2);
 }

@@ -590,10 +590,13 @@ namespace {
     // to both peers immediately, the fastest, most deterministic way to trigger their own real
     // HandleDisconnect/AttemptHostMigration paths, instead of waiting out ENet's connection
     // timeout for an unplugged-cable-style abrupt loss.
-    int RunMigrationHost(int timeoutSeconds) {
+    int RunMigrationHost(int timeoutSeconds, int hostLocals) {
         auto gamer = SignedInGamer::CreateInternal("HostPlayer");
+        auto guest = SignedInGamer::CreateInternal("HostGuest");
+        std::vector<SignedInGamer*> gamers{&gamer};
+        if (hostLocals == 2) gamers.push_back(&guest);
         NetworkSession* session = NetworkSession::Create(
-            NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+            NetworkSessionType::SystemLink, gamers, 8, 0, NetworkSessionProperties{}
         );
         // As in XNA, the host allows migration and every machine learns it from the host.
         session->setAllowHostMigrationProperty(true);
@@ -609,7 +612,7 @@ namespace {
         std::fflush(stdout);
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeoutSeconds);
-        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 3; })) {
+        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= hostLocals + 2; })) {
             std::fprintf(stderr, "migration-host: timed out waiting for both survivors to join\n");
             session->Dispose();
             delete session;
@@ -618,21 +621,23 @@ namespace {
 
         // A host-side join can precede delivery of the roster broadcast. Wait for each
         // survivor to acknowledge its full roster and installed migration handlers.
-        auto* local=session->getLocalGamersProperty()[0];std::set<NetworkGamer*> ready;
+        std::set<NetworkGamer*> ready;
         std::vector<SharpRuntime::bytecs> received(sizeof(kMigrationReady));
         if(!PumpUntil(session,deadline,[&] {
-            while(local->getIsDataAvailableProperty()) {
-                NetworkGamer* sender=nullptr;const auto length=local->ReceiveData(received,sender);
-                if(length!=static_cast<int>(sizeof(kMigrationReady))||!sender||sender->getIsLocalProperty()
-                    ||!std::equal(received.begin(),received.end(),std::begin(kMigrationReady)))
-                    throw std::runtime_error("Invalid migration readiness acknowledgement");
-                ready.insert(sender);
+            // A multi-gamer host may be addressed through either local identity.
+            for (auto* local : session->getLocalGamersProperty()) {
+                while(local->getIsDataAvailableProperty()) {
+                    NetworkGamer* sender=nullptr;const auto length=local->ReceiveData(received,sender);
+                    if(length!=static_cast<int>(sizeof(kMigrationReady))||!sender||sender->getIsLocalProperty()
+                        ||!std::equal(received.begin(),received.end(),std::begin(kMigrationReady)))
+                        throw std::runtime_error("Invalid migration readiness acknowledgement");
+                    ready.insert(sender);
+                }
             }
             return ready.size()==2;
         })) {
             std::fprintf(stderr,"migration-host: timed out waiting for survivor roster acknowledgements\n");
             session->Dispose();
-            delete session;
             delete session;
             return 1;
         }
@@ -654,7 +659,7 @@ namespace {
     // (HostChanged fires with newHost != its own local gamer) - both real outcomes are proven by
     // one real AppData round trip over the post-migration connection, mirroring RunHost/RunClient's
     // own echo halves above.
-    int RunMigrationSurvivor(uint16_t hostPort, const std::string& gamertag, int timeoutSeconds) {
+    int RunMigrationSurvivor(uint16_t hostPort, const std::string& gamertag, int timeoutSeconds, int hostLocals) {
         if (hostPort == 0) {
             std::fprintf(stderr, "%s: --port is required and must be nonzero\n", gamertag.c_str());
             return 64;
@@ -683,8 +688,15 @@ namespace {
         std::printf("JOINED wireid=%d\n", static_cast<int>(session->getLocalGamersProperty()[0]->getIdProperty()));
         std::fflush(stdout);
 
-        if (!PumpUntil(session, deadline, [&] { return session->getAllGamersProperty().getCountProperty() >= 3; })) {
-            std::fprintf(stderr, "%s: timed out waiting for the full 3-gamer roster to join\n", gamertag.c_str());
+        if (!PumpUntil(session, deadline, [&] {
+            if (session->getAllGamersProperty().getCountProperty() < hostLocals + 2) return false;
+            const auto hostMachine = session->getHostProperty()->GetSharedMachine();
+            int members = 0;
+            for (NetworkGamer* member : session->getRemoteGamersProperty())
+                if (member->GetSharedMachine() == hostMachine) ++members;
+            return members == hostLocals;
+        })) {
+            std::fprintf(stderr, "%s: timed out waiting for the full gamer and machine roster\n", gamertag.c_str());
             session->Dispose();
             delete session;
             return 1;
@@ -1121,6 +1133,7 @@ int main(int argc, char** argv) {
     int timeoutSeconds = 8;
     std::string gamertag;
     std::string findMode = "limit";
+    int hostLocals = 1;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -1134,6 +1147,9 @@ int main(int argc, char** argv) {
             gamertag = arg.substr(11);
         } else if (arg.rfind("--find=", 0) == 0) {
             findMode = arg.substr(7);
+        } else if (arg.rfind("--host-locals=", 0) == 0) {
+            hostLocals = std::stoi(arg.substr(14));
+            if (hostLocals != 1 && hostLocals != 2) return 64;
         }
     }
 
@@ -1178,19 +1194,19 @@ int main(int argc, char** argv) {
             return RunStartHostingPartialFailure();
         }
         if (role == "migration-host") {
-            return RunMigrationHost(timeoutSeconds);
+            return RunMigrationHost(timeoutSeconds, hostLocals);
         }
         if (role == "migration-survivor") {
             if (gamertag.empty()) {
                 std::fprintf(stderr, "migration-survivor: --gamertag is required\n");
                 return 64;
             }
-            return RunMigrationSurvivor(port, gamertag, timeoutSeconds);
+            return RunMigrationSurvivor(port, gamertag, timeoutSeconds, hostLocals);
         }
         std::fprintf(stderr,
                       "Usage: %s --role=host|client|find-join-client|added-gamer-host|added-gamer-client|guest-host|guest-client|"
                       "start-hosting-partial-failure|migration-host|migration-survivor|voice-host|voice-client "
-                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>]\n",
+                      "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>] [--host-locals=1|2]\n",
                       argv[0]);
         return 64;
     } catch (const std::exception& ex) {

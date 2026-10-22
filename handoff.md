@@ -13,6 +13,10 @@ its §5 entry in the same commit.
 
 Last reconciled against the code and a full test run: **2026-10-14** (`next`).
 
+Owner-requested museum repair intake (2026-10-22), focused validation and next task:
+[`CNA_MUSEUM_REPAIR_HANDOFF.md`](CNA_MUSEUM_REPAIR_HANDOFF.md). This is additional
+consumer evidence, not a claim that the full 2026-10-14 checkpoint was rerun.
+
 ## 1. Project summary
 
 CNA is a C++23 reimplementation of the XNA 4.0 programming model (`Microsoft::Xna::Framework`) on a

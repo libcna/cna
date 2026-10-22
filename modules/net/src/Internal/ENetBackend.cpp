@@ -960,26 +960,28 @@ namespace CNA::Internal::Net
             // via Create() (unlike a real Join()) leaves its own local gamers' IsHost at whatever
             // the constructor set, even after ConnectToHost turns it into a client (see
             // ENetBackendTests.cpp's own SystemLinkSessionFixture comment).
-            uint8_t deadHostId = 0;
-            bool foundDeadHost = false;
+            NetworkGamer* deadHost = nullptr;
             for (const auto& [id, gamer] : state.WireIdToGamer)
             {
                 if (!gamer->getIsLocalProperty() && gamer->getIsHostProperty())
                 {
-                    deadHostId = id;
-                    foundDeadHost = true;
+                    deadHost = gamer;
                     break;
                 }
             }
-            if (!foundDeadHost)
+            if (deadHost == nullptr)
             {
                 return false; // handshake never completed far enough to even learn who the host was
             }
 
+            // Losing the upstream connection removes its whole machine, including guests.
+            // Client wire-to-peer maps cannot identify this: all other clients are relayed
+            // through that same connection. Use the authoritative machine roster instead.
+            const auto deadMachine = deadHost->GetSharedMachine();
             std::vector<uint8_t> survivorIds;
             for (const auto& [id, gamer] : state.WireIdToGamer)
             {
-                if (id != deadHostId)
+                if (gamer->GetSharedMachine() != deadMachine)
                 {
                     survivorIds.push_back(id);
                 }

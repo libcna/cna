@@ -1584,6 +1584,73 @@ TEST(ENetBackendTest, AllowHostMigrationFalseStillEndsSessionImmediatelyWithARea
     EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
 }
 
+class ENetDepartingHostMachineTest : public ::testing::TestWithParam<bool> {};
+
+TEST_P(ENetDepartingHostMachineTest, ExcludesEveryGamerOnTheDepartingHostMachine) {
+    FakeHostedClient client(false);
+    client.session->setAllowHostMigrationProperty(true);
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {
+        RosterEntry{0, "DepartingHost", true}, RosterEntry{1, "DepartingGuest", false, true}
+    };
+    if (GetParam()) {
+        welcome.ExistingRoster.push_back(RosterEntry{2, "OtherSurvivor", false});
+        welcome.ExistingRoster.push_back(RosterEntry{3, "OtherSurvivorGuest", false, true});
+    }
+    client.SendFromHost(NetPacketCodec::Encode(welcome));
+    MachineRosterMessage machines;
+    machines.Entries = {{0, 0}, {1, 0}, {5, 2}};
+    if (GetParam()) {
+        machines.Entries.push_back({2, 1});
+        machines.Entries.push_back({3, 1});
+    }
+    client.SendFromHost(NetPacketCodec::Encode(machines));
+    NetworkGamer* departingHost = nullptr;
+    NetworkGamer* departingGuest = nullptr;
+    bool grouped = false;
+    for (int i = 0; i < 200 && !grouped; ++i, PollYield()) {
+        client.session->Update();
+        for (NetworkGamer* gamer : client.session->getRemoteGamersProperty()) {
+            if (gamer->getIdProperty() == 0) departingHost = gamer;
+            if (gamer->getIdProperty() == 1) departingGuest = gamer;
+        }
+        grouped = departingHost && departingGuest &&
+            departingHost->GetSharedMachine() == departingGuest->GetSharedMachine();
+    }
+    ASSERT_TRUE(grouped);
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), GetParam() ? 5 : 3);
+
+    int changed = 0, ended = 0;
+    NetworkGamer* newHost = nullptr;
+    client.session->HostChanged += [&](System::Object*, const HostChangedEventArgs& e) {
+        ++changed;
+        newHost = e.getNewHostProperty();
+    };
+    client.session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs&) { ++ended; };
+    client.fakeHost.Disconnect(client.peer, 0);
+    client.fakeHost.Flush();
+    for (int i = 0; i < 200 && changed == 0 && ended == 0; ++i, PollYield()) client.session->Update();
+
+    if (GetParam()) {
+        // This raw-host fixture has no reachable replacement process. Verify the actual
+        // reconnect target; the multi-process harness separately proves reconnection.
+        EXPECT_EQ(ended, 1);
+        EXPECT_EQ(changed, 0);
+        EXPECT_EQ(ENetBackend::GetLastMigrationReconnectAttemptGamertagForTesting(client.session), "OtherSurvivor");
+    } else {
+        EXPECT_EQ(ended, 0);
+        EXPECT_EQ(changed, 1);
+        EXPECT_EQ(newHost, client.session->getLocalGamersProperty()[0]);
+        EXPECT_TRUE(client.session->getIsHostProperty());
+        EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Lobby);
+    }
+    EXPECT_TRUE(departingHost->getHasLeftSessionProperty());
+    EXPECT_TRUE(departingGuest->getHasLeftSessionProperty());
+}
+
+INSTANTIATE_TEST_SUITE_P(MuseumMigration, ENetDepartingHostMachineTest, ::testing::Bool());
+
 TEST(ENetBackendTest, ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor) {
     ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
     uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
