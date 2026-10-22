@@ -20,6 +20,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -395,12 +396,36 @@ namespace CNA::Internal::Renderers::SdlGpu
     // outlive the wrapper and its release has to be deferred until the command buffer that samples
     // it has been submitted. Render targets keep their own richer state struct;
     // this is the minimal one for resources that are nothing but a sampleable texture.
-    struct SdlGpuSampledTextureState
+    /** @brief A texture allocation whose native lifetime cannot exceed its device. */
+    class SdlGpuTextureStateEXT
     {
-        SdlGpuRenderer* owner = nullptr;
+    public:
+        /** @brief Registers the state with its creating renderer. @param renderer The live owner. */
+        explicit SdlGpuTextureStateEXT(SdlGpuRenderer& renderer);
+        /** @brief Removes a partially constructed or already released state from its owner. */
+        virtual ~SdlGpuTextureStateEXT();
+        /** @brief Registered native ownership cannot be copied. */
+        SdlGpuTextureStateEXT(const SdlGpuTextureStateEXT&) = delete;
+        /** @brief Registered native ownership cannot be reassigned. */
+        SdlGpuTextureStateEXT& operator=(const SdlGpuTextureStateEXT&) = delete;
+        /** @brief Defers native handle release and detaches from the owner; idempotent. */
+        virtual void ReleaseNativeEXT() = 0;
+        /** @brief Live creating renderer, or null after native resources were released. */
+        SdlGpuRenderer* owner;
+    protected:
+        /** @brief Removes this state from its owner after native handles have been queued. */
+        void DetachOwnerEXT();
+    };
+
+    struct SdlGpuSampledTextureState : SdlGpuTextureStateEXT
+    {
+        /** @brief Registers this uploaded-texture state with its creating renderer. */
+        using SdlGpuTextureStateEXT::SdlGpuTextureStateEXT;
         SDL_GPUTexture* texture = nullptr;
 
         ~SdlGpuSampledTextureState();
+        /** @brief Defers the uploaded texture's release and detaches from its renderer. */
+        void ReleaseNativeEXT() override;
     };
 
     /**
@@ -592,9 +617,10 @@ namespace CNA::Internal::Renderers::SdlGpu
     // destructor defers the actual GPU release via QueueTextureRelease (see that method's own doc
     // comment for why release itself must also be deferred, not just the C++ object holding the
     // handles).
-    struct SdlGpuRenderTarget2DState
+    struct SdlGpuRenderTarget2DState : SdlGpuTextureStateEXT
     {
-        SdlGpuRenderer* owner = nullptr;
+        /** @brief Registers this target state with its creating renderer. */
+        using SdlGpuTextureStateEXT::SdlGpuTextureStateEXT;
         int width = 0;
         int height = 0;
         /// Exact public SurfaceFormat this target represents (SDLGPU-72).
@@ -647,6 +673,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         Uint8 clearStencil = 0;
 
         ~SdlGpuRenderTarget2DState();
+        /** @brief Defers all target attachments' release and detaches from their renderer. */
+        void ReleaseNativeEXT() override;
     };
 
     /**
@@ -792,9 +820,10 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     // Same rationale as SdlGpuRenderTarget2DState -- see that struct's own doc comment.
-    struct SdlGpuRenderTargetCubeState
+    struct SdlGpuRenderTargetCubeState : SdlGpuTextureStateEXT
     {
-        SdlGpuRenderer* owner = nullptr;
+        /** @brief Registers this cube-target state with its creating renderer. */
+        using SdlGpuTextureStateEXT::SdlGpuTextureStateEXT;
         int size = 0;
         /// Exact public SurfaceFormat and corresponding native cube attachment storage.
         int surfaceFormat = 0;
@@ -853,6 +882,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::array<Uint8, 6> clearStencil{};
 
         ~SdlGpuRenderTargetCubeState();
+        /** @brief Defers all cube attachments' release and detaches from their renderer. */
+        void ReleaseNativeEXT() override;
     };
 
     /**
@@ -1677,6 +1708,9 @@ namespace CNA::Internal::Renderers::SdlGpu
      */
     class SdlGpuRenderer final : public IGraphicsRenderer
     {
+        friend class SdlGpuTextureStateEXT;
+        // Declared before owning members so it also survives their constructor-failure cleanup.
+        std::unordered_set<SdlGpuTextureStateEXT*> liveTextureStates_;
         friend class SdlGpuRenderTargetRenderer;
         friend class SdlGpuRenderTargetCubeRenderer;
         friend struct SdlGpuRenderTarget2DState;

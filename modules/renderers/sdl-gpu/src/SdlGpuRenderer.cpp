@@ -2752,6 +2752,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             mojoShaderContext_ = nullptr;
         }
 #endif
+        // Retained internal texture/target renderers may outlive GraphicsDevice. Release their
+        // native handles while the device is alive, and detach their later destructors from us.
+        while (!liveTextureStates_.empty())
+            (*liveTextureStates_.begin())->ReleaseNativeEXT();
+
         // Any render target destroyed earlier but never followed by another real frame (e.g. the
         // game shut down right after) leaves its GPU texture handles deferred -- release them now
         // rather than relying solely on SDL_DestroyGPUDevice's own implicit cleanup below.
@@ -11172,7 +11177,31 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     // ---- SdlGpuSampledTextureState / texture resolution ----
 
+    SdlGpuTextureStateEXT::SdlGpuTextureStateEXT(SdlGpuRenderer& renderer) : owner(&renderer)
+    {
+        owner->liveTextureStates_.insert(this);
+    }
+
+    SdlGpuTextureStateEXT::~SdlGpuTextureStateEXT()
+    {
+        DetachOwnerEXT();
+    }
+
+    void SdlGpuTextureStateEXT::DetachOwnerEXT()
+    {
+        if (owner != nullptr)
+        {
+            owner->liveTextureStates_.erase(this);
+            owner = nullptr;
+        }
+    }
+
     SdlGpuSampledTextureState::~SdlGpuSampledTextureState()
+    {
+        ReleaseNativeEXT();
+    }
+
+    void SdlGpuSampledTextureState::ReleaseNativeEXT()
     {
         // Deferred, not immediate -- a draw queued this frame is only issued at
         // EnsureFrameRendered(), so a public Texture2D/Texture3D/TextureCube destroyed in between must leave
@@ -11186,7 +11215,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         // deferral to keep it valid is exactly the kind of unstated assumption the render-target-as-texture fix
         // exists to remove. Ordinary textures and render targets follow ONE lifetime rule.
         if (owner != nullptr)
+        {
             owner->QueueTextureRelease(texture);
+            texture = nullptr;
+            DetachOwnerEXT();
+        }
     }
 
     SdlGpuSampledTextureEXT ResolveSampledTextureEXT(const ITextureRenderer* texture, const char* usage)
@@ -11237,11 +11270,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuTextureRenderer::SdlGpuTextureRenderer(SdlGpuRenderer& owner, const ImageData& data)
         : owner_(&owner),
-          state_(std::make_shared<SdlGpuSampledTextureState>()),
+          state_(std::make_shared<SdlGpuSampledTextureState>(owner)),
           width_(data.width), height_(data.height), surfaceFormat_(data.surfaceFormat)
     {
-        state_->owner = &owner;
-
         // A zero or negative extent has to be refused HERE, before SDL is asked for
         // a texture, or createInfo.width/height wrap into an enormous Uint32 and the failure is
         // reported as an out-of-memory device error rather than as the invalid request it is.
@@ -11585,12 +11616,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuTexture3DRenderer::SdlGpuTexture3DRenderer(
         SdlGpuRenderer& owner, int width, int height, int depth,
         bool mipMap, int surfaceFormat)
-        : owner_(&owner), state_(std::make_shared<SdlGpuSampledTextureState>())
+        : owner_(&owner), state_(std::make_shared<SdlGpuSampledTextureState>(owner))
         , width_(width), height_(height), depth_(depth)
         , levelCount_(mipMap ? CalculateMipLevels(std::max(width, depth), height) : 1)
         , surfaceFormat_(surfaceFormat)
     {
-        state_->owner = &owner;
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
         RenderTargetFormatInfo formatInfo{};
         if (!TryGetRenderTargetFormatInfo(format, formatInfo) ||
@@ -11773,13 +11803,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     SdlGpuTextureCubeRenderer::SdlGpuTextureCubeRenderer(
         SdlGpuRenderer& owner, int size, bool mipMap, int surfaceFormat)
         : owner_(&owner)
-        , state_(std::make_shared<SdlGpuSampledTextureState>())
+        , state_(std::make_shared<SdlGpuSampledTextureState>(owner))
         , size_(size), mipMap_(mipMap)
         , levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
         , surfaceFormat_(surfaceFormat)
     {
-        state_->owner = &owner;
-
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
         compressed_ = IsClassicDxtFormat(format);
         blockBytes_ = LogicalTextureBlockBytes(format);
@@ -12183,6 +12211,12 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuRenderTarget2DState::~SdlGpuRenderTarget2DState()
     {
+        ReleaseNativeEXT();
+    }
+
+    void SdlGpuRenderTarget2DState::ReleaseNativeEXT()
+    {
+        if (owner == nullptr) return;
         // Deferred, NOT released directly here -- some other still-pending (not yet submitted)
         // draw command may sample one of these textures as an INPUT (e.g. a SpriteBatch draw
         // sampling this render target's contents elsewhere) via a raw handle captured at
@@ -12190,6 +12224,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         owner->QueueTextureRelease(depthTexture);
         owner->QueueTextureRelease(msaaTexture);
         owner->QueueTextureRelease(colorTexture);
+        depthTexture = msaaTexture = colorTexture = nullptr;
+        DetachOwnerEXT();
     }
 
     SdlGpuRenderTargetRenderer::SdlGpuRenderTargetRenderer(
@@ -12197,8 +12233,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool preserveContents, bool mipMap, int multiSampleCount, int surfaceFormat)
         : owner_(&owner)
     {
-        state_ = std::make_shared<SdlGpuRenderTarget2DState>();
-        state_->owner = owner_;
+        state_ = std::make_shared<SdlGpuRenderTarget2DState>(owner);
         state_->width = width;
         state_->height = height;
         state_->surfaceFormat = surfaceFormat;
@@ -12318,7 +12353,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuRenderTargetRenderer::~SdlGpuRenderTargetRenderer()
     {
-        if (owner_->currentRenderTarget_ == this)
+        if (state_->owner != nullptr && owner_->currentRenderTarget_ == this)
         {
             owner_->currentRenderTarget_ = nullptr;
             // Destroying the bound target ends its bind cycle exactly like an explicit unbind.
@@ -12521,6 +12556,12 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuRenderTargetCubeState::~SdlGpuRenderTargetCubeState()
     {
+        ReleaseNativeEXT();
+    }
+
+    void SdlGpuRenderTargetCubeState::ReleaseNativeEXT()
+    {
+        if (owner == nullptr) return;
         // Deferred -- see SdlGpuRenderTarget2DState's own destructor / QueueTextureRelease's doc
         // comment for why (some other still-pending draw may sample cubeTexture as an
         // EnvironmentMapEffect input, independent of the pending pass segments).
@@ -12528,6 +12569,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Six per-face multisample textures now, released exactly once each.
         for (SDL_GPUTexture* msaa : msaaTextures) owner->QueueTextureRelease(msaa);
         owner->QueueTextureRelease(cubeTexture);
+        depthTexture = cubeTexture = nullptr;
+        msaaTextures.fill(nullptr);
+        DetachOwnerEXT();
     }
 
     SdlGpuRenderTargetCubeRenderer::SdlGpuRenderTargetCubeRenderer(
@@ -12535,8 +12579,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool mipMap, int multiSampleCount, int surfaceFormat)
         : owner_(&owner), mipMap_(mipMap)
     {
-        state_ = std::make_shared<SdlGpuRenderTargetCubeState>();
-        state_->owner = owner_;
+        state_ = std::make_shared<SdlGpuRenderTargetCubeState>(owner);
         state_->size = size;
         state_->surfaceFormat = surfaceFormat;
         // Only the multisampled path consults it -- see the field's own comment.
@@ -12656,7 +12699,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuRenderTargetCubeRenderer::~SdlGpuRenderTargetCubeRenderer()
     {
-        if (owner_->currentRenderTargetCube_ == this)
+        if (state_->owner != nullptr && owner_->currentRenderTargetCube_ == this)
         {
             owner_->currentRenderTargetCube_ = nullptr;
             owner_->currentActiveCubeFace_ = -1;

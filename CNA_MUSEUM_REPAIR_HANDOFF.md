@@ -19,6 +19,75 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**Validated SDL_GPU escaped-resource lifetime repair, base830e9a9346b1adb84d236fb0f8b71579c89b05ba / demosadbeeaf.**
+External6400 completed: build88878ms PASS,84 runs, exact zero status/check-count/
+knownIssue/exit deltas; source drift0. Peak4303187968/high539/max0/oom0/kill0.
+The original MultiSampleMask FAIL remains explicitly present, unchanged, with no marker
+added. No old PASS became FAIL. Native lifetime tests and UAF repair are validated for
+Linux Vulkan lavapipe/RADV; no all-platform, clean-LSan or full-aggregate claim.
+Ready to commit only the SDL_GPU header/implementation, new lifetime tests and this
+handoff. Exact next task: isolate the384-byte Vulkan-init leak in a direct SDL-only
+control (no CNA), then baseline museum EnvironmentMapEffect texture reflection.
+Read-only reference for that next task: local FNA checkout
+/tmp/cna-demos-fna-reference/src/Graphics/Effect/StockEffects/EnvironmentMapEffect.cs,
+and ../xna4-decomp/reference/xna4/decompiled/windows/Microsoft.Xna.Framework.Graphics/
+Microsoft.Xna.Framework.Graphics/EnvironmentMapEffect.cs. Both expose Texture and
+EnvironmentMap through parameters; CNA omits them and uses private backing pointers.
+No EnvironmentMapEffect source or tests changed yet. No push or merge.
+
+The volume-source fix below is committed830e9a934; owner notified, no push.
+The separate eight cubemap teardown errors prompted a five-kind sanitizer reproduction.
+Ignored driver build-probe/repair-museum-sdlgpu-escape.mjs instruments the actual
+SdlGpuRenderer.cpp TU and links the matching shared CNA build; it does not emulate
+ownership. Before35311 compiled the TU but missed the versioned shaderc library at link;
+before-v2 corrected that, reproduced four UAFs, but its volume used Reach and was refused.
+Before-v3 job15559 corrected only the harness to HiDef: all five (2D, volume, cube,
+2D target, cube target) report ASan heap-use-after-free in the sampled-state or target
+wrapper destructors. Vulkan errors4/2/2/7/10 respectively. Peak419569664/events0/drift0.
+Candidate50201: native build10540ms, instrumented TU28657ms, all five UAFs and Vulkan
+errors gone. LSan still reports384 bytes/3 allocations with an unloaded-module frame
+in every case; do NOT claim a clean full sanitizer run. Peak1603846144/events0/drift0.
+No-texture LSan controls56082 reproduce the same384 bytes in both old demos and current
+native CNA, through Vulkan instance initialization. They use allocation interception,
+not a mismatched instrumented renderer overlay: first control46278 rejected that mix
+at link because demos compiled-effects are off (failure retained). Slow unwinding
+exposed that these standalone probes selected /usr/local/lib/libSDL3.so.0, while native
+CTest/demos select the project's pinned SDL. Both paths/hashes are recorded; subsequent
+drivers explicitly pin LD_LIBRARY_PATH to the project's SDL. Repeat ASan with that
+dependency before finalizing. Do not attribute these leaks to the texture registry.
+Eight native lifetime tests added, including retained states and failed constructors.
+Native v1 hit the nonproduction audit on the test's unnecessary SDL_GPUTexture return
+type; changed it to a boolean handle-presence predicate, preserving the same assertions,
+without adding an allowlist or changing audit budgets. Active v2 job81541 builds/runs
+native tests and original RT/deferred/bound lifetime fixtures with pinned SDL, private
+display and6GiB. Initial lavapipe: renderer77PASS/1SKIP, graphics405PASS/24SKIP (429),
+ten volume-layout CTests and all five legacy fixtures PASS, zero Vulkan errors.
+Prepared external driver repair-museum-sdlgpu-escape-external.mjs compares84 runs;
+the before library is still830e9a934 (no lifetime fix). Do not rebuild demos first.
+Native81541 completed on BOTH lavapipe/RADV: renderer77PASS/1SKIP, graphics405PASS/24SKIP,
+ten source-layout CTests and all five legacy fixtures PASS; zero Vulkan validation
+errors. Includes the unchanged previously-leaking cube escape test and original120-frame
+RT churn, deferred-source and bound-target suites. All70/352 previous renderer/graphics
+outcomes unchanged; eight new renderer tests and77 newly selected graphics tests.
+Offline mapping ASan11PASS, all five boundary gates PASS, peak1072603136/events0/drift0.
+Pinned-SDL sanitizer final51978: five escaped-resource cases and all eight permanent
+tests complete with no UAF/UB/Vulkan reports. LSan remains nonzero:384 bytes/3 allocations
+per device, also the no-texture control,3072/24 for eight tests. Logs identify pinned
+SDL's Vulkan instance initialization; no leak suppression, no clean-LSan claim.
+Peak1320493056/events0/drift0. Both renderer code and permanent tests were instrumented.
+Current sole heavy job6400, cna-museum-sdlgpu-escape-external-v1:42 before runs captured,
+incremental demos rebuild running,42 after runs pending. Baseline includes the existing
+SDL_GPU render_target.multisampling FAIL at MultiSampleMask0 (known limitation in
+handoff.md §5; demo has no knownIssue marker). It must not be hidden or relaxed.
+Other initial baseline outcomes: SOFTWARE12PASS/2SKIP, GLES14PASS,
+SDL_GPU11PASS/2SKIP/1FAIL. Compare all statuses/checks/markers/exits exactly.
+Next: compare a no-texture control, identify the residual allocation, run eight new
+native lifetime tests, existing deferred/bound-target lifetime fixtures and broader
+SDL_GPU graphics regressions on lavapipe/RADV; external before/after demos thereafter.
+Candidate registers each live native texture state, releases/detaches remaining states
+before device destruction, and preserves normal frame-deferred release. No public API
+change, vendor edit, or inherited content ownership edit. All lifetime work uncommitted.
+
 **Validated SDL_GPU volume-source repair, base CNA b0b0207e68b635b3fc1b97f05c8d9fc995514e52 / demos adbeeaf.**
 External job82770 completed: build264820ms PASS;72 runs compare36 before/after outcomes
 with zero status/check-count/knownIssue/exit deltas. Each phase: GLES12PASS;
