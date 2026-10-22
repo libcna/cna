@@ -73,6 +73,37 @@ namespace
 {
     constexpr float kTolerance = 1e-5f;
 
+    void ExpectUploadedPalette(const DrawParamsDump& draw, const std::vector<Matrix>& palette)
+    {
+        using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
+        const bool stock = draw.effectTypeName == "Microsoft.Xna.Framework.Graphics.SkinnedEffect";
+        ASSERT_TRUE(stock || draw.effectTypeName ==
+                            "Microsoft.Xna.Framework.Graphics.SkinnedPbrEffect");
+        // XNA's stock Bones parameter retains all 72 entries after a partial write.
+        // The custom PBR effect keeps its variable-sized palette contract.
+        const std::size_t uploadedCount = stock
+            ? static_cast<std::size_t>(SkinnedEffect::MaxBones) : palette.size();
+        ASSERT_LE(palette.size(), uploadedCount);
+        ASSERT_EQ(uploadedCount, static_cast<std::size_t>(draw.boneCount));
+        ASSERT_EQ(uploadedCount, draw.boneTransforms.size());
+        for (std::size_t b = 0; b < palette.size(); ++b)
+        {
+            float expected[16];
+            palette[b].ToColumnMajor(expected);
+            for (std::size_t i = 0; i < 16; ++i)
+                EXPECT_NEAR(expected[i], draw.boneTransforms[b][i], kTolerance)
+                    << "bone " << b << " element " << i;
+        }
+        // These effects are freshly loaded. Untouched stock registers must still
+        // carry identity, not uninitialized matrices or a truncated upload.
+        float identity[16];
+        Matrix::getIdentityProperty().ToColumnMajor(identity);
+        for (std::size_t b = palette.size(); b < uploadedCount; ++b)
+            for (std::size_t i = 0; i < 16; ++i)
+                EXPECT_EQ(identity[i], draw.boneTransforms[b][i])
+                    << "untouched bone " << b << " element " << i;
+    }
+
     /// A camera that is nothing like the identity in any of its three matrices, so a capture that
     /// silently dropped one -- or transposed it, or swapped view for projection -- cannot pass by
     /// coincidence.
@@ -775,18 +806,7 @@ TEST(GltfConformanceL6, SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex)
             // GLTF-258: CNA always packs four influences, so four is what the shader must sum.
             EXPECT_EQ(4, d.weightsPerVertex);
             // GLTF-263: the uploaded palette is GetSkinTransforms()'s, entry for entry.
-            ASSERT_EQ(palette.size(), static_cast<std::size_t>(d.boneCount));
-            ASSERT_EQ(palette.size(), d.boneTransforms.size());
-            for (std::size_t b = 0; b < palette.size(); ++b)
-            {
-                float expected[16];
-                palette[b].ToColumnMajor(expected);
-                for (std::size_t i = 0; i < 16; ++i)
-                {
-                    EXPECT_NEAR(expected[i], d.boneTransforms[b][i], kTolerance)
-                        << "bone " << b << " element " << i;
-                }
-            }
+            ASSERT_NO_FATAL_FAILURE(ExpectUploadedPalette(d, palette));
         }
     }
     EXPECT_GT(skinnedFixtures, 0u) << "the corpus has no skinned fixture any more";
@@ -835,19 +855,7 @@ TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
         {
             SCOPED_TRACE(ToJson(d));
             if (!d.skinned) { continue; }   // a static part of the same model -- see above
-            ASSERT_EQ(bindPose.size(), static_cast<std::size_t>(d.boneCount))
-                << "the loaded palette is not the bind-pose one";
-            ASSERT_EQ(bindPose.size(), d.boneTransforms.size());
-            for (std::size_t b = 0; b < bindPose.size(); ++b)
-            {
-                float expected[16];
-                bindPose[b].ToColumnMajor(expected);
-                for (std::size_t i = 0; i < 16; ++i)
-                {
-                    EXPECT_NEAR(expected[i], d.boneTransforms[b][i], kTolerance)
-                        << "bone " << b << " element " << i;
-                }
-            }
+            ASSERT_NO_FATAL_FAILURE(ExpectUploadedPalette(d, bindPose));
         }
 
         // And it is not the old MaxBones-sized default, on any fixture.
