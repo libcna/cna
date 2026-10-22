@@ -9,6 +9,27 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-22)
 
+**Latest terminal checkpoint (2026-10-22):113 reproduced, no heavy job live.**
+086/112 product9e4d0279affcb9f05f9d28807403f798fc948906; CNA closure039607ee7c37d3568e0c51e2c249be94e0c5b627;
+demos closuree9abefeabde9c12f504eb5305710535331760044. All gates/counts below retained.
+113 baseline85698 completed0 observation: six native witnesses on SOFTWARE/GLES/
+GL33 each5FAIL/1PASS; SDL_GPU6 declaredSKIP. Original demo fails first3 renderers,
+skipsSDL_GPU. No drift/events; peak454422528, compile2019ms. Matrix113 now
+CONFIRMED_OPEN/XNA_COMPATIBILITY_DEFECT, not a simple demo-only correction: genuine
+XNA accepts independent overlapping intervals, but CNA silently loses contender
+measurement/completion. Evidence/native candidate tests are in demos
+OCCLUSION_BEGIN_TRIAGE.md, OcclusionOverlapXnaOracle.cs, OcclusionOverlapTests.cpp.
+Exact next task: implement independent active-query intervals at the correct renderer
+layer (SOFTWARE active sample recipients; GL shared disjoint native segments), after
+reviewing FNA3D/WebGPU behavior and existing lifetime/device-loss/abandoned-run tests.
+Preserve zero-query fast paths and nonblocking completion; no per-device rejection
+guard, arbitrary waits, fake counts or assertion suppression. Add native tests,
+correct the proven wrong demo/header contract with retained history, validate all
+available applicable renderers and sanitizers. No113 product patch exists yet.
+DC-R1/DC-R2 remain explicit supplemental contract-triage findings. Historical156/
+44 null unchanged; final campaign not complete. No push/merge; inherited011/082
+dirt untouched. Current campaign changes are only evidence/matrix/handoffs.
+
 **2026-10-22 ISSUE-086/112 CLOSED; next113 baseline85698 live.**
 CNA product9e4d0279affcb9f05f9d28807403f798fc948906. Metadata93054 completed0:
 build12006ms/no diagnostics; exact719-catalog two-marker delta;12 original demo

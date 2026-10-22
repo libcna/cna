@@ -2267,12 +2267,15 @@
         "graphics.occlusion_query.visible_pixels"
       ],
       "subsystem": "graphics/c-api",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Historical distinct-query refusal expectation is disproved by genuine XNA: distinct overlapping intervals are supported. Actual CNA Software/EasyGL singleton native ownership silently loses contender measurements; tests expose never-completing results. Header/demo correction alone is insufficient.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Genuine XNA assembly under Wine/DXVK/RADV33342: one triangle496, nested owner3472/contender992, crossed1488/2976; active disposal preserves survivor3472/2976, fresh/reuse496/992. Same-object guards refuse. Not native Windows validation.",
+        "Six-case native evidence85698: SOFTWARE/GLES/GL33 each5FAIL/1PASS; SDL_GPU6 declaredSKIP. Original demo distinct-Begin assertion fails on first three and skipsSDL_GPU. Compile2019ms, no unexpected diagnostics/drift/events, peak454422528. No product patch or demo expectation change yet. Evidence: demos graphics/OCCLUSION_BEGIN_TRIAGE.md, OcclusionOverlapXnaOracle.cs, OcclusionOverlapTests.cpp."
+      ],
       "final_disposition": null
     },
     {
