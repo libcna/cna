@@ -18,7 +18,7 @@ cna-demos/build/linux-full/reports/repair-storage-path-before-v1-*.
 | Finding | Current disposition | Evidence / next task |
 | --- | --- | --- |
 | UP-019 | Fixed in `144d9f909`; DirectX runtime validation pending | Four public-effect producer/receiver regressions pass on SOFTWARE/GLES/GL33/WEBGPU/SDL_GPU/FNA3D, including both FNA3D drivers. DirectX bytecode regenerated and all 26 register tables verified; no Windows runtime claim. |
-| UP-018 | NOT_REPRODUCIBLE on current next | Public Single construction, draw of 0.5 and 0.5+1/4096 and white, full and rectangle float readback pass on SOFTWARE/GLES/GL33. Existing float-target implementation is `23c5557f7` (also predates reported pin). New permanent `SingleTargetPrecisionTests.cpp` protects the exact symptom. No unsupported-format fallback or precision weakening. |
+| UP-018 | ENGINE_EXPECTATION_ERROR verified on pin and next | Default device is Reach; preferred Single substitutes actual Color. Engine caches the requested enum rather than target.getFormatProperty(). HiDef Single retains float precision through Clear, Depth24 and indexed fog draws. No production repair required; see exact follow-up below. |
 | UP-006 | ALREADY_FIXED and verified | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). New engine-style module-only static library + umbrella consumers pass in both orders, with zero duplicate strong Graphics/Input/Vector3 symbols. |
 | UP-001 | Confirmed source gap | No CNA install export/config/version package exists. Design relocatable dependency/target export without breaking source consumers or duplicating the runtime. |
 | UP-002 | Documentation corrected | `docs/migration-guide.md`, CNAEXT and C++ language artefacts, distinguishes declaration markers from implicit/synthesized C# semantics and explicitly retains strict compiler diagnostics. No runtime/header/test changes needed. |
@@ -89,3 +89,35 @@ Runtime's public requirements, and prove relocation with an external consumer.
 The original cna-demos matrix still has 156 historical IDs, 41 without a final
 disposition, two additional pending platform validations and DC-R1/DC-R2 open.
 Do not confuse this engine intake with completion of that campaign.
+
+## UP-018 exact engine follow-up (2026-10-22)
+
+Owner supplied Clear(Color(128,128,128,255)), Depth24, default device and indexed
+fog draw. Added two permanent regressions, without replacing the original one.
+The default constructor selects Reach, so Single is a preference substituted with
+Color, reported accurately by getFormatProperty(). GetData<float> copies the raw
+RGBA bytes, not a numeric red-channel conversion; white 0xffffffff is a NaN.
+This reproduces the engine observation, but not its claimed Single storage defect.
+ShadowMap.cpp stores `format_ = format` (the requested enum) instead of the selected
+target format. The engine agent owns the correction; no engine/extended files edited.
+
+Evidence: repair-engine-single-compare-v1 compiles the same three permanent tests
+against the existing cna-engine/build static libraries at clean baseline source
+900d0db3b52d76d3115ebda0a0e04a25fefad1a5, with its HEADLESS/SDL=OFF configuration,
+and separately against current next d9e35a3dd's multi-renderer shared library with
+the real Headless platform installed. Both run SOFTWARE, no display, 3/3 PASS.
+The latter still links SDL dependencies; it is not mislabeled as an SDL-free build.
+HiDef + Depth24: full and first-texel grey/white Clear readbacks, then indexed
+far/near/far fog draws retain nearest depths 0.625 and 0.625+1/4096 at every texel.
+The default Reach test explicitly confirms the Color fallback and white NaN bits.
+Native single-followup-v1: build PASS, 30/30 precision/format/shadow tests each
+SOFTWARE/GLES/GL33, ten mixed-runtime CTests PASS, peak804761600/events0.
+
+Recovered Microsoft XNA RenderTarget2D.CreateRenderTarget queries selectedFormat
+through GraphicsAdapter.QueryFormat and constructs with that result, not the
+preference. This CNA behavior was repaired by70fe41618 (SOFTWARE-216), which is
+already an ancestor of900d0db3b. RenderTarget2D.cpp and the software Clear/target
+allocation/readback sources have no committed differences pin->current next.
+No new runtime fix SHA is claimed for UP-018. UP-006's470b12a5d is NOT in the engine
+pin; the prior mixed-runtime validation applies to local next, not to900d0db3b.
+Nothing has been pushed; the engine must revalidate after its pin actually moves.
