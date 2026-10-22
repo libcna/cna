@@ -19,7 +19,26 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
-**Next: museum haptic discovery ID lifetime, CNAf59336878 / demos82c90be plus closure.**
+**Haptic discovery lifetime repaired in this commit, base CNA5f08e9dd0 / demosc142af3.**
+Final native63156/v4: focused3/3 PASS (no skips), platform525PASS8SKIP,
+input562/562 PASS, devices473PASS4SKIP, five gates PASS. Original test/skip sets
+unchanged. Peak632156160/events0/drift0. Actual changed platform TU +10 lifecycle
+tests pass ASan/UBSan/LSan and TSan (v3), no suppressions. External24/24 PASS,
+zero deltas on SOFTWARE/GLES. The only intermediate sanitizer failure was test-owned
+SDL thread-local storage; fixed with the cleanup required for non-SDL-created threads.
+No /dev/uinput or physical haptic device exists here: native device IDs/effect upload
+must still be revalidated by the museum's tools/haptics_check.sh. Do not move its
+finding or claim hardware coverage. No knownIssue or assertion weakened in demos.
+Foreign source hashes match the pre-batch snapshot; no active job, push or merge.
+Exact next task: verify genuine XNA StorageDevice Begin/End result consumption,
+ownership and argument precedence for the museum storage finding before editing CNA.
+ISSUE010 overlaps storage exception categories but also dirty ContentManager ownership
+work; do not close it prematurely or touch that other agent's work. Human-reserved
+ray ISSUE131 and the unanswered CNB C-contract question remain blocked independently.
+
+## Haptic discovery lifetime batch: validation history
+
+**Active: museum haptic discovery ID lifetime, CNA5f08e9dd0 / demosc142af3.**
 ISSUE032 code/tests committed f593368783b652164035a96a03f66545f6c9e3fe.
 Final75405 after marker removal:549/549 native PASS46502ms, demo build3121ms PASS,
 12/12 external PASS,2/2 catalog CTests PASS6055ms. Same outcomes/check counts/exits;
@@ -31,7 +50,57 @@ change when the last scoped client releases SDL's device list. Read source confi
 the lifetime gap. Do not claim physical/virtual hardware validation: /dev/uinput
 does not exist in this environment. Add a real SDL lifecycle regression and preserve
 client handle cleanup/shutdown ordering; do not merely lengthen fake-device lifetime.
-No active job, push or merge. Foreign ownership/ISSUE113 changes remain untouched.
+Only own uncommitted code is three real-SDL lifecycle tests in Sdl3PlatformTests.cpp.
+Baseline job68521, scope cna-museum-haptic-lifetime-before-v2, builds existing focused
+CnaPlatformModuleTests/CnaInputModuleTests/CnaDevicesTests serially with the 4/6GiB
+limits and private display, then runs the new focused regressions expecting red and
+the pre-existing platform/input/devices suites. No source edits during the job.
+The first driver invocation stopped immediately: it mistakenly used the CTest label
+CnaPlatformTests as a build target. Correct names verified in UnitTests.cmake; logs
+retained, no source/build result claimed from that attempt. No push or merge.
+Foreign ownership/ISSUE113 changes remain untouched.
+Baseline68521 completed: build224099ms PASS; focused3 tests yield2FAIL/1PASS,
+confirming the actual SDL subsystem goes down between client calls. Existing
+platform/input/devices suites exit0 (original skips retained); input562/562 PASS.
+Peak877293568/events0/drift0. Candidate keeps one lazy platform-owned discovery
+reference, excludes it from client ReleaseSubsystem, and still closes cached handles
+when the last client releases (required for DevicesShutdownCoordinator ordering).
+call_once serializes first acquisition; the discovery flag and counts use the existing
+global lifecycle lock. Three real-SDL tests cover between-call lifetime, external
+ownership and concurrent first queries. Tests explicitly skip unavailable native
+subsystems on platforms that cannot initialize them, not absent hardware.
+Next native after run, exact before/after demo comparison, and instrument the changed
+platform implementation for lifecycle sanitizers before committing. No hardware claim.
+Candidate7234: focused3/3 PASS; full platform/input/devices exit0, five boundary gates
+PASS, peak1078378496/events0/drift0. Review identified a publication gap between
+acquiring the discovery ref and marking it non-consumable: an unpaired concurrent
+Release could consume it. Acquisition and publication now use one existing lifecycle
+critical section through a private AcquireSubsystemLocked helper. The concurrent
+test races first queries with unpaired releases via a barrier, without sleeps/retries.
+Next rerun the same suites (v3), then external before/after and sanitizers.
+Final native66417/v3: focused3/3 PASS (no skips), platform525PASS8SKIP,
+input562/562 PASS, devices473PASS4SKIP; every old test/skip outcome unchanged.
+Five architectural gates PASS, peak916025344/events0/drift0. External1254 compares
+old pre-repair binaries with rebuilt candidate:24/24 runs PASS, zero status/check-count/
+marker/exit deltas across six C++/C demos on SOFTWARE/GLES. Build52113ms, peak4303556608,
+high547/max0/oom0/kill0/drift0. These are absent-device paths, not device-ID runtime
+validation; museum must rerun its virtual kernel-device reproducer. Sole next heavy
+job is cna-museum-haptic-sanitizers-v1: changed Sdl3Platform.cpp + lifecycle tests
+instrumented with ASan/UBSan/LSan and TSan, not a whole-CNA sanitizer claim.
+Sanitizer v1 stopped at link: the probe needed Sharp Runtime's Environment object;
+added the existing core archive, no production change. v2 job8253: ten assertions
+PASS under ASan/UBSan, but LSan reports345bytes/3 SDL error-TLS allocations; TSan
+ten tests PASS. SDL_thread.h explicitly requires SDL_CleanupTLS for threads not
+created by SDL. Added that cleanup to the newly introduced std::thread test workers,
+not to CNA production code or suppressions. Rerun sanitizers and affected native/gate
+checks before accepting; retained failing logs are repair-museum-haptic-sanitizers-v2-*.
+Sanitizer v3 job67449: actual changed platform TU + ten permanent lifecycle tests
+PASS with ASan/UBSan/LSan (4359ms), and TSan (3903ms), no suppressions; peak633540608,
+all memory events zero, no source drift. The TLS cleanup fixes the test-owned worker
+threads, not CNA implementation behavior. SDL inventory regenerated solely for the
+new cleanup identifier (956->957); budget and allowlists unchanged, all gates pass.
+Sole current job cna-museum-haptic-lifetime-after-v4 reruns the native suites and gates
+after that test-only change. External candidate implementation is unchanged since1254.
 
 ## Completed ISSUE032 batch (f59336878)
 

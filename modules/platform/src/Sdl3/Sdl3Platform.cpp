@@ -347,6 +347,11 @@ namespace CNA::Platform::Sdl3 {
     void Sdl3Platform::AcquireSubsystem(const PlatformSubsystem subsystem)
     {
         SdlGlobalStateLock lock;
+        AcquireSubsystemLocked(subsystem);
+    }
+
+    void Sdl3Platform::AcquireSubsystemLocked(const PlatformSubsystem subsystem)
+    {
         if (!SDL_InitSubSystem(ToSdlFlag(subsystem)))
         {
             std::string detail = LastSdlError();
@@ -384,7 +389,9 @@ namespace CNA::Platform::Sdl3 {
         // An unpaired release is a documented no-op, not an error: cleanup may follow partial
         // initialization even though successful owners balance every acquisition.
         const auto it = ownedRefCounts_.find(subsystem);
-        if (it == ownedRefCounts_.end() || it->second == 0)
+        const int discoveryReferences =
+            subsystem == PlatformSubsystem::Haptic && hapticDiscoveryHeld_ ? 1 : 0;
+        if (it == ownedRefCounts_.end() || it->second <= discoveryReferences)
         {
             return;
         }
@@ -395,10 +402,10 @@ namespace CNA::Platform::Sdl3 {
             // Empty the service cache first so its destructor cannot later close stale pointers.
             sensors_.Deactivate();
         }
-        else if (it->second == 0 && subsystem == PlatformSubsystem::Haptic)
+        else if (it->second == discoveryReferences && subsystem == PlatformSubsystem::Haptic)
         {
-            // SDL invalidates native haptic handles when the last subsystem reference goes away.
-            // Empty the service cache first so its destructor cannot later close stale pointers.
+            // The last client still closes cached handles, including at device shutdown. The
+            // discovery lease keeps only the native device list alive, not effects or devices.
             haptics_.Deactivate();
         }
         SDL_QuitSubSystem(ToSdlFlag(subsystem));
@@ -687,7 +694,24 @@ namespace CNA::Platform::Sdl3 {
     IPlatformJoystick* Sdl3Platform::GetJoystick() { EnsureControllerSubsystem(); return &joystick_; }
     IPlatformTextInput* Sdl3Platform::GetTextInput() { return &textInput_; }
     IPlatformSensors* Sdl3Platform::GetSensors() { return &sensors_; }
-    IPlatformHaptics* Sdl3Platform::GetHaptics() { return &haptics_; }
+    IPlatformHaptics* Sdl3Platform::GetHaptics()
+    {
+        try
+        {
+            std::call_once(hapticDiscoveryOnce_, [this]
+            {
+                SdlGlobalStateLock lock;
+                AcquireSubsystemLocked(PlatformSubsystem::Haptic);
+                hapticDiscoveryHeld_ = true;
+            });
+        }
+        catch (const PlatformException&)
+        {
+            // Preserve the service accessor's non-throwing behavior. Callers explicitly acquire
+            // the subsystem before using it and handle an unavailable subsystem there.
+        }
+        return &haptics_;
+    }
 
     IPlatformInputDevices* Sdl3Platform::GetInputDevices() { return &inputDevices_; }
     IPlatformClipboard* Sdl3Platform::GetClipboard() { return &clipboard_; }

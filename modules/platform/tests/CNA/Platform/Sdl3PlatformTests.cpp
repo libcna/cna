@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <barrier>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
@@ -90,6 +91,20 @@ protected:
     /// "video is down" is only true when this suite runs alone, which is exactly the kind of
     /// test that passes in isolation and fails in the suite.
     [[nodiscard]] bool Up() const { return platform_->IsSubsystemInitialized(subsystem_); }
+
+    [[nodiscard]] bool HapticSubsystemAvailable()
+    {
+        try
+        {
+            platform_->AcquireSubsystem(PlatformSubsystem::Haptic);
+            platform_->ReleaseSubsystem(PlatformSubsystem::Haptic);
+            return true;
+        }
+        catch (const PlatformException&)
+        {
+            return false;
+        }
+    }
 
     /// Picks a subsystem that can actually start on this host, and skips the test when none can.
     ///
@@ -608,6 +623,77 @@ TEST_F(Sdl3PlatformTest, TheControllerSubsystemStartsOnDemandRatherThanWithThePl
     platform.reset();
     EXPECT_FALSE(PlatformFactory::Create("SDL3")->IsSubsystemInitialized(PlatformSubsystem::Gamepad))
         << "the destroyed platform must have released what it acquired";
+}
+
+TEST_F(Sdl3PlatformTest, HapticDiscoveryKeepsTheNativeDeviceListBetweenClientCalls)
+{
+    if (!HapticSubsystemAvailable()) GTEST_SKIP() << "the native haptic subsystem cannot initialize";
+    if (platform_->IsSubsystemInitialized(PlatformSubsystem::Haptic))
+        GTEST_SKIP() << "another owner already keeps the haptic device list alive";
+
+    auto discovery = PlatformFactory::Create("SDL3");
+    EXPECT_FALSE(discovery->IsSubsystemInitialized(PlatformSubsystem::Haptic));
+    auto* service = discovery->GetHaptics();
+    ASSERT_NE(service, nullptr);
+    EXPECT_TRUE(discovery->IsSubsystemInitialized(PlatformSubsystem::Haptic))
+        << "the discovery service must retain the native device list, and therefore its IDs";
+    for (int call = 0; call < 3; ++call)
+    {
+        EXPECT_EQ(discovery->GetHaptics(), service);
+        discovery->AcquireSubsystem(PlatformSubsystem::Haptic);
+        discovery->ReleaseSubsystem(PlatformSubsystem::Haptic);
+        EXPECT_TRUE(discovery->IsSubsystemInitialized(PlatformSubsystem::Haptic))
+            << "enumeration/open callers may release their own references, not discovery's";
+    }
+    discovery->ReleaseSubsystem(PlatformSubsystem::Haptic); // unpaired client release
+    EXPECT_TRUE(discovery->IsSubsystemInitialized(PlatformSubsystem::Haptic));
+    discovery.reset();
+    EXPECT_FALSE(platform_->IsSubsystemInitialized(PlatformSubsystem::Haptic))
+        << "destroying discovery must release exactly its own retained reference";
+}
+
+TEST_F(Sdl3PlatformTest, HapticDiscoveryDoesNotReleaseAnotherPlatformOwnersReference)
+{
+    if (!HapticSubsystemAvailable()) GTEST_SKIP() << "the native haptic subsystem cannot initialize";
+    const bool initiallyUp = platform_->IsSubsystemInitialized(PlatformSubsystem::Haptic);
+    platform_->AcquireSubsystem(PlatformSubsystem::Haptic);
+    {
+        auto discovery = PlatformFactory::Create("SDL3");
+        ASSERT_NE(discovery->GetHaptics(), nullptr);
+        ASSERT_NE(discovery->GetHaptics(), nullptr);
+        discovery->AcquireSubsystem(PlatformSubsystem::Haptic);
+        discovery->ReleaseSubsystem(PlatformSubsystem::Haptic);
+    }
+    EXPECT_TRUE(platform_->IsSubsystemInitialized(PlatformSubsystem::Haptic));
+    platform_->ReleaseSubsystem(PlatformSubsystem::Haptic);
+    EXPECT_EQ(platform_->IsSubsystemInitialized(PlatformSubsystem::Haptic), initiallyUp);
+}
+
+TEST_F(Sdl3PlatformTest, ConcurrentHapticServiceQueriesRetainOnlyOneDiscoveryReference)
+{
+    if (!HapticSubsystemAvailable()) GTEST_SKIP() << "the native haptic subsystem cannot initialize";
+    if (platform_->IsSubsystemInitialized(PlatformSubsystem::Haptic))
+        GTEST_SKIP() << "another owner already keeps the haptic device list alive";
+    auto discovery = PlatformFactory::Create("SDL3");
+    std::barrier start(8);
+    std::vector<std::thread> callers;
+    for (int caller = 0; caller < 8; ++caller)
+        callers.emplace_back([&, caller] {
+            start.arrive_and_wait();
+            for (int call = 0; call < 16; ++call)
+            {
+                if ((caller % 2) == 0)
+                    EXPECT_NE(discovery->GetHaptics(), nullptr);
+                else
+                    discovery->ReleaseSubsystem(PlatformSubsystem::Haptic);
+            }
+            // These threads are not created by SDL, so their native TLS needs explicit cleanup.
+            SDL_CleanupTLS();
+        });
+    for (auto& caller : callers) caller.join();
+    EXPECT_TRUE(discovery->IsSubsystemInitialized(PlatformSubsystem::Haptic));
+    discovery.reset();
+    EXPECT_FALSE(platform_->IsSubsystemInitialized(PlatformSubsystem::Haptic));
 }
 
 TEST_F(Sdl3PlatformTest, UnknownPlatformNameRefusesAndListsWhatIsAvailable)

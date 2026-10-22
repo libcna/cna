@@ -109,7 +109,10 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] IPlatformTextInput* GetTextInput() override;
         /** @brief Gets the sensor service. @return The SDL3 sensor service; never null. */
         [[nodiscard]] IPlatformSensors* GetSensors() override;
-        /** @brief Gets the haptics service. @return The SDL3 haptics service; never null. */
+        /**
+         * @brief Gets the haptics service, retaining its native device list until platform destruction.
+         * @return The SDL3 haptics service; never null. Explicit acquisition reports startup failures.
+         */
         [[nodiscard]] IPlatformHaptics* GetHaptics() override;
         /** @brief Gets the input device enumeration service. @return The service; never null. */
         [[nodiscard]] IPlatformInputDevices* GetInputDevices() override;
@@ -170,6 +173,9 @@ namespace CNA::Platform::Sdl3 {
         std::vector<PlatformEvent> pendingLifecycle_;
         bool lifecycleWatchAdded_ = false;
 
+        // Requires SdlGlobalStateLock; also lets discovery publish its lease atomically.
+        void AcquireSubsystemLocked(PlatformSubsystem subsystem);
+
         /// Acquires the controller subsystem the first time something asks for the gamepad or
         /// joystick service, and at most once per instance. See the definition for why this is
         /// not done up front.
@@ -187,6 +193,11 @@ namespace CNA::Platform::Sdl3 {
         /// failed: one attempt per instance, so a host without controller support does not pay
         /// the enumeration cost again on every query.
         bool controllerSubsystemEnsured_ = false;
+
+        // The discovery lease preserves instance IDs between separately scoped haptic callers.
+        std::once_flag hapticDiscoveryOnce_;
+        // Guarded by SdlGlobalStateLock; included in ownedRefCounts_, not releasable by clients.
+        bool hapticDiscoveryHeld_ = false;
 
         /// Services are owned by the platform and outlive every caller's use of them, which is
         /// what makes returning a raw pointer safe: a caller never owns what it is handed.

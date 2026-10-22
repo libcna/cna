@@ -126,6 +126,15 @@ no `Game`/`GraphicsDeviceManager` at all, so there may be no event pump running.
 > ownership all live in `IPlatformHaptics`/`Sdl3Haptics`. `Sdl3Platform`'s process-wide subsystem
 > lifecycle mutex serializes its native subsystem acquire/release with the sensor path.
 
+The SDL3 haptics service now retains one lazy discovery reference until its platform
+is destroyed. Releasing the last short-lived enumeration/open caller used to destroy
+SDL's device list; a subsequent call rescanned devices and assigned different IDs,
+so an enumerated ID could not be opened. The discovery reference is not consumable
+by client releases. The last **client** release still closes cached haptic handles
+and effects before relinquishing that client's reference; discovery retains only
+the native list. Platform destruction balances the retained reference along with
+its other owned references. Global SDL lifetime still belongs to the host.
+
 ### `SDL_INIT_GAMEPAD` — `SdlInputBridge`
 
 `modules/input/src/Internal/SdlInputBridge.cpp:1599` guards on `SDL_WasInit(SDL_INIT_GAMEPAD)`
