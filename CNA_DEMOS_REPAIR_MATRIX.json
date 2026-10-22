@@ -1062,12 +1062,17 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "DDSFromStreamEXT ignores Read's returned count and decodes total Length instead of actual remaining bytes, so short reads fail and prefixes conceal truncation.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "b6ab302cc06b028dedfc451838e97cc31bd0599a",
+      "validation": [
+        "2026-10-22 unchanged original five-check demo:3PASS/2FAIL on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU; repair-cube-stream-before-audit.json, no source drift or memory events.",
+        "Native14-case baseline:5PASS/9FAIL on all four renderers; corrected fixture after:14PASS each. Original5 demo checks and19 C child checks pass each on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU.",
+        "Native-v3:3040 graphics=2950PASS/90SKIP, exact prior3026 outcome parity;154 DDS/cube tests PASS. Final external132=123PASS/8existing082FAIL/1SKIP, no deltas; existing failures remain open.",
+        "Metadata-v2: exact719-entry catalog comparison proves only054 marker/restriction removal; six enabled CTests PASS/no skips. Final artifact revalidation:repair-cube-stream-external-final-audit.json. Evidence:CUBE_STREAM_TRIAGE.md; no new full campaign/sanitizer claim."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-055",
