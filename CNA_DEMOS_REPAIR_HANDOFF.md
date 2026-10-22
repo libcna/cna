@@ -9,6 +9,26 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**2026-10-22 ISSUE-054 repair validated, ready for coherent product commit.**
+CNA6fd2d636d / demos9d2cdd0. Candidate accumulates stream reads via existing
+BinaryReader with leaveOpen=true; decoder receives actual bytes, not total Length.
+Corrected14 native witnesses PASS on SW/GLES/GL33/SDL; original demo5PASS each.
+Native14642 completed0: build4420ms, focused14PASS, complete graphics3040=
+2950PASS/90SKIP39707ms, all154 DDS/cube cases PASS2599ms; exact prior3026
+identity/outcome parity. Peak2062221312/events0, no drift. Prior native build's
+four reviewed existing warnings and fixture initialization correction are retained
+in demos CUBE_STREAM_TRIAGE.md; no suppressed assertions or production workaround.
+External63082 completed2 with parityAccepted:true:132=123PASS/8existing082FAIL/
+1SKIP, no deltas. Four original DDS demos pass5 checks; peak169390080/events0.
+C API49361 passes19 child checks on each of four renderers (wrapper reports0),
+peak141025280/events0. No heavy job live. No new whole-native/full-smoke/sanitizer
+or visual-reference run claimed; no renderer/pixel algorithm changed, exact face/mip
+readback is covered. Last complete native checkpoint remains027:11041 tests.
+Next commit only054 product hunks, new test and handoff; then remove verified054
+marker, run prepared metadata/6-CTest gate and close permanent status. Afterwards
+reproduce034/035 (STOCK_PARAMETER_TRIAGE.md). Preserve inherited011/082 edits;
+never stage whole TextureCube files.066 awaits owner choice. No push/merge.
+
 **2026-10-22 ISSUE-027 committed766d62fbd; validation accepted.**
 Focused SW/GLES/GL33:14PASS each, including compiled/MRT paths. Default native
 11041=10923PASS/118SKIP, exact old11027 parity. External47085 terminated2 with

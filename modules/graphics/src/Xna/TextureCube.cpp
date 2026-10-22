@@ -9,6 +9,7 @@
 #include "CNA/Internal/Graphics/DiagnosticResource.hpp"
 #endif
 #include "System/IO/Stream.hpp"
+#include "System/IO/BinaryReader.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
@@ -784,16 +785,16 @@ namespace Microsoft::Xna::Framework::Graphics
     TextureCube TextureCube::DDSFromStreamEXT(GraphicsDevice& device, System::IO::Stream& stream)
     {
         using System::IO::intcs;
-        using System::IO::bytecs;
 
         const intcs len = stream.getLengthProperty();
         if (len <= 0)
             throw System::ArgumentException("TextureCube::DDSFromStreamEXT: stream is empty or length unknown");
 
-        std::vector<bytecs> buf(static_cast<std::size_t>(len));
-        stream.Read(buf.data(), 0, len);
+        // Accumulate short reads from the current position without padding a truncated payload.
+        System::IO::BinaryReader reader(&stream, true);
+        const auto buf = reader.ReadBytes(len);
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
-        const auto rawLen = static_cast<std::size_t>(len);
+        const auto rawLen = buf.size();
 
         // plans/plan_cnb.md CNBF-113: parsing and conversion live in the pure-CPU
         // CNA::Internal::Graphics::DecodeDdsCube component so both this run-time route and the

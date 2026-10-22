@@ -675,6 +675,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Creates a TextureCube by decoding DDS image data from a stream.
          *
+         * Reads from the current position, accumulating short reads. The caller's stream
+         * remains open on success or failure; truncated image data is rejected.
+         *
          * @param device The graphics device to create the texture on.
          * @param stream The input stream containing DDS-encoded cube map data.
          * @return The decoded TextureCube.
