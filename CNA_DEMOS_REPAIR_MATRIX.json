@@ -201,14 +201,15 @@
       ],
       "subsystem": "input/devices/platform",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "The public inline default constructor instantiates unique_ptr cleanup while IPlatformHapticDevice is still incomplete; the existing demos avoid this construction shape.",
+      "status": "RESOLVED",
+      "root_cause": "The public inline default constructor instantiated unique_ptr cleanup while IPlatformHapticDevice was incomplete. Define it out of line, preserving noexcept; demos now exercise default members.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "974c1ac08",
       "validation": [
-        "Fresh current1ad0a3916 public-header C++23/Wall/Wextra/Werror syntax probe fails at unique_ptr sizeof(incomplete IPlatformHapticDevice). No hardware required. Permanent ../cna-demos/docs/repair-evidence/api-shape/HapticDefaultConstructionProbe.cpp; repair-haptic-default-before-build.log. Associated demo PASS is not closure."
+        "Fresh current1ad0a3916 public-header C++23/Wall/Wextra/Werror syntax probe fails at unique_ptr sizeof(incomplete IPlatformHapticDevice). No hardware required. Permanent ../cna-demos/docs/repair-evidence/api-shape/HapticDefaultConstructionProbe.cpp; repair-haptic-default-before-build.log. Associated demo PASS is not closure.",
+        "2026-10-22 repair-museum-haptic: baseline public-header compile fails; repaired Werror compile, external link/runtime PASS. Native input562 PASS, previous560 unchanged plus2new tests. Both haptics demos SOFTWARE/OPENGLES3 PASS before/after, one additional default-member check each; no hardware claim. Evidence ../cna-demos/build/linux-full/reports/repair-museum-haptic-*."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-010",
