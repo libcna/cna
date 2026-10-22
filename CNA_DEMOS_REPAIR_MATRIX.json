@@ -536,13 +536,15 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
-      "current_validation": "2026-10-21 source-only audit at a1c43a51f with recorded011/082/003 candidates: SOFTWARE generalized and compiled/MRT paths both pass raw source RGBA to BlendComponent before target storage quantization. HasWideColor is not a float-format classifier. Six new BlendSourceRangeTests.cpp witnesses in demos are UNCOMPILED/UNRUN, with four normalized-target cases and two exact HDR controls. No runtime reproduction or repair claimed while native003/68394 runs. See graphics/BLEND_STATE_RANGE_TRIAGE.md; finish003 first, then baseline these and compiled/MRT cases.",
+      "status": "RESOLVED",
+      "root_cause": "SOFTWARE passes raw shader output into blend factors/equations before normalized target storage clamps it; generalized and compiled/MRT paths both affected.",
+      "current_validation": "2026-10-22 committed766d62fbd: baseline12 SOFTWARE failures become PASS; fourteen focused cases PASS each SOFTWARE/GLES/GL33 including enabled compiled/MRT paths. SDL external6PASS/8compiled-offSKIP explicit. Native69993 build30717ms/no diagnostics, graphics3026=2936PASS/90SKIP, full11041=10923PASS/118SKIP1157090ms, exact old11027 parity plus6PASS/8compiled-offSKIP, no drift/events, peak4056010752. External47085 parityAccepted:true/exit2 retains132=123PASS/8existing082FAIL/1SKIP with no deltas; original HDR4PASS/checks4 and six exact visuals0 pixels difference, ten screenshots inspected, peak193499136/events0. Final five enabled CTests57592 PASS/noSKIP24422ms, peak148176896/events0. No027 marker existed; no new sanitizer or full719 smoke claim. Inherited011/082 excluded. No push/merge.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "766d62fbd560b8356f43b169c3ebfdf2ccad3a7e",
+      "validation": [
+        "Permanent14 native/evidence regressions cover four Color source-range operations, two exact HDR controls and eight profile-valid compiled MRT pairs across Color/Rg32/Rgba1010102/Rgba64, both attachment orders. Rgba64/HdrBlendable verifies independent normalized/float ranges. Genuine XNA Clear quantization and forbidden Single/HalfVector2 blending corrected fixture setup without widening tolerances; all failed preparation logs retained. See demos docs/repair-evidence/graphics/BLEND_STATE_RANGE_TRIAGE.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-028",
@@ -1301,9 +1303,9 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
-      "current_validation": "2026-10-21 source-only audit at a1c43a51f: SoftwareRenderer::SetBlendEnabled still empty; preserve original C instanced pixel assertions and rerun only after ABI consumer rebuild. Additional contract discrepancy: EasyGL installs SourceAlpha/InverseSourceAlpha, FNA3D installs One/InverseSourceAlpha/Add, SDL_GPU/WebGPU retain factors and toggle a flag, DirectX9 also no-op. Public CNAEXT/C comments do not specify factors. No new runtime pass or public-contract decision. See graphics/BLEND_STATE_RANGE_TRIAGE.md; current native003 run remains isolated/frozen.",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "SOFTWARE/DirectX9 blend toggle no-op; other families disagree on enabling factors; public extension contract underspecified.",
+      "current_validation": "2026-10-22 original C draw_routes fails on SOFTWARE and SDL_GPU at accumulated-red assertion,255 instead of185..195; GLES/GL33 pass. SDL failure remains unexpected/unmarked. Owner asked whether enabling installs SourceAlpha/InverseSourceAlpha/Add or preserves factors; no answer presumed. No runtime repair, contract rewrite or closure.027 continues independently. See repair-blend-range-before-v7/after reports and BLEND_STATE_RANGE_TRIAGE.md.",
       "related_issues": [],
       "cna_fix_commit": null,
       "validation": [],

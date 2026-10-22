@@ -9,7 +9,7 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
-**2026-10-22 ISSUE-027 validation accepted; ready for product commit.**
+**2026-10-22 ISSUE-027 committed766d62fbd; validation accepted.**
 Focused SW/GLES/GL33:14PASS each, including compiled/MRT paths. Default native
 11041=10923PASS/118SKIP, exact old11027 parity. External47085 terminated2 with
 parityAccepted:true:132 cases=123PASS/8existingFAIL/1SKIP, no deltas; eight082
@@ -21,9 +21,11 @@ External peak193499136/events0; native peak4056010752/events0. No heavy job live
 Only numerical range handling changed; no new ownership/lifetime behavior, and no
 new sanitizer run claimed for this batch. Prior full719 smoke remains historical;
 final all-issue full campaign is still required. This batch did not remove any
-knownIssue marker (027 had none). Next commit only SoftwareRenderer.cpp plus the
-14 new native regressions, record its SHA and close027 in matrix/permanent inventory.
-Then reproduce054 using unchanged DDS stream demo; see CUBE_STREAM_TRIAGE.md.
+knownIssue marker (027 had none). Product SHA766d62fbd560b8356f43b169c3ebfdf2ccad3a7e
+contains only the range fix,14 regressions and handoff.027 is FIXED_VALIDATED;
+matrix156 IDs now has107 dispositions (including2 platform-pending),49 remaining.
+Exact next task: reproduce054 using unchanged DDS stream demo, then protect
+short-read/position/truncation/ownership boundaries; see CUBE_STREAM_TRIAGE.md.
 066 awaits the explicit toggle-contract choice; do not infer an answer. Preserve
 inherited011/082 edits, no push/merge.
 
