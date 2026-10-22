@@ -9,6 +9,21 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**2026-10-22 current next-batch checkpoint:034/035 confirmed open.**
+CNA bda0cf902 / demos bdd0c05;054 product b6ab302cc is closed and validated below.
+Unchanged parameter_values baseline80776 completed:31 checks=29PASS/2FAIL on
+SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU, exactly034 scalar-refusal and035 Bones-count
+failures. No source drift/events, peak140460032 bytes. No heavy job live.
+See STOCK_PARAMETER_TRIAGE.md and repair-stock-parameters-before-audit.json.
+No034/035 production edits or new native tests yet. Exact next task: add focused
+native regressions for stock Boolean/Int32/Single shape rejection and standalone
+controls; protect Bones parent/element mutation, partial writes and clone isolation.
+Use actual XNA scalar-getter guard evidence; verify Bones matrix convention before
+asserting dimensions or changing its public getter behavior. Investigate reuse of
+Effect's existing shared bounded parameter storage instead of fake child metadata.
+Preserve C API standalone contract, inherited011/082 dirt and pending066 choice.
+All156 IDs remain,108 dispositions/48 null. No push/merge; final campaign gates due.
+
 **2026-10-22 ISSUE-054 closed; next batch034/035.**
 CNA product b6ab302cc06b028dedfc451838e97cc31bd0599a; demos closure
 bdd0c0507c728352099ee483c8b7be9ccfb59694 (baseline9d2cdd0). Native3040

@@ -668,12 +668,15 @@
         "graphics.effect.parameter_values"
       ],
       "subsystem": "graphics/c-api",
-      "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "classification": "XNA_COMPATIBILITY_DEFECT",
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Scalar getters apply the XNA shape guard only to compiledStorage_; stock parameters retain unchecked vector-backed access. Preserve standalone CNA constructor semantics when repairing reflected stock parameters.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "2026-10-22 original parameter_values:31 checks,29PASS/2FAIL (034 and035) on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. repair-stock-parameters-before-audit.json; no drift/memory events.",
+        "Microsoft XNA4 EffectParameter.cs:1442/1631/1808 guards Boolean/Int32/Single scalar getters before D3DX. Source evidence, not a new GPU oracle. See STOCK_PARAMETER_TRIAGE.md."
+      ],
       "final_disposition": null
     },
     {
@@ -686,11 +689,14 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "SkinnedEffect creates Bones as a standalone Matrix parameter with MaxBones rows and no element views; reflected array metadata and parent/child aliasing need coherent storage.",
       "related_issues": [],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "2026-10-22 original parameter_values:31 checks,29PASS/2FAIL (034 and035) on four renderers; Bones remains0 elements/72 rows/4 columns. No drift/memory events.",
+        "Stored FNA SkinnedEffect reflection has72 Matrix/Single elements and3x4 parent/child dimensions. XNA GetBoneTransforms additionally normalizes M44; no fresh XNA GPU dimensional measurement claimed. See STOCK_PARAMETER_TRIAGE.md."
+      ],
       "final_disposition": null
     },
     {
