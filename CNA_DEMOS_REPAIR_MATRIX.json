@@ -6,6 +6,26 @@
     "date": "2026-10-19"
   },
   "policy": "PENDING_VERIFICATION is not a final disposition. Classification is provisional until source, contract and current reproduction are reviewed. Preserve every historical ID. Never infer closure from a whole-demo expected failure. The line and historical_status fields capture the initial inventory; locate current entries by permanent ID, not by those historical line numbers.",
+  "additional_validation_findings": [
+    {
+      "id": "DC-R1",
+      "status": "CONFIRMED_OPEN",
+      "demo": "c_api.graphics.render_target_bindings",
+      "renderer": "SDL_GPU",
+      "finding": "Four of25 checks fail because mixed cube/2D MRT is explicitly unsupported. Existing source/plan boundary; audit public C contract and demo renderer scope before disposition.",
+      "evidence": "../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md",
+      "final_disposition": null
+    },
+    {
+      "id": "DC-R2",
+      "status": "CONFIRMED_OPEN",
+      "demo": "graphics.render_target.multisampling",
+      "renderer": "SDL_GPU",
+      "finding": "Two of6 checks fail because BlendState/GraphicsDevice masks are ignored. Existing documented SDL limitation; audit contract, capability reporting and demo scope, without zero-mask hacks or silent skips.",
+      "evidence": "../cna-demos/docs/repair-evidence/graphics/DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md",
+      "final_disposition": null
+    }
+  ],
   "issues": [
     {
       "id": "CNA-DEMOS-ISSUE-001",
@@ -1706,11 +1726,17 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
-      "related_issues": [],
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "Renderer native members were released under another device's active GL context; the shared GraphicsDevice teardown now holds an owning-context lease through renderer destruction, ending before window destruction.",
+      "related_issues": ["CNA-DEMOS-ISSUE-112"],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Original12 observations reproduced GLES cube/target and OPENGL33 target failures; native6 baseline GLES6FAIL/OPENGL33 binding4FAIL.",
+        "Focused candidate8590:8 native PASS plus17/12/27 original demo checks PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. All12 screenshots inspected. No source drift or OOM.",
+      "Readback-before41922: independent Color/packed overload witnesses FAIL on both GL profiles before the shared readback lease.",
+      "Native-v2 full10972PASS/118 unchangedSKIP. New8 witnesses PASS on SOFTWARE/GLES/GL33/SDL_GPU/FNA3D/WebGPU; compiled renderer existing skips separately audited. SOFTWARE ASan/UBSan/float-cast/leak8PASS/no findings.",
+      "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product commit/metadata closure pending."
+      ],
       "final_disposition": null
     },
     {
@@ -2219,11 +2245,17 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
-      "related_issues": [],
+      "status": "CONFIRMED_OPEN",
+      "root_cause": "SetRenderTargets transitions and GetBackBufferDataCore native reads lacked the owning-context lease while another device owned the thread; validation/no-op ordering is retained.",
+      "related_issues": ["CNA-DEMOS-ISSUE-086"],
       "cna_fix_commit": null,
-      "validation": [],
+      "validation": [
+        "Original target demo fails on OPENGLES3 and OPENGL33; six-case native baseline isolates binding/unbind and independent device teardown failures.",
+        "Readback-before41922 independently reproduces Color and packed overload failures on both GL profiles while SOFTWARE/SDL_GPU8PASS. A lease is now held only around native readback, after public validation.",
+        "Focused8590:8 native and17/12/27 original demo checks PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU; all12 screenshots inspected, exact original assertions retained.",
+        "Native-v2 full10972PASS/118 unchangedSKIP after independent XNA-backed glTF test correction0a94a68aca7b3b482918306ec5426bc0ff74d6e9. New8 context witnesses PASS on six renderers; existing compiled-renderer skips explicitly audited. SOFTWARE sanitizer8PASS/no findings.",
+        "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product commit/metadata closure pending."
+      ],
       "final_disposition": null
     },
     {

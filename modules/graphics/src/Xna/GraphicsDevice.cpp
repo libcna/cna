@@ -4435,7 +4435,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const std::scoped_lock lifecycle(NativeDeviceLifecycleMutex());
         InvalidateRendererCapabilityProfileEXT();
-        renderer_.reset();
+        {
+            // Renderer members must release native handles in their owning context,
+            // not a different device's active frame. Restore that frame before the
+            // retiring window is destroyed; the lease keeps its context alive meanwhile.
+            const auto contextLease = AcquireRendererThreadContextLease();
+            renderer_.reset();
+        }
         surfacePresenter_.reset();
 
         if (platformWindow_ != nullptr)
@@ -5200,7 +5206,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         const std::size_t pixelCount = static_cast<std::size_t>(pixelCount64);
         std::vector<uint8_t> buf(pixelCount * 4u);
-        renderer_->ReadBackbuffer(x, y, w, h, buf.data());
+        {
+            const auto contextLease = AcquireRendererThreadContextLease();
+            renderer_->ReadBackbuffer(x, y, w, h, buf.data());
+        }
         if (!colorObjects)
         {
             auto* destination = static_cast<std::uint8_t*>(data) +
@@ -5337,6 +5346,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (renderTargets.empty())
         {
+            const auto contextLease = AcquireRendererThreadContextLease();
             if (renderer_)
                 renderer_->SetRenderTargets(nullptr, 0);
             CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/RenderTargetChanges", 1);
@@ -5419,6 +5429,10 @@ namespace Microsoft::Xna::Framework::Graphics
                     "SetRenderTargets: render targets must have matching pixel sizes.");
         }
 
+        // Like Clear and Reset, binding outside this device's frame must lease
+        // its context through viewport/scissor updates and any discard clear.
+        // All public validation above still precedes native state changes.
+        const auto contextLease = AcquireRendererThreadContextLease();
         if (renderer_)
             renderer_->SetRenderTargets(
                 descriptors.data(), static_cast<int>(descriptors.size()));
