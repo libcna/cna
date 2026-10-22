@@ -7,6 +7,16 @@ Follow-up [FULLSCREEN-002](plan_directx9_fullscreen_motion.md) covers ordinary s
 DirectX9 resize resets and logical presentation during movement, which this initial task
 did not exercise. Its original loss/recovery probe remains passing.
 
+2026-10-22 museum follow-up: the original delayed recovery probe missed the same-frame
+gap after a failed native Reset. Its new immediate assertions reproduced an open draw
+gate and premature DeviceReset event before repair. Failed Reset now immediately enters
+loss recovery; shared viewport refresh and success notification wait for recovery, and
+native SetViewport/Present cannot follow the failure. All five focused DirectX9 tests
+pass under Wine/DXVK3.1.1; 103 presentation/reset/viewport tests on each of SOFTWARE,
+OPENGLES3, OPENGL33, WEBGPU and SDL_GPU retain their baseline passes/skips. See
+`CNA_MUSEUM_REPAIR_HANDOFF.md` for exact counts and evidence. This is not a real-Windows
+or whole-suite validation claim.
+
 ## Scope and causes
 
 - Vulkan used a physical letterbox rectangle as the logical SpriteBatch projection divisor.

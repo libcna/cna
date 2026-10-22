@@ -471,6 +471,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::EnsureDeviceSize()
     {
+        // Recovery owns all native work after a failed Reset. Presentation setters may
+        // update their pending parameters, but must not restore state on a lost device.
+        if (deviceLost_) return;
         const auto drawableSize = surface_.GetDrawableSize();
         const int w = drawableSize.width;
         const int h = drawableSize.height;
@@ -505,21 +508,16 @@ namespace CNA::Internal::Renderers::DirectX9
         HRESULT hr = device_->Reset(&pp);
         if (FAILED(hr))
         {
-            // Mirrors PerformResetRecovery()'s own D9-34 resilience: a transient/spurious size
-            // observation (e.g. a window manager briefly reporting the full monitor resolution
-            // while mapping/animating a brand-new window -- observed for real under Wine here,
-            // see this file's own git history) can make Reset() genuinely fail. D3D11's DXGI
-            // swapchain absorbs the exact same noise silently (VK_SUBOPTIMAL_KHR -> recreate);
-            // D3D9 has no such automatic recovery, so this must do it explicitly. Stay on the
-            // previous (last successfully-applied) size and retry on the next natural
-            // EnsureDeviceSize() call (every Present()) instead of crashing the whole game --
-            // matches XNA's own resilience, same bar as the device-lost path above.
+            // Even INVALIDCALL leaves D3D9 unusable after Reset: only Reset,
+            // TestCooperativeLevel and Release are permitted until recovery succeeds.
+            // Keeping the previous dimensions does not preserve a usable backbuffer.
             width_ = previousWidth;
             height_ = previousHeight;
             presentationDirty_ = true;
+            MarkDeviceLostFromScopedFailureEXT();
             CNA::Logger::Warn(
                 "D3D9 Reset (resize to " + std::to_string(w) + "x" + std::to_string(h) +
-                    ") failed, hr=" + FormatHr(hr) + " -- keeping previous size, retrying next frame",
+                    ") failed, hr=" + FormatHr(hr) + " -- device lost, awaiting reset recovery",
                 CNA::LogCategory::RENDER);
             return;
         }
@@ -814,6 +812,7 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         EnsureDeviceSize();
+        if (deviceLost_) return;
 
         HRESULT hr = device_->Present(nullptr, nullptr, nullptr, nullptr);
         if (hr == D3DERR_DEVICELOST)
@@ -1853,8 +1852,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void DirectX9Renderer::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
+        ThrowIfDeviceLost();
         ComPtr<IDirect3DSurface9> target;
-        HRESULT hr = device_->GetRenderTarget(0, target.GetAddressOf());
+        HRESULT hr = InvokeGetRenderTargetEXT(0, target.GetAddressOf());
         if (FAILED(hr)) ThrowScopedFailureEXT("IDirect3DDevice9::GetRenderTarget", hr, "SetViewport");
         D3DSURFACE_DESC desc{};
         hr = target->GetDesc(&desc);

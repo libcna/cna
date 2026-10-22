@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include <cstdio>
@@ -12,12 +13,13 @@
 
 using namespace Microsoft::Xna::Framework;
 using CNA::Internal::Renderers::DirectX9::DirectX9Renderer;
+using CNA::Internal::Renderers::DirectX9::D3D9NativeOperationEXT;
 
 class FrameRecoveryTest final : public Game {
   std::unique_ptr<GraphicsDeviceManager> manager_;
   static constexpr int kRecoveryDeadline = 90;
   int updates_ = 0, draws_ = 0, result_ = 1, drawsBeforeReset_ = 0,
-      stateFailures_ = 0, recoveredAt_ = 0;
+      stateFailures_ = 0, recoveredAt_ = 0, lostEvents_ = 0, resetEvents_ = 0;
   Microsoft::WRL::ComPtr<IDirect3DSurface9> heldBackBuffer_;
   void Update(GameTime &) override {
     auto &renderer = static_cast<DirectX9Renderer &>(
@@ -48,7 +50,47 @@ class FrameRecoveryTest final : public Game {
         return;
       }
       drawsBeforeReset_ = draws_;
+      auto &device = getGraphicsDeviceProperty();
+      device.DeviceLost += [this](System::Object *, const System::EventArgs &) {
+        ++lostEvents_;
+      };
+      device.DeviceReset += [this](System::Object *, const System::EventArgs &) {
+        ++resetEvents_;
+      };
       manager_->ToggleFullScreen();
+      // Check the same Update, before TryBeginDraw can discover the native loss.
+      // A later-frame check misses illegal viewport/present calls after failed Reset.
+      if (renderer.CanBeginDrawEXT() || !renderer.IsDeviceLostEXT() ||
+          lostEvents_ != 1 || resetEvents_ != 0) {
+        std::printf("[FAIL] immediately after failed Reset: gate=%d, lost=%d, "
+                    "Lost events=%d, Reset events=%d\n",
+                    renderer.CanBeginDrawEXT(), renderer.IsDeviceLostEXT(),
+                    lostEvents_, resetEvents_);
+        Exit();
+        return;
+      }
+      const auto gets = renderer.GetNativeCallCountEXT(D3D9NativeOperationEXT::GetRenderTarget);
+      const auto sets = renderer.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetViewport);
+      bool viewportRefused = false, clearRefused = false;
+      try {
+        renderer.SetViewport(0, 0, 1, 1, 0, 1);
+      } catch (const Graphics::DeviceLostException &) {
+        viewportRefused = true;
+      }
+      try {
+        device.Clear(Color::White);
+      } catch (const Graphics::DeviceLostException &) {
+        clearRefused = true;
+      }
+      if (!viewportRefused || !clearRefused ||
+          gets != renderer.GetNativeCallCountEXT(D3D9NativeOperationEXT::GetRenderTarget) ||
+          sets != renderer.GetNativeCallCountEXT(D3D9NativeOperationEXT::SetViewport)) {
+        std::printf("[FAIL] a lost device reached native viewport/clear work\n");
+        Exit();
+        return;
+      }
+      std::printf("[PASS] failed Reset closes the gate immediately, defers Reset events "
+                  "and refuses viewport/clear before native calls\n");
     }
     if (updates_ == 12) {
       std::printf("[diagnostic] held buffer draws=%d, previous=%d, gate=%d, "
@@ -56,7 +98,7 @@ class FrameRecoveryTest final : public Game {
                   draws_, drawsBeforeReset_, renderer.CanBeginDrawEXT(),
                   static_cast<unsigned long>(
                       renderer.GetDeviceEXT()->TestCooperativeLevel()));
-      if (draws_ != drawsBeforeReset_) {
+      if (draws_ != drawsBeforeReset_ || lostEvents_ != 1 || resetEvents_ != 0) {
         std::printf("[FAIL] a draw went through while the held back buffer kept Reset failing\n");
         Exit();
         return;
@@ -88,7 +130,7 @@ class FrameRecoveryTest final : public Game {
     }
     if (recoveredAt_ != 0 && updates_ == recoveredAt_ + 8) {
       result_ = (draws_ > drawsBeforeReset_ && renderer.CanBeginDrawEXT() &&
-                 stateFailures_ == 0)
+                 stateFailures_ == 0 && lostEvents_ == 1 && resetEvents_ == 2)
                     ? 0
                     : 1;
       std::printf("[%s] failed fullscreen Reset waits for a held backbuffer, "

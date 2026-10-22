@@ -68,8 +68,8 @@ browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERM
 reference is represented; the generated census is
 [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md)
 (`python3 tools/audit_xna_runtime_surface.py --write-reports`). Representation is not behaviour:
-behavioural fidelity is held by each module's tests. One member is deliberately left unimplemented
-(§6).
+behavioural fidelity is held by each module's tests. The incomplete frustum-ray intersection
+is now authorized for repair (§5.2).
 
 **Bindings.** C and C# are the maintained bindings. CNA.NET (`libcna/cna-dotnet` `develop`) admits
 exactly C ABI 0.47.0 and pins one CNA `next` commit (`CNA_UPSTREAM_COMMIT` in its
@@ -152,7 +152,8 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   deliberately not applied; `ColorWriteChannels` is honoured.
 
 - `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does
-  not compute — reserved for the human author, see §6.
+  not compute. The owner revoked the former hands-on-work reservation on 2026-10-22
+  ("Ano, oprav ji v rámci kampaně"); repair and reference validation are pending.
 - Native `SurfaceFormat::Alpha8` render-target storage is unavailable on every renderer:
   `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` is false, and a
   render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows
@@ -228,11 +229,6 @@ Behaviour CNA does not own, measured and reported rather than worked around.
 
 ## 6. Reserved for the human author
 
-- **`BoundingFrustum::Intersects(Ray)`** (`modules/math/src/BoundingFrustum.cpp`). It answers a ray
-  whose origin is outside (`nullopt`) or inside (`0`) the frustum, and throws
-  `System::NotImplementedException` in the remaining case. The owner reserved the real
-  implementation as hands-on C++ work: do not implement it, generate it, or remove the exception.
-  `BoundingFrustumTests.cpp` covers only the two answered cases.
 - **Licence-header convention.** The tree carries 30 MIT and ~3,150 MS-PL SPDX headers, two
   `storage` source/header pairs with mismatched headers, and ~170 header-less `.hpp`/`.cpp` files
   (mostly examples). Which header CNA-original files carry, and whether `CNA::Internal::Net` stays

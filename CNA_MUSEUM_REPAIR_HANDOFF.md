@@ -19,6 +19,88 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+### Owner-forwarded complete re-intake, 2026-10-22 (current)
+
+User reaffirmed the complete Open inventory at museum revision a6f9e9b2e and says
+its full battery is running. Do not modify that repository or claim its battery
+passed. CNA checkpoint d49c080d9. New goal: finish engine/museum findings, then all
+remaining actionable cna-demos findings. The latter still has 41 unclosed IDs;
+the engine/museum intake is not completion of the original campaign.
+
+The engine UP-018 follow-up is now diagnosed/committed d49c080d9: the same three
+tests pass against pin900d0db3b HEADLESS/SDL=OFF and current next using Headless.
+Reach substitutes Color for preferred Single; engine caches the preference rather
+than the target's actual Format. HiDef Clear/Depth24/indexed-fog preserves float
+precision. See CNA_ENGINE_REPAIR_HANDOFF.md; do not edit cna-engine/extended.
+
+Fresh native revalidation: repair-museum-reintake-before-v1 builds and passes all
+15 PBR/volume-layout CTests (five renderer identities for PBR, ten SDL_GPU source
+layouts). These previously repaired items are already ancestors ofa6f9e9b2e:
+91612a0a3 PBR declaration routing, bb6a2f44e colored PBR follow-up,830e9a934 volume
+layout/reflection/diagnostics, f0caebc0d escaped-resource lifetime. Send their SHAs
+to the owner for museum comparison; do not duplicate those repairs.
+
+DirectX9 failed-Reset repair is validated (this commit). The original delayed
+FrameRecovery check passed; the strengthened same-Update check failed before the
+repair with gate=1, lost=0, Lost events=0, Reset events=1. The other four DirectX
+tests passed. EnsureDeviceSize now marks every failed Reset lost immediately;
+presentation setters retain pending parameters without native state work. Present
+does not follow a failed resize with a native Present, and SetViewport refuses
+before GetRenderTarget. GraphicsDevice defers viewport/scissor cache updates and
+the public success event until recovery. Surface changes still reach recovery.
+Official Reset contract permits only Reset,
+TestCooperativeLevel and Release after failure:
+https://learn.microsoft.com/en-us/windows/win32/api/d3d9/nf-d3d9-idirect3ddevice9-reset
+
+Evidence: cna-demos/build/linux-full/reports/repair-museum-d3d-reset-{before-v1,
+red-v1,after-v1}-*.log and audit.json. After: all five DirectX9 tests PASS on private
+Weston/Xwayland, Wine + DXVK3.1.1 (no native Windows claim). The test verifies
+immediate loss, no premature Reset event, no native viewport calls while lost,
+Clear refusal, Update continuation, eventual recovery after releasing the held
+backbuffer, exactly one loss and two successful resets including fullscreen exit,
+and restored blend/depth state. Native before/after: 103 tests each, SOFTWARE
+94PASS/9SKIP, OPENGLES3 and OPENGL33 100PASS/3SKIP, WEBGPU96PASS/7SKIP,
+SDL_GPU97PASS/6SKIP; no failures or changed skips. Builds use existing multi/MinGW
+trees, shared ccache and one compiler; after peak1542160384 bytes, all memory
+events zero. No sanitizer or full-suite claim for this state-transition batch.
+No push/merge; inherited ownership/ISSUE113 work remains untouched.
+
+Re-intake disposition (engineering queue, not museum closure):
+- A: EnvironmentMap28145a201, FNA3D c2664bad6, ENet5b6aab981, Haptic974c1ac08,
+  notification/mixer20fe6efd2/844e3ce41: await museum verification, no duplicate fix.
+- B1 PBR and B9 volume layout: fixed SHAs/revalidation above.
+- B2 failed DirectX Reset: repaired and focused/regression validated above;
+  museum reproducer and native Windows verification remain external.
+- B3 intermittent gs-avatar corruption: retain evidence, no reproduced cause yet;
+  requires targeted ASan run, not speculation from a Mesa malloc frame.
+- B4 phone failure event/send completion, B5 Android half-float readback,
+  B6 sign-out profile race, B8 vertex texture fetch, B10 surface-free WebGPU:
+  still require focused reproduction/contract audit.
+- B7 frustum ray overlaps ISSUE131. On 2026-10-22 the owner explicitly revoked
+  the former reservation: "Ano, oprav ji v rámci kampaně". Implementation is now
+  authorized; verify the genuine XNA contract and both overloads before repair.
+- B11 storage: Begin/End fixed3798787bb (after museum pin); path/error regression
+  tests remain uncommitted and red; SetAppNameEXT laziness not repaired.
+- B12 readback capability, B13 tray support contract, B14 dialog defaults,
+  B15 type diagnostics: actionable review queue, no claimed fixes.
+- B16 all17 pipeline subitems remain individually inventoried in the museum file;
+  do not drop intentional XNB-v4 support or security path containment without
+  checking documented contracts. Ownership changes in these files belong to other
+  work and must not be staged or overwritten.
+- B17 duplicate C/C++ states, input string contracts, achievement missing key and
+  presentation defaults: pending. CNB None size/ceiling was already repaired by
+  2386155f2 (also in museum pin); revalidate its C route before claiming closure.
+
+Exact next task: implement the now-authorized frustum-ray repair (ISSUE131 and
+museum B7). Genuine XNA4 oracle FrustumRayOracle.cs already passes72/72 checks
+(24 cases across three public routes; compile2473ms/run842ms, peak335900672 bytes,
+events0). Add equivalent native red regressions, then repair and validate the
+full math suite and both original demos without weakening their assertions.
+No active job at this checkpoint. The oracle and unrelated input-string oracle
+are uncommitted in demos; storage path-error test and inherited work remain dirty.
+
+### Previous storage checkpoint (retained history)
+
 **StorageDevice Begin/End repair validated; next is remaining storage argument/I/O errors.**
 Repair committed CNA3798787bbe05ddd79559f5313d8690971f0ea33e; evidence and stronger
 demo committed cna-demos173bf332469bbbbc5823151ac87bc57cefa0a139. Both commits are

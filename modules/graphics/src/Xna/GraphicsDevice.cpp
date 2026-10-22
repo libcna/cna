@@ -1070,6 +1070,9 @@ namespace Microsoft::Xna::Framework::Graphics
             // own forwarding exactly.
             renderer_->SetSwapInterval(toSwapInterval(presentationParameters_.getPresentationIntervalProperty()));
 
+            // A native reset may enter asynchronous device-loss recovery. Do not touch
+            // the viewport or announce success until its Reset callback restores the device.
+            if (!renderer_->CanBeginDrawEXT()) return;
         }
 
         UpdateViewportFromWindow();
@@ -4502,6 +4505,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->OnSurfaceChanged(surface);
             }
         }
+
+        // Still forward surface changes above: recovery needs the latest drawable size.
+        // Native viewport/scissor work, and its cached dimensions, wait for a usable device.
+        if (renderer_ != nullptr && !renderer_->CanBeginDrawEXT()) return;
 
         int width = 0;
         int height = 0;
