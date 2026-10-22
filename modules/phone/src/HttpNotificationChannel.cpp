@@ -2,9 +2,11 @@
 #include "Microsoft/Phone/Notification/HttpNotificationChannel.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cerrno>
 #include <cstring>
 #include <map>
+#include <system_error>
 #include <utility>
 
 #if defined(_WIN32)
@@ -38,6 +40,15 @@ namespace Microsoft::Phone::Notification {
 namespace {
 
 constexpr socket_t InvalidNativeSocket = static_cast<socket_t>(-1);
+
+SharpRuntime::intcs SocketError()
+{
+#if defined(_WIN32)
+    return WSAGetLastError();
+#else
+    return errno;
+#endif
+}
 
 void ShutdownSocket(socket_t socket)
 {
@@ -161,6 +172,21 @@ HttpNotificationChannel::~HttpNotificationChannel()
     Close();
 }
 
+void HttpNotificationChannel::QueueOpenError(SharpRuntime::intcs code, const char* operation)
+{
+#if defined(_WIN32)
+    const auto hresult = std::bit_cast<std::int32_t>(0x80070000u | (static_cast<std::uint32_t>(code) & 0xffffu));
+#else
+    // The public property is an HRESULT, not errno. POSIX has no Windows error
+    // mapping here: report E_FAIL and retain the native code in additional data.
+    constexpr std::int32_t hresult = -2147467259;
+#endif
+    NotificationChannelErrorEventArgs error(ChannelErrorType::ChannelOpenFailed, hresult, code,
+        std::string("HttpNotificationChannel: ") + operation + ": " + std::system_category().message(code));
+    const std::lock_guard<std::mutex> lock(mutex_);
+    pendingErrors_.push_back(std::move(error));
+}
+
 void HttpNotificationChannel::Open()
 {
     if (listening_) {
@@ -169,6 +195,7 @@ void HttpNotificationChannel::Open()
 
     const socket_t listener = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listener == InvalidNativeSocket) {
+        QueueOpenError(SocketError(), "socket creation failed");
         CNA::Logger::Warn("HttpNotificationChannel: could not create a listening socket.");
         return;
     }
@@ -186,7 +213,9 @@ void HttpNotificationChannel::Open()
 
     if (::bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
         ::listen(listener, 4) != 0) {
+        const auto error = SocketError();
         CNA_CLOSE_SOCKET(listener);
+        QueueOpenError(error, "listener setup failed");
         CNA::Logger::Warn("HttpNotificationChannel: could not listen for notifications.");
         return;
     }
@@ -194,18 +223,24 @@ void HttpNotificationChannel::Open()
     sockaddr_in bound{};
     socklen_t boundSize = sizeof(bound);
     if (::getsockname(listener, reinterpret_cast<sockaddr*>(&bound), &boundSize) != 0) {
+        const auto error = SocketError();
         CNA_CLOSE_SOCKET(listener);
+        QueueOpenError(error, "listener address lookup failed");
         return;
     }
 
 #if defined(_WIN32)
     const WSAEVENT acceptEvent = WSACreateEvent();
-    const WSAEVENT stopEvent = WSACreateEvent();
+    // Preserve the first failing operation's error instead of making another
+    // native call that may overwrite it.
+    const WSAEVENT stopEvent = acceptEvent == WSA_INVALID_EVENT ? WSA_INVALID_EVENT : WSACreateEvent();
     if (acceptEvent == WSA_INVALID_EVENT || stopEvent == WSA_INVALID_EVENT ||
         WSAEventSelect(listener, acceptEvent, FD_ACCEPT) == SOCKET_ERROR) {
+        const auto error = SocketError();
         if (acceptEvent != WSA_INVALID_EVENT) WSACloseEvent(acceptEvent);
         if (stopEvent != WSA_INVALID_EVENT) WSACloseEvent(stopEvent);
         CNA_CLOSE_SOCKET(listener);
+        QueueOpenError(error, "listener event setup failed");
         CNA::Logger::Warn("HttpNotificationChannel: could not create listener events.");
         return;
     }
@@ -353,9 +388,15 @@ void HttpNotificationChannel::BindToShellToast()
 void HttpNotificationChannel::DispatchPendingNotificationsEXT()
 {
     std::vector<std::vector<std::uint8_t>> ready;
+    std::vector<NotificationChannelErrorEventArgs> errors;
     {
         const std::lock_guard<std::mutex> lock(mutex_);
         ready.swap(pending_);
+        errors.swap(pendingErrors_);
+    }
+
+    for (const auto& error : errors) {
+        ErrorOccurred.Raise(nullptr, error);
     }
 
     for (auto& body : ready) {

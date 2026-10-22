@@ -13,6 +13,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Phone/Notification/HttpNotificationEventArgs.hpp"
+#include "Microsoft/Phone/Notification/NotificationChannelErrorEventArgs.hpp"
 #include "Microsoft/Phone/Notification/NotificationChannelUriEventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/Uri.hpp"
@@ -74,6 +75,13 @@ namespace Microsoft::Phone::Notification {
         System::EventHandler<HttpNotificationEventArgs> HttpNotificationReceived;
 
         /**
+         * @brief Raised by DispatchPendingNotificationsEXT when opening the local listener fails.
+         *
+         * The error category is ChannelOpenFailed; no URI is published for a failed open.
+         */
+        System::EventHandler<NotificationChannelErrorEventArgs> ErrorOccurred;
+
+        /**
          * @brief The channel's name.
          *
          * @return The name it was created with.
@@ -102,13 +110,14 @@ namespace Microsoft::Phone::Notification {
          * @brief Starts listening, and raises ChannelUriUpdated with the address.
          *
          * Opening a channel that is already open does nothing.
+         * A socket setup failure queues ErrorOccurred for DispatchPendingNotificationsEXT.
          */
         void Open();
 
         /**
          * @brief Stops listening, cancels an incomplete incoming request and releases the address.
          *
-         * Already queued notifications remain available to DispatchPendingNotificationsEXT.
+         * Already queued notifications and errors remain available to DispatchPendingNotificationsEXT.
          */
         void Close();
 
@@ -123,15 +132,17 @@ namespace Microsoft::Phone::Notification {
         void BindToShellToast();
 
         /**
-         * @brief Raises the events of every notification that has arrived.
+         * @brief Raises queued channel errors and received notification events.
          *
          * Called from the thread that should handle them -- for a game, its own, once per
-         * frame. Nothing is raised anywhere else.
+         * frame. These queued events run on that caller's thread; ChannelUriUpdated is
+         * raised separately by a successful Open.
          */
         CNAEXT void DispatchPendingNotificationsEXT();
 
     private:
         void Listen(std::uintptr_t listener);
+        void QueueOpenError(SharpRuntime::intcs code, const char* operation);
 
         std::string channelName_;
         std::string serviceName_;
@@ -152,6 +163,7 @@ namespace Microsoft::Phone::Notification {
         // Published/closed by the listener under mutex_; Close may only shut it down.
         std::uintptr_t activeConnection_ = InvalidSocket;
         std::vector<std::vector<std::uint8_t>> pending_;
+        std::vector<NotificationChannelErrorEventArgs> pendingErrors_;
     };
 
 } // namespace Microsoft::Phone::Notification

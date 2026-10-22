@@ -15,8 +15,11 @@ if(EMSCRIPTEN)
     # real browser socket shim without dragging a Game/window into this probe.
     add_executable(cna_notification_browser_probe EXCLUDE_FROM_ALL
         "${CNA_SOURCE_DIR}/tools/phone/notification_browser_test.cpp"
-        src/PushNotificationSender.cpp)
+        src/PushNotificationSender.cpp src/HttpNotificationChannel.cpp
+        src/NotificationChannelErrorEventArgs.cpp
+        "${CNA_SOURCE_DIR}/modules/core/src/Logger.cpp")
     target_include_directories(cna_notification_browser_probe PRIVATE include)
+    target_link_libraries(cna_notification_browser_probe PRIVATE cna_core_headers)
     cna_link_sharp_runtime(cna_notification_browser_probe PRIVATE Uri)
     target_link_options(cna_notification_browser_probe PRIVATE
         "-sENVIRONMENT=web" "-sEXIT_RUNTIME=1" "-sASSERTIONS=1")

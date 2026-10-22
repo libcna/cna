@@ -27,7 +27,67 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current checkpoint: sender acknowledgement fixed; channel errors still open
+### Current checkpoint: notification repair validated; museum revalidation pending
+
+Sender repair **3078bb41e6cc50f50ec10caba675e63ebe2a64b0** is published on
+origin/next (remote SHA verified). The companion failed-open repair is in the
+commit containing this checkpoint, based on that revision. Sharp and demos
+revisions remain `1dc8785b35284b5cf50f3aec361703bfaf090b72` and
+`1295899bbaa2d657348a115b831f31b928d2df6c` respectively.
+
+`HttpNotificationChannel` now queues ErrorOccurred/ChannelOpenFailed for failed
+socket creation, bind/listen, address lookup and Windows event setup. It preserves
+the operation's native error across cleanup, publishes no URI on failure, and
+dispatches handlers outside the mutex on the caller thread. Queued errors survive
+Close. Successful Open/ChannelUriUpdated and existing listener ownership remain
+unchanged. The public channel layout changed: rebuild C++ consumers before running.
+
+API names, enum values0..5, read-only property types, private construction, and the
+HRESULT meaning of ErrorCode were verified from the official Windows Phone SDK
+reference assembly/XML. See `tools/phone/REFERENCE.md` for provenance and hashes.
+No SDK installer/service was executed. POSIX uses E_FAIL, Windows uses
+HRESULT_FROM_WIN32; ErrorAdditionalData preserves the native errno/Winsock code.
+
+Validation (2026-10-22, same bounded/private build policy as below):
+
+- Before: all four deterministic failed-open CTests fail, because no public error
+  event exists. After: **24/24 notification CTests PASS**, including descriptor
+  release, preserved diagnostics, caller-thread/reentrant dispatch and successful
+  reopening; existing native **phone18/18 PASS**.
+- Actual Emscripten/Chrome: raw=false, toast=false; exactly one queued open error,
+  no URI/registry entry, correct HRESULT/native diagnostic, no duplicate dispatch,
+  exit0/no uncaught exception. No socket interposition in the browser probe.
+- Demos consumer rebuilt after the class layout change; unchanged local_push
+  **9/9 PASS** for SOFTWARE and OPENGLES3 selections. No assertion/knownIssue change.
+- Native shared runtime builds; actual MinGW channel and event-args translation
+  units compile. Native/Wasm/MinGW configure audits pass; only the existing Draco
+  developer warning remains. Windows runtime and TSan/ASan not rerun in this batch.
+- Diff whitespace and build-performance policy checks pass. Full CNA/demos
+  sweeps were not rerun; focused results do not replace the previous full checkpoint.
+
+Logs: `../cna-demos/build/linux-full/reports/repair-museum-notifications-open-*`:
+red-tests-v1, after-build-v4, after-tests-v1, after-phone-v1,
+browser-after-v1.json, mingw-v1, demo-build-v1, demo-{software,gles}-v1.json,
+shared-build-v1. Earlier build attempts failed on alias qualification and an
+inapplicable EventArgs GetTypeName override; both corrected, not hidden.
+No source outside the phone repair and its build/test/docs files is included.
+Inherited content/audio/occlusion work remains uncommitted and untouched.
+
+The museum owns final revalidation and its inventory; do not edit that repository.
+**Exact next task:** investigate the profile refresh/sign-out finding using
+GamerRequests.cpp, ServiceAsyncResult.hpp and OnlineBackend's slot generation and
+token lifetime. Current inspection shows tokenFor throws *before* issuing a
+request when no token exists (not an unauthenticated request already sent).
+BeginGetProfile checks disposal before scheduling, but captures only the gamertag;
+OnlineBackend::profile later chooses tokenFor({}). Reproduce the queued-work versus
+sign-out ordering deterministically, then establish the correct XNA exception and
+actor ownership before repairing. Existing SystemGuideTests cover a call made
+after sign-out/disposal, not this queued interval. Genuine XNA Gamer.cs confirms
+BeginGetProfile's ObjectDisposedException guard. No gamer-services source was changed.
+All batch processes are terminal. Fresh matrix census:156 IDs,40 without final
+disposition, plus DC-R1/DC-R2. This museum repair does not close those demos IDs.
+
+### Historical sender checkpoint: channel errors still open at that point
 
 Sender repair prepared against CNA `cb377fa04057b061f1daafb45c906e7aa2b31379`,
 Sharp Runtime `1dc8785b35284b5cf50f3aec361703bfaf090b72`, demos

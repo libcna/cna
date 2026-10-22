@@ -154,6 +154,20 @@ if(CNA_BUILD_TESTS)
 
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING
        AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_executable(CnaNotificationOpenFailureTests
+            tools/phone/notification_open_failure_test.cpp
+            modules/phone/src/HttpNotificationChannel.cpp)
+        target_link_libraries(CnaNotificationOpenFailureTests PRIVATE cna_phone)
+        target_link_options(CnaNotificationOpenFailureTests PRIVATE
+            -Wl,--wrap=socket -Wl,--wrap=bind -Wl,--wrap=listen
+            -Wl,--wrap=getsockname -Wl,--wrap=close)
+        foreach(_open_failure socket bind listen name)
+            add_test(NAME CnaNotificationOpenFailure_${_open_failure}
+                COMMAND CnaNotificationOpenFailureTests ${_open_failure})
+            set_tests_properties(CnaNotificationOpenFailure_${_open_failure}
+                PROPERTIES TIMEOUT 10 LABELS "Phone;Notification")
+        endforeach()
+
         add_executable(CnaNotificationSenderTests
             tools/phone/notification_sender_test.cpp
             modules/phone/src/PushNotificationSender.cpp)

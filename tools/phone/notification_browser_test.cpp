@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Phone/Notification/PushNotificationSender.hpp"
+#include "Microsoft/Phone/Notification/HttpNotificationChannel.hpp"
 
 #include <cstdio>
 
@@ -14,5 +15,23 @@ int main()
     const bool rawAccepted = raw.SendAsync(unreachable);
     const bool toastAccepted = toast.SendAsync(unreachable);
     std::printf("NOTIFICATION_BROWSER raw=%d toast=%d\n", rawAccepted, toastAccepted);
-    return rawAccepted || toastAccepted ? 1 : 0;
+    HttpNotificationChannel channel("browser-open-failure", "regression");
+    unsigned errors = 0, uris = 0;
+    bool correctError = true;
+    channel.ChannelUriUpdated += [&](System::Object*, const auto&) { ++uris; };
+    channel.ErrorOccurred += [&](System::Object*, const NotificationChannelErrorEventArgs& args) {
+        ++errors;
+        correctError &= args.getErrorTypeProperty() == ChannelErrorType::ChannelOpenFailed &&
+            args.getErrorCodeProperty() == -2147467259 &&
+            args.getErrorAdditionalDataProperty() != 0 && !args.getMessageProperty().empty();
+    };
+    channel.Open();
+    const bool queued = errors == 0;
+    channel.DispatchPendingNotificationsEXT();
+    channel.DispatchPendingNotificationsEXT();
+    const bool closed = !channel.getChannelUriProperty() &&
+        !HttpNotificationChannel::Find("browser-open-failure");
+    std::printf("NOTIFICATION_OPEN errors=%u uris=%u closed=%d queued=%d correct=%d\n",
+                errors, uris, closed, queued, correctError);
+    return rawAccepted || toastAccepted || errors != 1 || uris || !closed || !queued || !correctError ? 1 : 0;
 }

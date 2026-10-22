@@ -98,7 +98,9 @@ try {
     await new Promise(resolve => server.close(resolve));
 }
 const passed = !error && !exceptions.length && exitCode === 0 &&
-    log.includes('NOTIFICATION_BROWSER raw=0 toast=0') && !log.some(line => line.includes('NOTIFICATION_ABORT'));
+    log.includes('NOTIFICATION_BROWSER raw=0 toast=0') &&
+    log.includes('NOTIFICATION_OPEN errors=1 uris=0 closed=1 queued=1 correct=1') &&
+    !log.some(line => line.includes('NOTIFICATION_ABORT'));
 fs.writeFileSync(report, JSON.stringify({passed, error, exitCode, exceptions, log, profile}, null, 2) + '\n', {flag: 'wx'});
 console.log(JSON.stringify({passed, error, exitCode, report}));
 process.exitCode = passed ? 0 : 1;
