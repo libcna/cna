@@ -43,6 +43,22 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    # The defect is C signed-shift UB, not a wrong result guaranteed on every compiler.
+    # Compile the actual protocol C TU under UBSan in a separate executable so a returning
+    # signed literal fails deterministically and no test seam interposes on CNA's ENet.
+    if(TARGET enet AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+        # CNA's root project is CXX-only; ENet enabled C in its own directory scope.
+        enable_language(C)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            add_executable(CnaENetUnsequencedTests modules/net/tests/enet_unsequenced_window_test.c)
+            target_link_libraries(CnaENetUnsequencedTests PRIVATE enet)
+            target_compile_options(CnaENetUnsequencedTests PRIVATE -fsanitize=undefined -fno-sanitize-recover=undefined)
+            target_link_options(CnaENetUnsequencedTests PRIVATE -fsanitize=undefined)
+            add_test(NAME CnaENetUnsequencedTests COMMAND CnaENetUnsequencedTests)
+            set_tests_properties(CnaENetUnsequencedTests PROPERTIES TIMEOUT 30 LABELS "Net;UBSan")
+        endif()
+    endif()
+
     # Physical module layout: module-owned tests live in modules/<name>/tests (and
     # modules/renderers/<family>/tests), each preserving its former tests/-relative mirror
     # path -- which is why every path-tail filter below keeps matching unchanged. The

@@ -170,11 +170,39 @@ tray harness itself exits0 and all assertions pass. No native Windows/macOS clai
 Reproduce the real integration check from CNA (no live desktop):
 `tools/platform/run_gpu_tests_private.sh --exec dbus-run-session -- /usr/bin/python3 tools/platform/tray_dbus_check.py cmake-build-debug/cna_tray_dbus_harness`.
 
-Next priority: ENet's signed unsequenced-window shifts under UBSan. Draft deterministic
-C fixture `../cna-demos/build-probe/enet_unsequenced_window_test.c` calls the actual
-protocol handler and real queue/receive path, covering every bit, duplicates and window
-rollover. Not compiled/run yet. Promote to a CNA-native test and capture the sanitizer
-failure before the two-literal vendor repair. Then notification/mixer lifetime races.
+Canvas repair commit: `31a3d54b8`, local `next`, not pushed.
+
+MUSEUM-NET-003: FIXED_UBSAN_AND_NATIVE_VALIDATED, awaiting museum revalidation.
+This repair follows `31a3d54b8` on local `next`; its commit contains this checkpoint.
+CNA-native C fixture calls the actual protocol TU and real queue/receive path, covering
+every bit, duplicates, rollover and stale packets. Initial test registration was absent
+because CNA's root project only enabled CXX; enabling C in the test's native Linux scope
+fixed that harness error (no production change). Baseline78874 then reproduced UBSan
+`protocol.c:492:53: left shift of 1 by 31 places cannot be represented in type int`.
+Both literals changed to1u; after29501 passes26630 checks, build921ms/test566ms,
+peak157011968/events0/no source drift. Narrow vendor change documented in
+`third_party/enet/CNA_PATCHES.md`. First full-net driver had a JavaScript syntax error
+and never built or ran tests; fixed and syntax-checked before relaunch.
+Full regression completed in scope `cna-museum-enet-net-after-v2`, session89881, driver demos
+`build-probe/repair-museum-enet-net.mjs net-after`: existing debug build/net harness,
+UBSan CTest and full native network suite, one worker/6GiB/private GPU/private network,
+owner UID and zero capabilities. Build2679ms, UBSan CTest494ms, full net46462ms:547/547PASS,
+exact case-by-case parity with the preceding welcome repair. Peak1505333248/events0,
+no source drift or build diagnostics. Reports `repair-museum-enet-*` in demos.
+No heavy job remains. No museum net_check run, full CNA aggregate, other platform or
+extra renderer run claimed for this transport-only, wire-format-preserving repair.
+
+Next independent work: notification/mixer lifetime races; browser ErrorOccurred API.
+Current HttpNotificationChannel source and tests read. Close writes listenSocket_ while
+Listen reads it, and closes the fd before join; accepted connections are not shut down,
+so a partial request can strand Close in join. Reads can also deliver truncated bodies,
+contrary to the source's own stated contract. Need deterministic cancellation tests and
+actual-TU TSan reproduction before repair. Do not infer a thread-safe public Open/Close
+contract: Microsoft's instance methods are not guaranteed thread-safe, but the class
+must synchronize its own listener. Browser ErrorOccurred is a separate public contract
+repair; Microsoft Learn names the enum **ChannelErrorType**, not the museum's suggested
+NotificationChannelErrorType. Reference:
+https://learn.microsoft.com/en-us/previous-versions/ff707848(v=vs.110) .
 
 Resource discipline: one heavy job and one compiler worker, shared ccache
 `/rv/cnaccache` with base `/rv`, existing `cmake-build-debug`, MemoryHigh 4 GiB,
