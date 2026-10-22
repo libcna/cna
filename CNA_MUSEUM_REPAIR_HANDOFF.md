@@ -27,7 +27,101 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: GLES float readback repair validating (2026-10-23)
+### Current checkpoint: avatar load lifetime repair validated (2026-10-23)
+
+GLES float readback repair below is committed and published as
+`53292f1472e2681ce9f75e4fe53168ba928a000c`. The current investigation is museum B3,
+the single heap-corruption crash reported at a6f9e9b2e. A definite AvatarLoad mutex
+lifetime defect was reproduced and the narrow repair is validated below;
+its relationship to that historical crash is not established. Museum source remains
+clean at ce761beaa9189a68fa23f241acca80da6668675b;
+its source, pin and cna-next worktree are not changed.
+
+Persistent CNA-owned consumer tree `cmake-build-museum-asan` configured successfully
+from read-only `../museum-simulator`, with CNA_ROOT_DIR pointing to this CNA tree.
+It retains the original build-probe's seven renderers (default OPENGLES3), shared
+CNA, coverage, C API, networking, inspector, pipeline and automatic video support.
+Debug/address,undefined/O0 instruments the museum, CNA and Sharp Runtime: verified
+in compile_commands.json for AvatarLab, Main, AvatarRenderer, EasyGLRenderer and
+Uri. Vendored prebuilt SDL and system Mesa are not instrumented; do not call this
+whole-process coverage. Shared SDL and WebGPU packages are reused.
+
+Configure process13727 and build process74215 completed0. The build used
+scope `cna-museum-asan-build`, one compiler, MemoryHigh4G/MemoryMax6G/no swap, shared
+CCACHE_DIR=/rv/cnaccache and CCACHE_BASEDIR=/rv. Logs are in demos build/linux-full/reports/
+`repair-museum-avatar-asan-{configure,build}-v1.log`. Repaired AvatarRenderer compiled
+at step764. Native test/shared-library rebuild52458 also completed0 (six steps).
+Inherited content/audio/occlusion edits remain present and must not be staged.
+
+Source audit identified a definite lifetime defect in AvatarRenderer::Poll:
+resources_->load.reset() can free the AvatarLoad while lock_guard still owns its
+mutex. A cached model completes synchronously, so no worker reference prevents
+this. Existing native test ALoadCompletingInsideDrawWaitsUntilTheCallerCanUpdateItsAnimation
+confirmed it under gdb: __libc_free of the shared allocation precedes
+pthread_mutex_unlock from Poll's lock_guard destructor. Diagnostic10119 exited1,
+log `repair-museum-avatar-mutex-before-v1.log` contains the exact stack. This is
+concrete CNA UAF evidence, not proof of the historical Mesa crash's cause.
+New debugger-only tools/graphics/avatar_load_lifetime.gdb observes actual free and
+unlock calls on Linux x86-64/libstdc++; a new cached-completion native regression
+is prepared. Refined observer v2 also fails with the same free-before-unlock stack
+(process33931 terminal1); it restricts unlocks to the Poll thread and drops the
+watched address after unlock, avoiding unrelated worker unlocks/address reuse.
+The native pre-repair binary is the red baseline; the rare full museum crash has
+not been reproduced. Poll now scopes the lock before resetting its owning result.
+This source had not yet compiled in build74215 when edited, so that consumer build
+will contain the candidate fix. It is not a full museum before/after comparison.
+At that checkpoint no native rebuild or post-repair runtime check had run;
+completed validation is recorded below.
+
+Pre-repair full native GamerServices baseline completed:709 tests from88 suites,
+708PASS/1 unchanged declaredSKIP, no failures,79.049s. Private OPENGLES3 run17335;
+`repair-museum-avatar-native-before-v1.{log,xml}`. The pending new test is not in
+that old binary. Existing external C++ render/custom_animation and C avatar_renderer
+baselines completed on SOFTWARE/OPENGLES3 before rebuilding demos: render9/9,
+custom_animation3/3, C avatar_renderer41/41 each (C outer JSON reports0 checks;
+child log carries41). Six results are PASSED with empty knownIssue; process28914
+terminal0. Logs/JSON: `repair-museum-avatar-demo-*-before-v1.*`.
+
+Instrumented museum runtime53653 completed0: exact script
+`goto:gs-avatar;wait:20;pressall;wait:4;stats;quit`, OPENGLES3 on a private display,
+SDL dummy audio, --no-save, ASan/UBSan halt-on-error and leak detection enabled.
+No sanitizer report; frame27,27610 triangles,45 textures,zero exhibit/script errors.
+Log `repair-museum-avatar-asan-runtime-v1.log`. ldd verifies this uses the new
+instrumented CNA/C API libraries and libasan/libubsan, not a different build.
+SDL/Mesa remain uninstrumented. This one clean run is not proof that the historical
+intermittent crash is eliminated; its actual cause remains unconfirmed.
+
+New native cached-completion regression under debugger99211 passed,232 matching
+unlocks before allocation release (`repair-museum-avatar-mutex-after-v1.log`).
+The exact pre-repair existing test also passed after repair: observer9312 terminal0,
+286 matching unlocks (`repair-museum-avatar-mutex-after-original-v1.log`), a direct
+red-to-green comparison. Full native suite78530 completed0:710 tests,709PASS and
+the identical one declaredSKIP. XML comparison preserves every original709 result,
+no removed/changed outcomes, only the new regression PASS;79.507s. Demos rebuild56611
+completed0. Native SOFTWARE avatar subset passed33/34 with the same one declared
+skip. All six external after-cases passed (process18368 terminal0): render9/9,
+custom_animation3/3,C avatar_renderer41/41 on both renderers. Exact JSON comparison,
+excluding only elapsed seconds, preserves all six outcomes/check counts/knownIssue
+fields. MinGW implementation and test translation units also compile (33091 exit0,
+`repair-museum-avatar-mingw-compile-v1.log`); no Windows runtime claim.
+
+All owned build/test processes are terminal. Build-policy and diff checks pass.
+This coherent repair contains only AvatarRenderer.cpp, AvatarRendererTests.cpp,
+the debugger observer/README and this handoff. Its base is53292f147; the repair SHA
+is the commit containing this entry. Inherited content/audio/occlusion edits are
+preserved, not part of the commit. Museum source/pin remains unchanged. No full
+CNA corpus, TSan, browser or physical-platform validation is claimed for this batch.
+The156-ID demos census remains40 without final disposition: this separate avatar
+lifetime repair does not silently close any historical demo issue.
+
+**Exact next task:** reproduce museum B8's HiDef vertex texture fetch on WEBGPU
+and SDL_GPU, inspect format support and compiled-effect stage bindings, and repair
+the actual missing behavior with pixel regressions. Do not weaken the museum's
+vertex-sampler checks or silently downgrade its HiDef request. Keep B3's historical
+rare crash unconfirmed unless its actual failure is reproduced; send the owner this
+separate lifetime repair for museum revalidation.
+
+### Previous checkpoint: GLES float readback repair validated (2026-10-23)
 
 Candidate now adds one GLES-only branch in EasyGLRenderer.cpp: RGBA/FLOAT transfer
 for half or reduced-channel float targets, then existing HalfTypeHelper packing/
@@ -645,8 +739,10 @@ Re-intake disposition (engineering queue, not museum closure):
 - B1 PBR and B9 volume layout: fixed SHAs/revalidation above.
 - B2 failed DirectX Reset: repaired and focused/regression validated above;
   museum reproducer and native Windows verification remain external.
-- B3 intermittent gs-avatar corruption: retain evidence, no reproduced cause yet;
-  requires targeted ASan run, not speculation from a Mesa malloc frame.
+- B3 intermittent gs-avatar corruption: exact script now passes in the targeted
+  ASan/UBSan/LSan consumer build, but no reproduced historical cause. A separate
+  definite AvatarLoad mutex UAF was reproduced, repaired and validated in the
+  current checkpoint. Do not equate that repair with proof of the old crash's cause.
 - B4 phone failure event/send completion: repaired in3078bb41e/3c61c30ef above;
   museum revalidation pending. B6 sign-out profile errors:3cd6028b7 plus the
   two-account repair in the current checkpoint; museum revalidation pending.

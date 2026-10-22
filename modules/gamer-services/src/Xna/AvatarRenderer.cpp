@@ -309,12 +309,16 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             return;
         }
-        std::lock_guard guard(resources_->load->lock);
-        if (!resources_->load->done)
         {
-            return;
+            std::lock_guard guard(resources_->load->lock);
+            if (!resources_->load->done)
+            {
+                return;
+            }
+            resources_->model = resources_->load->model;
         }
-        resources_->model = resources_->load->model;
+        // A cache hit has no worker holding another reference. Unlock before
+        // releasing the result that owns the mutex.
         resources_->load.reset();
         if (!resources_->model)
         {

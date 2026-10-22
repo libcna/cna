@@ -185,6 +185,28 @@ TEST(AvatarRendererTest, DrawingNeedsInitializedGamerServices) {
     EXPECT_THROW(renderer.Draw(&animation), System::InvalidOperationException);
 }
 
+TEST(AvatarRendererTest, CachedCompletionReleasesItsLoadOnlyAfterUnlocking) {
+    auto description = Describe(AvatarBodyType::Female, 1730);
+    AvatarRenderer cachePrimer(&description, false);
+    ASSERT_EQ(WaitUntilLoaded(cachePrimer), AvatarRendererState::Ready);
+
+    // The live primer retains the cached model. This renderer therefore owns its
+    // completed AvatarLoad alone: no worker can accidentally extend its lifetime.
+    // tools/graphics/avatar_load_lifetime.gdb checks the actual free/unlock order
+    // on this path, including the unlock in the platform's uninstrumented libc.
+    AvatarRenderer renderer(&description, false);
+    ASSERT_EQ(renderer.getStateProperty(), AvatarRendererState::Ready);
+    const auto actual = renderer.getBindPoseProperty();
+    const auto expected = cachePrimer.getBindPoseProperty();
+    ASSERT_EQ(actual.getCountProperty(), AvatarRenderer::BoneCount);
+    for (int bone = 0; bone < AvatarRenderer::BoneCount; ++bone) {
+        EXPECT_EQ(static_cast<Matrix>(actual[bone]), static_cast<Matrix>(expected[bone]));
+    }
+    cachePrimer.Dispose();
+    EXPECT_EQ(renderer.getStateProperty(), AvatarRendererState::Ready);
+    EXPECT_EQ(renderer.getBindPoseProperty().getCountProperty(), AvatarRenderer::BoneCount);
+}
+
 TEST(AvatarRendererTest, DrawsEveryPresetAndExpressionOnTheDispatcherDevice) {
     GraphicsDevice device;
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
