@@ -100,7 +100,16 @@ function(cna_define_shared_runtime umbrella)
             "link-feature deduplication. Configure with -DCNA_SHARED_LIBRARY=OFF or upgrade CMake.")
     endif()
     set(_parts ${ARGN})
-    _cna_shared_walk(_whole _external _options ${_parts})
+    set(_runtime_parts ${_parts})
+    if(TARGET cna_c_api)
+        # C exposes these optional modules too. Their singleton state must live
+        # in the same DSO as that used by mixed C/C++ consumers.
+        list(APPEND _runtime_parts CNA_Net CNA_GamerServices)
+    endif()
+    _cna_shared_walk(_whole _runtime_external _options ${_runtime_parts})
+    # The DSO receives the optional modules' private link dependencies through
+    # their own targets; those are not new public umbrella usage requirements.
+    _cna_shared_walk(_umbrella_whole _external _umbrella_options ${_parts})
     if(NOT _whole)
         message(FATAL_ERROR "CNA_SHARED_LIBRARY: found no CNA-owned static library under ${CNA_SHARED_MODULES_ROOT}")
     endif()
@@ -115,6 +124,14 @@ function(cna_define_shared_runtime umbrella)
     add_library(cna_shared SHARED "${_stub}")
     add_library(CNA::Shared ALIAS cna_shared)
     set_target_properties(cna_shared PROPERTIES OUTPUT_NAME cna LINKER_LANGUAGE CXX)
+    if(TARGET cna_c_api)
+        # RUNPATH is not transitive: both DSOs must find the packaged SDL/wgpu
+        # dependencies beside themselves after installation or relocation.
+        include(GNUInstallDirs)
+        set_target_properties(cna_shared PROPERTIES INSTALL_RPATH "$ORIGIN")
+        install(TARGETS cna_shared
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT CNACApi)
+    endif()
 
     list(JOIN _whole "," _whole_csv)
     target_link_libraries(cna_shared PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,${_whole_csv}>")
@@ -153,7 +170,10 @@ function(cna_define_shared_runtime umbrella)
         ${_whole})
 
     target_link_libraries(${umbrella} INTERFACE cna_shared)
-    foreach(_part IN LISTS _parts)
+    foreach(_part IN LISTS _runtime_parts)
+        # DIRECT_EXCLUDE also removes compile requirements of explicitly linked
+        # module targets. Restore those through the umbrella, including optional
+        # modules folded into the DSO for the C adapter.
         target_link_libraries(${umbrella} INTERFACE "$<COMPILE_ONLY:${_part}>")
     endforeach()
     if(_external)

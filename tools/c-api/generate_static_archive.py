@@ -87,7 +87,8 @@ def link_line_tokens(module_dir: Path, build_dir: Path,
 
 
 def read_link_line(module_dir: Path, build_dir: Path,
-                   target: str = "cna_c_api") -> tuple[list[str], list[str], list[str]]:
+                   target: str = "cna_c_api", *,
+                   require_archives: bool = True) -> tuple[list[str], list[str], list[str]]:
     """Split CMake's own link line into objects, archives and external libraries."""
     tokens, working = link_line_tokens(module_dir, build_dir, target)
     objects: list[str] = []
@@ -133,9 +134,30 @@ def read_link_line(module_dir: Path, build_dir: Path,
             library = Path(token).name.removeprefix("lib").removesuffix(".tbd")
             if f"-l{library}" not in external:
                 external.append(f"-l{library}")
-    if not objects or not archives:
+    if not objects or (require_archives and not archives):
         raise SystemExit("the link line yielded no objects or no archives; its format changed")
     return objects, archives, external
+
+
+def read_static_closure(module_dir: Path, build_dir: Path,
+                        runtime_library: Path | None = None,
+                        runtime_dir: Path | None = None) -> tuple[list[str], list[str], list[str]]:
+    """Expand the shared CNA runtime for a self-contained, localized C archive."""
+    if (runtime_library is None) != (runtime_dir is None):
+        raise SystemExit("shared runtime library and binary directory must be supplied together")
+    objects, archives, external = read_link_line(
+        module_dir, build_dir, require_archives=runtime_library is None)
+    if runtime_library is None:
+        return objects, archives, external
+    runtime = str(runtime_library.resolve())
+    if runtime not in external:
+        raise SystemExit(f"the C API link line does not contain the shared runtime: {runtime}")
+    runtime_objects, runtime_archives, runtime_external = read_link_line(
+        runtime_dir, build_dir, "cna_shared")
+    # Keep order, but do not whole-archive Sharp Runtime or a cyclic module twice.
+    return (list(dict.fromkeys(objects + runtime_objects)),
+            list(dict.fromkeys(archives + runtime_archives)),
+            list(dict.fromkeys([item for item in external if item != runtime] + runtime_external)))
 
 
 def link_architecture(module_dir: Path, build_dir: Path, target: str = "cna_c_api") -> str | None:
@@ -325,6 +347,10 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="the static archive to produce")
     parser.add_argument("--targets-file", help="a CMake file describing how to consume it")
     parser.add_argument("--work-dir", help="where the intermediate object goes")
+    parser.add_argument("--shared-runtime-library", type=Path,
+                        help="expand this CNA shared runtime into the standalone ELF archive")
+    parser.add_argument("--shared-runtime-binary-dir", type=Path,
+                        help="directory containing the cna_shared target's link command")
     parser.add_argument(
         "--merge-from",
         help="Emscripten: merge the archives on this target's link line instead of partially "
@@ -339,6 +365,9 @@ def main() -> int:
         help="a library on the link line that the package installs beside the C API, so the "
              "static interface names the installed copy (repeatable; SDL3 is recognized by name)")
     arguments = parser.parse_args()
+    if (arguments.shared_runtime_library or arguments.shared_runtime_binary_dir) and (
+            arguments.merge_from or arguments.object_format != "elf"):
+        parser.error("shared runtime expansion is supported only for the native ELF archive")
     shipped = {Path(library).name for library in arguments.shipped_library}
 
     build_dir = Path(arguments.build_dir).resolve()
@@ -382,7 +411,9 @@ def main() -> int:
         return 0
 
     linker, objcopy, archiver, nm = (require(tool) for tool in ("ld", "objcopy", "ar", "nm"))
-    objects, archives, external = read_link_line(module_dir, build_dir)
+    objects, archives, external = read_static_closure(
+        module_dir, build_dir, arguments.shared_runtime_library,
+        arguments.shared_runtime_binary_dir)
 
     combined = work / "cna_c_api_combined.o"
     run([linker, "-r", "--whole-archive", *archives, "--no-whole-archive", *objects,

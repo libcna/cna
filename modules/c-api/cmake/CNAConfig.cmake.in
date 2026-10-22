@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: MS-PL
 #
-# The package a C consumer finds. There is exactly one target in it, CNA::CApi, because that is the
-# whole of what this project promises to anybody outside it: a C ABI in one shared library, with
-# every canonical C++ module linked privately behind hidden visibility and a version script.
+# The package a C consumer finds: CNA::CApi and, where built, CNA::CApiStatic.
+# The adapter exports only the C ABI. With CNA_SHARED_LIBRARY enabled it uses the
+# packaged shared C++ runtime; otherwise its implementation is linked privately.
+# The standalone static archive encapsulates its implementation in either mode.
 #
 # The package version is the **C ABI** version, not the CNA project's, which is what makes
 # `find_package(CNA 0.1 CONFIG)` mean what a consumer expects it to mean.

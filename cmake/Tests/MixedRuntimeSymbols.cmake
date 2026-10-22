@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: MS-PL
-execute_process(COMMAND "${CNA_NM}" -C -g --defined-only "${CNA_PROBE}"
+# Mold can localize every definition in a small executable whose framework
+# calls are all satisfied by the DSO. Inspect local symbols too: an empty
+# global-only table is valid, and a hidden duplicate must not evade this audit.
+execute_process(COMMAND "${CNA_NM}" -C --defined-only "${CNA_PROBE}"
     RESULT_VARIABLE _result OUTPUT_VARIABLE _symbols ERROR_VARIABLE _error)
 if(NOT _result EQUAL 0 OR _symbols STREQUAL "")
     message(FATAL_ERROR "Cannot inspect mixed-runtime consumer: ${_result}: ${_error}")
 endif()
-string(REGEX MATCHALL "[0-9a-fA-F]+ T Microsoft::Xna::Framework::Graphics::[^\n]+"
+string(REGEX MATCHALL "[0-9a-fA-F]+ [Tt] Microsoft::Xna::Framework::Graphics::[^\n]+"
     _duplicates "${_symbols}")
 list(LENGTH _duplicates _count)
 if(_count)
@@ -12,7 +15,7 @@ if(_count)
 endif()
 message(STATUS "Mixed-runtime consumer defines zero strong Graphics symbols")
 if(CNA_CHECK_ENGINE)
-    string(REGEX MATCHALL "[0-9a-fA-F]+ T Microsoft::Xna::Framework::(Input::|Vector3::)[^\n]+"
+    string(REGEX MATCHALL "[0-9a-fA-F]+ [Tt] Microsoft::Xna::Framework::(Input::|Vector3::)[^\n]+"
         _engine_duplicates "${_symbols}")
     if(_engine_duplicates)
         message(FATAL_ERROR "Module consumer duplicates Input/Math runtime definitions: ${_engine_duplicates}")

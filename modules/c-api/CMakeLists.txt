@@ -336,7 +336,13 @@ target_include_directories(cna_c_api
 # cna_platform joined the closure with the platform-separation merge: the exception barrier
 # catches CNA::Platform::PlatformException so a platform refusal reaches a caller as
 # CNA_RESULT_PLATFORM instead of falling through to CNA_RESULT_INTERNAL.
-target_link_libraries(cna_c_api PRIVATE cna_core cna_platform cna_runtime cna_graphics_ext cna_storage cna_content cna_media cna_devices cna_devices_ext CNA_Net CNA_GamerServices)
+if(CNA_SHARED_LIBRARY)
+    # The C adapter must use the same process-wide state as C++ consumers. Hidden
+    # component archives here would create a second runtime inside libcna_c_api.so.
+    target_link_libraries(cna_c_api PRIVATE CNA)
+else()
+    target_link_libraries(cna_c_api PRIVATE cna_core cna_platform cna_runtime cna_graphics_ext cna_storage cna_content cna_media cna_devices cna_devices_ext CNA_Net CNA_GamerServices)
+endif()
 
 # Every rule below names the same component, so `cmake --install . --component CNACApi` stages the
 # C ABI and nothing else. Without it the smallest possible install is the whole project -- 113 MB of
@@ -350,8 +356,8 @@ target_link_libraries(cna_c_api PRIVATE cna_core cna_platform cna_runtime cna_gr
 # the ABI, and FAILS if any non-cna_* symbol of any binding other than STB_GNU_UNIQUE survives --
 # so the archive exports the same names the shared library exports, or it is not produced at all.
 #
-# It reads the link line CMake already computed for cna_c_api, which is why it cannot drift from the
-# set of objects and archives that actually produce the working .so.
+# It reads the link lines CMake computed for cna_c_api and, in shared-runtime mode, cna_shared,
+# so it cannot drift from the objects and archives that actually produce the working DSOs.
 #
 # The wgpu-native runtime ships in the package whenever the WEBGPU renderer is compiled in (the
 # install rule is beside SDL's, below). It is decided here because the static interface needs it
@@ -386,6 +392,14 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL 
     else()
         set(_cna_c_api_static_mode)
         set(_cna_c_api_static_input cna_c_api)
+        if(CNA_SHARED_LIBRARY)
+            # The standalone archive still embeds CNA; expand the shared runtime's
+            # actual link closure rather than exporting a build-tree DSO path.
+            list(APPEND _cna_c_api_static_mode
+                --shared-runtime-library "$<TARGET_FILE:cna_shared>"
+                --shared-runtime-binary-dir "$<TARGET_PROPERTY:cna_shared,BINARY_DIR>")
+            list(APPEND _cna_c_api_static_input cna_shared)
+        endif()
     endif()
     # Libraries on the link line that the package carries itself, so CNA::CApiStatic names the
     # installed copy rather than the build machine's.
@@ -436,7 +450,7 @@ install(DIRECTORY include/
 
 # CBIND-045: the package carries the native libraries CNA itself builds.
 #
-# libcna_c_api.so records DT_NEEDED entries for SDL3 and SDL3_mixer, which this project
+# The C ABI's runtime closure records DT_NEEDED entries for SDL3 and SDL3_mixer, which this project
 # builds from third_party/ into CNA_SDL_PREBUILT_ROOT. Shipping them in the same directory, with the
 # library's INSTALL_RPATH of $ORIGIN, is what makes the installed package load with no environment
 # variable and link with no -rpath-link: the loader looks beside the library and finds them.
@@ -576,6 +590,37 @@ install(FILES
 )
 
 if(CNA_BUILD_TESTS)
+    if(CNA_SHARED_LIBRARY)
+        foreach(_order IN ITEMS CFirst CppFirst)
+            add_executable(CApi_SharedRuntime${_order}
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/modules/mixed_runtime_c_api.cpp")
+            if(_order STREQUAL "CFirst")
+                target_link_libraries(CApi_SharedRuntime${_order} PRIVATE cna_c_api CNA)
+            else()
+                target_link_libraries(CApi_SharedRuntime${_order} PRIVATE CNA cna_c_api)
+            endif()
+            cna_c_api_enable_strict_warnings(CApi_SharedRuntime${_order})
+            add_test(NAME CApi_SharedRuntime${_order} COMMAND CApi_SharedRuntime${_order})
+            set_tests_properties(CApi_SharedRuntime${_order} PROPERTIES
+                TIMEOUT 30 LABELS "configuration;shared-runtime")
+        endforeach()
+        if(CMAKE_NM AND CMAKE_READELF)
+            add_test(NAME CApi_SharedRuntimeSymbols
+                COMMAND ${CMAKE_COMMAND}
+                    -DCNA_NM=${CMAKE_NM}
+                    -DCNA_READELF=${CMAKE_READELF}
+                    -DCNA_C_API_LIBRARY=$<TARGET_FILE:cna_c_api>
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckSharedRuntime.cmake)
+            set_tests_properties(CApi_SharedRuntimeSymbols PROPERTIES
+                TIMEOUT 30 LABELS "configuration;shared-runtime")
+        endif()
+    endif()
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CApi_StaticArchiveClosure
+            COMMAND Python3::Interpreter -B "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/test_static_archive.py")
+        set_tests_properties(CApi_StaticArchiveClosure PROPERTIES
+            TIMEOUT 30 LABELS "configuration;packaging")
+    endif()
     find_package(Threads REQUIRED)
 
     if(UNIX AND NOT APPLE)
@@ -2190,7 +2235,7 @@ if(CNA_BUILD_TESTS)
     if(_cna_consumer_platform)
         add_test(NAME CApi_InstalledConsumer
             COMMAND ${CMAKE_COMMAND}
-                -DCNA_BUILD_DIR=${CMAKE_BINARY_DIR}
+                -DCNA_BUILD_DIR=${CNA_BINARY_DIR}
                 -DCNA_EXAMPLE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/examples/c
                 -DCNA_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/installed-consumer
                 -DCNA_C_COMPILER=${CMAKE_C_COMPILER}
@@ -2202,6 +2247,9 @@ if(CNA_BUILD_TESTS)
                 "-DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}"
                 -DCNA_SANITIZE=${CNA_SANITIZE}
                 -DCNA_EXPECT_STATIC=$<BOOL:${_cna_consumer_expect_static}>
+                -DCNA_EXPECT_SHARED_RUNTIME=$<BOOL:${CNA_SHARED_LIBRARY}>
+                -DCNA_READELF=${CMAKE_READELF}
+                -DCNA_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}
                 "-DCNA_STATIC_SKIP_REASON=${_cna_consumer_static_reason}"
                 -DCNA_CONSUMER_PLATFORM=${_cna_consumer_platform}
                 -DCNA_CONSUMER_VIDEODRIVER=${_cna_consumer_videodriver}

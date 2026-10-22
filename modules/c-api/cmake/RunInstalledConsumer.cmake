@@ -41,6 +41,29 @@ endfunction()
 cna_run_step("Installing the CNACApi component"
     ${CMAKE_COMMAND} --install "${CNA_BUILD_DIR}" --component CNACApi --prefix "${_stage}")
 
+if(CNA_EXPECT_SHARED_RUNTIME)
+    if(NOT CNA_READELF OR NOT CNA_INSTALL_LIBDIR)
+        message(FATAL_ERROR "Shared runtime inspection requires readelf and the install libdir")
+    endif()
+    foreach(_library IN ITEMS libcna_c_api.so libcna.so)
+        cna_run_step("Inspecting installed ${_library}"
+            "${CNA_READELF}" -d "${_stage}/${CNA_INSTALL_LIBDIR}/${_library}")
+        if(NOT cna_last_output MATCHES "\\[(\\$ORIGIN)\\]")
+            message(FATAL_ERROR "${_library} has no standalone $ORIGIN runtime search path")
+        endif()
+        if(_library STREQUAL "libcna_c_api.so" AND
+           NOT cna_last_output MATCHES "Shared library: \\[libcna\\.so\\]")
+            message(FATAL_ERROR "The installed C adapter does not use the shared CNA runtime")
+        endif()
+    endforeach()
+    if(CNA_EXPECT_STATIC)
+        file(READ "${_stage}/${CNA_INSTALL_LIBDIR}/cmake/CNA/CNACStaticTargets.cmake" _static_targets)
+        if(_static_targets MATCHES "libcna\\.so")
+            message(FATAL_ERROR "The standalone static C archive unexpectedly depends on libcna.so")
+        endif()
+    endif()
+endif()
+
 # The consumer is configured with CMAKE_PREFIX_PATH and nothing else pointing at CNA. If
 # find_package(CNA CONFIG) needed a source path, that would be the defect this test exists to find.
 set(_configure_arguments
