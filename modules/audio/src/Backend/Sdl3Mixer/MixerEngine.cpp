@@ -556,10 +556,15 @@ namespace CNA::Internal::Audio
     {
         TrackContext* context = GetTrackContext(Native(track));
         if (!context) return;
+        // SDL's setter locks the track, but the cooked callback runs under the
+        // mixer lock after the track's stream pull. Publish both fields there.
+        MIX_Mixer* mixer = MIX_GetTrackMixer(Native(track));
+        MIX_LockMixer(mixer);
         context->mixCallback = callback;
         context->mixUserdata = userdata;
         (void)MIX_SetTrackCookedCallback(Native(track), callback ? MixCallback : nullptr,
                                          callback ? context : nullptr);
+        MIX_UnlockMixer(mixer);
     }
 
     void SetMixerTrackStoppedCallback(MixerTrack* track,
@@ -568,10 +573,13 @@ namespace CNA::Internal::Audio
     {
         TrackContext* context = GetTrackContext(Native(track));
         if (!context) return;
+        MIX_Mixer* mixer = MIX_GetTrackMixer(Native(track));
+        MIX_LockMixer(mixer);
         context->stoppedCallback = callback;
         context->stoppedUserdata = userdata;
         (void)MIX_SetTrackStoppedCallback(Native(track), callback ? StoppedCallback : nullptr,
                                           callback ? context : nullptr);
+        MIX_UnlockMixer(mixer);
     }
 
     bool PlayMixerTrack(MixerTrack* track, const MixerPlayOptions& options) noexcept
@@ -605,7 +613,14 @@ namespace CNA::Internal::Audio
 
     void StopMixerTrack(MixerTrack* track) noexcept
     {
-        if (track) (void)MIX_StopTrack(Native(track), 0);
+        if (!track) return;
+        // Explicit Stop fires the same callback as mixer-thread exhaustion. Keep
+        // its callback tuple protected too, in mixer -> track lock order. The
+        // recursive mixer lock also allows callback-side callback replacement.
+        MIX_Mixer* mixer = MIX_GetTrackMixer(Native(track));
+        MIX_LockMixer(mixer);
+        (void)MIX_StopTrack(Native(track), 0);
+        MIX_UnlockMixer(mixer);
     }
 
     void PauseMixerTrack(MixerTrack* track) noexcept

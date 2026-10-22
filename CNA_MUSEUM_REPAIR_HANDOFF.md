@@ -19,6 +19,39 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+Phone repair committed as `20fe6efd26661ef1f19651d4c1eeeeac30ae8cee`, local next,
+not pushed. Completed batch **MUSEUM-AUDIO-001 FIXED_NATIVE_TSAN_VALIDATED**,
+callback publication in the SDL3
+mixer adapter. Pending-pan static teardown remains a separate open root cause.
+Baseline fixture calls actual adapter TU and real SDL: while mixer is locked,
+control updates prematurely replace callback/userdata; deterministic mix and stopped
+checks both fail (first0/second2). First TSan attempt caught a test-fixture lock-order
+mistake (resource creation while holding mixer); moved setup outside the lock.
+Before-v3 real audio-thread stress then reproduces the museum's exact data race,
+MixCallback:245 read vs SetMixerTrackMixCallback:559 write, exit66. No suppression.
+Fix publishes both tuples under the owning native mixer lock and makes explicit
+Stop follow mixer->track order, preserving callback-side replacement without inversion.
+Permanent fixture `tools/audio/mixer_callback_publication_test.cpp`, four CTests:
+mix, stopped, fixed-workload real audio stress, reentrant stopped-callback replacement.
+Final76516: all four PASS plain and TSan, peak346636288/events0/no drift.
+Native20876: build13767ms, four CTests PASS2465ms, full audio8692ms/media12245ms,
+MinGW actual adapter compile1131ms. Peak1170313216/events0/no drift. Existing
+audio outcomes775=771PASS/4unchangedSKIP and media355/355PASS match the previous
+full native checkpoint exactly, case by case.
+Five platform boundary gates PASS. No native Windows/macOS audio runtime claim;
+real SDL audio thread uses dummy output, not a physical speaker/listening check.
+Consumer job90674 completed successfully, scope `cna-museum-mixer-external-final`,
+driver demos `build-probe/repair-museum-mixer-external.mjs final`:11 demos on SOFTWARE
+and GLES before/after rebuild, including standalone C sound-effect client. All44
+executions PASS with identical status/check count/knownIssue outcomes; no assertion
+or source drift. Rebuild59025ms, peak4109045760 bytes/events0. Reports
+`repair-museum-mixer-external-final-*`. No full CNA aggregate or museum runtime
+claim. Preserve inherited audio ownership changes in SoundEffect.cpp. No push.
+No heavy job remains. Next: reproduce process-exit device/callback shutdown ordering
+behind the pending-pan static teardown race, using the existing CnaMixer exit hook
+as design evidence; do not just add a lock to a destructor while callbacks can
+still enqueue after that destructor returns.
+
 Latest checkpoint: **MUSEUM-PHONE-001 FIXED_LINUX_TSAN_AND_WINE_VALIDATED**.
 Repair follows5b6aab981 on local next; its commit contains this checkpoint.
 Native Windows/macOS and museum repro validation remain unclaimed. The

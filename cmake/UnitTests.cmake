@@ -43,6 +43,27 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    # The SDL mixer adapter's callback tuple must be published under the same
+    # mixer lock as invocation. Observe its native boundaries, retaining real SDL.
+    if(CNA_AUDIO_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+       AND NOT CMAKE_CROSSCOMPILING AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_executable(CnaMixerCallbackPublicationTests
+            tools/audio/mixer_callback_publication_test.cpp
+            modules/audio/src/Backend/Sdl3Mixer/MixerEngine.cpp)
+        target_link_libraries(CnaMixerCallbackPublicationTests PRIVATE
+            cna_audio SDL3::SDL3 SDL3_mixer::SDL3_mixer)
+        target_link_options(CnaMixerCallbackPublicationTests PRIVATE
+            -Wl,--wrap=MIX_LockMixer -Wl,--wrap=MIX_SetTrackCookedCallback
+            -Wl,--wrap=MIX_SetTrackStoppedCallback)
+        foreach(_mixer_callback_case mix stopped stress reentrant)
+            add_test(NAME CnaMixerCallbackPublication_${_mixer_callback_case}
+                COMMAND CnaMixerCallbackPublicationTests --${_mixer_callback_case})
+            set_tests_properties(CnaMixerCallbackPublication_${_mixer_callback_case}
+                PROPERTIES TIMEOUT 30 LABELS "Audio;Concurrency"
+                ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+        endforeach()
+    endif()
+
     # Observe real recv/event-wait entry without replacing the listener/parser. Keep
     # import wrappers in their own executable; CNA_SANITIZE=thread instruments it too.
     # The Winsock import spellings below are the undecorated MinGW64 ones.
