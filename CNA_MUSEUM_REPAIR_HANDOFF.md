@@ -19,6 +19,209 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+Publication authority: on 2026-10-22 the owner explicitly authorized ongoing pushes
+when appropriate. Publish validated, coherent commits with a normal fast-forward
+push; this does not authorize force pushes, merges, or committing another agent's
+uncommitted work. Recheck the remote and validation evidence at each checkpoint.
+Read-only `git ls-remote origin refs/heads/next` on that date confirmed
+aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
+by this validation step.
+
+### Next task: cna-engine UP-001 installed C++ module package
+
+The shared C/C++ runtime batch is complete and published. All batch build/test
+processes have terminated. Continue with UP-001; see CNA_ENGINE_REPAIR_HANDOFF.md
+for inspected package requirements and Sharp Runtime preparation. Do not edit
+cna-engine, cna-extended, or the museum. Their agents own consumer revalidation.
+The original demos matrix still has156 distinct IDs,40 without final disposition;
+this batch closes a museum finding, not those remaining actionable defects.
+
+### Fixed: shared C API / C++ runtime duplication
+
+Published CNA repair: **89fb1493f7ffc89460a3bbe8d92fec4a660c0fe7**,
+`Fix shared C API runtime identity (museum, cna-engine UP-006)`.
+Normal fast-forward push to origin/next verified with git ls-remote; no force,
+merge, tag, or unrelated working-tree changes included. Demos revision remains
+1295899bbaa2d657348a115b831f31b928d2df6c. Museum revalidation is pending.
+
+The adapter now uses libcna.so, with Net/GamerServices state included in that DSO.
+The localized static C archive still embeds its own runtime and does not depend
+on libcna.so. Both DSOs install with $ORIGIN lookup. The C ABI package version
+and its public export set are unchanged. No demo assertion or knownIssue changed.
+
+Validation (existing trees, shared ccache, one C++ compiler worker/heavy job):
+
+The installed-consumer fixture uses its existing bounded three-job build for two
+small C translation units; all campaign C++ builds and the relocation build use one.
+
+- Before: both link orders fail4/8 logger checks; after: both pass10/10,
+  including the museum's exact static assembly-title reproduction.
+- Build PASS, no compiler warnings in the external/native batch logs.
+  The pre-existing vendored Draco CMP0148 developer configure warning remains.
+- Six static-closure unit tests PASS. Real archive:3,205 C exports,44 archives;
+  the existing GNU-unique exception remains380 symbols, with no widened export rule.
+- Both C ABI export audits and all eight strict-C smoke programs PASS.
+- Native CTests14/14 PASS, including both C/C++ orders, local-symbol ownership,
+  closure tests and all five existing mixed-module consumer/symbol pairs.
+- Installed and genuinely relocated shared/static C clients PASS, no
+  LD_LIBRARY_PATH, no original-prefix/source/build path in the exported CMake files.
+- Full C category twice: SOFTWARE168PASS/9FAIL, OPENGLES3 169PASS/8FAIL (177 each).
+  No status/check-count/knownIssue delta against the latest historical per-scenario
+  reports. All failed assertion text also matches (19 SOFTWARE,18 GLES). Existing
+  unmarked content-manager Effect-ownership and resource-lifecycle failures remain
+  real failures. This is not a full-green or exact-revision pre-change baseline claim.
+- ASan consumer probes: both orders10/10, clean exit and no leak report.
+  Only the consumer is instrumented; allocation interception reaches the existing
+  unsanitized DSOs. No full-library sanitizer, full-native-suite or visual-golden claim.
+
+Evidence under cna-demos/build/linux-full/reports:
+repair-c-api-build-v8-*, repair-museum-c-api-runtime-{before-v3,after-v8,after-asan-v1}-*,
+repair-c-api-gates-v3-*, repair-c-api-deltas-v3.json, repair-c-api-relocation-v3-*.
+Build peak4302819328 bytes; memory.high4067, max/oom/oom_kill0. Final gates peak
+841568256, relocation1308114944, ASan136159232; their memory events are all0.
+
+Development configuration: demos build/linux-full C API remains ON, static archive
+restored OFF (configure PASS). CNA cmake-build-multi C API is now ON/static OFF for
+the permanent regression tests. The owned installed prefix is now
+build/linux-full/CNA/modules/c-api/installed-consumer/relocated; stage is absent.
+The archive generator already removes its large intermediate objects; its857217748-byte
+product archive and the relocated package remain available for the UP-001 comparison.
+Inherited content/audio ownership, ISSUE-113 work, storage/input oracle preparation,
+and demos changes are still uncommitted and were not included in this repair.
+
+<details><summary>Historical batch progression and failed validation attempts</summary>
+
+Current live continuation: gates-v3, session97230 / scope run-p443100-i8829742.scope.
+Gates-v2 is TERMINAL: native build succeeded,12/14 CTests passed, and the two failures
+were the pre-existing MixedRuntimeSymbols auditors for module_first/graphics_alias_first.
+Mold now localizes all definitions in those tiny clients (including main), so nm -g
+returns no definitions with exit0. The audit incorrectly interpreted that as unreadable.
+cmake/Tests/MixedRuntimeSymbols.cmake now inspects ALL defined symbols and rejects both
+T and t Graphics/Input/Vector3 definitions: a stricter duplicate-runtime oracle, not a
+suppression. Both direct positive checks pass; the deliberate negative control on
+libcna.so rejects2087 strong Graphics definitions. Full gates-v3 are rerunning with
+that correction. Use tag v3 for relocation after success; retain v1/v2 failure logs.
+
+Latest checkpoint (2026-10-22 20:42 CEST): build-v8 completed successfully, including
+the real standalone static archive (3,205 C exports,44 archives,380 existing GNU-unique
+statics). Both link orders pass all10 state checks, including the museum assembly-title
+case; all six Python closure tests pass. Build peak4302819328 bytes; memory.high
+throttled4067 times, max/oom/oom_kill all0. Do not misreport this as zero memory events.
+The previous sessions27553 and28891 are TERMINAL. Gates-v1 stopped on a real test-driver
+error: it installed the external demos root, whose EXCLUDE_FROM_ALL CNA subdirectory is
+not part of that install, so no C adapter reached staging. The driver now installs
+build/linux-full/CNA, and the permanent CTest passes CNA_BINARY_DIR rather than
+CMAKE_BINARY_DIR. Gates-v2 is LIVE in session4911, scope run-p434773-i8821415.scope.
+Its installed shared/static consumer, both ABI export audits, and all eight pure-C
+smokes PASS. It is now running the full C category; the native14-CTest stage follows.
+Reports: repair-c-api-gates-v2-*; use v2 for report-deltas and relocation scripts,
+which now select their input reports by the tag rather than hardcoding v1.
+Both complete C-category sweeps have now finished: SOFTWARE168PASS/9FAIL and
+OPENGLES3 169PASS/8FAIL (177 each). repair-c-api-deltas-v2.json records zero changed
+statuses/check counts/knownIssue markers against the latest available historical
+per-scenario evidence, with no missing baseline rows. Additionally compared the exact
+ordered CHECK FAILED assertions in every failed scenario: all19 SOFTWARE and18 GLES
+assertions match their prior logs. The unmarked content_manager (Effect ownership)
+and resource_lifecycle failures remain real, pre-existing failures, not expected passes.
+No whole-suite-green claim and no exact-revision pre-change baseline claim.
+The native stage is still compiling the selected probes/C adapter (88/126 at last poll).
+After gates-v2, run relocation with tag v2, then optionally run
+repair-museum-c-api-runtime.mjs after-asan-v1 asan in a separate capped scope. The latter
+instruments the consumer only and intercepts allocations/process exit from the existing
+unsanitized CNA DSOs; it is NOT full-library ASan coverage. It has not run yet.
+The real archive is857217748 bytes; remove this batch's disposable large intermediate
+objects after final validation/evidence capture, without deleting shared build directories.
+No batch commit or push yet. Earlier progression below is retained as history.
+
+At CNA7893e962b, the deterministic logger probe in tests/modules/mixed_runtime_c_api.cpp
+fails four of eight checks in BOTH link orders against current external consumer libraries.
+C and C++ do not share the log level or installed sinks. No window, device or exit crash is
+needed to reproduce it. Evidence: cna-demos/build/linux-full/reports/
+repair-museum-c-api-runtime-before-v3-* (peak99639296 bytes, all memory events zero).
+The C adapter embeds hidden component archives and has no DT_NEEDED libcna.so edge.
+The scoped candidate links CNA in shared mode, installs the shared runtime alongside the
+adapter, and expands its actual link closure when generating the standalone static archive.
+New permanent mixed-link probes and static-closure unit tests accompany it. NOT YET VALIDATED
+or committed. Next: incremental build, both link orders, export audit, installed/relocated
+shared and static consumers, and existing mixed module-runtime regression tests. Preserve
+all unrelated ownership/ISSUE113 changes. Nothing pushed or merged.
+
+Candidate progress: six static-closure Python tests PASS. Both existing mixed-runtime probe
+binaries now pass8/8 checks against the freshly linked libraries, and readelf confirms the C
+adapter's DT_NEEDED libcna.so. This is NOT final validation. Build v8 is running in the existing
+demos build/linux-full (CNA_C_API_BUILD_STATIC temporarily ON), one compiler in a4G-high/6G-max
+scope. Its measured peak so far is1314127872 bytes. Net/GamerServices also have to live inside
+the DSO; the shared umbrella must preserve their compile requirements when DIRECT_EXCLUDE
+removes their explicit archive edges. Private package dependencies stay in the DSO rather
+than being exported as new umbrella requirements. Earlier configure/build iterations are
+retained in repair-c-api-build-v1..v7 logs; v5 was intentionally interrupted to inspect excessive
+compile propagation, not killed by OOM. The necessary compile requirements do require a broad
+consumer rebuild, which v8 is completing. No expectation was relaxed.
+Pending driver: cna-demos/build-probe/repair-c-api-gates.mjs, followed by actual relocation
+checks and review of all C demo result deltas. Restore this development tree's static-archive
+option OFF after validation to avoid regenerating the large package artifact in every batch.
+Active build session27553 / scope run-p397552-i8784194.scope; at510/1053 steps, no new failure.
+A second lightweight monitor session28891 / scope run-p404018-i8790660.scope runs
+build-probe/repair-c-api-after-build.mjs: it starts gates-v1 ONLY when build-v8's final audit
+exists and reports success. Do not launch another heavy build or duplicate those gates.
+The permanent mixed probe now adds the museum's exact static-initialization assembly-title
+case and the reverse C-to-C++ assignment (10 checks total; the earlier before-v3 evidence
+and already-run binaries covered the eight logger checks). No test expectation changed.
+Actual static closure parsing already finds60 objects/44 archives, exactly one each of
+Core/Net/GamerServices, and no libcna.so external edge. Still requires the real archive link
+and installed consumers. The C++ umbrella's compile-only requirements necessarily include
+the optional modules because the linker exclusion also removes direct compile requirements;
+this accounts for v8's consumer rebuild. No imported package visibility changes remain.
+Continuation check: both session handles remain live; v8 has reached710/1053 steps.
+Peak measured3532460032 bytes in the capped build scope; no second heavy job started.
+Prepared and syntax-checked build-probe/repair-c-api-relocation.mjs (not executed): after
+gates-v1 succeeds, it renames the owned installed-consumer/stage prefix to relocated,
+reconfigures the same consumer tree, builds with one worker, runs shared/static consumers
+without LD_LIBRARY_PATH, and rejects source/build/original-prefix paths in installed CMake
+files. Inspect staging ownership/no active consumer before running it in a capped scope.
+It intentionally leaves the relocated prefix for inspection and records both locations.
+Also prepared/syntax-checked build-probe/repair-c-api-report-deltas.mjs: after both
+gates-v1 C demo reports exist, it compares each scenario with the latest historical
+report before v8 started (2026-10-22T17:50:24Z), retaining the exact source filename.
+This is explicitly NOT an exact-revision pre-change full baseline. Latest full C category
+evidence is repair-sprite-binding-full-SOFTWARE.json (177 results,167PASS/10FAIL),
+with newer focused results available for individual cases. Investigate every changed
+outcome and unmarked failure; the comparison never converts failures into expected ones.
+Review follow-ups applied (still uncommitted): the C++ probes reuse
+cna_c_api_enable_strict_warnings, the Python closure test uses -B, and
+modules/c-api/cmake/CNAConfig.cmake.in no longer claims that C++ modules always live
+privately inside the C adapter. The C ABI package-version contract is unchanged.
+Queued gates-v1 now refreshes the external configure after those edits. Its final
+native stage enables C API in the existing cmake-build-multi tree, with static archive
+OFF, and builds only the two new C/C++ probes plus the five existing mixed consumers.
+This validates the actual CMake/CTest registrations (14 tests including closure checks),
+not only the manual probes. No full native corpus build is requested. The external
+demos tree forces CNA_BUILD_TESTS=OFF, so it cannot perform that registration test.
+Expect cmake-build-multi's C API option to remain ON after these gates; it was OFF
+before this batch. No second large static archive is requested there.
+Added CApi_SharedRuntimeSymbols, inspecting local as well as exported symbols: the
+old hidden runtime was invisible to an export-only audit. The freshly linked external
+C adapter passes (no private logger/assembly/GraphicsAdapter registry; DT_NEEDED libcna.so).
+The deliberate negative control against libcna.so itself is rejected for those runtime
+definitions. This is auditor validation, not a newly rerun original C-adapter baseline.
+
+Read-only preparation for the next storage batch: StoragePathErrorsOracle.cs already ran
+against genuine XNA (repair-storage-path-reference-v1:29PASS), and the uncommitted native
+StorageContainerPathErrorsTests.cpp baseline passed2/7 tests. Current StorageContainer
+still uses ArgumentException for empty file/directory names and empty search patterns,
+and std::filesystem::remove for DeleteDirectory. XNA validates empty names with exact
+ArgumentNullException/parameter, returns no matches for an empty pattern without disk access,
+and delegates DeleteDirectory to System.IO.Directory.Delete (IOException for non-empty,
+DirectoryNotFoundException for absent). Do not blindly switch to Sharp Runtime Directory:
+its existing Delete/Exists/CreateDirectory use narrow std::filesystem string paths, unlike
+CNA's explicit UTF-8 widening, so that would regress Unicode on Windows. Inspect/fix the
+responsible lower layer before adopting it, retaining CNA's deliberate containment guard.
+SetAppNameEXT remains eager because it immediately sets the isolated-storage override via
+EnsureStorageRoot; laziness still needs a correct ownership/override design. No storage
+production code changed in this batch.
+
+</details>
+
 ### Owner-forwarded complete re-intake, 2026-10-22 (current)
 
 User reaffirmed the complete Open inventory at museum revision a6f9e9b2e and says
@@ -90,11 +293,12 @@ Re-intake disposition (engineering queue, not museum closure):
   do not drop intentional XNB-v4 support or security path containment without
   checking documented contracts. Ownership changes in these files belong to other
   work and must not be staged or overwritten.
-- B17 duplicate C/C++ states, input string contracts, achievement missing key and
-  presentation defaults: pending. CNB None size/ceiling was already repaired by
+- B17 duplicate C/C++ states: fixed and published89fb1493f, museum revalidation
+  pending. Input string contracts, achievement missing key and presentation defaults
+  remain pending. CNB None size/ceiling was already repaired by
   2386155f2 (also in museum pin); revalidate its C route before claiming closure.
 
-### Frustum-ray validation checkpoint
+### Previous frustum-ray validation checkpoint (retained history)
 
 Genuine XNA4 oracle FrustumRayOracle.cs passes72/72 checks (24 cases across three
 public routes; compile2473ms/run842ms, peak335900672 bytes/events0). Native before:
