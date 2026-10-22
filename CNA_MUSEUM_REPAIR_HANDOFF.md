@@ -19,6 +19,35 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**Active CNA-DEMOS-ISSUE-009 / museum HapticDevice:** repair follows `c2664bad6`.
+Fresh public-header test fails before the patch with unique_ptr's sizeof(incomplete
+IPlatformHapticDevice); its preexisting noexcept trait passes. Native baseline36
+haptics tests PASS23177ms (before-v2). First baseline tried a not-yet-built focused
+input binary and returned ENOENT; retained as before, not claimed as a test pass.
+Candidate moves the default constructor into HapticDevice.cpp and explicitly retains
+noexcept. New input tests deliberately never complete the platform type, cover local
+and member construction, move and idempotent disposal. No hardware is needed.
+Completed job30700, scope `cna-museum-haptic-after`, driver demos
+`build-probe/repair-museum-haptic.mjs after`: public-header Werror compile PASS1303ms,
+native build16477ms, public consumer compile/link1031ms and runtime36ms PASS; full
+input suite562 PASS24689ms, all560 preexisting cases retain their previous outcomes.
+Two new public-header tests pass. Peak1007407104, no memory-limit events.
+Consumer jobs59317/52602: both haptics demos on SOFTWARE/GLES pass before and after;
+rumble checks1->2 and effects12->13 add default-member construction without removing
+hardware restrictions or behavior assertions. Rebuild71030ms, peak3890540544/events0.
+Evidence: demos build/linux-full/reports/repair-museum-haptic-*. No hardware claim.
+One compiler, private display,6GiB cap. Commit CNA and demos separately; update only
+issue009 in the already-dirty matrix/issue inventory.
+Preserve all inherited ISSUE113 and content/audio edits, including dirty docs.
+
+**Next priority: museum PbrEffect WEBGPU lighting and SDL_GPU tangent-free vertices.**
+Read museum ValidationLab.cpp852-905 and CNA_FINDINGS.md PbrEffect entry; reproduce
+the actual pixel differences before changing either renderer. No PBR repair yet.
+Owner's museum revalidation2026-10-22 at5b6aab981: NET-001/002 net23PASS0FAIL;
+TRAY-00113PASS twice; WEBGPU-001/002 browser320rooms, none skipped, zero destroyed
+texture/uncaptured errors, exit0. App-device workaround removed. NET-003 remains
+source-inspected only in museum; no museum UBSan rerun. Museum owns its inventory.
+
 **2026-10-22 MUSEUM-FNA3D-001 FIXED_NATIVE_VALIDATED:** follows HEAD `594d7d328`,
 local next, no push. Its commit contains this checkpoint. Museum revalidation pending.
 The sporadic museum SDL_GPU sampler crash now has a deterministic minimized CNA

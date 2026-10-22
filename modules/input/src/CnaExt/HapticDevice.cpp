@@ -53,6 +53,8 @@ namespace CNA::Input
         }
     }
 
+    HapticDevice::HapticDevice() noexcept = default;
+
     HapticDevice::HapticDevice(
         std::unique_ptr<CNA::Platform::IPlatformHapticDevice> effectDevice,
         CNA::Platform::IPlatform* platform, std::optional<std::uint64_t> standaloneId,

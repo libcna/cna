@@ -34,7 +34,7 @@ namespace CNA::Input
     {
     public:
         /** @brief Constructs a closed haptic device. */
-        CNAEXT HapticDevice() = default;
+        CNAEXT HapticDevice() noexcept;
 
         HapticDevice(const HapticDevice&)            = delete;
         HapticDevice& operator=(const HapticDevice&) = delete;
