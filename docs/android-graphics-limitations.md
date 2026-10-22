@@ -23,5 +23,20 @@ as for Linux. Audio, input and sensors on Android are covered in `docs/devices-a
 - `SDL_GPU`: unqualified on Android; no Android build or run of it is recorded.
 - CI: no job builds for Android.
 
+## Floating-point render-target readback
+
+EasyGL uses `RGBA/FLOAT` transfers for GLES floating-point render targets, then
+packs the target's declared half or reduced-channel layout. The texture upload
+type is not necessarily a supported readback type: the Android guest's
+SwiftShader4.0.0.1 returned corrupt `HALF_FLOAT` data without a GL error, while
+`RGBA/FLOAT` returned exact values. See
+[`tools/graphics/HALF_FLOAT_READBACK.md`](../tools/graphics/HALF_FLOAT_READBACK.md).
+
+The repaired transfer selection and packed 2D/cube layouts are native-tested;
+the changed renderer translation unit cross-compiles with NDK29. A driver-only
+Android emulator diagnostic verifies the portable transfer and half conversion.
+The museum's complete Android application still requires its separate revalidation;
+none of this is physical-device coverage.
+
 `SDL_RENDERER`, the former Android default, was retired on 2026-10-13
 ([`removed-renderers.md`](removed-renderers.md)).

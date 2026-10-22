@@ -27,7 +27,115 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current checkpoint: two-account profile repair validated
+### Current task: GLES float readback repair validating (2026-10-23)
+
+Candidate now adds one GLES-only branch in EasyGLRenderer.cpp: RGBA/FLOAT transfer
+for half or reduced-channel float targets, then existing HalfTypeHelper packing/
+channel selection. Desktop GL and full RGBA32F direct read are unchanged. No
+capability was disabled and no expected value relaxed.
+
+New permanent `EasyGLFloatReadbackTests.cpp` observes native GL calls through the
+existing platform loader seam (not a new production test hook). Its first attempt
+observed the executable's separate private meta-gl table, so v1 calls=0 was a test
+instrumentation failure, not root-cause evidence. Corrected v2 observes14 calls
+and fails only the required RGBA/FLOAT pair on original code. After the repair it
+passes all14 reads:7 formats,2D/cube,odd-width subrectangle,negative/>1 values and
+sentinel bounds. Unsupported formats are not asserted to exist on other hardware.
+
+Native build PASS. Existing HDR suite16/16 and format-agreement suites12/12 PASS
+each on SOFTWARE/OPENGLES3/OPENGL33 (the first filter matched only HDR; separate
+format runs cover the actual suite names). Full raw renderer baseline293 has
+109PASS/170SKIP/14FAIL: the14 SDL_GPU-specific tests were run under OPENGLES3 and
+explicitly refuse that selection. Proper SDL_GPU run59=58PASS/1 declared skip.
+Raw after294 has exactly the same293 outcomes plus the new PASS. This is not a
+claim that the raw incorrectly-selected run was green. All logs/XML are under the
+existing `repair-museum-half-readback-*` reports prefix.
+
+External original HDR demo baseline passed4/4 on SOFTWARE/OPENGLES3/OPENGL33.
+Actual changed EasyGL translation unit cross-compiles with NDK29, using the
+existing Android consumer's compile metadata read-only. Its object was redirected
+to CNA cmake-build-multi/EasyGLRenderer.android-readback.o; no museum file written.
+Log: `repair-museum-half-readback-android-compile-v1.log`.
+
+Portable diagnostic passed natively and in the private Android guest:
+`repair-museum-half-readback-{native,android}-portable-v1.log`. Original HALF_FLOAT
+still prints FAIL; RGBA/FLOAT and existing CNA HalfTypeHelper conversion print
+PASS, with exact {-2,0.5,2,1} and untouched sentinels. Default diagnostic mode still
+requires both raw transfers; --portable explicitly tests only the portable route,
+not a reclassification of the original failure. README documents this boundary.
+This is substrate/conversion coverage, not a full Android CNA/museum runtime pass.
+The after emulator was stopped normally; session42823 terminal0, peak5370978304
+bytes, no live guest. Native observer's final no-GL-platform guard also builds and
+passes (`repair-museum-half-readback-focused-final-v1.log`).
+
+External build58597 completed0 (`repair-museum-half-readback-demo-build-v1.log`).
+Unchanged HDR demo4/4, C render_target12/12 and C texture_formats6/6 PASS each on
+SOFTWARE/OPENGLES3/OPENGL33. Exact HDR JSON comparison excludes timing only and
+matches the original baseline. All three800x480 screenshots were inspected: HDR
+keeps the three distinct additive levels and labels, while Color saturates as
+expected. ImageMagick AE comparison SOFTWARE vs GLES and vs desktop GL is0 pixels
+each. These are cross-renderer comparisons, not a full historical visual-reference
+sweep. Report prefix remains `repair-museum-half-readback-*`; C wrapper JSON has
+zero outer checks, child logs carry12/6 respectively. Diff/policy PASS.
+
+All processes are terminal; no live emulator or build. No full CNA suite, WebGL
+browser, sanitizer or physical-device coverage claimed. Museum application
+revalidation is pending, not silently counted as a pass. This commit contains only
+renderer cpp,new renderer test,driver diagnostic,its README,Android documentation
+and this handoff. Inherited content/audio/occlusion work remains untouched.
+
+**Exact next task:** investigate B3's intermittent gs-avatar heap crash with a
+targeted ASan reproduction. First inspect museum build rules and existing sanitizer
+artifacts read-only; its source/pin/worktree are owned by its agent. Use an isolated
+stable CNA-owned consumer build if a new instrumented build is needed, one compiler
+and a hard memory limit, and the private display. Do not infer a Mesa defect from
+the malloc stack. Existing CNA build-asan is SOFTWARE-only, not an OpenGLES3 proof.
+No remaining approval blocker; continue other actionable findings if a necessary
+external reproduction is unavailable. The156-ID demos matrix still has40 without
+final disposition; this museum-only fix closes none of them.
+
+Profile repair is published and remote-verified as
+**ca8633622f237d40a46a3535be1dbd6718e4ea9f**; details below. No consumer pin changed.
+New uncommitted source: `tools/graphics/half_float_readback_probe.cpp`, a driver-only
+EGL/GLES3 diagnostic using EasyGL's RGBA16F/RGBA/HALF_FLOAT triple. It clears four
+distinct exactly representable values and compares half/float reads plus sentinel
+bounds. Native private Xwayland control PASS on AMD/Mesa25.0.7; Android NDK29
+x86_64 compile PASS after linking GLESv3 (GLESv2 lacks the ES3 symbols).
+Artifacts in existing `cmake-build-multi/half-float-readback-probe{,-android}`.
+Evidence prefix: demos `build/linux-full/reports/repair-museum-half-readback-*`.
+
+Private read-only Medium_Phone emulator on port5594, user scope
+`cna-half-readback-5594.scope`, completed and was shut down normally with the
+serial-specific emu kill; tool session85899 is terminal0. No emulator/compile job
+remains. It had no window/audio/snapshots, guest GLES,2cores,3072MiB guest memory,
+6GiB cgroup hard limit/no swap; peak5371133952 bytes. Shared AVD was not altered.
+
+**Reproduced:** Google SwiftShader4.0.0.1 GLES3.0 reports complete RGBA16F framebuffer
+and no allocation/clear errors. Its preferred read type is GL_FLOAT (0x1406).
+Reading HALF_FLOAT yields wrong values with GL_NO_ERROR; reading RGBA/FLOAT yields
+exactly {-2,0.5,2,1}, with intact bounds sentinels. Native Mesa passes both reads.
+Reports: `repair-museum-half-readback-{native,android}-before-v1.log`; emulator
+startup log retained separately. These are driver/substrate tests, not an Android
+CNA or museum application runtime pass. No production renderer change yet.
+Museum source currently uses HdrBlendable plus HalfVector4 readback and a HiDef
+project; its historical finding calls the target HalfVector4.
+
+**Exact next task:** implement and validate the GLES-safe float readback route,
+using RGBA/FLOAT transfer and selecting/packing the target's own channels/half
+elements with existing PackedVector::HalfTypeHelper. Do not blindly copy the upload
+pixel type to ReadPixels. Keep desktop GL behavior intentional and cover Single,
+Vector2, HalfSingle, HalfVector2, HalfVector4/HdrBlendable, cube/2D, odd widths,
+subrectangles, bounds and negative/>1 values. Preserve existing exact assertions.
+Official ES3 reference accepts RGBA/FLOAT for float rendering surfaces; HALF_FLOAT
+is not universally guaranteed, only the implementation-selected pair is additional:
+https://raw.githubusercontent.com/KhronosGroup/OpenGL-Refpages/main/es3.0/glReadPixels.xml
+Use that contract, not an Android-specific driver-name workaround. Native regression
+coverage exists in HdrRenderTargetRoundTripTests/RenderTargetFormatAgreementTests.
+Require a regression that guards the selected transfer route as well as conversion,
+then emulator and consumer evidence before commit. The new diagnostic source and
+this handoff are the only current campaign-owned uncommitted files.
+
+### Completed checkpoint: two-account profile repair validated
 
 Base CNA **3cd6028b7ad30a22251349e12db32df9f07d5e88** is published. Sharp
 **1dc8785b35284b5cf50f3aec361703bfaf090b72** was rechecked with ls-remote and
@@ -542,7 +650,9 @@ Re-intake disposition (engineering queue, not museum closure):
 - B4 phone failure event/send completion: repaired in3078bb41e/3c61c30ef above;
   museum revalidation pending. B6 sign-out profile errors:3cd6028b7 plus the
   two-account repair in the current checkpoint; museum revalidation pending.
-- B5 Android half-float readback, B8 vertex texture fetch, B10 surface-free WebGPU:
+- B5 Android half-float readback: repaired and focused validated in the current
+  checkpoint, full museum Android application revalidation pending.
+- B8 vertex texture fetch, B10 surface-free WebGPU:
   still require focused reproduction/contract audit.
 - B7 frustum ray overlaps ISSUE131 and is repaired/validated in9a5e5d896150bf5094de57be22e25ad6f35e2242.
   On 2026-10-22 the owner explicitly revoked the former reservation:

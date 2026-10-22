@@ -9,6 +9,7 @@
 #include "CNA/Internal/Renderers/EasyGL/GlStockShaderSources.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 #include "Fna3dStockEffectBlobs.hpp"
@@ -3178,6 +3179,41 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         DrainGlErrors();
+        if (storage.isFloat && !ProfileIsDesktopCore() &&
+            (!storage.isFullFloat || storage.pixelFormat != ::metagl::PixelFormat::Rgba))
+        {
+            // GLES guarantees RGBA/FLOAT for floating-point attachments, not their upload
+            // format/type pair. In particular the Android guest driver accepts HALF_FLOAT
+            // without an error yet returns corrupt data. Keep CNA's packed output layout,
+            // but transfer using the portable pair (also required for R/RG float targets).
+            const std::size_t texels = static_cast<std::size_t>(width) * height;
+            std::vector<float> expanded(texels * 4u);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment, 4);
+            ::metagl::glReadPixels(x, y, width, height, ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::Float, expanded.data());
+            if (!GlUploadSucceeded())
+                return false;
+            const int componentBytes = storage.isFullFloat ? 4 : 2;
+            const int channels = storage.bytesPerPixel / componentBytes;
+            auto* destination = static_cast<std::uint8_t*>(data);
+            for (std::size_t texel = 0; texel < texels; ++texel)
+            {
+                for (int channel = 0; channel < channels; ++channel)
+                {
+                    const float value = expanded[texel * 4u + channel];
+                    if (storage.isFullFloat)
+                        std::memcpy(destination, &value, sizeof(value));
+                    else
+                    {
+                        const auto half = Microsoft::Xna::Framework::Graphics::PackedVector::
+                            HalfTypeHelper::Convert(value);
+                        std::memcpy(destination, &half, sizeof(half));
+                    }
+                    destination += componentBytes;
+                }
+            }
+            return true;
+        }
         if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Rg32)
         {
             // GLES permits RG16 attachments through EXT_texture_norm16, but its core ReadPixels
