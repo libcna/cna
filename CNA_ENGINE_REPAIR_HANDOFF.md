@@ -19,6 +19,30 @@ job remains. Next engine task: UP-001 installed C++ module package, still open;
 this C-adapter repair does not supply the missing installed C++ module targets.
 The chronological notes below retain earlier failures and intermediate checkpoints.
 
+## UP-020 publication confirmation and engine revalidation (2026-10-22)
+
+UP-020 is RESOLVED_BY_DEPENDENCY_PUBLICATION, not a new code repair. The engine
+reported that published CNA `08c1387ec` called Uri::getIsFileProperty/getLocalPathProperty
+from CNA `abbd8a4ea`, while the then-published Sharp Runtime `f2aecfef` lacked those
+members. They were implemented in Sharp `c26614e8`. The preceding authorized pushes
+have now published that commit: `git ls-remote origin refs/heads/next` in Sharp
+returns `1dc8785b35284b5cf50f3aec361703bfaf090b72`, exactly the local HEAD, and
+`git merge-base --is-ancestor c26614e8 HEAD` succeeds. Both declarations are present
+in modules/uri/include/System/Uri.hpp. Use `1dc8785b` (or a verified descendant), not
+the intermediate package revision `42847935` whose embedded-install policy needed
+the follow-up. No production code or version change is needed for this publication
+finding. Both projects still declare 0.1.0; this does NOT make that version alone
+a reliable check for the presence of the new members in an older checkout.
+
+Engine-reported validation, not a new run by this agent: CNA `08c1387ec` with Sharp
+`c26614e8` built successfully and passed 338/339 engine tests. The one failure is
+the engine calibration test expecting the pre-UP-019 software shadow orientation;
+the engine explicitly confirms the corrected orientation is intended. Record this
+as consumer confirmation of UP-019, not a fully green engine suite. The engine
+agent owns its oracle/pin updates; none of its files were changed here. This report
+does not separately establish a rerun of its UP-006 mixed-runtime reproducer.
+UP-001 remains actionable and is the next implementation task.
+
 ## UP-001 dependency-package checkpoint (continuation, 2026-10-22)
 
 CNA runtime source baseline is published `08c1387eca7f9707d6180ff57d07f0360e059672`
@@ -143,11 +167,12 @@ cna-demos/build/linux-full/reports/repair-storage-path-before-v1-*.
 
 | Finding | Current disposition | Evidence / next task |
 | --- | --- | --- |
-| UP-019 | Fixed in `144d9f909`; engine revalidation and DirectX runtime validation pending | Four public-effect producer/receiver regressions pass on SOFTWARE/GLES/GL33/WEBGPU/SDL_GPU/FNA3D, including both FNA3D drivers. DirectX bytecode regenerated and all 26 register tables verified; no Windows runtime claim. Engine will rerun after publication and pin movement. |
+| UP-019 | Fixed in `144d9f909`; engine confirms intended corrected orientation; DirectX runtime validation pending | CNA renderer regressions pass as recorded below. Engine reports 338/339 at CNA `08c1387ec` + Sharp `c26614e8`; remaining failure is its calibration assertion for the old orientation, not a full-green consumer result. No Windows runtime claim. |
 | UP-018 | CLOSED — NOT_A_CNA_DEFECT / ENGINE_EXPECTATION_ERROR | Engine confirmed and fixed in `8b7610c`: store target.getFormatProperty(), not the preference. Existing exact pin/next checks prove Reach selects Color and HiDef Single retains float precision. No CNA production repair required. |
 | UP-006 | ALREADY_FIXED and CNA-validated; engine revalidation pending | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). Engine-style consumers pass in both orders with zero duplicate strong Graphics/Input/Vector3 symbols. Engine owns pin movement/revalidation. The museum's separate C adapter duplication is now fixed and published in `89fb1493f`. |
 | UP-001 | CONFIRMED_OPEN — installed C++ module package missing | The existing CNAConfig package serves CApi/CApiStatic only; it does not export the C++ module aliases. Provide relocatable Core/Math/Input/GraphicsCore/Content/Runtime/Audio and their SharpRuntime dependencies, preserving shared/static identity and the existing C ABI package/version contract. |
 | UP-002 | Documentation corrected | `docs/migration-guide.md`, CNAEXT and C++ language artefacts, distinguishes declaration markers from implicit/synthesized C# semantics and explicitly retains strict compiler diagnostics. No runtime/header/test changes needed. |
+| UP-020 | RESOLVED_BY_DEPENDENCY_PUBLICATION | Required Sharp Runtime `c26614e8` is an ancestor of verified published next `1dc8785b`. No new runtime repair/version bump. The shared 0.1.0 version still does not distinguish older checkouts; use the verified commit. |
 
 Only one heavy job/compiler worker at a time, existing build directories, shared
 ccache and private GPU runner. Use established MemoryHigh=4G / MemoryMax=6G /
