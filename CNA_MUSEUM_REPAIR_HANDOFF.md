@@ -27,14 +27,50 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Next task: cna-engine UP-001 installed C++ module package
+### Next task: notification channel failure reporting / send acknowledgement
 
-The shared C/C++ runtime batch is complete and published. All batch build/test
-processes have terminated. Continue with UP-001; see CNA_ENGINE_REPAIR_HANDOFF.md
-for inspected package requirements and Sharp Runtime preparation. Do not edit
-cna-engine, cna-extended, or the museum. Their agents own consumer revalidation.
-The original demos matrix still has156 distinct IDs,40 without final disposition;
-this batch closes a museum finding, not those remaining actionable defects.
+UP-001's installed C++ SDK is now published as
+`58ebc46fd2613833cfbb273edb50328bae109405` (remote SHA verified). See
+CNA_ENGINE_REPAIR_HANDOFF.md for shared/static relocation, native16/16 gates and
+the Windows/WebAssembly configure-only limits. All batch processes are terminal.
+Do not edit cna-engine, cna-extended, or the museum; their agents own revalidation.
+
+Museum's current Open section was re-read at this checkpoint. Next actionable
+batch: `HttpNotificationChannel fails silently where no socket can listen`.
+No phone source/test has been changed yet. Current source inspection confirms:
+
+- `modules/phone/src/HttpNotificationChannel.cpp::Open` returns without a public
+  error event on socket/bind/listen/getsockname or Windows event setup failure.
+  Its header has ChannelUriUpdated and HttpNotificationReceived only. Existing
+  lifecycle/race repairs must be preserved; do not revert to a mutable listener
+  socket read in the worker.
+- `PushNotificationSender.cpp::Post` returns whether send() accepted every byte;
+  it ignores recv()'s result and the HTTP response entirely. Thus locally queued
+  Emscripten socket bytes can be reported as receiver acceptance. The museum's
+  exact closed/unreachable sends are in
+  `src/Exhibits/Devices/NotificationLab.cpp` (read-only evidence). Existing native
+  tests live in modules/phone/tests/Microsoft/Phone/Notification/
+  HttpNotificationChannelTests.cpp. A focused socket/lifecycle fixture exists at
+  tools/phone/notification_lifecycle_test.cpp and cmake/UnitTests.cmake:136.
+- Check the reference before implementing the museum's suggested type spelling:
+  Microsoft's public enum is **ChannelErrorType**, not
+  `NotificationChannelErrorType`. First-party reference:
+  https://learn.microsoft.com/en-us/previous-versions/windows/apps/ff707611(v=vs.105)
+  lists ChannelOpenFailed, PayloadFormatError, MessageBadContent,
+  NotificationRateTooHigh, PowerLevelChanged and Unknown. Event arguments expose
+  ErrorAdditionalData, ErrorCode, ErrorType and Message:
+  https://learn.microsoft.com/en-us/previous-versions/ff707848(v=vs.110).
+  Numeric enum values, property types and construction/event timing still need
+  reference verification; do not infer them from alphabetical documentation order.
+
+Exact next work: read the existing focused lifecycle fixture, establish native
+phone baseline and deterministic red cases for failed open/false receiver
+acceptance, verify the WP contract, repair locally with permanent tests, then
+exercise the real browser send/open paths. No browser runtime pass is claimed
+by the source inspection. Keep one compiler/heavy process and private rendering.
+The last demos matrix census has156 distinct IDs,40 without final disposition;
+the SDK batch closes UP-001, not those remaining actionable defects or this phone
+finding. Recount the matrix before reporting new campaign totals.
 
 ### Fixed: shared C API / C++ runtime duplication
 

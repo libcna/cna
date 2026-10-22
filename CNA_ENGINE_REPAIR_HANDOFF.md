@@ -21,8 +21,11 @@ The chronological notes below retain earlier failures and intermediate checkpoin
 
 ## UP-001 installed SDK implementation and validation (2026-10-22)
 
-The commit containing this entry implements the missing installed CNA C++ package
-(commit subject includes `cna-engine UP-001`). Baseline was published CNA
+Published repair: **58ebc46fd2613833cfbb273edb50328bae109405**,
+`Install relocatable C++ module SDK for cna-engine UP-001`. Normal fast-forward
+push completed and `git ls-remote origin refs/heads/next` returned that exact SHA.
+No force, merge, tags, consumer-pin changes or unrelated dirty files were included.
+This commit implements the missing installed CNA C++ package. Baseline was published CNA
 `9cfe94f2a8cf32609738ec5bca135a27cd08e062`; Sharp Runtime remains published
 `1dc8785b35284b5cf50f3aec361703bfaf090b72`, demos remains `1295899bbaa2d657348a115b831f31b928d2df6c`.
 UP-001 is FIXED / NATIVE_VALIDATED; consumer agents own their pin movement and
@@ -95,8 +98,10 @@ CNA build path is given. SDK install flags remain ON intentionally in the native
 MinGW and WebAssembly producer trees; the latter two are configure-only checks.
 No engine/extended/museum source or pin was changed. Inherited content ownership,
 ISSUE-113, storage and their tests remain dirty and excluded from this commit.
-Next: publish this validated isolated package commit, then re-read the museum's
-current Open section and continue the highest-priority actionable runtime finding;
+No active build/test/push process remains at this checkpoint. Next: the museum's
+HttpNotificationChannel open-error and false-positive send findings (intake below
+in CNA_MUSEUM_REPAIR_HANDOFF.md); the current Open section has been re-read and the
+published package is ready for engine/extended-owned consumer revalidation;
 the cna-demos campaign still has unfinished findings and is not complete.
 
 ## Historical UP-001 working C++ SDK checkpoint (2026-10-22)
@@ -400,7 +405,7 @@ cna-demos/build/linux-full/reports/repair-storage-path-before-v1-*.
 | UP-019 | Fixed in `144d9f909`; engine confirms intended corrected orientation; DirectX runtime validation pending | CNA renderer regressions pass as recorded below. Engine reports 338/339 at CNA `08c1387ec` + Sharp `c26614e8`; remaining failure is its calibration assertion for the old orientation, not a full-green consumer result. No Windows runtime claim. |
 | UP-018 | CLOSED — NOT_A_CNA_DEFECT / ENGINE_EXPECTATION_ERROR | Engine confirmed and fixed in `8b7610c`: store target.getFormatProperty(), not the preference. Existing exact pin/next checks prove Reach selects Color and HiDef Single retains float precision. No CNA production repair required. |
 | UP-006 | ALREADY_FIXED and CNA-validated; engine revalidation pending | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). Engine-style consumers pass in both orders with zero duplicate strong Graphics/Input/Vector3 symbols. Engine owns pin movement/revalidation. The museum's separate C adapter duplication is now fixed and published in `89fb1493f`. |
-| UP-001 | FIXED / NATIVE_VALIDATED — installed C++ SDK | Commit containing the installed SDK checkpoint above exports CNA and SharpRuntime component targets. Relocated Linux shared/static clients and native C compatibility pass. Windows/WebAssembly export graphs pass; installed runtime validation on those platforms remains pending. Engine/extended own pin movement and consumer revalidation. |
+| UP-001 | FIXED / NATIVE_VALIDATED — installed C++ SDK | Published `58ebc46fd` exports CNA and SharpRuntime component targets. Relocated Linux shared/static clients and native C compatibility pass. Windows/WebAssembly export graphs pass; installed runtime validation on those platforms remains pending. Engine/extended own pin movement and consumer revalidation. |
 | UP-002 | Documentation corrected | `docs/migration-guide.md`, CNAEXT and C++ language artefacts, distinguishes declaration markers from implicit/synthesized C# semantics and explicitly retains strict compiler diagnostics. No runtime/header/test changes needed. |
 | UP-020 | RESOLVED_BY_DEPENDENCY_PUBLICATION | Required Sharp Runtime `c26614e8` is an ancestor of verified published next `1dc8785b`. No new runtime repair/version bump. The shared 0.1.0 version still does not distinguish older checkouts; use the verified commit. |
 
