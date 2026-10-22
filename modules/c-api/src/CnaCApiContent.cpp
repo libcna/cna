@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp"
 #include "Microsoft/Xna/Framework/Content/ResourceContentManager.hpp"
 #include "CNA/Content/ForeignContentObjectEXT.hpp"
@@ -32,6 +33,7 @@
 
 namespace {
 
+using CNA::Internal::ContentManagerAccess;
 using CNA::C::Detail::AddOwnedContentManager;
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
@@ -598,7 +600,7 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    *outBytes = contentManager->value->BuildAssetPath(assetNameCopy).size();
+    *outBytes = ContentManagerAccess::BuildAssetPath(*contentManager->value, assetNameCopy).size();
     return CNA_RESULT_SUCCESS;
 }
 
@@ -620,7 +622,7 @@ namespace {
         return result;
     }
     return CopyText(
-        contentManager->value->BuildAssetPath(assetNameCopy),
+        ContentManagerAccess::BuildAssetPath(*contentManager->value, assetNameCopy),
         destination,
         capacity,
         outBytes);
@@ -641,7 +643,7 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    *outBytes = contentManager->value->NormalizeKey(assetNameCopy).size();
+    *outBytes = ContentManagerAccess::NormalizeKey(*contentManager->value, assetNameCopy).size();
     return CNA_RESULT_SUCCESS;
 }
 
@@ -663,7 +665,7 @@ namespace {
         return result;
     }
     return CopyText(
-        contentManager->value->NormalizeKey(assetNameCopy),
+        ContentManagerAccess::NormalizeKey(*contentManager->value, assetNameCopy),
         destination,
         capacity,
         outBytes);

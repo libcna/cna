@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Song and Video: loose media files, .cnb and .xnb.
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/ContentRoot.hpp"
@@ -85,6 +86,7 @@ namespace Microsoft::Xna::Framework::Content
     namespace
     {
         using namespace detail;
+        using CNA::Internal::ContentManagerAccess;
 
         class SongTypeReader : public LooseFileContentTypeReader<Media::Song>
         {
@@ -129,7 +131,8 @@ namespace Microsoft::Xna::Framework::Content
         std::string ResolveMediaStreamPathEXT(ContentManager& cm, const std::string& reference,
                                               const std::string& assetName)
         {
-            const std::string resolved = cm.ResolveExistingAssetPath(cm.BuildAssetPath(reference));
+            const std::string resolved = ContentManagerAccess::ResolveExistingAssetPath(
+                cm, ContentManagerAccess::BuildAssetPath(cm, reference));
             if (!std::filesystem::exists(CNA::Internal::PathFromUtf8(resolved)))
             {
                 throw ContentLoadException("'" + assetName + "' streams '" + reference +

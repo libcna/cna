@@ -39,6 +39,11 @@
 
 #include "Microsoft/Xna/Framework/Content/detail/BuiltinContent.hpp"
 
+namespace CNA::Internal
+{
+    struct ContentManagerAccess;
+}
+
 namespace Microsoft::Xna::Framework::Content
 {
     using log = CNA::Logger;
@@ -108,11 +113,15 @@ namespace Microsoft::Xna::Framework::Content
 
         [[nodiscard]] std::vector<std::string> ScanXnbReaderNames(const std::filesystem::path& xnbPath) const;
 
+    public:
         /**
          * @brief Content root; assignment is refused while loaded assets remain cached.
          * @throws System::InvalidOperationException if the cache is not empty, even for the same root.
          */
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
+
+    private:
+        friend struct CNA::Internal::ContentManagerAccess;
 
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
         [[nodiscard]] std::string ResolveExistingAssetPath(const std::string& path) const;

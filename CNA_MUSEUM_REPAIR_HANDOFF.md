@@ -19,7 +19,83 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
-**PBR follow-up validated; next DEF_PROP visibility. Base CNA91612a0a3 / demosadbeeaf.**
+**Validated DEF_PROP visibility repair, base CNA bb6a2f44ef64bef812a82941781d2454c00f1705 / demos adbeeaf.**
+PBR follow-up below is committed bb6a2f44e; owner notified, no push. Visibility baseline:
+new test exposes eleven helpers in the shared tree (nine in committed HEAD plus two
+from the preserved, uncommitted ownership work); RootDirectory/Viewport controls pass.
+Pure-C ContentSmoke before-v2 passes SOFTWARE and GLES (4634/4701ms), peak140267520,
+events0. First before run used a different CWD from TitleLocation and could not find
+its fixture; retained that harness failure, then matched the original CTest layout.
+Candidate restores explicit public property/private helper sections; three path/key
+methods are reachable only via CNA::Internal::ContentManagerAccess for existing C
+adapter/media consumers. No path logic duplicated, no SharpRuntime macro change.
+Private-header native/content job13768 completed, scope cna-museum-visibility-after:
+build428414ms, visibility3PASS, existing content2053PASS/4SKIP in111972ms. All2057
+existing outcomes exactly match pbr-final baseline. Peak3039920128/events0.
+C API after76446: build190433ms, strict C compilationPASS, original ContentSmoke
+SOFTWARE/GLES bothPASS5002/5158ms, peak2055286784/events0. No runtime expectation edits.
+Focused demos job87409 (cna-museum-visibility-demos) hit the driver's20-minute build
+timeout at662/958 steps, SIGTERM, no compile error and no tests run. Peak4063199232,
+events0 including oom/kill0. Verified the scope inactive and no orphan ninja/compiler.
+Resumed incremental build with a one-hour build timeout under scope
+cna-museum-visibility-demos-v2, new evidence suffix demos-v2; original logs retained.
+It rebuilds the complete demo binary
+and checks C manager inspection, several managers, compiled Song and Video on both
+SOFTWARE/GLES. Historical matching reports are captured separately, not mislabeled
+as a fresh baseline. Evidence repair-museum-visibility-{after,capi-after,demos}*.
+Job49071 completed: incremental build1244346ms, all8 demo runsPASS, peak2783576064,
+events0. Against historical reports, six outcomes/check counts/markers are unchanged;
+both several_managers runs changeFAIL->PASS because the preserved uncommitted
+ownership work already changes Load-after-Dispose to ObjectDisposedException.
+Do NOT attribute ISSUE-010 to this visibility batch or remove its marker.
+Final layout correction moved the new helper to src/Internal/ContentManagerAccess.cpp
+(same implementation). Job64839, scope cna-museum-visibility-final, rebuilds and reruns
+native content, strict-C SOFTWARE/GLES and all8 focused demos in sequence. Evidence
+suffix final; no source changes during this final validation.
+Job64839 completed successfully: native build24018ms, visibility3PASS53ms,
+content2053PASS/4SKIP142991ms; exact XML comparison covers all2057 existing cases
+with zero outcome deltas against pbr-final. C API build11420ms, strict-C compile363ms,
+SOFTWARE/GLES smokePASS5715/5445ms. Demo rebuild55072ms and all8 checksPASS again;
+statuses/check counts/knownIssue markers match demos-v2 exactly. Combined scope
+peak4299747328, high1961, max0/oom0/kill0 (memory.high throttling, not OOM).
+Only nine access/call-site hunks are staged in the two shared files; their remaining
+unstaged added/removed lines exactly equal the saved pre-repair ownership diff.
+The new helper header/source, media call-site and three visibility regressions belong
+to this batch. No demo oracle or marker changed; no full CNA aggregate claim and no
+new sanitizer claim for this access-only repair. No push or merge.
+Next task: commit this validated batch, then reproduce the SDL_GPU volume-source
+layout failure below against a freshly rebuilt multi-renderer library.
+
+Read-only preparation for the next memory-safety batch: museum SDL_GPU `tex-volshader`.
+GLSL CompileProgram currently bypasses the SPIR-V resource remapper, hardcodes one
+fragment sampler/one uniform per stage and never populates reflected resource snapshots.
+The bytecode route already remaps descriptors and captures their original bindings.
+This is a source-level root-cause candidate, not a newly reproduced runtime claim yet.
+Important: the remapper also flips vertex Y for portable bytecode; source GLSL is
+documented as compiled as written. Do not accidentally double-flip existing native
+source shaders when unifying resource handling. Native set2 volume bindings also
+need the actual sampler dimension, not an unconditional SpriteBatch 2D texture.
+Prepared but NOT compiled/run: demos build-probe/museum-sdlgpu-volume-layout.cpp,
+five isolated modes native2d/native_volume/portable_volume/portable_uniforms/invalid_volume.
+It checks4096 exact pixels and uses asymmetric volume colors to detect orientation.
+Prepared driver build-probe/repair-museum-volume.mjs runs each case under prlimit
+core=0, a60-second timeout and Vulkan validation. Baseline/candidate phases use
+lavapipe only; add RADV after the corrected lavapipe cases pass.
+Do not launch it concurrently with the active demos rebuild. Its compile/source/
+library hashes and every failing case remain in the baseline audit, not suppressed.
+Further source review: preserve portable set0/binding0 SpriteBatch inputs as well
+as set1 typed units; native set2 needs dimension-aware routing. Empty reflected
+uniform/sampler lists must remain distinguishable from the old unreflected GLSL
+fallback (otherwise a shader with no uniforms still receives nonexistent slot0).
+The current 2D-white fallback is invalid for a missing cube/volume binding; do not
+introduce another dimension mismatch while fixing the bound-volume reproduction.
+Next baseline should run each mode separately with core dumps disabled, private
+display and memory cap, first lavapipe (/usr/share/vulkan/icd.d/lvp_icd.json).
+Official contracts reviewed: https://wiki.libsdl.org/SDL3/SDL_CreateGPUShader and
+https://wiki.libsdl.org/SDL3/SDL_BindGPUFragmentSamplers (dense per-stage bindings and
+matching sampled texture dimensions). No SDL_GPU production changes in this batch.
+
+**Completed PBR follow-up, historical evidence. Base CNA91612a0a3 / demosadbeeaf; commit bb6a2f44e.**
 PBR batch committed91612a0a3a39605b594ec9c54a61eaa9ec50de9c; owner notified, no push.
 Read-only audit: DEF_PROP and its DDATA/DGETTER wrappers occur in only ContentManager
 and Viewport. Viewport already puts all macros in public scope. ContentManager's
@@ -57,8 +133,9 @@ peak4302499840/high1887/max0/oom0/kill0. Five boundary gates PASS.
 Final content job98717 (repair-museum-visibility-pbr-final): build9887ms PASS;
 2053PASS/4unchangedSKIP,133442ms,peak3459633152/events0. PBR follow-up is fully validated
 within the stated native/browser scope; no full aggregate or museum rerun claim.
-Next: run pure-C ContentSmoke baseline, then repair visibility. Its new failing test
-stays uncommitted outside the PBR commit; all unrelated dirty work remains preserved.
+At that checkpoint the next task was the pure-C baseline and visibility repair above;
+the then-failing visibility test stayed outside the PBR commit. Unrelated dirty work
+remained preserved.
 Exact planned local repair: explicit public RootDirectory/private helper boundary;
 keep C API asset-path/normalized-key routes and built-in media loader resolution via
 a narrow internal friend accessor, not duplicated path logic. Current C API directly
