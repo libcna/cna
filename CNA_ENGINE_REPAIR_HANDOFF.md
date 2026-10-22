@@ -15,7 +15,7 @@ cna-demos/build/linux-full/reports/repair-storage-path-before-v1-*.
 | --- | --- | --- |
 | UP-019 | Investigating | Software shadow projection uses positive Y-to-V although its raster target is top-down; reproduce producer/receiver orientation before changing it. |
 | UP-018 | NOT_REPRODUCIBLE on current next | Public Single construction, draw of 0.5 and 0.5+1/4096 and white, full and rectangle float readback pass on SOFTWARE/GLES/GL33. Existing float-target implementation is `23c5557f7` (also predates reported pin). New permanent `SingleTargetPrecisionTests.cpp` protects the exact symptom. No unsupported-format fallback or precision weakening. |
-| UP-006 | Candidate already fixed | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). Rebuild and run real mixed-runtime consumers and symbol checks, including engine-style module combinations. |
+| UP-006 | ALREADY_FIXED and verified | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). New engine-style module-only static library + umbrella consumers pass in both orders, with zero duplicate strong Graphics/Input/Vector3 symbols. |
 | UP-001 | Confirmed source gap | No CNA install export/config/version package exists. Design relocatable dependency/target export without breaking source consumers or duplicating the runtime. |
 | UP-002 | Documentation corrected | `docs/migration-guide.md`, CNAEXT and C++ language artefacts, distinguishes declaration markers from implicit/synthesized C# semantics and explicitly retains strict compiler diagnostics. No runtime/header/test changes needed. |
 
@@ -41,3 +41,25 @@ v3 925278208, all memory events zero. Dirty Texture2D changes concern ownership,
 not format/storage/readback; kept untouched and excluded from commits. Validation
 uses the shared worktree, not a clean checkout. No claim about the engine's binary
 or a rerun of its calibration; its agent owns revalidation.
+
+UP-006 final-v1: rebuilt public Core/Math/Input/GraphicsCore/Content/Audio/Runtime
+static-library consumers beside CNA in both orders. The adapter TU is referenced
+without initializing hardware, and real Input/Math/Graphics calls execute. Both
+programs start and exit cleanly; nm finds no duplicate strong runtime definitions.
+Ten CTests pass (five consumer shapes plus five symbol audits), including the
+existing opaque ld.bfd case. No production CMake workaround added: existing
+470b12a5d is sufficient for these reproductions. Local commits only.
+
+UP-019 in progress: Software's directional shadow projection repaired locally.
+Exact full-suite before/after comparison covers3157 tests per SOFTWARE/GLES/GL33:
+only the four new Software orientation tests change FAIL->PASS; all other results
+unchanged. Residual failures17/4/13 are retained (dirty occlusion-query work and
+default-renderer/lifecycle tests); no full-green claim. final-v1 canonical skinned
+tangent fixture passes4/4 on WEBGPU and SDL_GPU too. FNA3D/SDL_GPU-Vulkan exposes
+the same upside-down shadow on all four effects; investigate its shared HLSL next.
+It declares no Single target, so orientation uses Color there (UP-018 remains a
+separate strict Single precision test on Software/EasyGL). Prior fixture failures
+on tangent-free SkinnedPbrEffect are retained in logs, not claimed as passing.
+No active heavy job. Preserve uncommitted ShadowTargetOrientationTests.cpp and
+SoftwareRenderer.cpp. Exact next task: fix/compile the CNA-owned FNA shadow shaders,
+validate FNA3D drivers, then commit UP-019. UP-001 packaging remains actionable.

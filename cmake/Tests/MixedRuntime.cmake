@@ -55,4 +55,26 @@ if(CNA_SHARED_LIBRARY AND CNA_ENABLE_GAMER_SERVICES AND CMAKE_NM AND CMAKE_READE
         # Keep exercising ld.bfd's positional --as-needed even when AUTO uses Mold.
         target_link_libraries(cna_mixed_runtime_opaque_bfd PRIVATE -fuse-ld=bfd)
     endif()
+
+    # cna-engine UP-006: unlike the sidecar fixtures, this library knows only the
+    # public module aliases. Its application also links the umbrella, in both orders.
+    add_library(cna_mixed_runtime_engine STATIC tests/modules/mixed_runtime_engine.cpp)
+    target_link_libraries(cna_mixed_runtime_engine PUBLIC
+        CNA::Core CNA::Math CNA::Input CNA::GraphicsCore CNA::Content CNA::Audio CNA::Runtime)
+    foreach(_order IN ITEMS engine_first umbrella_first)
+        set(_probe cna_mixed_runtime_${_order})
+        add_executable(${_probe} tests/modules/mixed_runtime_engine_main.cpp)
+        if(_order STREQUAL "engine_first")
+            target_link_libraries(${_probe} PRIVATE cna_mixed_runtime_engine CNA)
+        else()
+            target_link_libraries(${_probe} PRIVATE CNA cna_mixed_runtime_engine)
+        endif()
+        add_test(NAME MixedRuntime_${_order} COMMAND ${_probe})
+        add_test(NAME MixedRuntimeSymbols_${_order}
+            COMMAND ${CMAKE_COMMAND} -DCNA_NM=${CMAKE_NM}
+                -DCNA_CHECK_ENGINE=TRUE -DCNA_PROBE=$<TARGET_FILE:${_probe}>
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/MixedRuntimeSymbols.cmake)
+        set_tests_properties(MixedRuntime_${_order} MixedRuntimeSymbols_${_order}
+            PROPERTIES TIMEOUT 30 LABELS "configuration;shared-runtime")
+    endforeach()
 endif()
