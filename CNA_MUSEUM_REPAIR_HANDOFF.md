@@ -19,6 +19,82 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**Validated SDL_GPU volume-source repair, base CNA b0b0207e68b635b3fc1b97f05c8d9fc995514e52 / demos adbeeaf.**
+External job82770 completed: build264820ms PASS;72 runs compare36 before/after outcomes
+with zero status/check-count/knownIssue/exit deltas. Each phase: GLES12PASS;
+SOFTWARE2PASS/10SKIP and SDL_GPU2PASS/10SKIP (existing dialect/capability gates unchanged,
+not claimed as native source-layout coverage). Native ten-layout CTests above provide
+the actual SDL_GPU regression, including4096 exact pixels per render case.
+External peak4297715712/high1344/max0/oom0/kill0, source drift0.
+XML v3/v4 comparison confirms all59 old renderer and352 graphics outcomes unchanged
+on each driver; only eleven added mapping tests appear. No test or demo weakened.
+Ready for a coherent source-layout repair commit; museum owns final tex-volshader
+revalidation. Linux Vulkan lavapipe/RADV validated, not Metal/D3D12/mobile or a full
+CNA aggregate. The separate pre-existing cube-escape teardown errors stay OPEN.
+Exact next task after committing: run prepared ignored driver
+build-probe/repair-museum-sdlgpu-escape.mjs before in a private6GiB/one-worker scope.
+It instruments the actual SDL_GPU renderer TU and tests escaped2D/volume/cube/2D-target/
+cube-target renderers; reproduce memory safety before changing lifetime ownership.
+Preserve all inherited content/ISSUE-113 changes. No push or merge.
+
+Expanded validation v3 completed (job97142): ten source-layout CTests PASS on each
+lavapipe/RADV; existing native and portable two-volume fixtures PASS on both;
+renderer58PASS/1SKIP each, graphics338PASS/14SKIP each. Offline ASan/UBSan/LSan10PASS;
+all five boundary gates PASS, peak538288128/events0/source drift0.
+NOT an overall green result: each graphics run emitted eight device-teardown Vulkan
+errors in unchanged TextureCubeLifetimeTest.RenderTargetCubeRendererSurvivesATextureCubeBaseMove.
+Review job61919 compares this lifetime against the still-old demos library before any
+demos rebuild; evidence repair-museum-volume-review-v1-*. No source shader is involved.
+The new offline test guard was too narrow for multi-renderer builds (standalone sanitizer
+did execute all10). Corrected it to include CNA_RENDERER_PRESENT_SDL_GPU; native suite
+must be rerun. Review also adds a16/17 sampler boundary regression: source layouts can
+combine more than SDL's16 slots; SDL_CreateGPUShader asserts on overflow in debug mode.
+Do not commit until this boundary and the Vulkan delta are resolved/documented.
+Earlier expanded attempts retained: v1 configure audit mistook the test's printf tag
+SDL_GPU_VOLUME_LAYOUT for a native API use (renamed only the tag, no audit bypass);
+v2 build passed but standalone fixture missed -lSDL3 (link invocation corrected).
+Review61919 completed: the isolated unchanged cube escape reproduces exactly eight
+VUID-vkDestroyDevice-device-05137 errors on BOTH old demos and candidate libraries,
+on lavapipe and RADV. LD_DEBUG proves the distinct loaded libcna paths; hashes recorded.
+It is a pre-existing escaped-resource lifetime defect, not a shader regression, and
+remains OPEN for the next batch (raw owner pointers outlive the SDL_GPU device).
+New sampler-boundary test first failed10PASS/1FAIL, then the local16-slot guard repaired it.
+Final native v4 job89186: build7826ms; ten layout CTests and both legacy fixtures PASS
+on each driver; renderer69PASS/1unchangedSKIP (eleven new offline tests really enabled);
+graphics338PASS/14SKIP and the same eight separately reproduced teardown errors each.
+ASan/UBSan/LSan11PASS, five boundary gates PASS, peak1295589376/events0/source drift0.
+Driver retains exit1 for the eight Vulkan errors; no suppression or all-green claim.
+Current sole heavy job cna-museum-volume-external-v1, driver
+build-probe/repair-museum-volume-external.mjs v1: captures36 before outcomes, rebuilds
+the existing demos tree with one worker, runs36 after outcomes on SOFTWARE/GLES/SDL_GPU.
+Do not change C++ sources during this job. No demo oracle or marker edits. No push/merge.
+
+Visibility repair committed b0b0207e6; owner notified, foreign ownership edits
+verified unchanged after commit, no push. Scope cna-museum-volume-before rebuilds
+cmake-build-multi/libcna.so with one compiler, then runs the five isolated shader
+layouts on lavapipe only with Vulkan validation, core dumps disabled and a60-second
+per-case timeout. Driver build-probe/repair-museum-volume.mjs before; evidence
+repair-museum-volume-before-*. Do not change sources while the baseline runs.
+Baseline73354 completed: build126224ms/compile2641ms, native2dPASS4096pixels;
+native_volumeFAIL4096/4096 with VUID07752 (2D view bound to sampler3D);
+portable_volume and portable_uniforms bothSIGSEGV with descriptor-stage07988 and
+unwritten-descriptor08114 validation errors; invalid_volume wrongly accepted.
+Peak1399189504/events0, source/library drift0. No RADV baseline crash was attempted.
+Candidate unifies GLSL/SPIR-V descriptor reflection, retains image dimensions and
+logical units, preserves source GLSL Y-up versus portable bytecode's Y correction,
+rejects unmappable sampler descriptors before GPU use and missing cube/volume
+bindings before queueing. Empty resource snapshots stay explicitly empty.
+Candidate34717 caught a missing InvalidOperationException include (build failed,
+no runtime tests); corrected include only. Candidate-v2 job19487: build10292ms,
+all5 original lavapipe casesPASS, zero Validation Error/VUID lines, exact4096pixel
+matches, peak827277312/events0 and no drift. This is focused evidence, NOT closure.
+Added10 permanent source-layout CTests (also multi-renderer) and10 offline mapping
+tests, plus docs/sdlgpu-shader-effect-layout.md. No vendor or museum files changed.
+Next: compile/run expanded tests, existing native and portable ShaderEffect fixtures,
+affected renderer/graphics suites, offline ASan/UBSan/LSan, boundary gates and focused
+external demos. Validate corrected cases on lavapipe before RADV; commit only after
+regression evidence is reviewed. All SDL_GPU changes remain uncommitted.
+
 **Validated DEF_PROP visibility repair, base CNA bb6a2f44ef64bef812a82941781d2454c00f1705 / demos adbeeaf.**
 PBR follow-up below is committed bb6a2f44e; owner notified, no push. Visibility baseline:
 new test exposes eleven helpers in the shared tree (nine in committed HEAD plus two

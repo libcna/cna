@@ -1293,8 +1293,10 @@ namespace CNA::Internal::Renderers::SdlGpu
      * color, `[96..99]` = float/int slot 0 (`name` is deliberately ignored, matching every sibling
      * `EffectRenderer`'s own name-discarding convention). Per `SDL_gpu`'s own binding
      * convention (`SDL_CreateGPUShader`'s doc comment), the compiled GLSL must declare its uniform
-     * block at vertex `set=1`/`binding=0` and fragment `set=3`/`binding=0`, and its one texture
-     * sampler at fragment `set=2`/`binding=0`.
+     * block at vertex `set=1`/`binding=0` and fragment `set=3`/`binding=0`. Fragment
+     * samplers at native `set=2` use bindings 0..3 as typed texture units; portable
+     * set1 uses 0..3 for 2D, 4..7 for cube and 8..11 for volume. Both routes reflect
+     * the actual resource counts. See docs/sdlgpu-shader-effect-layout.md.
      */
     class SdlGpuEffectRenderer final : public IEffectRenderer
     {
@@ -1318,11 +1320,12 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * @param vertSpirv Vertex module bytes.
          * @param fragSpirv Fragment module bytes.
+         * @param flipClipSpaceY Apply the portable bytecode correction; false for compiled source GLSL.
          * @return True when both shaders were created; false with `GetCompileError()` set.
          */
         CNAEXT bool CompileSpirvProgramEXT(const std::string& vertSpirv,
-                                           const std::string& fragSpirv);
-        /** @brief Descriptor map the vertex module declared, empty for a GLSL-route effect. CNAEXT. */
+                                           const std::string& fragSpirv, bool flipClipSpaceY = true);
+        /** @brief Descriptor map the vertex module declared. CNAEXT. */
         CNAEXT [[nodiscard]] const std::vector<SpirvResourceBindingEXT>& GetVertexResourcesEXT() const
         {
             return vertexResourcesEXT_;
@@ -1336,8 +1339,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Binds a 2D texture to one of this effect's own sampler units. SMG-0008.
          *
-         * The GLSL route's effects sample exactly one texture -- the sprite's -- so this used to
-         * inherit `IEffectRenderer`'s no-op. A portable shader package routinely declares several
+         * Both source GLSL and portable shader packages may declare several textures
          * (a post-process pass reads scene colour, depth and sometimes a noise or history
          * texture), and a module whose declared sampler count is not matched by the draw is not a
          * missing feature but a crash: SDL builds descriptor writes for every sampler the shader
@@ -1356,12 +1358,13 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Shares the current bound-texture set with a queued draw. CNAEXT.
          *
          * @return An immutable snapshot, rebuilt only when a bind has changed it since the last call.
+         * @throws System::InvalidOperationException if a declared cube/volume unit has no texture.
          */
         CNAEXT [[nodiscard]] std::shared_ptr<const SdlGpuEffectTexturesEXT>
         SnapshotBoundTexturesEXT() const;
 
         /** @brief Vertex-input locations the compiled module consumes. CNAEXT. SMG-0019.
-         *  @return Ascending locations, or empty for a GLSL-route effect. */
+         *  @return Ascending locations consumed by the vertex shader. */
         CNAEXT [[nodiscard]] const std::vector<std::uint32_t>& GetVertexInputLocationsEXT() const
         {
             return vertexInputLocationsEXT_;
@@ -1403,14 +1406,14 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief The fragment stage's reflected SAMPLER resources, shared by queued draws. CNAEXT.
-         * @return Null when this effect took the GLSL route.
+         * @return A non-null snapshot, empty when no sampler is declared.
          */
         CNAEXT [[nodiscard]] std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
         SnapshotFragmentSamplersEXT() const;
 
         /**
          * @brief The fragment stage's reflected uniform-buffer resources, shared by queued draws. CNAEXT.
-         * @return Null when this effect took the GLSL route, which has one fixed block.
+         * @return A non-null snapshot, empty when no uniform buffer is declared.
          */
         CNAEXT [[nodiscard]] std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
         SnapshotFragmentUniformsEXT() const;

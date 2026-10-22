@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -5586,49 +5587,36 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SDL_GPUTexture* texture = nullptr;
             SDL_GPUSampler* sampler = nullptr;
-            if (declared.originalSet != kEffectTextureSetEXT)
+            const std::uint32_t unit = declared.textureUnit;
+            if (declared.usesSpriteTexture)
             {
                 texture = spriteTexture;
-                sampler = spriteSampler;
             }
-            else
+            else if (textures != nullptr)
             {
-                const std::uint32_t binding = declared.originalBinding;
-                const std::uint32_t unit =
-                    binding >= kEffectVolumeBindingBaseEXT ? binding - kEffectVolumeBindingBaseEXT
-                    : binding >= kEffectCubeBindingBaseEXT ? binding - kEffectCubeBindingBaseEXT
-                                                           : binding;
-                if (textures != nullptr)
+                switch (declared.textureDimension)
                 {
-                    if (binding >= kEffectVolumeBindingBaseEXT)
-                    {
-                        if (unit < textures->textures3D.size())
-                            texture = textures->textures3D[unit].texture;
-                    }
-                    else if (binding >= kEffectCubeBindingBaseEXT)
-                    {
-                        if (unit < textures->texturesCube.size())
-                            texture = textures->texturesCube[unit].texture;
-                    }
-                    else if (unit < textures->textures2D.size())
-                    {
+                    case SpirvTextureDimensionEXT::Texture3D:
+                        texture = textures->textures3D[unit].texture;
+                        break;
+                    case SpirvTextureDimensionEXT::Cube:
+                        texture = textures->texturesCube[unit].texture;
+                        break;
+                    case SpirvTextureDimensionEXT::Texture2D:
                         texture = textures->textures2D[unit].texture;
-                    }
+                        break;
+                    default: break;
                 }
-                // STREETS-0004: unit N samples through SamplerStates[N], as in XNA and on the
-                // retired Vulkan renderer (VULKAN-166). A ShaderEffect applies no LOD bias of its
-                // own, so the state's bias rides on the native sampler. Unit 0 of a SpriteBatch
-                // draw is the batch's own sampler: SpriteBatch assigns SamplerStates[0] through its
-                // private channel, which never reaches samplerSlots_[0].
-                if (unit == 0 && spriteSampler != nullptr)
-                    sampler = spriteSampler;
-                else if (unitSamplers != nullptr && unit < unitSamplers->size())
-                {
-                    const SamplerSlotState& state = (*unitSamplers)[unit];
-                    sampler = GetOrCreateSampler(state.filter, state.addressU, state.addressV,
-                                                 state.maxAnisotropy, "ShaderEffect",
-                                                 state.maxMipLevel, state.lodBias, state.addressW);
-                }
+            }
+            // SpriteBatch owns sampler unit zero; the remaining units keep their own states.
+            if (unit == 0 && spriteSampler != nullptr)
+                sampler = spriteSampler;
+            else if (unitSamplers != nullptr && unit < unitSamplers->size())
+            {
+                const SamplerSlotState& state = (*unitSamplers)[unit];
+                sampler = GetOrCreateSampler(state.filter, state.addressU, state.addressV,
+                                             state.maxAnisotropy, "ShaderEffect",
+                                             state.maxMipLevel, state.lodBias, state.addressW);
             }
             if (texture == nullptr) texture = AcquireDefaultWhiteTextureEXT();
             if (sampler == nullptr) sampler = AcquireFallbackSamplerEXT();
@@ -5741,25 +5729,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 32> uniforms = command.customUniforms;
             uniforms[0] = viewportSize[0];
             uniforms[1] = viewportSize[1];
-            if (command.customVertexUniforms == nullptr && command.customFragmentUniforms == nullptr)
-            {
-                // The GLSL route: one fixed block per stage, at slot 0, as it has always been.
-                SDL_PushGPUVertexUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
-                SDL_PushGPUFragmentUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
-            }
-            else
-            {
-                // SMG-0010: a reflected module says which slot holds what. Only the blocks the
-                // module actually declares are pushed -- pushing a slot the shader does not
-                // declare is what SDL asserts on, and leaving a declared one unpushed is what
-                // reaches the driver as an unwritten descriptor.
-                PushCustomEffectUniformsEXT(
-                    cmd, command.customVertexUniforms.get(), uniforms,
-                    command.customUniformArrays.get(), /*fragment=*/false);
-                PushCustomEffectUniformsEXT(
-                    cmd, command.customFragmentUniforms.get(), uniforms,
-                    command.customUniformArrays.get(), /*fragment=*/true);
-            }
+            PushCustomEffectUniformsEXT(
+                cmd, command.customVertexUniforms.get(), uniforms,
+                command.customUniformArrays.get(), /*fragment=*/false);
+            PushCustomEffectUniformsEXT(
+                cmd, command.customFragmentUniforms.get(), uniforms,
+                command.customUniformArrays.get(), /*fragment=*/true);
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         else if (command.compiledEffect.vertexShader != nullptr)
@@ -13021,9 +12996,9 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     bool SdlGpuEffectRenderer::CompileSpirvProgramEXT(
-        const std::string& vertSpirv, const std::string& fragSpirv)
+        const std::string& vertSpirv, const std::string& fragSpirv, const bool flipClipSpaceY)
     {
-        SpirvRemapResultEXT vertex = RemapSpirvForSdlGpuEXT(vertSpirv.data(), vertSpirv.size());
+        SpirvRemapResultEXT vertex = RemapSpirvForSdlGpuEXT(vertSpirv.data(), vertSpirv.size(), flipClipSpaceY);
         if (!vertex.error.empty())
         {
             compileError_ = "ShaderEffect vertex SPIR-V: " + vertex.error;
@@ -13034,7 +13009,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             compileError_ = "ShaderEffect vertex payload does not declare a vertex entry point";
             return false;
         }
-        SpirvRemapResultEXT fragment = RemapSpirvForSdlGpuEXT(fragSpirv.data(), fragSpirv.size());
+        SpirvRemapResultEXT fragment = RemapSpirvForSdlGpuEXT(fragSpirv.data(), fragSpirv.size(), flipClipSpaceY);
         if (!fragment.error.empty())
         {
             compileError_ = "ShaderEffect fragment SPIR-V: " + fragment.error;
@@ -13110,6 +13085,19 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::shared_ptr<const SdlGpuEffectTexturesEXT>
     SdlGpuEffectRenderer::SnapshotBoundTexturesEXT() const
     {
+        // Validate before queueing: a 2D white fallback is not a legal cube/volume descriptor.
+        for (const SpirvResourceBindingEXT& resource : fragmentResourcesEXT_)
+        {
+            if (resource.kind != SpirvResourceKindEXT::SampledTexture) continue;
+            const auto unit = resource.textureUnit;
+            if ((resource.textureDimension == SpirvTextureDimensionEXT::Texture3D
+                 && boundTexturesEXT_.textures3D[unit].texture == nullptr)
+                || (resource.textureDimension == SpirvTextureDimensionEXT::Cube
+                    && boundTexturesEXT_.texturesCube[unit].texture == nullptr))
+                throw System::InvalidOperationException(
+                    "SDL_GPU ShaderEffect requires a bound cube/volume texture at unit "
+                    + std::to_string(unit) + " before drawing.");
+        }
         if (textureSnapshotEXT_ == nullptr)
             textureSnapshotEXT_ =
                 std::make_shared<const SdlGpuEffectTexturesEXT>(boundTexturesEXT_);
@@ -13119,7 +13107,6 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
     SdlGpuEffectRenderer::SnapshotFragmentSamplersEXT() const
     {
-        if (fragmentResourcesEXT_.empty()) return nullptr;
         if (fragmentSamplerSnapshotEXT_ == nullptr)
         {
             auto samplers = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
@@ -13208,7 +13195,6 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
     SdlGpuEffectRenderer::SnapshotFragmentUniformsEXT() const
     {
-        if (fragmentResourcesEXT_.empty()) return nullptr;
         if (fragmentUniformSnapshotEXT_ == nullptr)
         {
             auto uniforms = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
@@ -13223,7 +13209,6 @@ namespace CNA::Internal::Renderers::SdlGpu
     std::shared_ptr<const std::vector<SpirvResourceBindingEXT>>
     SdlGpuEffectRenderer::SnapshotVertexUniformsEXT() const
     {
-        if (vertexResourcesEXT_.empty()) return nullptr;
         if (vertexUniformSnapshotEXT_ == nullptr)
         {
             auto uniforms = std::make_shared<std::vector<SpirvResourceBindingEXT>>();
@@ -13249,6 +13234,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         valid_ = false;
         vertexResourcesEXT_.clear();
         fragmentResourcesEXT_.clear();
+        vertexInputLocationsEXT_.clear();
+        fragmentSamplerCountEXT_ = 0;
+        fragmentSamplerSnapshotEXT_.reset();
+        fragmentUniformSnapshotEXT_.reset();
+        vertexUniformSnapshotEXT_.reset();
+        textureSnapshotEXT_.reset();
         for (auto& [key, pipeline] : pipelines_)
             owner_->QueueGraphicsPipelineRelease(pipeline);
         pipelines_.clear();
@@ -13282,47 +13273,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (!CompileGlslToSpirv(fragSrc, kShadercFragmentShader, "ShaderEffect_fs", fragSpirv, compileError_))
             return false;
 
-        SDL_GPUShaderCreateInfo vsInfo{};
-        vsInfo.code = vertSpirv.data();
-        vsInfo.code_size = vertSpirv.size();
-        vsInfo.entrypoint = "main";
-        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 1;
-        // Through the renderer's shader route, for the reason CompileSpirvProgramEXT
-        // gives: a driver that does not consume SPIR-V must never be handed it directly.
-        try
-        {
-            vertexShader_ = owner_->CreateRoutedSpirvShaderEXT(vsInfo, "(vertex) ");
-        }
-        catch (const std::exception& exception)
-        {
-            compileError_ = std::string("ShaderEffect shader creation failed ") + exception.what();
-            return false;
-        }
-
-        SDL_GPUShaderCreateInfo fsInfo{};
-        fsInfo.code = fragSpirv.data();
-        fsInfo.code_size = fragSpirv.size();
-        fsInfo.entrypoint = "main";
-        fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-        fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-        fsInfo.num_samplers = 1;
-        fsInfo.num_uniform_buffers = 1;
-        try
-        {
-            fragmentShader_ = owner_->CreateRoutedSpirvShaderEXT(fsInfo, "(fragment) ");
-        }
-        catch (const std::exception& exception)
-        {
-            compileError_ = std::string("ShaderEffect shader creation failed ") + exception.what();
-            SDL_ReleaseGPUShader(owner_->Device(), vertexShader_);
-            vertexShader_ = nullptr;
-            return false;
-        }
-
-        valid_ = true;
-        return true;
+        // Source shaders already emit SDL's native Y-up clip space. Share descriptor
+        // reflection/routing with portable bytecode without applying its Y correction.
+        return CompileSpirvProgramEXT(
+            std::string(reinterpret_cast<const char*>(vertSpirv.data()), vertSpirv.size()),
+            std::string(reinterpret_cast<const char*>(fragSpirv.data()), fragSpirv.size()), false);
 #endif
     }
 

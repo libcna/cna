@@ -14,6 +14,24 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
+# The museum volume-source regression also runs when SDL_GPU is a non-default
+# member of a multi-renderer build. It requires the optional native GLSL compiler.
+if(CNA_BUILD_TESTS AND CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE)
+    enable_testing()
+    add_executable(CnaSdlGpuVolumeLayoutTest sdlgpu_volume_layout_test.cpp)
+    target_link_libraries(CnaSdlGpuVolumeLayoutTest PRIVATE CNA)
+    cna_link_sharp_runtime(CnaSdlGpuVolumeLayoutTest PRIVATE)
+    foreach(_volume_layout native2d native_volume portable_volume portable_uniforms invalid_volume
+                           missing_volume mismatched_volume sampler_array zero_uniforms zero_samplers)
+        cna_register_renderer_test(NAME SdlGpu_ShaderEffect_SourceLayout_${_volume_layout}
+            COMMAND CnaSdlGpuVolumeLayoutTest ${_volume_layout}
+            TIMEOUT 60 LABELS "SdlGpu;ShaderEffect;Texture3D"
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=SDL_GPU")
+        set_tests_properties(SdlGpu_ShaderEffect_SourceLayout_${_volume_layout} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation Error")
+    endforeach()
+endif()
+
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     enable_testing()
 

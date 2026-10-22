@@ -110,6 +110,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SpirvResourceKindEXT kind = SpirvResourceKindEXT::SampledTexture;
             std::uint32_t arrayLength = 1;
+            SpirvTextureDimensionEXT textureDimension = SpirvTextureDimensionEXT::None;
         };
     }
 
@@ -121,7 +122,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         return magic == kMagic;
     }
 
-    SpirvRemapResultEXT RemapSpirvForSdlGpuEXT(const void* bytes, const std::size_t byteCount)
+    SpirvRemapResultEXT RemapSpirvForSdlGpuEXT(
+        const void* bytes, const std::size_t byteCount, const bool flipClipSpaceY)
     {
         SpirvRemapResultEXT result;
         if (bytes == nullptr || byteCount == 0)
@@ -136,11 +138,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         std::vector<std::uint32_t> words(byteCount / sizeof(std::uint32_t));
         std::memcpy(words.data(), bytes, byteCount);
-        return RemapSpirvForSdlGpuEXT(words.data(), words.size());
+        return RemapSpirvForSdlGpuEXT(words.data(), words.size(), flipClipSpaceY);
     }
 
     SpirvRemapResultEXT RemapSpirvForSdlGpuEXT(
-        const std::uint32_t* wordData, const std::size_t wordCount)
+        const std::uint32_t* wordData, const std::size_t wordCount, const bool flipClipSpaceY)
     {
         SpirvRemapResultEXT result;
         if (wordData == nullptr || wordCount < 5 || wordData[0] != kMagic)
@@ -176,7 +178,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::map<std::uint32_t, std::uint32_t> arrayLengthId;    // %arr  -> length constant id
         std::map<std::uint32_t, std::uint32_t> constantValue;    // %const-> literal
         std::map<std::uint32_t, std::uint32_t> imageSampled;     // %img  -> Sampled operand
-        std::set<std::uint32_t> sampledImageTypes;
+        struct ImageType
+        {
+            std::uint32_t dimension = 0;
+            bool arrayed = false;
+            bool multisampled = false;
+        };
+        std::map<std::uint32_t, ImageType> imageTypes;
+        std::map<std::uint32_t, std::uint32_t> sampledImageTypes;
         std::set<std::uint32_t> samplerTypes;
         std::set<std::uint32_t> structTypes;
         std::set<std::uint32_t> blockStructs;
@@ -201,13 +210,17 @@ namespace CNA::Internal::Renderers::SdlGpu
                     }
                     break;
                 case kOpTypeImage:
-                    if (w.size() >= 8) imageSampled[w[1]] = w[7];
+                    if (w.size() >= 8)
+                    {
+                        imageSampled[w[1]] = w[7];
+                        imageTypes[w[1]] = {w[3], w[5] != 0, w[6] != 0};
+                    }
                     break;
                 case kOpTypeSampler:
                     if (w.size() >= 2) samplerTypes.insert(w[1]);
                     break;
                 case kOpTypeSampledImage:
-                    if (w.size() >= 3) sampledImageTypes.insert(w[1]);
+                    if (w.size() >= 3) sampledImageTypes[w[1]] = w[2];
                     break;
                 case kOpTypeArray:
                     if (w.size() >= 4)
@@ -304,6 +317,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
             // Walk through array wrappers; an array of descriptors occupies that many slots.
             std::uint32_t base = pointerIt->second;
+            if (storage == kStorageClassUniformConstant && arrayElement.count(base) != 0)
+            {
+                result.error = "SDL_GPU ShaderEffect cannot bind sampler descriptor arrays";
+                return result;
+            }
             std::uint32_t arrayLength = 1;
             while (arrayElement.count(base) != 0)
             {
@@ -392,6 +410,19 @@ namespace CNA::Internal::Renderers::SdlGpu
             const auto bindingIt = declaredBinding.find(variable);
             entry.originalSet = setIt != declaredSet.end() ? setIt->second : 0u;
             entry.originalBinding = bindingIt != declaredBinding.end() ? bindingIt->second : 0u;
+            if (entry.classified.kind == SpirvResourceKindEXT::SampledTexture)
+            {
+                const auto combined = sampledImageTypes.find(base);
+                const auto image = imageTypes.find(combined != sampledImageTypes.end() ? combined->second : base);
+                if (image == imageTypes.end() || image->second.arrayed || image->second.multisampled
+                    || image->second.dimension < 1 || image->second.dimension > 3)
+                {
+                    result.error = "SDL_GPU ShaderEffect requires a non-array, non-multisampled 2D, cube or volume sampler";
+                    return result;
+                }
+                entry.classified.textureDimension =
+                    static_cast<SpirvTextureDimensionEXT>(image->second.dimension);
+            }
             entries.push_back(entry);
         }
 
@@ -563,7 +594,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // cannot: it is shared with the renderers that must NOT negate. So the same negation is
         // applied to the module here, which keeps one convention across every renderer and leaves
         // the shared sources correct for all of them.
-        if (result.stage == SpirvStageEXT::Vertex)
+        if (result.stage == SpirvStageEXT::Vertex && flipClipSpaceY)
         {
             // glslang writes gl_Position as member 0 of the gl_PerVertex block, reached by an
             // OpAccessChain, not as a variable of its own -- so the BuiltIn decoration to look for
@@ -747,12 +778,55 @@ namespace CNA::Internal::Renderers::SdlGpu
             binding.slot = slotOf[entry.variable];
             binding.arrayLength = entry.classified.arrayLength;
             binding.convertedFromPushConstant = entry.fromPushConstant;
+            binding.textureDimension = entry.classified.textureDimension;
+            if (binding.kind == SpirvResourceKindEXT::SampledTexture)
+            {
+                const auto dimension = binding.textureDimension;
+                bool mapped = result.stage == SpirvStageEXT::Fragment;
+                if (binding.originalSet == 0)
+                {
+                    mapped = mapped && binding.originalBinding == 0
+                        && dimension == SpirvTextureDimensionEXT::Texture2D;
+                    binding.usesSpriteTexture = true;
+                }
+                else if (binding.originalSet == 1)
+                {
+                    const std::uint32_t base = dimension == SpirvTextureDimensionEXT::Texture3D ? 8u
+                        : dimension == SpirvTextureDimensionEXT::Cube ? 4u : 0u;
+                    mapped = mapped && binding.originalBinding >= base
+                        && binding.originalBinding < base + 4u;
+                    if (mapped) binding.textureUnit = binding.originalBinding - base;
+                }
+                else if (binding.originalSet == 2)
+                {
+                    mapped = mapped && binding.originalBinding < 4u;
+                    binding.textureUnit = binding.originalBinding;
+                    binding.usesSpriteTexture = binding.textureUnit == 0
+                        && dimension == SpirvTextureDimensionEXT::Texture2D;
+                }
+                else mapped = false;
+                if (!mapped)
+                {
+                    result.error = "SDL_GPU ShaderEffect cannot map sampler at set "
+                        + std::to_string(binding.originalSet) + ", binding "
+                        + std::to_string(binding.originalBinding)
+                        + " to a supported fragment texture unit/dimension";
+                    return result;
+                }
+            }
             result.resources.push_back(binding);
         }
 
-        // SDL_gpu allows at most one uniform buffer slot per stage in the conventions CNA uses; a
-        // module wanting more is not wrong, but the runtime below has nowhere to route the extras,
-        // so it is named here rather than mis-bound at draw time.
+        // SDL_gpu exposes sixteen samplers and four uniform buffer slots per stage; reject an overflowing layout
+        // before shader creation rather than leave descriptors unbound at draw time.
+        if (result.samplerCount > 16u)
+        {
+            std::ostringstream message;
+            message << "SPIR-V module declares " << result.samplerCount
+                    << " samplers; SDL_gpu exposes sixteen per stage";
+            result.error = message.str();
+            return result;
+        }
         if (result.uniformBufferCount > 4u)
         {
             std::ostringstream message;

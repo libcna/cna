@@ -30,7 +30,7 @@
  * renderer is retired (WebGPU's WGSL payloads are derived from the same sources), so the
  * translation stays here.
  *
- * Two transformations happen, and nothing else:
+ * Resource translation is shared by compiled GLSL and portable bytecode:
  *
  * 1. **Descriptor sets and bindings are reassigned** into the table above. Bindings are renumbered
  *    contiguously from zero within each set, and the original `(set, binding)` of every
@@ -50,6 +50,11 @@
  * also satisfy std140 on their own (a `mat4` and a `vec4` both land on 16), so the block is a legal
  * uniform buffer without repacking. A block that did **not** satisfy std140 is refused by name
  * rather than reinterpreted.
+ *
+ * Portable vertex bytecode also receives its established clip-space Y correction. Source GLSL
+ * already uses SDL's Y-up coordinates and explicitly disables that correction. Sampled image
+ * dimensions and original bindings are checked against ShaderEffect's bindable units before
+ * a driver sees the module; unsupported descriptor arrays/image shapes fail with a diagnostic.
  *
  * Nothing here is `SDL_gpu`-version-specific beyond the layout table, and nothing here needs a
  * shader compiler: it is a word-level rewrite of a module that is already SPIR-V.
@@ -84,6 +89,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         UniformBuffer = 1
     };
 
+    /** @brief Sampled image dimensions supported by ShaderEffect's texture setters. */
+    enum class SpirvTextureDimensionEXT : std::uint8_t
+    {
+        /** @brief Not a sampled texture. */
+        None = 0,
+        /** @brief A two-dimensional texture. */
+        Texture2D = 1,
+        /** @brief A volume texture. */
+        Texture3D = 2,
+        /** @brief A cube texture. */
+        Cube = 3
+    };
+
     /**
      * @brief Where one resource was declared, and where `SDL_gpu` will expect to find it. CNAEXT.
      *
@@ -109,10 +127,16 @@ namespace CNA::Internal::Renderers::SdlGpu
          *        every binding call actually takes.
          */
         std::uint32_t slot = 0;
-        /** @brief How many descriptors this declaration occupies; above one for an array. */
+        /** @brief Number of descriptor slots; sampler descriptor arrays are refused. */
         std::uint32_t arrayLength = 1;
         /** @brief True when this entry is a `push_constant` block converted to a uniform buffer. */
         bool convertedFromPushConstant = false;
+        /** @brief Dimension reflected from OpTypeImage, not inferred from the compacted slot. */
+        SpirvTextureDimensionEXT textureDimension = SpirvTextureDimensionEXT::None;
+        /** @brief ShaderEffect texture/sampler unit, resolved from the original descriptor. */
+        std::uint32_t textureUnit = 0;
+        /** @brief This declaration samples SpriteBatch's own two-dimensional texture. */
+        bool usesSpriteTexture = false;
     };
 
     /**
@@ -155,20 +179,22 @@ namespace CNA::Internal::Renderers::SdlGpu
      *
      * @param words Start of the module, including its five-word header.
      * @param wordCount Number of 32-bit words in the module.
+     * @param flipClipSpaceY Apply the portable bytecode's Y correction; false for native GLSL.
      * @return The rewritten module and its resource map, or a value whose `error` names the refusal.
      */
     [[nodiscard]] SpirvRemapResultEXT RemapSpirvForSdlGpuEXT(
-        const std::uint32_t* words, std::size_t wordCount);
+        const std::uint32_t* words, std::size_t wordCount, bool flipClipSpaceY = true);
 
     /**
      * @brief Convenience overload taking the byte form a shader package payload arrives in. CNAEXT.
      *
      * @param bytes Module bytes; the length must be a whole number of 32-bit words.
      * @param byteCount Number of bytes.
+     * @param flipClipSpaceY Apply the portable bytecode's Y correction; false for native GLSL.
      * @return As @ref RemapSpirvForSdlGpuEXT, with a named refusal for a misaligned length.
      */
     [[nodiscard]] SpirvRemapResultEXT RemapSpirvForSdlGpuEXT(
-        const void* bytes, std::size_t byteCount);
+        const void* bytes, std::size_t byteCount, bool flipClipSpaceY = true);
 
     /**
      * @brief Whether a byte range begins with the SPIR-V magic word. CNAEXT.

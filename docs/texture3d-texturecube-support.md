@@ -78,19 +78,18 @@ Task 279; the fix only changes silent-no-op into a clear exception.
 
 ## Sampling in shaders
 
-| Use case | EasyGL |
-|---|:---:|
-| `TextureCube` in `EnvironmentMapEffect` | ✅ (pre-existing, reconfirmed) |
-| `Texture3D` in any effect, stock or custom | ❌ |
+The Task 277 finding formerly recorded here (no Texture inheritance and no custom-effect
+texture binding) is historical, not the current API. `Texture3D` and `TextureCube` now
+derive from `Texture`; `ShaderEffect::SetTexture` has explicit 2D, cube and volume overloads.
+`EnvironmentMapEffect` continues to provide stock cube sampling. Query the selected
+renderer's capability profile for the shader dialect and volume-sampling support; API
+presence does not imply that every renderer executes custom shader source.
 
-`Texture3D` sampling is not implemented on any renderer for a structural reason, not a per-renderer
-gap: `Texture3D`/`TextureCube` don't inherit `Texture` in CNA (unlike FNA's `Texture3D : Texture`),
-so neither can be placed into `GraphicsDevice.Textures[slot]`, and custom `ShaderEffect` has no
-texture-binding API of any kind (Task 277 finding, tracked as Task 863). `TextureCube` sampling
-*does* work for `EnvironmentMapEffect` specifically because that stock effect bypasses
-`GraphicsDevice.Textures` entirely via a dedicated `GpuDrawParams::envMap` field that every renderer's
-draw dispatch consumes directly — but no stock effect needs `Texture3D`, and no custom-effect
-workaround exists for it.
+SDL_GPU source and portable-bytecode sampler layouts are documented in
+[SDL_GPU ShaderEffect layout](sdlgpu-shader-effect-layout.md). In particular a native
+fragment `sampler3D` at set2/binding0 consumes the effect's volume unit0, not SpriteBatch's
+2D texture. Unsupported layouts are refused explicitly. The source-layout and existing
+portable per-unit-sampler regressions protect this distinction.
 
 ---
 
