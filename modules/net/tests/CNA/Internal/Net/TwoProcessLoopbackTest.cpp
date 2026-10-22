@@ -182,6 +182,10 @@ TEST(TwoProcessLoopbackTest, HostAndClientJoinAndExchangeAppDataAcrossRealProces
     RunHostAndClient("host", "client");
 }
 
+TEST(TwoProcessLoopbackTest, MuseumJoinInProgressReturnsPlayingAndReplaysGameStartedExactlyOnce) {
+    RunHostAndClient("playing-host", "playing-client");
+}
+
 // GSX-E1: voice between two real processes over SystemLink: each machine's gamer talks, is heard
 // and played on the other. (A build without libopus reports PORT=0 and passes trivially below.)
 TEST(TwoProcessLoopbackTest, VoiceTravelsBothWaysAcrossRealProcesses) {

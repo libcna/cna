@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
@@ -89,11 +90,17 @@ namespace {
         return true;
     }
 
-    int RunHost(int timeoutSeconds) {
+    int RunHost(int timeoutSeconds, bool playing = false) {
         auto gamer = SignedInGamer::CreateInternal("HostPlayer");
         NetworkSession* session = NetworkSession::Create(
             NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
         );
+
+        if (playing) {
+            session->setAllowJoinInProgressProperty(true);
+            session->StartGame();
+            session->Update();
+        }
 
         uint16_t port = ENetBackend::GetBoundPort(session);
         if (port == 0) {
@@ -162,7 +169,7 @@ namespace {
         return 0;
     }
 
-    int RunClient(uint16_t port, int timeoutSeconds) {
+    int RunClient(uint16_t port, int timeoutSeconds, bool playing = false) {
         if (port == 0) {
             std::fprintf(stderr, "client: --port is required and must be nonzero\n");
             return 64;
@@ -180,6 +187,18 @@ namespace {
             NetworkSessionProperties{}, QualityOfService::CreateInternal(), "127.0.0.1", port,
             NetworkSessionType::SystemLink);
         NetworkSession* session = NetworkSession::Join(&available);
+        int started = 0;
+        if (playing) {
+            // XNA's GameStarted add accessor immediately replays Playing to this new handler.
+            session->GameStarted += [&](System::Object*, const GameStartedEventArgs&) { ++started; };
+            if (session->getSessionStateProperty() != NetworkSessionState::Playing || started != 1) {
+                std::fprintf(stderr, "client: Join did not return Playing with one GameStarted replay (state=%d, events=%d)\n",
+                    static_cast<int>(session->getSessionStateProperty()), started);
+                session->Dispose();
+                delete session;
+                return 71;
+            }
+        }
         auto& properties = session->getSessionPropertiesProperty();
         bool rejected = false;
         try { properties[0] = 7; } catch(const System::InvalidOperationException&) { rejected = true; }
@@ -229,6 +248,12 @@ namespace {
             return 1;
         }
 
+        if (playing && started != 1) {
+            std::fprintf(stderr, "client: the welcome replayed GameStarted again during Update\n");
+            session->Dispose();
+            delete session;
+            return 72;
+        }
         session->Dispose();
 
         delete session;
@@ -1160,6 +1185,12 @@ int main(int argc, char** argv) {
         if (role == "client") {
             return RunClient(port, timeoutSeconds);
         }
+        if (role == "playing-host") {
+            return RunHost(timeoutSeconds, true);
+        }
+        if (role == "playing-client") {
+            return RunClient(port, timeoutSeconds, true);
+        }
         if (role == "find-join-client") {
             return RunFindJoinClient(port, findMode, timeoutSeconds);
         }
@@ -1204,7 +1235,7 @@ int main(int argc, char** argv) {
             return RunMigrationSurvivor(port, gamertag, timeoutSeconds, hostLocals);
         }
         std::fprintf(stderr,
-                      "Usage: %s --role=host|client|find-join-client|added-gamer-host|added-gamer-client|guest-host|guest-client|"
+                      "Usage: %s --role=host|client|playing-host|playing-client|find-join-client|added-gamer-host|added-gamer-client|guest-host|guest-client|"
                       "start-hosting-partial-failure|migration-host|migration-survivor|voice-host|voice-client "
                       "[--port=<n>] [--gamertag=<name>] [--find=limit|list] [--timeout=<seconds>] [--host-locals=1|2]\n",
                       argv[0]);

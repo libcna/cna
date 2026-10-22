@@ -32,6 +32,13 @@ entry below also keeps its own status line.
 
 ## Not limitations: implemented and tested
 
+SystemLink join-in-progress transmits the host's current state in the welcome
+message. Native `Join` returns `Playing` before the caller subscribes; as in XNA,
+subscribing to `GameStarted` while Playing immediately notifies that handler once.
+The optional wire extension retains the old Lobby message layout. Correct state
+on a late join requires both host and client to include the 2026-10-22 welcome-state
+repair; older hosts do not send state and older clients ignore the extension.
+
 Listed so that nobody reads an older document as saying they are missing. Achievements (service
 and offline catalogs), leaderboards (LocalWithLeaderboards, PlayerMatch, Ranked, Stream columns),
 PlayerMatch and Ranked sessions, SystemLink, the authenticated TLS/WSS relay, invitations and

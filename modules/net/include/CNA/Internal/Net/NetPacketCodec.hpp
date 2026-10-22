@@ -96,6 +96,8 @@ namespace CNA::Internal::Net
         std::vector<RosterEntry> ExistingRoster;
         /** @brief Complete host-authoritative session-property snapshot at join time. */
         NetworkSessionProperties SessionProperties;
+        /** @brief Host state at join time; welcomes from older peers default to Lobby. */
+        NetworkSessionState SessionState{NetworkSessionState::Lobby};
     };
 
     /** @brief Sent by the host to already-connected clients when new gamers join. */

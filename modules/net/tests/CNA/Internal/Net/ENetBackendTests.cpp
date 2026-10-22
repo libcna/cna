@@ -238,6 +238,48 @@ TEST(ENetBackendTest, RealNetworkingEnabledOnlyForSystemLink) {
     EXPECT_FALSE(ENetBackend::RealNetworkingEnabled(NetworkSessionType::LocalWithLeaderboards));
 }
 
+TEST(ENetBackendTest, MuseumHostWelcomeAdvertisesAnAlreadyPlayingSession) {
+    SystemLinkSessionFixture host("HostPlayer");
+    host.session->setAllowJoinInProgressProperty(true);
+    host.session->StartGame();
+    host.session->Update();
+    ASSERT_EQ(host.session->getSessionStateProperty(), NetworkSessionState::Playing);
+    ENetHostHandle client = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    ENetPeer* peer = nullptr;
+    ServerWelcomeMessage welcome;
+    ConnectFakeClientAndCompleteHandshake(client, host.session, &peer, &welcome);
+    EXPECT_EQ(welcome.SessionState, NetworkSessionState::Playing);
+}
+
+TEST(ENetBackendTest, MuseumWelcomeAppliesPlayingAndDoesNotRepeatAnUnchangedState) {
+    FakeHostedClient client(false);
+    int started = 0, ended = 0, lateStarted = 0;
+    client.session->GameStarted += [&](System::Object*, const GameStartedEventArgs&) {
+        ++started;
+        EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Playing);
+        EXPECT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+    };
+    client.session->GameEnded += [&](System::Object*, const auto&) { ++ended; };
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {{0, "OtherPlayer", true}};
+    welcome.SessionState = NetworkSessionState::Playing;
+    client.SendFromHost(NetPacketCodec::Encode(welcome));
+    for (int i = 0; i < 200 && started == 0; ++i, PollYield()) client.session->Update();
+    ASSERT_EQ(started, 1);
+    EXPECT_EQ(ended, 0);
+    client.session->GameStarted += [&](System::Object*, const GameStartedEventArgs&) { ++lateStarted; };
+    EXPECT_EQ(lateStarted, 1);
+    client.SendFromHost(NetPacketCodec::Encode(welcome));
+    // A subsequent ordered state change proves the repeated welcome was consumed first.
+    client.SendFromHost(NetPacketCodec::Encode(StateChangeBroadcastMessage{NetworkSessionState::Lobby}));
+    for (int i = 0; i < 200 && ended == 0; ++i, PollYield()) client.session->Update();
+    EXPECT_EQ(ended, 1);
+    EXPECT_EQ(started, 1);
+    EXPECT_EQ(lateStarted, 1);
+    EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Lobby);
+}
+
 TEST(ENetBackendTest, TeardownAndPumpOnUnregisteredSessionAreSafeNoOps) {
     auto gamer = SignedInGamer::CreateInternal("tag1");
     NetworkSession* session = NetworkSession::Create(

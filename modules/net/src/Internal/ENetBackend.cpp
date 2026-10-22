@@ -572,6 +572,7 @@ namespace CNA::Internal::Net
             ServerWelcomeMessage welcome;
             welcome.ExistingRoster = SnapshotRoster(session, state);
             welcome.SessionProperties = session->getSessionPropertiesProperty();
+            welcome.SessionState = session->getSessionStateProperty();
 
             GamerJoinBroadcastMessage broadcastMsg;
             std::vector<uint8_t> newWireIds;
@@ -740,6 +741,17 @@ namespace CNA::Internal::Net
                     std::find(state.PendingLocalAdds.begin(), state.PendingLocalAdds.end(), local) == state.PendingLocalAdds.end())
                     state.PendingLocalAdds.push_back(local);
             RequestPendingLocalAdds(state);
+
+            // Initial Join pumps this event before returning. XNA's GameStarted add accessor
+            // (already implemented by NetworkSession) then replays Playing to a new handler.
+            // Reconnecting to the same state during migration is not a second transition.
+            if (session->getSessionStateProperty() != welcome.SessionState)
+            {
+                NetworkSession::NetworkEvent evt;
+                evt.Type = NetworkSession::NetworkEventType::StateChange;
+                evt.State = welcome.SessionState;
+                session->SendNetworkEvent(std::move(evt));
+            }
 
             // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for this
             // client's own locals and every already-existing roster gamer - either could complete

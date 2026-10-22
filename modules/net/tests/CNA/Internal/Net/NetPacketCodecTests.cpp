@@ -81,6 +81,45 @@ TEST(NetPacketCodecTest, ServerWelcomeEncodeThrowsWhenAssignedWireIdsExceeds255)
     EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
 }
 
+TEST(NetPacketCodecTest, MuseumWelcomeStateRoundtripsWithAndWithoutGuestFlags) {
+    for (const auto state : {NetworkSessionState::Lobby, NetworkSessionState::Playing}) {
+        for (const bool guest : {false, true}) {
+            ServerWelcomeMessage message;
+            message.AssignedWireIds = {2};
+            message.ExistingRoster = {{0, "host", true}, {1, "guest", false, guest}};
+            message.SessionState = state;
+            message.SessionProperties.setItem(0, 42);
+            const auto decoded = NetPacketCodec::DecodeServerWelcome(NetPacketCodec::Encode(message));
+            EXPECT_EQ(decoded.SessionState, state);
+            EXPECT_EQ(decoded.AssignedWireIds, message.AssignedWireIds);
+            ASSERT_EQ(decoded.ExistingRoster.size(), 2u);
+            EXPECT_EQ(decoded.ExistingRoster[1].IsGuest, guest);
+            EXPECT_EQ(decoded.SessionProperties.getItem(0), 42);
+        }
+    }
+}
+
+TEST(NetPacketCodecTest, MuseumLegacyWelcomeRetainsItsBytesAndDefaultsToLobby) {
+    const std::vector<uint8_t> legacy{2, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0};
+    EXPECT_EQ(NetPacketCodec::Encode(ServerWelcomeMessage{}), legacy);
+    EXPECT_EQ(NetPacketCodec::DecodeServerWelcome(legacy).SessionState, NetworkSessionState::Lobby);
+    auto future = legacy;
+    future.insert(future.end(), {0x7f, 0xff});
+    EXPECT_EQ(NetPacketCodec::DecodeServerWelcome(future).SessionState, NetworkSessionState::Lobby);
+}
+
+TEST(NetPacketCodecTest, MuseumMalformedWelcomeStateIsRejected) {
+    ServerWelcomeMessage message;
+    message.SessionState = NetworkSessionState::Playing;
+    auto bytes = NetPacketCodec::Encode(message);
+    bytes.pop_back();
+    EXPECT_THROW(NetPacketCodec::DecodeServerWelcome(bytes), System::IO::EndOfStreamException);
+    bytes.push_back(255);
+    EXPECT_THROW(NetPacketCodec::DecodeServerWelcome(bytes), std::runtime_error);
+    message.SessionState = NetworkSessionState::Ended;
+    EXPECT_THROW(NetPacketCodec::Encode(message), std::runtime_error);
+}
+
 TEST(NetPacketCodecTest, ServerWelcomeEncodeThrowsWhenExistingRosterExceeds255) {
     ServerWelcomeMessage message;
     message.ExistingRoster.assign(256, RosterEntry{1, "x"});

@@ -39,9 +39,12 @@ namespace CNA::Internal::Net
         // admit no guests, unchanged. The SystemLink decoders stop reading at the end of the
         // original payload, so a peer that predates the block ignores it, and a message from such
         // a peer has none: every gamer reads as no guest. A block of another tag is a later
-        // extension and is skipped; one of this tag with the wrong count is malformed.
+        // extension and is left for the caller; one of this tag with the wrong count is malformed.
         constexpr bytecs GamerFlagsBlock = 0x47;
         constexpr bytecs GamerFlagGuest = 0x01;
+        // Optional welcome suffix. Lobby retains the old byte layout, including for the
+        // online relay's strict welcome parser; old SystemLink clients ignore this suffix.
+        constexpr bytecs WelcomeStateBlock = 0x53;
 
         void WriteGamerFlags(PacketWriter& writer, const std::vector<bool>& guests)
         {
@@ -57,8 +60,14 @@ namespace CNA::Internal::Net
         std::vector<bool> ReadGamerFlags(PacketReader& reader, std::size_t count)
         {
             std::vector<bool> guests(count, false);
-            if (reader.getLengthProperty() - reader.getPositionProperty() < 2 || reader.ReadByte() != GamerFlagsBlock)
+            const int position = reader.getPositionProperty();
+            if (reader.getLengthProperty() - position < 2)
             {
+                return guests;
+            }
+            if (reader.ReadByte() != GamerFlagsBlock)
+            {
+                reader.setPositionProperty(position);
                 return guests;
             }
             if (reader.ReadByte() != count || reader.getLengthProperty() - reader.getPositionProperty() < static_cast<int>(count))
@@ -205,6 +214,13 @@ namespace CNA::Internal::Net
 
         WriteSessionProperties(writer, message.SessionProperties);
         WriteGamerFlags(writer, GuestsOf(message.ExistingRoster));
+        if (message.SessionState != NetworkSessionState::Lobby)
+        {
+            if (message.SessionState != NetworkSessionState::Playing)
+                throw std::runtime_error("NetPacketCodec: invalid welcome session state");
+            writer.Write(WelcomeStateBlock);
+            writer.Write(static_cast<bytecs>(message.SessionState));
+        }
 
         return ExtractBytes(writer);
     }
@@ -234,6 +250,13 @@ namespace CNA::Internal::Net
         message.SessionProperties = ReadSessionProperties(reader);
         const auto guests = ReadGamerFlags(reader, message.ExistingRoster.size());
         for (std::size_t i = 0; i < guests.size(); ++i) message.ExistingRoster[i].IsGuest = guests[i];
+        if (reader.getPositionProperty() < reader.getLengthProperty() && reader.ReadByte() == WelcomeStateBlock)
+        {
+            const auto state = static_cast<NetworkSessionState>(reader.ReadByte());
+            if (state != NetworkSessionState::Lobby && state != NetworkSessionState::Playing)
+                throw std::runtime_error("NetPacketCodec: invalid welcome session state");
+            message.SessionState = state;
+        }
 
         return message;
     }
