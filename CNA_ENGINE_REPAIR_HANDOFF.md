@@ -14,7 +14,7 @@ cna-demos/build/linux-full/reports/repair-storage-path-before-v1-*.
 | Finding | Current disposition | Evidence / next task |
 | --- | --- | --- |
 | UP-019 | Investigating | Software shadow projection uses positive Y-to-V although its raster target is top-down; reproduce producer/receiver orientation before changing it. |
-| UP-018 | Investigating | Current Software framebuffer retains declared-format floats and FetchColorTexel reads them. Verify public creation, drawing, typed readback and shadow precision; do not assume the historical symptom persists. |
+| UP-018 | NOT_REPRODUCIBLE on current next | Public Single construction, draw of 0.5 and 0.5+1/4096 and white, full and rectangle float readback pass on SOFTWARE/GLES/GL33. Existing float-target implementation is `23c5557f7` (also predates reported pin). New permanent `SingleTargetPrecisionTests.cpp` protects the exact symptom. No unsupported-format fallback or precision weakening. |
 | UP-006 | Candidate already fixed | `470b12a5d` repairs mixed umbrella/static-sidecar ordering (ISSUE-016). Rebuild and run real mixed-runtime consumers and symbol checks, including engine-style module combinations. |
 | UP-001 | Confirmed source gap | No CNA install export/config/version package exists. Design relocatable dependency/target export without breaking source consumers or duplicating the runtime. |
 | UP-002 | Documentation corrected | `docs/migration-guide.md`, CNAEXT and C++ language artefacts, distinguishes declaration markers from implicit/synthesized C# semantics and explicitly retains strict compiler diagnostics. No runtime/header/test changes needed. |
@@ -29,3 +29,15 @@ UP-002 validation: checked the three input declarations, Vector3 compound
 operators and their existing C# synthesis comment, CNAHelper.hpp's macro, and
 cmake/Harnesses.cmake's deprecation-as-error gate. This is documentation only;
 no strict marker, assertion, budget or runtime contract changed.
+
+UP-018 validation: baseline-v1 24/24 tests on SOFTWARE and OPENGLES3, including
+23 existing HDR/format tests. shadow-before-v3 adds rectangle readback and OPENGL33;
+all 24 precision/format checks pass on all three. The four additional UP-019 tests
+fail only on SOFTWARE (top lit / bottom dark), and pass on GLES/GL33. Build v1/v2
+of the new shadow fixture failed to compile (unsupported typed DrawUserPrimitives,
+then PBR emissive setter spelling); corrected in v3, no runtime change hidden.
+Logs: cna-demos/build/linux-full/reports/repair-engine-*. Peak v1 2293923840 bytes,
+v3 925278208, all memory events zero. Dirty Texture2D changes concern ownership,
+not format/storage/readback; kept untouched and excluded from commits. Validation
+uses the shared worktree, not a clean checkout. No claim about the engine's binary
+or a rerun of its calibration; its agent owns revalidation.
