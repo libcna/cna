@@ -251,10 +251,35 @@ endfunction()
 function(cna_link_private_build_support target)
     get_target_property(_cna_target_type "${target}" TYPE)
     if(_cna_target_type STREQUAL "INTERFACE_LIBRARY")
-        target_link_libraries("${target}" INTERFACE ${ARGN})
+        set(_cna_scope INTERFACE)
     else()
-        target_link_libraries("${target}" PRIVATE ${ARGN})
+        set(_cna_scope PRIVATE)
     endif()
+    foreach(_cna_support IN LISTS ARGN)
+        # These parent-owned policy targets must not become dependencies of an
+        # installed Sharp Runtime/CNA archive. Keep source-build semantics intact.
+        target_link_libraries("${target}" ${_cna_scope} "$<BUILD_INTERFACE:${_cna_support}>")
+
+        # Instrumented objects still require their runtime at the final link;
+        # Emscripten frames must keep the configured exception ABI. Embed those
+        # usage requirements, not producer-only debug/optimization/linker policy.
+        # Capture them after configuration, preserving any nested config genex.
+        if(NOT _cna_support MATCHES "^cna_(instrumentation|emscripten_exception_abi)$")
+            continue()
+        endif()
+        if(_cna_target_type MATCHES "^(STATIC_LIBRARY|OBJECT_LIBRARY|INTERFACE_LIBRARY)$")
+            get_target_property(_cna_link_options "${_cna_support}" INTERFACE_LINK_OPTIONS)
+            if(_cna_link_options)
+                target_link_options("${target}" INTERFACE "$<INSTALL_INTERFACE:${_cna_link_options}>")
+            endif()
+        endif()
+        if(_cna_target_type STREQUAL "INTERFACE_LIBRARY")
+            get_target_property(_cna_compile_options "${_cna_support}" INTERFACE_COMPILE_OPTIONS)
+            if(_cna_compile_options)
+                target_compile_options("${target}" INTERFACE "$<INSTALL_INTERFACE:${_cna_compile_options}>")
+            endif()
+        endif()
+    endforeach()
 endfunction()
 
 function(cna_apply_sharp_runtime_build_support)

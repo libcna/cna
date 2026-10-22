@@ -58,6 +58,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 -DCNA_SHARED_RUNTIME_COMPILER=${CMAKE_CXX_COMPILER}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/SharedRuntimeCase.cmake)
         set_tests_properties(CnaSharedRuntimeLinkage PROPERTIES TIMEOUT 120 LABELS "configuration")
+
+        add_test(NAME CnaBuildSupportExport
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+                -DCNA_BUILD_SUPPORT_WORKDIR=${CMAKE_CURRENT_BINARY_DIR}/build-support-export-probe
+                -DCNA_BUILD_SUPPORT_COMPILER=${CMAKE_CXX_COMPILER}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/BuildSupportExportCase.cmake)
+        set_tests_properties(CnaBuildSupportExport PROPERTIES TIMEOUT 120 LABELS "configuration;install")
     endif()
 
     function(cna_add_module_probe name module)

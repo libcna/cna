@@ -19,6 +19,56 @@ job remains. Next engine task: UP-001 installed C++ module package, still open;
 this C-adapter repair does not supply the missing installed C++ module targets.
 The chronological notes below retain earlier failures and intermediate checkpoints.
 
+## UP-001 build-support export prerequisite (2026-10-22)
+
+Starting CNA revision: `79364adbd780b5ade3650af2047e193f2f737b6e`;
+Sharp remains published `1dc8785b35284b5cf50f3aec361703bfaf090b72`, demos remains
+`1295899bbaa2d657348a115b831f31b928d2df6c`. This checkpoint fixes the previously
+recorded parent-owned build-policy export blocker. UP-001 itself is STILL OPEN:
+the full installed CNA C++ target graph and package/version composition remain next.
+
+`cna_link_private_build_support` now confines policy target references to the build
+interface. Installed static/object/header-only targets retain sanitizer runtime
+link options and Emscripten exception ABI options directly; header-only code also
+retains their compile options. Private archive compile flags stay private, and
+producer-only debug/linker/size policy targets do not leak. Nested configuration
+expressions containing option lists are retained as expressions, not split apart.
+
+The new permanent `CnaBuildSupportExport` regression first failed generation with
+eight unexported-policy-target errors (four each for archive/header-only routes).
+After repair it configures, builds, installs and runs source and installed consumers.
+The native archive has real UBSan instrumentation; installed clients need no manual
+sanitizer flags. Real Emscripten/Node clients also pass, including an exception thrown
+from the installed archive and caught by its header-usage consumer. Both platforms
+check that producer-only definitions disappear, required flags remain, private
+compile options do not propagate, and nested Debug option lists survive. Each has
+one source plus two installed runtime checks. The fixture uses warnings as errors,
+one compiler and optional ccache, with all command output retained in steps.log.
+
+Validation: actual CNA `cmake-build-multi` configure/generate succeeds with explicit
+`SHARP_RUNTIME_INSTALL=ON`, including SDL/platform audits (formerly impossible).
+The cache was then restored to OFF, preserving the existing source-consumer policy;
+configure/generate also passes there. The known Draco CMP0148 developer warning is
+unchanged. Seven real module probes plus both engine-style shared/module link orders
+were rebuilt with one compiler and passed 11/11 CTests, including duplicate-symbol
+checks; GPU-capable consumers used the private Weston/Xwayland runner. The existing
+runtime-linkage gates plus the new export gate passed 3/3. Build-performance policy
+passes; its pre-existing global warning-options violation in SharedRuntimeProbe was
+corrected to target-scoped options, retaining -Wall/-Wextra/-Werror for all four
+fixture targets. No assertions, limits or expectations were weakened.
+
+Evidence: `cna-demos/build/linux-full/reports/repair-build-support-export-native-v1.log`
+and `repair-build-support-export-consumers-v1.log`, plus final native/wasm steps.log
+under `cmake-build-multi/build-support-export{,-wasm}-probe/`. Jobs ran in the usual
+4G-high/6G-max/no-swap scopes. No full CNA/demos sweep or new renderer parity claim
+is made for this CMake-only prerequisite. No active job remains at the checkpoint.
+Next: export CNA's actual modular target/dependency graph, preserve narrow Math
+closure and C/shared runtime identity, integrate with the existing C ABI package
+without silently replacing its version contract, then turn InstalledRuntimeProbe
+green against relocated native shared/static installations. That two-file fixture
+remains unregistered/uncommitted. All inherited content/ownership/ISSUE-113 changes
+are untouched and excluded from this prerequisite commit.
+
 ## UP-020 publication confirmation and engine revalidation (2026-10-22)
 
 UP-020 is RESOLVED_BY_DEPENDENCY_PUBLICATION, not a new code repair. The engine

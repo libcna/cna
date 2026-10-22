@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MS-PL
+foreach(_required IN ITEMS CNA_SOURCE_DIR CNA_BUILD_SUPPORT_WORKDIR CNA_BUILD_SUPPORT_COMPILER)
+    if(NOT DEFINED ${_required})
+        message(FATAL_ERROR "${_required} is required")
+    endif()
+endforeach()
+file(MAKE_DIRECTORY "${CNA_BUILD_SUPPORT_WORKDIR}")
+file(WRITE "${CNA_BUILD_SUPPORT_WORKDIR}/steps.log" "")
+
+function(run_step description)
+    execute_process(COMMAND ${ARGN} RESULT_VARIABLE _result
+        OUTPUT_VARIABLE _output ERROR_VARIABLE _error)
+    file(APPEND "${CNA_BUILD_SUPPORT_WORKDIR}/steps.log"
+        "${description} (exit ${_result})\n${_output}\n${_error}\n")
+    if(NOT _result EQUAL 0)
+        message(FATAL_ERROR "${description} failed (${_result})\n${_output}\n${_error}")
+    endif()
+    message(STATUS "${description}: PASS")
+endfunction()
+
+set(_probe "${CNA_SOURCE_DIR}/cmake/Tests/BuildSupportExportProbe")
+set(_build "${CNA_BUILD_SUPPORT_WORKDIR}/producer")
+set(_prefix "${CNA_BUILD_SUPPORT_WORKDIR}/installed")
+set(_consumer "${CNA_BUILD_SUPPORT_WORKDIR}/consumer")
+set(_toolchain_args)
+find_program(_ccache NAMES ccache)
+if(_ccache)
+    list(APPEND _toolchain_args "-DCMAKE_CXX_COMPILER_LAUNCHER=${_ccache}")
+endif()
+if(CNA_BUILD_SUPPORT_TOOLCHAIN)
+    list(APPEND _toolchain_args "-DCMAKE_TOOLCHAIN_FILE=${CNA_BUILD_SUPPORT_TOOLCHAIN}")
+endif()
+if(CNA_BUILD_SUPPORT_EMULATOR)
+    list(APPEND _toolchain_args "-DCMAKE_CROSSCOMPILING_EMULATOR=${CNA_BUILD_SUPPORT_EMULATOR}")
+endif()
+run_step("Producer configure" "${CMAKE_COMMAND}" -S "${_probe}" -B "${_build}" -G Ninja
+    "-DCNA_SOURCE_DIR=${CNA_SOURCE_DIR}" "-DCMAKE_CXX_COMPILER=${CNA_BUILD_SUPPORT_COMPILER}"
+    -DCMAKE_BUILD_TYPE=Debug ${_toolchain_args})
+run_step("Producer build" "${CMAKE_COMMAND}" --build "${_build}" --parallel 1)
+run_step("Source consumer" "${CMAKE_CTEST_COMMAND}" --test-dir "${_build}" --output-on-failure)
+run_step("Install" "${CMAKE_COMMAND}" --install "${_build}" --prefix "${_prefix}")
+file(READ "${_prefix}/lib/cmake/Probe/ProbeTargets.cmake" _export)
+if(_export MATCHES "cna_(instrumentation|debug_info_options|emscripten_exception_abi|size_options)")
+    message(FATAL_ERROR "Export still references producer-only targets")
+endif()
+run_step("Installed consumer configure" "${CMAKE_COMMAND}" -S "${_probe}/consumer" -B "${_consumer}"
+    -G Ninja "-DPROBE_PREFIX=${_prefix}" "-DCMAKE_CXX_COMPILER=${CNA_BUILD_SUPPORT_COMPILER}"
+    -DCMAKE_BUILD_TYPE=Debug ${_toolchain_args})
+run_step("Installed consumer build" "${CMAKE_COMMAND}" --build "${_consumer}" --parallel 1)
+run_step("Installed consumers" "${CMAKE_CTEST_COMMAND}" --test-dir "${_consumer}" --output-on-failure)
