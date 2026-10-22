@@ -13,17 +13,6 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    namespace
-    {
-        void AddParam(EffectParameterCollection& params, const std::string& name,
-                      int rows, int columns,
-                      EffectParameterClass parameterClass, EffectParameterType parameterType)
-        {
-            params.Add(EffectParameter(
-                name, "", rows, columns, parameterClass, parameterType));
-        }
-    }
-
     BasicEffect::BasicEffect(GraphicsDevice& device)
         : Effect(device, "BasicEffect")
     {
@@ -70,28 +59,28 @@ namespace Microsoft::Xna::Framework::Graphics
     void BasicEffect::CacheEffectParameters()
     {
         auto& params = getParametersProperty();
-        AddParam(params, "Texture", 0, 0,
+        AddStockParameterInternal(params, "Texture", 0, 0,
                  EffectParameterClass::Object, EffectParameterType::Texture2D);
-        AddParam(params, "DiffuseColor", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "EmissiveColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "SpecularPower", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
-        AddParam(params, "DirLight0Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight0DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight0SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight1Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight1DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight1SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight2Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight2DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "DirLight2SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "EyePosition", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogVector", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "World", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "WorldInverseTranspose", 3, 3, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "ShaderIndex", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+        AddStockParameterInternal(params, "DiffuseColor", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EmissiveColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "SpecularPower", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight0Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight0DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight0SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight1Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight1DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight1SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight2Direction", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight2DiffuseColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DirLight2SpecularColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EyePosition", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogColor", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogVector", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "World", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldInverseTranspose", 3, 3, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "ShaderIndex", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
 
         textureParam_ = params["Texture"];
         diffuseColorParam_ = params["DiffuseColor"];

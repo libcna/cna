@@ -22,12 +22,6 @@ namespace Microsoft::Xna::Framework::Graphics
         constexpr int DirtyShaderIndex = 128;
         constexpr int DirtyAll         = -1;
 
-        static void AddParam(EffectParameterCollection& params, const std::string& name,
-                             int rows, int cols,
-                             EffectParameterClass pc, EffectParameterType pt)
-        {
-            params.Add(EffectParameter(name, "", rows, cols, pc, pt));
-        }
     }
 
     EnvironmentMapEffect::EnvironmentMapEffect(GraphicsDevice& device)
@@ -88,18 +82,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void EnvironmentMapEffect::CacheEffectParameters()
     {
         auto& params = getParametersProperty();
-        AddParam(params, "EnvironmentMapAmount",   1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
-        AddParam(params, "EnvironmentMapSpecular", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FresnelFactor",          1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
-        AddParam(params, "DiffuseColor",           1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "EmissiveColor",          1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "EyePosition",            1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogColor",               1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogVector",              1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "World",                  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "WorldInverseTranspose",  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "WorldViewProj",          4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "ShaderIndex",            1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+        AddStockParameterInternal(params, "EnvironmentMapAmount",   1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EnvironmentMapSpecular", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FresnelFactor",          1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DiffuseColor",           1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EmissiveColor",          1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EyePosition",            1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogColor",               1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogVector",              1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "World",                  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldInverseTranspose",  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldViewProj",          4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "ShaderIndex",            1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
 
         environmentMapAmountParam_   = params["EnvironmentMapAmount"];
         environmentMapSpecularParam_ = params["EnvironmentMapSpecular"];

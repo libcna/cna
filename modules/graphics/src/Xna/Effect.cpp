@@ -1063,8 +1063,35 @@ namespace Microsoft::Xna::Framework::Graphics
         return new Effect(*device_, compiledRuntime_->Clone(), this);
     }
 
+    void Effect::AddStockParameterInternal(EffectParameterCollection& parameters,
+        const std::string& name, int rows, int columns,
+        EffectParameterClass parameterClass, EffectParameterType parameterType)
+    {
+        EffectParameter parameter(name, "", rows, columns, parameterClass, parameterType);
+        parameter.stockParameter_ = true;
+        parameters.Add(std::move(parameter));
+    }
+
     void Effect::OnApply()
     {
+    }
+
+    void Effect::AddStockMatrixArrayInternal(const std::string& name,
+        int rows, int columns, int count)
+    {
+        CNA::Internal::Renderers::CompiledEffectParameterDescription description;
+        description.name = name;
+        description.parameterClass = EffectParameterClass::Matrix;
+        description.parameterType = EffectParameterType::Single;
+        description.rowCount = rows;
+        description.columnCount = columns;
+        description.elementCount = count;
+        // XNA EffectParameter's D3DX metadata uses matrix rows/columns, whereas
+        // the compiled FNA reflection describes column registers/components.
+        description.rawValue.resize(static_cast<std::size_t>(columns) * 16 * count);
+        auto parameter = BuildCompiledParameter(description);
+        parameter.compiledStorage_->stockMatrixLayout = true;
+        parameters_.Add(std::move(parameter));
     }
 
     EffectParameter Effect::BuildCompiledParameter(

@@ -22,13 +22,6 @@ namespace Microsoft::Xna::Framework::Graphics
         constexpr int DirtyAll          = -1;
     }
 
-    static void AddParam(EffectParameterCollection& params, const std::string& name,
-                         int rows, int cols,
-                         EffectParameterClass pc, EffectParameterType pt)
-    {
-        params.Add(EffectParameter(name, "", rows, cols, pc, pt));
-    }
-
     AlphaTestEffect::AlphaTestEffect(GraphicsDevice& device)
         : Effect(device)
         , dirtyFlags_(DirtyAll)
@@ -67,12 +60,12 @@ namespace Microsoft::Xna::Framework::Graphics
     void AlphaTestEffect::CacheEffectParameters()
     {
         auto& params = getParametersProperty();
-        AddParam(params, "DiffuseColor",   1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "AlphaTest",      1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogColor",       1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogVector",      1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "WorldViewProj",  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "ShaderIndex",    1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+        AddStockParameterInternal(params, "DiffuseColor",   1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "AlphaTest",      1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogColor",       1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogVector",      1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldViewProj",  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "ShaderIndex",    1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
 
         diffuseColorParam_  = params["DiffuseColor"];
         alphaTestParam_     = params["AlphaTest"];

@@ -248,6 +248,29 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT Effect(GraphicsDevice& device, const std::string& stockTechniqueName);
 
         /**
+         * @brief Adds a stock parameter with the reflected-effect getter contract.
+         * @param parameters Collection receiving the parameter.
+         * @param name Parameter name.
+         * @param rows Reflected row count.
+         * @param columns Reflected column count.
+         * @param parameterClass Reflected value class.
+         * @param parameterType Reflected value type.
+         */
+        CNAEXT static void AddStockParameterInternal(EffectParameterCollection& parameters,
+            const std::string& name, int rows, int columns,
+            EffectParameterClass parameterClass, EffectParameterType parameterType);
+
+        /**
+         * @brief Adds a fixed-capacity stock matrix array with shared element views.
+         * @param name Parameter name.
+         * @param rows Matrix row count.
+         * @param columns Matrix column count.
+         * @param count Number of matrices.
+         */
+        CNAEXT void AddStockMatrixArrayInternal(const std::string& name,
+            int rows, int columns, int count);
+
+        /**
          * @brief Derived classes override this to upload shader parameters to the GPU before drawing.
          */
         virtual void OnApply();

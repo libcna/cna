@@ -122,7 +122,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a boolean.
          *
          * @return The boolean value stored in this parameter.
-         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         * @throws System::InvalidCastException If a compiled or stock effect parameter cannot be read
          *         as a scalar value.
          */
         [[nodiscard]] bool GetValueBoolean() const;
@@ -140,7 +140,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a 32-bit integer.
          *
          * @return The integer value stored in this parameter.
-         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         * @throws System::InvalidCastException If a compiled or stock effect parameter cannot be read
          *         as a scalar value.
          */
         [[nodiscard]] int GetValueInt32() const;
@@ -158,7 +158,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a single-precision float.
          *
          * @return The float value stored in this parameter.
-         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         * @throws System::InvalidCastException If a compiled or stock effect parameter cannot be read
          *         as a scalar value.
          */
         [[nodiscard]] float GetValueSingle() const;
@@ -542,6 +542,7 @@ namespace Microsoft::Xna::Framework::Graphics
             Texture* texture = nullptr;
             std::uint32_t runtimeIndex = 0;
             bool dirty = false;
+            bool stockMatrixLayout = false;
         };
 
         EffectParameter(std::string name, std::string semantic,
@@ -558,7 +559,9 @@ namespace Microsoft::Xna::Framework::Graphics
                                     std::size_t valueCount,
                                     bool enforceElementCount) const;
         void RequireCompiledNumericArrayClass() const;
-        void RequireCompiledScalarGetterShape() const;
+        void RequireScalarGetterShape() const;
+        [[nodiscard]] int MatrixRegisterCount() const;
+        [[nodiscard]] int MatrixComponentCount() const;
         [[nodiscard]] bool RequireCompiledVectorGetterShape(int columnCount) const;
         [[nodiscard]] bool RequireCompiledMatrixGetterShape() const;
         [[nodiscard]] int ReadCompiledNumericCellAsInt(
@@ -587,6 +590,7 @@ namespace Microsoft::Xna::Framework::Graphics
         EffectParameterClass paramClass_;
         EffectParameterType paramType_;
         int elementCount_ = 0;
+        bool stockParameter_ = false;
 
         // Storage: raw float buffer for numeric types, string for string, pointer for textures.
         // Texture2D/Texture3D/TextureCube each get their own slot even though all three now
@@ -606,7 +610,8 @@ namespace Microsoft::Xna::Framework::Graphics
         EffectAnnotationCollection annotations_;
 
         // Compiled parameters and all of their element/member views share one bounded byte store.
-        // Standalone/stock parameters leave this null and retain the historical vector storage.
+        // Stock matrix arrays use the same bounded views; independent parameters and
+        // other stock values retain their vector storage.
         std::shared_ptr<CompiledStorage> compiledStorage_;
         std::size_t compiledByteOffset_ = 0;
         std::size_t compiledByteSize_ = 0;

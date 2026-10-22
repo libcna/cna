@@ -27,12 +27,6 @@ namespace Microsoft::Xna::Framework::Graphics
         constexpr int DirtyShaderIndex = 128;
         constexpr int DirtyAll         = -1;
 
-        static void AddParam(EffectParameterCollection& params, const std::string& name,
-                             int rows, int cols,
-                             EffectParameterClass pc, EffectParameterType pt)
-        {
-            params.Add(EffectParameter(name, "", rows, cols, pc, pt));
-        }
     }
 
     const int SkinnedEffect::MaxBones;
@@ -105,18 +99,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void SkinnedEffect::CacheEffectParameters()
     {
         auto& params = getParametersProperty();
-        AddParam(params, "DiffuseColor",          1,        4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "EmissiveColor",          1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "SpecularColor",          1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "SpecularPower",          1,        1, EffectParameterClass::Scalar, EffectParameterType::Single);
-        AddParam(params, "EyePosition",            1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogColor",               1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "FogVector",              1,        4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddParam(params, "World",                  4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "WorldInverseTranspose",  4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "WorldViewProj",          4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "Bones",                  MaxBones, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddParam(params, "ShaderIndex",            1,        1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+        AddStockParameterInternal(params, "DiffuseColor",          1,        4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EmissiveColor",          1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "SpecularColor",          1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "SpecularPower",          1,        1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EyePosition",            1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogColor",               1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "FogVector",              1,        4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "World",                  4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldInverseTranspose",  4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldViewProj",          4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockMatrixArrayInternal("Bones", 4, 3, MaxBones);
+        AddStockParameterInternal(params, "ShaderIndex",            1,        1, EffectParameterClass::Scalar, EffectParameterType::Int32);
 
         diffuseColorParam_          = params["DiffuseColor"];
         emissiveColorParam_         = params["EmissiveColor"];

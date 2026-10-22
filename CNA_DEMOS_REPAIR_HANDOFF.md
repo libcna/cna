@@ -9,6 +9,96 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**2026-10-22 ISSUE-034/035 product validation complete; commit/metadata next.**
+Multi85003 accepted127PASS/noSKIP each SDL_GPU/FNA3D/WEBGPU, no drift/events.
+Initial25845 built successfully168710ms/no diagnostics and ran SDL_GPU127PASS;
+its driver incorrectly expected116 (omitted11 existing EffectApplyTest cases).
+The resumed gate derives the exact100 existing+27 new names, reuses the completed
+build/SDL run, and runs FNA3D/WebGPU without rebuilding or weakening assertions.
+All prior native/external/visual/sanitizer results below accepted; eight082 failures
+remain unrelated/open. No heavy process live. Stage only the034/035 product/test,
+this handoff/matrix and the034/035 upstream-plan hunk (082 hunk is inherited).
+Then record the CNA commit, remove only repaired demo metadata, run prepared
+repair-stock-parameters-metadata.mjs and close both permanent IDs with evidence.
+Next run repair-device-context-before.mjs for086/112. No push/merge. Final full
+campaign gates still due; matrix156/108 final/48 null until metadata closure.
+
+**2026-10-22 resumed checkpoint: external/sanitizer accepted; multi25845 live.**
+The prior goal-proposal-only response made no engineering progress; current state
+has now been revalidated. CNA3253be833 / demos03f45c834 unchanged,48 IDs still open.
+Native1357 build succeeded but stopped for six pre-existing nodiscard warnings;
+all four source hashes match HEAD, reviewed without suppressing diagnostics.
+Resumed51126 completed0: full graphics3066=2976PASS/90 unchangedSKIP; selected
+aggregate effects1127=1106PASS/21 unchangedSKIP; focused26PASS, exact prior parity.
+This is not a new full aggregate checkpoint. Genuine XNA v5 completed41PASS,
+including NaN/+Infinity/-Infinity broadcasts, no drift/events, peak341856256.
+New native/evidence fixture27 adds nonfinite floating broadcast coverage.
+Sanitizer36243 reproduced UBSan NaN-to-int at EffectParameter.cpp:450 (exit1,
+peak1160265728/events0); the unused conversion is now avoided for float storage.
+Focus99893 completed27PASS/33 demoPASS on four renderers, no drift/OOM;
+peak4297433088, memory.high258 throttles/max0. Earlier2325 was a pre-build manifest
+guard stop after legitimate ASan archive changes, not a test failure/rebuild.
+Native40268 completed0:27focusPASS, graphics2977PASS/90 unchangedSKIP, selected
+aggregate effects1107PASS/21 unchangedSKIP, exact prior parity; incremental build
+zero diagnostics, no drift/events, peak4000546816. External13160 ended2 with
+parityAccepted:true:132 exact prior outcomes (123PASS/8existing082FAIL/1SKIP),
+148stock/C cases142PASS/6declared shadow-pathSKIP,8DDS/C controls and six exact
+visuals PASS. All ten screenshots inspected. Sanitizer84611 completed27PASS,
+no findings/drift/events, peak837709824. Sole live multi25845/scope
+cna-repair-stock-parameters-multi expects116PASS each compiled-on SDL_GPU/FNA3D/
+WebGPU. Collect before product commit/metadata cleanup; preserve frozen lineage.
+Next086/112 source audit/UNRUN baseline driver is prepared
+in demos DEVICE_CONTEXT_TRIAGE.md; no production change for that batch. Close034/035 only
+after coherent commits. KnownIssue markers retained; inherited011/082 untouched.
+No push/merge; final campaign gates still due.
+
+**2026-10-22 latest verified focus; sole native1357 running.**
+034/035 final candidate26 native witnesses and corrected33-check original demo PASS
+on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU (86220 terminal0, no source drift/events,
+peak4037730304). New XNA v4 reference39765 confirms38 checks; bounds witness17543
+first reproduces25PASS/1FAIL per renderer before the scalar-broadcast register/bound
+correction. Intermediate candidate failures retained, no relaxed tolerance.
+Sole running scope cna-repair-stock-parameters-native/session1357: one-worker native
+build, full graphics, selected aggregate effect tests, exact3040-old/26-added parity.
+Collect before starting prepared sanitizer/external drivers. Sanitizer script now
+expects26, external132+all stock/effect/C demos+six exact visuals. Screenshots still
+need inspection. All product/tests/demo changes uncommitted; knownIssue retained,
+both IDs CONFIRMED_OPEN until broad validation/commits. Inherited011/082 preserved.
+Matrix156/108 final/48 null. Last complete native11041 checkpoint unchanged. No push.
+
+**2026-10-22 latest live process88163;034/035 still unclosed.**
+Scope cna-repair-stock-parameters-after-v2 builds consumer library/demo single-worker
+then runs25 native witnesses and corrected33-check demo on four renderers.
+Earlier69336 is terminal1: strict build0/SOFTWARE22PASS, then four proven incorrect
+raw-M44 demo assertions fail (no suppression). Genuine extended references30250/65073
+each36PASS establish transpose/row-major numeric-array reads/writes. Native25641
+proves23PASS/1FAIL on all four renderers before correcting candidate flat-array
+indexing. Current uncommitted demo asserts raw4x3/M44zero plus both full affine
+GetBoneTransforms results, same tolerance. Product/test files remain uncommitted;
+plan_bindings_upstream has one additional034/035 candidate row alongside inherited
+082 dirt (partial-stage later). Prepared native/sanitizer/external drivers use
+repair-stock-parameters-*; run only after collecting88163. Review scalar broadcast
+on newly exposed matrix elements before freezing the final candidate. All original
+issue IDs and final-state counts unchanged. No push/merge, no closure claim.
+
+**2026-10-22 ISSUE-034/035 candidate in progress; collect69336 first.**
+HEAD3253be833 / demos03f45c834, Runtime c26614e8 unchanged. Genuine XNA session42602
+completed36PASS under Wine/private GPU (not native Windows), peak691195904/events0.
+Bones is4x3, rawM44=0; GetBoneTransforms restores1. Native new22 witnesses against
+unchanged CNA:16FAIL/6PASS on all four renderers, session8001 terminal0 observation,
+peak570241024/events0. Source/evidence: demos graphics/STOCK_PARAMETER_TRIAGE.md,
+StockParametersXnaOracle.cs and StockParameterContractTests.cpp (native copy present).
+Uncommitted candidate: Effect/EffectParameter headers+cpp, five stock-effect cpp
+files, new native test. Keep separate from inherited011/082 dirt. Sole live scope
+cna-repair-stock-parameters-after/session69336 builds shared consumer library then
+runs22 witnesses and unchanged demo. Original demo's rawM44=1 assumption is disproved
+by XNA and needs an evidence-backed correction; do not hide its failed candidate run.
+Prepared extended genuine oracle: build-probe/repair-stock-parameters-reference-v2.mjs
+(not yet run; transpose/flat-array observations). Next collect69336, run that oracle,
+finish any shared-layout edge repairs, correct raw-M44 demo with retained full-bone
+getter checks, then focused/native/C API/regression validation. No closure or new
+product commit;156 IDs/108 dispositions/48 null unchanged. No push/merge.
+
 **2026-10-22 current next-batch checkpoint:034/035 confirmed open.**
 CNA bda0cf902 / demos bdd0c05;054 product b6ab302cc is closed and validated below.
 Unchanged parameter_values baseline80776 completed:31 checks=29PASS/2FAIL on
