@@ -19,6 +19,82 @@ job remains. Next engine task: UP-001 installed C++ module package, still open;
 this C-adapter repair does not supply the missing installed C++ module targets.
 The chronological notes below retain earlier failures and intermediate checkpoints.
 
+## UP-001 dependency-package checkpoint (continuation, 2026-10-22)
+
+CNA runtime source baseline is published `08c1387eca7f9707d6180ff57d07f0360e059672`
+(this handoff-only checkpoint advances no runtime source);
+cna-demos remains `1295899bbaa2d657348a115b831f31b928d2df6c`.
+Sharp Runtime now has a genuine installed, relocatable modular package, implemented
+in `4284793523bd157ff16661344955ae1c0d4d7673` and published with the required
+embedded-policy follow-up as `1dc8785b35284b5cf50f3aec361703bfaf090b72`.
+Use the latter revision for source consumers. This is a prerequisite, NOT closure
+of UP-001: CNA's installed C++ aliases are still missing and its red fixture is
+still intentionally unregistered/uncommitted. No engine/extended/museum source,
+pin or worktree was edited.
+
+Sharp's full pre-change baseline passed 18,193/18,193 tests across 41 executables,
+after setting XNA_SAMPLES_ROOT to the existing mapping of the original ShipGame
+and Spacewar fixtures. The initial five skips are retained in before-v1 evidence.
+The post-change full gate exposed an independent pre-existing stochastic oracle
+bug: a one-byte entropy tail was required to differ from0xA5 (false failure1/256).
+An unchanged binary stopped at iteration293 with n=257 under a diagnostic bounded
+repeat. A separate test-only repair `7046edbb8ea6863f7331b32041c590e850fa6b16`
+uses a fixed32-draw matrix over EVERY byte position and two deterministic oracle
+controls; it changes no production RNG. Full gate after-v2 is18,195/18,195, zero
+fail/skip/compiler warnings, boundary validator PASS. Memory peak349,163,520 bytes,
+all cgroup high/max/OOM events zero. No retry-until-green or assertion suppression.
+
+Installed full and Core.Base-only consumers pass after renaming the prefix, with
+the original prefix absent. Full package exercises Guid, JSON, XML/tinyxml2,
+DEFLATE/zlib and ZIP/miniz; minimal package excludes unrelated module targets and
+headers. Both reject unknown required components and incompatible version99.0;
+minimal also rejects known-but-uninstalled Xml. final-v2 checks project/.NET and
+private-miniz licence notices too. Install gate peak615,297,024 bytes/events0.
+Evidence: cna-demos build/linux-full/reports/repair-runtime-package-{before-v1,
+before-v2,after-v1,after-v2}-* and repair-runtime-install-final-v{1,2}-*.
+All builds used one compiler, shared ccache, standard Sharp build/build-modular/
+build-consumer directories, never /tmp. Four older install copies (~416MiB) were
+removed after recording evidence. Three superseded final-v2/v3 copies (~397MiB)
+were also removed after final-v4 passed; only final-v4 full/core copies remain
+under Sharp build-probe. They are reproducible by the committed fixture. No build
+tree/source/foreign file was deleted.
+
+Integration follow-up: enabling Sharp exports automatically when embedded exposed
+CNA's private cna_instrumentation/debug_info/emscripten_exception_abi/size_options
+targets, which have no export set. The published42847935 therefore requires the
+immediate follow-up in progress: SHARP_RUNTIME_INSTALL defaults ON standalone,
+OFF in add_subdirectory, with explicit parent opt-in for SDK composition. A parent
+build-policy regression is added separately from source-independent package tests.
+CNA cmake-build-multi now configures/generates successfully with this correction;
+all SDL/platform audits pass, existing Draco CMP0148 developer warning unchanged.
+No new CNA runtime build/full-test result is claimed for this configure check.
+
+Final follow-up `1dc8785b` is committed/pushed; Sharp worktree clean and remote SHA
+verified. Full after-v3 gate passed 18,195/18,195, zero failures/skips/warnings,
+boundary validator PASS, peak100,278,272 bytes/events0. Installed final-v4 passed
+both parent-policy configure cases, full2/2 and minimal1/1 runtime cases, all
+component/version rejection checks, licence-manifest and relocation checks;
+peak617,811,968 bytes/events0. The final-v3 fixture-generation failure is retained:
+its strict compiler options had targeted the newly introduced INTERFACE helper;
+they now apply only to test executables. No test expectation was relaxed.
+No job remains active. Exact next task: implement CNA's exported module graph.
+For CNA, preserve narrow Math/Core closures, shared/static runtime identity and
+the existing C ABI package/version. Its build-policy helper currently links raw
+parent targets into Sharp; explicit installed contracts must retain sanitizer and
+Emscripten ABI flags without leaking producer-only debug/linker targets. Do not
+paper over that by exporting absolute producer paths or forcing every module
+through the full runtime. Preserve inherited content/ownership/ISSUE-113 changes.
+
+The earlier 12 unpushed Sharp campaign commits were included in the authorized
+normal fast-forward push to7046edbb and are covered by the complete gate;
+package42847935 and follow-up1dc8785b were pushed separately. No force-push,
+merge or tag was performed. CNA-owned uncommitted UP-001 work is this document and
+cmake/Tests/InstalledRuntimeProbe; all other dirty CNA files are preserved inherited
+work, not part of these commits. Original campaign still has 156 historical IDs,
+40 without a final disposition, plus residual DC-R1/DC-R2 work; it is not complete.
+
+### Earlier UP-001 preparation (historical)
+
 UP-001 preparation: cna_add_module currently publishes absolute source include paths;
 CoreHeaders and Core additionally expose the generated Version.hpp include root.
 Both need build/install interfaces, not copied source-tree paths in an export.
@@ -40,6 +116,23 @@ umbrella or absolute source/vendor paths. Repository policy requires the full
 Sharp Runtime gate before committing a dependency change, at most two workers
 (this campaign uses one), existing build directories, and immediate normal push
 to next under SA-1. No Sharp Runtime files changed during this preparation.
+
+UP-001 executable red baseline (2026-10-22, after published08c1387ec): added the
+uncommitted standalone fixture cmake/Tests/InstalledRuntimeProbe/{CMakeLists.txt,main.cpp}.
+Configuring it in the standard build-consumer directory against the genuinely relocated
+C ABI installation finds CNAConfig but fails for all seven requested CNA module targets
+and SharpRuntime::Core.Base/IO. No source paths or add_subdirectory fallback are allowed.
+This is the expected package defect, not a compiler failure; main.cpp is not compiled yet.
+Command: cmake -S cmake/Tests/InstalledRuntimeProbe -B build-consumer
+-DCMAKE_PREFIX_PATH=../cna-demos/build/linux-full/CNA/modules/c-api/installed-consumer/relocated
+-DCMAKE_CXX_COMPILER_LAUNCHER=ccache (the actual invocation used the absolute prefix).
+build-consumer did not previously exist; it is the approved reusable consumer directory,
+not a new CNA build. Configure used shared ccache/one worker in a4G-high/6G-max scope.
+No job remains active. Next: implement the proper Sharp Runtime export/install layer,
+validate it with the dependency's full gate, then integrate CNA's modular package and
+turn this same installed-consumer fixture green in shared/static and relocated cases.
+Uncommitted work for UP-001 is this handoff plus the two fixture files only; preserve
+all inherited ownership/ISSUE-113 and storage/input preparation changes separately.
 
 Baseline: CNA `a8800619e1b063e4e7f8bed5cf1b19744362c189`, branch `next`;
 reported engine pin `900d0db3b` is an ancestor. Preserve the inherited dirty
