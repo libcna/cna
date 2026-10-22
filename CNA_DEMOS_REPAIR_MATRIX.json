@@ -1726,18 +1726,18 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Renderer native members were released under another device's active GL context; the shared GraphicsDevice teardown now holds an owning-context lease through renderer destruction, ending before window destruction.",
       "related_issues": ["CNA-DEMOS-ISSUE-112"],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "9e4d0279affcb9f05f9d28807403f798fc948906",
       "validation": [
         "Original12 observations reproduced GLES cube/target and OPENGL33 target failures; native6 baseline GLES6FAIL/OPENGL33 binding4FAIL.",
         "Focused candidate8590:8 native PASS plus17/12/27 original demo checks PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. All12 screenshots inspected. No source drift or OOM.",
       "Readback-before41922: independent Color/packed overload witnesses FAIL on both GL profiles before the shared readback lease.",
       "Native-v2 full10972PASS/118 unchangedSKIP. New8 witnesses PASS on SOFTWARE/GLES/GL33/SDL_GPU/FNA3D/WebGPU; compiled renderer existing skips separately audited. SOFTWARE ASan/UBSan/float-cast/leak8PASS/no findings.",
-      "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product commit/metadata closure pending."
+      "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product9e4d0279affcb9f05f9d28807403f798fc948906. Metadata93054 accepted: registry719 exact two-marker delta,12 original runs PASS17/12/27 checks,7 enabled CTests PASS/noSKIP14326ms, build12006ms/no diagnostics, no drift/events, peak2029166592. Historical assertions retained; volume adds two exact pixel checks."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-087",
@@ -2245,18 +2245,18 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "SetRenderTargets transitions and GetBackBufferDataCore native reads lacked the owning-context lease while another device owned the thread; validation/no-op ordering is retained.",
       "related_issues": ["CNA-DEMOS-ISSUE-086"],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "9e4d0279affcb9f05f9d28807403f798fc948906",
       "validation": [
         "Original target demo fails on OPENGLES3 and OPENGL33; six-case native baseline isolates binding/unbind and independent device teardown failures.",
         "Readback-before41922 independently reproduces Color and packed overload failures on both GL profiles while SOFTWARE/SDL_GPU8PASS. A lease is now held only around native readback, after public validation.",
         "Focused8590:8 native and17/12/27 original demo checks PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU; all12 screenshots inspected, exact original assertions retained.",
         "Native-v2 full10972PASS/118 unchangedSKIP after independent XNA-backed glTF test correction0a94a68aca7b3b482918306ec5426bc0ff74d6e9. New8 context witnesses PASS on six renderers; existing compiled-renderer skips explicitly audited. SOFTWARE sanitizer8PASS/no findings.",
-        "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product commit/metadata closure pending."
+        "External132 exact prior outcomes retain8 independent082FAIL;8DDS/C controls PASS;192 device/texture runs183PASS/7SKIP/2 SDL_GPU residualFAIL tracked as DC-R1/DC-R2. Source proves context lease is a no-op on SDL_GPU. Six exact visuals PASS/all inspected. Scoped regression accepted, not full-green. Product9e4d0279affcb9f05f9d28807403f798fc948906. Metadata93054 accepted: registry719 exact two-marker delta,12 original runs PASS17/12/27 checks,7 enabled CTests PASS/noSKIP14326ms, build12006ms/no diagnostics, no drift/events, peak2029166592. Historical assertions retained; volume adds two exact pixel checks."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-113",

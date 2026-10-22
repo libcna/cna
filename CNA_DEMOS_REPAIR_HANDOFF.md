@@ -9,6 +9,31 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-22)
 
+**2026-10-22 ISSUE-086/112 CLOSED; next113 baseline85698 live.**
+CNA product9e4d0279affcb9f05f9d28807403f798fc948906. Metadata93054 completed0:
+build12006ms/no diagnostics; exact719-catalog two-marker delta;12 original demo
+runs PASS17/12/27 checks;7 enabled CTests PASS/noSKIP14326ms. No drift/events,
+peak2029166592. Both permanent IDs Resolved; no assertions removed, volume adds
+two exact framebuffer checks. Native full10972PASS/118 unchangedSKIP, context8PASS
+on six available renderers, SOFTWARE sanitizer8PASS; all12 repair screenshots and
+six exact reference screenshots inspected. Full campaign regression is NOT green:
+eight independent082 failures and two SDL_GPU residuals remain explicit.
+Matrix156 historical IDs:77 FIXED_VALIDATED,2 platform-pending,23 documentation,
+8 already-fixed,1 demo-oracle correction,1 duplicate,44 null. Supplemental DC-R1/
+DC-R2 are tracked separately in additional_validation_findings; both require final
+contract dispositions, not hidden expected failures. See DEVICE_CONTEXT_EXTERNAL_RESIDUALS.md.
+Genuine113 reference33342 proves distinct-query overlap is valid XNA (nested7/2,
+crossed3/6 triangle counts; disposal survivors7/6), disproving the historical
+refusal expectation. Six new native evidence witnesses now test real overlap
+counts/empty intervals/disposal. Sole live scope cna-repair-occlusion-overlap-before/
+session85698 compiles only that fixture and runs it plus the unchanged original
+demo on SOFTWARE/GLES/GL33/SDL_GPU. No113 production patch or demo change yet.
+Collect85698, inspect exact failures, then repair actual query semantics and
+correct the proven incorrect header/demo expectation with retained history.
+Uncommitted113 evidence: OCCLUSION_BEGIN_TRIAGE.md, OcclusionOverlapXnaOracle.cs,
+OcclusionOverlapTests.cpp. Keep separate from086/112 closure commit. Inherited
+011/082 shared work untouched; no push/merge. Final full campaign gates still due.
+
 **2026-10-22 ISSUE-086/112 product gates complete; commit/metadata next.**
 External49730 terminal1 correctly exposes two SDL_GPU residuals among192 selected
 runs (183PASS/7SKIP/2FAIL). The132 previous outcomes match exactly and8 DDS/C controls
