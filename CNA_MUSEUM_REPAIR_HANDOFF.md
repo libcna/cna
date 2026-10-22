@@ -27,7 +27,59 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current checkpoint: profile sign-out exception fixed; multi-account audit remains
+### Current checkpoint: two-account profile repair validated
+
+Base CNA **3cd6028b7ad30a22251349e12db32df9f07d5e88** is published. Sharp
+**1dc8785b35284b5cf50f3aec361703bfaf090b72** was rechecked with ls-remote and
+contains c26614e8: UP-020 remains resolved by dependency publication. Demos stays
+at1295899bbaa2d657348a115b831f31b928d2df6c.
+
+The new production-loopback regression
+`ServiceRequestRetryTest.LocalProfileUsesItsOwnAccountAndNeverBorrowsAnotherAfterSignOut`
+reproduced the defect in11ms: Bob's healthy read used Alice's token; his read
+queued after logout also used Alice instead of failing. The request count proves
+the second read reached the loopback service. No external service/credentials used.
+Evidence in `../cna-demos/build/linux-full/reports/`:
+`repair-museum-profile-actor-red-{build,tests}-v1.log`.
+
+Candidate captures a local SignedInGamer's service identity before queueing and
+passes it to the internal profile operation. OnlineBackend no longer falls back
+to another slot for that explicit actor. FakeBackend rejects a signed-out explicit
+actor too. Remote Gamer lookups (including objects with a service user ID), guests
+and offline identities retain the default lookup route. Worker never dereferences
+the Gamer. Both production-loopback and fake-backend tests retain the remote-read
+control and the separate disposed-object contract.
+
+One-worker memory-limited native rebuild passed, log
+`repair-museum-profile-actor-after-build-v1.log`; existing unrelated nodiscard
+warnings only. Focused4/4 PASS (`repair-museum-profile-actor-focused-v1.log`). Full
+suite **709 =708 PASS/1 unchanged SKIP**,74364ms; exact XML comparison to the707
+checkpoint found no old outcome changes/missing tests and exactly two new PASS.
+Log/XML: `repair-museum-profile-actor-native-after-v1.{log,xml}`. Native shared
+library rebuild also passed (`repair-museum-profile-actor-shared-build-v1.log`).
+Windows cross-compilation of the three changed production units passed
+(`repair-museum-profile-actor-mingw-v1.log`); no Windows runtime coverage claimed.
+External consumer build passed (`repair-museum-profile-actor-demo-build-v1.log`).
+Unchanged C++ get_profile is9/9 PASS and C profile_identity is19/19 PASS on both
+SOFTWARE and OPENGLES3, matching the prior checkpoint. The C wrapper's JSON has
+zero outer checks; its child log contains19. Logs/JSON:
+`repair-museum-profile-actor-{demo,c-demo}-after-{SOFTWARE,OPENGLES3}-v1.*`.
+Diff/build-performance policy PASS. No public API/test expectations changed.
+Only the six gamer-services files and this handoff belong to this commit.
+Inherited content/audio/occlusion work remains untouched. No new CNA-DEMOS ID or
+disposition changes. No full CNA/sanitizer sweep or live online service validation
+claimed. Museum reproduction/revalidation remains its agent's responsibility.
+
+**Exact next task:** investigate B5 Android half-float render-target readback:
+verify the museum's actual format/data element types, inspect ReadRenderTargetPixels
+and context capabilities, then reproduce before choosing conversion vs capability
+refusal. No renderer edits yet. B3's13 non-reproducing avatar reruns remain recorded;
+the existing CNA build-asan is SOFTWARE-only (address,undefined/O0), not an
+OPENGLES3 sanitizer reproducer. Do not claim it reproduced or ruled out that crash.
+All profile-batch processes are terminal. Commit and normal fast-forward publication
+are authorized; no unrelated work may be included.
+
+### Previous checkpoint: profile sign-out exception fixed
 
 Notifications are published through **3c61c30ef00801b1ae99cab867ec30c57c9a94d7**,
 verified directly on origin/next. No museum repository or pin was changed.
@@ -51,9 +103,8 @@ Source reference: sibling `xna4-decomp/reference/xna4/decompiled/windows/`
 `ErrorHandler.cs` maps ProfileNotSignedIn to **GamerPrivilegeException**. Gamer.cs
 separately checks disposal at BeginGetProfile and throws ObjectDisposedException.
 These are different states; do not replace all failures with a disposal exception.
-The backend currently throws GamerServicesNotAvailableException from tokenFor.
-Also investigate how a local signed-in profile chooses its requesting account:
-the current operation captures only a gamertag and profile uses tokenFor({}).
+Before that repair tokenFor threw a generic GamerServicesNotAvailableException.
+The remaining default-account selection was subsequently reproduced above.
 
 The build completed (v1 and public-API refinement v2). The new test reproduces
 the exact museum message deterministically in13ms: EndGetProfile throws
@@ -83,7 +134,7 @@ than INTERNAL; that is source inspection, not a live online C API failure test.
 Diff and build-performance policy PASS. No demo expectations changed; no full
 CNA/demos or sanitizer sweep is claimed. All batch processes are terminal.
 
-**Exact next task:** reproduce and audit profile requester identity with two
+**Next task at that checkpoint:** reproduce and audit profile requester identity with two
 signed-in accounts. The exception fix does not prove that a queued local-profile
 read cannot borrow another account after logout: BeginGetProfile still captures
 only gamertag and OnlineBackend::profile still calls tokenFor({}). Extend the
@@ -488,8 +539,10 @@ Re-intake disposition (engineering queue, not museum closure):
   museum reproducer and native Windows verification remain external.
 - B3 intermittent gs-avatar corruption: retain evidence, no reproduced cause yet;
   requires targeted ASan run, not speculation from a Mesa malloc frame.
-- B4 phone failure event/send completion, B5 Android half-float readback,
-  B6 sign-out profile race, B8 vertex texture fetch, B10 surface-free WebGPU:
+- B4 phone failure event/send completion: repaired in3078bb41e/3c61c30ef above;
+  museum revalidation pending. B6 sign-out profile errors:3cd6028b7 plus the
+  two-account repair in the current checkpoint; museum revalidation pending.
+- B5 Android half-float readback, B8 vertex texture fetch, B10 surface-free WebGPU:
   still require focused reproduction/contract audit.
 - B7 frustum ray overlaps ISSUE131 and is repaired/validated in9a5e5d896150bf5094de57be22e25ad6f35e2242.
   On 2026-10-22 the owner explicitly revoked the former reservation:

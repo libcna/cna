@@ -3,6 +3,7 @@
 #include "../../../../../src/Internal/ServiceAsyncResult.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -121,6 +122,21 @@ INSTANTIATE_TEST_SUITE_P(ServiceFamilies,ServiceAsyncLifetimeTest,::testing::Val
     Operation::Profile,Operation::Lookup,Operation::Award,Operation::Achievements,Operation::Read));
 
 class ServiceReadLifetimeTest : public ServiceAsyncLifetimeTest {};
+TEST_F(ServiceReadLifetimeTest, LocalProfileKeepsItsAccountAcrossQueuedSignOut) {
+    auto* bob=(*Gamer::getSignedInGamersProperty())[1];
+    {std::unique_ptr<GamerProfile> profile(bob->GetProfile());ASSERT_NE(nullptr,profile);}
+    service->signOut(1);
+    std::unique_ptr<System::IAsyncResult> pending(bob->BeginGetProfile({},{}));
+    EXPECT_THROW({std::unique_ptr<GamerProfile> profile(bob->EndGetProfile(pending.get()));},GamerPrivilegeException);
+    ASSERT_EQ(1,Gamer::getSignedInGamersProperty()->getCountProperty());
+    EXPECT_EQ("Alice",actor()->getGamertagProperty());
+    EXPECT_THROW((void)bob->BeginGetProfile({},{}),System::ObjectDisposedException);
+
+    // The same target, now represented by a remote Gamer, is still a valid public lookup.
+    std::unique_ptr<Gamer> remote(Gamer::GetFromGamertag("Bob"));
+    {std::unique_ptr<GamerProfile> profile(remote->GetProfile());ASSERT_NE(nullptr,profile);}
+}
+
 TEST_F(ServiceReadLifetimeTest, ReaderPagingRetainsOriginalContextAndDisposeReleasesIt) {
     auto reader=LeaderboardReader::Read(identity,0,1);
     std::weak_ptr<Service::IGamerServicesBackend> origin=service;

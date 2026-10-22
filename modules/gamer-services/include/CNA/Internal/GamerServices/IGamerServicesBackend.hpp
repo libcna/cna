@@ -292,8 +292,10 @@ public:
     /** @brief Queues logical work on the backend executor. @param work Background work.
      * @param completion Completion at Update boundary. */
     virtual void submit(std::function<void()> work,std::function<void()> completion) = 0;
-    /** @brief Retrieves public identity/profile. @param gamertag Public name. @return Snapshot. */
-    virtual ServiceIdentity profile(const std::string& gamertag) = 0;
+    /** @brief Retrieves public identity/profile. @param gamertag Public name.
+     * @param actor Local authenticated identity, or empty to use the default account for a remote lookup.
+     * @return Snapshot. */
+    virtual ServiceIdentity profile(const std::string& gamertag,const std::string& actor = {}) = 0;
     /** @brief Gets achievements. @param userId Authenticated identity. @return Catalog/state. */
     virtual std::vector<ServiceAchievement> achievements(const std::string& userId) = 0;
     /** @brief Awards a title-defined achievement. @param userId Identity. @param key Catalog key.

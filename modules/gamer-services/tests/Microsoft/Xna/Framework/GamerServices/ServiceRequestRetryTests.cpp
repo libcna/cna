@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include <nlohmann/json.hpp>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -72,6 +73,7 @@ public:
     void drop(const std::string& op,int count) {std::lock_guard lock(mutex_);drops_[op]=count;}
     std::vector<std::string> ids(const std::string& op) {std::lock_guard lock(mutex_);return seen_[op];}
     std::vector<Json> arguments(const std::string& op) {std::lock_guard lock(mutex_);return args_[op];}
+    std::vector<std::string> actors(const std::string& op) {std::lock_guard lock(mutex_);return actors_[op];}
     // Offers avatars and catalog packs; avatars.catalog answers with `newest` as the newest catalog.
     void avatars(long long newest) {std::lock_guard lock(mutex_);avatars_=true;newestCatalog_=newest;}
 private:
@@ -88,6 +90,8 @@ private:
                 const auto body=Json::parse(request);const auto op=body.at("op").get<std::string>();
                 bool dropped=false;
                 {std::lock_guard lock(mutex_);seen_[op].push_back(body.at("id").get<std::string>());args_[op].push_back(body.value("args",Json::object()));
+                 const auto token=body.value("token",std::string{});
+                 actors_[op].push_back(token==std::string(64,'a')?"Alice":token==std::string(64,'d')?"Bob":"other");
                  if(drops_[op]>0){--drops_[op];dropped=true;}}
                 if(dropped)break;
                 std::string code="OK";
@@ -129,14 +133,15 @@ private:
         }
         if(op=="auth.login"||op=="auth.refresh") {
             std::lock_guard lock(mutex_);
-            Json credentials= {{"identity",{{"userId","u1"},{"gamertag","Alice"},{"displayName","Alice"},{"motto",""},{"region","US"},
-                {"picture",""},{"gamerScore",0},{"totalAchievements",0},{"allowOnlineSessions",true}}},
-                {"token",std::string(64,op=="auth.refresh"?'b':'a')},{"expires",now+3600},{"serverTime",now},
+            const bool bob=args.value("username",std::string{})=="bob";
+            Json credentials= {{"identity",profileIdentity(bob?"Bob":"Alice")},
+                {"token",std::string(64,bob?'d':op=="auth.refresh"?'b':'a')},{"expires",now+3600},{"serverTime",now},
                 {"privileges",{{"communication",communication_},{"profileViewing","blocked"},{"userContent","everyone"},
                     {"trade",false},{"purchase",true},{"premium",false}}}};
             if(refresh_) {credentials["refreshToken"]=std::string(64,'c');credentials["refreshExpires"]=now+86400;}
             return credentials;
         }
+        if(op=="profile.get")return profileIdentity(args.at("gamertag").get<std::string>());
         if(op=="assets.read") {
             const std::string bytes="private-picture";
             const auto offset=args.at("offset").get<std::size_t>(),length=args.at("length").get<std::size_t>();
@@ -160,10 +165,15 @@ private:
         if(op=="avatars.catalogPack")return {{"version",args.at("version")}};
         return Json::object();
     }
+    static Json profileIdentity(const std::string& tag) {
+        return {{"userId",tag=="Alice"?"u1":tag=="Bob"?"u2":"u3"},
+            {"gamertag",tag},{"displayName",tag},{"motto",""},{"region","US"},
+            {"picture",""},{"gamerScore",0},{"totalAchievements",0},{"allowOnlineSessions",true}};
+    }
     bool outcomes_,privacy_,refresh_,revokePing_=false,avatars_=false;long long newestCatalog_=3;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
     std::string assetCode_="OK", profileCode_="OK", communication_="friends";
     Json blocked_=Json::array({"Bob","Carol"});
-    std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_;std::map<std::string,std::vector<Json>> args_;
+    std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_,actors_;std::map<std::string,std::vector<Json>> args_;
 };
 
 class ServiceRequestRetryTest : public ::testing::Test {
@@ -244,6 +254,54 @@ TEST_F(ServiceRequestRetryTest, ProfileAuthenticationRefusalIsMappedButOtherServ
     service.profilePolicy("UNAUTHENTICATED");
     EXPECT_THROW({ std::unique_ptr<GamerProfile> profile(gamer.GetProfile()); }, GamerPrivilegeException);
     EXPECT_EQ(2u, service.ids("profile.get").size());
+}
+
+TEST_F(ServiceRequestRetryTest, LocalProfileUsesItsOwnAccountAndNeverBorrowsAnotherAfterSignOut) {
+    using namespace Microsoft::Xna::Framework::GamerServices;
+    struct Provider : System::IServiceProvider {
+        void* GetService(const std::type_info&) const override { return nullptr; }
+    } provider;
+    LoopbackService service(true);
+    Deployment::setConfigurationOverride(Deployment::Configuration{service.endpoint(),"retry",{},true});
+    Service::setBackendForTesting({});
+    const auto backend=Service::backend();
+    if(!GamerServicesDispatcher::getIsInitializedProperty())GamerServicesDispatcher::Initialize(provider);
+    const auto count=[] {return Gamer::getSignedInGamersProperty()->getCountProperty();};
+    const auto await=[&](auto condition) {
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        while(!condition()) {
+            if(std::chrono::steady_clock::now()>=deadline)return false;
+            GamerServicesDispatcher::Update();
+            std::this_thread::yield();
+        }
+        return true;
+    };
+    struct Cleanup {std::function<void()> run; ~Cleanup(){run();}} cleanup{[&] {
+        backend->signOut(0);backend->signOut(1);
+        EXPECT_TRUE(await([&] {return count()==0;}));
+    }};
+    ASSERT_EQ(0,count());
+    backend->signIn(0,"alice","fixture");backend->signIn(1,"bob","fixture");
+    ASSERT_TRUE(await([&] {return count()==2;}));
+    auto* alice=(*Gamer::getSignedInGamersProperty())[0];
+    auto* bob=(*Gamer::getSignedInGamersProperty())[1];
+    {std::unique_ptr<GamerProfile> profile(bob->GetProfile());ASSERT_NE(nullptr,profile);}
+    EXPECT_EQ(std::vector<std::string>{"Bob"},service.actors("profile.get"));
+
+    backend->signOut(1);
+    ASSERT_FALSE(bob->getIsDisposedProperty()) << "identity events have not been pumped yet";
+    std::unique_ptr<System::IAsyncResult> pending(bob->BeginGetProfile({},{}));
+    EXPECT_THROW({std::unique_ptr<GamerProfile> profile(bob->EndGetProfile(pending.get()));},GamerPrivilegeException);
+    EXPECT_EQ(1u,service.ids("profile.get").size()) << "must not send the old local read as Alice";
+    ASSERT_EQ(1,count());
+    EXPECT_EQ(alice,(*Gamer::getSignedInGamersProperty())[0]);
+    EXPECT_THROW((void)bob->BeginGetProfile({},{}),System::ObjectDisposedException);
+
+    // A remote gamer has a service user ID too, but is not the local requesting account.
+    std::unique_ptr<Gamer> carol(Gamer::GetFromGamertag("Carol"));
+    {std::unique_ptr<GamerProfile> profile(carol->GetProfile());ASSERT_NE(nullptr,profile);}
+    EXPECT_EQ(3u,service.ids("profile.get").size());
+    EXPECT_EQ("Alice",service.actors("profile.get").back());
 }
 
 TEST_F(ServiceRequestRetryTest, AnAvatarReadThatNamesNoCatalogsSendsNoCatalogList) {

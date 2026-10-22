@@ -44,7 +44,9 @@ public:
     void signOut(int slot) override {
         slotGuard(slot);queue([this,slot]{slots_[slot].clear();BackendEvent event;event.slot=slot;event.type=BackendEvent::Type::SignedOut;return event;});
     }
-    ServiceIdentity profile(const std::string& tag) override {
+    ServiceIdentity profile(const std::string& tag,const std::string& actor = {}) override {
+        if(!actor.empty()&&std::find(slots_.begin(),slots_.end(),actor)==slots_.end())
+            throw ServiceOperationError("UNAUTHENTICATED");
         for(const auto& person:identities_)if(person.gamertag==tag) {
             auto value=person;for(const auto& entry:catalog_)if(earned_[person.userId][entry.key]){value.gamerScore+=entry.score;++value.totalAchievements;}
             if(value.totalAchievements>0)value.titlesPlayed=std::max(value.titlesPlayed,1);

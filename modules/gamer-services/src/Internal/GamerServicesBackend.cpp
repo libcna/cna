@@ -187,7 +187,7 @@ public:
         }
         return QueuedBackend::pump();
     }
-    ServiceIdentity profile(const std::string& tag) override {return identity(request("profile.get",{{"gamertag",tag}},tokenFor({})));}
+    ServiceIdentity profile(const std::string& tag,const std::string& actor = {}) override {return identity(request("profile.get",{{"gamertag",tag}},tokenFor(actor)));}
     std::vector<ServiceAchievement> achievements(const std::string& user) override {
         const auto result=request("achievements.list",Json::object(),tokenFor(user));
         const auto& entries=result.at("achievements");if(!entries.is_array()||entries.size()>128)throw Unavailable("Invalid achievement response.");

@@ -35,8 +35,11 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (CNA::Internal::GamerServices::backend()->serviceEnabled()) {
             auto service = CNA::Internal::GamerServices::backend();
             const auto tag = gamertag_;
+            // A local profile belongs to its signed-in account, even if another slot remains
+            // authenticated after logout. Remote Gamer identities are lookup targets, not actors.
+            const auto actor = dynamic_cast<SignedInGamer*>(this) ? serviceUserId_ : std::string{};
             return CNA::Internal::GamerServices::ServiceAsyncResult::begin("profile", this,
-                [tag](auto& executor) -> std::any { return executor.profile(tag); }, std::move(callback), std::move(asyncState),std::move(service));
+                [tag, actor](auto& executor) -> std::any { return executor.profile(tag, actor); }, std::move(callback), std::move(asyncState),std::move(service));
         }
         auto* action = new GamerAction(std::move(asyncState), std::move(callback));
         action->setIsCompletedProperty(true);
