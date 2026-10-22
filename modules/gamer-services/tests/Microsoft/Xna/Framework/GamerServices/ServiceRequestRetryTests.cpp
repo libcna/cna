@@ -19,6 +19,8 @@
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "CNA/Internal/GamerServices/VoiceMutes.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
 #include <nlohmann/json.hpp>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -64,6 +66,7 @@ public:
     std::string endpoint() const {return "http://127.0.0.1:"+std::to_string(port_)+"/cna/v1";}
     void revokeNextPing() { std::lock_guard lock(mutex_); revokePing_=true; }
     void assetPolicy(const std::string& code) {std::lock_guard lock(mutex_);assetCode_=code;}
+    void profilePolicy(const std::string& code) {std::lock_guard lock(mutex_);profileCode_=code;}
     void policy(std::string communication, Json blocked) { std::lock_guard lock(mutex_); communication_=std::move(communication); blocked_=std::move(blocked); }
     // The next `count` requests of `op` are read, then their connection closes without an answer.
     void drop(const std::string& op,int count) {std::lock_guard lock(mutex_);drops_[op]=count;}
@@ -88,7 +91,7 @@ private:
                  if(drops_[op]>0){--drops_[op];dropped=true;}}
                 if(dropped)break;
                 std::string code="OK";
-                {std::lock_guard lock(mutex_);if(op=="assets.read")code=assetCode_;if(op=="auth.ping"&&revokePing_){code="UNAUTHENTICATED";revokePing_=false;}}
+                {std::lock_guard lock(mutex_);if(op=="assets.read")code=assetCode_;if(op=="profile.get")code=profileCode_;if(op=="auth.ping"&&revokePing_){code="UNAUTHENTICATED";revokePing_=false;}}
                 const auto text=Json{{"v",1},{"id",body.at("id")},{"error",code},{"result",code=="OK"?result(op,body.at("args")):Json::object()}}.dump();
                 const auto reply="HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: "+
                     std::to_string(text.size())+"\r\n\r\n"+text;
@@ -158,7 +161,7 @@ private:
         return Json::object();
     }
     bool outcomes_,privacy_,refresh_,revokePing_=false,avatars_=false;long long newestCatalog_=3;int listener_=-1;unsigned short port_=0;std::atomic<bool> stop_{false};std::atomic<int> connection_{-1};std::thread thread_;
-    std::string assetCode_="OK", communication_="friends";
+    std::string assetCode_="OK", profileCode_="OK", communication_="friends";
     Json blocked_=Json::array({"Bob","Carol"});
     std::mutex mutex_;std::map<std::string,int> drops_;std::map<std::string,std::vector<std::string>> seen_;std::map<std::string,std::vector<Json>> args_;
 };
@@ -204,6 +207,43 @@ TEST_F(ServiceRequestRetryTest, ADevelopmentCatalogIsNeverAskedForOrAccepted) {
     EXPECT_EQ(false,service.arguments("avatars.catalog")[1]["manifest"]);
     EXPECT_NO_THROW((void)backend->avatarCatalogPack(3));
     EXPECT_NO_THROW((void)backend->avatarCatalog(3));
+}
+
+TEST_F(ServiceRequestRetryTest, ProfileQueuedAfterSignOutReportsTheXnaPrivilegeFailureWithoutSending) {
+    using namespace Microsoft::Xna::Framework::GamerServices;
+    struct Provider : System::IServiceProvider {
+        void* GetService(const std::type_info&) const override { return nullptr; }
+    } provider;
+    LoopbackService service(true);
+    const auto backend = signedIn(service);
+    if (!GamerServicesDispatcher::getIsInitializedProperty()) GamerServicesDispatcher::Initialize(provider);
+    struct ProfileGamer : Gamer { ProfileGamer() : Gamer("Alice") {} } gamer;
+    backend->signOut(0);
+    // The real production queue executes logout before this work, regardless of
+    // whether its SignedOut event has reached the game thread yet. No sleep race.
+    std::unique_ptr<System::IAsyncResult> result(gamer.BeginGetProfile({}, {}));
+    // XNA ErrorHandler maps ProfileNotSignedIn to GamerPrivilegeException.
+    EXPECT_THROW({ std::unique_ptr<GamerProfile> profile(gamer.EndGetProfile(result.get())); },
+                 GamerPrivilegeException);
+    EXPECT_EQ(1u, service.ids("auth.logout").size());
+    EXPECT_TRUE(service.ids("profile.get").empty());
+}
+
+TEST_F(ServiceRequestRetryTest, ProfileAuthenticationRefusalIsMappedButOtherServiceErrorsArePreserved) {
+    using namespace Microsoft::Xna::Framework::GamerServices;
+    struct Provider : System::IServiceProvider {
+        void* GetService(const std::type_info&) const override { return nullptr; }
+    } provider;
+    LoopbackService service(true);
+    const auto backend = signedIn(service);
+    if (!GamerServicesDispatcher::getIsInitializedProperty()) GamerServicesDispatcher::Initialize(provider);
+    struct ProfileGamer : Gamer { ProfileGamer() : Gamer("Alice") {} } gamer;
+    service.profilePolicy("INVALID_RESPONSE");
+    EXPECT_THROW({ std::unique_ptr<GamerProfile> profile(gamer.GetProfile()); }, Unavailable);
+    EXPECT_EQ(1u, service.ids("profile.get").size());
+    service.profilePolicy("UNAUTHENTICATED");
+    EXPECT_THROW({ std::unique_ptr<GamerProfile> profile(gamer.GetProfile()); }, GamerPrivilegeException);
+    EXPECT_EQ(2u, service.ids("profile.get").size());
 }
 
 TEST_F(ServiceRequestRetryTest, AnAvatarReadThatNamesNoCatalogsSendsNoCatalogList) {

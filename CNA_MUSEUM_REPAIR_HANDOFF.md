@@ -27,7 +27,78 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current checkpoint: notification repair validated; museum revalidation pending
+### Current checkpoint: profile sign-out exception fixed; multi-account audit remains
+
+Notifications are published through **3c61c30ef00801b1ae99cab867ec30c57c9a94d7**,
+verified directly on origin/next. No museum repository or pin was changed.
+
+Two native regressions accompany the repair in
+`modules/gamer-services/tests/Microsoft/Xna/Framework/GamerServices/ServiceRequestRetryTests.cpp`:
+`ProfileQueuedAfterSignOutReportsTheXnaPrivilegeFailureWithoutSending` and
+`ProfileAuthenticationRefusalIsMappedButOtherServiceErrorsArePreserved`.
+It uses the existing loopback service and the real production worker queue;
+logout precedes the profile job deterministically, independent of game-thread
+event publication. It checks the exception family and that profile.get was never
+sent. This is not online/service validation and uses no extra sleep/retry.
+The runtime repair changes only GamerServicesBackend.cpp and GamerRequests.cpp:
+tokenFor preserves a typed ServiceOperationError/UNAUTHENTICATED (still an internal
+service exception); EndGetProfile maps that specific reason to GamerPrivilegeException.
+Other service/transport errors retain their existing family. A second public-API
+test covers server authentication refusal and a non-authentication error control.
+
+Source reference: sibling `xna4-decomp/reference/xna4/decompiled/windows/`
+`Microsoft.Xna.Framework.GamerServices/Microsoft.Xna.Framework.GamerServices/`
+`ErrorHandler.cs` maps ProfileNotSignedIn to **GamerPrivilegeException**. Gamer.cs
+separately checks disposal at BeginGetProfile and throws ObjectDisposedException.
+These are different states; do not replace all failures with a disposal exception.
+The backend currently throws GamerServicesNotAvailableException from tokenFor.
+Also investigate how a local signed-in profile chooses its requesting account:
+the current operation captures only a gamertag and profile uses tokenFor({}).
+
+The build completed (v1 and public-API refinement v2). The new test reproduces
+the exact museum message deterministically in13ms: EndGetProfile throws
+GamerServicesNotAvailableException, not XNA's GamerPrivilegeException. The profile
+request was not sent. Log: `repair-museum-profile-signout-red-tests-v1.log` under
+the reports directory below. The test asserts the XNA contract at public
+BeginGetProfile/EndGetProfile, not on the internal backend API.
+
+Baseline completed: **705 tests =704 PASS/1 SKIP**, no failure (73742ms).
+Candidate build and full module run passed: **707 =706 PASS/1 unchanged SKIP**
+(74284ms). XML comparison confirms all705 old outcomes identical, exactly two new
+PASS, no missing tests. Native shared library relink and both changed MinGW
+translation units pass; Windows runtime not rerun. Log/XML under
+`../cna-demos/build/linux-full/reports/`:
+`repair-museum-profile-signout-native-{baseline,after}-v1.{log,xml}`.
+Existing unrelated nodiscard test warnings are preserved. The original demos
+consumer, before rebuilding, passes get_profile9/9 on SOFTWARE and OPENGLES3.
+
+External consumer build passed (one compiler, shared cache, existing tree); log
+`repair-museum-profile-signout-demo-build-v1.log` in that reports directory.
+Rebuilt unchanged C++ get_profile is9/9 PASS on SOFTWARE and OPENGLES3, matching
+both pre-rebuild results. Unchanged C profile_identity is19/19 PASS on both
+selections (the wrapper JSON reports0 outer checks; child logs contain19).
+Reports/logs: `repair-museum-profile-signout-{demo,c-demo}-after-{software,gles}-v1.*`.
+The C adapter already maps GamerPrivilegeException to INVALID_STATE/STATE rather
+than INTERNAL; that is source inspection, not a live online C API failure test.
+Diff and build-performance policy PASS. No demo expectations changed; no full
+CNA/demos or sanitizer sweep is claimed. All batch processes are terminal.
+
+**Exact next task:** reproduce and audit profile requester identity with two
+signed-in accounts. The exception fix does not prove that a queued local-profile
+read cannot borrow another account after logout: BeginGetProfile still captures
+only gamertag and OnlineBackend::profile still calls tokenFor({}). Extend the
+loopback fixture with distinct users/tokens and observe the actual outgoing actor
+before deciding the smallest correct session/identity repair. Preserve normal
+remote-gamer profile reads and guest/offline behavior; avoid reading a mutable
+Gamer object from the worker or broadly rewriting all service APIs. The museum
+finding remains pending this audit and museum revalidation. No approval blocker.
+
+This batch is based on CNA3c61c30ef, Sharp1dc8785b and demos1295899b; the commit
+containing this checkpoint carries the exception fix. Inherited content/audio/
+occlusion changes remain uncommitted and untouched. The156-ID demos matrix still
+has40 without final disposition, plus DC-R1/DC-R2; none is silently closed here.
+
+### Completed notification checkpoint: museum revalidation pending
 
 Sender repair **3078bb41e6cc50f50ec10caba675e63ebe2a64b0** is published on
 origin/next (remote SHA verified). The companion failed-open repair is in the

@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -51,8 +52,17 @@ namespace Microsoft::Xna::Framework::GamerServices
     GamerProfile* Gamer::EndGetProfile(System::IAsyncResult* result)
     {
         if (dynamic_cast<CNA::Internal::GamerServices::ServiceAsyncResult*>(result)) {
-            const auto person = std::any_cast<CNA::Internal::GamerServices::ServiceIdentity>(
-                CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "profile", this));
+            CNA::Internal::GamerServices::ServiceIdentity person;
+            try {
+                person = std::any_cast<CNA::Internal::GamerServices::ServiceIdentity>(
+                    CNA::Internal::GamerServices::ServiceAsyncResult::end(result, "profile", this));
+            } catch (const CNA::Internal::GamerServices::ServiceOperationError& error) {
+                // XNA ErrorHandler maps ProfileNotSignedIn to GamerPrivilegeException;
+                // a queued read can lose authentication before the worker executes it.
+                if (error.code == "UNAUTHENTICATED")
+                    throw GamerPrivilegeException("The profile is not signed in to an online account.");
+                throw;
+            }
             auto profile = std::make_unique<GamerProfile>(GamerProfile::CreateInternal());
             profile->pictureHash_=person.picture;profile->motto_ = person.motto; profile->gamerScore_ = person.gamerScore;
             profile->totalAchievements_ = person.totalAchievements;

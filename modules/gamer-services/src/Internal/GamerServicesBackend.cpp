@@ -544,7 +544,9 @@ private:
     std::string tokenFor(const std::string& user) {
         std::lock_guard lock(slotMutex_);
         for(const auto& slot:slots_)if(!slot.token.empty()&&(user.empty()||slot.identity.userId==user))return slot.token;
-        throw Unavailable("No authenticated CNA gamer for this operation.");
+        // Keep authentication failure distinguishable from transport unavailability
+        // so each public API can apply its own XNA exception contract.
+        throw ServiceError("UNAUTHENTICATED");
     }
     static std::size_t write(char* data,std::size_t size,std::size_t count,void* context) noexcept {
         auto& text=*static_cast<std::string*>(context);
