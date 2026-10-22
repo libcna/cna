@@ -144,9 +144,31 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
+        // Normalized targets clamp shader output before both the blend equation and its
+        // source-dependent factors. Floating targets retain their extended input range;
+        // applying the first MRT attachment's range to all outputs would corrupt HDR siblings.
+        std::array<float, 4> BlendSourceForTarget(
+            const SoftwareFramebuffer& target, std::array<float, 4> source)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            switch (static_cast<SurfaceFormat>(target.surfaceFormat))
+            {
+                case SurfaceFormat::Color:
+                case SurfaceFormat::Rgba1010102:
+                case SurfaceFormat::Rg32:
+                case SurfaceFormat::Rgba64:
+                    for (float& channel : source)
+                        channel = std::clamp(channel, 0.0f, 1.0f);
+                    break;
+                default:
+                    break;
+            }
+            return source;
+        }
+
         /// Applies the independently selected colour/alpha BlendFunction after
-        /// both terms have been multiplied by their own factors. Clamping deliberately remains at
-        /// the caller, after the function and before the established RGBA8 conversion.
+        /// both terms have been multiplied by their own factors. Target storage performs
+        /// the final result quantization separately from pre-blend input range handling.
         float ApplyBlendFunction(int function, float sourceTerm, float destinationTerm)
         {
             switch (function)
@@ -3582,8 +3604,8 @@ namespace CNA::Internal::Renderers::Software
                 const std::size_t pixelIndex =
                     static_cast<std::size_t>(y) * static_cast<std::size_t>(target.width) +
                     static_cast<std::size_t>(x);
-                const std::array<float, 4>& source =
-                    pixel.colors[static_cast<std::size_t>(slot)];
+                const std::array<float, 4> source = BlendSourceForTarget(
+                    target, pixel.colors[static_cast<std::size_t>(slot)]);
                 const auto writeColor = [&](int sample)
                 {
                     std::array<float, 4> output = source;
@@ -5532,7 +5554,7 @@ namespace CNA::Internal::Renderers::Software
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
             // path writes every channel exactly as before.
-            const std::array<float, 4> source{r, g, b, a};
+            const std::array<float, 4> source = BlendSourceForTarget(fb, {r, g, b, a});
             const auto writeBlendedColor = [&](int sample) {
                 std::array<float, 4> output = source;
                 if (!ctx.blendState.IsOpaqueIdentity())

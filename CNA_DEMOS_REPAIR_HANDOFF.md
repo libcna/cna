@@ -9,6 +9,43 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**2026-10-22 ISSUE-027 validation accepted; ready for product commit.**
+Focused SW/GLES/GL33:14PASS each, including compiled/MRT paths. Default native
+11041=10923PASS/118SKIP, exact old11027 parity. External47085 terminated2 with
+parityAccepted:true:132 cases=123PASS/8existingFAIL/1SKIP, no deltas; eight082
+failures remain unaccepted. Original HDR demo4PASS/checks4; six exact visuals PASS
+with zero pixel difference. All ten screenshots individually inspected: HDR
+preserves distinct additive levels and text, font/clear/checkerboard references match.
+Final CTest57592 accepted5PASS/noSKIP24422ms, no input drift/events; peak148176896.
+External peak193499136/events0; native peak4056010752/events0. No heavy job live.
+Only numerical range handling changed; no new ownership/lifetime behavior, and no
+new sanitizer run claimed for this batch. Prior full719 smoke remains historical;
+final all-issue full campaign is still required. This batch did not remove any
+knownIssue marker (027 had none). Next commit only SoftwareRenderer.cpp plus the
+14 new native regressions, record its SHA and close027 in matrix/permanent inventory.
+Then reproduce054 using unchanged DDS stream demo; see CUBE_STREAM_TRIAGE.md.
+066 awaits the explicit toggle-contract choice; do not infer an answer. Preserve
+inherited011/082 edits, no push/merge.
+
+**2026-10-22 ISSUE-027 candidate; sole external47085 running.**
+CNA HEAD30c872915 / demos2031ddd.003 closure is committed, Windows runtime pending.
+Current027 baseline: SOFTWARE12FAIL/2PASS versus GLES/GL3314PASS; eight compiled-off
+SDL skips explicit. Narrow SoftwareRenderer.cpp range helper plus two new native
+regression files fix all14 SOFTWARE cases; focused after15346 passes14 each
+SW/GLES/GL33, SDL6PASS/8SKIP. Existing066 C failures remain unchanged on SW/SDL.
+No source drift or OOM; focused peak902090752 bytes. No027 commit/closure yet.
+Native69993 completed0: build30717ms/no diagnostics, graphics3026=2936PASS/90SKIP,
+full11041=10923PASS/118SKIP in1157090ms; exact old11027 outcomes unchanged plus
+6PASS/8compiled-offSKIP. No source drift/events, peak4056010752 bytes. Scope dead.
+Sole external47085 now runs repair-blend-range-external.mjs: original132 outcomes
+with previously accepted003 checks9, original HDR demo/screenshots on four renderers,
+six exact visual references. Private GPU/6GiB/no swap. Collect before any new heavy
+job, inspect screenshots, then commit027 and update permanent status. Separate
+existing082 failures remain failures, not a green full campaign. No027 closure yet.
+See demos graphics/BLEND_STATE_RANGE_TRIAGE.md for fixture corrections, exact logs
+and contract evidence.066 awaits an explicit legacy-toggle factor choice; no answer
+presumed and it does not block027. Inherited011/082 work remains separate. No push.
+
 **2026-10-22 ISSUE-003 product and metadata validation complete.**
 CNA repair `3b6a2eaf3bc51a7cf44cf645b5cfa66494e0a6bb` contains only003
 code/tests; inherited011 ownership and082 lifecycle changes remain uncommitted.
