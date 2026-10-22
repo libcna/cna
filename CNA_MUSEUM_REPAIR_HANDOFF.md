@@ -19,6 +19,78 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**Haptic consumer-configure follow-up validated; storage red baseline is next.**
+After two direct questions specifying the sole34->35 test-budget exception, the owner
+repeatedly instructed continuation. Proceeded with that narrowly scoped approval;
+the escalated documented manifest update was accepted. Its exact diff changes ONLY
+Sdl3PlatformTests.cpp max_references34->35. No category, allowlist, production budget,
+assertion or sanitizer suppression changed.
+
+Native62596 / repair-museum-haptic-lifetime-after-v5: explicit CMake configure PASS
+11544ms, build PASS668ms, focused3/3 PASS, platform525PASS8SKIP, input562PASS,
+devices473PASS4SKIP. All seven boundary gates PASS, including strict production
+ratchet, nonproduction audit and contract checker. Peak872615936 bytes, all memory
+events zero, source drift zero. Consumer90308 / external-v2: explicit cna-demos
+configure PASS5880ms, build PASS15593ms,24/24 SOFTWARE/GLES before/rebuild/after
+cases PASS with no status/check-count/knownIssue/exit deltas. Peak4295970816 bytes,
+high77/max0/oom0/kill0, source drift zero. No source or test assertion changed in this
+follow-up, so the prior ASan/UBSan/LSan and TSan results still apply; they were not rerun.
+No hardware pass claimed; museum must rerun tools/haptics_check.sh with its virtual
+kernel device. This follow-up commits only the budget and this handoff. The source
+repair remains272696e8bc2077b988771417a9b5daf59c636294. No push or merge.
+Next: report this configurable successor to owner and resume storage red baseline-v2.
+All unrelated ownership/ISSUE113 changes and the uncommitted storage oracle/tests
+remain separate; do not stage them in the audit follow-up.
+
+### Historical configure blocker (now approved, corrected and consumer-validated)
+
+Museum independently confirmed the same consumer-configure failure at
+cmake/PlatformRatchet.cmake:102 and returned its worktree to5b6aab981 pending a
+configurable successor. Its kernel force-feedback revalidation has NOT run.
+Follow-up source search found no existing SDL TLS cleanup helper in CNA modules or
+shared tests: the new worker cleanup is the sole SDL_CleanupTLS call. Do not move
+or disguise that reference merely to evade the per-file audit. The museum report
+does not itself grant the outstanding owner approval for the narrow budget change.
+Fresh CMake regeneration for storage baseline94864 failed the non-production SDL
+audit: Sdl3PlatformTests.cpp has35 references vs its ceiling34. The one addition is
+SDL_CleanupTLS in the new test-owned worker threads, needed for the clean LSan run.
+The earlier five gates passed, but this sixth configure-time gate had not rerun.
+Attempted explicit manifest update was rejected by auto-review because retained
+instructions prohibit relaxing budgets/allowlists without owner approval. NO manifest
+change occurred. Do not bypass that rejection, disable the gate, remove assertions,
+or suppress leaks. Ask owner for the narrow34->35 platform-native-test exception;
+production's zero-coupling budget and category/allowlists must stay unchanged.
+If approved: update only that entry using the documented tool, inspect the exact diff,
+run all seven architecture gates, regenerate/build/retest the haptic module suites,
+then commit the audit follow-up separately and resume the storage red baseline.
+No active jobs. Haptic code272696e8b is committed and focused runtime/sanitizer-tested,
+but a fresh configuration is currently BLOCKED by this missing audit approval.
+Storage9 native regressions have NOT executed; its baseline stopped at configure.
+Genuine XNA46 controls passed. Uncommitted own work: this handoff, new native
+StorageDeviceAsyncContractTests.cpp, demos StorageDeviceAsyncOracle.cs. All inherited
+ownership/ISSUE113 changes remain untouched. Nothing pushed or merged.
+
+## Storage async reference triage (in progress)
+
+**Active storage async reference triage, CNA272696e8b / demosc142af3.**
+Haptic repair committed272696e8bc2077b988771417a9b5daf59c636294; owner notified,
+no push. Sole job cna-storage-async-reference-v1 runs a new genuine XNA console
+oracle from demos/docs/repair-evidence/storage/StorageDeviceAsyncOracle.cs in the
+existing Wine XNA4 prefix without DISPLAY/WAYLAND_DISPLAY. It exercises only
+selectors and failing container ends: no storage directory or successful container
+is created. Verify actual loaded assembly and exact exception/parameter precedence
+before CNA edits. The oracle is uncommitted in demos; no CNA storage code changed.
+Reference97145 completed:46/46 PASS on actual GAC XNA Storage4.0.0.0, warning-free
+csc compile2061ms/runtime788ms, peak321904640/events0. In particular wrong-owner End
+consumes before name validation; wrong result type does not consume; empty/null name
+validation occurs in End, not Begin; callback may End synchronously; invalid player
+precedes invalid size and directoryCount is not validated. New nine-test native file
+StorageDeviceAsyncContractTests.cpp is uncommitted; no runtime repair yet. Sole job
+cna-storage-async-before-v1 builds CnaStorageTests, runs those regressions expecting
+red, then all prior storage tests unchanged. No source edits while the job runs.
+
+## Completed haptic lifetime repair (272696e8b)
+
 **Haptic discovery lifetime repaired in this commit, base CNA5f08e9dd0 / demosc142af3.**
 Final native63156/v4: focused3/3 PASS (no skips), platform525PASS8SKIP,
 input562/562 PASS, devices473PASS4SKIP, five gates PASS. Original test/skip sets

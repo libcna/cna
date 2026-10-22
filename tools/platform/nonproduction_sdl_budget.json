@@ -179,7 +179,7 @@
     },
     "modules/platform/tests/CNA/Platform/Sdl3PlatformTests.cpp": {
       "category": "platform-sdl3-integration",
-      "max_references": 34
+      "max_references": 35
     },
     "modules/platform/tests/CNA/Platform/Sdl3XErrorHandlerTests.cpp": {
       "category": "platform-sdl3-integration",
