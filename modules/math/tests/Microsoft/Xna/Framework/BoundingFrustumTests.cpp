@@ -368,6 +368,74 @@ TEST(BoundingFrustumTest, IntersectsPlaneOutRef)
 
 // --- Intersects (Ray) ---
 
+TEST(BoundingFrustumTest, IntersectsRayClipsEveryPlaneWithXnaBoundaryRules)
+{
+    // The same 22 cases pass against the original XNA 4.0 assembly in
+    // cna-demos/docs/repair-evidence/math/FrustumRayOracle.cs.
+    struct Case
+    {
+        const char* name;
+        Vector3 origin;
+        Vector3 direction;
+        std::optional<float> expected;
+    };
+    const Case cases[] = {
+        {"near entry", {0, 0, -3}, Vector3::UnitZ, 3},
+        {"far entry", {0, 0, 4}, -Vector3::UnitZ, 3},
+        {"left entry", {-4, 0, .5f}, Vector3::UnitX, 3},
+        {"right entry", {4, 0, .5f}, -Vector3::UnitX, 3},
+        {"bottom entry", {0, -4, .5f}, Vector3::UnitY, 3},
+        {"top entry", {0, 4, .5f}, -Vector3::UnitY, 3},
+        {"nonunit direction", {0, 0, -3}, {0, 0, 2}, 1.5f},
+        {"behind ray", {0, 0, -3}, -Vector3::UnitZ, std::nullopt},
+        {"parallel outside", {3, 0, -3}, Vector3::UnitZ, std::nullopt},
+        {"disjoint intervals", {3, 0, -3}, {-1, 0, 3}, std::nullopt},
+        {"edge tangent", {1, 1, -3}, Vector3::UnitZ, 3},
+        {"corner contact", {2, 0, -1}, {-1, 1, 1}, 1},
+        {"boundary inward", Vector3::Zero, Vector3::UnitZ, 0},
+        {"boundary outward", Vector3::Zero, -Vector3::UnitZ, 0},
+        {"boundary stationary", Vector3::Zero, Vector3::Zero, 0},
+        {"inside stationary", {0, 0, .5f}, Vector3::Zero, 0},
+        {"outside stationary", {0, 0, -3}, Vector3::Zero, std::nullopt},
+        {"containment tolerance", {0, 0, -1e-6f}, -Vector3::UnitZ, 0},
+        {"beyond containment tolerance", {0, 0, -1e-3f}, Vector3::UnitZ, 1e-3f},
+        {"direction below parallel epsilon", {0, 0, -1}, {0, 0, 5e-6f}, std::nullopt},
+        {"direction at parallel epsilon", {0, 0, -1}, {0, 0, 1e-5f}, 100000},
+        {"parallel offset beyond plane but inside tolerance", {1 + 1e-6f, 0, -3},
+            Vector3::UnitZ, std::nullopt},
+    };
+    const BoundingFrustum frustum(Matrix::getIdentityProperty());
+    for (const auto& test : cases)
+    {
+        SCOPED_TRACE(test.name);
+        const Ray ray(test.origin, test.direction);
+        std::optional<float> output = 99.0f;
+        frustum.Intersects(ray, output);
+        EXPECT_EQ(output, test.expected);
+        EXPECT_EQ(frustum.Intersects(ray), test.expected);
+        EXPECT_EQ(ray.Intersects(frustum), test.expected);
+    }
+}
+
+TEST(BoundingFrustumTest, IntersectsRayUsesTransformedAndCameraFrustumPlanes)
+{
+    const BoundingFrustum translated(Matrix::CreateTranslation(-10, 20, -30));
+    const BoundingFrustum camera(Matrix::CreateLookAt(Vector3(0, 0, 5), Vector3::Zero,
+        Vector3::Up) * Matrix::CreateOrthographic(2, 2, 1, 5));
+    const Ray translatedRay(Vector3(10, -20, 27), Vector3::UnitZ);
+    const Ray cameraRay(Vector3(0, 0, 7), -Vector3::UnitZ);
+    std::optional<float> output = 99.0f;
+    translated.Intersects(translatedRay, output);
+    EXPECT_EQ(output, 3.0f);
+    EXPECT_EQ(translated.Intersects(translatedRay), 3.0f);
+    EXPECT_EQ(translatedRay.Intersects(translated), 3.0f);
+    output = 99.0f;
+    camera.Intersects(cameraRay, output);
+    EXPECT_EQ(output, 3.0f);
+    EXPECT_EQ(camera.Intersects(cameraRay), 3.0f);
+    EXPECT_EQ(cameraRay.Intersects(camera), 3.0f);
+}
+
 TEST(BoundingFrustumTest, IntersectsRayOriginInsideReturnZero)
 {
     BoundingFrustum f = MakeTestFrustum();

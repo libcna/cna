@@ -11,7 +11,6 @@
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Ray.hpp"
-#include "System/NotImplementedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -284,22 +283,41 @@ bool ConvexIntersects(const std::array<Vector3, 8> &vertices, Vector3 direction,
         ContainmentType ctype;
         Contains(ray.Position, ctype);
 
-        if (ctype == ContainmentType::Disjoint)
-        {
-            result = std::nullopt;
-            return;
-        }
         if (ctype == ContainmentType::Contains)
         {
             result = 0.0f;
             return;
         }
-        if (ctype != ContainmentType::Intersects)
+        // XNA clips outside origins against the plane interval. FNA's origin-only
+        // shortcut misses entering rays. Keep XNA's separate containment and
+        // parallel-plane thresholds; do not normalize the caller's direction.
+        float entry = std::numeric_limits<float>::lowest();
+        float exit = std::numeric_limits<float>::max();
+        result = std::nullopt;
+        for (const Plane& plane : planes)
         {
-            throw System::ArgumentOutOfRangeException("ctype");
-        }
+            const float direction = Vector3::Dot(ray.Direction, plane.Normal);
+            const float distance = Vector3::Dot(ray.Position, plane.Normal) + plane.D;
+            if (std::abs(direction) < 1e-5f)
+            {
+                if (distance > 0.0f) return;
+                continue;
+            }
 
-        throw System::NotImplementedException("BoundingFrustum::Intersects(Ray) is not implemented");
+            const float parameter = (0.0f - distance) / direction;
+            if (direction < 0.0f)
+            {
+                if (parameter > exit) return;
+                if (parameter > entry) entry = parameter;
+            }
+            else
+            {
+                if (parameter < entry) return;
+                if (parameter < exit) exit = parameter;
+            }
+        }
+        const float parameter = entry >= 0.0f ? entry : exit;
+        if (parameter >= 0.0f) result = parameter;
     }
 
     void BoundingFrustum::CreateCorners()

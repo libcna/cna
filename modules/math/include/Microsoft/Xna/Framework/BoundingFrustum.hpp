@@ -222,7 +222,8 @@ namespace Microsoft::Xna::Framework
          * @brief Returns the distance along a ray where it hits this frustum, or an empty optional if there is no hit.
          *
          * @param ray The ray to test.
-         * @return The intersection distance, or empty if no intersection.
+         * @return The first nonnegative ray parameter, zero when the origin is contained,
+         * or empty if there is no intersection. Distance assumes a unit direction.
          */
         [[nodiscard]] std::optional<float> Intersects(Ray ray) const;
 
@@ -230,7 +231,8 @@ namespace Microsoft::Xna::Framework
          * @brief Output-ref variant; writes the intersection distance to @p result, or empty if no hit.
          *
          * @param ray The ray to test.
-         * @param result Output that receives the intersection distance or empty.
+         * @param result Output receiving the first nonnegative ray parameter, zero for a
+         * contained origin, or empty if there is no intersection.
          */
         void Intersects(const Ray& ray, std::optional<float>& result) const;
 

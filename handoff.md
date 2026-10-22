@@ -68,8 +68,7 @@ browser are all reached through SDL3's drivers), `HEADLESS`, or POSIX-only `TERM
 reference is represented; the generated census is
 [`docs/xna-4-runtime-member-coverage.md`](docs/xna-4-runtime-member-coverage.md)
 (`python3 tools/audit_xna_runtime_surface.py --write-reports`). Representation is not behaviour:
-behavioural fidelity is held by each module's tests. The incomplete frustum-ray intersection
-is now authorized for repair (§5.2).
+behavioural fidelity is held by each module's tests.
 
 **Bindings.** C and C# are the maintained bindings. CNA.NET (`libcna/cna-dotnet` `develop`) admits
 exactly C ABI 0.47.0 and pins one CNA `next` commit (`CNA_UPSTREAM_COMMIT` in its
@@ -151,9 +150,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so the mask reaches the renderer and is
   deliberately not applied; `ColorWriteChannels` is honoured.
 
-- `BoundingFrustum::Intersects(Ray)` throws `System::NotImplementedException` for the case it does
-  not compute. The owner revoked the former hands-on-work reservation on 2026-10-22
-  ("Ano, oprav ji v rámci kampaně"); repair and reference validation are pending.
 - Native `SurfaceFormat::Alpha8` render-target storage is unavailable on every renderer:
   `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Alpha8)` is false, and a
   render target preferring Alpha8 falls back to `Color` as XNA's preferred-format rule allows

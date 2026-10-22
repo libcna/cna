@@ -76,9 +76,11 @@ Re-intake disposition (engineering queue, not museum closure):
 - B4 phone failure event/send completion, B5 Android half-float readback,
   B6 sign-out profile race, B8 vertex texture fetch, B10 surface-free WebGPU:
   still require focused reproduction/contract audit.
-- B7 frustum ray overlaps ISSUE131. On 2026-10-22 the owner explicitly revoked
-  the former reservation: "Ano, oprav ji v rámci kampaně". Implementation is now
-  authorized; verify the genuine XNA contract and both overloads before repair.
+- B7 frustum ray overlaps ISSUE131 and is repaired/validated in this commit.
+  On 2026-10-22 the owner explicitly revoked the former reservation:
+  "Ano, oprav ji v rámci kampaně". The six-plane interval now matches genuine XNA;
+  containment tolerance, parallel epsilon, non-unit directions and output clearing
+  remain explicit. No consumer-specific branch or relaxed assertion was added.
 - B11 storage: Begin/End fixed3798787bb (after museum pin); path/error regression
   tests remain uncommitted and red; SetAppNameEXT laziness not repaired.
 - B12 readback capability, B13 tray support contract, B14 dialog defaults,
@@ -91,13 +93,33 @@ Re-intake disposition (engineering queue, not museum closure):
   presentation defaults: pending. CNB None size/ceiling was already repaired by
   2386155f2 (also in museum pin); revalidate its C route before claiming closure.
 
-Exact next task: implement the now-authorized frustum-ray repair (ISSUE131 and
-museum B7). Genuine XNA4 oracle FrustumRayOracle.cs already passes72/72 checks
-(24 cases across three public routes; compile2473ms/run842ms, peak335900672 bytes,
-events0). Add equivalent native red regressions, then repair and validate the
-full math suite and both original demos without weakening their assertions.
-No active job at this checkpoint. The oracle and unrelated input-string oracle
-are uncommitted in demos; storage path-error test and inherited work remain dirty.
+### Frustum-ray validation checkpoint
+
+Genuine XNA4 oracle FrustumRayOracle.cs passes72/72 checks (24 cases across three
+public routes; compile2473ms/run842ms, peak335900672 bytes/events0). Native before:
+971 tests,967PASS/two expected new failures/two existing missing-fixture skips.
+After:969PASS/the same two skips. Both added tests preserve exact expectations;
+the permanent C GeometrySmoke adds seven cases through both C routes (14 calls).
+Its strict C17/Wall/Wextra/Wpedantic/Werror compile and runtime pass.
+
+External SOFTWARE and OPENGLES3 math sweeps each move93PASS/two ISSUE131 failures
+to95PASS. The first fixed sweep correctly exited1 for two unexpected passes while
+knownIssue remained. Markers were then removed, with the six and three original
+checks unchanged; both final sweeps exit0, and exact status/check/marker/message
+comparisons have no unintended deltas. The complete C math category passes on
+both renderers; all12 focused demo/catalog CTests pass, no skips. Evidence:
+../cna-demos/build/linux-full/reports/repair-frustum-ray-{reference-v1,red-v1,
+fixed-v1,closed-v1,gates-v1}-*. No visual/sanitizer/full-CNA-suite claim for this
+pure geometry batch. Consumer CMake configure and SDL audit passed unchanged.
+Initial consumer rebuild peak4298473472 bytes/high975, max/oom/kill0; final C gates
+peak135626752/events0. All builds used existing trees/shared ccache/one compiler.
+
+No active job. Next: commit the demo oracle/closure and permanent ISSUE131 matrix
+entry narrowly, preserving inherited ISSUE113 and ownership edits; then reproduce
+the museum shared C/C++ runtime duplication with the existing UP-006 consumer
+fixture and inspect the C API's install/static archive obligations before changing
+its linkage. Input-string oracle and storage path-error test are still uncommitted
+preparation, not completed repairs. No push/merge.
 
 ### Previous storage checkpoint (retained history)
 

@@ -577,6 +577,38 @@ static int validate_bounding_frustum(void)
         return 0;
     }
 
+    /* ISSUE-131: both public C routes must preserve outside entry, misses and
+       non-unit ray parameters from the shared XNA-compatible implementation. */
+    const struct {
+        CNA_Ray ray;
+        CNA_Bool hit;
+        float distance;
+    } ray_cases[] = {
+        {{{0.0F, 0.0F, -3.0F}, {0.0F, 0.0F, 1.0F}}, CNA_TRUE, 3.0F},
+        {{{0.0F, 0.0F, -3.0F}, {0.0F, 0.0F, 2.0F}}, CNA_TRUE, 1.5F},
+        {{{3.0F, 0.0F, -3.0F}, {0.0F, 0.0F, 1.0F}}, CNA_FALSE, 0.0F},
+        {{{0.0F, 0.0F, -3.0F}, {0.0F, 0.0F, -1.0F}}, CNA_FALSE, 0.0F},
+        {{{2.0F, 0.0F, -1.0F}, {-1.0F, 1.0F, 1.0F}}, CNA_TRUE, 1.0F},
+        {{{0.0F, 0.0F, -1.0F}, {0.0F, 0.0F, 0.000005F}}, CNA_FALSE, 0.0F},
+        {{{0.0F, 0.0F, -1.0F}, {0.0F, 0.0F, 0.00001F}}, CNA_TRUE, 100000.0F}
+    };
+    for (size_t i = 0; i < sizeof(ray_cases) / sizeof(ray_cases[0]); ++i) {
+        hit = CNA_FALSE;
+        distance = 77.0F;
+        if (cna_bounding_frustum_intersects_ray(frustum, ray_cases[i].ray, &hit,
+                &distance) != CNA_RESULT_SUCCESS || hit != ray_cases[i].hit ||
+            distance != ray_cases[i].distance) {
+            return 0;
+        }
+        hit = CNA_FALSE;
+        distance = 77.0F;
+        if (cna_ray_intersects_frustum(ray_cases[i].ray, frustum, &hit,
+                &distance) != CNA_RESULT_SUCCESS || hit != ray_cases[i].hit ||
+            distance != ray_cases[i].distance) {
+            return 0;
+        }
+    }
+
     CNA_Matrix projection;
     CNA_BoundingFrustum other;
     int32_t hash = 0;
