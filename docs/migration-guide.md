@@ -49,6 +49,26 @@ Non-XNA CNA-only additions (helpers, extensions, internal renderer types) are ma
 `Texture2D::SetDataPointerEXT`) — anything with that suffix is safe to ignore unless you
 specifically want a CNA extension your original XNA code never used.
 
+### CNAEXT and C++ language artefacts
+
+`CNAEXT` is a declaration-level marker, not by itself proof of a new runtime
+capability. Some tagged C++ declarations spell out behavior that C# supplies
+implicitly: the parameterless `KeyboardState`, `MouseState` and `GamePadState`
+constructors correspond to zero-initialized XNA value types, and vector compound
+assignments such as `Vector3::operator+=` express C#'s synthesized assignment from
+the corresponding binary operator. Using those operations does not require a
+CNA-only feature in the original XNA program (cna-engine UP-002).
+
+Do not confuse a semantic XNA-compatibility audit with CNA's optional
+`CNA_STRICT_XNA_API` declaration check. That macro turns **every** `CNAEXT` marker
+into a deprecation diagnostic, including these language artefacts. With
+`-Werror=deprecated-declarations`, calling them is therefore rejected even though
+their semantics are available in C# XNA. The marker and this compile gate have not
+been relaxed. For compound assignment, strict declaration-checking code can write
+the explicit equivalent, for example `position = position + offset`. Genuine CNA
+extensions, such as horizontal mouse scrolling or extra vertex layouts, remain
+extensions regardless of this language-mapping distinction.
+
 ## Choosing a renderer
 
 CNA has 10 public renderer identities over 8 implementation families, chosen at CMake configure
