@@ -20,6 +20,17 @@ failures) and passed six exact visual references. It is not a completed repair.
 ## Current task
 
 **StorageDevice Begin/End repair validated; next is remaining storage argument/I/O errors.**
+Repair committed CNA3798787bbe05ddd79559f5313d8690971f0ea33e; evidence and stronger
+demo committed cna-demos173bf332469bbbbc5823151ac87bc57cefa0a139. Both commits are
+local, nothing pushed or merged. The owner was given the repair SHA for museum
+revalidation; do not edit the museum finding on its behalf. This SHA also includes
+the haptic code272696e8b and approved configuration fixa6f9e9b2e.
+No active job and no uncommitted storage code remains. Inherited ownership/ISSUE113
+work remains dirty and must be preserved. Exact next task: verify current XNA/CNA
+empty filesystem argument and non-empty DeleteDirectory exception contracts, add
+focused red regressions, then fix at the existing SharpRuntime I/O boundary without
+changing containment policy. Do not equate an empty search pattern with an empty path
+without reference evidence. Keep FileShare152 and ContentManager010 separately open.
 Base CNAfb713de84 / demosc142af3. Reference60629-v2 verifies46/46 genuine XNA
 checks including exact resource-derived ParamName (compile4283ms/runtime2004ms,
 peak319725568/events0). Native baseline11499:8/9 new tests FAIL,18/18 prior PASS.
