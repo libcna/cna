@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionJoinError.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionState.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
@@ -10,6 +11,7 @@
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,6 +27,7 @@ namespace CNA::Internal::Net
     using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkGamer;
     using Microsoft::Xna::Framework::Net::NetworkSession;
+    using Microsoft::Xna::Framework::Net::NetworkSessionJoinError;
     using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
     using Microsoft::Xna::Framework::Net::NetworkSessionState;
     using Microsoft::Xna::Framework::Net::NetworkSessionType;
@@ -141,6 +144,14 @@ namespace CNA::Internal::Net
          * @param port The host's bound UDP port (see GetBoundPort()).
          */
         static void ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port);
+
+        /**
+         * @brief Returns an explicit host refusal received before the initial welcome.
+         *
+         * @param session The session attempting to join.
+         * @return The refusal reason, or no value if no explicit join refusal was received.
+         */
+        static std::optional<NetworkSessionJoinError> GetJoinFailure(NetworkSession* session);
 
                 /**
          * @brief Sends one voice frame from a local gamer to a remote gamer, unreliably on the

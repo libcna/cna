@@ -1717,10 +1717,14 @@ namespace Microsoft::Xna::Framework::Net
 
                 if (activeSession_->getHostProperty() == constructionTimeHost)
                 {
+                    const auto joinError = CNA::Internal::Net::ENetBackend::GetJoinFailure(activeSession_)
+                        .value_or(NetworkSessionJoinError::SessionNotFound);
                     cleanupFailedJoin();
                     throw NetworkSessionJoinException(
-                        "The requested network session could not be found.",
-                        NetworkSessionJoinError::SessionNotFound
+                        joinError == NetworkSessionJoinError::SessionNotJoinable
+                            ? "The network session is not joinable."
+                            : "The requested network session could not be found.",
+                        joinError
                     );
                 }
 #endif

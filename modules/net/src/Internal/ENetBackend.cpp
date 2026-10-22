@@ -135,6 +135,7 @@ namespace CNA::Internal::Net
             // Client: local gamers added after the welcome, waiting for the host to number them.
             std::vector<LocalNetworkGamer*> PendingLocalAdds;
             bool Welcomed{false};
+            std::optional<NetworkSessionJoinError> JoinFailure;
             // BytesPerSecondSent/Received, from this host's wire totals.
             TrafficRate Traffic;
             // Host: when the round trips to client gamers are next published.
@@ -563,7 +564,7 @@ namespace CNA::Internal::Net
             if (session->getSessionStateProperty() == NetworkSessionState::Playing
                 && !session->getAllowJoinInProgressProperty())
             {
-                state.Host.Disconnect(peer, 0);
+                state.Host.Disconnect(peer, DisconnectSessionNotJoinable);
                 return;
             }
 
@@ -1133,6 +1134,10 @@ namespace CNA::Internal::Net
 
         void HandleDisconnect(NetworkSession* session, SessionState& state, ENetPeer* peer, uint32_t data)
         {
+            if (peer == state.HostPeer && !state.Welcomed && data == DisconnectSessionNotJoinable)
+            {
+                state.JoinFailure = NetworkSessionJoinError::SessionNotJoinable;
+            }
             if (peer == state.HostPeer && data == DisconnectRemovedByHost)
             {
                 // The host removed this machine (NetworkMachine.RemoveFromSession): no migration.
@@ -1652,7 +1657,14 @@ namespace CNA::Internal::Net
 #endif
 
         SessionState& state = *Sessions().at(session);
+        state.JoinFailure.reset();
         state.HostPeer = state.Host.Connect(address, port, kChannelLimit);
+    }
+
+    std::optional<NetworkSessionJoinError> ENetBackend::GetJoinFailure(NetworkSession* session)
+    {
+        const auto it = Sessions().find(session);
+        return it == Sessions().end() ? std::nullopt : it->second->JoinFailure;
     }
 
     void ENetBackend::SendAppData(

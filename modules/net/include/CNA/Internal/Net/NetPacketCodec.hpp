@@ -19,6 +19,9 @@ namespace CNA::Internal::Net
     /** @brief ENet disconnect data a host sends to a machine it removes (XNA NetworkMachine.RemoveFromSession). */
     inline constexpr std::uint32_t DisconnectRemovedByHost = 0x524D5648u;
 
+    /** @brief ENet disconnect data for a join refused because the session is not joinable. */
+    inline constexpr std::uint32_t DisconnectSessionNotJoinable = 0x4A4E4F54u;
+
     using Microsoft::Xna::Framework::Net::NetworkSessionState;
     using Microsoft::Xna::Framework::Net::NetworkSessionProperties;
     using Microsoft::Xna::Framework::Net::PacketReader;

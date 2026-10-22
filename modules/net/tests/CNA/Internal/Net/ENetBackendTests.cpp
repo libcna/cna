@@ -1865,6 +1865,8 @@ TEST(ENetBackendTest, HostRejectsClientHelloWhenPlayingAndJoinInProgressDisallow
         ENetEvent evt{};
         if (fakeClient.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_DISCONNECT) {
             disconnected = true;
+            EXPECT_EQ(evt.data, DisconnectSessionNotJoinable)
+                << "the client must distinguish a closed game from a missing session";
         }
     }
     EXPECT_TRUE(disconnected) << "host should have disconnected the peer instead of accepting its join";
@@ -2095,6 +2097,56 @@ TEST(ENetBackendTest, HostRemovesAClientMachineWhichIsToldWhy) {
     EXPECT_EQ(left, std::vector<std::string>{"RemotePlayer"});
     EXPECT_EQ(host.session->getAllGamersProperty().getCountProperty(), 1);
     EXPECT_EQ(host.session->getRemoteGamersProperty().getCountProperty(), 0);
+}
+
+TEST(ENetBackendTest, JoinRefusalPreservesTheHostReasonOnlyBeforeWelcome) {
+    for (const bool welcomed : {false, true}) {
+        SCOPED_TRACE(welcomed ? "established session" : "pending join");
+        FakeHostedClient client(welcomed);
+        ASSERT_NE(client.peer, nullptr);
+        EXPECT_FALSE(ENetBackend::GetJoinFailure(client.session).has_value());
+        client.fakeHost.Disconnect(client.peer, DisconnectSessionNotJoinable);
+        client.fakeHost.Flush();
+        for (int i = 0; i < 200 && client.session->getSessionStateProperty() != NetworkSessionState::Ended;
+             ++i, PollYield()) {
+            client.session->Update();
+            ENetEvent evt{};
+            while (client.fakeHost.Service(0, evt) > 0) {
+                if (evt.type == ENET_EVENT_TYPE_RECEIVE) enet_packet_destroy(evt.packet);
+            }
+        }
+        ASSERT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
+        const auto failure = ENetBackend::GetJoinFailure(client.session);
+        if (welcomed) {
+            EXPECT_FALSE(failure.has_value());
+        } else {
+            ASSERT_TRUE(failure.has_value());
+            EXPECT_EQ(*failure, NetworkSessionJoinError::SessionNotJoinable);
+        }
+        client.session->Dispose();
+        EXPECT_FALSE(ENetBackend::GetJoinFailure(client.session).has_value());
+    }
+}
+
+TEST(ENetBackendTest, UnspecifiedOrUnknownDisconnectIsNotAnExplicitJoinRefusal) {
+    EXPECT_FALSE(ENetBackend::GetJoinFailure(nullptr).has_value());
+    for (const uint32_t reason : {0u, 123u}) {
+        SCOPED_TRACE(reason);
+        FakeHostedClient client(false);
+        ASSERT_NE(client.peer, nullptr);
+        client.fakeHost.Disconnect(client.peer, reason);
+        client.fakeHost.Flush();
+        for (int i = 0; i < 200 && client.session->getSessionStateProperty() != NetworkSessionState::Ended;
+             ++i, PollYield()) {
+            client.session->Update();
+            ENetEvent evt{};
+            while (client.fakeHost.Service(0, evt) > 0) {
+                if (evt.type == ENET_EVENT_TYPE_RECEIVE) enet_packet_destroy(evt.packet);
+            }
+        }
+        ASSERT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
+        EXPECT_FALSE(ENetBackend::GetJoinFailure(client.session).has_value());
+    }
 }
 
 TEST(ENetBackendTest, AClientTheHostRemovedEndsWithRemovedByHost) {

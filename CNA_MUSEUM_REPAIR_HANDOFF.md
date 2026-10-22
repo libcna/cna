@@ -19,6 +19,31 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**Active: CNA-DEMOS-ISSUE-032, base CNA824851ac3 / demos82c90be.**
+ISSUE033 closure is committed in both repositories; no push. Before job92190
+(`repair-museum-issue032-before-*`) confirms the new native assertion fails because
+the host sends disconnect data0 instead of a join-refusal reason. Build84249ms PASS,
+one test FAIL as expected, peak1378267136/events0/drift0. Original external reproduction
+already fails on SOFTWARE/GLES in both033 checkpoints. Candidate sends an explicit
+pre-welcome refusal, preserves it in transport state and reads it before EndJoin
+cleanup. Ordinary/unknown disconnect reasons and established-session ends remain
+unchanged. Native regressions cover those boundaries; next run the full native net
+suite and six unmodified demos on SOFTWARE/GLES under the same isolated, capped scope.
+Candidate validation14889 (`repair-museum-issue032-after-*`): build33221ms PASS,
+549/549 native network tests PASS46500ms (the old547 retained plus two boundary tests),
+demos build63554ms PASS,12/12 external runs PASS. Only both join_refused runs change
+FAIL/exit1 to PASS/exit0; every other status/check count/marker/exit is unchanged.
+Both exact JoinError assertions and late-join Playing assertions pass. No demo edits
+yet; knownIssue032 intentionally remains until this fix is committed. Peak3037581312,
+all memory events zero, no source drift. Changed TUs emit no warnings; existing
+nodiscard warnings in unrelated net test TUs remain. No service/other-platform claim.
+Commit only four net implementation/header files, ENetBackendTests.cpp and this
+handoff; then record the fix SHA, remove only the now-passing032 marker, revalidate
+and commit each repo's closure evidence. Foreign ownership/ISSUE113 changes preserved.
+No active job, push or merge.
+
+## Completed ISSUE033 closure (824851ac3 / demos82c90be)
+
 **CNA-DEMOS-ISSUE-033 revalidation, CNA28145a2017fd2421ce2554772923b96a31c1ce36 / demosadbeeaf.**
 EnvironmentMapEffect repair is committed28145a201; owner notified, no push.
 MUSEUM-NET-002 commit04fb4978ae6d3304442c3899bf7a3746f3d77d85 fixes the same missing
