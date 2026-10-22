@@ -19,6 +19,66 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**2026-10-22 MUSEUM-FNA3D-001 FIXED_NATIVE_VALIDATED:** follows HEAD `594d7d328`,
+local next, no push. Its commit contains this checkpoint. Museum revalidation pending.
+The sporadic museum SDL_GPU sampler crash now has a deterministic minimized CNA
+reproducer on physical RADV PHOENIX. Draw/destroy a textured BasicEffect triangle,
+then draw an untextured punctual-light BasicEffect: slot0 is a hole in the latter
+shader's register layout, but FNA3D binds the full slot range and reuses the released
+texture. ELF observation of the real SDL bind reports the stale pointer before a UAF.
+Baseline before: exit90, second binding, released fragment slot0; peak382513152/events0.
+Extended before-v3: all11 cases fail as intended (draw90, five texture kinds each
+pixel93/vertex94). Before-v2 only had a test enum compile typo; retained separately.
+Candidate-v2: all11 PASS using actual repaired Fna3dResources.cpp linked ahead of the
+existing multi library; peak483000320/events0. Native drivers/dependencies are real,
+not stubs. The candidate centralizes wrapper release in Fna3dDeviceState::ReleaseTexture:
+clear matching native and CNA cached slots before disposal, preserve live slots,
+honor retired device tokens. Covers2D/3D/cube/RT2D/RTcube; no FNA3D dependency edit.
+Permanent fixture `modules/renderers/fna3d/examples/fna3d_sampler_lifetime_test.cpp`,
+11 Linux/shared-FNA3D CTests. Native API observer is narrowly recorded in the existing
+nonproduction SDL manifest (19 references), no widened audit rule.
+Native job33681 captured successful before suites on SDLGPU/OpenGL, then configure
+correctly rejected the not-yet-catalogued native test. After adding its manifest row,
+job84679 completed under scope `cna-museum-fna3d-native-v2`, driver demos
+`build-probe/repair-museum-fna3d-native.mjs v2`: before suites, incremental single-job
+multi build,11 CTests, after suites, both-driver release controls. MemoryHigh4GiB,
+MemoryMax6GiB, no swap, private display. Build84083ms,11 CTests PASS3270ms;
+each driver112 renderer cases=111PASS/1unchangedSKIP and68 graphics cases PASS.
+Exact before/after outcomes match by case. Twenty extra release controls (ten per
+driver) PASS. Peak1840414720/events0/no source drift. Fifteen preexisting enum-compare
+warnings in unchanged Fna3dCompiledEffectTests; no new source warning.
+
+ASan/UBSan actual resource TU + permanent fixture: every lifetime assertion PASS,
+no UAF/UB reported, but **sanitizer process exit1 due to unsuppressed dependency leaks**.
+Do NOT call the sanitizer suite green. Final job51401 (`repair-museum-fna3d-asan-final-*`)
+includes a device-only control with no application textures or calls to the new release
+path: it already leaks8792bytes/513allocations. Ten compiled release cases leak
+8896bytes/516allocations; draw9464bytes/517allocations. Logs identify MojoShader
+`spv_add_attrib_fixup` allocations (profiles/mojoshader_profile_spirv.c:849/850) through
+stock effect compilation, plus native SDL allocations in the draw. The independent
+shader/native cleanup leak remains OPEN; FNA3D and its MojoShader AGENTS prohibit
+AI-authored dependency fixes, so it requires human-authored dependency repair.
+No dependency modified, no leak suppressions or disabled leak detection. Dependencies
+are normal binaries, not comprehensively instrumented. Final sanitizer peak539738112,
+events0/no source drift. Original asan logs retained too.
+
+Consumer job92494 (`repair-museum-fna3d-external-final-*`) completed: final fixture
+rebuild4540ms and11 CTests PASS4090ms; six demos each SOFTWARE/GLES before/after,
+all24 executions PASS with identical status/check/knownIssue/assertions. These demos'
+linux-full configuration does not compile FNA3D: this is cross-renderer nonregression,
+not a museum/FNA3D consumer claim. Rebuild27012ms, peak4296372224, memory.high90,
+max/oom/oom_kill0; no source drift. Native FNA3D validation above exercises real
+RADV Vulkan and OpenGL. Five boundary gates PASS after regenerating only the platform
+inventory's test-file counts; the narrow nonproduction manifest also passes.
+All older content/audio/ISSUE113 dirt remains untouched. No full aggregate, museum
+rerun, Windows/macOS runtime, or leak-free claim. No heavy job remains.
+Next: reproduce the service sign-out/profile timing finding. Read-only prep:
+GamerServicesBackend::signOut clears the authenticated slot on its worker before
+the SignedOut event reaches the main-thread pump; tokenFor then throws locally.
+The quoted error therefore does not itself prove an unauthenticated network request.
+Inspect GamerRequests/dispatcher lifecycle and test the real service backend, not
+only the synchronous fake, before deciding the repair or XNA exception contract.
+
 Mixer publication repair committed as `844e3ce41eff298e3cc17011706b3de87e06a13f`,
 local next, not pushed. **MUSEUM-AUDIO-002 FIXED_NATIVE_SANITIZER_VALIDATED:** pending-pan static
 teardown. The SDL3 mixer has no process-exit hook; its selected audio device may

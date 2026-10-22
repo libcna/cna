@@ -40,6 +40,12 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] FNA3D_Device* RequireDevice(const char* operation) const;
         /** @brief Returns the live renderer or raises a deterministic post-device-use error. */
         [[nodiscard]] Fna3dRenderer& RequireRenderer(const char* operation) const;
+
+        /**
+         * @brief Clears sampler references before releasing a texture on a live device.
+         * @param texture Native texture to release; null and retired devices are ignored.
+         */
+        void ReleaseTexture(FNA3D_Texture* texture) const noexcept;
     };
 
     /**
@@ -1696,6 +1702,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
     private:
         friend class Fna3dCompiledEffect;
+        friend struct Fna3dDeviceState;
         struct BoundTarget
         {
             FNA3D_RenderTargetBinding binding{};

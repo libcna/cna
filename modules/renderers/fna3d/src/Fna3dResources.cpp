@@ -143,6 +143,38 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    void Fna3dDeviceState::ReleaseTexture(FNA3D_Texture* texture) const noexcept
+    {
+        if (device == nullptr || texture == nullptr)
+            return;
+
+        // Stock passes can leave holes in their sampler registers. Native deferred draws
+        // still bind those slots, and compiled effects can reuse our cached handles.
+        // Clear both references before FNA3D is allowed to destroy the texture.
+        if (renderer != nullptr)
+        {
+            for (std::size_t slot = 0; slot < renderer->boundPixelTextures_.size(); ++slot)
+            {
+                if (renderer->boundPixelTextures_[slot] == texture)
+                {
+                    FNA3D_VerifySampler(device, static_cast<int32_t>(slot), nullptr,
+                                        &renderer->samplerStates_[slot]);
+                    renderer->boundPixelTextures_[slot] = nullptr;
+                }
+            }
+            for (std::size_t slot = 0; slot < renderer->boundVertexTextures_.size(); ++slot)
+            {
+                if (renderer->boundVertexTextures_[slot] == texture)
+                {
+                    FNA3D_VerifyVertexSampler(device, static_cast<int32_t>(slot), nullptr,
+                                              &renderer->vertexSamplerStates_[slot]);
+                    renderer->boundVertexTextures_[slot] = nullptr;
+                }
+            }
+        }
+        FNA3D_AddDisposeTexture(device, texture);
+    }
+
     // ---------------------------------------------------------------------------------------
     // Fna3dTextureRenderer
     // ---------------------------------------------------------------------------------------
@@ -195,7 +227,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device, texture_);
+            deviceState_->ReleaseTexture(texture_);
         }
         texture_ = nullptr;
     }
@@ -360,7 +392,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                                           multiSampleCount_, texture_);
                 if (colorBuffer_ == nullptr)
                 {
-                    FNA3D_AddDisposeTexture(device, texture_);
+                    deviceState_->ReleaseTexture(texture_);
                     texture_ = nullptr;
                     multiSampleCount_ = 0;
                     throw std::runtime_error(
@@ -381,7 +413,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     FNA3D_AddDisposeRenderbuffer(device, colorBuffer_);
                     colorBuffer_ = nullptr;
                 }
-                FNA3D_AddDisposeTexture(device, texture_);
+                deviceState_->ReleaseTexture(texture_);
                 texture_ = nullptr;
                 throw std::runtime_error(
                     "FNA3D renderer: depth/stencil renderbuffer creation failed for a "
@@ -407,7 +439,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         if (texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device, texture_);
+            deviceState_->ReleaseTexture(texture_);
         }
         depthBuffer_ = nullptr;
         colorBuffer_ = nullptr;
@@ -547,7 +579,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device, texture_);
+            deviceState_->ReleaseTexture(texture_);
         }
         texture_ = nullptr;
     }
@@ -624,7 +656,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     device, size_, size_, FNA3D_SURFACEFORMAT_COLOR, multiSampleCount_, texture_);
                 if (colorBuffer_ == nullptr)
                 {
-                    FNA3D_AddDisposeTexture(device, texture_);
+                    deviceState_->ReleaseTexture(texture_);
                     texture_ = nullptr;
                     multiSampleCount_ = 0;
                     throw std::runtime_error(
@@ -645,7 +677,7 @@ namespace CNA::Internal::Renderers::Fna3d
                     FNA3D_AddDisposeRenderbuffer(device, colorBuffer_);
                     colorBuffer_ = nullptr;
                 }
-                FNA3D_AddDisposeTexture(device, texture_);
+                deviceState_->ReleaseTexture(texture_);
                 texture_ = nullptr;
                 throw std::runtime_error(
                     "FNA3D renderer: depth/stencil renderbuffer creation failed for a "
@@ -671,7 +703,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         if (texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device, texture_);
+            deviceState_->ReleaseTexture(texture_);
         }
         depthBuffer_ = nullptr;
         colorBuffer_ = nullptr;
@@ -764,7 +796,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (FNA3D_Device* device = LiveDevice(deviceState_); device != nullptr && texture_ != nullptr)
         {
-            FNA3D_AddDisposeTexture(device, texture_);
+            deviceState_->ReleaseTexture(texture_);
         }
         texture_ = nullptr;
     }

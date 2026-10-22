@@ -233,6 +233,10 @@
       "category": "renderer-integration-executable",
       "max_references": 16
     },
+    "modules/renderers/fna3d/examples/fna3d_sampler_lifetime_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 19
+    },
     "modules/renderers/headless/examples/headless_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6

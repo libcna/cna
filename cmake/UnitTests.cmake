@@ -43,6 +43,30 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    # Observe real native texture retirement and deferred SDL_GPU binding, without
+    # replacing either driver. ELF interposition requires the shared CNA library.
+    if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_SHARED_LIBRARY
+       AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+        add_executable(CnaFna3dSamplerLifetimeTests
+            modules/renderers/fna3d/examples/fna3d_sampler_lifetime_test.cpp)
+        target_include_directories(CnaFna3dSamplerLifetimeTests PRIVATE tests/support)
+        target_link_libraries(CnaFna3dSamplerLifetimeTests PRIVATE CNA cna_fna3d SDL3::SDL3 ${CMAKE_DL_LIBS})
+        target_link_options(CnaFna3dSamplerLifetimeTests PRIVATE -Wl,--export-dynamic)
+        add_test(NAME Fna3d_SamplerLifetime_DeferredDraw COMMAND CnaFna3dSamplerLifetimeTests)
+        set_tests_properties(Fna3d_SamplerLifetime_DeferredDraw PROPERTIES
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=FNA3D;FNA3D_FORCE_DRIVER=SDLGPU"
+            TIMEOUT 30 LABELS "Fna3d;Lifetime")
+        foreach(_sampler_texture 2d rt2d cube rtcube 3d)
+            foreach(_sampler_stage pixel vertex)
+                add_test(NAME Fna3d_SamplerLifetime_${_sampler_texture}_${_sampler_stage}
+                    COMMAND CnaFna3dSamplerLifetimeTests ${_sampler_texture} ${_sampler_stage})
+                set_tests_properties(Fna3d_SamplerLifetime_${_sampler_texture}_${_sampler_stage} PROPERTIES
+                    ENVIRONMENT "CNA_GRAPHICS_RENDERER=FNA3D;FNA3D_FORCE_DRIVER=SDLGPU"
+                    TIMEOUT 30 LABELS "Fna3d;Lifetime")
+            endforeach()
+        endforeach()
+    endif()
+
     # The SDL mixer adapter's callback tuple must be published under the same
     # mixer lock as invocation. Observe its native boundaries, retaining real SDL.
     if(CNA_AUDIO_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
