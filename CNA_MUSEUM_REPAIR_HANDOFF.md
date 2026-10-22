@@ -19,6 +19,22 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**Next: museum haptic discovery ID lifetime, CNAf59336878 / demos82c90be plus closure.**
+ISSUE032 code/tests committed f593368783b652164035a96a03f66545f6c9e3fe.
+Final75405 after marker removal:549/549 native PASS46502ms, demo build3121ms PASS,
+12/12 external PASS,2/2 catalog CTests PASS6055ms. Same outcomes/check counts/exits;
+only the now-resolved032 marker disappears. Peak1277517824/events0/drift0.
+Matrix now115/156 historical final dispositions,41 pending (plus DC-R1/R2).
+Next commit closure evidence separately in each repository, then reproduce haptic
+subsystem teardown between enumerate/open calls. Museum reports SDL instance IDs
+change when the last scoped client releases SDL's device list. Read source confirms
+the lifetime gap. Do not claim physical/virtual hardware validation: /dev/uinput
+does not exist in this environment. Add a real SDL lifecycle regression and preserve
+client handle cleanup/shutdown ordering; do not merely lengthen fake-device lifetime.
+No active job, push or merge. Foreign ownership/ISSUE113 changes remain untouched.
+
+## Completed ISSUE032 batch (f59336878)
+
 **Active: CNA-DEMOS-ISSUE-032, base CNA824851ac3 / demos82c90be.**
 ISSUE033 closure is committed in both repositories; no push. Before job92190
 (`repair-museum-issue032-before-*`) confirms the new native assertion fails because

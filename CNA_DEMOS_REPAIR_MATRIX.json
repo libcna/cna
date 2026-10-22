@@ -656,12 +656,14 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The host rejected a join to a non-joinable game with disconnect data zero, and EndJoin discarded any specific failure before cleanup.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "f593368783b652164035a96a03f66545f6c9e3fe",
+      "validation": [
+        "Red native host-refusal assertion: actual data0. Candidate/final:549/549 native net PASS,12/12 original external runs PASS on SOFTWARE/GLES; only both join_refused FAIL/1 change to PASS/0. Exact refusal/serialization/late-join assertions retained, two new boundary regressions, all old547 tests retained. Final2/2 catalog CTests PASS. Private GPU/network namespace, one worker, candidate peak3037581312/final1277517824/events0/drift0. Evidence: ../cna-demos/docs/repair-evidence/net/JOIN_REFUSAL.md. Linux local SystemLink only."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-033",
