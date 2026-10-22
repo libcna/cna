@@ -669,17 +669,17 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "Scalar getters apply the XNA shape guard only to compiledStorage_; stock parameters retain unchecked vector-backed access. Preserve standalone CNA constructor semantics when repairing reflected stock parameters.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "current_validation": "2026-10-22 uncommitted candidate: genuine XNA41PASS under Wine/private GPU; native27 and corrected original33-check demo PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. Full graphics3067=2977PASS/90 unchangedSKIP and selected aggregate effects1128=1107PASS/21 unchangedSKIP preserve all old outcomes. ASan/UBSan/float-cast/leaks27PASS after reproduced NaN-to-int failure and narrow repair. External132 exact parity retains8 separate082 failures;148 stock/C runs=142PASS/6 declared shadow-pathSKIP;8 DDS/C controls and six zero-difference visuals PASS; all ten screenshots inspected. Compiled-on SDL_GPU/FNA3D/WebGPU each127PASS/noSKIP with exact100 existing+27 new inventory; build/SDL_GPU reused after correcting a driver-only count omission. All product gates accepted; commit/knownIssue closure pending. See STOCK_PARAMETER_TRIAGE.md.",
+      "cna_fix_commit": "d650554a89b967cebca5af6b40917b9ded8294c8",
+      "current_validation": "2026-10-22 CNA d650554a89b967cebca5af6b40917b9ded8294c8: genuine XNA41PASS under Wine/private GPU; native27 and corrected original33-check demo PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. Full graphics3067=2977PASS/90 unchangedSKIP and selected aggregate effects1128=1107PASS/21 unchangedSKIP preserve all old outcomes. ASan/UBSan/float-cast/leaks27PASS after reproduced NaN-to-int failure and narrow repair. External132 exact parity retains8 separate082 failures;148 stock/C runs=142PASS/6 declared shadow-pathSKIP;8 DDS/C controls and six zero-difference visuals PASS; all ten screenshots inspected. Compiled-on SDL_GPU/FNA3D/WebGPU each127PASS/noSKIP with exact100 existing+27 new inventory; build/SDL_GPU reused after correcting a driver-only count omission. Metadata3898 accepted: exact719-entry catalog delta removes only repaired marker/restriction, four unmarked33-check demo runs and five enabled CTests PASS/noSKIP. No drift/OOM; both historical IDs retained and Resolved. No push/merge. See STOCK_PARAMETER_TRIAGE.md.",
       "validation": [
         "2026-10-22 original parameter_values:31 checks,29PASS/2FAIL (034 and035) on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. repair-stock-parameters-before-audit.json; no drift/memory events.",
         "Microsoft XNA4 EffectParameter.cs:1442/1631/1808 guards Boolean/Int32/Single scalar getters before D3DX. Source evidence, not a new GPU oracle. See STOCK_PARAMETER_TRIAGE.md.",
         "2026-10-22 genuine XNA4 under Wine/private GPU confirms all30 stock scalar-refusal checks (five effect classes); final expanded oracle38PASS. Native baseline22 tests gives16FAIL/6PASS on four renderers. Candidate25 tests and corrected33-check demo pass on all four renderers (88163); further bounded-element regression found and being fixed before broad validation. Product/metadata closure and fix commit pending; knownIssue retained."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-035",
@@ -691,17 +691,17 @@
       ],
       "subsystem": "graphics/c-api",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "SkinnedEffect creates Bones as a standalone Matrix parameter with MaxBones rows and no element views; reflected array metadata and parent/child aliasing need coherent storage.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "current_validation": "2026-10-22 uncommitted candidate: genuine XNA41PASS under Wine/private GPU; native27 and corrected original33-check demo PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. Full graphics3067=2977PASS/90 unchangedSKIP and selected aggregate effects1128=1107PASS/21 unchangedSKIP preserve all old outcomes. ASan/UBSan/float-cast/leaks27PASS after reproduced NaN-to-int failure and narrow repair. External132 exact parity retains8 separate082 failures;148 stock/C runs=142PASS/6 declared shadow-pathSKIP;8 DDS/C controls and six zero-difference visuals PASS; all ten screenshots inspected. Compiled-on SDL_GPU/FNA3D/WebGPU each127PASS/noSKIP with exact100 existing+27 new inventory; build/SDL_GPU reused after correcting a driver-only count omission. All product gates accepted; commit/knownIssue closure pending. See STOCK_PARAMETER_TRIAGE.md.",
+      "cna_fix_commit": "d650554a89b967cebca5af6b40917b9ded8294c8",
+      "current_validation": "2026-10-22 CNA d650554a89b967cebca5af6b40917b9ded8294c8: genuine XNA41PASS under Wine/private GPU; native27 and corrected original33-check demo PASS on SOFTWARE/OPENGLES3/OPENGL33/SDL_GPU. Full graphics3067=2977PASS/90 unchangedSKIP and selected aggregate effects1128=1107PASS/21 unchangedSKIP preserve all old outcomes. ASan/UBSan/float-cast/leaks27PASS after reproduced NaN-to-int failure and narrow repair. External132 exact parity retains8 separate082 failures;148 stock/C runs=142PASS/6 declared shadow-pathSKIP;8 DDS/C controls and six zero-difference visuals PASS; all ten screenshots inspected. Compiled-on SDL_GPU/FNA3D/WebGPU each127PASS/noSKIP with exact100 existing+27 new inventory; build/SDL_GPU reused after correcting a driver-only count omission. Metadata3898 accepted: exact719-entry catalog delta removes only repaired marker/restriction, four unmarked33-check demo runs and five enabled CTests PASS/noSKIP. No drift/OOM; both historical IDs retained and Resolved. No push/merge. See STOCK_PARAMETER_TRIAGE.md.",
       "validation": [
         "2026-10-22 original parameter_values:31 checks,29PASS/2FAIL (034 and035) on four renderers; Bones remains0 elements/72 rows/4 columns. No drift/memory events.",
         "Stored FNA SkinnedEffect reflection has72 Matrix/Single elements and3x4 parent/child dimensions. XNA GetBoneTransforms additionally normalizes M44; no fresh XNA GPU dimensional measurement claimed. See STOCK_PARAMETER_TRIAGE.md.",
         "2026-10-22 actual XNA4/Wine HiDef oracle instead measures4x3 parent/child, raw fourth-column zero, row-first numeric arrays, coherent partial writes/elements/clones. Original demo's rawM44=1 assumption corrected with retained exact component comparisons and two added full GetBoneTransforms checks (31 to33). Candidate25 tests/four-renderer33-check demo pass; new scalar-broadcast boundary witness then reproduces25PASS/1FAIL per renderer, including adjacent-element corruption in the uncommitted candidate. Bounded write correction under validation; final disposition/fix commit still pending. See STOCK_PARAMETER_TRIAGE.md."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-036",

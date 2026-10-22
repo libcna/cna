@@ -9,6 +9,24 @@ Do not push or merge. Unavailable hardware/services must be stated explicitly.
 
 ## Current checkpoint (2026-10-21)
 
+**2026-10-22 ISSUE-034/035 closed; next086/112 original reproductions.**
+CNA product d650554a89b967cebca5af6b40917b9ded8294c8; demos evidence/closure
+c352e478332303e0c8ab6bf2073785f1acdfd012; Runtime c26614e8 unchanged. Phase G.
+Matrix156 IDs:75 FIXED_VALIDATED,2 platform-pending,23 documentation,8 already-fixed,
+1 demo-oracle correction,1 duplicate,46 null. Both034/035 permanent entries Resolved.
+Native graphics3067=2977PASS/90sameSKIP, selected effects1128=1107PASS/21sameSKIP;
+27new witnesses/four-renderer demo33PASS; compiled SDL_GPU/FNA3D/WebGPU127PASS each;
+ASan/UBSan/float-cast/leaks27PASS. External132 exact parity retains8 separate082
+failures;148stock/C=142PASS/6declaredSKIP,8DDS/C PASS,six exact visuals/all ten
+screenshots inspected. Metadata3898 accepted719 catalog/exact marker delta,
+four unmarked33-check runs and five enabled CTests PASS/noSKIP, no drift/events.
+One knownIssue demo removed for two repaired IDs; no assertion weakening.
+Last complete aggregate native checkpoint remains027:11041; full final gates due.
+No heavy process live. Next run demos build-probe/repair-device-context-before.mjs,
+then minimize current086/112 behavior; source audit in DEVICE_CONTEXT_TRIAGE.md.
+Only inherited011/082 product changes remain; status matrix/handoff closure is
+being committed separately. No push/merge. Pending066 owner choice stays separate.
+
 **2026-10-22 ISSUE-034/035 product validation complete; commit/metadata next.**
 Multi85003 accepted127PASS/noSKIP each SDL_GPU/FNA3D/WEBGPU, no drift/events.
 Initial25845 built successfully168710ms/no diagnostics and ran SDL_GPU127PASS;
