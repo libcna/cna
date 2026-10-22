@@ -23,8 +23,9 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 User reaffirmed the complete Open inventory at museum revision a6f9e9b2e and says
 its full battery is running. Do not modify that repository or claim its battery
-passed. CNA checkpoint d49c080d9. New goal: finish engine/museum findings, then all
-remaining actionable cna-demos findings. The latter still has 41 unclosed IDs;
+passed. CNA repair checkpoint9a5e5d896; demos1295899bbaa2d657348a115b831f31b928d2df6c.
+Current phase: finish engine/museum findings, then all
+remaining actionable cna-demos findings. The matrix retains156 IDs,40 without a final disposition;
 the engine/museum intake is not completion of the original campaign.
 
 The engine UP-018 follow-up is now diagnosed/committed d49c080d9: the same three
@@ -40,7 +41,7 @@ layouts). These previously repaired items are already ancestors ofa6f9e9b2e:
 layout/reflection/diagnostics, f0caebc0d escaped-resource lifetime. Send their SHAs
 to the owner for museum comparison; do not duplicate those repairs.
 
-DirectX9 failed-Reset repair is validated (this commit). The original delayed
+DirectX9 failed-Reset repair is validated (d0cea70363c805cc1e4891ebf7350c441f88a540). The original delayed
 FrameRecovery check passed; the strengthened same-Update check failed before the
 repair with gate=1, lost=0, Lost events=0, Reset events=1. The other four DirectX
 tests passed. EnsureDeviceSize now marks every failed Reset lost immediately;
@@ -76,7 +77,7 @@ Re-intake disposition (engineering queue, not museum closure):
 - B4 phone failure event/send completion, B5 Android half-float readback,
   B6 sign-out profile race, B8 vertex texture fetch, B10 surface-free WebGPU:
   still require focused reproduction/contract audit.
-- B7 frustum ray overlaps ISSUE131 and is repaired/validated in this commit.
+- B7 frustum ray overlaps ISSUE131 and is repaired/validated in9a5e5d896150bf5094de57be22e25ad6f35e2242.
   On 2026-10-22 the owner explicitly revoked the former reservation:
   "Ano, oprav ji v rámci kampaně". The six-plane interval now matches genuine XNA;
   containment tolerance, parallel epsilon, non-unit directions and output clearing
@@ -114,8 +115,11 @@ pure geometry batch. Consumer CMake configure and SDL audit passed unchanged.
 Initial consumer rebuild peak4298473472 bytes/high975, max/oom/kill0; final C gates
 peak135626752/events0. All builds used existing trees/shared ccache/one compiler.
 
-No active job. Next: commit the demo oracle/closure and permanent ISSUE131 matrix
-entry narrowly, preserving inherited ISSUE113 and ownership edits; then reproduce
+No active job. Demo oracle/closure is committed1295899; permanent ISSUE131 matrix
+closure is included in this documentation commit, preserving inherited113/ownership edits.
+The post-document-move gates-v2 rerun also passes C geometry,19 C math demos per
+renderer and all12 CTests. All156 historical IDs were checked unchanged and unique.
+Next: reproduce
 the museum shared C/C++ runtime duplication with the existing UP-006 consumer
 fixture and inspect the C API's install/static archive obligations before changing
 its linkage. Input-string oracle and storage path-error test are still uncommitted

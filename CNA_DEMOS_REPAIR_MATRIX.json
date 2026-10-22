@@ -2677,15 +2677,16 @@
       ],
       "subsystem": "math",
       "classification": "CODE_DEFECT",
-      "status": "BLOCKED",
-      "root_cause": "Outside-origin rays are rejected solely by origin containment; the remaining ray/frustum implementation is explicitly reserved for the human author by CNA handoff.md section6. Earlier containment repair naturally corrected boundary starts without changing this reserved method.",
+      "status": "RESOLVED",
+      "root_cause": "Outside-origin rays were rejected solely by origin containment instead of clipping their parameter interval against all six planes. Earlier containment repair corrected boundary starts; the owner explicitly released the remaining implementation reservation on 2026-10-22.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "9a5e5d896150bf5094de57be22e25ad6f35e2242",
       "validation": [
         "2026-10-21 read-only continuation audit: current BoundingFrustum.cpp still contains the origin-only implementation and reserved exception. CNA handoff.md section6 explicitly forbids implementing/generating the real method or removing the exception; geometry/CONTAINMENT_CHECKPOINT.md records the previously measured two remaining131 demo failures and96 genuine boundary-ray passes. No implementation, oracle change or new runtime run performed.",
-        "Asked owner asynchronously whether the explicit reservation is lifted for this campaign or must remain. Awaiting that narrow decision; unrelated native88430 and subsequent repairs continue. BLOCKED here is an issue-level authority boundary, not a completed final disposition or a blocked campaign."
+        "Asked owner asynchronously whether the explicit reservation is lifted for this campaign or must remain. Awaiting that narrow decision; unrelated native88430 and subsequent repairs continue. BLOCKED here is an issue-level authority boundary, not a completed final disposition or a blocked campaign.",
+        "2026-10-22 owner authorization: Ano, oprav ji v rámci kampaně. Genuine XNA4 passes72/72 checks. Native baseline967PASS/two addedFAIL/two existing fixtureSKIP; repaired969PASS/same twoSKIP. Strict C17/Werror GeometrySmoke including14 new ray/frustum C calls PASS. Both SOFTWARE/GLES math sweeps95/95PASS, exactly two former131 failures repaired with all assertions/check counts unchanged and markers removed only after successful validation. Both19-demo C math sweeps and12 focused CTests PASS. No unintended comparison delta; no OOM/kill. Evidence ../cna-demos/docs/repair-evidence/math/FRUSTUM_RAY_CHECKPOINT.md. No full-CNA, sanitizer or native-Windows claim; museum revalidation remains external."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-132",

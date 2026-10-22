@@ -1,5 +1,15 @@
 # CNA demos repair campaign
 
+**Latest completed repair: ISSUE-131 (2026-10-22).** CNA `9a5e5d896` fixes
+frustum/ray clipping after the owner's explicit release of the former reservation.
+Native math969PASS/two unchanged fixtureSKIP; SOFTWARE/GLES math95/95 each;
+C geometry, both19-demo C math sweeps and12 focused CTests pass. See
+`../cna-demos/docs/repair-evidence/math/FRUSTUM_RAY_CHECKPOINT.md` and the museum
+handoff for exact evidence. This supersedes older live-task descriptions below.
+No job is active, no push/merge. Next: shared C/C++ runtime duplication through
+the C API, preserving install/static archive contracts. Inherited ownership/113
+changes and storage/input preparation remain uncommitted, not implicitly closed.
+
 ## Campaign contract
 
 Repair every actionable defect inventoried in `../cna-demos/docs/CNA_ISSUES.md`.
