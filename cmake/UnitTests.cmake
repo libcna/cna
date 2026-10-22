@@ -29,6 +29,18 @@ if(CNA_BUILD_TESTS)
 
     add_subdirectory(vendor/googletest)
 
+    # The real tray adapter against a label-retaining SDL seam. Keep the exported SDL
+    # stand-ins in a separate Linux executable; they must not interpose on other tests.
+    if(CNA_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+        add_executable(CnaTrayLabelLifetimeTests
+            tools/platform/tray_label_lifetime_test.cpp
+            modules/platform/src/Sdl3/Sdl3Tray.cpp)
+        target_link_libraries(CnaTrayLabelLifetimeTests PRIVATE cna_platform gtest_main SDL3::SDL3)
+        add_test(NAME CnaTrayLabelLifetimeTests COMMAND CnaTrayLabelLifetimeTests)
+        add_executable(cna_tray_dbus_harness tools/platform/tray_dbus_harness.cpp)
+        target_link_libraries(cna_tray_dbus_harness PRIVATE cna_platform SDL3::SDL3)
+    endif()
+
     enable_testing()
 
     # Physical module layout: module-owned tests live in modules/<name>/tests (and

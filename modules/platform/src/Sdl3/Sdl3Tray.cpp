@@ -38,7 +38,7 @@ namespace CNA::Platform::Sdl3 {
 
             ~Sdl3TrayIcon() override
             {
-                // SDL removes every entry with the tray. Callback storage stays alive until that
+                // SDL removes every entry with the tray. Callback and label storage stay alive until that
                 // operation has completed, then the member vectors are destroyed normally.
                 SDL_DestroyTray(tray_);
             }
@@ -62,15 +62,19 @@ namespace CNA::Platform::Sdl3 {
                     flags |= SDL_TRAYENTRY_CHECKED;
                 }
 
-                // Complete both potentially-throwing allocations before SDL owns an entry whose
+                // Complete all potentially-throwing allocations before SDL owns an entry whose
                 // callback points into our storage. The following pointer/unique_ptr pushes are
                 // then noexcept and cannot leave a native ghost entry after a C++ allocation
                 // failure.
                 entries_.reserve(entries_.size() + 1);
                 callbacks_.reserve(callbacks_.size() + 1);
+                labels_.reserve(labels_.size() + 1);
                 auto callback = std::make_unique<TrayEntryClickCallback>(std::move(onClick));
+                // SDL's Unix dbusmenu backend retains this pointer. Heap-owned strings also
+                // keep short-string data stable when the storage vector grows.
+                auto ownedLabel = std::make_unique<std::string>(label);
 
-                SDL_TrayEntry* entry = SDL_InsertTrayEntryAt(menu_, -1, label.c_str(), flags);
+                SDL_TrayEntry* entry = SDL_InsertTrayEntryAt(menu_, -1, ownedLabel->c_str(), flags);
                 if (entry == nullptr)
                 {
                     throw PlatformException("AddTrayEntry", SDL_GetError());
@@ -79,6 +83,7 @@ namespace CNA::Platform::Sdl3 {
                 SDL_SetTrayEntryCallback(entry, &EntryClickTrampoline, callback.get());
                 entries_.push_back(entry);
                 callbacks_.push_back(std::move(callback));
+                labels_.push_back(std::move(ownedLabel));
                 return entries_.size() - 1;
             }
 
@@ -86,7 +91,9 @@ namespace CNA::Platform::Sdl3 {
             {
                 if (index < entries_.size())
                 {
-                    SDL_SetTrayEntryLabel(entries_[index], label.c_str());
+                    auto replacement = std::make_unique<std::string>(label);
+                    SDL_SetTrayEntryLabel(entries_[index], replacement->c_str());
+                    labels_[index] = std::move(replacement);
                 }
             }
 
@@ -130,6 +137,7 @@ namespace CNA::Platform::Sdl3 {
             SDL_TrayMenu* menu_ = nullptr;
             std::vector<SDL_TrayEntry*> entries_;
             std::vector<std::unique_ptr<TrayEntryClickCallback>> callbacks_;
+            std::vector<std::unique_ptr<std::string>> labels_;
         };
 
     } // namespace

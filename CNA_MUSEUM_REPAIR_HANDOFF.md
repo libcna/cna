@@ -40,7 +40,7 @@ Reports: `../cna-demos/build/linux-full/reports/repair-museum-net-before-*`,
 `repair-museum-net-migration-v2-after-*` (accepted).
 Runner: `../cna-demos/build-probe/repair-museum-net.mjs`.
 
-MUSEUM-NET-002: FIXED_NATIVE_VALIDATED, awaiting museum revalidation. Public Join
+MUSEUM-NET-002: FIXED_NATIVE_VALIDATED (`04fb4978a`), awaiting museum revalidation. Public Join
 in two real processes reproduced Lobby/events=0 before repair. The welcome now
 carries Playing in an optional tagged suffix after guest flags; Lobby's exact old
 bytes and the strict online-relay envelope stay unchanged. An old welcome defaults
@@ -60,11 +60,38 @@ unchanged NetworkSessionTests.cpp/NetworkSessionTypePolicyTests.cpp; no diagnost
 in a changed source. Reports: `repair-museum-net-welcome-before-*` (expected1FAIL),
 `repair-museum-net-welcome-after-*` (accepted), under the report directory above.
 
-Next: MUSEUM-TRAY-001, retained label pointers in Sdl3Tray. A deterministic native
-retaining-SDL fixture is prepared at `tools/platform/tray_label_lifetime_test.cpp`,
-not yet built/registered; production code remains unchanged. Run it before repair,
-then preserve per-entry string storage, validate with sanitizers and the platform
-suite. A real private-D-Bus host revalidation is distinct from that seam.
+MUSEUM-TRAY-001: FIXED_NATIVE_VALIDATED, awaiting museum revalidation. Sdl3Tray now
+owns a heap-stable string per entry; all allocations precede native insertion,
+replacement keeps the old label alive through the native update, and label storage
+outlives SDL_DestroyTray. No vendor changes or public API changes.
+Before: the actual Sdl3Tray TU against a retaining-SDL seam gives3FAIL/1PASS.
+After:4PASS, including short/long labels, replacement,128 entries with vector
+growth, callbacks and failed insertion. Dedicated CTest CnaTrayLabelLifetimeTests
+passes and keeps the fake SDL exports out of every other test executable.
+Real SDL on private Wayland and private D-Bus also passes:42 exact menu labels
+after caller storage expired,42 after replacement, two dbusmenu callbacks and
+clean exit. This uses the committed tools/platform/tray_dbus_harness.cpp and
+tray_dbus_check.py, not the museum executable or the owner's panel/bus.
+Platform suite530 =522PASS/8SKIP, exact case-by-case parity with the prior full
+aggregate checkpoint repair-occlusion-native-full.xml. ASan/UBSan/float-cast/leaks
+on the actual adapter TU:4PASS, no findings. All five platform boundary gates PASS
+(inventory, classify, renderer audit, ratchet, hot-path lint).
+Normal build23448ms, D-Bus522ms, platform8612ms, CTest3924ms;
+sanitizer build21536ms/test37ms. Peaks635338752/538132480 bytes; no memory events
+or source drift. Reports: `repair-museum-tray-before-*`, `-after-*`, `-sanitizer-*`.
+Private portal processes log shutdown warnings when their private bus ends; the
+tray harness itself exits0 and all assertions pass. No native Windows/macOS claim.
+
+Reproduce the real integration check from CNA (no live desktop):
+`tools/platform/run_gpu_tests_private.sh --exec dbus-run-session -- /usr/bin/python3 tools/platform/tray_dbus_check.py cmake-build-debug/cna_tray_dbus_harness`.
+
+Next priority: browser WebGPU tier-1 feature gating and destroyed canvas textures.
+Read-only inspection confirms RequestDeviceOnlyEXT currently requests the native
+16-bit-normalized feature only; browser comments incorrectly refer to Tier2.
+Do not edit blindly: inspect the pinned emdawnwebgpu header, map every affected
+format/capability/probe path, reproduce on the museum browser configuration, and
+separately minimize canvas reconfiguration/presentation lifetime. No WebGPU fix or
+browser runtime validation has occurred in this museum batch. No heavy job remains.
 
 Resource discipline: one heavy job and one compiler worker, shared ccache
 `/rv/cnaccache` with base `/rv`, existing `cmake-build-debug`, MemoryHigh 4 GiB,
