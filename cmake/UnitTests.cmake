@@ -43,6 +43,31 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    # Observe real recv/event-wait entry without replacing the listener/parser. Keep
+    # import wrappers in their own executable; CNA_SANITIZE=thread instruments it too.
+    # The Winsock import spellings below are the undecorated MinGW64 ones.
+    if(((CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+        OR (MINGW AND CMAKE_SIZEOF_VOID_P EQUAL 8))
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_executable(CnaNotificationLifecycleTests
+            tools/phone/notification_lifecycle_test.cpp
+            modules/phone/src/HttpNotificationChannel.cpp)
+        target_link_libraries(CnaNotificationLifecycleTests PRIVATE cna_phone)
+        if(MINGW)
+            target_link_options(CnaNotificationLifecycleTests PRIVATE
+                -Wl,--wrap=__imp_recv -Wl,--wrap=__imp_WSAWaitForMultipleEvents)
+            target_link_libraries(CnaNotificationLifecycleTests PRIVATE ws2_32)
+        else()
+            target_link_options(CnaNotificationLifecycleTests PRIVATE -Wl,--wrap=recv)
+        endif()
+        foreach(_notification_case complete idle partial partial-header truncated)
+            add_test(NAME CnaNotificationLifecycle_${_notification_case}
+                COMMAND CnaNotificationLifecycleTests --${_notification_case})
+            set_tests_properties(CnaNotificationLifecycle_${_notification_case}
+                PROPERTIES TIMEOUT 10 LABELS "Phone;Lifecycle")
+        endforeach()
+    endif()
+
     # The defect is C signed-shift UB, not a wrong result guaranteed on every compiler.
     # Compile the actual protocol C TU under UBSan in a separate executable so a returning
     # signed literal fails deterministically and no test seam interposes on CNA's ENet.

@@ -19,6 +19,44 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+Latest checkpoint: **MUSEUM-PHONE-001 FIXED_LINUX_TSAN_AND_WINE_VALIDATED**.
+Repair follows5b6aab981 on local next; its commit contains this checkpoint.
+Native Windows/macOS and museum repro validation remain unclaimed. The
+external job35138 completed successfully: both phone demos preserve all outcomes
+(9+2 checks) on SOFTWARE and OPENGLES3. Rebuild142706ms, peak4305600512 bytes;
+memory.high2358, max/oom/oom_kill0, no source drift. Reports
+`repair-museum-phone-external-*`. This replaces the historical "current job" below.
+Windows control `repair-museum-winsock-control.log` measured shutdown=-1/10057 and
+accept still waiting; closesocket then releases it. An initial event-wait listener
+candidate passed complete100 and idle2000 under Wine, but partial body still hung
+in blocking recv (bounded45s test termination, report `phone-windows-after-*`).
+Candidate now uses cancellable Windows FD_READ/FD_CLOSE waits as well, preserves
+socket ownership until worker exit, and explicitly unregisters socket events before
+releasing their handles. Same fixture has real Winsock import observers; it waits
+for the first receive continuation, not an arbitrary delay.
+Job69392 (`phone-windows-after-v2`) completed: all five cases PASS against actual
+channel TU and real SharpRuntime/core archives; compile7320ms/link67ms, complete1899ms,
+idle2800ms, partial386ms, partial-header296ms, truncated495ms. Peak598634496/events0.
+Linux final job94627: all five cases plain and TSan PASS; five native CTests PASS;
+all18 existing phone tests PASS, exact outcome parity with previous full native
+aggregate `repair-occlusion-native-full.xml`. Build19067ms, CTest3382ms, phone907ms,
+MinGW actual-TU compile3721ms. Peak974692352/events0/no source drift. No sanitizers
+were claimed for uninstrumented SharpRuntime/SDL dependencies.
+Final external job19798 rebuilt against the final source and preserved both phone
+demo outcomes (9+2 checks) on SOFTWARE and OPENGLES3, no knownIssue changes.
+Build24649ms, peak3663585280/events0/no drift. Reports `phone-external-final-*`.
+Tests retain real recv/WSA waits; partial requests cancel, EOF-truncated bodies are
+rejected, complete queued bodies survive Close, registry/URI disappear and repeated
+Close does not reclaim a reused handle. New CTests cover native Linux and MinGW64;
+no fake native Windows claim. Final CMake-only adjustment limits MinGW wrappers to
+64-bit import spelling; no source behavior changed. No full CNA aggregate rerun.
+Next independent task: SDL3 mixer callback/userdata races, then pending-pan teardown.
+
+Museum-owned inventory now confirms the browser tour at5b6aab981:320 rooms,
+zero destroyed-texture/uncaptured errors; the unrelated PbrEffect finding remains.
+It also records successful museum net/tray revalidation. These are consumer-reported
+results, not additional runs performed by this agent.
+
 **2026-10-22 MUSEUM-WEBGPU-001: FIXED_BROWSER_AND_NATIVE_VALIDATED**, awaiting museum revalidation.
 This repair follows CNA `93baa9363` on `next`; its commit contains this checkpoint.
 The existing museum browser artifacts are not modified. CNA had no configured browser
@@ -193,6 +231,34 @@ No heavy job remains. No museum net_check run, full CNA aggregate, other platfor
 extra renderer run claimed for this transport-only, wire-format-preserving repair.
 
 Next independent work: notification/mixer lifetime races; browser ErrorOccurred API.
+ENet repair commit: `5b6aab981`, local `next`, not pushed.
+
+Notification baseline in progress: actual HttpNotificationChannel.cpp plus standalone
+public-API fixture linked against existing debug libcna. Plain100 complete-request
+open/close cycles pass; the same TSan run reports no race (not proof of absence).
+The deterministic partial-request case observes the listener entering its second real
+recv, then calls Close: it hangs and its own bounded process is terminated after10s.
+Report `repair-museum-notification-before-*`; no source drift, peak265203712/events0.
+Before-v2 session59902 completed: both TSan complete-request and2000 idle cycles reproduce
+the exact Close:223 write/Listen:180 read race, exit66; partial Close still times out.
+Candidate passes all five cases plain and TSan (complete100, idle2000, partial body,
+partial header, truncated100). Job27856 peak272269312/events0/no drift. Listener captures
+the native-width socket handle; Close shuts down accepted work under the same mutex as
+its close, joins, then releases the listener. Incomplete bodies no longer become queued
+successes. Queued complete notifications are retained after Close. Fixture is now
+`tools/phone/notification_lifecycle_test.cpp`; five standalone CTests registered.
+The recv wrapper only observes entry; it calls the real syscall and parser.
+Native35451 completed: build16918ms, five CTests PASS, all18 phone tests PASS, MinGW
+actual-TU cross-compile PASS; peak1022484480/events0/no drift. Not Windows runtime proof.
+Current sole heavy job:session35138, scope `cna-museum-phone-external`, driver demos
+`build-probe/repair-museum-phone-external.mjs`. Captures old phone demo outcomes on
+SOFTWARE/GLES, rebuilds cna-demos against current CNA, then compares both phone scenarios
+exactly. One worker/private GPU/private network/6GiB. Do not edit C++ during this job.
+**Before committing, audit Windows cancellation:** shutdown on a listening Winsock
+socket is not a documented accept-cancellation mechanism; delaying closesocket until
+join may change the old Windows behavior. Need a focused Windows/Wine control (or
+event-based cancellation if required), not just the successful cross-compile. No
+Windows runtime pass or notification repair closure is claimed yet.
 Current HttpNotificationChannel source and tests read. Close writes listenSocket_ while
 Listen reads it, and closes the fd before join; accepted connections are not shut down,
 so a partial request can strand Close in join. Reads can also deliver truncated bodies,

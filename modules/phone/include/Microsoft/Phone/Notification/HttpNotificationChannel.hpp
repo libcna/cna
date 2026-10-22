@@ -105,7 +105,11 @@ namespace Microsoft::Phone::Notification {
          */
         void Open();
 
-        /** @brief Stops listening and releases the address. */
+        /**
+         * @brief Stops listening, cancels an incomplete incoming request and releases the address.
+         *
+         * Already queued notifications remain available to DispatchPendingNotificationsEXT.
+         */
         void Close();
 
         /**
@@ -127,7 +131,7 @@ namespace Microsoft::Phone::Notification {
         CNAEXT void DispatchPendingNotificationsEXT();
 
     private:
-        void Listen();
+        void Listen(std::uintptr_t listener);
 
         std::string channelName_;
         std::string serviceName_;
@@ -136,9 +140,17 @@ namespace Microsoft::Phone::Notification {
 
         std::atomic<bool> listening_{false};
         std::thread listener_;
-        int listenSocket_ = -1;
+        static constexpr std::uintptr_t InvalidSocket = ~std::uintptr_t{0};
+        std::uintptr_t listenSocket_ = InvalidSocket;
+#if defined(_WIN32)
+        // Native event handles stay owned until the listener has joined.
+        std::uintptr_t acceptEvent_ = 0;
+        std::uintptr_t stopEvent_ = 0;
+#endif
 
         std::mutex mutex_;
+        // Published/closed by the listener under mutex_; Close may only shut it down.
+        std::uintptr_t activeConnection_ = InvalidSocket;
         std::vector<std::vector<std::uint8_t>> pending_;
     };
 
