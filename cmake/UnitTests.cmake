@@ -152,6 +152,23 @@ if(CNA_BUILD_TESTS)
         endforeach()
     endif()
 
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_executable(CnaNotificationSenderTests
+            tools/phone/notification_sender_test.cpp
+            modules/phone/src/PushNotificationSender.cpp)
+        target_link_libraries(CnaNotificationSenderTests PRIVATE cna_phone)
+        target_link_options(CnaNotificationSenderTests PRIVATE
+            -Wl,--wrap=send -Wl,--wrap=recv)
+        foreach(_sender_case accepted fragmented interim refused redirect closed pending
+                truncated malformed short-send interrupted short-status upgrade overlong failed-send)
+            add_test(NAME CnaNotificationSender_${_sender_case}
+                COMMAND CnaNotificationSenderTests ${_sender_case})
+            set_tests_properties(CnaNotificationSender_${_sender_case}
+                PROPERTIES TIMEOUT 10 LABELS "Phone;Notification")
+        endforeach()
+    endif()
+
     # The defect is C signed-shift UB, not a wrong result guaranteed on every compiler.
     # Compile the actual protocol C TU under UBSan in a separate executable so a returning
     # signed literal fails deterministically and no test seam interposes on CNA's ENet.

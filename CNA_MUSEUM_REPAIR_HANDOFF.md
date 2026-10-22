@@ -27,7 +27,51 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Next task: notification channel failure reporting / send acknowledgement
+### Current checkpoint: sender acknowledgement fixed; channel errors still open
+
+Sender repair prepared against CNA `cb377fa04057b061f1daafb45c906e7aa2b31379`,
+Sharp Runtime `1dc8785b35284b5cf50f3aec361703bfaf090b72`, demos
+`1295899bbaa2d657348a115b831f31b928d2df6c`. The sender now requires complete
+final HTTP 2xx response headers instead of treating a local socket enqueue as
+receiver acceptance. It handles short writes and interrupted syscalls, refuses
+EOF/incomplete/malformed/non-success responses, and releases the connection on
+every return. Public comments describe the existing synchronous bool contract.
+No demo assertion, knownIssue or unrelated inherited change was altered.
+
+Validation on 2026-10-22, one compiler at a time, shared ccache, existing build
+trees and private test display, MemoryHigh=4G/MemoryMax=6G/MemorySwapMax=0:
+
+- Original sender: deterministic transport suite **2/11 PASS, 9 FAIL**; failed
+  responses incorrectly accepted, fragmented acknowledgement not fully read,
+  short writes and interrupted calls incorrectly refused.
+- Repaired sender: **20/20 CTests PASS** (15 sender cases, 5 existing lifecycle
+  cases), including four extra short-status/upgrade/overlong/failed-send guards.
+- Existing native `CnaPhoneTests`: **18/18 PASS**, including real raw/toast delivery.
+- Real Emscripten/Chrome probe: raw and toast to the museum's unreachable
+  endpoint both return false; exit0, no uncaught exception. No socket test seam
+  is used in that browser executable.
+- Existing demos consumer rebuilt; unchanged `phone.notification.local_push`
+  **9/9 checks PASS** with SOFTWARE and OPENGLES3 selected. This console demo
+  verifies transport/events, not renderer pixels.
+- MinGW actual Winsock sender translation unit compiles. Windows runtime and
+  retired Windows Phone service validation are not claimed.
+- `git diff --check` and build-performance policy PASS. No new compiler warning;
+  existing vendored Draco CMP0148 configure warning remains.
+
+Evidence: `../cna-demos/build/linux-full/reports/repair-museum-notifications-*`:
+`sender-red-tests-v1.log`, `sender-final-tests-v1.log`,
+`sender-after-phone-v1.log`, `browser-after-v1.json`, `sender-mingw-v1.log`,
+`demo-build-v1.log`, `demo-software-v1.json`, `demo-gles-v1.json`.
+Permanent fixtures and commands: `tools/phone/README.md`.
+This is focused regression evidence, not a new full CNA/demos/sanitizer sweep.
+
+**Do not close the museum finding yet.** `HttpNotificationChannel.ErrorOccurred`
+is still missing. Next: verify the Windows Phone error enum values and event
+argument contract, add deterministic failed-open tests, implement reporting
+without disturbing the repaired listener lifetime, and exercise a real browser
+Open. No required external permission is pending. All batch processes are terminal.
+
+### Historical notification intake
 
 UP-001's installed C++ SDK is now published as
 `58ebc46fd2613833cfbb273edb50328bae109405` (remote SHA verified). See
@@ -37,7 +81,7 @@ Do not edit cna-engine, cna-extended, or the museum; their agents own revalidati
 
 Museum's current Open section was re-read at this checkpoint. Next actionable
 batch: `HttpNotificationChannel fails silently where no socket can listen`.
-No phone source/test has been changed yet. Current source inspection confirms:
+Before the sender repair above, source inspection confirmed:
 
 - `modules/phone/src/HttpNotificationChannel.cpp::Open` returns without a public
   error event on socket/bind/listen/getsockname or Windows event setup failure.

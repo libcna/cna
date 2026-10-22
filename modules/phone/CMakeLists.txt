@@ -9,3 +9,15 @@ file(GLOB CNA_PHONE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 cna_add_module(cna_phone Phone ${CNA_PHONE_SOURCES})
 target_link_libraries(cna_phone PUBLIC cna_runtime cna_core_headers)
 cna_link_sharp_runtime(cna_phone PUBLIC Core.Base Collections.Core Uri)
+
+if(EMSCRIPTEN)
+    # Opt-in executable, not part of the framework/default build. Exercise the
+    # real browser socket shim without dragging a Game/window into this probe.
+    add_executable(cna_notification_browser_probe EXCLUDE_FROM_ALL
+        "${CNA_SOURCE_DIR}/tools/phone/notification_browser_test.cpp"
+        src/PushNotificationSender.cpp)
+    target_include_directories(cna_notification_browser_probe PRIVATE include)
+    cna_link_sharp_runtime(cna_notification_browser_probe PRIVATE Uri)
+    target_link_options(cna_notification_browser_probe PRIVATE
+        "-sENVIRONMENT=web" "-sEXIT_RUNTIME=1" "-sASSERTIONS=1")
+endif()

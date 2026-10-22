@@ -45,11 +45,13 @@ namespace Microsoft::Phone::Notification {
         /**
          * @brief Sends the notification to a channel's URI.
          *
-         * Returns as soon as the request is on its way; delivery is the receiver's business, and
-         * a receiver that is not listening is not an error the sender can act on.
+         * Waits for the receiver's HTTP acknowledgement. Locally queued bytes do not
+         * establish acceptance; an unavailable connection or unsuccessful/incomplete
+         * HTTP response returns false. Despite its name, this compatibility API returns
+         * a synchronous confirmation, not an asynchronous completion handle.
          *
          * @param clientUri The channel URI the receiver handed out.
-         * @return True when the receiver accepted it.
+         * @return True after complete response headers with a final HTTP 2xx status.
          */
         bool SendAsync(const System::Uri& clientUri) const;
 
@@ -88,7 +90,8 @@ namespace Microsoft::Phone::Notification {
          * @brief Sends the notification to a channel's URI.
          *
          * @param clientUri The channel URI the receiver handed out.
-         * @return True when the receiver accepted it.
+         * @return True after complete response headers with a final HTTP 2xx status;
+         *         false when delivery cannot be confirmed, as for the raw sender.
          */
         bool SendAsync(const System::Uri& clientUri) const;
 

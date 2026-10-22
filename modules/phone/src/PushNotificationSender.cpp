@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Phone/Notification/PushNotificationSender.hpp"
 
+#include <algorithm>
+#include <cerrno>
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -23,6 +26,54 @@ using socket_t = int;
 namespace Microsoft::Phone::Notification {
 
 namespace {
+
+bool Interrupted()
+{
+#if defined(_WIN32)
+    return WSAGetLastError() == WSAEINTR;
+#else
+    return errno == EINTR;
+#endif
+}
+
+bool ReceiverAccepted(socket_t connection)
+{
+    // Queueing bytes locally is not an acknowledgement, particularly for browser
+    // socket shims. Require complete HTTP headers and a final successful status.
+    std::string response;
+    std::size_t received = 0;
+    constexpr std::size_t MaximumResponseHeaders = 64 * 1024;
+    while (true) {
+        const auto headerEnd = response.find("\r\n\r\n");
+        if (headerEnd != std::string::npos) {
+            const auto lineEnd = response.find("\r\n");
+            if (lineEnd < 12 ||
+                (!response.starts_with("HTTP/1.0 ") && !response.starts_with("HTTP/1.1 ")) ||
+                response[9] < '1' || response[9] > '5' ||
+                response[10] < '0' || response[10] > '9' ||
+                response[11] < '0' || response[11] > '9' ||
+                (response[12] != ' ' && response[12] != '\r')) {
+                return false;
+            }
+            const int status = (response[9] - '0') * 100 +
+                               (response[10] - '0') * 10 + response[11] - '0';
+            if (status >= 200) return status < 300;
+            // A protocol upgrade is not a notification acknowledgement. Other
+            // informational responses precede the actual final response.
+            if (status == 101) return false;
+            response.erase(0, headerEnd + 4);
+            continue;
+        }
+        if (received == MaximumResponseHeaders) return false;
+        char buffer[512];
+        const auto size = static_cast<int>(std::min(sizeof(buffer), MaximumResponseHeaders - received));
+        const auto count = ::recv(connection, buffer, size, 0);
+        if (count < 0 && Interrupted()) continue;
+        if (count <= 0) return false;
+        response.append(buffer, static_cast<std::size_t>(count));
+        received += static_cast<std::size_t>(count);
+    }
+}
 
 const char* PriorityHeader(MessageSendPriority priority, bool toast)
 {
@@ -71,7 +122,7 @@ bool Post(const System::Uri& clientUri, const std::string& body, const std::stri
 
     const socket_t connection =
         ::socket(resolved->ai_family, resolved->ai_socktype, resolved->ai_protocol);
-    if (connection < 0) {
+    if (connection == static_cast<socket_t>(-1)) {
         ::freeaddrinfo(resolved);
         return false;
     }
@@ -82,6 +133,16 @@ bool Post(const System::Uri& clientUri, const std::string& body, const std::stri
         CNA_CLOSE_SOCKET(connection);
         return false;
     }
+    struct CloseConnection {
+        socket_t socket;
+        ~CloseConnection() { CNA_CLOSE_SOCKET(socket); }
+    } closeConnection{connection};
+
+#if defined(SO_NOSIGPIPE)
+    const int noSigPipe = 1;
+    (void)::setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE,
+                      reinterpret_cast<const char*>(&noSigPipe), sizeof(noSigPipe));
+#endif
 
     std::string request = "POST " + path + " HTTP/1.1\r\nHost: " + hostPort +
                           "\r\nContent-Type: " + contentType +
@@ -92,21 +153,22 @@ bool Post(const System::Uri& clientUri, const std::string& body, const std::stri
     request += "\r\nContent-Length: " + std::to_string(body.size()) +
                "\r\nConnection: close\r\n\r\n" + body;
 
-    // ::send takes its length as size_t and returns ssize_t on POSIX, and takes int and returns
-    // int on Windows -- where ssize_t is not defined at all, POSIX being the only place it comes
-    // from. MinGW-w64 supplies it anyway, which is why only MSVC reported
-    // "syntax error: identifier 'ssize_t'". One expression serves both: narrow the length once for
-    // the Windows signature, and compare the result as a signed 64-bit count.
-    // plans/plan_win32_native_validation.md WINNATIVE-0009.
-    const auto requestLength = static_cast<int>(request.size());
-    const std::int64_t sentBytes =
-        static_cast<std::int64_t>(::send(connection, request.c_str(), requestLength, 0));
-    const bool sent = sentBytes == static_cast<std::int64_t>(request.size());
-
-    char discard[512];
-    (void)::recv(connection, discard, static_cast<int>(sizeof(discard)), 0);
-    CNA_CLOSE_SOCKET(connection);
-    return sent;
+    std::size_t offset = 0;
+    while (offset < request.size()) {
+        // Winsock takes an int length; POSIX also permits a short successful send.
+        const auto count = static_cast<int>(std::min(request.size() - offset,
+                                                     static_cast<std::size_t>(INT_MAX)));
+#if defined(MSG_NOSIGNAL)
+        constexpr int flags = MSG_NOSIGNAL;
+#else
+        constexpr int flags = 0;
+#endif
+        const auto sent = ::send(connection, request.data() + offset, count, flags);
+        if (sent < 0 && Interrupted()) continue;
+        if (sent <= 0) return false;
+        offset += static_cast<std::size_t>(sent);
+    }
+    return ReceiverAccepted(connection);
 }
 
 } // namespace
