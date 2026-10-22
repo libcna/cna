@@ -19,6 +19,41 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**StorageDevice Begin/End repair validated; next is remaining storage argument/I/O errors.**
+Base CNAfb713de84 / demosc142af3. Reference60629-v2 verifies46/46 genuine XNA
+checks including exact resource-derived ParamName (compile4283ms/runtime2004ms,
+peak319725568/events0). Native baseline11499:8/9 new tests FAIL,18/18 prior PASS.
+Candidate32478:build20728ms,9/9 focused and27/27 full storage PASS,
+peak485470208/events0/source drift0. Local repair validates player before size,
+normalizes255 to shared storage, consumes matching Begin/End results once before
+owner/name/filesystem work, checks originating device and captured player, and
+preserves synchronous callback/state/wait semantics. Wrong-kind results are not consumed.
+No C API contract or path-containment policy changed.
+
+External60430 / repair-storage-async-external-v1:build285266ms,36 before/after cases
+give32PASS/four unchanged FileShare152 failures across SOFTWARE/GLES. Selector checks
+increase6->12 on each renderer; every other status/count/knownIssue/exit is unchanged.
+Actual C children pass38 save-game and35 member checks. Peak4301287424 bytes,
+high3308/max0/oom0/kill0, source drift0. No original assertion or marker removed.
+The first catalog regex selected no tests and is NOT counted as coverage.
+Sanitizer95671-v1 passed9 assertions but double-freed static storage strings on exit:
+the manual harness incorrectly linked both instrumented StorageDevice.cpp and its
+duplicate in libcna.so. Corrected to the native test's SharpRuntime static archives,
+with no libcna.so and no duplicate storage state.87901-v2 sanitizer9/9 passed; its
+catalog used the wrong multi-build DSO and failed symbol lookup (CRTEffect).
+Final68562-v3:actual storage TUs + permanent9 tests pass ASan/UBSan/LSan,22ms,
+no suppressions. Correct consumer DSO gives2/2 catalog CTests PASS281ms with
+--no-tests=error. Peak451665920/events0/drift0. All intermediate failures retained.
+No whole-CNA sanitizer, hardware, visual or non-Linux runtime claim. No active jobs.
+This batch commits narrowly: StorageDevice.hpp/cpp, StorageContainer.cpp,
+new StorageDeviceAsyncContractTests.cpp and only the museum async paragraph in the
+shared plans/plan_bindings_upstream.md belong to this batch. Demos changes: the new
+StorageDeviceAsyncOracle.cs and6 added selector checks. Preserve all inherited changes.
+Do not close the full museum storage finding: empty filesystem paths/non-empty
+directory exceptions still need their own focused repair. ISSUE010 is also still open.
+
+## Haptic configuration follow-up and explicit approval
+
 **Owner explicitly approved the sole34->35 exception; resume storage async repairs.**
 Owner's direct reply: "ano, schvaluji 34 → 35". The exception is now authorized
 only for Sdl3PlatformTests.cpp. Keep every other budget/category/allowlist unchanged.

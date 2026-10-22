@@ -250,6 +250,22 @@ tests remain visible, including three pre-existing new Title145 failures and thr
 unchanged capability skips. Actual external C ABI execution is still pending.
 Evidence: `../cna-demos/docs/repair-evidence/storage/`; no FileShare152 closure.
 
+Museum StorageDevice async repair decision (2026-10-22, focused validation complete):
+XNA4 StorageDevice.BeginShowSelector validates player before size, accepts player255
+for shared storage, and leaves directoryCount unchecked. End methods reject null or
+mismatched result kinds with ArgumentNullException; a matching result is consumed
+before owner/name/filesystem validation. A failed End is still one-shot; End inside
+the synchronous callback is permitted. EndOpenContainer checks both originating
+device identity and captured player. These differ from FNA's reusable fake-async
+results and unchecked selector arguments. Preserve XNA's resource-derived ParamName
+for the empty title and mismatched-owner errors. Evidence: genuine46-check public
+oracle in cna-demos/docs/repair-evidence/storage/StorageDeviceAsyncOracle.cs and the
+shipped XNA4 StorageDevice/StorageContainer IL. Native baseline:8/9 new tests fail,
+all18 existing storage tests pass. Candidate27/27 native,9/9 ASan/UBSan/LSan and
+46/46 genuine checks PASS. External36 comparisons preserve32PASS/four FileShare152
+failures (before/after, SOFTWARE/GLES); selector checks increase6->12 on each renderer.
+No C API contract change or full ISSUE010 closure. See demos storage/ASYNC_CONTRACT.md.
+
 Title145 measured repair decision (2026-10-20, external validation pending):
 genuine Windows XNA4 rejects initially empty input before cleaning, normalizes
 dot/parent components before rejecting rooted/reserved/escaping names, and validates

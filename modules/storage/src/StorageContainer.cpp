@@ -8,6 +8,7 @@
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/IO/FileStream.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace
@@ -56,8 +57,7 @@ namespace Microsoft::Xna::Framework::Storage
         : device_(&device), displayName_(displayName)
     {
         if (displayName.empty())
-            throw System::ArgumentException(
-                "A title name has to be provided in parameter displayName.");
+            throw System::ArgumentNullException("You must pass in a non-null title name.");
 
         std::string playerFolder = (playerIndex >= 0)
             ? "Player" + std::to_string(playerIndex + 1)

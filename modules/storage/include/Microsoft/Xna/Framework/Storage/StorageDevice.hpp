@@ -60,7 +60,9 @@ namespace Microsoft::Xna::Framework::Storage
         /**
          * @brief Begins opening a StorageContainer for the given display name.
          *
-         * Completes synchronously; pass the result to EndOpenContainer.
+         * Completes synchronously; pass the result once to EndOpenContainer on this
+         * device. Display-name validation occurs in EndOpenContainer, not here.
+         * This device must remain alive through EndOpenContainer and container use.
          *
          * @param displayName Name of the container to open.
          * @param callback    Optional callback invoked when the operation completes.
@@ -77,6 +79,11 @@ namespace Microsoft::Xna::Framework::Storage
          *
          * @param result IAsyncResult returned by BeginOpenContainer.
          * @return Unique pointer to the opened StorageContainer.
+         * @throws System::ArgumentNullException If result is null, belongs to another
+         * operation kind, or the display name is empty.
+         * @throws System::InvalidOperationException If this result has already been ended.
+         * @throws System::ArgumentException If another device started the operation.
+         * A matching result is consumed even when owner/name validation or opening fails.
          */
         [[nodiscard]] std::unique_ptr<StorageContainer> EndOpenContainer(
             System::IAsyncResult* result);
@@ -104,10 +111,11 @@ namespace Microsoft::Xna::Framework::Storage
         /**
          * @brief Begins showing the device-selection UI for a specific player.
          *
-         * @param player   Player whose storage device to select.
+         * @param player   Player One through Four, or value 255 for shared storage.
          * @param callback Optional callback invoked on completion.
          * @param state    User-defined state object.
          * @return IAsyncResult representing the pending operation.
+         * @throws System::ArgumentOutOfRangeException If player is not a supported value.
          */
         static std::unique_ptr<System::IAsyncResult> BeginShowSelector(
             PlayerIndex player,
@@ -122,6 +130,8 @@ namespace Microsoft::Xna::Framework::Storage
          * @param callback       Optional callback invoked on completion.
          * @param state          User-defined state object.
          * @return IAsyncResult representing the pending operation.
+         * @throws System::ArgumentOutOfRangeException If sizeInBytes is negative.
+         * directoryCount is accepted without validation, matching XNA on desktop.
          */
         static std::unique_ptr<System::IAsyncResult> BeginShowSelector(
             int sizeInBytes, int directoryCount,
@@ -131,12 +141,14 @@ namespace Microsoft::Xna::Framework::Storage
         /**
          * @brief Begins showing the device-selection UI for a player with space requirements.
          *
-         * @param player         Player whose storage device to select.
+         * @param player         Player One through Four, or value 255 for shared storage.
          * @param sizeInBytes    Required free space in bytes.
          * @param directoryCount Required number of directories.
          * @param callback       Optional callback invoked on completion.
          * @param state          User-defined state object.
          * @return IAsyncResult representing the pending operation.
+         * @throws System::ArgumentOutOfRangeException If player is invalid or sizeInBytes
+         * is negative. Player validation precedes size validation; directoryCount is not checked.
          */
         static std::unique_ptr<System::IAsyncResult> BeginShowSelector(
             PlayerIndex player,
@@ -149,6 +161,8 @@ namespace Microsoft::Xna::Framework::Storage
          *
          * @param result IAsyncResult returned by BeginShowSelector.
          * @return Unique pointer to the selected StorageDevice.
+         * @throws System::ArgumentNullException If result is null or has another operation kind.
+         * @throws System::InvalidOperationException If this result has already been ended.
          */
         static std::unique_ptr<StorageDevice> EndShowSelector(System::IAsyncResult* result);
 

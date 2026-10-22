@@ -36,6 +36,9 @@ static int CnaBrowserStorageReady()
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework::Storage
 {
@@ -50,6 +53,7 @@ namespace Microsoft::Xna::Framework::Storage
     public:
         std::optional<PlayerIndex> playerIndex;
         std::any asyncState;
+        bool endHasBeenCalled = false;
 
         bool getIsCompletedProperty()           const override { return true; }
         bool getCompletedSynchronouslyProperty() const override { return true; }
@@ -66,6 +70,9 @@ namespace Microsoft::Xna::Framework::Storage
     public:
         std::string displayName;
         std::any asyncState;
+        const StorageDevice* owner = nullptr;
+        std::optional<PlayerIndex> playerIndex;
+        bool endHasBeenCalled = false;
 
         bool getIsCompletedProperty()           const override { return true; }
         bool getCompletedSynchronouslyProperty() const override { return true; }
@@ -251,6 +258,8 @@ namespace Microsoft::Xna::Framework::Storage
         auto result = std::make_unique<ContainerResult>();
         result->displayName = displayName;
         result->asyncState  = state;
+        result->owner = this;
+        result->playerIndex = devicePlayer_;
         if (callback) callback(result.get());
         return result;
     }
@@ -259,7 +268,19 @@ namespace Microsoft::Xna::Framework::Storage
         System::IAsyncResult* result)
     {
         auto* r = dynamic_cast<ContainerResult*>(result);
-        if (!r) throw System::ArgumentException("result was not produced by BeginOpenContainer.");
+        // XNA 4.0 StorageDevice.EndOpenContainer IL: wrong result type does not
+        // consume; a matching End consumes before owner/name/filesystem validation.
+        if (!r) throw System::ArgumentNullException("result");
+        if (r->endHasBeenCalled)
+            throw System::InvalidOperationException("An \"End\" function can only be called once for each call to \"Begin.\"");
+        r->endHasBeenCalled = true;
+        if (r->owner != this || r->playerIndex != devicePlayer_)
+            throw System::ArgumentException("result",
+                "The IAsyncResult parameter to this \"End\" function must be obtained by calling the matching \"Begin.\"");
+        // XNA StorageContainer's constructor uses this resource as ParamName.
+        // Check before EnsureStorageRoot so an invalid name never accesses storage.
+        if (r->displayName.empty())
+            throw System::ArgumentNullException("You must pass in a non-null title name.");
 
         int playerIdx = devicePlayer_.has_value()
             ? static_cast<int>(devicePlayer_.value())
@@ -310,22 +331,26 @@ namespace Microsoft::Xna::Framework::Storage
     }
 
     std::unique_ptr<System::IAsyncResult> StorageDevice::BeginShowSelector(
-        int /*sizeInBytes*/, int /*directoryCount*/,
+        int sizeInBytes, int directoryCount,
         std::function<void(System::IAsyncResult*)> callback, void* state)
     {
-        auto result = std::make_unique<SelectorResult>();
-        result->playerIndex = std::nullopt;
-        result->asyncState  = state;
-        if (callback) callback(result.get());
-        return result;
+        return BeginShowSelector(static_cast<PlayerIndex>(255), sizeInBytes, directoryCount,
+                                 std::move(callback), state);
     }
 
     std::unique_ptr<System::IAsyncResult> StorageDevice::BeginShowSelector(
-        PlayerIndex player, int /*sizeInBytes*/, int /*directoryCount*/,
+        PlayerIndex player, int sizeInBytes, int /*directoryCount*/,
         std::function<void(System::IAsyncResult*)> callback, void* state)
     {
+        // XNA 4.0 BeginShowSelector IL validates player before size, accepts the
+        // shared-player sentinel255, and does not validate directoryCount.
+        const int playerValue = static_cast<int>(player);
+        if ((playerValue < 0 || playerValue > 3) && playerValue != 255)
+            throw System::ArgumentOutOfRangeException("player");
+        if (sizeInBytes < 0)
+            throw System::ArgumentOutOfRangeException("sizeInBytes");
         auto result = std::make_unique<SelectorResult>();
-        result->playerIndex = player;
+        result->playerIndex = playerValue == 255 ? std::nullopt : std::optional<PlayerIndex>(player);
         result->asyncState  = state;
         if (callback) callback(result.get());
         return result;
@@ -334,7 +359,11 @@ namespace Microsoft::Xna::Framework::Storage
     std::unique_ptr<StorageDevice> StorageDevice::EndShowSelector(System::IAsyncResult* result)
     {
         auto* r = dynamic_cast<SelectorResult*>(result);
-        if (!r) throw System::ArgumentException("result was not produced by BeginShowSelector.");
+        // XNA 4.0 EndShowSelector rejects a null/mismatched result, then consumes once.
+        if (!r) throw System::ArgumentNullException("result");
+        if (r->endHasBeenCalled)
+            throw System::InvalidOperationException("An \"End\" function can only be called once for each call to \"Begin.\"");
+        r->endHasBeenCalled = true;
         return std::unique_ptr<StorageDevice>(new StorageDevice(r->playerIndex));
     }
 
