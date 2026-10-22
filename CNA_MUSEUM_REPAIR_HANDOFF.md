@@ -19,6 +19,50 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+Mixer publication repair committed as `844e3ce41eff298e3cc17011706b3de87e06a13f`,
+local next, not pushed. **MUSEUM-AUDIO-002 FIXED_NATIVE_SANITIZER_VALIDATED:** pending-pan static
+teardown. The SDL3 mixer has no process-exit hook; its selected audio device may
+still run when SoundEffect's static cleanup drains queued pan states. CnaMixer's
+separate engine already registers a first-use exit hook to close its device before
+preexisting statics. A lock in the pan destructor alone does not stop future enqueue.
+Baseline55798 completed: active and recreated mixer cases fail deterministically
+because generation/stopped callbacks show no shutdown before static cleanup;
+explicit-close control passes. This reproduces ordering, not the museum's actual
+TSan delete/read trace. Candidate registers DestroyMixer on first initialization,
+stopping/joining the device and retiring all tracks before earlier statics destruct.
+After53523: all three cases PASS plain and TSan, peak351772672/events0/no drift.
+Final job83680 completed, scope `cna-museum-mixer-exit-final`, drivers demos
+`build-probe/repair-museum-mixer-exit.mjs final` then `repair-museum-mixer-exit-native.mjs final`.
+Instruments actual AudioMixer.cpp
+and SoundEffect.cpp (preserving inherited ownership work), with a public/native
+fixture checking mixer generation invalidation and stopped callbacks before static
+cleanup, real long/short fire-and-forget pan sounds, first-callback synchronization,
+and active/recreated/explicitly-closed mixer cases. No arbitrary sleep. Permanent
+fixture is `tools/audio/mixer_exit_order_test.cpp`, three CTests. Final job adds
+ASan/UBSan/leaks: all three cases PASS under each of plain/TSan/ASan+UBSan+LSan,
+peak454717440/events0/no findings or source drift. Native rebuild13488ms; seven
+publication/exit CTests PASS2930ms; audio775=771PASS/4unchangedSKIP8736ms,
+media355/355PASS12239ms; both exactly match prior publication checkpoint by case.
+MinGW actual AudioMixer TU compile1428ms; peak837533696/events0/no drift. Five
+boundary gates PASS. No native Windows/macOS runtime claim.
+Consumer job19835 completed, scope `cna-museum-mixer-exit-external`, existing
+11-demo SOFTWARE/GLES consumer driver with suffix `exit-final`:all44 executions PASS,
+no status/check/knownIssue/assertion delta or source drift. Rebuild59330ms,
+peak3862011904/events0. No heavy job remains. SoundEffect.cpp has not been modified
+by this repair; its inherited ownership work remains uncommitted. No full aggregate,
+museum run, native Windows/macOS audio runtime or physical listening claim.
+Next investigation: FNA3D SDL_GPU deferred sampler lifetime. Read-only source evidence:
+CNA caches raw native textures in boundPixelTextures_/boundVertexTextures_, but its
+resource destructors do not invalidate them; Fna3dCompiledEffect::ApplyNativeSampler
+can reuse these caches. FNA3D FreeTextureHandle also releases the SDL texture without
+clearing native sampler arrays. Neither observation yet proves the museum crash's
+exact cause. Need a focused reproducer before selecting the repair layer.
+Dependency source is `/home/robertvokac/deps/FNA3D/src/FNA3D_Driver_SDL.c` (not
+the old _SDLGPU.c spelling); configured by cmake-build-multi. Its AGENTS.md/CLAUDE.md
+explicitly prohibit AI-authored code contributions and allow issue identification.
+Do not edit FNA3D/MojoShader sources; investigate CNA ownership and report any
+dependency-only repair requiring a human author. No vendor changes made.
+
 Phone repair committed as `20fe6efd26661ef1f19651d4c1eeeeac30ae8cee`, local next,
 not pushed. Completed batch **MUSEUM-AUDIO-001 FIXED_NATIVE_TSAN_VALIDATED**,
 callback publication in the SDL3

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -35,6 +36,7 @@ namespace CNA::Internal::Audio
         std::mutex g_mixerMutex;
         MIX_Mixer* g_mixer = nullptr;
         std::unique_ptr<CNA::Audio::Platform::IAudioDevice> g_audioDevice;
+        bool g_exitHandlerInstalled = false;
 
         // AUD-04-004: test-only override for the spec requested below. Guarded by the same
         // mutex as g_mixer since it is read/written from the same lazy-init sequence.
@@ -206,6 +208,16 @@ namespace CNA::Internal::Audio
                 callback->Configure(mixer, negotiated);
                 g_generatedBytes.store(0, std::memory_order_release);
                 g_outputError.store(false, std::memory_order_release);
+                if (!g_exitHandlerInstalled)
+                {
+                    // Registered after the statics used before the first sound:
+                    // stop/join audio and retire tracks before their cleanup runs.
+                    // In particular, pending pan states must not be drained while
+                    // the final cooked callback can still read or enqueue them.
+                    if (std::atexit(DestroyMixer) != 0)
+                        throw std::runtime_error("could not register mixer shutdown");
+                    g_exitHandlerInstalled = true;
+                }
                 audioDevice->Start();
 
                 g_mixer = mixer;

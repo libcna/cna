@@ -62,6 +62,15 @@ if(CNA_BUILD_TESTS)
                 PROPERTIES TIMEOUT 30 LABELS "Audio;Concurrency"
                 ENVIRONMENT "SDL_AUDIODRIVER=dummy")
         endforeach()
+        add_executable(CnaMixerExitOrderTests tools/audio/mixer_exit_order_test.cpp)
+        target_link_libraries(CnaMixerExitOrderTests PRIVATE cna_audio SDL3::SDL3 SDL3_mixer::SDL3_mixer)
+        foreach(_mixer_exit_case active recreate explicit-close)
+            add_test(NAME CnaMixerExitOrder_${_mixer_exit_case}
+                COMMAND CnaMixerExitOrderTests --${_mixer_exit_case})
+            set_tests_properties(CnaMixerExitOrder_${_mixer_exit_case}
+                PROPERTIES TIMEOUT 10 LABELS "Audio;Lifecycle"
+                ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+        endforeach()
     endif()
 
     # Observe real recv/event-wait entry without replacing the listener/parser. Keep
