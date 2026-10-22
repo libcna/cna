@@ -19,6 +19,58 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**2026-10-22 MUSEUM-WEBGPU-001: FIXED_BROWSER_AND_NATIVE_VALIDATED**, awaiting museum revalidation.
+This repair follows CNA `93baa9363` on `next`; its commit contains this checkpoint.
+The existing museum browser artifacts are not modified. CNA had no configured browser
+tree, so `cmake-build-wasm-webgpu` is now its persistent Emscripten WEBGPU variant,
+reusing the existing `.sdl-prebuilt-emscripten` and shared ccache. Configure succeeded.
+Baseline build30563 completed0 in1025714ms, no source drift, peak529199104/events0.
+Baseline browser72828 reproduced the exact rgba16unorm/tier1 JavaScript TypeError in
+both runs (adapter feature available/hidden), with no reached success summary. This
+was a successful reproduction of failure, not a passing product test. Peak436781056.
+Candidate requests tier1 in browsers, keeps native TextureFormat16bitNorm, and gates
+all six16-bit normalized probe formats before creating a texture. Exact renderer
+factories refuse unsupported formats with NotSupportedException. The public XNA
+preferred-format fallback is preserved, as required by shipped RenderTarget2D's
+GraphicsAdapter.QueryFormat call and existing RenderTargetFormatAgreement tests.
+Fixture now checks that distinction explicitly rather than requiring the public
+preferred-format constructor to throw. Its original baseline never reached those
+assertions because the capability probe already terminated the page.
+After build56744:0/48084ms/peak401289216. Browser18939:10/10 PASS available and10/10 PASS
+with feature hidden, actual device feature enabled/disabled respectively. Complete
+capability report, exact2D/cube factories, public preferred-format selection and all16
+readback pixels checked; no JavaScript/uncaptured GPU errors. Peak422395904/events0,
+no source/artifact drift. Actual Chrome/private Vulkan runs, not Node-only Wasm runs.
+Reports are demos `build/linux-full/reports/repair-museum-webgpu-{before,after}-*`.
+Reusable regression driver added as `scripts/run-webgpu-optional-format-test.mjs`
+(Node22+, existing browser build and optional report directory as arguments). Linux
+must use the private GPU runner. No museum executable/reproducer run is claimed.
+
+Native job47658 completed0: existing multi-renderer library/graphics/renderer targets
+built in656309ms; native fixture9PASS; WebGPU renderer suite67=66PASS/1SKIP; format and
+capability checks28PASS on each of WEBGPU/OPENGLES3/SOFTWARE. The57 previously recorded
+WebGPU effect cases have identical outcomes, including the Reach volume-texture skip;
+the10 reflection cases also pass. All28 format/capability outcomes match the previous
+full native aggregate. No full aggregate or museum browser tour rerun is claimed.
+Native peak2134278144 bytes, no memory events or source drift. Seventeen warnings are
+in unchanged HEAD test sources (two MorphTargetEXT nodiscard calls and fifteen FNA3D
+enum comparisons); none in changed source. Browser builds before/after have the same
+six existing warnings (32-bit size_t constant truncation and unhandled draw enum cases).
+Reports: demos `build/linux-full/reports/repair-museum-webgpu-native-*`.
+The committed browser driver itself also ran successfully (job10085):10/10 available,
+10/10 absent; no JavaScript/GPU errors or artifact drift. Its retained reports are in
+`build/linux-full/reports/repair-museum-webgpu-portable/`.
+No heavy job remains. Next: minimize the independent canvas lifetime failure before
+changing production code. Draft `../cna-demos/build-probe/webgpu_canvas_lifetime_test.cpp`
+is not compiled or runtime-validated yet. Do not report it as a passing regression.
+Current SDK header exposes TextureFormatsTier1, and Chrome's primary feature reference
+identifies rgba16unorm as tier1, not the tier2 claimed by CNA's stale comments:
+https://developer.chrome.com/blog/new-in-webgpu-142 . Native's extension remains distinct.
+The pre-fix browser RequestDeviceOnlyEXT omitted tier1 and ProbeRenderTargetFormatEXT
+created RGBA16Unorm without a feature guard. Canvas lifetime needs its own reproduction:
+frame encoding survives async capability/shader waits, not just backbuffer readback.
+Do not claim that requesting tier1 fixes the destroyed-canvas-texture error.
+
 MUSEUM-NET-001: FIXED_NATIVE_VALIDATED (`cd9868526`), awaiting museum revalidation. Migration
 now excludes the departed host's whole shared NetworkMachine. Client peer maps
 cannot do this correctly because the star topology relays other machines through
@@ -60,7 +112,7 @@ unchanged NetworkSessionTests.cpp/NetworkSessionTypePolicyTests.cpp; no diagnost
 in a changed source. Reports: `repair-museum-net-welcome-before-*` (expected1FAIL),
 `repair-museum-net-welcome-after-*` (accepted), under the report directory above.
 
-MUSEUM-TRAY-001: FIXED_NATIVE_VALIDATED, awaiting museum revalidation. Sdl3Tray now
+MUSEUM-TRAY-001: FIXED_NATIVE_VALIDATED (`93baa9363`), awaiting museum revalidation. Sdl3Tray now
 owns a heap-stable string per entry; all allocations precede native insertion,
 replacement keeps the old label alive through the native update, and label storage
 outlives SDL_DestroyTray. No vendor changes or public API changes.
@@ -85,13 +137,10 @@ tray harness itself exits0 and all assertions pass. No native Windows/macOS clai
 Reproduce the real integration check from CNA (no live desktop):
 `tools/platform/run_gpu_tests_private.sh --exec dbus-run-session -- /usr/bin/python3 tools/platform/tray_dbus_check.py cmake-build-debug/cna_tray_dbus_harness`.
 
-Next priority: browser WebGPU tier-1 feature gating and destroyed canvas textures.
-Read-only inspection confirms RequestDeviceOnlyEXT currently requests the native
-16-bit-normalized feature only; browser comments incorrectly refer to Tier2.
-Do not edit blindly: inspect the pinned emdawnwebgpu header, map every affected
-format/capability/probe path, reproduce on the museum browser configuration, and
-separately minimize canvas reconfiguration/presentation lifetime. No WebGPU fix or
-browser runtime validation has occurred in this museum batch. No heavy job remains.
+Next priority: browser WebGPU destroyed canvas textures, separately from the validated
+optional-format repair above. Candidate reproduction covers asynchronous capability
+probes, offscreen readback and surface reconfiguration while a backbuffer is acquired.
+No canvas production fix or passing canvas regression is claimed yet.
 
 Resource discipline: one heavy job and one compiler worker, shared ccache
 `/rv/cnaccache` with base `/rv`, existing `cmake-build-debug`, MemoryHigh 4 GiB,
@@ -130,6 +179,21 @@ take precedence over the shorter request summary.
    PresentationParameters defaults; devices.h desktop/Emulator wording.
 
 Suggestions and documented intentional differences are not automatically defects.
+
+Read-only preparation while the browser baseline compiles (no additional runtime claim):
+`HttpNotificationChannel::Listen` reads the plain `listenSocket_` concurrently with
+Close's replacement. Capturing the listener handle is necessary, but preserve its
+ownership until the listener exits (closing before join also permits descriptor reuse).
+The listener can also block in ReadRequestBody on an accepted connection; merely
+shutting down the listening socket does not wake that recv. Cover partial requests and
+Close before calling this lifecycle repaired. Header uses int for SOCKET and socket
+failure tests use `< 0`; inspect Windows handle width/INVALID_SOCKET in the same audit.
+`SetMixerTrackMixCallback` writes callback/userdata before the locking SDL setter, while
+MixCallback reads them. The stopped-callback pair has the analogous pattern. SDL_mixer
+offers MIX_LockMixer; existing CNA MixerLock is already used as a callback barrier by
+PendingPanStateCleanup::DrainAfterMixerBarrier, but its destructor calls DrainClaimed
+without that barrier. Audio files carry inherited ownership work: do not overwrite it.
+
 The museum's already-fixed missing-asset diagnostic and disposed StorageContainer
 entries remain historical evidence, not new repairs. No platform/service runtime
 coverage is inferred from source review.

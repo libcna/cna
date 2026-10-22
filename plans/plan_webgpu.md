@@ -7,7 +7,25 @@
 > cited as the boundary of the former engine layer, were deleted on 2026-10-11 and survive in Git
 > history; the surviving extension module is `docs/cnaext-engine-layer.md`.
 
-## Status summary (2026-09-09)
+## Current status supplement (2026-10-22)
+
+The museum's newer executable findings supersede the historical blanket parity statements below.
+See `CNA_MUSEUM_REPAIR_HANDOFF.md` and `../museum-simulator/docs/CNA_FINDINGS.md` for the permanent
+external evidence and repair status. The old row totals remain historical totals, not a claim
+that only external-platform work remains.
+
+- Browser optional texture formats: reproduced a JavaScript TypeError from the Rgba64 capability
+  probe, both with an adapter offering tier1 and with tier1 hidden. The repair requests
+  `texture-formats-tier1` and refuses feature-gated probes before entering WebGPU; browser checks
+  pass10/10 with it enabled and10/10 on a real device created without it. Native fixture9PASS;
+  WebGPU renderer suite66PASS/1unchangedSKIP; format/capability checks28PASS each on WEBGPU,
+  OPENGLES3 and SOFTWARE. The museum's own tour revalidation is pending.
+- Browser canvas textures used after invalidation: OPEN, separately reported during the museum
+  tour. The optional-format test's clean runs do not establish this lifetime repair.
+- PBR lighting, vertex texture fetch/float storage and surface-free device creation: museum
+  follow-up still requires contract/reproduction work; none is closed by the optional-format fix.
+
+## Historical row summary (2026-09-09)
 
 **202 rows — ✅ 201 · 🟨 1 · ⬜ 0** (counted from the row tables by
 `tools/count_webgpu_plan_status.sh`, not by hand). **The only open row is `WEBGPU-1`, whose

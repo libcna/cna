@@ -924,11 +924,10 @@ namespace CNA::Internal::Renderers::WebGPU
         /// `Color` target byte-identical to its pre-198 form.
         ///
         /// `Rgba64` maps to `RGBA16Unorm`, which is NOT core WebGPU: natively it needs
-        /// wgpu-native's `WGPUNativeFeature_TextureFormat16bitNorm`, and a browser would need the
-        /// newer `TextureFormatsTier2` if one ever exposes it. It is listed here unconditionally on
-        /// purpose -- whether it works is the PROBE's question, not this table's, which is the
-        /// separation `WEBGPU-198` was built around. On a device without the feature the probe
-        /// fails to create the texture and the format is refused by name (`WEBGPU-201`).
+        /// wgpu-native's `WGPUNativeFeature_TextureFormat16bitNorm`; a browser needs
+        /// `TextureFormatsTier1`. The map describes representation, not availability. The probe
+        /// first checks the enabled feature: a missing browser feature throws a JavaScript
+        /// TypeError before WebGPU's validation error scopes can catch it.
         ///
         /// @param surfaceFormat SurfaceFormat ordinal.
         /// @param out Receives the native format when the return value is true.
@@ -4644,12 +4643,13 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler (`Float32Filterable`) and BLENDING into one (`Float32Blendable`). Asked for when
         // the adapter has them, and remembered either way so the paths that depend on them can say
         // which one was missing rather than degrading in silence.
-        // WEBGPU-201: RGBA16Unorm (SurfaceFormat::Rgba64) is not core WebGPU -- natively it needs
-        // wgpu-native's own TextureFormat16bitNorm, and a browser would need the newer
-        // TextureFormatsTier2 if and when one exposes it. Native-only by construction.
+        // Optional 16-bit normalized formats use different feature names in the pinned native
+        // implementation and in the browser. Availability is not enough: request it below too.
 #if defined(CNA_WEBGPU_HAS_NATIVE_EXTRAS)
         rgba16UnormSupported_ = wgpuAdapterHasFeature(
             adapter_, static_cast<WGPUFeatureName>(WGPUNativeFeature_TextureFormat16bitNorm)) != 0;
+#elif defined(__EMSCRIPTEN__)
+        rgba16UnormSupported_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_TextureFormatsTier1) != 0;
 #endif
         float32Filterable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Filterable) != 0;
         float32Blendable_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_Float32Blendable) != 0;
@@ -4682,6 +4682,9 @@ namespace CNA::Internal::Renderers::WebGPU
         if (rgba16UnormSupported_)
             requiredFeatures[requiredFeatureCount++] =
                 static_cast<WGPUFeatureName>(WGPUNativeFeature_TextureFormat16bitNorm);
+#elif defined(__EMSCRIPTEN__)
+        if (rgba16UnormSupported_)
+            requiredFeatures[requiredFeatureCount++] = WGPUFeatureName_TextureFormatsTier1;
 #endif
 
         DeviceRequestState deviceState;
@@ -11975,6 +11978,21 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     bool WebGPURenderer::ProbeRenderTargetFormatEXT(WGPUTextureFormat format) const
     {
+        // A browser rejects these enum values with a JavaScript TypeError when tier1 was not
+        // enabled. Error scopes handle GPU validation, not WebIDL conversion failures. Never
+        // issue even a capability probe for a feature-gated format on such a device.
+        switch (format)
+        {
+            case WGPUTextureFormat_R16Unorm:
+            case WGPUTextureFormat_R16Snorm:
+            case WGPUTextureFormat_RG16Unorm:
+            case WGPUTextureFormat_RG16Snorm:
+            case WGPUTextureFormat_RGBA16Unorm:
+            case WGPUTextureFormat_RGBA16Snorm:
+                if (!rgba16UnormSupported_) return false;
+                break;
+            default: break;
+        }
         if (const auto it = renderTargetFormatProbe_.find(static_cast<std::uint32_t>(format));
             it != renderTargetFormatProbe_.end())
             return it->second;
@@ -12030,8 +12048,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // No render-target representation here at all. Defer rather than Unsupported: the
             // framework's own rule (Texture::ValidateFormat) is the right authority for a format
             // this renderer has never had an opinion about, and it already refuses everything but
-            // Color. Rgba64 lands here deliberately -- WebGPU has no 16-bit UNORM colour format to
-            // map it to, which is WEBGPU-201's subject.
+            // Color. Mapped optional formats instead pass through the feature-gated probe below.
             return RendererFormatVerdict::Defer;
         }
         return ProbeRenderTargetFormatEXT(native) ? RendererFormatVerdict::Supported
@@ -12285,20 +12302,18 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             "glTF route rather than an XNA stock effect. On those two the bias is accepted and has "
             "no effect.");
 
-        // WEBGPU-201: Rgba64, the one entry here that is a platform boundary rather than a missing
-        // optional feature.
+        // Optional format support and render-attachment usage are separate requirements.
         if (!rgba16UnormSupported_)
         {
             add("SurfaceFormat::Rgba64 is not available as a render target: it maps to "
                 "WGPUTextureFormat_RGBA16Unorm, which is not core WebGPU. Natively it needs "
-                "wgpu-native's TextureFormat16bitNorm, which this adapter does not offer; in a "
-                "browser it would need TextureFormatsTier2, which no browser exposes yet.");
+                "wgpu-native's TextureFormat16bitNorm; in a browser it needs "
+                "texture-formats-tier1. The required feature is not enabled on this device.");
         }
         else if (!ProbeRenderTargetFormatEXT(WGPUTextureFormat_RGBA16Unorm))
         {
             add("SurfaceFormat::Rgba64 is not available as a render target on this device. The "
-                "adapter DOES have wgpu-native's TextureFormat16bitNorm and the device requests it, "
-                "and RGBA16Unorm is usable here as a sampled texture -- what it is not granted is "
+                "required normalized-format feature is enabled -- what it is not granted is "
                 "RENDER_ATTACHMENT usage, measured by creating one rather than assumed. So this is "
                 "a usage boundary, not a missing feature.");
         }
@@ -13618,9 +13633,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             throw System::NotSupportedException(
                 "CNA WebGPU: SurfaceFormat " + std::to_string(surfaceFormat) +
-                " has a WebGPU render-target format, but this adapter refused to create a "
-                "render-attachment texture of it. The refusal is probed on this device, not "
-                "assumed from the specification.");
+                " is not supported by this device's enabled features or render-attachment usage.");
         }
         return std::make_unique<WebGPURenderTargetRenderer>(*this, w, h, depthFormat,
                                                            preserveContents, mipMap,
@@ -13788,8 +13801,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             throw System::NotSupportedException(
                 "CNA WebGPU: SurfaceFormat " + std::to_string(surfaceFormat) +
-                " has a WebGPU render-target format, but this adapter refused to create a "
-                "render-attachment texture of it.");
+                " is not supported by this device's enabled features or render-attachment usage.");
         }
         return std::make_unique<WebGPURenderTargetCubeRenderer>(*this, size, depthFormat,
                                                               preserveContents, mipMap,

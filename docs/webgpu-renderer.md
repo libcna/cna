@@ -2,6 +2,11 @@
 
 ## Status
 
+The museum's October 2026 follow-up found browser optional-format and canvas-lifetime defects,
+plus additional graphics gaps requiring investigation. Current repair status is tracked in
+`CNA_MUSEUM_REPAIR_HANDOFF.md` and the top of `plans/plan_webgpu.md`; older validation results
+below describe their tested configurations, not a claim that these newer findings are resolved.
+
 The WebGPU renderer was activated by the project owner on **2026-07-12** and has been a **supported
 CNA graphics renderer** (`GraphicsRendererMaturity::Supported`) since 2026-10-17 -- one of the project's 10 public renderer identities, native (wgpu-native)
 on desktop and, since 2026-08-26, also in the browser through Emscripten's emdawnwebgpu port. Select
@@ -948,18 +953,41 @@ The map is the reference renderer's own eight-format set: `Single`→`R32Float`,
 `HalfVector4`/`HdrBlendable`→`RGBA16Float`. `Color` is deliberately absent from it — it maps to the
 live `surfaceFormat_`, which keeps every existing `Color` target byte-identical to its earlier form.
 `Rgba64` maps to `RGBA16Unorm`, which is **not** core WebGPU — natively it needs wgpu-native's
-`WGPUNativeFeature_TextureFormat16bitNorm` (which lives in `wgpu.h`, absent from the browser's
-emdawnwebgpu, so the whole path is native-only), and a browser would need `TextureFormatsTier2`,
-which none exposes yet. It is in the map unconditionally anyway: whether it *works* is the probe's
-question, not the table's.
+`WGPUNativeFeature_TextureFormat16bitNorm`; in a browser it needs
+`TextureFormatsTier1` (`texture-formats-tier1`). CNA requests the appropriate feature when
+the adapter offers it, including when recreating a device. Without it the format is reported
+unsupported **before creating any probe texture**: the browser rejects these format values with
+a JavaScript `TypeError`, which a WebGPU validation error scope cannot catch. The guard covers
+all six 16-bit normalized native formats, even though `Rgba64` is the only one currently mapped
+as a CNA render target. See the [Chrome feature description](https://developer.chrome.com/blog/new-in-webgpu-142).
 
-The measured answer here (`WEBGPU-201`) is worth stating exactly, because a feature check alone gets
+The exact-format renderer factories throw `NotSupportedException` when support is absent.
+The public XNA `RenderTarget2D`/`RenderTargetCube` constructors still select a supported format
+from the requested *preference*, including `Color` fallback; inspect their `Format` property.
+This correction does not add previously unsupported ordinary Texture2D/TextureCube formats.
+
+Regression: build `cna_webgpu_optional_format_page` in an existing Emscripten WEBGPU
+configuration, then run (Node22+ and Chrome required):
+
+```sh
+tools/platform/run_gpu_tests_private.sh --exec node scripts/run-webgpu-optional-format-test.mjs cmake-build-wasm-webgpu
+```
+
+The driver runs both feature-enabled and genuinely feature-disabled devices, checking capability
+reports, exact-factory refusals, preferred-format fallback and exact pixel readback. It retains
+reports under the build directory (or a second directory argument). A host lacking tier1 cannot
+validate the enabled branch and does not produce a false pass. Native default-WEBGPU builds
+register the same fixture as `WebGPU_OptionalFormat`.
+
+The historical measured answer (`WEBGPU-201`) is worth stating exactly, because a feature check alone gets
 it wrong in both directions. **This adapter has `TextureFormat16bitNorm`** and the device requests
 it — so "the adapter lacks it" is false. And `RGBA16Unorm` still is not a render target here: with
 the feature enabled, creating one with `TextureBinding` usage succeeds while the same texture with
 `RenderAttachment` usage fails. So "the adapter has it, therefore it works" is false too. `Rgba64` is
-refused as a render target for a **usage** boundary, not a missing feature, and
+refused on that tested adapter as a render target for a **usage** boundary, not a missing feature, and
 `GetAdditionalLimitationsTextEXT()` says which of the two applies.
+That historical result is not a universal statement about current native or browser adapters:
+with the feature enabled, the actual device's render-attachment probe remains authoritative.
 
 `CreateRenderTarget2DEXT` is overridden so the target is **allocated in the format it was asked
 for** — `IGraphicsRenderer`'s default forwards to the format-less overload and drops the argument,
