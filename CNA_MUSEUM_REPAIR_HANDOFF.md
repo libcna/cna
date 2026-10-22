@@ -19,6 +19,32 @@ failures) and passed six exact visual references. It is not a completed repair.
 
 ## Current task
 
+**CNA-DEMOS-ISSUE-033 revalidation, CNA28145a2017fd2421ce2554772923b96a31c1ce36 / demosadbeeaf.**
+EnvironmentMapEffect repair is committed28145a201; owner notified, no push.
+MUSEUM-NET-002 commit04fb4978ae6d3304442c3899bf7a3746f3d77d85 fixes the same missing
+welcome-state root cause as historical ISSUE033, whose matrix row is still pending.
+Museum verified23/23 network checks, but the permanent cna-demos reproduction must
+be checked independently. Sole heavy job55547, cna-museum-issue033-baseline:
+build CnaNetTests and two-process harness in cmake-build-multi, full native net suite,
+then six network demos on SOFTWARE/GLES. Private user/network namespace (cna-test0
+192.0.2.1/24 +broadcast route), owner UID/all capabilities dropped, private display,
+one compiler/4GiB high/6GiB max/no swap. No source edits during the job.
+Baseline55547 completed: native547/547 PASS,12 external runs10PASS/2 retained032FAIL.
+Both child Playing assertions PASS; only refusal reason and propagated child-exit checks
+fail. Build362378ms/native46486ms, peak2062786560/events0/drift0.
+Final81575 after comment/restriction update: native547/547 PASS46350ms, demos build6764ms,
+same12 outcomes/check counts/markers/exits and identical failed-label sets. Both Playing
+assertions PASS; catalog2/2 PASS8.43s after rebuild. Peak1485955072/events0/drift0.
+ISSUE033 now FIXED_VALIDATED with existing04fb4978a fix, permanent evidence in demos
+docs/repair-evidence/net/JOIN_IN_PROGRESS.md; history and032 marker preserved.
+Matrix156 historical IDs:114 have a final disposition,42 remain pending (plus DC-R1/R2).
+Next commit scoped closure documents in each repo, then reproduce/fix ordinary
+ISSUE032 refusal reason at the transport-to-EndJoin boundary. No production code changed
+for033 closure. No active jobs. Foreign ISSUE113/ownership work must not enter either
+repo's commit. CNB C contract question remains pending; no answer presumed.
+
+## Completed EnvironmentMapEffect batch (28145a201)
+
 **EnvironmentMapEffect texture reflection, base f0caebc0d47aabd02e7b051c96cb8430e636974e / demos adbeeaf.**
 The preceding SDL_GPU lifetime repair is committed f0caebc0d, owner notified, no push.
 Baseline `repair-museum-envmap-before-*`: build PASS; each of eight native renderer

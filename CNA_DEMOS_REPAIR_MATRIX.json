@@ -673,12 +673,14 @@
       ],
       "subsystem": "network/gamer-services",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
-      "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "status": "RESOLVED",
+      "root_cause": "ServerWelcome omitted the host's Playing state; the joiner therefore kept its default Lobby state.",
+      "related_issues": ["MUSEUM-NET-002"],
+      "cna_fix_commit": "04fb4978ae6d3304442c3899bf7a3746f3d77d85",
+      "validation": [
+        "Revalidated at CNA28145a201/demosadbeeaf: native network547/547 PASS; original join_refused Playing assertion passes on SOFTWARE and OPENGLES3. Six scenarios per renderer:10 PASS,2 retained ISSUE032 failures. Native codec/event/two-process regressions retained. Private GPU/network namespace, one worker, peak2062786560/events0/drift0. Evidence: ../cna-demos/docs/repair-evidence/net/JOIN_IN_PROGRESS.md. No service/other-platform runtime claim."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-034",
