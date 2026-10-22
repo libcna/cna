@@ -114,18 +114,36 @@ emcmake cmake -S . -B cmake-build-wasm-webgpu -DCNA_GRAPHICS_RENDERER=WEBGPU \
       -DFETCHCONTENT_SOURCE_DIR_FNA3D="$HOME/deps/FNA3D"
 cmake --build cmake-build-wasm-webgpu --target cna_webgpu_compiled_effect_page -j4
 CNA_WEBGPU_DEMO=cna_webgpu_compiled_effect_page scripts/run-webgpu-browser-test.sh
-``` **`WEBGPU-133` (fixed).** Under a **multiple-`ReadBackbuffer`-per-frame** pattern (which the effect
-suites use), `ReadBackbuffer()`'s buffer-map wait yields to the browser event loop (`emscripten_sleep`,
-Asyncify), and the browser presents and invalidates the canvas's current surface texture during that
-yield. The renderer cached the acquired texture across the yield, so a later same-frame flush re-
-submitted a now-destroyed texture -- which wgpu-native tolerates and Dawn rejects with
-`Destroyed texture ... used in a submit`. Fixed with a *lazy discard*: a readback marks the acquired
-texture stale (`acquiredBackbufferStale_`), and `EnsureFrameRendered()` discards and re-acquires a
-fresh one only when it is about to render again -- while a same-frame re-READ still reuses the
-already-captured `readbackBuffer_`. This handles both browser readback patterns (draw/read per check,
-and several reads of one frame). All five effect pages pass in-browser (`PbrEffect` 5/5,
-`EnvironmentMapEffect` 4/4, `SkinnedEffect` 9/9, `DualTextureEffect` 4/4, `AlphaTestEffect` 4/4) and
-the 2D/3D smokes are unregressed. (The earlier `SkinnedEffect` D2 failure was this same multi-read
+```
+
+**Canvas lifetime (`WEBGPU-133`, museum follow-up October 2026).** The earlier lazy-discard
+repair only marked a canvas texture stale after backbuffer readback. Other operations also yield
+through Asyncify: offscreen reads, capability probes, shader validation and occlusion results.
+The browser may expire its current canvas texture at any such yield, including during render-pass
+replay. Reacquiring after readback also discarded untouched pixels in a subsequent partial draw.
+See the [WebGPU automatic-expiry contract](https://www.w3.org/TR/webgpu/#automatic-expiry-task-source).
+
+The browser now renders into one cached, owned backbuffer (recreated on size/format changes),
+also used for readback and MSAA resolves. `Present` acquires the canvas only after rendering,
+copies the backbuffer and submits without any callback wait. This adds one retained color texture
+and one GPU copy per browser presentation, not a second draw pass or a second normal frame submit.
+Native rendering keeps its direct surface path; before reconfiguration it must release its acquired
+surface output, otherwise wgpu-native aborts. The museum's own full browser tour remains pending.
+
+The focused regression checks readback/partial-draw preservation, capability probes, offscreen
+maps, reconfiguration, resize, MSAA and pending occlusion results. Build
+`cna_webgpu_canvas_lifetime_page` and run (Node22+, Chrome, Python3/Pillow):
+
+```sh
+tools/platform/run_gpu_tests_private.sh --exec node scripts/run-webgpu-canvas-lifetime-test.mjs cmake-build-wasm-webgpu
+```
+
+It also captures the actual presented canvas and checks every pixel exactly. Native
+default-WEBGPU builds register `WebGPU_CanvasLifetime` from the same fixture.
+
+Historical effect-page results (`WEBGPU-133`) were `PbrEffect` 5/5,
+`EnvironmentMapEffect` 4/4, `SkinnedEffect` 9/9, `DualTextureEffect` 4/4 and `AlphaTestEffect` 4/4;
+the 2D/3D smokes passed that checkpoint. (The earlier `SkinnedEffect` D2 failure was this same multi-read
 artifact, not a skinning bug: per-render probing confirmed the WeightsPerVertex=2 quad shifts right
 correctly.) The one remaining web-specific refusal is the `--webgpu-2d-validation` scene's
 `MinimizeEXT()` (a native-only `GameWindow` operation, not a renderer limit).

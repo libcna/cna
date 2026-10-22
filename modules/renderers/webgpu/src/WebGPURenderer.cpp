@@ -30,6 +30,7 @@
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
 #endif
 
 #include <algorithm>
@@ -4746,10 +4747,16 @@ namespace CNA::Internal::Renderers::WebGPU
         // WEBGPUPERF-0006: passes already recorded against the old surface go before it changes.
         OrderExternalQueueWorkEXT();
         const auto drawableSize = surfaceState_.GetDrawableSize();
-        const int width = drawableSize.width;
-        const int height = drawableSize.height;
+        int width = drawableSize.width;
+        int height = drawableSize.height;
+#if defined(__EMSCRIPTEN__)
+        // SDL may already have resized the canvas before its surface notification is processed.
+        // Read the backing size without acquiring a short-lived canvas texture.
+        emscripten_get_canvas_element_size("#canvas", &width, &height);
+#endif
         if (width <= 0 || height <= 0)
         {
+            DiscardAcquiredBackbuffer();
             if (surfaceConfigured_ && surface_ != nullptr)
                 wgpuSurfaceUnconfigure(surface_);
             surfaceConfigured_ = false;
@@ -4830,6 +4837,10 @@ namespace CNA::Internal::Renderers::WebGPU
         surfaceConfig_.device = device_;
         surfaceConfig_.format = surfaceConfiguredFormat_;
         surfaceConfig_.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
+#if defined(__EMSCRIPTEN__)
+        // Rendering uses an owned attachment; the canvas is acquired only for the final copy.
+        surfaceConfig_.usage |= WGPUTextureUsage_CopyDst;
+#endif
         surfaceConfig_.width = static_cast<std::uint32_t>(width);
         surfaceConfig_.height = static_cast<std::uint32_t>(height);
         // Must outlive wgpuSurfaceConfigure(): WGPUSurfaceConfiguration only borrows the array.
@@ -4840,6 +4851,10 @@ namespace CNA::Internal::Renderers::WebGPU
         surfaceConfig_.viewFormats = needsViewReinterpretation ? surfaceViewFormats_.data() : nullptr;
         surfaceConfig_.presentMode = presentMode;
         surfaceConfig_.alphaMode = alphaMode;
+        // Native wgpu requires the old SurfaceOutput to be dropped before reconfiguration.
+        // An owned backbuffer survives a same-size/mode change, but not a resize/format change.
+        if (!acquiredOffscreenEXT_ || width != physicalWidth_ || height != physicalHeight_ || formatChanged)
+            DiscardAcquiredBackbuffer();
         wgpuSurfaceConfigure(surface_, &surfaceConfig_);
         wgpuSurfaceCapabilitiesFreeMembers(capabilities);
 
@@ -12725,16 +12740,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     bool WebGPURenderer::EnsureFrameRendered()
     {
-#if defined(__EMSCRIPTEN__)
-        // WEBGPU-133: a prior readback marked the acquired surface texture stale (the browser
-        // invalidated it during the readback's event-loop yield). Reusing it for another read-only
-        // re-read of the same frame is fine -- readbackBuffer_ already holds the captured pixels --
-        // but an actual RENDER must not resubmit the destroyed texture. framePending_ is what
-        // distinguishes "about to render" from a read-only flush; discard here so the block below
-        // re-acquires a fresh current texture only when we are really going to draw.
-        if (hasAcquiredTexture_ && acquiredBackbufferStale_ && framePending_)
-            DiscardAcquiredBackbuffer();
-#endif
         if (!hasAcquiredTexture_)
         {
             ConfigureSurface(false);
@@ -12748,6 +12753,16 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             }
 
             WGPUSurfaceTexture surfaceTexture{};
+#if defined(__EMSCRIPTEN__)
+            // Any synchronous-looking CNA operation may yield through Asyncify (readback,
+            // capability probes, shader validation), even inside render-pass replay. Canvas
+            // textures expire at that yield. Keep our own backbuffer across those operations;
+            // only Present acquires the canvas, copies and submits without yielding.
+            surfaceTexture.texture = CreateOccludedBackbufferEXT();
+            if (surfaceTexture.texture == nullptr)
+                throw std::runtime_error("CNA WebGPU: failed to allocate browser backbuffer");
+            acquiredOffscreenEXT_ = true;
+#else
             if (SurfaceOccludedForTesting())
                 surfaceTexture.status =
                     static_cast<WGPUSurfaceGetCurrentTextureStatus>(kWgpuNativeSurfaceStatusOccluded);
@@ -12783,32 +12798,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 }
                 acquiredOffscreenEXT_ = true;
             }
+#endif
 
             acquiredTexture_ = surfaceTexture.texture;
             hasAcquiredTexture_ = true;
             framePending_ = true;
-
-#if defined(__EMSCRIPTEN__)
-            acquiredBackbufferStale_ = false;   // WEBGPU-133: freshly acquired, valid for a render.
-            // In the browser the surface's backing store follows the <canvas>'s own width/height,
-            // which SDL updates on a resize independently of the size ConfigureSurface() requested.
-            // wgpuSurfaceGetCurrentTexture() therefore returns the canvas size, not surfaceConfig_'s,
-            // so a resize leaves the depth/MSAA attachments (sized from physicalWidth_/physicalHeight_
-            // via ConfigureSurface) mismatched against the colour attachment -- a render-pass
-            // attachment-size validation error. Sync them, and the viewport, to the texture we
-            // actually got. Native surfaces are app-driven and always already agree, so this is web
-            // only.
-            const int acquiredWidth = static_cast<int>(wgpuTextureGetWidth(acquiredTexture_));
-            const int acquiredHeight = static_cast<int>(wgpuTextureGetHeight(acquiredTexture_));
-            if (acquiredWidth > 0 && acquiredHeight > 0 &&
-                (acquiredWidth != physicalWidth_ || acquiredHeight != physicalHeight_))
-            {
-                physicalWidth_ = acquiredWidth;
-                physicalHeight_ = acquiredHeight;
-                RecreateDepthTexture();
-                RecreateMsaaColorTexture();
-            }
-#endif
         }
 
         if (!framePending_)
@@ -13078,15 +13072,61 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPUPERF-0006: the frame's one submission. Render-target passes recorded before a
         // failed back-buffer acquisition are still the game's, so they go even then.
         const bool rendered = EnsureFrameRendered();
+#if defined(__EMSCRIPTEN__)
+        WGPUSurfaceTexture canvas{};
+        if (rendered)
+        {
+            wgpuSurfaceGetCurrentTexture(surface_, &canvas);
+            if (canvas.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+                canvas.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
+            {
+                if (canvas.texture != nullptr) wgpuTextureRelease(canvas.texture);
+                SubmitFrameEncoderEXT();
+                DiscardAcquiredBackbuffer();
+                if (IsSurfaceRecoverable(canvas.status))
+                {
+                    ConfigureSurface(true);
+                    return;
+                }
+                throw std::runtime_error("CNA WebGPU: browser surface acquisition failed");
+            }
+            // A resize during an Asyncify wait can invalidate this frame's dimensions. Keep
+            // its offscreen work submitted, and recreate attachments for the next frame rather
+            // than encoding an invalid-size copy into the new canvas.
+            if (wgpuTextureGetWidth(canvas.texture) != static_cast<std::uint32_t>(physicalWidth_) ||
+                wgpuTextureGetHeight(canvas.texture) != static_cast<std::uint32_t>(physicalHeight_))
+            {
+                SubmitFrameEncoderEXT();
+                wgpuTextureRelease(canvas.texture);
+                DiscardAcquiredBackbuffer();
+                ConfigureSurface(true);
+                return;
+            }
+            WGPUTexelCopyTextureInfo source{};
+            source.texture = acquiredTexture_;
+            source.aspect = WGPUTextureAspect_All;
+            WGPUTexelCopyTextureInfo destination{};
+            destination.texture = canvas.texture;
+            destination.aspect = WGPUTextureAspect_All;
+            const WGPUExtent3D size{static_cast<std::uint32_t>(physicalWidth_),
+                                   static_cast<std::uint32_t>(physicalHeight_), 1};
+            // BeginReplayEXT may map pending occlusion results and yield. No draw replay is
+            // needed for this copy: acquire the encoder directly, with no asynchronous work.
+            wgpuCommandEncoderCopyTextureToTexture(AcquireFrameEncoderEXT(), &source, &destination, &size);
+        }
+#endif
         SubmitFrameEncoderEXT();
+#if defined(__EMSCRIPTEN__)
+        if (canvas.texture != nullptr) wgpuTextureRelease(canvas.texture);
+#endif
         if (!rendered)
             return;
         SweepBindingCacheEXT();
 #if !defined(__EMSCRIPTEN__)
         // In the browser there is no explicit present: emdawnwebgpu aborts on wgpuSurfacePresent
         // ("use requestAnimationFrame instead"). The canvas's current texture is shown automatically
-        // once control returns to the event loop, which Game::RunLoop() does every frame by awaiting
-        // requestAnimationFrame. The queue submit above is the whole frame.
+        // once control returns to the event loop. The browser copy and queue submission above
+        // deliberately contain no callback wait that could expire the canvas in between.
         if (!acquiredOffscreenEXT_)
             wgpuSurfacePresent(surface_);
 #endif
@@ -13100,6 +13140,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     {
         if (physicalWidth_ <= 0 || physicalHeight_ <= 0 || surfaceFormat_ == WGPUTextureFormat_Undefined)
             return nullptr;
+        // The same owned storage is also the browser's backbuffer, independent of canvas lifetime.
         // plans/plan_apple_m4.md AM4-109: one stand-in serves every occluded frame of the same shape;
         // the caller's reference is released at Present like a surface texture's, the cache keeps its
         // own. A minimised or hidden game used to allocate and free a full back buffer each frame.
@@ -13257,19 +13298,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
         wgpuBufferUnmap(readbackBuffer_);
 
-#if defined(__EMSCRIPTEN__)
-        // WEBGPU-133: the buffer map above yielded to the browser event loop (emscripten_sleep,
-        // Asyncify), which lets the browser present and invalidate the canvas's current surface
-        // texture. Mark it stale rather than release it now: a subsequent same-frame read (the
-        // skinned suite reads two points per check) must still reuse the already-captured
-        // readbackBuffer_ without forcing a re-acquire, while the next actual RENDER must re-acquire a
-        // fresh texture instead of resubmitting this destroyed one (Dawn rejects that as "Destroyed
-        // texture ... used in a submit"; wgpu-native tolerates it, so this is web only).
-        // EnsureFrameRendered() consumes the flag: it discards the stale texture only when it is
-        // about to render. The frame content was already copied into readbackBuffer_ before the
-        // yield, so nothing is lost.
-        acquiredBackbufferStale_ = true;
-#endif
     }
 
     void WebGPURenderer::DiscardAcquiredBackbuffer()
@@ -13279,7 +13307,6 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         acquiredTexture_ = nullptr;
         hasAcquiredTexture_ = false;
         acquiredOffscreenEXT_ = false;
-        acquiredBackbufferStale_ = false;
     }
 
     void WebGPURenderer::GetViewportSize(int& width, int& height)

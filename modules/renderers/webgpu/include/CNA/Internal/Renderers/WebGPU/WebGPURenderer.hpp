@@ -3510,18 +3510,17 @@ namespace CNA::Internal::Renderers::WebGPU
                               const GpuDrawParams* params = nullptr,
                               StockVertexShapeEXT shape = StockVertexShapeEXT::Colored);
         void CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture);
-        // Acquires a swapchain texture if none is currently held, and renders any pending
-        // Clear()/sprite work into it. Called on demand by both Present() and ReadBackbuffer()
+        // Acquires a native swapchain texture or owned browser backbuffer if none is held,
+        // and renders pending work into it. Called on demand by Present() and ReadBackbuffer()
         // so that GetBackBufferData() can observe work queued earlier in the same logical frame.
         // Returns false if the surface isn't presentable right now (minimized, lost, etc).
         bool EnsureFrameRendered();
         // plans/plan_apple_m4.md AM4-089: an offscreen stand-in for the surface texture of an occluded
-        // window, in the surface's render format and size with the surface's usage; null when the
-        // surface has no size or format yet.
+        // window, also used as the browser's retained backbuffer. Uses the surface's render format,
+        // size and usage; null when the surface has no size or format yet.
         WGPUTexture CreateOccludedBackbufferEXT();
-        // WEBGPU-133: releases the currently acquired canvas surface texture and marks it re-
-        // acquirable. Used on Emscripten after a readback wait yields to the browser (which presents
-        // and invalidates the current texture), so the next flush obtains a fresh one.
+        // Releases the frame's acquired texture reference before surface reconfiguration or
+        // invalidation. The owned offscreen cache retains its separate reference until resized.
         void DiscardAcquiredBackbuffer();
         // WEBGPU-53/54: renders every currently queued Clear()/3D-draw/SpriteBatch command into a
         // single render pass targeting the given RenderTarget2D's own colour+depth attachments,
@@ -4039,7 +4038,8 @@ namespace CNA::Internal::Renderers::WebGPU
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;
         // plans/plan_apple_m4.md AM4-089: acquiredTexture_ is CreateOccludedBackbufferEXT()'s, not the
-        // surface's, so Present() skips the surface present.
+        // surface's, so native Present() skips the surface present. Browsers always render into
+        // this owned storage, then copy to a short-lived canvas texture at Present.
         bool acquiredOffscreenEXT_ = false;
         // plans/plan_apple_m4.md AM4-109: the occluded-frame stand-in is kept and reused while its
         // size, format and usage still match, instead of being created and destroyed every frame.
@@ -4048,10 +4048,6 @@ namespace CNA::Internal::Renderers::WebGPU
         int occludedBackbufferHeightEXT_ = 0;
         WGPUTextureFormat occludedBackbufferFormatEXT_ = WGPUTextureFormat_Undefined;
         WGPUTextureUsage occludedBackbufferUsageEXT_ = WGPUTextureUsage_None;
-        // WEBGPU-133 (Emscripten): set when a readback's browser-yielding map has let the browser
-        // invalidate the acquired surface texture; the next render discards and re-acquires, while a
-        // same-frame re-read still reuses readbackBuffer_. Always false on native.
-        bool acquiredBackbufferStale_ = false;
         bool framePending_ = true;
 
         // WEBGPU-53/54: the currently bound RenderTarget2D renderer, or nullptr for the swapchain

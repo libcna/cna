@@ -225,6 +225,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_optional_format webgpu_optional_format_test.cpp)
     cna_register_renderer_test(NAME WebGPU_OptionalFormat COMMAND cna_test_webgpu_optional_format
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_webgpu_test(cna_test_webgpu_canvas_lifetime webgpu_canvas_lifetime_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_CanvasLifetime COMMAND cna_test_webgpu_canvas_lifetime
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     target_link_libraries(cna_test_webgpu_float32_features PRIVATE WebGPU::WebGPU)
     cna_register_renderer_test(NAME WebGPU_Float32Features COMMAND cna_test_webgpu_float32_features
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -1171,6 +1174,8 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     target_link_libraries(cna_webgpu_coverage_page PRIVATE WebGPU::WebGPU)
     cna_webgpu_effect_page(cna_webgpu_optional_format_page webgpu_optional_format_test.cpp)
     target_link_libraries(cna_webgpu_optional_format_page PRIVATE WebGPU::WebGPU)
+    cna_webgpu_effect_page(cna_webgpu_canvas_lifetime_page webgpu_canvas_lifetime_test.cpp)
+    target_link_libraries(cna_webgpu_canvas_lifetime_page PRIVATE WebGPU::WebGPU)
 
     # plans/plan_webgpu.md WEBGPU-203: compiled XNA Effects, in a browser. The native suites prove
     # The translator and every shared contract through it, but two things are open until this runs:

@@ -60,16 +60,49 @@ Reports: demos `build/linux-full/reports/repair-museum-webgpu-native-*`.
 The committed browser driver itself also ran successfully (job10085):10/10 available,
 10/10 absent; no JavaScript/GPU errors or artifact drift. Its retained reports are in
 `build/linux-full/reports/repair-museum-webgpu-portable/`.
-No heavy job remains. Next: minimize the independent canvas lifetime failure before
-changing production code. Draft `../cna-demos/build-probe/webgpu_canvas_lifetime_test.cpp`
-is not compiled or runtime-validated yet. Do not report it as a passing regression.
+Optional-format repair commit: `b6fc8e441`, local `next`, not pushed.
+
+**MUSEUM-WEBGPU-002: FIXED_BROWSER_AND_NATIVE_VALIDATED**, awaiting museum revalidation.
+This repair follows `b6fc8e441` on local `next`; its commit contains this checkpoint.
+Before browser fixture:7checks/3FAIL,
+three destroyed-canvas-texture submission errors. Before native fixture:SIGABRT from
+wgpuSurfaceConfigure, `SurfaceOutput must be dropped before a new Surface is made`.
+Reports: demos `build/linux-full/reports/repair-museum-canvas-before-*` and
+`repair-museum-canvas-native-before-*`; source/artifact drift empty, memory events0.
+The repair uses cached owned browser backbuffer storage and only acquires/copies/submits
+the canvas at Present. Surface reconfiguration first drops native acquired output.
+Expanded14-check fixture covers partial-draw preservation, resize and MSAA as well.
+First candidate browser build65662 passed in44370ms, peak402931712, no events/drift.
+Browser job62634 was the expected failing baseline; job48287 the native abort baseline.
+Intermediate browser71049 passed14/14. Source review then corrected Present's copy to
+AcquireFrameEncoderEXT, not BeginReplayEXT (the latter may map occlusion results/yield),
+and added a pending-query frame. Final build28474 passed0/45551ms/peak397864960/events0.
+Final browser27103 passed16/16 and exact screenshot pixels2880/2880; no JS/GPU errors or
+artifact drift. Actual MSAA4 was applied. Screenshot is under demos reports
+`repair-museum-canvas-final-browser/`, viewed and independently pixel-checked.
+Native23052 completed0: build64863ms, fixture16PASS, existing clear/readback10PASS,
+MSAA7PASS, RenderTarget2D13PASS, cube18PASS, occlusion3PASS. WebGPU suite66PASS/1SKIP and
+format/capability28PASS each on WEBGPU/GLES/SOFTWARE. No build/fixture compiler diagnostics;
+peak1478066176/events0/source drift0. Only private-header comments changed afterwards.
+Browser regression build86381 completed0/280539ms/peak398274560/events0/no drift.
+Seven existing warnings repeat the same two known messages (32-bit hash truncation,
+unhandled draw enum cases); the coverage page adds one more inclusion of that header.
+Regression job60945 passed: final canvas16/16 plus **all3840/3840 screenshot pixels**,
+optional formats10/10 enabled and10/10 disabled, browser coverage9/9, EnvironmentMap4/4,
+Skinned9/9, DualTexture4/4, AlphaTest4/4. No JS/uncaptured GPU errors or artifact drift;
+peak479354880/events0. Native67 renderer and28 format cases per renderer have exact
+outcome parity with the preceding optional-format checkpoint. Reports:
+`build/linux-full/reports/repair-museum-canvas-regression-*` in demos.
+No heavy job remains. No museum tour, full native aggregate, compiled browser Effects,
+Firefox, native Windows/macOS or sanitizer run is claimed for this GPU-lifetime batch.
+GPU validation and exact pixels cover the actual invalid-texture defect.
 Current SDK header exposes TextureFormatsTier1, and Chrome's primary feature reference
 identifies rgba16unorm as tier1, not the tier2 claimed by CNA's stale comments:
 https://developer.chrome.com/blog/new-in-webgpu-142 . Native's extension remains distinct.
 The pre-fix browser RequestDeviceOnlyEXT omitted tier1 and ProbeRenderTargetFormatEXT
-created RGBA16Unorm without a feature guard. Canvas lifetime needs its own reproduction:
+created RGBA16Unorm without a feature guard. Canvas lifetime is a separate root cause:
 frame encoding survives async capability/shader waits, not just backbuffer readback.
-Do not claim that requesting tier1 fixes the destroyed-canvas-texture error.
+The two repairs remain separate commits and separate regression fixtures.
 
 MUSEUM-NET-001: FIXED_NATIVE_VALIDATED (`cd9868526`), awaiting museum revalidation. Migration
 now excludes the departed host's whole shared NetworkMachine. Client peer maps
@@ -137,10 +170,11 @@ tray harness itself exits0 and all assertions pass. No native Windows/macOS clai
 Reproduce the real integration check from CNA (no live desktop):
 `tools/platform/run_gpu_tests_private.sh --exec dbus-run-session -- /usr/bin/python3 tools/platform/tray_dbus_check.py cmake-build-debug/cna_tray_dbus_harness`.
 
-Next priority: browser WebGPU destroyed canvas textures, separately from the validated
-optional-format repair above. Candidate reproduction covers asynchronous capability
-probes, offscreen readback and surface reconfiguration while a backbuffer is acquired.
-No canvas production fix or passing canvas regression is claimed yet.
+Next priority: ENet's signed unsequenced-window shifts under UBSan. Draft deterministic
+C fixture `../cna-demos/build-probe/enet_unsequenced_window_test.c` calls the actual
+protocol handler and real queue/receive path, covering every bit, duplicates and window
+rollover. Not compiled/run yet. Promote to a CNA-native test and capture the sanitizer
+failure before the two-literal vendor repair. Then notification/mixer lifetime races.
 
 Resource discipline: one heavy job and one compiler worker, shared ccache
 `/rv/cnaccache` with base `/rv`, existing `cmake-build-debug`, MemoryHigh 4 GiB,

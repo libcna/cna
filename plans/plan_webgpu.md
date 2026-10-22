@@ -20,8 +20,13 @@ that only external-platform work remains.
   pass10/10 with it enabled and10/10 on a real device created without it. Native fixture9PASS;
   WebGPU renderer suite66PASS/1unchangedSKIP; format/capability checks28PASS each on WEBGPU,
   OPENGLES3 and SOFTWARE. The museum's own tour revalidation is pending.
-- Browser canvas textures used after invalidation: OPEN, separately reported during the museum
-  tour. The optional-format test's clean runs do not establish this lifetime repair.
+- Browser canvas textures used after invalidation: repaired separately from optional formats.
+  An owned browser backbuffer survives Asyncify waits; canvas acquisition/copy/submission never
+  yields. Native reconfiguration releases the acquired surface first (the reproducer previously
+  aborted). Fixture16/16 on Chrome and native, exact presented canvas3840/3840 pixels; existing
+  native pixel fixtures51/51, browser coverage9/9 and four effect pages21/21. Optional-format
+  checks still10/10+10/10; native renderer/format outcomes unchanged. The museum tour remains
+  awaiting consumer revalidation; these are not full aggregate or all-platform results.
 - PBR lighting, vertex texture fetch/float storage and surface-free device creation: museum
   follow-up still requires contract/reproduction work; none is closed by the optional-format fix.
 
