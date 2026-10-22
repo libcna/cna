@@ -299,6 +299,9 @@ protected:
         const auto shadeClassic = [&](ITextureRenderer* map, float ambient) {
             GpuDrawParams params;
             params.lightingEnabled = true;
+            // This fixture's VPNTanT has no COLOR0. The internal draw contract
+            // defaults to vertex colour, unlike BasicEffect's public default.
+            params.vertexColorEnabled = false;
             params.diffuseColor[0] = params.diffuseColor[1] =
                 params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
             params.ambientColor[0] = params.ambientColor[1] = params.ambientColor[2] = ambient;

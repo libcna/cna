@@ -2198,7 +2198,10 @@ namespace CNA::Internal::Renderers::Software
                                            worldPosition, x, y, z, w);
             if (!(std::abs(w) > 1e-12f)) return 1.0f;
             const float u = x / w * 0.5f + 0.5f;
-            const float v = y / w * 0.5f + 0.5f;
+            // Software raster targets and uploaded textures both store row zero at
+            // the top. Positive clip Y therefore samples the top half, unlike a
+            // native OpenGL render-target attachment's bottom-up storage (UP-019).
+            const float v = 0.5f - y / w * 0.5f;
             const float depth = z / w * 0.5f + 0.5f;
             if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return 1.0f;
             return SampleDirectionalShadowPcf(*map, u, v, depth, params.shadowDepthBias,

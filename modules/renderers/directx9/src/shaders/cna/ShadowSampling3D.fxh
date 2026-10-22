@@ -117,6 +117,9 @@ float CnaShadowFactor(float3 worldPos)
     {
         float4 lightSpace = mul(float4(worldPos, 1.0), CnaLightViewProj);
         float3 uv = lightSpace.xyz / lightSpace.w * 0.5 + 0.5;
+        // XNA/FNA sampled row zero is the top, where positive clip Y rasterizes.
+        // Keep the generating view-projection unchanged (cna-engine UP-019).
+        uv.y = 1.0 - uv.y;
         if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
             return 1.0;
         return CnaShadowTap(uv, float2(0.0, 0.0), float2(1.0, 1.0));

@@ -43,6 +43,22 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    # Keep the existing shadow/PCF/cascade oracle available when FNA3D is not
+    # the build default (cna-engine UP-019).
+    if(NOT EMSCRIPTEN AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
+        add_executable(CnaShadowSamplingTest modules/graphics/examples/shadow_sampling_test.cpp)
+        target_link_libraries(CnaShadowSamplingTest PRIVATE CNA)
+        cna_link_sharp_runtime(CnaShadowSamplingTest PRIVATE)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            foreach(_shadow_driver OpenGL SDLGPU)
+                add_test(NAME ShadowSampling_FNA3D_${_shadow_driver} COMMAND CnaShadowSamplingTest)
+                set_tests_properties(ShadowSampling_FNA3D_${_shadow_driver} PROPERTIES
+                    ENVIRONMENT "CNA_GRAPHICS_RENDERER=FNA3D;FNA3D_FORCE_DRIVER=${_shadow_driver}"
+                    TIMEOUT 120 LABELS "Fna3d;Shadow")
+            endforeach()
+        endif()
+    endif()
+
     if(NOT EMSCRIPTEN)
         add_executable(CnaPbrVertexContractTest modules/graphics/examples/pbr_vertex_contract_test.cpp)
         target_link_libraries(CnaPbrVertexContractTest PRIVATE CNA)
