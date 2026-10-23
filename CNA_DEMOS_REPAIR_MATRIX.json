@@ -1539,12 +1539,16 @@
       ],
       "subsystem": "c-api",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The offset C receive adapter copies its whole zero-initialized temporary back to the caller instead of only the packet span written by canonical ReceiveData.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "40f286237cdbf7bdc05eb0a2ee9c9ee584eb677f",
+      "validation": [
+        "New native C sentinel regression fails before production repair. Adapter now copies only the received span at offset; prefix/suffix, rejected requests and empty queues are protected. Complete CnaNetTests549/549PASS (46.642s); CApi_NetSmoke and GeneratedRoutesSmoke PASS under both renderer selections. Strict adapter/test and consumer builds PASS;21 pre-existing nodiscard warnings are confined to unchanged NetworkSessionTests.cpp.",
+        "Original external28 assertions preserve names/order and all PASS on SOFTWARE/OPENGLES3 before retiring075 marker/stale restriction. Complete719-ID SW647PASS/21FAIL/48SKIP/3NOTRUN and GLES689PASS/20FAIL/7SKIP/3NOTRUN change only075 and remove exactly its one failed assertion per renderer.",
+        "Final serial CTest659.97s:735registered/732enabled,678PASS/48SKIP/6unchangedFAIL/3disabled; per-test DELTAS[]. All275 artifact hashes match after both sweeps and CTest. No new visual/sanitizer/full native corpus/browser/external-service/additional-platform claim. Evidence: demos docs/repair-evidence/net/PACKET_RECEIVE_RANGE.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED"
     },
     {
       "id": "CNA-DEMOS-ISSUE-076",

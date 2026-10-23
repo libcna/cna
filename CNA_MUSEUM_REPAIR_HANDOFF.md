@@ -27,7 +27,20 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-075 C packet destination range (2026-10-23)
+### Current task: ISSUE-026 discovery after an earlier search (2026-10-23)
+
+ISSUE-075 fix40f286237cdbf7bdc05eb0a2ee9c9ee584eb677f is committed and fully validated.
+Matrix075 is RESOLVED/FIXED_VALIDATED; census156 IDs/122 final dispositions/34 without.
+Commit the075 matrix/evidence closure and publish both repositories, verifying remote refs.
+Then implement the native independent-process026 witness described in demos
+docs/repair-evidence/net/DISCOVERY_PREFLIGHT.md, demonstrate the unchanged source's failure,
+and repair its shared reply-socket root cause. No026 code/test change or runtime claim yet.
+ISSUE018 contract preflight is also recorded there; keep it separate until reproduced.
+The075 artifact freeze has ended. One compiler/test suite at a time, shared ccache, existing
+trees, private display/network, MemoryHigh4GiB/MemoryMax6GiB/no swap. No pending approval.
+Preserve inherited content/audio/graphics work, matrix113 and both older campaign handoffs.
+
+#### Last complete checkpoint: ISSUE-075
 
 Publication VERIFIED: CNA origin/next6767bda371bbb1635ff65844bedbd8885b745ebe and demos
 origin/nextedc44ee9deecc212abf3d3b85b3924eab724add0. Sharp Runtime remains2f644cf47.
@@ -51,14 +64,14 @@ exact per-test DELTAS[]. All275 hashes match after both sweeps and CTest; freeze
 No build/test scope remains. Reports repair-packet-range-ctest.log/xml and exact comparison.
 Compare against repair-host-cleanup-full/repair-host-cleanup-ctest, expecting only075 and one
 removed failure per renderer. Do not rebuild/change executable inputs meanwhile.
-Validation is complete; next commit only075 adapter/tests and this handoff, then close075
-matrix/inventory with the actual fix SHA, publish and verify both repositories. Preserve foreign
-files and matrix113. No new visual/sanitizer/full native corpus/browser/additional-platform claim.
+Validation is complete (CTest659.97s). Fix40f286237 and075 permanent disposition are recorded;
+publish the closure next. Preserve foreign files and matrix113. No new visual/sanitizer/full
+native corpus/browser/additional-platform claim.
 Read-only follow-on018/026 notes are in demos net/DISCOVERY_PREFLIGHT.md (uncommitted, exclude
 from075). Existing549 native tests bypass independent-process discovery by handing over the
 host port; SearchSocket remains Apple-only. No new018/026 runtime reproduction or code change.
 
-#### ISSUE-075 preparation and previous checkpoint
+#### Historical ISSUE-075 preparation and previous checkpoint
 
 ISSUE-051 fix9b0f481f554c2961d6bbe15d1d445b045b49a745 and demos closureedc44ee are committed.
 Matrix051 is RESOLVED/FIXED_VALIDATED; census156 IDs/121 final dispositions/35 without.
