@@ -202,6 +202,58 @@ TEST_F(StorageDeviceDeleteContainerTest, ContainerOperationsRejectSymlinkEscapes
     EXPECT_FALSE(fs::exists(outsideRoot / "outside.bin"));
 }
 
+// weakly_canonical cannot follow a symlink whose target does not exist yet, so such a link used to
+// pass the containment check; opening it for writing then created its target outside.
+TEST_F(StorageDeviceDeleteContainerTest, ContainerOperationsRejectDanglingSymlinkEscapes)
+{
+    auto container = OpenContainer("ContainedGame");
+    const fs::path containerRoot = fs::path(root_) / "ContainedGame" / "AllPlayers";
+    const fs::path outsideRoot = fs::path(root_) / "outside";
+    fs::create_directories(outsideRoot);
+
+    std::error_code error;
+    fs::create_symlink(outsideRoot / "created.bin", containerRoot / "dangling", error);
+    if (error)
+    {
+        GTEST_SKIP() << "Symlinks are unavailable: " << error.message();
+    }
+    fs::create_symlink("../../outside/relative.bin", containerRoot / "relative", error);
+    ASSERT_FALSE(error) << error.message();
+    // A chain: the first link exists and names a second that dangles outside.
+    fs::create_symlink(outsideRoot / "chained.bin", containerRoot / "second", error);
+    ASSERT_FALSE(error) << error.message();
+    fs::create_symlink("second", containerRoot / "chain", error);
+    ASSERT_FALSE(error) << error.message();
+    // ".." after a linked directory is resolved by the kernel from the link's target.
+    fs::create_directories(fs::path(root_) / "deep" / "inner");
+    fs::create_directory_symlink(fs::path(root_) / "deep" / "inner", containerRoot / "jump", error);
+    ASSERT_FALSE(error) << error.message();
+    fs::create_symlink("jump/../escaped.bin", containerRoot / "through", error);
+    ASSERT_FALSE(error) << error.message();
+    // A dangling link that stays inside the container is an ordinary new file.
+    fs::create_symlink("inside.bin", containerRoot / "local", error);
+    ASSERT_FALSE(error) << error.message();
+    EXPECT_NO_THROW({ [[maybe_unused]] auto accepted = container->CreateFile("local"); });
+    EXPECT_TRUE(fs::is_regular_file(containerRoot / "inside.bin"));
+
+    for (const char* link : {"dangling", "relative", "chain", "through"})
+    {
+        SCOPED_TRACE(link);
+        EXPECT_THROW({ [[maybe_unused]] auto rejected = container->CreateFile(link); },
+                     System::ArgumentException);
+        for (const auto mode : {System::IO::FileMode::Create, System::IO::FileMode::OpenOrCreate,
+                                System::IO::FileMode::Append, System::IO::FileMode::CreateNew})
+        {
+            EXPECT_THROW({ [[maybe_unused]] auto rejected = container->OpenFile(link, mode); },
+                         System::ArgumentException);
+        }
+    }
+    EXPECT_FALSE(fs::exists(outsideRoot / "created.bin"));
+    EXPECT_FALSE(fs::exists(outsideRoot / "relative.bin"));
+    EXPECT_FALSE(fs::exists(outsideRoot / "chained.bin"));
+    EXPECT_FALSE(fs::exists(fs::path(root_) / "deep" / "escaped.bin"));
+}
+
 TEST_F(StorageDeviceDeleteContainerTest, ContainerAllowsNormalizedPathsThatRemainContained)
 {
     auto container = OpenContainer("ContainedGame");

@@ -40,6 +40,32 @@ namespace
         throw System::IO::IOException(message, cause);
     }
 
+    // weakly_canonical cannot follow a symlink whose target does not exist yet, so the containment
+    // check accepts it -- and a file opened for writing through it is created at the target. Follow
+    // such a final link to where the filesystem would create it. A loop or unreadable link is left
+    // to fail the operation itself.
+    bool DanglingLinkStaysBelow(const std::filesystem::path& root, std::filesystem::path path)
+    {
+        namespace fs = std::filesystem;
+        std::error_code error;
+        if (!fs::is_symlink(fs::symlink_status(path, error))) return true;
+        for (int hop = 0; hop < 40; ++hop)
+        {
+            const fs::path target = fs::read_symlink(path, error);
+            if (error) return true;
+            path = target.is_absolute() ? target : path.parent_path() / target;
+            // A missing target reports not_found with an error set; that is the case to check.
+            if (!fs::is_symlink(fs::symlink_status(path, error)))
+            {
+                // Canonical before any lexical step, so ".." after a linked directory is the
+                // kernel's ".." and not the text's.
+                const fs::path resolved = fs::weakly_canonical(path, error);
+                return error || CNA::Internal::ValidateContainedNativePath(root, resolved).ok;
+            }
+        }
+        return true;
+    }
+
     // Minimal glob: '*' = any sequence, '?' = any single char
     bool GlobMatch(const std::string& pattern, const std::string& str)
     {
@@ -140,7 +166,12 @@ namespace Microsoft::Xna::Framework::Storage
                                                          const char* escapeMessage)
     {
         const auto contained = CNA::Internal::ResolveContainedUtf8Path(root, relative);
-        if (contained.ok) return contained.resolvedPath;
+        if (contained.ok)
+        {
+            if (!DanglingLinkStaysBelow(root, contained.resolvedPath))
+                throw System::ArgumentException(escapeMessage);
+            return contained.resolvedPath;
+        }
         // A component the filesystem cannot inspect (no search permission, a symlink loop, an
         // overlong name) is not an escape: the operation cannot traverse it either, so it fails
         // with the filesystem's own error, as XNA's does (StorageResidualPathsOracle). A lexical
