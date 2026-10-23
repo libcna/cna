@@ -1577,6 +1577,8 @@ namespace CNA::Internal::Renderers::Software
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /** @brief The CPU sprite path applies `ColorMatrixEffect`. @return True. */
+        [[nodiscard]] bool SupportsColorMatrixSpriteEffectEXT() const override { return true; }
         /**
          * @brief Reports whether this build executes compiled XNA Effect bytecode.
          *

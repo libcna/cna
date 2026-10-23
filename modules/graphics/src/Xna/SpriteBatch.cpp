@@ -21,6 +21,8 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
+#include "System/NotSupportedException.hpp"
 #include "CNA/Internal/Renderers/Common/XnaStateConversion.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
 #include "System/ArgumentException.hpp"
@@ -287,6 +289,16 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (begun)
             throw System::InvalidOperationException("Begin has been called before calling End.");
+        // ColorMatrixEffect is a fixed CPU transform only some renderers apply; elsewhere the
+        // sprites would be drawn untransformed without a word (CNA-DEMOS-ISSUE-007).
+        if (effect != nullptr && graphicsDevice_ != nullptr &&
+            dynamic_cast<const ColorMatrixEffect*>(effect) != nullptr &&
+            !graphicsDevice_->GetRenderer().SupportsColorMatrixSpriteEffectEXT())
+        {
+            throw System::NotSupportedException(
+                "SpriteBatch::Begin: this graphics renderer does not apply a ColorMatrixEffect; "
+                "use a ShaderEffect instead.");
+        }
 
         blendState_ = blendState ? *blendState : BlendState::AlphaBlend;
         samplerState_ = samplerState ? *samplerState : SamplerState::LinearClamp;

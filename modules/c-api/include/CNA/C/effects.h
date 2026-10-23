@@ -2341,6 +2341,9 @@ CNA_C_API CNA_Result cna_skinned_effect_set_vertex_color_enabled(
 
 /**
  * @brief Creates an owned ColorMatrixEffect for a borrowed graphics device.
+ *
+ * Only a renderer that applies the transform accepts the effect in
+ * `cna_sprite_batch_begin_with_effect`; elsewhere that call returns `CNA_RESULT_NOT_SUPPORTED`.
  * @param graphics_device Callback-scoped graphics-device handle.
  * @param out_effect Receives the owned effect handle.
  * @return A CNA result code; failure leaves @p out_effect invalid.

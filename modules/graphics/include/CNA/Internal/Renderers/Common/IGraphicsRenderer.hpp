@@ -3055,6 +3055,17 @@ namespace CNA::Internal::Renderers
                 "DrawInstancedPrimitives is not supported on this graphics renderer.");
         }
 
+        /**
+         * @brief Whether this renderer's SpriteBatch applies a `ColorMatrixEffect`.
+         *
+         * The effect is a fixed CPU colour transform, not shader source, so a renderer applies it
+         * only if it implements that contract; SpriteBatch refuses it elsewhere rather than drawing
+         * the sprites untransformed (CNA-DEMOS-ISSUE-007).
+         *
+         * @return False unless the renderer implements the transform.
+         */
+        [[nodiscard]] virtual bool SupportsColorMatrixSpriteEffectEXT() const { return false; }
+
         /// Disables context-loss recovery on the running renderer.
         /// Safe to call after renderer creation when no resources have been
         /// loaded yet (e.g. from Game1 constructor). Future Create* calls

@@ -18,7 +18,8 @@ namespace Microsoft::Xna::Framework::Graphics
      * RGBA colour matrix and offset, so the renderer need not parse or silently ignore shader
      * source. Pass it to `SpriteBatch::Begin(..., &effect)`; it transforms each sprite's sampled
      * and tinted source colour before ordinary `BlendState` processing. It is unsupported by GPU
-     * renderers unless they explicitly add the same contract.
+     * renderers unless they explicitly add the same contract; there `SpriteBatch::Begin` refuses it
+     * with `System::NotSupportedException` rather than drawing the sprites untransformed.
      *
      * The matrix is row-major: `out[row] = dot(matrix[row], inRGBA) + offset[row]`. Every output
      * component is clamped to [0,1]. The default is the identity transform.

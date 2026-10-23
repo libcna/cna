@@ -186,6 +186,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param depthStencilState Depth-stencil state, or nullptr to use None.
          * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
          * @param effect           Custom effect to apply, or nullptr to use the default sprite effect.
+         * @throws System::NotSupportedException A `ColorMatrixEffect` on a renderer that does not
+         *         apply it.
          */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
@@ -204,6 +206,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param depthStencilState Depth-stencil state, or nullptr to use None.
          * @param rasterizerState Rasterizer state, or nullptr to use CullCounterClockwise.
          * @param effect Custom effect to apply, or nullptr to use the default sprite effect.
+         * @throws System::NotSupportedException A `ColorMatrixEffect` on a renderer that does not
+         *         apply it.
          */
         void Begin(SpriteSortMode sortMode,
                    const BlendState* blendState,
@@ -222,6 +226,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
          * @param effect           Custom effect, or nullptr for the default sprite effect.
          * @param transformMatrix  Matrix applied to all sprites before projection.
+         * @throws System::NotSupportedException A `ColorMatrixEffect` on a renderer that does not
+         *         apply it.
          */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
@@ -241,6 +247,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rasterizerState Rasterizer state, or nullptr to use CullCounterClockwise.
          * @param effect Custom effect, or nullptr for the default sprite effect.
          * @param transformMatrix Matrix applied to all sprites before projection.
+         * @throws System::NotSupportedException A `ColorMatrixEffect` on a renderer that does not
+         *         apply it.
          */
         void Begin(SpriteSortMode sortMode,
                    const BlendState* blendState,

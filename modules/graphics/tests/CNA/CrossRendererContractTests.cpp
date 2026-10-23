@@ -34,6 +34,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include "System/NotSupportedException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -338,6 +341,39 @@ TEST_F(CrossRendererContractTest, WarnAndStubMakesTexture3DAUsableNullObjectWith
             CNA::Unsupported3DGraphicsCallBehavior::Throw);
     });
     if (judged == 0) { GTEST_SKIP() << "every renderer in this build stores volume textures"; }
+}
+
+// CNA-DEMOS-ISSUE-007: a ColorMatrixEffect is applied by the renderers that implement the fixed
+// CPU transform and refused by SpriteBatch::Begin everywhere else, instead of being ignored.
+TEST_F(CrossRendererContractTest, SpriteBatchAppliesOrRefusesAColorMatrixEffect)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::ColorMatrixEffect;
+    using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+    using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
+    int applied = 0;
+    int refused = 0;
+    ForEachRenderer([&](GraphicsDevice& device, GraphicsRendererType)
+    {
+        ColorMatrixEffect effect(device);
+        SpriteBatch batch(device);
+        if (device.GetRenderer().SupportsColorMatrixSpriteEffectEXT())
+        {
+            EXPECT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, nullptr,
+                                        nullptr, nullptr, &effect));
+            EXPECT_NO_THROW(batch.End());
+            ++applied;
+            return;
+        }
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, nullptr, nullptr,
+                                 nullptr, &effect),
+                     System::NotSupportedException);
+        // The refused Begin published nothing: an ordinary batch still begins.
+        EXPECT_NO_THROW(batch.Begin());
+        EXPECT_NO_THROW(batch.End());
+        ++refused;
+    });
+    EXPECT_GT(applied + refused, 0);
 }
 
 #endif  // CNA_MULTI_RENDERER
