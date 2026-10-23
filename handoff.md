@@ -19,8 +19,10 @@ Repositories and branches:
 - cna-demos: `../cna-demos`, branch `next`, campaign closure commit
   `fb6c6530493289f08a6487b52445adc47e435310`; its
   `docs/CNA_ISSUES.md` is the permanent historical inventory and its assertions remain the oracle.
-- Sharp Runtime: `../sharp-runtime`, clean published `next` at
-  `2f644cf4761123275426247b4d582e3392b4a181`. Do not make an incidental dependency edit.
+- Sharp Runtime: `../sharp-runtime`, branch `next`. Published `2f644cf4`; local commit
+  `530e217f` (Directory creation error mapping, ISSUE-010) is required by CNA's container
+  construction repair and is not pushed yet -- publish it before the CNA commit that needs it.
+  Do not make an incidental dependency edit.
 - Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
   move pins/findings after published CNA commits are available.
 
@@ -43,6 +45,15 @@ cube/2D MRT) and `DC-R2` (SDL_GPU multisample mask), both recorded in the matrix
 
 ### Latest accepted work
 
+- ISSUE-010 StorageContainer construction (2026-10-23, not pushed): genuine XNA
+  `StorageContainerCreationOracle` (real `EndOpenContainer` in an isolated Wine overlay profile)
+  shows End creating the whole chain and a file at any level escaping as an exact `IOException`,
+  an unwritable parent as `UnauthorizedAccessException`. CNA's `EndOpenContainer` now only
+  resolves the root and the constructor creates the chain through Sharp `Directory` (Sharp
+  `530e217f`); the extension root routes keep `StorageDeviceNotConnectedException`. Native
+  storage 62/62 (ASan/UBSan/leaks too), Sharp 18,230/18,230, storage 7/7 and C storage 2/2 on
+  SOFTWARE/OPENGLES3. Evidence: `../cna-demos/docs/repair-evidence/storage/
+  STORAGE_CONTAINER_CREATION.md`. 010 stays `CONFIRMED_OPEN`.
 - `39ef8ea2f` fixes CNA-DEMOS-ISSUE-011 and the real GraphicsResource event defect found while
   correcting ISSUE-082. ContentManager records/disposes materialized resources in XNA order;
   nested/model children and failed partial reads are covered; value wrappers have an internal
@@ -93,14 +104,19 @@ checkpoint 075 (CNA `40f286237`, closure `538069391`, demos `6e85316`): full 719
 
 ### Exact next task
 
-Resume CNA-DEMOS-ISSUE-010, not ISSUE-011/082. Reproduce `StorageContainer` construction with an
-unavailable or uncreatable resolved root, compare XNA/.NET exception type/timing, and decide
-whether the root should be resolved lazily at `StorageDevice` or translated at the Sharp Runtime
-filesystem boundary. Then audit the residual storage paths before closing 010. Preserve the
-already-passing ContentManager disposed guard and directory/delete repairs. Validate native
-storage, the unchanged storage demos and strict-C storage boundary on SOFTWARE/OPENGLES3 before
-any marker/status change. The next confirmed-open coherent batch after 010 is ISSUE-020 (compiled
-Song/Video sidecar path), followed by ISSUE-029 or ISSUE-066 according to locality.
+Finish CNA-DEMOS-ISSUE-010's residual storage paths, then close it only if every part passes.
+`StorageDevice::DeleteContainer` uses the throwing `fs::remove_all` (a denied subtree leaks
+`std::filesystem::filesystem_error`), creates the root just to resolve it, and removes the whole
+named container where XNA's `DeleteContainer` removes only this device's player folder and ignores
+a missing one. `StorageContainer::FileExists`/`DirectoryExists` use throwing `fs::is_regular_file`/
+`fs::is_directory`, where XNA's `File.Exists`/`Directory.Exists` answer false. Measure each with
+genuine XNA -- `StorageContainerCreationRunner.mjs` beside the oracle in
+`../cna-demos/docs/repair-evidence/storage/` shows how to call real `StorageDevice` code without
+touching `~/Documents` -- add failing native tests, repair, and validate native storage, the
+storage demos and the strict-C storage boundary on SOFTWARE/OPENGLES3 before any marker/status
+change. The next confirmed-open coherent batch after
+010 is ISSUE-020 (compiled Song/Video sidecar path), followed by ISSUE-029 or ISSUE-066 according to
+locality.
 
 Consumer-only work still matters. cna-engine's current `upstream-issues.md` reports UP-001,
 UP-006, UP-018, UP-019 and UP-020 resolved; UP-002 remains an informational documentation request

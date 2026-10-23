@@ -123,14 +123,14 @@ namespace Microsoft::Xna::Framework::Storage
         }
     }
 
-    const std::string& StorageDevice::EnsureStorageRoot()
+    std::string StorageDevice::ResolveStorageRoot()
     {
         if (storageRootInitialized_) return storageRoot_;
 
         const std::string app = appName_.empty() ? "game" : appName_;
 
         // Storage is intentionally independent of the selected windowing platform.  Resolve a
-        // conventional per-user data root directly, then ensure it exists before returning it.
+        // conventional per-user data root directly; creating it is the caller's decision.
         // This also makes saved games follow the same policy under SDL3, HEADLESS and TERMINAL.
         fs::path root;
 #if defined(__EMSCRIPTEN__)
@@ -172,7 +172,14 @@ namespace Microsoft::Xna::Framework::Storage
             root = fs::current_path() / appComponent;
         }
 #endif
+        return CNA::Internal::PathToGenericUtf8(root);
+    }
 
+    const std::string& StorageDevice::EnsureStorageRoot()
+    {
+        if (storageRootInitialized_) return storageRoot_;
+
+        const fs::path root = CNA::Internal::PathFromUtf8(ResolveStorageRoot());
         std::error_code code;
         fs::create_directories(root, code);
         if (code)
@@ -276,7 +283,7 @@ namespace Microsoft::Xna::Framework::Storage
             throw System::ArgumentException("result",
                 "The IAsyncResult parameter to this \"End\" function must be obtained by calling the matching \"Begin.\"");
         // XNA StorageContainer's constructor uses this resource as ParamName.
-        // Check before EnsureStorageRoot so an invalid name never accesses storage.
+        // Check before resolving the root so an invalid name never accesses storage.
         if (r->displayName.empty())
             throw System::ArgumentNullException("You must pass in a non-null title name.");
 
@@ -284,8 +291,10 @@ namespace Microsoft::Xna::Framework::Storage
             ? static_cast<int>(devicePlayer_.value())
             : -1;
 
+        // XNA only names the device folder here; the container's DirectoryInfo.Create builds the
+        // whole chain and its System.IO failure escapes unwrapped (StorageContainerCreationOracle).
         return std::unique_ptr<StorageContainer>(
-            new StorageContainer(*this, r->displayName, EnsureStorageRoot(), playerIdx));
+            new StorageContainer(*this, r->displayName, ResolveStorageRoot(), playerIdx));
     }
 
     void StorageDevice::DeleteContainer(const std::string& titleName)

@@ -94,13 +94,11 @@ namespace Microsoft::Xna::Framework::Storage
         }
         storagePath_ = contained.resolvedPath;
 
-        // Widened like every other member does. Left narrow, the constructor created a
-        // mojibake-named directory while ResolveNativePath, GetFileNames and FileExists all
-        // operated on the correct one -- so the container was permanently empty and a junk
-        // directory accumulated beside it.
-        const std::filesystem::path nativeRoot = CNA::Internal::PathFromUtf8(storagePath_);
-        if (!fs::exists(nativeRoot))
-            fs::create_directories(nativeRoot);
+        // XNA's FinishCreation: DirectoryInfo.Create builds the whole chain, including the storage
+        // root, and its System.IO failure escapes. A file occupying any level is an IOException
+        // and is kept, not opened as the container. Directory takes the UTF-8 path and widens it
+        // itself, so the directory created is the one every other member resolves.
+        System::IO::Directory::CreateDirectory(storagePath_);
     }
 
     StorageContainer::~StorageContainer()

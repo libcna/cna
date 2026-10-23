@@ -83,7 +83,13 @@ namespace Microsoft::Xna::Framework::Storage
          * operation kind, or the display name is empty.
          * @throws System::InvalidOperationException If this result has already been ended.
          * @throws System::ArgumentException If another device started the operation.
+         * @throws System::IO::IOException If a file occupies any directory of the container's
+         * path, including the storage root itself.
+         * @throws System::UnauthorizedAccessException If a directory of that path cannot be
+         * created for lack of permission.
          * A matching result is consumed even when owner/name validation or opening fails.
+         * The container's directories, including the storage root, are created here and not by
+         * BeginOpenContainer.
          */
         [[nodiscard]] std::unique_ptr<StorageContainer> EndOpenContainer(
             System::IAsyncResult* result);
@@ -197,6 +203,7 @@ namespace Microsoft::Xna::Framework::Storage
         static std::string appName_;
         static bool storageRootInitialized_;
 
+        static std::string ResolveStorageRoot();
         static const std::string& EnsureStorageRoot();
     };
 

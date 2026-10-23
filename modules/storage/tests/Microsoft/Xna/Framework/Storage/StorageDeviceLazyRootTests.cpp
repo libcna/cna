@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 #include "SharpRuntime/Storage/StoragePaths.hpp"
+#include "System/IO/IOException.hpp"
 
 // Desktop roots honor XDG_DATA_HOME; Android and browser roots have separate policies.
 #if !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
@@ -76,7 +77,9 @@ TEST_F(StorageDeviceLazyRootTest, AnUnavailableRootFailsOnlyWhenStorageIsAccesse
     auto device = StorageDevice::EndShowSelector(selection.get());
     EXPECT_FALSE(device->getIsConnectedProperty());
     auto opening = device->BeginOpenContainer("saves", nullptr, nullptr);
-    EXPECT_THROW((void)device->EndOpenContainer(opening.get()), StorageDeviceNotConnectedException);
+    // Genuine XNA construction reports a file in the root chain as IOException
+    // (StorageContainerCreationOracle.cs); only the CNA extensions report a disconnected device.
+    EXPECT_THROW((void)device->EndOpenContainer(opening.get()), System::IO::IOException);
     EXPECT_THROW((void)StoragePaths::GetIsolatedStorageRoot(), StorageDeviceNotConnectedException);
     EXPECT_TRUE(fs::is_regular_file(data_));
 }

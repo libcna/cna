@@ -116,6 +116,12 @@ exactly once.
 | `System::NotSupportedException` (unwritable or unreadable stream) | `CNA_RESULT_NOT_SUPPORTED` |
 | `System::ObjectDisposedException` | `CNA_RESULT_INVALID_STATE` |
 
+`cna_storage_container_open` creates the container's directories, the storage root included, as
+XNA's `EndOpenContainer` does: a file occupying any of them, or a directory that cannot be written,
+is `CNA_RESULT_IO`, and the next open succeeds once the obstruction is gone. Only the extension
+routes that ask for the root itself (`cna_storage_get_root_size_ext`, `cna_storage_copy_root_ext`)
+report an unusable root as a disconnected device.
+
 `cna_storage_device_delete_container` keeps the containment guard: a title name that is absolute or
 escapes the storage root is refused with `CNA_RESULT_INVALID_ARGUMENT` instead of being resolved.
 The same result protects container opening and all paths used through a container. No native
