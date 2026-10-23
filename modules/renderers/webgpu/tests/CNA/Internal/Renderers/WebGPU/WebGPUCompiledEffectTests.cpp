@@ -784,6 +784,51 @@ TEST(WebGPUCompiledEffectDrawTest, PointVertexTexturesDoNotRequireFloat32Filtera
     CNA::TestSupport::RunCompiledEffectVertexTextureContract(device, SurfaceFormat::Vector4);
 }
 
+class WebGPUCompiledEffectVolumeLifetimeTest : public ::testing::TestWithParam<bool> {};
+
+TEST_P(WebGPUCompiledEffectVolumeLifetimeTest, VolumeTextureOutlivesItsDeferredDraw)
+{
+    using namespace CNA::TestSupport;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    auto* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the WebGPU renderer";
+    std::unique_ptr<WgslRouteScope> wgsl;
+    if (GetParam()) wgsl = std::make_unique<WgslRouteScope>(device);
+    Effect effect(device, BuildSyntheticSamplingEffect({}, 0, SyntheticSamplerKind::Sampler3D));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(Vector4(1, 1, 1, 1));
+    auto volume = std::make_unique<Texture3D>(device, 1, 1, 2, false, SurfaceFormat::Color);
+    const Color slices[] = {Color::Red, Color::Blue};
+    volume->SetData(slices, 2);
+    effect.getParametersProperty()["FxTexture"]->SetValue(volume.get());
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    SamplingQuadVertexXYZ quad[6];
+    FillSamplingQuadXYZ(quad, 0.5f, 0.5f, 0.25f);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad),
+                              0, 2, SamplingQuadDeclarationXYZ());
+    volume->Dispose();
+    volume.reset();
+    effect.Dispose();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color pixel;
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &pixel, 0, 1);
+    EXPECT_EQ(pixel, Color::Red);
+    EXPECT_EQ(renderer->GetUncapturedErrorCountEXT(), 0u);
+}
+
+INSTANTIATE_TEST_SUITE_P(WebGPUShaderRoutes, WebGPUCompiledEffectVolumeLifetimeTest,
+                        ::testing::Values(false, true), [](const auto& info) {
+                            return info.param ? "WGSL" : "SPIRV";
+                        });
+
 #define CNA_WEBGPU_WGSL_ROUTE_TEST(name, call)                                                   \
     TEST(WebGPUCompiledEffectWgslDrawTest, name)                                                 \
     {                                                                                            \

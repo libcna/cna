@@ -193,7 +193,8 @@ class WebGpuBrowserCompiledEffectTest : public Game
     /// target, and returns that target's centre pixel.
     template <typename Vertex>
     Color DrawQuadAndRead(GraphicsDevice& device, Effect& effect, std::size_t passIndex,
-                          const Vertex (&quad)[6], const VertexDeclaration& declaration)
+                          const Vertex (&quad)[6], const VertexDeclaration& declaration,
+                          Texture3D* releaseAfterDraw = nullptr)
     {
         RenderTarget2D target(device, kTargetSize, kTargetSize);
         device.SetRenderTarget(&target);
@@ -202,6 +203,7 @@ class WebGpuBrowserCompiledEffectTest : public Game
         effect.getTechniquesProperty()[0]->getPassesProperty()[passIndex]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0,
                                   2, declaration);
+        if (releaseAfterDraw != nullptr) releaseAfterDraw->Dispose();
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         return CentreOf(target);
     }
@@ -475,6 +477,7 @@ public:
                 break;
             }
             case 8:
+            case 16:
             {
                 // Rung 8, first slice.
                 Effect effect(device,
@@ -489,12 +492,15 @@ public:
                 QuadVertexUVW quad[6];
                 FillQuad(quad, 0.5f, 0.5f, 0.25f);
                 const Color pixel =
-                    DrawQuadAndRead(device, effect, 1, quad, PositionUvwDeclaration());
+                    DrawQuadAndRead(device, effect, 1, quad, PositionUvwDeclaration(),
+                                    step_ == 16 ? &volume : nullptr);
                 check(Near(pixel.getRProperty(), 255) && Near(pixel.getBProperty(), 40),
-                      "a compiled pixel shader samples a Texture3D (near slice)");
+                      step_ == 16 ? "a disposed Texture3D survives its deferred draw (near slice)"
+                                  : "a compiled pixel shader samples a Texture3D (near slice)");
                 break;
             }
             case 9:
+            case 17:
             {
                 // Rung 8, second slice: w must pick a different slice, which is what makes this a
                 // volume sampler rather than a 2D one with a spare coordinate.
@@ -510,9 +516,11 @@ public:
                 QuadVertexUVW quad[6];
                 FillQuad(quad, 0.5f, 0.5f, 0.75f);
                 const Color pixel =
-                    DrawQuadAndRead(device, effect, 1, quad, PositionUvwDeclaration());
+                    DrawQuadAndRead(device, effect, 1, quad, PositionUvwDeclaration(),
+                                    step_ == 17 ? &volume : nullptr);
                 check(Near(pixel.getBProperty(), 255) && Near(pixel.getRProperty(), 40),
-                      "a compiled pixel shader samples a Texture3D (far slice)");
+                      step_ == 17 ? "a disposed Texture3D survives its deferred draw (far slice)"
+                                  : "a compiled pixel shader samples a Texture3D (far slice)");
                 break;
             }
             case 10:

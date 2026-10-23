@@ -11315,10 +11315,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         {
             const auto* volume =
                 dynamic_cast<const WebGPUTexture3DRenderer*>(&texture3D->GetRenderer());
-            if (volume == nullptr) return {};
-            WebGPUSampledTextureEXT resolved;
-            resolved.view = volume->SampledView();
-            return resolved;
+            return volume != nullptr ? volume->SampledEXT() : WebGPUSampledTextureEXT{};
         }
         if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
         {

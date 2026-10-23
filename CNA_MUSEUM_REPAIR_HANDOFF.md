@@ -27,7 +27,36 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: WebGPU HiDef vertex-texture repair (2026-10-23)
+### Current task: WebGPU deferred volume lifetime (2026-10-23)
+
+Vertex-texture repair below is published as
+`e8bfdf2c5584bb0f8f6f4b7c6d84c1c32336fdf9`; push16173 and ls-remote confirm it.
+Follow-up source suspicion is now reproduced, not merely speculative:
+WebGPUCompiledEffectWgslDrawTest.VolumeTextureOutlivesItsDeferredDraw constructs
+a two-slice volume, issues a draw, disposes/destroys the volume and Effect, then
+flushes/readbacks. Pre-fix run26818 aborts134 in wgpuDeviceCreateBindGroup with
+`TextureView[Id(3,2)] does not exist`. Test build22757 completed0.
+Evidence prefix: demos build/linux-full/reports/repair-museum-volume-lifetime-*.
+The resolver used a bare SampledView despite an existing owning SampledEXT helper.
+The narrow fix returns that helper's texture/view lease; no new ownership system.
+Native fix build89313 completed0. Expanded native WebGPU/translator run93013:
+78tests,77PASS/1unchanged cube/volumeSKIP, including the new strict disposal test.
+Browser page retains all19 earlier checks and adds near/far disposal checks21total.
+Browser build77738 completed0 (existing wasm tree, scope cna-volume-browser-build,
+one compiler/shared ccache/6GiB cap). Private Chrome run97432 completed0:
+21/21PASS,120frames,clean teardown,no uncaptured/validation errors. Both new disposal
+checks pass; all19 prior assertions remain and pass. The native regression is now
+parameterized over SPIR-V and WGSL (WebGPUShaderRoutes); rebuild80767 completed0.
+Final native run87152:79tests,78PASS/1same Reach-volumeSKIP; both new routes pass,
+no uncaptured errors. This batch is the commit containing this entry, based on e8bfdf2c5.
+No new sanitizer result: the demonstrated failure is a stale WebGPU resource handle,
+detected directly by wgpu validation, not a claimed host-heap sanitizer diagnosis.
+Only renderer source, native test, browser page and this handoff belong to this batch.
+All owned processes are terminal. No museum/engine/demos source or consumer pin changed.
+FNA3D baseline76366 completed0 meanwhile:112tests,111PASS/1Reach-volumeSKIP.
+Its Single-format promotion audit is next; no FNA production changes yet.
+
+### Previous checkpoint: WebGPU HiDef vertex-texture repair (2026-10-23)
 
 SDL_GPU batch below is committed and published as
 `079dfc55eef2c2cbf62efbb99f3dcd154281e39f`; normal push97006 and ls-remote verified.
