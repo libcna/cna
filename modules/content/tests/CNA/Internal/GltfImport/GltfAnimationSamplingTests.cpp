@@ -586,3 +586,55 @@ TEST(GltfAnimationSampling, AnAuthoredClipNameIsUsedVerbatim)
     ASSERT_EQ(1u, clips.size());
     EXPECT_EQ("Clip", clips[0].name);
 }
+
+// --- CNA-DEMOS-ISSUE-093: an interpolation glTF does not define is refused -----------------------
+
+TEST(GltfAnimationSampling, ValidationAcceptsEveryInterpolationGltfDefines)
+{
+    for (const char* mode : {"LINEAR", "STEP"})
+    {
+        SCOPED_TRACE(mode);
+        // Validation reads the sampler tokens back from the JSON, which cgltf_parse borrows.
+        const std::string document = AnimatedJointDocument(
+            mode, {0.0f, 1.0f}, {0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f});
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, document));
+        std::vector<std::string> warnings;
+        EXPECT_NO_THROW(ValidateGltfEXT(parsed.data, "modes.gltf", warnings));
+    }
+    // CUBICSPLINE stores an in-tangent, a value and an out-tangent per time.
+    const std::string document = AnimatedJointDocument(
+        "CUBICSPLINE", {0.0f, 1.0f},
+        {0, 0, 0,  0, 0, 0,  0, 0, 0,  0, 0, 0,  1, 0, 0,  0, 0, 0});
+    Parsed parsed;
+    ASSERT_TRUE(Parse(parsed, document));
+    std::vector<std::string> warnings;
+    EXPECT_NO_THROW(ValidateGltfEXT(parsed.data, "cubic.gltf", warnings));
+}
+
+TEST(GltfAnimationSampling, ValidationRefusesAnInterpolationGltfDoesNotDefine)
+{
+    // cgltf leaves an unrecognised token as LINEAR, so without this check a CATMULLROM sampler
+    // played as a linear one with nothing reported.
+    for (const char* mode : {"CATMULLROM", "linear", ""})
+    {
+        SCOPED_TRACE(std::string("'") + mode + "'");
+        const std::string document = AnimatedJointDocument(
+            mode, {0.0f, 1.0f}, {0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f});
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, document));
+        ASSERT_EQ(cgltf_interpolation_type_linear, parsed.data->animations[0].samplers[0].interpolation);
+        std::vector<std::string> warnings;
+        try
+        {
+            ValidateGltfEXT(parsed.data, "unknown.gltf", warnings);
+            ADD_FAILURE() << "an undefined interpolation was accepted";
+        }
+        catch (const std::runtime_error& e)
+        {
+            const std::string message = e.what();
+            EXPECT_NE(std::string::npos, message.find(std::string("'") + mode + "'")) << message;
+            EXPECT_NE(std::string::npos, message.find("sampler 0 of animation 0")) << message;
+        }
+    }
+}

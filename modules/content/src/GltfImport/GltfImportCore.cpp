@@ -5166,6 +5166,23 @@ namespace CNA::Internal::GltfImport
                 "rather than imported.");
         }
 
+        // CNA-DEMOS-ISSUE-093. glTF 2.0 allows only LINEAR, STEP and CUBICSPLINE. cgltf records a
+        // recognised token and otherwise leaves the zero value, LINEAR, in place, so any other
+        // token would silently replay authored motion as linear. It is read back and refused.
+        {
+            cgltf_size animation = 0;
+            cgltf_size sampler = 0;
+            std::string token;
+            if (CgltfFindInvalidInterpolation(data, animation, sampler, token))
+            {
+                throw std::runtime_error(
+                    "'" + sourceName + "' declares interpolation '" + token + "' on sampler " +
+                    std::to_string(sampler) + " of animation " + std::to_string(animation) +
+                    ". glTF 2.0 allows only LINEAR, STEP and CUBICSPLINE, so the file is refused "
+                    "rather than played as LINEAR.");
+            }
+        }
+
         // (4) GLTF-061. The one piece of redundancy glTF gives a reader: the author states each
         // accessor's bounds, and a decoder producing values outside them has decoded something
         // other than what was written. Nothing read them before, which is why D4 -- a sparse index

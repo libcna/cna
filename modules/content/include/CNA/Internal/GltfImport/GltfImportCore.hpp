@@ -2038,9 +2038,14 @@ namespace CNA::Internal::GltfImport
      *    explicitly said would be wrong without that extension.
      * 3. **`extensionsUsed`** — an entry CNA does not implement is *reported*, not rejected
      *    (`GLTF-024`): by definition the file is expected to load without it.
+     * 4. **Animation interpolation** — a sampler whose `interpolation` is not LINEAR, STEP or
+     *    CUBICSPLINE is a hard rejection (CNA-DEMOS-ISSUE-093); cgltf would otherwise read it as
+     *    LINEAR without a word.
      *
      * @note CNAEXT — not part of the XNA 4.0 API. Call after `cgltf_load_buffers`, since the
-     * sparse index-bound check needs buffer data to run at all.
+     * sparse index-bound check needs buffer data to run at all. The interpolation check reads the
+     * document's JSON (`data->json`) again: `cgltf_parse_file` keeps it, while a `cgltf_parse`
+     * caller must keep the buffer it parsed alive until this returns.
      *
      * @param data The parsed glTF file, with buffers already loaded.
      * @param sourceName The file name or asset name, used in diagnostics.
