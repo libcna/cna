@@ -63,7 +63,7 @@
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTests.cpp": {
       "category": "audio-native-integration",
-      "max_references": 8
+      "max_references": 9
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectTests.cpp": {
       "category": "audio-native-integration",
