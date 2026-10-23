@@ -1616,7 +1616,8 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
     NetworkGamer* sender = nullptr;
     const int received = gamer->ReceiveData(buffer, static_cast<int>(offset), sender);
     if (received > 0) {
-        std::memcpy(destination, buffer.data(), buffer.size());
+        std::memcpy(destination + offset, buffer.data() + offset,
+            static_cast<std::size_t>(received));
     }
     *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
     return PublishSender(sender, gamerHandle, outSender);

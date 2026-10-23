@@ -29,6 +29,37 @@ by this validation step.
 
 ### Current task: ISSUE-075 C packet destination range (2026-10-23)
 
+Publication VERIFIED: CNA origin/next6767bda371bbb1635ff65844bedbd8885b745ebe and demos
+origin/nextedc44ee9deecc212abf3d3b85b3924eab724add0. Sharp Runtime remains2f644cf47.
+Current owned075 code: modules/c-api/tests/pure_c/NetSmoke.c adds sentinels around offset2/0/4,
+reject-without-mutation and empty-queue preservation; native red CApi_NetSmoke fails exactly the
+new offset2 boundary assertion before production changes (repair-packet-range-before.log/xml).
+CnaCApiNetSessions.cpp now copies only the received byte range at offset; no other production
+change. Native target build52146 passes; its21 nodiscard warnings all belong to unchanged
+NetworkSessionTests.cpp exception assertions. The strict C adapter/test build has no warnings.
+Complete CnaNetTests passes549/549 in46.642s (repair-packet-range-native.log/xml).
+CApi_NetSmoke/GeneratedRoutesSmoke pass on SOFTWARE/GLES,0.11s each; packet tests are
+renderer-independent, so no GPU/online-service claim. Consumer builds14040/40617 pass without
+diagnostics. The untouched external demo passes28/28 on both selections, exact assertion names/
+order preserved and one failure removed. Marker075/stale restriction removed only afterwards.
+Catalog719/zero problems; only075 metadata differs. All275 artifacts are frozen in
+repair-packet-range-full-artifacts.sha256. Full SOFTWARE completed719 IDs:
+647PASS/21FAIL/48SKIP/3NOTRUN, only075 changes and40->39 failed assertions; all275 hashes match.
+OPENGLES3 completed719 IDs:689PASS/20FAIL/7SKIP/3NOTRUN, exact only075 delta and39->38 failed
+assertions. Final serial CTest735registered/732enabled=678PASS/48SKIP/6unchangedFAIL/3disabled;
+exact per-test DELTAS[]. All275 hashes match after both sweeps and CTest; freeze released.
+No build/test scope remains. Reports repair-packet-range-ctest.log/xml and exact comparison.
+Compare against repair-host-cleanup-full/repair-host-cleanup-ctest, expecting only075 and one
+removed failure per renderer. Do not rebuild/change executable inputs meanwhile.
+Validation is complete; next commit only075 adapter/tests and this handoff, then close075
+matrix/inventory with the actual fix SHA, publish and verify both repositories. Preserve foreign
+files and matrix113. No new visual/sanitizer/full native corpus/browser/additional-platform claim.
+Read-only follow-on018/026 notes are in demos net/DISCOVERY_PREFLIGHT.md (uncommitted, exclude
+from075). Existing549 native tests bypass independent-process discovery by handing over the
+host port; SearchSocket remains Apple-only. No new018/026 runtime reproduction or code change.
+
+#### ISSUE-075 preparation and previous checkpoint
+
 ISSUE-051 fix9b0f481f554c2961d6bbe15d1d445b045b49a745 and demos closureedc44ee are committed.
 Matrix051 is RESOLVED/FIXED_VALIDATED; census156 IDs/121 final dispositions/35 without.
 Next commit only the051 matrix/handoff closure and publish both repositories, verify remotes,

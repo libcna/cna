@@ -5,6 +5,7 @@
 #include "CnaTestReport.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 /* A signed-in gamer added to the roster session; it must outlive that session. */
@@ -1383,6 +1384,17 @@ static int validate_secondary_sessions(const CNA_SignedInGamerHandle signed_in)
 static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
 {
     static const uint8_t payload[4] = {0x11U, 0x22U, 0x33U, 0x44U};
+    static const uint8_t untouched[8] = {
+        0xA5U, 0xA5U, 0xA5U, 0xA5U, 0xA5U, 0xA5U, 0xA5U, 0xA5U
+    };
+    static const struct {
+        int32_t offset;
+        uint8_t expected[8];
+    } offset_cases[] = {
+        {2, {0xA5U, 0xA5U, 0x11U, 0x22U, 0x33U, 0x44U, 0xA5U, 0xA5U}},
+        {0, {0x11U, 0x22U, 0x33U, 0x44U, 0xA5U, 0xA5U, 0xA5U, 0xA5U}},
+        {4, {0xA5U, 0xA5U, 0xA5U, 0xA5U, 0x11U, 0x22U, 0x33U, 0x44U}}
+    };
     CNA_NetworkEventInfo event = {
         sizeof(CNA_NetworkEventInfo), UINT32_C(1), CNA_NETWORK_EVENT_TYPE_PACKET_SEND,
         CNA_SEND_DATA_OPTIONS_RELIABLE, CNA_NETWORK_SESSION_STATE_LOBBY,
@@ -1421,22 +1433,44 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
     }
 
     /* A packet that does not fit after the offset is refused and stays queued. */
+    memcpy(buffer, untouched, sizeof(buffer));
     if (cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS ||
         cna_local_network_gamer_receive_data_at(
             local, buffer, UINT64_C(4), 3, &sender, &received) != CNA_RESULT_INVALID_ARGUMENT ||
+        memcmp(buffer, untouched, sizeof(buffer)) != 0 ||
         cna_local_network_gamer_get_is_data_available(local, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE) {
         return 0;
     }
-    if (cna_local_network_gamer_receive_data_at(
-            local, buffer, (uint64_t)sizeof(buffer), 2, &sender, &received) !=
-            CNA_RESULT_SUCCESS ||
-        received != UINT64_C(4) || memcmp(buffer + 2, payload, 4U) != 0) {
-        return 0;
-    }
-    if (sender != CNA_INVALID_HANDLE &&
-        cna_network_gamer_destroy(sender) != CNA_RESULT_SUCCESS) {
-        return 0;
+    /* CNA-DEMOS-ISSUE-075: receiving must preserve the prefix and suffix, including when the
+       packet starts at zero, ends exactly at capacity, or the queue is empty. */
+    for (size_t scenario = 0; scenario < sizeof(offset_cases) / sizeof(offset_cases[0]); ++scenario) {
+        if (scenario != 0 &&
+            cna_local_network_gamer_enqueue_packet_ext(local, &event) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        memcpy(buffer, untouched, sizeof(buffer));
+        if (cna_local_network_gamer_receive_data_at(
+                local, buffer, (uint64_t)sizeof(buffer), offset_cases[scenario].offset,
+                &sender, &received) != CNA_RESULT_SUCCESS ||
+            received != UINT64_C(4) ||
+            memcmp(buffer, offset_cases[scenario].expected, sizeof(buffer)) != 0) {
+            fprintf(stderr, "offset receive changed bytes outside its packet at offset %d\n",
+                (int)offset_cases[scenario].offset);
+            return 0;
+        }
+        if (sender != CNA_INVALID_HANDLE &&
+            cna_network_gamer_destroy(sender) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        memcpy(buffer, untouched, sizeof(buffer));
+        if (cna_local_network_gamer_receive_data_at(
+                local, buffer, (uint64_t)sizeof(buffer), offset_cases[scenario].offset,
+                &sender, &received) != CNA_RESULT_SUCCESS ||
+            received != UINT64_C(0) || sender != CNA_INVALID_HANDLE ||
+            memcmp(buffer, untouched, sizeof(buffer)) != 0) {
+            return 0;
+        }
     }
 
     /* The packet-reader overload reports the packet size, as the canonical one does, and the
