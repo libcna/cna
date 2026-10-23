@@ -38,7 +38,15 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     using namespace CNA::Internal::Renderers;
 
-    /** @brief High-performance batched sprite rendering engine matching XNA 4.0 SpriteBatch. */
+    /**
+     * @brief High-performance batched sprite rendering engine matching XNA 4.0 SpriteBatch.
+     *
+     * Dispose releases native storage but preserves the Begin/End pair and device accounting.
+     * Deferred Begin and Draw still perform their ordinary sequencing and argument checks;
+     * an already-open Immediate batch can End. Drawing through its disposed native buffer
+     * throws ObjectDisposedException. Applying disposed sprite state (deferred End or a new
+     * Immediate Begin) also throws ObjectDisposedException instead of accessing freed storage.
+     */
     class SpriteBatch : public GraphicsResource
     {
     private:
@@ -88,7 +96,6 @@ namespace Microsoft::Xna::Framework::Graphics
         void flushSingle(const SpriteInfo& s);
         void drawThroughStockEffect(const SpriteInfo* sprites, std::size_t count);
         void applyRenderState();
-        void throwIfDisposed() const;
 
     protected:
         /**

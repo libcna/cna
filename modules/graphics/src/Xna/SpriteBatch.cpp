@@ -157,21 +157,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!isDisposed_)
         {
             renderer_.reset();
-            spriteQueue_.clear();
-            customEffect_ = nullptr;
-            stockEffect_ = false;
-            begun = false;
+            // Disposal releases native storage, not the XNA Begin/End pair or its queue.
+            // An already-open Immediate batch can still End and release device accounting.
         }
         GraphicsResource::Dispose(disposing);
-    }
-
-    void SpriteBatch::throwIfDisposed() const
-    {
-        if (getIsDisposedProperty())
-        {
-            throw System::ObjectDisposedException(
-                getNameProperty().empty() ? "SpriteBatch" : getNameProperty());
-        }
     }
 
     void SpriteBatch::applyRenderState()
@@ -183,6 +172,10 @@ namespace Microsoft::Xna::Framework::Graphics
             graphicsDevice_->setDepthStencilStateProperty(depthStencilState_);
             graphicsDevice_->setRasterizerStateProperty(rasterizerState_);
         }
+
+        // XNA reaches its destroyed SpriteEffect here (and can fault in native code).
+        // Refuse at that boundary without changing the managed Begin/End bookkeeping.
+        System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "SpriteEffect");
 
         // A deferred batch retains the caller's state object until this flush boundary. Its
         // properties are still mutable between Begin and End, so refresh the renderer's private
@@ -292,7 +285,6 @@ namespace Microsoft::Xna::Framework::Graphics
                             Effect* effect,
                             Matrix transformMatrix)
     {
-        throwIfDisposed();
         if (begun)
             throw System::InvalidOperationException("Begin has been called before calling End.");
 
@@ -398,7 +390,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::End()
     {
-        throwIfDisposed();
         if (!begun)
             throw System::InvalidOperationException("End was called, but Begin has not yet been called.");
         bool rendererEndAttempted = false;
@@ -557,6 +548,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::flushSingle(const SpriteInfo& s)
     {
+        System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "DynamicVertexBuffer");
         if (!renderer_ || !s.texture) return;
         if (stockEffect_)
         {
@@ -738,9 +730,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
@@ -756,9 +747,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& sourceRectangle,
                            Color color)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
@@ -772,9 +762,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, rotation_rad, origin, effect, layerDepth);
     }
@@ -789,9 +778,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
@@ -804,9 +792,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -823,9 +810,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, float scale,
                            SpriteEffects effects, float layerDepth)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -843,9 +829,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, Vector2 scale,
                            SpriteEffects effects, float layerDepth)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -861,9 +846,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle, Color color)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture, destinationRectangle, Rectangle(0, 0, w, h),
@@ -874,9 +858,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& destinationRectangle,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -893,9 +876,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
-        if (!renderer_) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -912,7 +894,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                  Vector2 position,
                                  Color color)
     {
-        throwIfDisposed();
         DrawString(spriteFont, text, position, color, 0.0f, Vector2::Zero,
                    Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f);
     }
@@ -927,7 +908,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects,
                                  float layerDepth)
     {
-        throwIfDisposed();
         DrawString(spriteFont, text, position, color, rotation, origin,
                    Vector2(scale, scale), effects, layerDepth);
     }
@@ -942,9 +922,9 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects,
                                  float layerDepth)
     {
-        throwIfDisposed();
         if (!begun) throw System::InvalidOperationException("SpriteBatch::DrawString called before Begin().");
-        if (!renderer_ || text.empty()) return;
+        if (text.empty()) return;
+        if (!renderer_ && !getIsDisposedProperty()) return;
 
         const Texture2D& texture = spriteFont.textureValue_;
         if (texture.getWidthProperty() == 0) return;
@@ -1059,7 +1039,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                  const System::Text::StringBuilder& text,
                                  Vector2 position, Color color)
     {
-        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color);
     }
 
@@ -1069,7 +1048,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, float scale,
                                  SpriteEffects effects, float layerDepth)
     {
-        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
     }
@@ -1080,7 +1058,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, Vector2 scale,
                                  SpriteEffects effects, float layerDepth)
     {
-        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
     }

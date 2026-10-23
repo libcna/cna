@@ -196,14 +196,14 @@ TEST(SpriteBatchTest, BeginWithoutRendererDoesNotThrow)
     EXPECT_NO_THROW(batch.Begin());
 }
 
-TEST(SpriteBatchTest, RepeatedDisposeRejectsBeginAndEnd)
+TEST(SpriteBatchTest, RepeatedDisposePreservesOpenPair)
 {
     SpriteBatch batch;
     batch.Begin();
     EXPECT_NO_THROW(batch.Dispose());
     EXPECT_NO_THROW(batch.Dispose());
     EXPECT_TRUE(batch.getIsDisposedProperty());
-    EXPECT_THROW(batch.Begin(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
     EXPECT_THROW(batch.End(), System::ObjectDisposedException);
 }
 
@@ -895,15 +895,82 @@ TEST(SpriteBatchLifecycleTest, DisposeReleasesRendererAndIsIdempotent)
     EXPECT_EQ(disposingEvents, 1);
 }
 
-TEST(SpriteBatchLifecycleTest, EveryRenderEntryRejectsDisposedBatch)
+TEST(SpriteBatchLifecycleTest, DisposedClosedBatchRetainsPairValidation)
 {
     SpriteBatch batch;
     Texture2D texture;
     batch.Dispose();
 
-    EXPECT_THROW(batch.Begin(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_THROW(batch.Draw(texture, 0.0f, 0.0f), System::InvalidOperationException);
+    EXPECT_NO_THROW(batch.Begin());
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    // XNA faults in its destroyed SpriteEffect at this boundary; CNA fails safely.
     EXPECT_THROW(batch.End(), System::ObjectDisposedException);
-    EXPECT_THROW(batch.Draw(texture, 0.0f, 0.0f), System::ObjectDisposedException);
+}
+
+TEST(SpriteBatchLifecycleTest, DisposedImmediateEndReleasesAccounting)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 1, 1);
+    SpriteBatch batch(device);
+    SpriteBatch other(device);
+    batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    batch.Dispose();
+    EXPECT_THROW(other.Begin(), System::InvalidOperationException);
+    try
+    {
+        batch.Draw(texture, Vector2::Zero, Color::White);
+        FAIL() << "A disposed Immediate batch must not submit native draws";
+    }
+    catch (const System::ObjectDisposedException& error)
+    {
+        EXPECT_EQ(error.getObjectNameProperty(), "DynamicVertexBuffer");
+    }
+    EXPECT_NO_THROW(batch.End());
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_NO_THROW(other.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend));
+    EXPECT_NO_THROW(other.End());
+    EXPECT_NO_THROW(batch.Begin());
+    EXPECT_NO_THROW(batch.Draw(texture, Vector2::Zero, Color::White));
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+}
+
+TEST(SpriteBatchLifecycleTest, DisposedDeferredQueueRetainsTextureAndAccounting)
+{
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    SpriteBatch other(device);
+    std::weak_ptr<CNA::Internal::Renderers::ITextureRenderer> retained;
+    batch.Begin();
+    {
+        Texture2D texture(device, 1, 1);
+        retained = texture.GetRendererWeak();
+        batch.Draw(texture, Vector2::Zero, Color::White);
+        batch.Dispose();
+        EXPECT_NO_THROW(batch.Draw(texture, Vector2::Zero, Color::White));
+    }
+    EXPECT_FALSE(retained.expired());
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    EXPECT_THROW(other.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend),
+                 System::InvalidOperationException);
+    EXPECT_NO_THROW(batch.Dispose());
+    EXPECT_FALSE(retained.expired());
+}
+
+TEST(SpriteBatchLifecycleTest, DisposedImmediateBeginDoesNotPublishPair)
+{
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    SpriteBatch other(device);
+    batch.Dispose();
+    EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_NO_THROW(other.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend));
+    EXPECT_NO_THROW(other.End());
+    EXPECT_NO_THROW(batch.Begin());
 }
 
 // -----------------------------------------------------------------------
