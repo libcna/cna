@@ -149,6 +149,30 @@ namespace Microsoft::Xna::Framework::Content
                 ResolveRootRelativeSidecarPath(cm, manifestPath, field, relativePath));
         }
 
+        // XNA resolves a reference from the referring asset's own directory
+        // (ContentReader.GetPathToReference). A .cnb names it relative to the root it was compiled
+        // against and records its own name there, so the name it is loaded by, minus that compiled
+        // name, is where the build sits below this manager's root (CNA-DEMOS-ISSUE-020).
+        std::string CnbReferenceNameEXT(const CNA::Content::Cnb::CnbDocument& document,
+                                        const std::string& assetName,
+                                        const std::string& reference)
+        {
+            const std::string& compiled = document.Metadata().contentName;
+            if (compiled.empty() || reference.empty()) { return reference; }
+            std::string loaded = assetName;
+            std::replace(loaded.begin(), loaded.end(), '\\', '/');
+            if (loaded.ends_with(".cnb") && !compiled.ends_with(".cnb"))
+            {
+                loaded.resize(loaded.size() - 4);
+            }
+            if (loaded.size() <= compiled.size() || !loaded.ends_with(compiled) ||
+                loaded[loaded.size() - compiled.size() - 1] != '/')
+            {
+                return reference;
+            }
+            return loaded.substr(0, loaded.size() - compiled.size()) + reference;
+        }
+
         // plans/plan_cnj.md CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
         // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
         // "sourceFile" field. Reject it explicitly with a clear error instead of silently

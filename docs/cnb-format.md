@@ -220,6 +220,8 @@ Both halves of that rule are implemented: `CnbLoaderRegistry::ResolveForDocument
 read and `CnbWriter::Build` enforces it on write, so a custom file that could never be loaded
 cannot be produced in the first place.
 
+`contentName` never decides identity; a loader reads it only to place `XREF` names (below).
+
 **`XREF` — optional, at most one, marked `Mandatory`. External asset references.**
 
 ```text
@@ -231,12 +233,16 @@ count × {
 }
 ```
 
-`logicalName` is relative to the content root the file was compiled against, not to the `.cnb`'s
-own directory as an `.xnb` external reference is in XNA: a compiled model therefore loads through a
-`ContentManager` rooted where it was compiled, and moving it into a subdirectory needs a
-recompile (living-room-simulator R-28). It is validated on read **and on write**, by one shared function
-(`CnbLogicalNameProblem()`): non-empty, well-formed UTF-8, no backslash, not starting with `/`, not
-drive-qualified (`X:`), and containing no `..` segment. `ContentManager`'s own containment checks
+`logicalName` is relative to the content root the file was compiled against, and `CMET`'s
+`contentName` records the file's own name under that root. A loader resolves a reference where the
+build sits below its `ContentManager`'s root: when the name the asset is loaded by ends in
+`contentName` at a `/` boundary, the remaining prefix is prepended to `logicalName`. That gives an
+`.xnb`'s result -- XNA resolves an external reference from the referring asset's own directory --
+so a content build may sit in a subdirectory of the manager's root (CNA-DEMOS-ISSUE-020; this
+replaces the recompile living-room-simulator R-28 needed). Without a `contentName` that the loaded
+name ends in, `logicalName` stays relative to the manager's root. It is validated on read **and
+on write**, by one shared function (`CnbLogicalNameProblem()`): non-empty, well-formed UTF-8, no
+backslash, not starting with `/`, not drive-qualified (`X:`), and containing no `..` segment. `ContentManager`'s own containment checks
 still run afterwards; this is defence in depth, so a compiled file can never hand path-traversal
 input to the resolver in the first place. Sharing the rule is what stops a writer producing a file
 its own reader refuses — the reader used to be alone in applying it.

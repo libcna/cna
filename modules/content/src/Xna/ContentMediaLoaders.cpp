@@ -169,8 +169,10 @@ namespace Microsoft::Xna::Framework::Content
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
                const std::string& assetName) -> std::any
             {
-                return std::any(BuildSongFromCnbEXT(
-                    CNA::Content::Cnb::DecodeSongFromCnb(document), contentManager, assetName));
+                auto data = CNA::Content::Cnb::DecodeSongFromCnb(document);
+                data.streamReference =
+                    detail::CnbReferenceNameEXT(document, assetName, data.streamReference);
+                return std::any(BuildSongFromCnbEXT(data, contentManager, assetName));
             });
     }
 
@@ -191,8 +193,10 @@ namespace Microsoft::Xna::Framework::Content
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
                const std::string& assetName) -> std::any
             {
-                return std::any(BuildVideoFromCnbEXT(
-                    CNA::Content::Cnb::DecodeVideoFromCnb(document), contentManager, assetName));
+                auto data = CNA::Content::Cnb::DecodeVideoFromCnb(document);
+                data.streamReference =
+                    detail::CnbReferenceNameEXT(document, assetName, data.streamReference);
+                return std::any(BuildVideoFromCnbEXT(data, contentManager, assetName));
             });
     }
 

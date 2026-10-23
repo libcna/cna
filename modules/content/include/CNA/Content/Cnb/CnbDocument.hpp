@@ -117,8 +117,9 @@ namespace CNA::Content::Cnb
         /**
          * @brief The logical content name the compiler was given, or empty.
          *
-         * Provenance only -- nothing reads it to make a decision. Unlike @ref assetTypeName, this
-         * is diagnostic for every asset type.
+         * Besides provenance, it tells a loader where the content build sits below its
+         * ContentManager's root, so `XREF` names resolve beside the asset as in XNA
+         * (`docs/cnb-format.md`, `XREF`). It never decides the asset's type.
          */
         std::string contentName;
     };

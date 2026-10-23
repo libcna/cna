@@ -4872,15 +4872,34 @@ namespace Microsoft::Xna::Framework::Content
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
                const std::string& assetName) -> std::any
             {
+                const auto relocate = [&](std::string& reference)
+                { reference = detail::CnbReferenceNameEXT(document, assetName, reference); };
                 if (document.AssetSchemaVersion() ==
                     CNA::Content::Cnb::CnbModelV2SchemaVersion)
                 {
-                    return std::any(BuildModelV2FromCnbEXT(
-                        CNA::Content::Cnb::DecodeModelV2FromCnb(document),
-                        contentManager, assetName));
+                    auto data = CNA::Content::Cnb::DecodeModelV2FromCnb(document);
+                    for (auto& effect : data.effects)
+                    {
+                        relocate(effect.primaryTexture);
+                        relocate(effect.secondaryTexture);
+                        relocate(effect.cubeTexture);
+                    }
+                    return std::any(BuildModelV2FromCnbEXT(data, contentManager, assetName));
                 }
-                return std::any(BuildModelFromCnbEXT(
-                    CNA::Content::Cnb::DecodeModelFromCnb(document), contentManager, assetName));
+                auto data = CNA::Content::Cnb::DecodeModelFromCnb(document);
+                for (auto& part : data.parts)
+                {
+                    for (std::string* texture :
+                         {&part.material.baseColorTexture, &part.material.texture2,
+                          &part.material.normalMap, &part.material.metallicRoughnessMap,
+                          &part.material.emissiveMap, &part.material.occlusionMap,
+                          &part.material.specularMap, &part.material.specularColorMap})
+                    {
+                        relocate(*texture);
+                    }
+                    relocate(part.externalEffect);
+                }
+                return std::any(BuildModelFromCnbEXT(data, contentManager, assetName));
             });
     }
 

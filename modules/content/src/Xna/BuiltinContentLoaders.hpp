@@ -53,6 +53,9 @@ namespace Microsoft::Xna::Framework::Content::detail
                                              const std::string& manifestPath,
                                              const char* field,
                                              const std::string& relativePath);
+    /** @brief A compiled reference of @p document as named below this manager's root. */
+    std::string CnbReferenceNameEXT(const CNA::Content::Cnb::CnbDocument& document,
+                                    const std::string& assetName, const std::string& reference);
     /** @brief Refuses a "sourceFile" on a .cnj whose type is self-contained. */
     void RejectSourceFileForSelfContainedCnj(const CNA::Internal::CnjEnvelope& envelope,
                                              const std::string& typeName,
