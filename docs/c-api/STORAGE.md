@@ -68,9 +68,17 @@ reading answers `CNA_FALSE` to `cna_storage_stream_get_can_write`, and writing t
 
 `CNA_FILE_MODE_*`, `CNA_FILE_ACCESS_*`, `CNA_FILE_SHARE_*` and `CNA_SEEK_ORIGIN_*` carry the exact
 canonical ordinals, pinned by static assertions in the adapter. `CNA_FILE_SHARE_*` is a bit set;
-unknown bits are rejected. The canonical container currently ignores the share selection, so
-`cna_storage_container_open_file_share` differs from `cna_storage_container_open_file_access` only
-in which selection the caller states explicitly.
+unknown bits are rejected. `cna_storage_container_open_file_share` forwards the selection to
+the canonical native stream. Windows enforces the access/share masks. POSIX follows .NET's
+advisory policy: None takes an exclusive lock, other values a shared lock; unsupported locking
+is best-effort. A sharing conflict returns `CNA_RESULT_IO`, leaves the output handle invalid,
+and is checked before truncation. It does not impose mandatory locks on unrelated Unix tools.
+
+`cna_storage_container_create_file`, `cna_storage_container_open_file` and
+`cna_storage_container_open_file_access` default to exclusive sharing (None).
+The mode-only open chooses write access for Append and read/write otherwise, matching XNA.
+These contracts replace the previously documented ignored-share/read-write-default behavior
+as part of CNA-DEMOS-ISSUE-152; no C signature or handle ownership rule changes.
 
 ## Application name and storage root
 

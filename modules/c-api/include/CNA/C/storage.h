@@ -523,7 +523,7 @@ CNA_C_API CNA_Result cna_storage_container_copy_file_name(
     uint64_t* out_bytes);
 
 /**
- * @brief Creates or truncates a file and opens it for writing.
+ * @brief Creates or truncates a file and opens it for exclusive read/write access.
  *
  * @param container Owned container handle.
  * @param file UTF-8 relative file path.
@@ -538,7 +538,8 @@ CNA_C_API CNA_Result cna_storage_container_create_file(
     CNA_StorageStreamHandle* out_stream);
 
 /**
- * @brief Opens a file with an explicit mode, defaulting access and sharing to read/write.
+ * @brief Opens a file with an explicit mode and exclusive sharing.
+ * Access is write-only for Append and read/write otherwise.
  *
  * @param container Owned container handle.
  * @param file UTF-8 relative file path.
@@ -554,7 +555,7 @@ CNA_C_API CNA_Result cna_storage_container_open_file(
     CNA_StorageStreamHandle* out_stream);
 
 /**
- * @brief Opens a file with an explicit mode and access, defaulting sharing to read/write.
+ * @brief Opens a file with an explicit mode and access, defaulting sharing to None.
  *
  * @param container Owned container handle.
  * @param file UTF-8 relative file path.
@@ -583,8 +584,10 @@ CNA_C_API CNA_Result cna_storage_container_open_file_access(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown identity, or a
  * documented handle/thread/native failure.
  *
- * The canonical implementation currently ignores @p file_share, so this route differs from
- * `cna_storage_container_open_file_access` only in which selection the caller states explicitly.
+ * Sharing follows the canonical native .NET platform policy: Windows enforces access/share
+ * masks; POSIX uses advisory exclusive locking for None and shared locking otherwise, with
+ * best-effort behavior on filesystems without locking. A sharing conflict returns
+ * `CNA_RESULT_IO`, leaves @p out_stream invalid, and does not truncate existing data.
  */
 CNA_C_API CNA_Result cna_storage_container_open_file_share(
     CNA_StorageContainerHandle container,

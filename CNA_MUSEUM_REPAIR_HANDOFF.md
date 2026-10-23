@@ -29,6 +29,8 @@ by this validation step.
 
 ### Current task: CNA-DEMOS-ISSUE-152 native handle repair and consumer validation (2026-10-23)
 
+The CNA facade/native tests are published as
+`21b4cd64cd122353431dafb5793a19ac568956fd` (normal push83014, ls-remote verified).
 The lower-layer repair is published in Sharp Runtime as
 `c6984ecef98aa6a04634e76145763545a90c68fe` (normal push25211, ls-remote verified).
 It uses one native handle, Windows
@@ -70,13 +72,27 @@ C API storage2/2 PASS on each renderer (35/38 internal child checks, outer check
 
 Additional actual .NET8.0.31 oracle covers all16 legal Delete/Inheritable sharing masks:
 2304pairs,2025allowed/279refused,zero native-policy mismatches; append-boundary controls pass.
-Source: demos docs/repair-evidence/storage/FileShareFlagsOracle.cs. Framework4 comparison is
-in progress; do not claim its result until the saved run is complete.
+Source: demos docs/repair-evidence/storage/FileShareFlagsOracle.cs. Genuine Framework4 under
+Wine also passes:2304pairs,400allowed/1904refused,zero policy mismatches/append failures.
+First reference compile failed on a path spelling (retained); corrected -v2 compile/run passes.
 
-Next: publish this CNA facade/test batch after the already-published dependency, remove the
-now-stale152 marker with assertions unchanged, then finish full corpus/visual/CTest comparisons
-before marking permanent disposition. Stage only owned issue-status hunks in shared dirty
-documents. This commit is NOT a full CNA corpus or full repaired-demo sweep claim.
+The marker-only demo rebuild is complete. Full SOFTWARE smoke is running in session64878,
+scope cna-fileshare-full-software-1023, through the existing complete-category driver.
+Artifacts are frozen in repair-fileshare-full-artifacts.sha256 (275 files). Do not rebuild
+them during the sweep. Latest full predecessor is repair-sprite-binding-full; its existing
+unmarked c_api.content.content_manager/resource_lifecycle failures and stale010/011 passes
+are still visible, not accepted or reclassified. Peak observed scope memory <900MiB.
+
+C API follow-up (this checkpoint): storage.h/STORAGE.md no longer claim ignored sharing or
+ReadWrite short defaults; StorageSmoke.c adds native conflict->IO/invalid-handle/nontruncation,
+shared-reader positive controls and Append/default checks. Strict C17/Wall/Wextra/Wpedantic/
+Werror compile and no-window actual shared-library runtime PASS; linkage log records the
+rebuilt external C ABI. No adapter implementation/signature or demo oracle changed.
+
+Next: finish SOFTWARE, run OPENGLES3 sequentially, exact visuals and full CTest; compare
+failure/assertion/status deltas before final152 disposition. Then commit only owned status
+hunks in shared dirty documents. See demos docs/repair-evidence/storage/FILE_SHARE.md.
+This checkpoint is NOT a full CNA corpus or full repaired-demo sweep pass claim.
 Evidence prefix: demos build/linux-full/reports/repair-fileshare-*.
 Campaign remains156 historical IDs/40 pending until the actual issue disposition is updated.
 

@@ -509,6 +509,57 @@ static int validate_access_and_share(const CNA_StorageContainerHandle container)
         &stream) == CNA_RESULT_IO;
 }
 
+static int validate_sharing_boundaries(const CNA_StorageContainerHandle container)
+{
+    CNA_StorageStreamHandle first = CNA_INVALID_HANDLE;
+    CNA_StorageStreamHandle second = UINT64_C(77);
+    int64_t length = INT64_C(-1);
+    CNA_Bool readable = CNA_TRUE;
+    CNA_Bool writable = CNA_FALSE;
+
+    // Native OS sharing is unavailable on the browser virtual filesystem.
+#if !defined(__EMSCRIPTEN__)
+    if (cna_storage_container_open_file_share(container, view("save.dat"), CNA_FILE_MODE_OPEN,
+            CNA_FILE_ACCESS_READ, CNA_FILE_SHARE_NONE, &first) != CNA_RESULT_SUCCESS ||
+        cna_storage_container_open_file_share(container, view("save.dat"), CNA_FILE_MODE_OPEN,
+            CNA_FILE_ACCESS_READ, CNA_FILE_SHARE_READ, &second) != CNA_RESULT_IO ||
+        second != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    second = UINT64_C(77);
+    if (cna_storage_container_create_file(container, view("save.dat"), &second) != CNA_RESULT_IO ||
+        second != CNA_INVALID_HANDLE ||
+        cna_storage_stream_get_length(first, &length) != CNA_RESULT_SUCCESS || length != 4 ||
+        cna_storage_stream_close(first) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    // The shorter overload is exclusive too; failure must not create an owned child handle.
+    if (cna_storage_container_open_file(container, view("save.dat"), CNA_FILE_MODE_OPEN, &first) != CNA_RESULT_SUCCESS ||
+        cna_storage_container_open_file_share(container, view("save.dat"), CNA_FILE_MODE_OPEN,
+            CNA_FILE_ACCESS_READ, CNA_FILE_SHARE_READ_WRITE, &second) != CNA_RESULT_IO ||
+        second != CNA_INVALID_HANDLE || cna_storage_stream_close(first) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+#endif
+    // Positive control: released exclusivity permits two explicit read-shared streams.
+    if (cna_storage_container_open_file_share(container, view("save.dat"), CNA_FILE_MODE_OPEN,
+            CNA_FILE_ACCESS_READ, CNA_FILE_SHARE_READ, &first) != CNA_RESULT_SUCCESS ||
+        cna_storage_container_open_file_share(container, view("save.dat"), CNA_FILE_MODE_OPEN,
+            CNA_FILE_ACCESS_READ, CNA_FILE_SHARE_READ, &second) != CNA_RESULT_SUCCESS ||
+        cna_storage_stream_close(second) != CNA_RESULT_SUCCESS ||
+        cna_storage_stream_close(first) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_storage_container_open_file(container, view("save.dat"), CNA_FILE_MODE_APPEND, &first) != CNA_RESULT_SUCCESS ||
+        cna_storage_stream_get_can_read(first, &readable) != CNA_RESULT_SUCCESS || readable != CNA_FALSE ||
+        cna_storage_stream_get_can_write(first, &writable) != CNA_RESULT_SUCCESS || writable != CNA_TRUE ||
+        cna_storage_stream_get_position(first, &length) != CNA_RESULT_SUCCESS || length != 4 ||
+        cna_storage_stream_close(first) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
 static int validate_files(const CNA_StorageContainerHandle container)
 {
     static const uint8_t payload[8] = {0x10U, 0x20U, 0x30U, 0x40U, 0x50U, 0x60U, 0x70U, 0x80U};
@@ -550,6 +601,9 @@ static int validate_files(const CNA_StorageContainerHandle container)
         return 0;
     }
     if (!validate_access_and_share(container)) {
+        return 0;
+    }
+    if (!validate_sharing_boundaries(container)) {
         return 0;
     }
     if (cna_storage_container_delete_file(container, view("save.dat")) != CNA_RESULT_SUCCESS) {
