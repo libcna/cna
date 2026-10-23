@@ -218,10 +218,8 @@ static int validate_properties(const CNA_Handle game)
         cna_game_copy_type_name(game, text, UINT64_C(2), &bytes) != CNA_RESULT_BUFFER_TOO_SMALL) {
         return 0;
     }
-    /* Forgetting the accumulated time is an ordinary request from inside a frame; stepping a frame
-       is not, and is refused for the same reason running the game from inside a callback is. */
-    return cna_game_reset_elapsed_time(game) == CNA_RESULT_SUCCESS &&
-        cna_game_tick(game) == CNA_RESULT_INVALID_STATE;
+    /* Driving a frame from a callback is refused; an ordinary tick outside one is allowed. */
+    return cna_game_tick(game) == CNA_RESULT_INVALID_STATE;
 }
 
 static int validate_launch_parameters(const CNA_Handle game)
@@ -733,6 +731,11 @@ static CNA_Result on_update(
         !validate_content_manager(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
+    /* Exercise reset inside a callback once. Resetting every Update would deliberately discard
+       the next fixed-step clock sample and interfere with the independent draw-count checks. */
+    if (!state->validated && cna_game_reset_elapsed_time(game) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
     state->validated = 1;
     return CNA_RESULT_SUCCESS;
 }
@@ -800,6 +803,11 @@ int main(void)
        Initialize set, so the reversal breaks them at the first frame. */
     if (strncmp(smoke_state.order, "ilu", 3U) != 0) {
         return CNA_TEST_FAIL(2);
+    }
+    /* Consume the one pending reset before testing draw suppression. With XNA's fixed-step
+       semantics this call may have no Update/Draw; it is not the suppressed drawing frame. */
+    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+        return CNA_TEST_FAIL(3);
     }
     /* Suppressing the draw skips exactly one frame's drawing. */
     {

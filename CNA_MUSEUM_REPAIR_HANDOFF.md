@@ -27,7 +27,32 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: finish C API audit checkpoint, then ISSUE-150 (2026-10-23)
+### Current task: ISSUE-150 facade retirement validation (2026-10-23)
+
+C API audit commit079a2fbe2891dae7e144a95a55963fa45adb48de is published and its remote SHA verified.
+ISSUE-150 remains OPEN until validation/closure. The issue explicitly permits retiring the
+declaration-only facade instead of inventing a new subsystem-lifetime API. A repository-wide
+search finds no production includer/caller; the original standalone reproducer still fails all
+five link symbols in the pre-repair log. Candidate removes CNA/Misc.hpp, its eleven C inventory
+rows and obsolete limitation theme, documents Game/C game lifecycle and preserves the historical
+CBIND-037E5 record. CNA::Runtime the CMake module target is unrelated and remains unchanged.
+New CApi_RetiredRuntimeFacade checks header absence plus the five exact retired method names;
+it intentionally does not reject CNA::Runtime::Testing. Before header removal its new check
+failed on the old public header; after removal it passes against the actual runtime archive.
+Original reproducer remains unchanged. One-job/6GiB incremental CnaRuntimeTests build is running;
+next run native runtime regression, clean/shared C API gates and the external consumer checks.
+No facade closure, new sanitizer claim or new full renderer checkpoint yet.
+
+Additional native C smoke audit exposed an independent stale ISSUE-019 test assumption:
+RuntimeGameSmoke reset the clock in every Update and then expected each of two fixed-step calls
+to draw. Its fresh run fails exit3 at the draw-count check; RuntimeComponentsSmoke passes.
+Genuine XNA clock evidence and the seven native reset tests already establish that a reset step
+may execute no Update/Draw. The test now exercises ResetElapsedTime once inside Update, consumes
+its pending clock-reset step before the independent SuppressDraw checks, and preserves the reset
+success, callback-reentry and exact draw-count assertions. No runtime implementation changed.
+Separate test-only fix: strict C build passes; both C runtime smoke tests pass on OPENGLES3
+in10.57s and on SOFTWARE in0.38s. Logs repair-runtime-facade-c-smoke-ctest (original failure) and
+repair-reset-c-smoke-isolation-* (repair). Commit this fixture correction separately from150.
 
 ISSUE-019 publication is VERIFIED: origin/next CNA70a7a4ef9f01faf071cbda6d3868de75ba5d56ba,
 demosfe283d03b2054cbc8ef766358d0a1644609c78e8. Normal fast-forward pushes only; all owned019
