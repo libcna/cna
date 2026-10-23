@@ -61,6 +61,50 @@ static int name_equals(const CNA_ModelMeshHandle mesh, const char* const expecte
            count == expected_size && memcmp(bytes, expected, (size_t)count) == 0;
 }
 
+/* CNA-DEMOS-ISSUE-081: a mesh built from parts that already carry effects starts with each
+ * distinct effect in Effects, in part order, and its retention is released with it. */
+static int validate_preattached_effects(const CNA_Handle device)
+{
+    CNA_ModelMeshPartHandle parts[3] = {
+        CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE};
+    CNA_EffectHandle first = CNA_INVALID_HANDLE;
+    CNA_EffectHandle second = CNA_INVALID_HANDLE;
+    CNA_EffectHandle returned = CNA_INVALID_HANDLE;
+    CNA_ModelMeshHandle mesh = CNA_INVALID_HANDLE;
+    CNA_ModelEffectCollectionHandle effects = CNA_INVALID_HANDLE;
+    uint64_t count = UINT64_MAX;
+
+    REQUIRE(cna_model_mesh_part_create_default(&parts[0]) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_create_default(&parts[1]) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_create_default(&parts[2]) == CNA_RESULT_SUCCESS &&
+            cna_basic_effect_create(device, &first) == CNA_RESULT_SUCCESS &&
+            cna_basic_effect_create(device, &second) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_set_effect(parts[0], first) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_set_effect(parts[1], second) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_set_effect(parts[2], first) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_model_mesh_create(device, parts, 3U, &mesh) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_get_effects(mesh, &effects) == CNA_RESULT_SUCCESS &&
+            cna_model_effect_collection_get_count(effects, &count) == CNA_RESULT_SUCCESS &&
+            count == 2U &&
+            cna_model_effect_collection_get_at(effects, 0U, &returned) == CNA_RESULT_SUCCESS &&
+            returned == first &&
+            cna_model_effect_collection_get_at(effects, 1U, &returned) == CNA_RESULT_SUCCESS &&
+            returned == second);
+    /* The seeded list keeps following the parts. */
+    REQUIRE(cna_model_mesh_part_set_effect(parts[1], CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
+            cna_model_effect_collection_get_count(effects, &count) == CNA_RESULT_SUCCESS &&
+            count == 1U);
+    /* Once mesh and parts are gone nothing retains the effects. */
+    REQUIRE(cna_model_effect_collection_destroy(effects) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_destroy(mesh) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_destroy(parts[0]) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_destroy(parts[1]) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_part_destroy(parts[2]) == CNA_RESULT_SUCCESS &&
+            cna_effect_destroy(first) == CNA_RESULT_SUCCESS &&
+            cna_effect_destroy(second) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
 static int validate_meshes(const CNA_Handle device)
 {
     static const char MeshName[] = "MÅÃ­Å¾";
@@ -251,7 +295,7 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 1;
-    if (!validate_meshes(state->device)) {
+    if (!validate_meshes(state->device) || !validate_preattached_effects(state->device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 2;

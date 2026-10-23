@@ -544,6 +544,10 @@ CNA_C_API CNA_Result cna_model_mesh_part_collection_get_at(
 
 /**
  * @brief Creates an unnamed model mesh from retained parts.
+ *
+ * Each distinct effect a part already carries starts in the mesh's effect collection, in part
+ * order, as if it had been assigned while the part belonged to the mesh.
+ *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param parts Caller-owned part-handle array, or null only for zero count.
  * @param part_count Number of handles in @p parts.
@@ -558,6 +562,9 @@ CNA_C_API CNA_Result cna_model_mesh_create(
 
 /**
  * @brief Creates a named model mesh from retained parts and copied UTF-8.
+ *
+ * The mesh's effect collection starts as `cna_model_mesh_create` describes.
+ *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param name Mesh name copied by the call.
  * @param parts Caller-owned part-handle array, or null only for zero count.

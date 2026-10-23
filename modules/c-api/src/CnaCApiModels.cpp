@@ -1295,6 +1295,21 @@ void AddMeshEffect(
         mesh->parts[index]->detachedValue = detachedParts[index];
         mesh->parts[index]->parentMesh = mesh.get();
     }
+    // The native mesh seeds its Effects from the parts' existing effects; the retained list
+    // follows it, one entry per distinct effect in part order (CNA-DEMOS-ISSUE-081).
+    for (const std::shared_ptr<PartResource>& part : mesh->parts) {
+        const CNA_EffectHandle effectHandle = part->effect.handle;
+        if (effectHandle == CNA_INVALID_HANDLE ||
+            FindMeshEffect(*mesh, effectHandle) != mesh->effects.end()) {
+            continue;
+        }
+        auto effect = std::static_pointer_cast<EffectResource>(part->effect.owner);
+        if (effect->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
+            return Overflow("The ModelMesh Effect retention count overflowed.");
+        }
+        mesh->effects.reserve(mesh->effects.size() + 1U);
+        AddMeshEffect(*mesh, effectHandle, effect);
+    }
     mesh->value = named
         ? std::make_shared<ModelMesh>(device->value, name, std::move(nativeParts))
         : std::make_shared<ModelMesh>(device->value, std::move(nativeParts));

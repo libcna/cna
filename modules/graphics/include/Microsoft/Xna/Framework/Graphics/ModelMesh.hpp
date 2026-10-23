@@ -25,7 +25,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Constructs a mesh from a graphics device and parts.
          * @param graphicsDevice A valid reference to the GraphicsDevice.
-         * @param parts The mesh parts that make up this mesh.
+         * @param parts The mesh parts that make up this mesh. Each distinct effect a part already
+         * carries starts in @ref getEffectsProperty, in part order.
          */
         CNAEXT ModelMesh(GraphicsDevice* graphicsDevice, std::vector<ModelMeshPart*> parts);
 
@@ -33,7 +34,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Constructs a named mesh from a graphics device and parts.
          * @param graphicsDevice A valid reference to the GraphicsDevice.
          * @param name The name of this mesh.
-         * @param parts The mesh parts that make up this mesh.
+         * @param parts The mesh parts that make up this mesh. Each distinct effect a part already
+         * carries starts in @ref getEffectsProperty, in part order.
          */
         CNAEXT ModelMesh(GraphicsDevice* graphicsDevice, std::string name,
                         std::vector<ModelMeshPart*> parts);

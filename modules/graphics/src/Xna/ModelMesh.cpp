@@ -11,11 +11,8 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     ModelMesh::ModelMesh(GraphicsDevice* graphicsDevice, std::vector<ModelMeshPart*> parts)
-        : graphicsDevice_(graphicsDevice)
+        : ModelMesh(graphicsDevice, std::string(), std::move(parts))
     {
-        meshParts_.parts_ = std::move(parts);
-        for (ModelMeshPart* part : meshParts_.parts_)
-            part->parent_ = this;
     }
 
     ModelMesh::ModelMesh(GraphicsDevice* graphicsDevice, std::string name,
@@ -25,7 +22,14 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         meshParts_.parts_ = std::move(parts);
         for (ModelMeshPart* part : meshParts_.parts_)
+        {
             part->parent_ = this;
+            // A part that already carries an effect contributes it now, exactly as
+            // ModelMeshPart::setEffectProperty would once the part belongs to this mesh
+            // (CNA-DEMOS-ISSUE-081).
+            if (part->effect_ != nullptr && !effects_.Contains(part->effect_))
+                effects_.Add(part->effect_);
+        }
     }
 
     BoundingSphere ModelMesh::getBoundingSphereProperty() const { return boundingSphere_; }
