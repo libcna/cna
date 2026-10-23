@@ -1021,6 +1021,42 @@ TEST(SignedInGamerTest, AMalformedOfflineCatalogIsRefusedNamingTheFile) {
     }
 }
 
+TEST(SignedInGamerTest, OfflineCatalogNeverReportsEarnedOnline) {
+    GamerServicesStoreGuard store;
+    OfflineTitleGuard title("offline-title");
+    auto gamer = SignedInGamer::CreateInternal("offline_origin");
+    const auto before = gamer.GetAchievements();
+    ASSERT_EQ(2, before.getCountProperty());
+    for (const auto& value : before) {
+        EXPECT_FALSE(value.getIsEarnedProperty());
+        EXPECT_FALSE(value.getEarnedOnlineProperty());
+    }
+    gamer.AwardAchievement("first-steps");
+    auto reopened = SignedInGamer::CreateInternal("offline_origin");
+    const auto after = reopened.GetAchievements();
+    ASSERT_EQ(2, after.getCountProperty());
+    EXPECT_TRUE(after["first-steps"].getIsEarnedProperty());
+    EXPECT_FALSE(after["hidden.one"].getIsEarnedProperty());
+    for (const auto& value : after) EXPECT_FALSE(value.getEarnedOnlineProperty());
+    EXPECT_FALSE(before["first-steps"].getIsEarnedProperty());
+}
+
+TEST(SignedInGamerTest, OfflineStoreWithoutCatalogNeverReportsEarnedOnline) {
+    GamerServicesStoreGuard store;
+    OfflineTitleGuard title("offline-title-absent");
+    auto gamer = SignedInGamer::CreateInternal("offline_origin");
+    gamer.AwardAchievement("first");
+    const auto saved = gamer.GetAchievements();
+    ASSERT_EQ(1, saved.getCountProperty());
+    EXPECT_TRUE(saved[0].getIsEarnedProperty());
+    EXPECT_FALSE(saved[0].getEarnedOnlineProperty());
+    auto reopened = SignedInGamer::CreateInternal("offline_origin");
+    const auto restored = reopened.GetAchievements();
+    ASSERT_EQ(1, restored.getCountProperty());
+    EXPECT_EQ(saved[0], restored[0]);
+    EXPECT_FALSE(restored[0].getEarnedOnlineProperty());
+}
+
 // Without a catalog an offline profile still counts what this title recorded: no scores (nothing
 // defines them), one title once something was earned.
 TEST(SignedInGamerTest, AnOfflineProfileWithoutACatalogCountsEarnedAchievements) {

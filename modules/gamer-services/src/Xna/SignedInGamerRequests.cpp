@@ -193,6 +193,8 @@ namespace Microsoft::Xna::Framework::GamerServices
                     : System::DateTime(0);
                 auto value = Achievement::CreateInternal(record.key, record.name, record.description,
                     record.displayBeforeEarned, record.earnedTicks != 0, earned);
+                // Only this authenticated service path establishes an online award.
+                value.earnedOnline_ = record.earnedTicks != 0;
                 value.gamerScore_ = record.score; value.howToEarn_ = record.howToEarn;value.pictureHash_=record.picture;
                 values.push_back(std::move(value));
             }

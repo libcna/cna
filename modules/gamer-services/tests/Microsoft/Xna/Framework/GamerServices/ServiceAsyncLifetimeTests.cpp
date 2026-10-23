@@ -219,3 +219,18 @@ TEST_F(ServiceReadLifetimeTest, EarnedDateTimeIsTheServiceTimeInLocalTime) {
     EXPECT_EQ(System::DateTimeKind::Local,earned.getKindProperty());
     EXPECT_EQ(utc.ToLocalTime(System::TimeZone::CurrentTimeZone()).getTicksProperty(),earned.getTicksProperty());
 }
+
+TEST_F(ServiceReadLifetimeTest, EarnedOnlineRequiresAnActualServiceAward) {
+    auto* gamer = actor();
+    const auto before = gamer->GetAchievements();
+    ASSERT_EQ(1, before.getCountProperty());
+    EXPECT_FALSE(before[0].getIsEarnedProperty());
+    EXPECT_FALSE(before[0].getEarnedOnlineProperty());
+    gamer->AwardAchievement("first");
+    const auto after = gamer->GetAchievements();
+    ASSERT_EQ(1, after.getCountProperty());
+    EXPECT_TRUE(after[0].getIsEarnedProperty());
+    EXPECT_TRUE(after[0].getEarnedOnlineProperty());
+    EXPECT_FALSE(before[0].getIsEarnedProperty());
+    EXPECT_FALSE(before[0].getEarnedOnlineProperty());
+}

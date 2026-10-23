@@ -66,21 +66,30 @@ AchievementCollectionXnaOracle.cs; ignored reports repair-achievements-*. Artifa
 
 Publication VERIFIED: CNA origin/next f3ac0166b4e79f855b28df156e5cb0d4319e74b8,
 demos origin/next46b16ee3398e83cddbc981222c62e7e200592319. Normal pushes only.
-Current next task017: four new native regressions added for synthetic values, offline catalog,
-offline store without catalog, and service award state. Runtime and old expectations unchanged.
-Witness build passed; all four *EarnedOnline* witnesses FAIL before repair in0.002s.
-Candidate now defaults synthetic/offline values to false and marks only earned service records true.
-Public docs state the synthetic default. Corrected one old native and one C synthetic-fixture
-assumption; added C assertions for persisted offline provenance. No storage/ABI changes.
-After-build passed. Full native732=731PASS/1unchanged rendererSKIP (78.538s), all728 prior
-outcomes retained and4newPASS; six C gamer controlsPASS0.20s. Corrected the earlier077/078
-reporting count:727PASS/1SKIP, not728PASS; same pre-existing no-3D upload fixture skip.
-Consumer build scope cna-achievement-origin-consumer-build/session20621 is running, one compiler.
-Next original award14 checks on SOFTWARE/OPENGLES3, then remove017 marker only after passing.
+Current task017 is validated and ready for a coherent source commit. Four focused witnesses
+failed before repair (0.002s); candidate defaults synthetic/offline EarnedOnline to false and sets
+true only for earned authenticated service records. Public native/C docs state the synthetic
+default. Corrected one old native and one C synthetic-fixture assertion; added C offline provenance
+control. No ABI, storage serialization, copy or ownership changes. Original award14 assertions
+are unchanged and PASS on SOFTWARE/OPENGLES3;017 marker removed only after these passes.
+Full native732=731PASS/1unchanged declared rendererSKIP78.538s, all728 prior outcomes retained
+and4newPASS. Six C gamer controlsPASS0.20s. Native build17 existing nodiscard warnings in unchanged
+expressions, consumer builds no warnings. Generated3197 routes/57 files current.
+SOFTWARE35 and OPENGLES3 35 each33PASS/1unchanged085FAIL/1manualNOTRUN. Exact comparison against
+077/078 changes only017 FAILED->PASSED and one additional C signed-in provenance assertion;
+other33 rows retain all outcomes/assertion multiplicities. Five registered achievement/catalog
+CTestsPASS11.38s; award now passes normally, without expected-failure policy. Catalog719 valid,
+only017 metadata changed. All275 frozen artifact hashes verified after final tests; freeze released.
+No new full719/native aggregate/sanitizer/visual/other-platform/live-service claim. Evidence:
+demos docs/repair-evidence/gamer/EARNED_ONLINE.md; ignored reports repair-achievement-origin-*.
+Corrections-only publication verified: CNA f61dc24ef5646cc0a759575882f5b633eca275d9 and demos
+b190f8f102bf37fa8e4a0f6723873903d4dc477f.017 production changes remain uncommitted until the
+immediate next step: commit source/tests/docs, close017 with actual SHA, commit demos separately,
+publish normal fast-forwards and verify. Then continue offline leaderboard025/085 root-cause batch.
+No active build/test. Preserve foreign113/content/audio work and the corrected077/078 totals.
 Preserve077/078 and compare surrounding gamer results. Evidence demos EARNED_ONLINE.md.
-Achievement ctor
-sets EarnedOnline=true, including unearned/synthetic/offline values. Three materialization paths
-need provenance review. Offline store contains key/ticks, not an online flag (historical issue
+The old Achievement ctor set EarnedOnline=true, including unearned/synthetic/offline values;
+that default and the three materialization paths have now been repaired. Offline store contains key/ticks, not an online flag (historical issue
 sentence is wrong); service awards are authenticated calls. Genuine Windows XNA getter is a Pro
 feature stub, so no runtime online/offline XNA-value claim. Preserve foreign113/content/audio work.
 No pending approval. Neither repository is globally clean because foreign

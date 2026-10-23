@@ -2512,6 +2512,7 @@ typedef struct CNA_AchievementInfo {
  *
  * CNAEXT: the canonical factory exists so a platform layer can publish an achievement catalog. It is
  * also useful for explicit offline fixtures; service identities retrieve their title catalog.
+ * Synthetic values have `earned_online` false: this factory has no authenticated award provenance.
  */
 CNA_C_API CNA_Result cna_achievement_create_ext(
     CNA_StringView key,

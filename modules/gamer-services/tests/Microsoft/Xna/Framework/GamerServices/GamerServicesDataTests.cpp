@@ -320,9 +320,20 @@ TEST(AchievementTest, PropertiesFromCtor) {
     EXPECT_EQ("Desc1", a.getDescriptionProperty());
     EXPECT_TRUE(a.getDisplayBeforeEarnedProperty());
     EXPECT_FALSE(a.getIsEarnedProperty());
-    EXPECT_TRUE(a.getEarnedOnlineProperty());
+    EXPECT_FALSE(a.getEarnedOnlineProperty());
     EXPECT_EQ(0, a.getGamerScoreProperty());
     EXPECT_EQ("", a.getHowToEarnProperty());
+}
+
+// A synthetic value has no authenticated service award to establish online provenance.
+TEST(AchievementTest, SyntheticValuesDoNotInventEarnedOnlineProvenance) {
+    for (const bool earned : {false, true}) {
+        const System::DateTime date(earned ? 1234 : 0);
+        const auto value = Achievement::CreateInternal("key", "Name", "Description", true, earned, date);
+        EXPECT_EQ(earned, value.getIsEarnedProperty());
+        EXPECT_FALSE(value.getEarnedOnlineProperty());
+        EXPECT_EQ(date, value.getEarnedDateTimeProperty());
+    }
 }
 
 // An achievement without a picture reports that as the service path does, as documented.

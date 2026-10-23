@@ -59,12 +59,12 @@ static int validate_achievement(void)
     }
 
     ok = cna_achievement_get_info(first, &info) == CNA_RESULT_SUCCESS &&
-        info.is_earned == CNA_TRUE && info.display_before_earned == CNA_TRUE &&
+        info.is_earned == CNA_TRUE && info.display_before_earned == CNA_TRUE && info.earned_online == CNA_FALSE &&
         info.earned_date_time_ticks == INT64_C(637000000000000000) &&
         cna_achievement_get_info(first, &broken) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_achievement_get_info(first, 0) == CNA_RESULT_INVALID_ARGUMENT;
     ok = ok && cna_achievement_get_info(other, &info) == CNA_RESULT_SUCCESS &&
-        info.is_earned == CNA_FALSE && info.display_before_earned == CNA_FALSE;
+        info.is_earned == CNA_FALSE && info.display_before_earned == CNA_FALSE && info.earned_online == CNA_FALSE;
 
     ok = ok && cna_achievement_get_key_size(first, &size) == CNA_RESULT_SUCCESS &&
         text_is(cna_achievement_copy_key(first, text, sizeof(text), &size), size, text,
@@ -252,7 +252,7 @@ static int validate_gamer_achievements(const CNA_SignedInGamerHandle gamer)
     /* An earned achievement carries only a key, an earned flag and a timestamp: no catalog exists
        here to supply a name, a description or a score. */
     ok = ok && cna_achievement_get_info(entry, &info) == CNA_RESULT_SUCCESS &&
-        info.is_earned == CNA_TRUE && info.gamer_score == 0 &&
+        info.is_earned == CNA_TRUE && info.gamer_score == 0 && info.earned_online == CNA_FALSE &&
         info.earned_date_time_ticks > INT64_C(0);
     ok = ok && cna_achievement_get_name_size(entry, &size) == CNA_RESULT_SUCCESS &&
         size == UINT64_C(0);

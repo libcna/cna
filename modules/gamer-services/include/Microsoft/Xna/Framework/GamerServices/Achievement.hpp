@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         [[nodiscard]] System::DateTime getEarnedDateTimeProperty() const;
 
         /**
-         * @brief Gets whether the achievement was earned in an online session.
+         * @brief Gets whether the achievement was earned while signed in to the online service.
          *
          * @return true if earned online.
          */
@@ -107,7 +107,17 @@ namespace Microsoft::Xna::Framework::GamerServices
          */
         CNAEXT [[nodiscard]] bool operator!=(const Achievement& other) const;
 
-        /** @brief Creates an Achievement for CNA internal use. */
+        /**
+         * @brief Creates a synthetic achievement value without online award provenance.
+         * @param key Achievement key.
+         * @param name Display name.
+         * @param description Display description.
+         * @param showBeforeEarned Whether to display the achievement before it is earned.
+         * @param earned Whether it has been earned.
+         * @param earnedDateTime Time of the award.
+         * @return A value whose EarnedOnline is false; service materialization sets that flag
+         * only for an actual authenticated award.
+         */
         CNAEXT static Achievement CreateInternal(
             const std::string& key,
             const std::string& name,

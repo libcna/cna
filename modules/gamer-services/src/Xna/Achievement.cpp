@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         : description_(description)
         , displayBeforeEarned_(showBeforeEarned)
         , earnedDateTime_(earnedDateTime)
-        , earnedOnline_(true)
+        , earnedOnline_(false)
         , gamerScore_(0)
         , howToEarn_()
         , isEarned_(earned)

@@ -199,6 +199,11 @@ route behind both canonical equality operators, and achievements compare **by va
 field** rather than by identity — which is exactly what makes a handle a collection answered
 comparable with one the caller built.
 
+Synthetic `create_ext` values have `earned_online` false, independently of `is_earned`:
+construction does not establish an authenticated award. Offline catalog/store values also report
+false. Values retrieved from the service report true only when the service records an award;
+unearned service entries report false.
+
 The collection **copies what it is given**, so releasing a source handle afterwards changes nothing
 in it, and **both indexers answer a copy rather than a view**: the canonical reference points into
 storage owned by the collection, and the copy remains independently owned. Both
