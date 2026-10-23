@@ -27,7 +27,84 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-010 directory checkpoint; ISSUE-019 reference preparation (2026-10-23)
+### Current task: publish validated ISSUE-019 repair (2026-10-23)
+
+Validation is complete. Native runtime244PASS/4 unchanged SKIP of248; all seven new reset
+regressions pass. Genuine XNA17 clock checks plus six live control/reset checks pass.
+Full719-ID SOFTWARE/GLES sweeps change only019 from FAIL to PASS; original four assertions kept.
+Final serial CTest94813 finished713.22s:735 registered/732enabled,678PASS/48SKIP/6FAIL/3disabled.
+Exact comparison with the directory checkpoint has DELTAS[]. All275 binary hashes match after
+completion; the freeze is RELEASED. No compiler or test process from this batch remains active.
+The global gate remains RED on the same six external residuals and the separately diagnosed
+pre-existing coverage inventory rules; do not claim full campaign/native-corpus completion.
+
+Next: commit only Game.cpp, Game.hpp, ResetElapsedTimeTests.cpp, own019 upstream-plan row and
+this handoff. Then record that repair SHA in the019 matrix/permanent demos inventory, commit
+the demos marker/evidence and CNA status update, and publish normal fast-forward next refs.
+Never stage inherited113 matrix/inventory,082 upstream-plan or content ownership changes.
+
+### ISSUE-019 validation record
+
+Directory publication is finished. Active owned candidate: Game.cpp, Game.hpp and new
+ResetElapsedTimeTests.cpp; only019 hunks in matrix and upstream plan, plus this handoff.
+Do not stage inherited113 matrix or082 upstream-plan hunks. Demos own new lifecycle directory
+contains two genuine XNA reference sources and RESET_ELAPSED_TIME.md. Original assertions unchanged.
+Actual XNA4 reference now passes17/17 clock/mutation checks. Fresh-process live Game.Run cases
+pass control2/2 (12 catch-up updates) and reset4/4 (one ordinary update, slow=false).
+Native pre-repair full runtime baseline:246 tests,238PASS/4SKIP/4FAIL; all four failures are new
+ResetElapsedTime regressions, variable-reset control passes. Reports repair-reset-runtime-before.*.
+Candidate makes reset apply to both modes, consumes only the next clock interval, keeps prior
+debt and planned steps, and clears slow history without changing the currently executing
+Update argument. Native builds51133/89090 passed without diagnostics. First candidate run65091:
+247 tests,243PASS/4 unchanged SKIP/0FAIL. Exact comparison changes four failing reset witnesses
+to PASS and adds one passing fractional-debt test; all old outcomes retained. Six reset tests pass.
+Consumer rebuild26240 was deliberately interrupted only in its named scope (exit130): expanding
+the header's documentation shifted debug line information and invalidated hundreds of cached
+objects. The correct public brief now retains its original single line; no semantic/test edit.
+Restart36976 passes (967 planned/966 printed steps), no compiler diagnostics. Original demo now
+passes4/4 on SOFTWARE and OPENGLES3 (one update, slow=false), with its marker still retained.
+V5 genuine observation of20 retained whole steps leaves Draw slow=false. Seventh regression
+RetainedDebtDoesNotImmediatelyRestoreSlowDrawHistory reproduces6PASS/1FAIL (only Draw flag).
+The final correction excludes retained reset debt from immediately restoring lag history.
+Genuine reference v6 passes17/17. Final native run48764:248 tests,244PASS/4 unchanged SKIP/0FAIL;
+all seven reset tests pass. Original demo marker removed after both renderer passes, with all
+four assertions unchanged. Consumer build2181 passes (228 planned/227 printed steps), no compiler
+diagnostics, one compiler/6GiB. Final timestep category5/5 and C runtime controls1/1 pass on each
+renderer. Catalog719/zero problems; all6 visual references pixel-exact. All275 binaries were
+frozen by repair-reset-full-artifacts.sha256 through validation. Complete sweep51712
+finished: SOFTWARE719=644PASS/24FAIL/48SKIP/3NOTRUN; GLES719=686PASS/23FAIL/7SKIP/3NOTRUN.
+Exact comparison with the directory checkpoint changes only019 FAILED->PASSED and removes its
+marker/one burst assertion failure. All other statuses, markers, check counts and failed-assertion
+multisets unchanged (51->50 SW,50->49 GLES). All275 hashes verified after both sweeps.
+Final serial CTest94813 finished713.22s with identical per-test statuses to the directory
+checkpoint:678PASS/48SKIP/6FAIL/3disabled. All hashes verified; freeze released. Reports
+repair-reset-ctest.{log,xml}, repair-reset-ctest-comparison.log, repair-reset-hashes-after-ctest.log.
+C API coverage check69539 FAILED on two stale rules: haptic-device-empty-constructor does not
+match noexcept added in974c1ac08; content-manager-resolve-existing-asset-path still describes a
+public helper made private inb0b0207e6. Both changes are present in base9c068f632 HEAD, unrelated
+to Game's comment/implementation. Preserve failure log repair-reset-capi-coverage.log; no coverage
+pass is claimed. These need a separate inventory repair, preserving inherited mapping/doc hunks.
+Prose export counts pass (8 claims/3205 exports). The global gate had six existing
+CTest residuals at the directory checkpoint; do not hide them or call the campaign complete.
+Independent read-only ISSUE-150 preparation: its original public consumer still fails all five
+Runtime symbols when linking the current DSO (repair-runtime-facade-before.log). No150 source edit.
+Next-batch audit preparation only: ignored demos build-probe/cna-capi-audit-9c068f632 is a116MB
+source-only archive of published HEAD (modules/tools/docs/plan/ENet headers), not a new compiler
+build tree. Clean coverage baseline22436 fails the same two rules PLUS content-reader-detail-traits.
+That third stale rule is already deleted in the inherited uncommitted mapping hunk; do not stage
+it as part of019. This proves the published baseline has three stale coverage rules, while the
+shared worktree has two. No source/index change was made for this diagnosis. Keep clean and
+shared validation distinct; generated coverage docs must not accidentally include inherited work.
+Doxygen diagnostic confirms HapticDevice() noexcept = CPP-53709B9BFBB0 and no public
+ResolveExistingAssetPath. Its exact new signature is `() noexcept`, not `()noexcept`.
+First interrupted consumer log retained.
+No closure/commit yet. Older preparation notes below are historical.
+
+Current published revisions: CNA9c068f6324bf06cd43f3de4d035de54bce4fecfa,
+demos499a58e5a188671d4dbe7dc40bec7cf1208273db,
+Sharp2f644cf4761123275426247b4d582e3392b4a181. All three remote next refs verified;
+no force push, merge or tag. Directory checkpoint is complete and its binary freeze released.
+The campaign still has156 IDs/117 dispositions/39 without;010 is only partially repaired.
 
 ISSUE-152 disposition/handoff checkpoint is published in CNA `8c162e142af498c5db22f14fe9f3eba2b9a938ed`
 and demos `0086bc424e50a023c79698a3107c2e1d7dd0aa41`. Three completed FileShare probe binaries
@@ -123,6 +200,9 @@ The first live XNA oracle shows the no-reset control's12 catch-up updates but st
 run before its post-load witness (4/6 checks pass). No live reset pass is claimed. Its Draw-count
 termination is now conditioned on actually observing the post-load update, and the burst check
 also refuses zero unobserved updates. Corrected live execution is pending; keep first failed log.
+Live v2 still returns from its SECOND Game.Run before the witness despite the corrected draw
+termination (3/6). The harness now runs control/reset in separate fresh processes; compilation/
+execution of that isolation correction is pending. Do not attribute this host-loop issue to019.
 Four deterministic native clock tests are now added in the separate new ResetElapsedTimeTests.cpp,
 using the existing platform decorator and a scripted counter; no sleep or Game production edit.
 Native-only build58721 of CnaRuntimeTests passed (40 planned/37 printed steps), one compiler/6GiB.

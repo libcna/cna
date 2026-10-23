@@ -660,10 +660,10 @@ namespace Microsoft::Xna::Framework
 
     void Game::ResetElapsedTime()
     {
-        if (!IsFixedTimeStep_)
-        {
-            forceElapsedTimeToZero_ = true;
-        }
+        // XNA 4.0 Game.ResetElapsedTime resets both timing modes and slow history.
+        // Do not mutate the GameTime currently being observed by an Update callback.
+        forceElapsedTimeToZero_ = true;
+        updateFrameLag_ = 0;
     }
 
     void Game::SuppressDraw()
@@ -803,9 +803,18 @@ namespace Microsoft::Xna::Framework
 
         CNA_DIAGNOSTICS_FRAME_SCOPE();
         CNA_PROFILE_SCOPE_CATEGORY("Game/Tick", CNA::Diagnostics::Category::Core);
-        AdvanceElapsedTime();
+        const bool resetElapsedTime = forceElapsedTimeToZero_;
+        forceElapsedTimeToZero_ = false;
+        const auto timeAdvanced = AdvanceElapsedTime();
+        if (resetElapsedTime)
+        {
+            // Consume the clock sample, but retain debt accumulated before this Tick.
+            // Measured against XNA 4.0 Game.Tick; a reset with no debt runs no fixed Update.
+            accumulatedElapsedTime_ = accumulatedElapsedTime_ - timeAdvanced;
+            gameTime_.setIsRunningSlowlyProperty(false);
+        }
 
-        if (IsFixedTimeStep_)
+        if (IsFixedTimeStep_ && !resetElapsedTime)
         {
             while (TimeSpanLess(accumulatedElapsedTime_ + worstCaseSleepPrecision_, TargetElapsedTime_))
             {
@@ -860,6 +869,11 @@ namespace Microsoft::Xna::Framework
                 accumulatedElapsedTime_ = accumulatedElapsedTime_ - TargetElapsedTime_;
                 ++stepCount;
 
+                if (forceElapsedTimeToZero_)
+                {
+                    // A preceding Update reset the history, not the already planned steps.
+                    gameTime_.setIsRunningSlowlyProperty(false);
+                }
                 AssertNotDisposed();
                 {
                     CNA_PROFILE_SCOPE_CATEGORY("Game/Update", CNA::Diagnostics::Category::Update);
@@ -872,7 +886,20 @@ namespace Microsoft::Xna::Framework
                 hasUpdatedOnce_ = true;
             }
 
-            updateFrameLag_ += std::max(0, stepCount - 1);
+            if (resetElapsedTime && stepCount == 0)
+            {
+                return;
+            }
+
+            if (resetElapsedTime || forceElapsedTimeToZero_)
+            {
+                // Retained debt must not immediately restore the reset slow-frame history.
+                gameTime_.setIsRunningSlowlyProperty(false);
+            }
+            else
+            {
+                updateFrameLag_ += std::max(0, stepCount - 1);
+            }
 
             if (gameTime_.getIsRunningSlowlyProperty())
             {
@@ -898,7 +925,7 @@ namespace Microsoft::Xna::Framework
         }
         else
         {
-            if (forceElapsedTimeToZero_)
+            if (resetElapsedTime || forceElapsedTimeToZero_)
             {
                 gameTime_.setElapsedGameTimeProperty(System::TimeSpan::Zero);
                 forceElapsedTimeToZero_ = false;

@@ -201,7 +201,7 @@ namespace Microsoft::Xna::Framework
         /** @brief Signals the game loop to exit. */
         void Exit();
 
-        /** @brief Resets elapsed timing for the next variable-timestep update. */
+        /** @brief Resets the next clock interval and slow-frame history in both timestep modes. */
         void ResetElapsedTime();
 
         /** @brief Skips drawing for the current frame. */
