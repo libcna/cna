@@ -271,10 +271,10 @@ static void on_content_lost(
 static void on_disposing(const CNA_Handle resource, void* const context)
 {
     LifecycleState* const state = (LifecycleState*)context;
-    CNA_Bool disposed = CNA_TRUE;
+    CNA_Bool disposed = CNA_FALSE;
     if (resource != CNA_INVALID_HANDLE &&
         cna_graphics_resource_get_is_disposed(resource, &disposed) == CNA_RESULT_SUCCESS &&
-        disposed == CNA_FALSE) {
+        disposed == CNA_TRUE) {
         ++state->disposing_count;
     }
 }
