@@ -5,7 +5,6 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
-#include "SharpRuntime/Prop.hpp"
 #include "System/DateTimeOffset.hpp"
 #include "System/EventArgs.hpp"
 
@@ -22,10 +21,10 @@ namespace Microsoft::Devices::Sensors
     class AccelerometerReadingEventArgs : public System::EventArgs
     {
     private:
-        DEF_MEMBER(double, X)
-        DEF_MEMBER(double, Y)
-        DEF_MEMBER(double, Z)
-        DEF_MEMBER(System::DateTimeOffset, Timestamp)
+        double X_;
+        double Y_;
+        double Z_;
+        System::DateTimeOffset Timestamp_;
 
     public:
         /**

@@ -10,7 +10,6 @@
 
 #include "System/EventArgs.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
-#include "SharpRuntime/Prop.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
@@ -22,7 +21,7 @@ namespace Microsoft::Devices::Sensors
                       "T must derive from ISensorReading");
 
     private:
-        DEF_MEMBER(T, SensorReading)
+        T SensorReading_;
 
     public:
         /**

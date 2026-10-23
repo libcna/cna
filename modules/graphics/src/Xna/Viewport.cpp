@@ -11,12 +11,29 @@ namespace Microsoft::Xna::Framework::Graphics
     using Microsoft::Xna::Framework::Rectangle;
     using Microsoft::Xna::Framework::Vector3;
 
-    IMPL_PROP(int, Height,     getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
-    IMPL_PROP(float, MaxDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
-    IMPL_PROP(float, MinDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
-    IMPL_PROP(int, Width,      getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
-    IMPL_PROP(int, Y,         getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
-    IMPL_PROP(int, X,         getter1, setter1, member0, static0, constret1, ref1, constmet1, Viewport, nothing)
+    const int& Viewport::getHeightProperty() const { return Height_; }
+    void Viewport::setHeightProperty(const int& v) { Height_ = v; }
+    void Viewport::setHeightProperty(int&& v) { Height_ = v; }
+
+    const float& Viewport::getMaxDepthProperty() const { return MaxDepth_; }
+    void Viewport::setMaxDepthProperty(const float& v) { MaxDepth_ = v; }
+    void Viewport::setMaxDepthProperty(float&& v) { MaxDepth_ = v; }
+
+    const float& Viewport::getMinDepthProperty() const { return MinDepth_; }
+    void Viewport::setMinDepthProperty(const float& v) { MinDepth_ = v; }
+    void Viewport::setMinDepthProperty(float&& v) { MinDepth_ = v; }
+
+    const int& Viewport::getWidthProperty() const { return Width_; }
+    void Viewport::setWidthProperty(const int& v) { Width_ = v; }
+    void Viewport::setWidthProperty(int&& v) { Width_ = v; }
+
+    const int& Viewport::getYProperty() const { return Y_; }
+    void Viewport::setYProperty(const int& v) { Y_ = v; }
+    void Viewport::setYProperty(int&& v) { Y_ = v; }
+
+    const int& Viewport::getXProperty() const { return X_; }
+    void Viewport::setXProperty(const int& v) { X_ = v; }
+    void Viewport::setXProperty(int&& v) { X_ = v; }
 
     Viewport::Viewport()
         : Height_(0), MaxDepth_(0.0f), MinDepth_(0.0f), Width_(0), Y_(0), X_(0)

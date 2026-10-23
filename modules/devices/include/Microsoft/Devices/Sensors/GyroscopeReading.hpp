@@ -5,7 +5,6 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
-#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
@@ -20,8 +19,8 @@ namespace Microsoft::Devices::Sensors
         friend class Gyroscope;
 
     private:
-        DEF_MEMBER(Vector3, RotationRate)
-        DEF_MEMBER(System::DateTimeOffset, Timestamp)
+        Vector3 RotationRate_;
+        System::DateTimeOffset Timestamp_;
 
     public:
         /**

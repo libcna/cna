@@ -4,7 +4,6 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
-#include "SharpRuntime/Prop.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -20,12 +19,42 @@ namespace Microsoft::Xna::Framework::Graphics
         int X_;
 
     public:
-        DEF_PROP(int, Height,   getter1, setter1, member0, static0, constret1, ref1, constmet1)
-        DEF_PROP(float, MaxDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1)
-        DEF_PROP(float, MinDepth, getter1, setter1, member0, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, Width,    getter1, setter1, member0, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, Y,        getter1, setter1, member0, static0, constret1, ref1, constmet1)
-        DEF_PROP(int, X,        getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        /** @brief Gets the height of the viewport in pixels. @return The value. */
+        [[nodiscard]] const int& getHeightProperty() const;
+        /** @brief Sets the height of the viewport in pixels. @param v The new value. */
+        void setHeightProperty(const int& v);
+        /** @brief Sets the height of the viewport in pixels. @param v The new value. */
+        void setHeightProperty(int&& v);
+        /** @brief Gets the maximum depth of the clip volume. @return The value. */
+        [[nodiscard]] const float& getMaxDepthProperty() const;
+        /** @brief Sets the maximum depth of the clip volume. @param v The new value. */
+        void setMaxDepthProperty(const float& v);
+        /** @brief Sets the maximum depth of the clip volume. @param v The new value. */
+        void setMaxDepthProperty(float&& v);
+        /** @brief Gets the minimum depth of the clip volume. @return The value. */
+        [[nodiscard]] const float& getMinDepthProperty() const;
+        /** @brief Sets the minimum depth of the clip volume. @param v The new value. */
+        void setMinDepthProperty(const float& v);
+        /** @brief Sets the minimum depth of the clip volume. @param v The new value. */
+        void setMinDepthProperty(float&& v);
+        /** @brief Gets the width of the viewport in pixels. @return The value. */
+        [[nodiscard]] const int& getWidthProperty() const;
+        /** @brief Sets the width of the viewport in pixels. @param v The new value. */
+        void setWidthProperty(const int& v);
+        /** @brief Sets the width of the viewport in pixels. @param v The new value. */
+        void setWidthProperty(int&& v);
+        /** @brief Gets the Y coordinate of the upper-left corner in pixels. @return The value. */
+        [[nodiscard]] const int& getYProperty() const;
+        /** @brief Sets the Y coordinate of the upper-left corner in pixels. @param v The new value. */
+        void setYProperty(const int& v);
+        /** @brief Sets the Y coordinate of the upper-left corner in pixels. @param v The new value. */
+        void setYProperty(int&& v);
+        /** @brief Gets the X coordinate of the upper-left corner in pixels. @return The value. */
+        [[nodiscard]] const int& getXProperty() const;
+        /** @brief Sets the X coordinate of the upper-left corner in pixels. @param v The new value. */
+        void setXProperty(const int& v);
+        /** @brief Sets the X coordinate of the upper-left corner in pixels. @param v The new value. */
+        void setXProperty(int&& v);
 
         /** @brief Constructs an empty viewport with all fields set to zero. */
         Viewport();

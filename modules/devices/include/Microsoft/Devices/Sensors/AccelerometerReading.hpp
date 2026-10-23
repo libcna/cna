@@ -8,7 +8,6 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
-#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
@@ -23,8 +22,8 @@ namespace Microsoft::Devices::Sensors
         friend class Accelerometer;
 
     private:
-        DEF_MEMBER(System::DateTimeOffset, Timestamp)
-        DEF_MEMBER(Vector3, Acceleration)
+        System::DateTimeOffset Timestamp_;
+        Vector3 Acceleration_;
 
     public:
         /**

@@ -5,7 +5,6 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
-#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Devices/Sensors/AttitudeReading.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -21,11 +20,11 @@ namespace Microsoft::Devices::Sensors
         friend class Motion;
 
     private:
-        DEF_MEMBER(AttitudeReading, Attitude)
-        DEF_MEMBER(Vector3, DeviceAcceleration)
-        DEF_MEMBER(Vector3, DeviceRotationRate)
-        DEF_MEMBER(Vector3, Gravity)
-        DEF_MEMBER(System::DateTimeOffset, Timestamp)
+        AttitudeReading Attitude_;
+        Vector3 DeviceAcceleration_;
+        Vector3 DeviceRotationRate_;
+        Vector3 Gravity_;
+        System::DateTimeOffset Timestamp_;
 
     public:
         /**

@@ -23,7 +23,6 @@
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "CNA/Logger.hpp"
-#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
@@ -118,10 +117,22 @@ namespace Microsoft::Xna::Framework::Content
 
     public:
         /**
-         * @brief Content root; assignment is refused while loaded assets remain cached.
+         * @brief Gets the content root.
+         * @return The directory asset names are resolved against.
+         */
+        [[nodiscard]] const std::string& getRootDirectoryProperty() const;
+        /**
+         * @brief Sets the content root; assignment is refused while loaded assets remain cached.
+         * @param v The new content root.
          * @throws System::InvalidOperationException if the cache is not empty, even for the same root.
          */
-        DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
+        void setRootDirectoryProperty(const std::string& v);
+        /**
+         * @brief Sets the content root; assignment is refused while loaded assets remain cached.
+         * @param v The new content root.
+         * @throws System::InvalidOperationException if the cache is not empty, even for the same root.
+         */
+        void setRootDirectoryProperty(std::string&& v);
 
     private:
         friend struct CNA::Internal::ContentManagerAccess;

@@ -5,7 +5,6 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
-#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -22,12 +21,12 @@ namespace Microsoft::Devices::Sensors
         friend class Motion;
 
     private:
-        DEF_MEMBER(float, Pitch)
-        DEF_MEMBER(float, Roll)
-        DEF_MEMBER(float, Yaw)
-        DEF_MEMBER(Quaternion, Quaternion)
-        DEF_MEMBER(Matrix, RotationMatrix)
-        DEF_MEMBER(System::DateTimeOffset, Timestamp)
+        float Pitch_;
+        float Roll_;
+        float Yaw_;
+        Quaternion Quaternion_;
+        Matrix RotationMatrix_;
+        System::DateTimeOffset Timestamp_;
 
     public:
         /**

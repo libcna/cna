@@ -5,7 +5,6 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
-#include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Devices/Sensors/ISensorReading.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
@@ -20,11 +19,11 @@ namespace Microsoft::Devices::Sensors
         friend class Compass;
 
     private:
-        DEF_MEMBER(double, HeadingAccuracy)
-        DEF_MEMBER(double, MagneticHeading)
-        DEF_MEMBER(Vector3, MagnetometerReading)
-        DEF_MEMBER(System::DateTimeOffset, Timestamp)
-        DEF_MEMBER(double, TrueHeading)
+        double HeadingAccuracy_;
+        double MagneticHeading_;
+        Vector3 MagnetometerReading_;
+        System::DateTimeOffset Timestamp_;
+        double TrueHeading_;
 
     public:
         /**
