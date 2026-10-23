@@ -14,10 +14,16 @@
 #include "System/Runtime/Serialization/SerializationInfo.hpp"
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <typeinfo>
+#include <utility>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "SharpRuntime/Storage/StoragePaths.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Storage::StorageDevice;
 
@@ -192,6 +198,69 @@ TEST_F(StorageDeviceDeleteContainerTest, ContainerAllowsNormalizedPathsThatRemai
     auto stream = container->CreateFile("profiles/../save.bin");
     stream.reset();
     EXPECT_TRUE(container->FileExists("save.bin"));
+}
+
+// Museum B11. Genuine XNA4 public-call oracle: StoragePathErrorsOracle.cs, 29/29.
+// Keep these committed regressions independent of inherited uncommitted test files.
+TEST_F(StorageDeviceDeleteContainerTest, EmptyContainerPathsMatchXnaExceptionTypeAndParameter)
+{
+    using namespace System::IO;
+    auto container = OpenContainer("Arguments");
+    const std::vector<std::pair<std::function<void()>, const char*>> operations = {
+        {[&] { container->CreateDirectory(""); }, "directory"},
+        {[&] { (void)container->DirectoryExists(""); }, "directory"},
+        {[&] { container->DeleteDirectory(""); }, "directory"},
+        {[&] { (void)container->CreateFile(""); }, "file"},
+        {[&] { (void)container->FileExists(""); }, "file"},
+        {[&] { container->DeleteFile(""); }, "file"},
+        {[&] { (void)container->OpenFile("", static_cast<FileMode>(-1)); }, "file"},
+        {[&] { (void)container->OpenFile("", static_cast<FileMode>(-1),
+                                       static_cast<FileAccess>(-1)); }, "file"},
+        {[&] { (void)container->OpenFile("", static_cast<FileMode>(-1),
+                                       static_cast<FileAccess>(-1), static_cast<FileShare>(-1)); }, "file"}
+    };
+    for (std::size_t index = 0; index < operations.size(); ++index)
+    {
+        SCOPED_TRACE(index);
+        try
+        {
+            operations[index].first();
+            ADD_FAILURE() << "expected ArgumentNullException";
+        }
+        catch (const System::ArgumentNullException& error)
+        {
+            EXPECT_TRUE(typeid(error) == typeid(System::ArgumentNullException));
+            EXPECT_EQ(error.getParamNameProperty(), operations[index].second);
+        }
+        catch (const std::exception& error)
+        {
+            ADD_FAILURE() << "wrong exception: " << error.what();
+        }
+    }
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, EmptyContainerPatternsReturnNoMatchesWithoutAccessingTheRoot)
+{
+    auto container = OpenContainer("Patterns");
+    container->CreateDirectory("child");
+    { auto file = container->CreateFile("seed.txt"); }
+    EXPECT_EQ(container->GetFileNames(), std::vector<std::string>{"seed.txt"});
+    EXPECT_EQ(container->GetDirectoryNames(), std::vector<std::string>{"child"});
+    EXPECT_TRUE(container->GetFileNames("").empty());
+    EXPECT_TRUE(container->GetDirectoryNames("").empty());
+    fs::rename(fs::path(root_) / "Patterns" / "AllPlayers", fs::path(root_) / "moved");
+    EXPECT_TRUE(container->GetFileNames("").empty());
+    EXPECT_TRUE(container->GetDirectoryNames("").empty());
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, DisposalStillPrecedesEmptyContainerPatternsAndPaths)
+{
+    auto container = OpenContainer("DisposedArguments");
+    container->Dispose();
+    EXPECT_THROW(container->CreateDirectory(""), System::ObjectDisposedException);
+    EXPECT_THROW((void)container->CreateFile(""), System::ObjectDisposedException);
+    EXPECT_THROW((void)container->GetFileNames(""), System::ObjectDisposedException);
+    EXPECT_THROW((void)container->GetDirectoryNames(""), System::ObjectDisposedException);
 }
 
 // ---------------------------------------------------------------------------

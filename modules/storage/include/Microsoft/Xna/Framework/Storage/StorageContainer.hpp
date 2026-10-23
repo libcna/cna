@@ -27,6 +27,9 @@ namespace Microsoft::Xna::Framework::Storage
          * traversal outside the container and symlink escapes are rejected.
          * After disposal, file/directory operations and DisplayName/StorageDevice access
          * throw System::ObjectDisposedException before validating their arguments.
+         * An empty file or directory argument throws System::ArgumentNullException with
+         * parameter name "file" or "directory", before validating stream options. An empty
+         * enumeration pattern instead returns no matches without accessing the filesystem.
          * IsDisposed, type inspection and repeated Dispose remain available. Disposing is
          * raised after the state changes; backing files and existing streams are retained.
          */

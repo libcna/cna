@@ -27,7 +27,46 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: museum B11 deferred storage root (2026-10-23)
+### Current task: museum B11 empty storage arguments/patterns (2026-10-23)
+
+Lazy-root checkpoint published: CNA `fffa552ad4b4567c772f2f293302b8b103a5b16f`,
+Sharp Runtime `31c7c08f1987a284ce1b84bf1c779ce236a6e1c6`, demos
+`0fbe936047059b5bac75eefc6e8c1a3630503aed` (all remote SHAs verified).
+Demos dedicated evidence `docs/repair-evidence/storage/LAZY_ROOT.md`; catalog3/3PASS.
+The owned disposable Sharp sanitizer binary was removed after recording6/6; sources/logs
+remain. Inherited ownership/occlusion/path-error work remains untouched.
+
+Next confirmed root cause: StorageContainer uses ArgumentException for empty file/directory
+paths and rejects empty search patterns. Genuine XNA4 ValidateArguments uses
+ArgumentNullException with parameter file/directory before stream-option validation;
+enumeration delegates to Directory, where empty pattern returns zero matches before IO.
+Existing real GAC public-call evidence: demos report repair-storage-path-reference-v1-xna.log,
+29/29PASS. Its untracked oracle/test files are inherited and must not be staged here.
+
+Three owned permanent regressions were added to existing StorageDeviceTests.cpp (reusing
+its owned-root fixture): nine path-entry cases with exact type/parameter; empty patterns
+with both present and missing root; disposal precedence control. BEFORE:2FAIL/1PASS.
+Candidate changes only seven empty-path throws and two empty-pattern returns, plus public
+contract comments. AFTER full native storage:40PASS/2FAIL in42; remaining failures are
+the pre-existing nonempty/missing-directory error-type cases, not suppressed.
+
+Native builds65069/23075 clean. Demos build61151 completed0 in existing build/linux-full,
+no warnings/errors. Seven storage demos on each of SOFTWARE/OPENGLES3 remain6PASS/
+1expectedISSUE-152FAIL; exact status/check-count/knownIssue/message delta is empty on both.
+All six SDL boundary audits pass with unchanged budgets. Native XML comparison improves
+exactly three inherited failures to PASS and adds three PASS, with no regression.
+One compiler throughout, shared cache,6GiB memory cap, private display. No new sanitizer
+or non-Linux runtime claim for this scalar/error-control-flow change.
+
+This checkpoint is the commit containing this entry, based on fffa552ad. Publish only
+StorageContainer.cpp/.hpp, StorageDeviceTests.cpp and this handoff. Next: directory
+deletion error translation, without losing existing UTF-8 native-path support; its
+current std::filesystem::remove lets filesystem_error escape and silently accepts a
+missing directory. Sharp Directory::Delete has the types but still uses narrow native
+paths, so blindly routing CNA's already-widened path through it regresses Windows UTF-8.
+Evidence prefix: demos build/linux-full/reports/repair-museum-storage-args-*.
+
+### Previous checkpoint: museum B11 deferred storage root (2026-10-23)
 
 Baseline CNA/origin `d7ed7592d8cf50f3d3ff33a391839c2744aeebac`, Sharp Runtime
 `1dc8785b35284b5cf50f3aec361703bfaf090b72`. B13 publication was verified by ls-remote.
