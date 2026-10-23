@@ -27,7 +27,16 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: publish validated ISSUE-019 repair (2026-10-23)
+### Current task: ISSUE-019 closure publication; coverage audit follow-up (2026-10-23)
+
+CNA runtime repair `f9747ea4964c4aa65cda1d5fa437ec40ab89911a` is committed. Demos closure
+`fe283d03b2054cbc8ef766358d0a1644609c78e8` is committed; Sharp remains
+`2f644cf4761123275426247b4d582e3392b4a181`. Status-only CNA commit follows this runtime revision.
+ISSUE-019 is RESOLVED/FIXED_VALIDATED, matrix156 IDs/118 final dispositions/38 without.
+Original demo assertions remain intact. Only its knownIssue marker was removed.
+Next publish the CNA status update and demos closure by ordinary fast-forward pushes, verify
+remote refs, then continue the separate C API coverage inventory audit described below.
+No merges, force pushes, tags, or edits to museum/cna-engine/cna-extended.
 
 Validation is complete. Native runtime244PASS/4 unchanged SKIP of248; all seven new reset
 regressions pass. Genuine XNA17 clock checks plus six live control/reset checks pass.
@@ -38,9 +47,12 @@ completion; the freeze is RELEASED. No compiler or test process from this batch 
 The global gate remains RED on the same six external residuals and the separately diagnosed
 pre-existing coverage inventory rules; do not claim full campaign/native-corpus completion.
 
-Next: commit only Game.cpp, Game.hpp, ResetElapsedTimeTests.cpp, own019 upstream-plan row and
-this handoff. Then record that repair SHA in the019 matrix/permanent demos inventory, commit
-the demos marker/evidence and CNA status update, and publish normal fast-forward next refs.
+The runtime commit contains only Game.cpp, Game.hpp, seven tests, own019 upstream-plan row
+and this handoff. Demos commit contains only marker/inventory/evidence changes. A first demos
+commit attempt was automatically rejected because the review mistook the displayed unstaged113
+diff for the index. Direct `git show :docs/CNA_ISSUES.md` comparison proved113 byte-identical to
+HEAD in the index, with exactly six authorized staged paths. The same commit was then approved;
+no workaround, staging change, or user permission request was used. No approval block remains.
 Never stage inherited113 matrix/inventory,082 upstream-plan or content ownership changes.
 
 ### ISSUE-019 validation record

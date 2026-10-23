@@ -408,12 +408,17 @@
       ],
       "subsystem": "game/lifecycle",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The FNA-derived reset flag is ignored in fixed-step mode and slow-frame history is retained. Genuine XNA resets both modes while preserving accumulated debt and the current callback GameTime.",
       "related_issues": [],
-      "cna_fix_commit": null,
-      "validation": [],
-      "final_disposition": null
+      "cna_fix_commit": "f9747ea4964c4aa65cda1d5fa437ec40ab89911a",
+      "validation": [
+        "Genuine XNA4 Framework4/Wine: 17/17 clock/mutation checks; fresh-process live control 2/2 and reset 4/4. Native baseline: 238 PASS/4 SKIP/4 FAIL (all new reset regressions). Additional retained-debt Draw witness: candidate 6 PASS/1 FAIL; final runtime244 PASS/4 unchanged SKIP/0 FAIL, all seven reset cases pass.",
+        "Original four demo assertions pass SOFTWARE/OPENGLES3; only019 marker removed. Timestep category5/5 and C runtime controls1/1 on each renderer; catalog719/zero problems and six exact visuals pass. Full SW719=644PASS/24FAIL/48SKIP/3NOTRUN, GLES719=686PASS/23FAIL/7SKIP/3NOTRUN; exact comparison changes only019 FAIL->PASS and removes its one failed assertion.",
+        "Final serial CTest713.22s:735 registered/732enabled,678PASS/48SKIP/6 pre-existing FAIL/3disabled; exact per-test status DELTAS[]. All275 frozen hashes verified after completion. No native Windows, other renderer, sanitizer or full native CNA corpus pass claimed; separate baseline C API inventory failures remain visible. Evidence: demos docs/repair-evidence/lifecycle/RESET_ELAPSED_TIME.md."
+      ],
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-23: closed with original oracle intact. Campaign156 IDs/118 final dispositions/38 without. Six external CTest residuals and three stale coverage rules in published baseline remain separate actionable work."
     },
     {
       "id": "CNA-DEMOS-ISSUE-020",
