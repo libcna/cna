@@ -605,6 +605,11 @@ static int validate_files(const CNA_StorageContainerHandle container)
         count != UINT64_C(0)) {
         return 0;
     }
+    /* Rejected directory creation must leave the file and all eight bytes intact. */
+    if (cna_storage_container_create_directory(container, view("save.dat")) != CNA_RESULT_IO ||
+        cna_storage_container_create_directory(container, view("save.dat/child")) != CNA_RESULT_IO) {
+        return 0;
+    }
     if (!validate_read(container, payload)) {
         return 0;
     }

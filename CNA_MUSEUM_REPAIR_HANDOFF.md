@@ -27,7 +27,7 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: ISSUE-010 file deletion validated; directory semantics next (2026-10-23)
+### Current task: ISSUE-010 directory checkpoint; ISSUE-019 reference preparation (2026-10-23)
 
 ISSUE-152 disposition/handoff checkpoint is published in CNA `8c162e142af498c5db22f14fe9f3eba2b9a938ed`
 and demos `0086bc424e50a023c79698a3107c2e1d7dd0aa41`. Three completed FileShare probe binaries
@@ -76,9 +76,61 @@ FILE_DELETION.md, FILE_SHARE.md, FileDeletionOracle.cs, StorageOperationsOracle.
 inventory progress hunk. Everything else remains inherited dirt, including
 StorageContainerPathErrorsTests.cpp and the ISSUE-113 matrix/inventory hunks.
 Do not stage it. Detailed evidence: demos docs/repair-evidence/storage/FILE_DELETION.md.
-Exact next task: publish this coherent CNA/demos deletion checkpoint, then reproduce and repair
-CreateDirectory(existing file/file parent) and missing-root enumeration using the already
-validated genuine XNA12-check oracle. ISSUE-010 remains CONFIRMED_OPEN; no markers are removed.
+Deletion is now published: CNA4d384865ca0b586a4ed52929907589ea32a1656b and
+demos27fd84c809b5c9df8a2563828ffeae4c55172d31, both remote refs verified.
+Next batch in progress: CreateDirectory(existing file/file parent) and missing-root enumeration.
+CNA baseline53PASS/2FAIL of55 includes a passing Unicode name/filter control. Candidate delegates
+creation/enumeration to Sharp Directory, retains GlobMatch/empty-pattern behavior, and passes55/55.
+Sharp five directory tests reproduce4PASS/1FAIL on Linux AND actual Windows code under Win64 Wine:
+embedded NUL creates/enumerates the prefix. Unicode already passed in that MinGW configuration;
+do not claim a reproduced Unicode failure. Actual .NET8.0.31 oracle12/12 passes.
+Sharp repair2f644cf4761123275426247b4d582e3392b4a181 is published (remote verified): full
+18228/18228/42 executables,0skips/failures, warning-free build; Windows/Wine5/5, boundary44/109.
+No native Windows/MSVC/browser runtime or sanitizer claim. C smoke's new creation rejection
+assertions fail with exit4 against the old external DSO, before the consumer rebuild.
+Full demos rebuild90648 passed (234 planned/231 printed steps), no compiler diagnostics.
+Both renderer storage7/7 and C storage2/2 pass; directory checks11->18, every old check retained.
+Strict C17 smoke now exits0 against the rebuilt DSO, unchanged executable from pre-fix exit4.
+Catalog719/zero problems and6 pixel-exact visuals pass. Platform ratchet/nonproduction/hotpath
+audits pass with unchanged budgets. All275 binary hashes frozen in
+repair-storage-directory-full-artifacts.sha256. Complete sequential SOFTWARE/OPENGLES3 sweep
+session96493 finished with explicit SDL_AUDIO_DRIVER=dummy. SOFTWARE643/25/48/3 and
+OPENGLES3685/24/7/3, each719 exact IDs; statuses/markers/failing-assertion multisets identical
+to the deletion checkpoint (51SW/50GLES), only directory checks11->18. All275 hashes match.
+Final serial CTest56448 finished692.56s:735 registered/732enabled,
+678PASS/48SKIP/6FAIL/3disabled. Exact ID/status comparison with the deletion checkpoint has
+zero differences. All275 hashes match after CTest; the binary freeze is released. Reports
+repair-storage-directory-ctest.*. The same six residuals keep the global gate RED.
+Owned new CNA work: StorageContainer.cpp, StorageDeviceTests.cpp, StorageSmoke.c and this handoff.
+Owned demos: directories.cpp, DIRECTORY_OPERATIONS.md, DirectoryOperationsOracle.cs. Sharp clean.
+Reports repair-storage-directory-*. This checkpoint publishes only the three owned storage/C
+source/test files, the ISSUE-010 matrix hunk and this handoff. Demos inventory/evidence publication
+follows with the CNA commit SHA. ISSUE-010 stays CONFIRMED_OPEN: content guard/remaining filesystem
+error audit is not closed. No marker is removed. Next: publish CNA/demos, then complete the019
+genuine live reference and deterministic native baseline before changing Game production.
+Independent reference preparation for ISSUE-019 has started: ResetElapsedTimeOracle.cs and
+RESET_ELAPSED_TIME.md belong to the NEXT batch, not the directory commit. The sample-bin Game.dll and
+actual loaded XNA GAC differ (GameClock type not found in the sample-assumed assembly).
+First oracle failed with TypeLoadException; only its exact process/debugger were stopped.
+The sample's disassembly is not accepted as genuine runtime evidence. The GAC monodis attempt
+aborted. V2 passed10/12 and disproved the sample-derived frame-clock assumptions. Corrected v3
+passes11/11 against the actual GAC Game/Clock assembly: reset consumes stale time for fixed steps,
+preserves previous whole/fractional debt, clears slow history, and zeroes one variable update.
+No Game product/demo edit. Actual Game.Run/private-display and deterministic native seams are
+still needed before repair; do not infer the exact live clock behavior from the sample assembly.
+Current full SOFTWARE game category still reproduces019's original failed catch-up assertion.
+The first live XNA oracle shows the no-reset control's12 catch-up updates but stops the reset
+run before its post-load witness (4/6 checks pass). No live reset pass is claimed. Its Draw-count
+termination is now conditioned on actually observing the post-load update, and the burst check
+also refuses zero unobserved updates. Corrected live execution is pending; keep first failed log.
+Four deterministic native clock tests are now added in the separate new ResetElapsedTimeTests.cpp,
+using the existing platform decorator and a scripted counter; no sleep or Game production edit.
+Native-only build58721 of CnaRuntimeTests passed (40 planned/37 printed steps), one compiler/6GiB.
+No compiler warnings; existing vendored Draco CMP0148 configure warning remains. It did not
+rebuild frozen demo artifacts. Native execution remains pending. The expanded constructor-free
+XNA v4 oracle passes15/15 and additionally proves Reset does not mutate the current Update's
+GameTime slow flag, while the next already-planned Update sees cleared slow history. Exclude this new
+runtime test file and all lifecycle reference preparation from the directory repair commit.
 
 ### Previous checkpoint: ISSUE-152 validated on Linux; ISSUE-010 deletion next (2026-10-23)
 

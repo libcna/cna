@@ -421,6 +421,52 @@ TEST_F(StorageDeviceDeleteContainerTest, DeleteFileDistinguishesMissingParentAnd
     EXPECT_FALSE(container->FileExists("real-file"));
 }
 
+TEST_F(StorageDeviceDeleteContainerTest, CreateDirectoryRefusesFilesAndPreservesTheirContents)
+{
+    auto container = OpenContainer("DirectoryCreation");
+    auto file = container->CreateFile("seed.bin");
+    file->WriteByte(42);
+    file->Close();
+    EXPECT_THROW(container->CreateDirectory("seed.bin"), System::IO::IOException);
+    EXPECT_THROW(container->CreateDirectory("seed.bin/child"), System::IO::IOException);
+    auto read = container->OpenFile("seed.bin", System::IO::FileMode::Open);
+    EXPECT_EQ(read->ReadByte(), 42);
+    EXPECT_EQ(read->getLengthProperty(), 1);
+    EXPECT_NO_THROW(container->CreateDirectory("parent/child"));
+    EXPECT_NO_THROW(container->CreateDirectory("parent/child"));
+    EXPECT_TRUE(container->DirectoryExists("parent/child"));
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, EnumerationOfVanishedRootUsesDirectoryNotFoundException)
+{
+    auto container = OpenContainer("VanishedDirectory");
+    device_->DeleteContainer("VanishedDirectory");
+    EXPECT_THROW((void)container->GetFileNames(), System::IO::DirectoryNotFoundException);
+    EXPECT_THROW((void)container->GetFileNames("*"), System::IO::DirectoryNotFoundException);
+    EXPECT_THROW((void)container->GetDirectoryNames(), System::IO::DirectoryNotFoundException);
+    EXPECT_THROW((void)container->GetDirectoryNames("*"), System::IO::DirectoryNotFoundException);
+    // Genuine XNA returns an empty result before accessing storage for an empty pattern.
+    EXPECT_TRUE(container->GetFileNames("").empty());
+    EXPECT_TRUE(container->GetDirectoryNames("").empty());
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, EnumerationPreservesUnicodeNamesAndReturnsOnlyLeafNames)
+{
+    const std::string unicode = "\xe4\xb8\x96\xe7\x95\x8c";
+    auto container = OpenContainer("Unicode-" + unicode);
+    const auto directory = "directory-" + unicode;
+    const auto file = "file-" + unicode + ".bin";
+    container->CreateDirectory(directory);
+    container->CreateFile(file)->Close();
+    container->CreateFile(directory + "/nested.bin")->Close();
+    EXPECT_EQ(container->GetFileNames(), std::vector<std::string>{file});
+    EXPECT_EQ(container->GetFileNames("*.bin"), std::vector<std::string>{file});
+    EXPECT_TRUE(container->GetFileNames("no-match*").empty());
+    EXPECT_EQ(container->GetDirectoryNames(), std::vector<std::string>{directory});
+    EXPECT_EQ(container->GetDirectoryNames("directory-*"), std::vector<std::string>{directory});
+    EXPECT_TRUE(container->GetDirectoryNames("no-match*").empty());
+}
+
 // ---------------------------------------------------------------------------
 // XNA-MISSING-014: StorageDeviceNotConnectedException's serialization constructor.
 //

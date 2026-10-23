@@ -8,6 +8,7 @@
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/IO/FileStream.hpp"
 #include "System/IO/File.hpp"
+#include "System/IO/Directory.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -163,8 +164,7 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentNullException("directory");
-        fs::path p = ResolveNativePath(directory);
-        if (!fs::exists(p)) fs::create_directories(p);
+        System::IO::Directory::CreateDirectory(ResolvePath(directory));
     }
 
     bool StorageContainer::DirectoryExists(const std::string& directory) const
@@ -200,9 +200,9 @@ namespace Microsoft::Xna::Framework::Storage
     {
         VerifyNotDisposed(*this);
         std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
-            if (e.is_directory())
-                result.push_back(CNA::Internal::PathToUtf8(e.path().filename()));
+        for (const auto& path : System::IO::Directory::GetDirectories(storagePath_))
+            result.push_back(CNA::Internal::PathToUtf8(
+                CNA::Internal::PathFromUtf8(path).filename()));
         return result;
     }
 
@@ -212,14 +212,8 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
-        std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
-        {
-            if (!e.is_directory()) continue;
-            // Simple glob: '*' matches anything, '?' matches one char
-            const std::string name = CNA::Internal::PathToUtf8(e.path().filename());
-            if (GlobMatch(searchPattern, name)) result.push_back(name);
-        }
+        auto result = GetDirectoryNames();
+        std::erase_if(result, [&](const std::string& name) { return !GlobMatch(searchPattern, name); });
         return result;
     }
 
@@ -256,9 +250,9 @@ namespace Microsoft::Xna::Framework::Storage
     {
         VerifyNotDisposed(*this);
         std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
-            if (e.is_regular_file())
-                result.push_back(CNA::Internal::PathToUtf8(e.path().filename()));
+        for (const auto& path : System::IO::Directory::GetFiles(storagePath_))
+            result.push_back(CNA::Internal::PathToUtf8(
+                CNA::Internal::PathFromUtf8(path).filename()));
         return result;
     }
 
@@ -268,13 +262,8 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
-        std::vector<std::string> result;
-        for (const auto& e : fs::directory_iterator(CNA::Internal::PathFromUtf8(storagePath_)))
-        {
-            if (!e.is_regular_file()) continue;
-            const std::string name = CNA::Internal::PathToUtf8(e.path().filename());
-            if (GlobMatch(searchPattern, name)) result.push_back(name);
-        }
+        auto result = GetFileNames();
+        std::erase_if(result, [&](const std::string& name) { return !GlobMatch(searchPattern, name); });
         return result;
     }
 
