@@ -89,7 +89,10 @@ the contract test holds it to refusing null. A check that reads the looked-up ob
 against its count -- is ``require = "RequireIndex(index, object->value->bones.size(), ...)"``,
 the same kind of call made after the lookup.
 
-Every generated route runs inside CallWithExceptionBarrier, refuses a null output (for ``copy``, a
+By default a generated route runs inside CallWithExceptionBarrier. A group with ``dispatch = false``
+uses CallHereWithExceptionBarrier: exceptions are still translated, but an owner-thread refusal is
+never queued for retry. Use it for game-driving, destruction and dispatch-control routes whose
+contract requires the caller itself to be the owner. Every route refuses a null output (for ``copy``, a
 null ``out_bytes`` or a null destination with a capacity) with CNA_RESULT_INVALID_ARGUMENT before
 doing anything else, then validates CNA_Bool inputs, then its
 ``invalid_if`` conditions and ``validate`` calls, then reads its text, and returns whatever the
@@ -490,6 +493,7 @@ class Route:
         i = " " * 8
         reads_text = any(self.types.kind_of(p.type) == "text" for p in self.inputs)
         if (self.kind == "copy" and not self.has_lookup and not reads_text
+                and self.group.get("dispatch", True)
                 and not self.refusals and not self.validations
                 and not any(p.type == "CNA_Bool" for p in self.inputs)
                 and self.outputs[0].type == "char"):
@@ -498,7 +502,9 @@ class Route:
                      f"{out_bytes}, [&] {{"]
                      + self._locals(i)
                      + [f"{i}return {self.expression};", "    });"])
-        lines = [f"    return {DETAIL}CallWithExceptionBarrier([&]() -> CNA_Result {{"]
+        barrier = ("CallWithExceptionBarrier" if self.group.get("dispatch", True)
+                   else "CallHereWithExceptionBarrier")
+        lines = [f"    return {DETAIL}{barrier}([&]() -> CNA_Result {{"]
         if self.versioned:
             output = self.outputs[0].name
             lines += returns_on_failure(
@@ -579,12 +585,15 @@ def load_family(spec: Path, types: CTypes) -> list[Route]:
         if not isinstance(group, dict) or "routes" not in group:
             raise SpecError(f"{spec.name}: [{group_name}] has no [{group_name}.routes] table")
         unknown = set(group) - {"lookup", "object", "owner", "other", "arguments",
-                                "accepts_null_handle", "feature", "unavailable", "raw", "routes"}
+                                "accepts_null_handle", "feature", "unavailable", "raw", "routes",
+                                "dispatch"}
         if unknown:
             raise SpecError(f"{spec.name}: [{group_name}] has unknown key(s) "
                             f"{', '.join(sorted(unknown))}")
         if not isinstance(group["routes"], dict):
             raise SpecError(f"{spec.name}: [{group_name}.routes] must be a table")
+        if "dispatch" in group and type(group["dispatch"]) is not bool:
+            raise SpecError(f"{spec.name}: [{group_name}] dispatch must be a boolean")
         for key in ("lookup", "object", "owner", "feature", "unavailable"):
             if key in group and (not isinstance(group[key], str) or not group[key].strip()):
                 raise SpecError(f"{spec.name}: [{group_name}] {key} must be non-empty text")

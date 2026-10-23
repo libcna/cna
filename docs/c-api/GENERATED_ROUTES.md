@@ -155,7 +155,14 @@ A structure the route reads through a const pointer is accepted only when an `in
 (`invalid_if = "!IsPresentationParameters(source)"`); the contract test checks that a null one
 is refused.
 
-Every generated route runs inside `CallWithExceptionBarrier` and checks in one fixed order: a null
+By default a generated route runs inside `CallWithExceptionBarrier`, which can dispatch an ordinary
+foreign-thread handle call. A group with `dispatch = false` instead uses
+`CallHereWithExceptionBarrier`: the same exception translation without queuing a refusal for retry.
+Game-driving, destruction and dispatch-control groups use this policy because their contract
+requires the caller itself to be the game thread. The lookup still validates thread ownership;
+this policy does not permit a foreign caller to run the operation locally.
+
+Every generated route checks in one fixed order: a null
 output is refused with `CNA_RESULT_INVALID_ARGUMENT` first (for `copy`, a null `out_bytes` or a
 null destination with a capacity; for `versioned`, a structure of the wrong size or version; for
 `result`, every non-const `out_*` pointer not listed in `optional`, and a handle

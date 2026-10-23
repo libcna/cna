@@ -1936,6 +1936,14 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_ForeignThreadCallsSmoke COMMAND cna_c_api_foreign_thread_calls_smoke)
     set_tests_properties(CApi_ForeignThreadCallsSmoke PROPERTIES TIMEOUT 120)
 
+    add_executable(cna_c_api_owner_thread_runtime_test
+        tests/cpp/OwnerThreadRuntimeTest.cpp
+    )
+    target_link_libraries(cna_c_api_owner_thread_runtime_test PRIVATE cna_c_api Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_owner_thread_runtime_test)
+    add_test(NAME CApi_OwnerThreadRuntime COMMAND cna_c_api_owner_thread_runtime_test)
+    set_tests_properties(CApi_OwnerThreadRuntime PROPERTIES TIMEOUT 60)
+
     add_executable(cna_c_api_runtime_components_smoke
         tests/pure_c/RuntimeComponentsSmoke.c
     )

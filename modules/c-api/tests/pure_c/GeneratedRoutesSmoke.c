@@ -4574,13 +4574,13 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_available_network_session_not_equals(handle, v_CNA_AvailableNetworkSessionHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_not_equals", what);
     failures += expect(cna_local_network_gamer_enable_send_voice(handle, v_CNA_NetworkGamerHandle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_local_network_gamer_enable_send_voice", what);
     failures += expect_unless_arguments_refused(cna_local_network_gamer_send_packet_writer(handle, v_CNA_PacketWriterHandle, v_CNA_SendDataOptions), CNA_RESULT_INVALID_HANDLE, "cna_local_network_gamer_send_packet_writer", what);
-    failures += expect(cna_game_set_foreign_thread_calls_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_set_foreign_thread_calls_ext", what);
-    failures += expect(cna_game_run_foreign_thread_calls_ext(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_run_foreign_thread_calls_ext", what);
     failures += expect(cna_game_request_exit(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_request_exit", what);
     o_CNA_Handle = UINT64_C(0xDEAD);
     failures += expect(cna_game_get_graphics_device(handle, &o_CNA_Handle), CNA_RESULT_INVALID_HANDLE, "cna_game_get_graphics_device", what);
     failures += expect_cleared(o_CNA_Handle, "cna_game_get_graphics_device");
     failures += expect(cna_game_set_window_title(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_game_set_window_title", what);
+    failures += expect(cna_game_set_foreign_thread_calls_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_set_foreign_thread_calls_ext", what);
+    failures += expect(cna_game_run_foreign_thread_calls_ext(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_run_foreign_thread_calls_ext", what);
     failures += expect(cna_game_tick(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_tick", what);
     failures += expect(cna_accelerometer_get_is_supported(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_accelerometer_get_is_supported", what);
     failures += expect(cna_accelerometer_set_event_watch_registration_failure_for_tests_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_accelerometer_set_event_watch_registration_failure_for_tests_ext", what);

@@ -9,40 +9,6 @@
 #include "../CnaCApiMarshal.hpp"
 #include "../CnaCApiOutput.hpp"
 
-CNA_Result cna_game_set_foreign_thread_calls_ext(
-    const CNA_Handle game,
-    const CNA_Bool c_enabled)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        std::shared_ptr<CGame> object{};
-        if (const CNA_Result routeResult = GetGame(game, &object);
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
-        CNA::C::Detail::SetForeignThreadCalls(enabled);
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_game_run_foreign_thread_calls_ext(
-    const CNA_Handle game)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        std::shared_ptr<CGame> object{};
-        if (const CNA_Result routeResult = GetGame(game, &object);
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        CNA::C::Detail::RunForeignThreadCalls();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_request_exit(
     const CNA_Handle game)
 {
@@ -95,10 +61,44 @@ CNA_Result cna_game_set_window_title(
     });
 }
 
+CNA_Result cna_game_set_foreign_thread_calls_ext(
+    const CNA_Handle game,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallHereWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<CGame> object{};
+        if (const CNA_Result routeResult = GetGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        CNA::C::Detail::SetForeignThreadCalls(enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_run_foreign_thread_calls_ext(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallHereWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CGame> object{};
+        if (const CNA_Result routeResult = GetGame(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        CNA::C::Detail::RunForeignThreadCalls();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_tick(
     const CNA_Handle game)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+    return CNA::C::Detail::CallHereWithExceptionBarrier([&]() -> CNA_Result {
         std::shared_ptr<CGame> object{};
         if (const CNA_Result routeResult = GetCallableGame(game, &object);
             routeResult != CNA_RESULT_SUCCESS) {
@@ -122,34 +122,6 @@ CNA_Result cna_game_create(
     });
 }
 
-CNA_Result cna_game_run_frame_ext(
-    const CNA_Handle game,
-    CNA_Bool* const out_running)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        if (out_running == nullptr) {
-            return CNA::C::Detail::InvalidArgument("cna_game_run_frame_ext: out_running is null.");
-        }
-        return GameRunFrameExt(game, out_running);
-    });
-}
-
-CNA_Result cna_game_run_one_frame(
-    const CNA_Handle game)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GameRunOneFrame(game);
-    });
-}
-
-CNA_Result cna_game_run(
-    const CNA_Handle game)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        return GameRun(game);
-    });
-}
-
 CNA_Result cna_game_clear(
     const CNA_Handle game,
     const CNA_Color color)
@@ -168,10 +140,38 @@ CNA_Result cna_game_set_frame_hooks_ext(
     });
 }
 
+CNA_Result cna_game_run_frame_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_running)
+{
+    return CNA::C::Detail::CallHereWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_running == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_run_frame_ext: out_running is null.");
+        }
+        return GameRunFrameExt(game, out_running);
+    });
+}
+
+CNA_Result cna_game_run_one_frame(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallHereWithExceptionBarrier([&]() -> CNA_Result {
+        return GameRunOneFrame(game);
+    });
+}
+
+CNA_Result cna_game_run(
+    const CNA_Handle game)
+{
+    return CNA::C::Detail::CallHereWithExceptionBarrier([&]() -> CNA_Result {
+        return GameRun(game);
+    });
+}
+
 CNA_Result cna_game_destroy(
     const CNA_Handle game)
 {
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+    return CNA::C::Detail::CallHereWithExceptionBarrier([&]() -> CNA_Result {
         return GameDestroy(game);
     });
 }

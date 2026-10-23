@@ -47,6 +47,8 @@ class RouteValidationTests(unittest.TestCase):
             'lookup = 1\n[r.routes]',
             'lookup = "Read"\narguments = true\n[r.routes]',
             'lookup = "Read"\naccepts_null_handle = "false"\n[r.routes]',
+            'dispatch = "false"\n[r.routes]',
+            'dispatch = 0\n[r.routes]',
             'lookup = "Read"\nobject = "Object"\nother = { lookup = 1, object = "Object" }\n[r.routes]',
         ]
         with tempfile.TemporaryDirectory() as directory:
@@ -55,6 +57,23 @@ class RouteValidationTests(unittest.TestCase):
                 path.write_text("[r]\n" + entry + "\n", encoding="utf-8")
                 with self.subTest(entry=entry), self.assertRaisesRegex(generator.SpecError, "Probe.toml"):
                     generator.load_family(path, types)
+
+    def test_owner_only_routes_keep_exception_translation_without_dispatch(self):
+        parameters = ["CNA_Handle game", "CNA_Bool* out_running"]
+        entry = {"result": "Run(game, out_running)"}
+        ordinary = self.route(parameters, entry).render()
+        owner_only = self.route(parameters, entry, {"dispatch": False}).render()
+        self.assertIn("CallWithExceptionBarrier", ordinary)
+        self.assertIn("CallHereWithExceptionBarrier", owner_only)
+        self.assertNotIn("CallWithExceptionBarrier", owner_only)
+        self.assertIn("out_running == nullptr", owner_only)
+        self.assertLess(owner_only.index("out_running == nullptr"),
+                        owner_only.index("Run(game, out_running)"))
+        owner_copy = self.route(
+            ["char* destination", "uint64_t capacity", "uint64_t* out_bytes"],
+            {"copy": '"probe"'}, {"dispatch": False}).render()
+        self.assertIn("CallHereWithExceptionBarrier", owner_copy)
+        self.assertNotIn("CopyFormattedText", owner_copy)
 
 
 class RegenerationTests(unittest.TestCase):

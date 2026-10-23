@@ -6,15 +6,24 @@ lookup = "GetGame"
 object = "std::shared_ptr<CGame>"
 
 [game.routes]
-cna_game_set_foreign_thread_calls_ext = { call = "CNA::C::Detail::SetForeignThreadCalls(enabled)" }
-cna_game_run_foreign_thread_calls_ext = { call = "CNA::C::Detail::RunForeignThreadCalls()" }
 cna_game_request_exit = { call = "object->Exit()" }
 cna_game_get_graphics_device = { result = "object->BorrowGraphicsDevice(out_graphics_device)" }
 cna_game_set_window_title = { call = "object->SetWindowTitle(title)", refuse_nul = ["title"] }
 
+# Queue control is called by the serving thread, never served through its own queue.
+[owner_game]
+lookup = "GetGame"
+object = "std::shared_ptr<CGame>"
+dispatch = false
+
+[owner_game.routes]
+cna_game_set_foreign_thread_calls_ext = { call = "CNA::C::Detail::SetForeignThreadCalls(enabled)" }
+cna_game_run_foreign_thread_calls_ext = { call = "CNA::C::Detail::RunForeignThreadCalls()" }
+
 [callable_game]
 lookup = "GetCallableGame"
 object = "std::shared_ptr<CGame>"
+dispatch = false
 
 [callable_game.routes]
 # A frame step drives the game, so it is refused from inside a lifecycle callback for the
@@ -29,9 +38,15 @@ raw = true
 
 [helpers.routes]
 cna_game_create = { result = "GameCreate(create_info, out_game)" }
+cna_game_clear = { result = "GameClear(game, color)" }
+cna_game_set_frame_hooks_ext = { result = "GameSetFrameHooksExt(game, hooks)" }
+
+[owner_helpers]
+raw = true
+dispatch = false
+
+[owner_helpers.routes]
 cna_game_run_frame_ext = { result = "GameRunFrameExt(game, out_running)" }
 cna_game_run_one_frame = { result = "GameRunOneFrame(game)" }
 cna_game_run = { result = "GameRun(game)" }
-cna_game_clear = { result = "GameClear(game, color)" }
-cna_game_set_frame_hooks_ext = { result = "GameSetFrameHooksExt(game, hooks)" }
 cna_game_destroy = { result = "GameDestroy(game)" }

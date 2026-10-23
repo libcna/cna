@@ -27,7 +27,69 @@ Read-only `git ls-remote origin refs/heads/next` on that date confirmed
 aaef018ef92fa57a9c9e2f59c79b90bcf565c233 already published; no push was performed
 by this validation step.
 
-### Current task: publish ISSUE-150 closure, then ISSUE-050 (2026-10-23)
+### Current task: commit validated ISSUE-050, then repair ISSUE-051 (2026-10-23)
+
+ISSUE-050 validation is complete. Full SOFTWARE719=645PASS/23FAIL/48SKIP/3NOTRUN;
+OPENGLES3719=687PASS/22FAIL/7SKIP/3NOTRUN. Only050 changes relative to019; exactly its two failed
+assertions disappear on each renderer. Final serial CTest735registered/732enabled gives
+678PASS/48SKIP/6unchangedFAIL/3disabled; per-test status DELTAS[]. All275 frozen artifact hashes
+match after both sweeps and CTest; the freeze is released. No full native corpus, new visual,
+sanitizer or additional-platform pass is claimed. Native six-test controls pass on both renderers.
+Next commit only050 generator/spec/routes/test/docs, then close050 with that SHA in the matrix
+and demos permanent inventory, publish and verify. Preserve all foreign work, especially113.
+Then implement051's native adversarial cleanup regression before changing the adapter.
+Reports: repair-owner-* in the demos existing linux-full tree. Preparatory051 evidence is a
+separate uncommitted HOST_FAILURE_COMPLETION.md; exclude it from the050 commit.
+
+#### ISSUE-050 investigation and validation history
+
+Publication VERIFIED: CNA origin/next82a93ae97aa6eb6fac70e39bc7de35a37dfa8286 and demos
+origin/next4e9f461881aae09db5c86df5108a800c484346bd. ISSUE-150 is closed;119/156 final dispositions.
+Current owned050 work: new modules/c-api/tests/cpp/OwnerThreadRuntimeTest.cpp and its CMake target,
+generator/spec/generated Runtime routes and generated smoke, docs/c-api/GENERATED_ROUTES.md,
+plus generator regression and malformed-policy cases in test_generate_routes.py. The new generator
+test failed before production changes (repair-owner-routes-generator-before.log).
+Native baseline control passes; the new test has7PASS dispatch off/7FAIL dispatch on, all seven
+wrongly queued calls released only by cancellation with STATE instead of THREAD,15.22s.
+The native test checks seven owner-only routes with dispatch off/on;
+it never pumps a forbidden operation, waits on a condition variable for at most2s and cancels
+any wrongly queued call, requiring direct THREAD/categoryTHREAD and intact owner state to pass.
+The candidate is explicit boolean group dispatch policy in the route generator, using existing
+CallHereWithExceptionBarrier for owner-only groups and keeping ordinary calls dispatchable.
+Include queue configuration/pumping, which runtime.h explicitly reserves for the game thread,
+alongside run/run_one_frame/run_frame_ext/tick/destroy. Generated body comparison proves those
+seven change only their barrier; no other generated function body changes. The formatted-copy
+optimization is disabled for owner-only groups so it cannot bypass the policy. Five generator
+tests pass, generated-file checks pass, all3205 routes remain covered. Native six-test regression
+passes in12.53s, including all14 owner-thread cases, ordinary queued calls, host-driven lifecycle,
+runtime game/components and the3197-route generated smoke. Full consumer rebuild is running.
+Native six tests also pass SOFTWARE in0.96s. The original standalone demo now passes on both
+renderers with all46 child assertions intact (the historical issue's30 is an earlier revision).
+Exact assertion-name/order comparison against full019 baseline preserves all46 and removes exactly
+two failed assertions. Parent JSON correctly has checks=0 for a standalone; the first focus harness
+incorrectly asserted30 there and stopped after the passing SOFTWARE run. That harness failure is
+retained; GLES was then run and both child logs independently validated. Marker050 is now removed
+after those passes; no assertion or restriction changed. Final consumer build/full regression next.
+Reports repair-owner-*. No closure yet; six global residuals remain separate.
+Final consumer build60273 passed; catalog719 has only050 marker delta. All275 artifacts are frozen
+by repair-owner-full-artifacts.sha256. Full SOFTWARE completed719 IDs:645PASS/23FAIL/48SKIP/3NOTRUN.
+Exact comparison with019 changes only050 and removes exactly its two failures (50->48 assertions).
+OPENGLES3 completed719 IDs:687PASS/22FAIL/7SKIP/3NOTRUN; only050 changes,49->47 failed assertions.
+Exact status/marker/check/message and failed-assertion comparisons pass on both renderers.
+All275 artifact hashes still match. Serial full external CTest scope cna-owner-full-ctest,
+session29950 is running; report repair-owner-ctest.log/xml. Compare to repair-reset-ctest.xml,
+expecting the same six residuals, then recheck hashes before releasing the freeze.
+Do not rebuild or change executable inputs while frozen. Matrix050 is now
+CONFIRMED_OPEN with the verified root cause; preserve inherited113 row. Owned external evidence
+is lifecycle/OWNER_THREAD_DISPATCH.md plus its README link and the single050 metadata line.
+Read-only051 preparation: CGame::EndRun and NotifyExit still use Invoke's failure-suppression
+guard, unlike UnloadContent's runAfterFailure=true. Public host-frame contract promises both
+completion hooks. Any future repair must preserve first callback diagnostics even when cleanup
+callbacks fail or call another failing C API; current RecordCallbackFailure overwrites them.
+No051 edit/reproduction change during the050 freeze.
+The fresh complete owner sweeps reproduce051 identically on both renderers:65PASS/8FAIL out of73
+child assertions, with all ten failure-point traces retained. Read-only preparation is recorded in
+the new demos lifecycle/HOST_FAILURE_COMPLETION.md; do not include it in the050 closure commit.
 
 ISSUE-150 repair is committed as379bac6d3f76f452ffce7c7760149b2d1df30b95. Matrix and demos inventory
 now close150 as UNSUPPORTED_CONTRACT_CORRECTED, preserving its historical link reproducer and
