@@ -1,5 +1,7 @@
 #include "CNA/Internal/Renderers/Stub/StubRenderer.hpp"
 
+#include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
+
 namespace CNA::Internal::Renderers::Stub
 {
     StubRenderer::StubRenderer(int virtualWidth, int virtualHeight)
@@ -42,6 +44,19 @@ namespace CNA::Internal::Renderers::Stub
     std::unique_ptr<IIndexBufferRenderer> StubRenderer::CreateIndexBuffer32(int index_capacity)
     {
         return std::make_unique<StubIndexBufferRenderer>(index_capacity, true);
+    }
+
+    std::unique_ptr<ITexture3DRenderer> StubRenderer::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        // CNA-DEMOS-ISSUE-104: WarnAndStub promises a usable no-op resource; the inherited
+        // nullptr left Texture3D refusing its first SetData instead.
+        if (!ShouldStubUnsupported3DResource())
+        {
+            return IGraphicsRenderer::CreateTexture3D(w, h, depth, mipMap, surfaceFormat);
+        }
+        HandleUnsupported3DCall("STUB", "CreateTexture3D");
+        return std::make_unique<NoOpTexture3DRenderer>(w, h, depth);
     }
 }
 

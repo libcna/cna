@@ -153,6 +153,12 @@ namespace CNA::Internal::Renderers::Stub
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
+        /// Stub has no volume storage. Under Unsupported3DGraphicsCallBehavior::WarnAndStub -- the
+        /// only way Texture3D asks a renderer without the capability -- it warns once and returns
+        /// the zero-reading null object; otherwise it keeps the shared nullptr default.
+        std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                            int surfaceFormat) override;
+
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                    const Matrix& world,
                                    const Matrix& view,

@@ -1,6 +1,7 @@
 #include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
 #include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
+#include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -743,6 +744,14 @@ namespace CNA::Internal::Renderers::Headless
     std::unique_ptr<ITexture3DRenderer> HeadlessRenderer::CreateTexture3D(int w, int h, int depth, bool mipMap,
                                                                             int surfaceFormat)
     {
+        // HEADLESS stores no volumes and reports no GraphicsCapability::Texture3D, so Texture3D asks
+        // only under Unsupported3DGraphicsCallBehavior::WarnAndStub, whose contract is a usable
+        // null object rather than a resource that refuses its first upload (CNA-DEMOS-ISSUE-104).
+        if (ShouldStubUnsupported3DResource())
+        {
+            HandleUnsupported3DCall("HEADLESS", "CreateTexture3D");
+            return std::make_unique<NoOpTexture3DRenderer>(w, h, depth);
+        }
         return std::make_unique<HeadlessTexture3DRenderer>(state_, w, h, depth, mipMap, surfaceFormat);
     }
 

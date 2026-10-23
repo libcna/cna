@@ -30,6 +30,10 @@
 #include <cstdio>
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -294,6 +298,46 @@ TEST_F(CrossRendererContractTest, NoRendererPaintsAVertexAttributeInsteadOfTheEf
     EXPECT_GT(judged, 0)
         << "no renderer in this build both drew the stride-48 record and could read the result "
            "back, so this test measured nothing";
+}
+
+// CNA-DEMOS-ISSUE-104: on a renderer without volume storage, Texture3D is refused under the
+// default Throw policy, and under WarnAndStub it is the promised usable null object -- uploads are
+// accepted and reads return zeros -- rather than a wrapper that refuses its first SetData.
+TEST_F(CrossRendererContractTest, WarnAndStubMakesTexture3DAUsableNullObjectWithoutVolumeSupport)
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    using Microsoft::Xna::Framework::Graphics::Texture3D;
+    int judged = 0;
+    ForEachRenderer([&](GraphicsDevice& device, GraphicsRendererType)
+    {
+        // Reach refuses volumes on every renderer; under HiDef only the renderer can.
+        device.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+        if (device.SupportsCapability(CNA::GraphicsCapability::Texture3D)) { return; }
+        ++judged;
+        EXPECT_THROW(Texture3D(device, 1, 1, 1, false, SurfaceFormat::Color),
+                     System::NotSupportedException);
+
+        device.SetUnsupported3DGraphicsCallBehavior(
+            CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub);
+        try
+        {
+            Texture3D first(device, 1, 1, 1, false, SurfaceFormat::Color);
+            Texture3D second(device, 1, 1, 1, false, SurfaceFormat::Color);
+            const Color red = Color::Red;
+            first.SetData(&red, 1);
+            Color back = Color::White;
+            first.GetData(&back, 1);
+            EXPECT_EQ(Color(0, 0, 0, 0), back);
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << "WarnAndStub Texture3D was not a usable null object: " << e.what();
+        }
+        device.SetUnsupported3DGraphicsCallBehavior(
+            CNA::Unsupported3DGraphicsCallBehavior::Throw);
+    });
+    if (judged == 0) { GTEST_SKIP() << "every renderer in this build stores volume textures"; }
 }
 
 #endif  // CNA_MULTI_RENDERER

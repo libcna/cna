@@ -404,8 +404,10 @@ namespace CNA::Internal::Renderers::Headless
          * Same reviewed reasoning as `HeadlessTextureCubeRenderer::GetData`. This
          * class is additionally unreachable through the public API: the content reader fix made
          * `Texture3D`'s constructor fail on a device that reports no
-         * `GraphicsCapability::Texture3D`, which this renderer does not. It states its refusal
-         * anyway so the answer does not depend on that one gate staying in place.
+         * `GraphicsCapability::Texture3D`, which this renderer does not, and under
+         * `WarnAndStub` -- the one policy that lets the constructor ask -- the factory returns
+         * the shared null object instead. It states its refusal anyway so the answer does not
+         * depend on those gates staying in place.
          *
          * @return Always false.
          */
