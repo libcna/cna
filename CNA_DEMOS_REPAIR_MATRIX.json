@@ -443,14 +443,15 @@
       ],
       "subsystem": "audio/media",
       "classification": "CODE_DEFECT",
-      "status": "CONFIRMED_OPEN",
-      "root_cause": "Compiled media stream references are resolved from the ContentManager root, ignoring the compiled asset location; the passing demo chooses a narrower root that masks relocation failure.",
+      "status": "RESOLVED",
+      "root_cause": "Compiled media and model references (XREF) are written relative to the root the asset was compiled against, and the loaders resolved them from the ContentManager root, so a build placed in a subdirectory of the manager's root could not find its streams or textures. XNA's ContentReader.GetPathToReference resolves from the asset's own directory.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "3da9ea645",
       "validation": [
         "Fresh strict native probe against current1ad0a3916 and existing rebuilt assets: narrow root assets/media loads music/theme with positive duration; parent root assets fails media/music/theme with missing music/theme.ogg diagnostic. Source ContentMediaLoaders.cpp still uses BuildAssetPath(reference). repair-compiled-song-root-before{,-build}.log; permanent ../cna-demos/docs/repair-evidence/api-shape/CompiledSongRootProbe.cpp. No asset mutation/playback, no repair or closure claimed."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-23 accepted at 3da9ea645: CnbReferenceNameEXT prefixes a reference with the part of the loaded name that precedes the asset's CMET contentName at a '/' boundary (XNA's result; equal names, every previously working load, change nothing). Five CnbRelocatedReferenceTest cases 1 PASS/4 FAIL before, 5/5 after including a decoy at the root; content 2,062 PASS/4 unchanged SKIP. Demos compiled_song and play_video add a relocated-root check each. Complete checkpoint with the demos tree rebuilt from the tree committed as 8842b9a50: 719-ID sweeps SOFTWARE 654/14/48/3 and OPENGLES3 696/13/7/3 against the ISSUE-010 closure checkpoint change only sensor_lifecycle FAIL->PASS (marker removed) and the intended check counts from_stream 8->9, compiled_song 3->4, play_video 4->5; failed assertions 31->29 and 30->28. Serial CTest 723.84s: 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled, identical to the ISSUE-010 checkpoint. Reports repair-batch3-closure-{full,ctest}*. See demos content/COMPILED_REFERENCE_RELOCATION.md."
     },
     {
       "id": "CNA-DEMOS-ISSUE-021",
@@ -632,15 +633,16 @@
       ],
       "subsystem": "audio/media",
       "classification": "XNA_COMPATIBILITY_DEFECT",
-      "status": "CONFIRMED_OPEN",
+      "status": "RESOLVED",
       "root_cause": "The only SoundEffect.FromStream entry accepts std::istream rather than the canonical System::IO::Stream returned by TitleContainer; the associated demo uses std::ifstream.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "5d66bb795",
       "validation": [
         "Fresh current1ad0a3916 canonical stream C++23/Wall/Wextra/Werror syntax probe fails to convert System::IO::Stream to std::istream&. Permanent ../cna-demos/docs/repair-evidence/api-shape/SoundEffectStreamProbe.cpp; repair-sound-effect-stream-before-build.log. No playback or repair claimed.",
         "2026-10-21:95566 genuine managed WAV/public refusal oracle25/25PASS;52326 extended managed chunk/loop/duration oracle71/71PASS, pinned Framework hash/MVID, strict C# build2708ms/run585ms, peak285597696/events0, source unchanged. Successful public native sound creation and hardware output are not claimed. Nine native cases prepared but UNCOMPILED; no production fix."
       ],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-23 accepted at 5d66bb795: SoundEffect::FromStream(System::IO::Stream&) ports XNA's WavFile (RIFF/format/chunk/loop/duration rules measured by the genuine 25/25 and 71/71 oracles); the std::istream overload is marked CNAEXT. The 28 prepared native cases compile and pass; audio 803 PASS/4 unchanged SKIP; the canonical probe compiles under -Werror. Demo from_stream adds a TitleContainer stream check (8 -> 9). Complete checkpoint with the demos tree rebuilt from the tree committed as 8842b9a50: 719-ID sweeps SOFTWARE 654/14/48/3 and OPENGLES3 696/13/7/3 against the ISSUE-010 closure checkpoint change only sensor_lifecycle FAIL->PASS (marker removed) and the intended check counts from_stream 8->9, compiled_song 3->4, play_video 4->5; failed assertions 31->29 and 30->28. Serial CTest 723.84s: 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled, identical to the ISSUE-010 checkpoint. Reports repair-batch3-closure-{full,ctest}*. See demos api-shape/SOUND_EFFECT_STREAM_REPAIR.md."
     },
     {
       "id": "CNA-DEMOS-ISSUE-030",
@@ -1311,12 +1313,13 @@
       ],
       "subsystem": "input/devices/platform",
       "classification": "CODE_DEFECT",
-      "status": "PENDING_VERIFICATION",
-      "root_cause": null,
+      "status": "RESOLVED",
+      "root_cause": "The C accelerometer and gyroscope routes looked the sensor up without asking whether it had been disposed, so CurrentValue and the other members kept answering after cna_*_dispose; XNA's SensorBase refuses them.",
       "related_issues": [],
-      "cna_fix_commit": null,
+      "cna_fix_commit": "8842b9a50",
       "validation": [],
-      "final_disposition": null
+      "final_disposition": "FIXED_VALIDATED",
+      "current_validation": "2026-10-23 accepted at 8842b9a50: SensorResource records disposal and every canonical accelerometer/gyroscope route except destroy and the *_for_tests_ext hooks requires a live sensor (Sensors.toml require); subscribe routes borrow a live one. SensorDeviceSmoke's new post-dispose checks fail against the old routes and pass after; C sensor smokes 5/5. Demo c_api.devices.sensor_lifecycle passes without its knownIssue marker. Complete checkpoint with the demos tree rebuilt from the tree committed as 8842b9a50: 719-ID sweeps SOFTWARE 654/14/48/3 and OPENGLES3 696/13/7/3 against the ISSUE-010 closure checkpoint change only sensor_lifecycle FAIL->PASS (marker removed) and the intended check counts from_stream 8->9, compiled_song 3->4, play_video 4->5; failed assertions 31->29 and 30->28. Serial CTest 723.84s: 735 registered/732 enabled, 684 PASS/48 SKIP/0 FAIL/3 disabled, identical to the ISSUE-010 checkpoint. Reports repair-batch3-closure-{full,ctest}*."
     },
     {
       "id": "CNA-DEMOS-ISSUE-063",
