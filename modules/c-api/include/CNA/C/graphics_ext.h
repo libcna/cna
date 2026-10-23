@@ -106,9 +106,12 @@ CNA_C_API CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* out_
 /**
  * @brief Reports whether the light is complete enough to shade with.
  *
- * All three textures must be present and the mip count at least one. A light that is *nearly*
- * complete is the failure this answers: it does not look like a mismatch, it looks like a scene
- * lit slightly wrong.
+ * All three textures must be present and the mip count at least one: `irradiance` and
+ * `prefiltered_specular` live TextureCube (or RenderTargetCube) handles, `brdf_lut` a live
+ * Texture2D (or RenderTarget2D) handle. A live handle of any other kind is not present and makes
+ * the light invalid rather than being an argument error. A light that is *nearly* complete is the
+ * failure this answers: it does not look like a mismatch, it looks like a scene lit slightly
+ * wrong.
  *
  * @param light The light.
  * @param out_valid Receives the answer.

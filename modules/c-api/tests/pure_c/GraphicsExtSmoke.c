@@ -366,6 +366,79 @@ static int validate_ascii_effect(CNA_Handle graphics_device) {
          ok;
 }
 
+/* CNA-DEMOS-ISSUE-091: each image-based-light field accepts only a live handle of the type its
+ * C++ field holds -- TextureCube for both maps, Texture2D for the lookup -- and any other live
+ * handle makes the light invalid without being an argument error. */
+static int validate_image_based_light_kinds(CNA_Handle game,
+                                            CNA_Handle graphics_device) {
+  const CNA_Texture2DCreateInfo texture_info = {sizeof(CNA_Texture2DCreateInfo),
+                                                UINT32_C(1),
+                                                4U,
+                                                4U,
+                                                CNA_FALSE,
+                                                {0U, 0U, 0U},
+                                                CNA_SURFACE_FORMAT_COLOR};
+  CNA_TextureCubeCreateInfo cube_info;
+  memset(&cube_info, 0, sizeof(cube_info));
+  cube_info.struct_size = sizeof(CNA_TextureCubeCreateInfo);
+  cube_info.struct_version = UINT32_C(1);
+  cube_info.size = 4U;
+  cube_info.mip_map = CNA_FALSE;
+  cube_info.format = CNA_SURFACE_FORMAT_COLOR;
+
+  CNA_ImageBasedLightEXT light;
+  CNA_Bool valid = CNA_TRUE;
+  if (cna_image_based_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+    return 0;
+  }
+  /* The live game handle in every field is no texture at all. */
+  light.irradiance = game;
+  light.prefiltered_specular = game;
+  light.brdf_lut = game;
+  if (cna_image_based_light_ext_is_valid(&light, &valid) != CNA_RESULT_SUCCESS ||
+      valid != CNA_FALSE) {
+    return 0;
+  }
+
+  CNA_Handle irradiance = CNA_INVALID_HANDLE;
+  CNA_Handle specular = CNA_INVALID_HANDLE;
+  CNA_Handle lookup = CNA_INVALID_HANDLE;
+  if (cna_texture2d_create(graphics_device, &texture_info, &lookup) != CNA_RESULT_SUCCESS) {
+    return 0;
+  }
+  const CNA_Result first_cube = cna_texturecube_create(graphics_device, &cube_info, &irradiance);
+  int ok = 1;
+  if (first_cube == CNA_RESULT_SUCCESS) {
+    ok = cna_texturecube_create(graphics_device, &cube_info, &specular) == CNA_RESULT_SUCCESS;
+    light.irradiance = irradiance;
+    light.prefiltered_specular = specular;
+    light.brdf_lut = lookup;
+    ok = ok && cna_image_based_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+         valid == CNA_TRUE;
+    /* A Texture2D in a cube field, and a cube in the lookup field, are the wrong kind. */
+    light.irradiance = lookup;
+    ok = ok && cna_image_based_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+         valid == CNA_FALSE;
+    light.irradiance = irradiance;
+    light.brdf_lut = specular;
+    ok = ok && cna_image_based_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+         valid == CNA_FALSE;
+    light.brdf_lut = game;
+    ok = ok && cna_image_based_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+         valid == CNA_FALSE;
+    /* A destroyed cube is no longer present. */
+    light.brdf_lut = lookup;
+    ok = ok && cna_texturecube_destroy(specular) == CNA_RESULT_SUCCESS &&
+         cna_image_based_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+         valid == CNA_FALSE;
+    ok = cna_texturecube_destroy(irradiance) == CNA_RESULT_SUCCESS && ok;
+  } else {
+    /* Without 3D support no cube exists; the refusal is the only answer. */
+    ok = first_cube == CNA_RESULT_NOT_SUPPORTED && irradiance == CNA_INVALID_HANDLE;
+  }
+  return cna_texture2d_destroy(lookup) == CNA_RESULT_SUCCESS && ok;
+}
+
 static CNA_Result on_load(CNA_Handle game, const CNA_GameTime *game_time,
                           void *context, CNA_CallbackError *out_error) {
   (void)out_error;
@@ -395,6 +468,10 @@ static CNA_Result on_load(CNA_Handle game, const CNA_GameTime *game_time,
           graphics_device, color_space, &supported)) ||
       !is_supported(cna_graphics_device_notify_content_lost_resources_ext(
           graphics_device))) {
+    return CNA_RESULT_INVALID_STATE;
+  }
+
+  if (!validate_image_based_light_kinds(game, graphics_device)) {
     return CNA_RESULT_INVALID_STATE;
   }
 

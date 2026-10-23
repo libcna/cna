@@ -139,21 +139,32 @@ namespace {
         return InvalidArgument("The image-based-light structure is malformed.");
     }
     // The canonical predicate asks whether all three textures are present and the mip count is
-    // at least one. Here the textures are handles, so "present" is "a live texture handle" --
-    // a stale one is not a texture and must not read as a complete light.
-    const CNA_Handle handles[] = {
-        light->irradiance, light->prefiltered_specular, light->brdf_lut};
+    // at least one. Here the textures are handles, so "present" is "a live handle of the type the
+    // C++ field holds": TextureCube for the two maps, Texture2D for the lookup, a render target
+    // of that type included. A stale handle, or a live one of another kind, is not that texture
+    // and must not read as a complete light (CNA-DEMOS-ISSUE-091).
+    using CNA::C::Detail::ObjectKind;
+    struct Field {
+        CNA_Handle handle;
+        ObjectKind texture;
+        ObjectKind renderTarget;
+    };
+    const Field fields[] = {
+        {light->irradiance, ObjectKind::TextureCube, ObjectKind::RenderTargetCube},
+        {light->prefiltered_specular, ObjectKind::TextureCube, ObjectKind::RenderTargetCube},
+        {light->brdf_lut, ObjectKind::Texture2D, ObjectKind::RenderTarget2D}};
     // IsValidEXT() also refuses a negative intensity: a bundle that would subtract light
     // is not two thirds of an answer either.
     bool complete = light->prefiltered_mip_count >= INT32_C(1) && light->intensity >= 0.0F;
-    for (const CNA_Handle handle : handles) {
+    for (const Field& field : fields) {
         if (!complete) {
             break;
         }
-        CNA::C::Detail::ObjectKind kind = CNA::C::Detail::ObjectKind::Unknown;
-        complete = handle != CNA_INVALID_HANDLE &&
-            CNA::C::Detail::GetRuntimeHandles().GetKind(handle, &kind) ==
-                CNA_RESULT_SUCCESS;
+        ObjectKind kind = ObjectKind::Unknown;
+        complete = field.handle != CNA_INVALID_HANDLE &&
+            CNA::C::Detail::GetRuntimeHandles().GetKind(field.handle, &kind) ==
+                CNA_RESULT_SUCCESS &&
+            (kind == field.texture || kind == field.renderTarget);
     }
     return StoreValue(outValid, static_cast<CNA_Bool>(ToCBool(complete)));
 }
